@@ -185,3 +185,39 @@ def test_listar_pagos_filtra_por_estado(client):
 def test_listar_pagos_requiere_admin(client_sin_permisos):
     resp = client_sin_permisos.get("/api/v1/membresias/pagos")
     assert resp.status_code == 403
+
+
+def test_estadisticas_membresias_cuenta_solo_activas(client):
+    persona = _crear_persona(client)
+    tipo = _crear_tipo_membresia(client)
+    membresia_activa = client.post(
+        "/api/v1/membresias/",
+        json={
+            "monto_aplicado": "35.00", "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+        },
+    ).json()
+    client.post(
+        "/api/v1/membresias/",
+        json={
+            "monto_aplicado": "35.00", "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+        },
+    )
+    pago = client.post(
+        "/api/v1/membresias/pagos",
+        json={
+            "monto": "35.00", "tipo_pago": "EFECTIVO", "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
+            "persona_id": persona["id"], "membresia_id": membresia_activa["id"],
+        },
+    ).json()
+    client.patch(f"/api/v1/membresias/pagos/{pago['id']}/validar", json={"estado_pago": "APROBADO"})
+
+    response = client.get("/api/v1/membresias/estadisticas")
+
+    assert response.status_code == 200
+    assert response.json() == {"activeMemberships": 1}
+
+
+def test_estadisticas_membresias_requiere_admin(client_sin_permisos):
+    response = client_sin_permisos.get("/api/v1/membresias/estadisticas")
+
+    assert response.status_code == 403

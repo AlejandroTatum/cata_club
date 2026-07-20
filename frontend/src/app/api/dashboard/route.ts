@@ -1,21 +1,16 @@
 /**
  * GET /api/dashboard — aggregate counts for the admin overview (Fase 7).
  *
- * There is no backend aggregation endpoint (see the Fase 7 plan note), so
- * this composes counts directly from the same FastAPI resources the
- * `/members`, `/payments` and `/attendance` Route Handlers already proxy —
- * `/personas`, `/membresias/pagos*` and `/asistencias/horarios` — rather
- * than calling those other Route Handlers over HTTP.
+ * This composes counts directly from FastAPI resources rather than calling
+ * other Next.js Route Handlers over HTTP. Membership totals come from the
+ * backend aggregate endpoint so this route never fans out per membership.
  *
- * Counting decisions, since no `/membresias` list-all endpoint exists:
+ * Counting decisions:
  *  - `totalPersonas` reads FastAPI's own `total` from the paginated
  *    `/personas/` response (accurate regardless of `limit`), not
  *    `items.length`.
- *  - `activeMemberships` resolves every distinct `membresiaId` referenced
- *    by any Pago (not just each persona's latest, unlike
- *    src/lib/server/members-adapter.ts's per-account view) and counts how
- *    many of those Membresia records are `ACTIVA` — the closest available
- *    proxy for "active memberships" given there's no direct listing.
+ *  - `activeMemberships` is counted by FastAPI directly from active
+ *    memberships, rather than inferring it from a bounded payment page.
  *  - `pendingPayments` reads `total` from `/membresias/pagos?estado_pago=
  *    PENDIENTE_VALIDACION` — the same raw queue FastAPI backs the /payments
  *    screen with (one row per Pago, not deduped per persona), so this
@@ -29,12 +24,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
-import type { BackendPagoListItem, BackendMembresia } from "@/lib/server/payments-adapter";
+import type { BackendPagoListItem } from "@/lib/server/payments-adapter";
 import type { BackendHorario, BackendDiaSemana } from "@/lib/server/attendance-adapter";
 
 interface PaginatedResponse<T> {
   items: T[];
   total: number;
+}
+
+interface MembershipStatsResponse {
+  activeMemberships: number;
 }
 
 export interface DashboardStats {
@@ -63,9 +62,9 @@ function todayBackendDiaSemana(): BackendDiaSemana {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const [personasResult, pagosResult, pendientesResult, horariosResult] = await Promise.all([
+  const [personasResult, membershipStatsResult, pendientesResult, horariosResult] = await Promise.all([
     backendFetchAuthed(request, "/personas/?limit=1"),
-    backendFetchAuthed(request, "/membresias/pagos?limit=200"),
+    backendFetchAuthed(request, "/membresias/estadisticas"),
     backendFetchAuthed(request, "/membresias/pagos?estado_pago=PENDIENTE_VALIDACION&limit=1"),
     backendFetchAuthed(request, "/asistencias/horarios"),
   ]);
@@ -78,19 +77,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   const totalPersonas = ((await personasResult.response.json()) as PaginatedResponse<unknown>).total;
 
-  const pagos: BackendPagoListItem[] =
-    pagosResult.ok && pagosResult.response.ok
-      ? ((await pagosResult.response.json()) as PaginatedResponse<BackendPagoListItem>).items
-      : [];
-
-  const uniqueMembresiaIds = [...new Set(pagos.map((pago) => pago.membresiaId))];
-  const membresias = await Promise.all(
-    uniqueMembresiaIds.map(async (membresiaId) => {
-      const result = await backendFetchAuthed(request, `/membresias/${membresiaId}`);
-      return result.ok && result.response.ok ? ((await result.response.json()) as BackendMembresia) : undefined;
-    }),
-  );
-  const activeMemberships = membresias.filter((membresia) => membresia?.estado === "ACTIVA").length;
+  const activeMemberships =
+    membershipStatsResult.ok && membershipStatsResult.response.ok
+      ? ((await membershipStatsResult.response.json()) as MembershipStatsResponse).activeMemberships
+      : 0;
 
   const pendingPayments =
     pendientesResult.ok && pendientesResult.response.ok

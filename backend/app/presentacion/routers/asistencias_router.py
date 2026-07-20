@@ -26,7 +26,7 @@ async def crear_horario(datos: HorarioCreateDTO, db: Session = Depends(obtener_s
     response_model=List[HorarioResponseDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
-async def listar_horarios(db: Session = Depends(obtener_sesion)):
+def listar_horarios(db: Session = Depends(obtener_sesion)):
     return AsistenciaServicio(db).listar_horarios()
 
 

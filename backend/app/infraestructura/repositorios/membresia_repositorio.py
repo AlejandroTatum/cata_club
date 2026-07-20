@@ -1,6 +1,6 @@
 from typing import Optional, List
 from datetime import date
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Membresia, TipoMembresia
@@ -30,6 +30,14 @@ class MembresiaRepositorio:
 
     def obtener_por_id(self, membresia_id: int) -> Optional[Membresia]:
         return self.db.get(Membresia, membresia_id)
+
+    def contar_activas(self) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Membresia)
+            .where(Membresia.estado == EstadoMembresia.ACTIVA)
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def crear(self, membresia: Membresia) -> Membresia:
         self.db.add(membresia)

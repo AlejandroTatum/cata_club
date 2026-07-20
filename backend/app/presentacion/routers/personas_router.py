@@ -37,7 +37,7 @@ async def registrar_persona(persona_in: PersonaCreateDTO, db: Session = Depends(
     response_model=PaginatedResponse[PersonaResponseDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
-async def listar_personas(skip: int = 0, limit: int = 50, db: Session = Depends(obtener_sesion)):
+def listar_personas(skip: int = 0, limit: int = 50, db: Session = Depends(obtener_sesion)):
     items, total = PersonaServicio(db).listar_personas(skip, limit)
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 

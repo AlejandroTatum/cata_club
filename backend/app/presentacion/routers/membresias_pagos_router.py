@@ -5,7 +5,7 @@ from typing import List, Optional
 from app.infraestructura.db import obtener_sesion
 from app.dominio.enums import EstadoPago
 from app.presentacion.schemas.membresia_pago_schemas import (
-    MembresiaCreateDTO, MembresiaResponseDTO,
+    MembresiaCreateDTO, MembresiaEstadisticasResponseDTO, MembresiaResponseDTO,
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
     TipoMembresiaCreateDTO, TipoMembresiaResponseDTO,
@@ -70,7 +70,7 @@ async def listar_membresias_por_persona(persona_id: int, db: Session = Depends(o
     response_model=PaginatedResponse[PagoListItemDTO],
     dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
 )
-async def listar_pagos(
+def listar_pagos(
     estado_pago: Optional[EstadoPago] = Query(default=None),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
@@ -81,6 +81,15 @@ async def listar_pagos(
 
 
 # --- Membresia ---
+@router.get(
+    "/estadisticas",
+    response_model=MembresiaEstadisticasResponseDTO,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+def obtener_estadisticas_membresias(db: Session = Depends(obtener_sesion)):
+    return {"active_memberships": MembresiaServicio(db).contar_membresias_activas()}
+
+
 # Membresía expone relación persona<->plan: exige autenticación (no rol admin).
 @router.get(
     "/{membresia_id}",

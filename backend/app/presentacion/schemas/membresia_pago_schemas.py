@@ -35,6 +35,10 @@ class MembresiaResponseDTO(ResponseBase, BaseModel):
     tipo_membresia_id: int
 
 
+class MembresiaEstadisticasResponseDTO(ResponseBase, BaseModel):
+    active_memberships: int
+
+
 # --- Pago ---
 class PagoCreateDTO(BaseModel):
     monto: Decimal = Field(..., gt=0)
