@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from datetime import date, time, datetime
 from typing import Optional
 
-from app.dominio.enums import EstadoAsistencia, DiaSemana
+from app.dominio.enums import EstadoAsistencia, DiaSemana, Categoria
 from app.presentacion.schemas.base import ResponseBase
 
 
@@ -11,6 +11,7 @@ class HorarioCreateDTO(BaseModel):
     hora_inicio: time
     hora_fin: time
     entrenador_id: int
+    categoria: Categoria
 
 
 class HorarioResponseDTO(ResponseBase, HorarioCreateDTO):

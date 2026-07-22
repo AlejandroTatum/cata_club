@@ -47,6 +47,21 @@ class DiaSemana(str, enum.Enum):
     DOMINGO = "DOMINGO"
 
 
+class Categoria(str, enum.Enum):
+    """
+    Categoría de horario de entrenamiento (edad/audiencia), fija y no editable
+    por administración -- 5 valores hardcodeados según la spec de negocio.
+    No debe confundirse con `CategoriaRanking` (nivel 1-11 del ranking
+    mensual): son dos conceptos de dominio distintos que hoy compartían por
+    error `NivelRanking`/`Ranking.nivel_ranking_id` -- esta es la separación.
+    """
+    FORMATIVO = "FORMATIVO"
+    INFANTIL = "INFANTIL"
+    JUVENIL = "JUVENIL"
+    COMPETITIVO = "COMPETITIVO"
+    ADULTOS = "ADULTOS"
+
+
 class TipoModalidad(str, enum.Enum):
     PERSONALIZADA = "PERSONALIZADA"
     MENSUAL = "MENSUAL"

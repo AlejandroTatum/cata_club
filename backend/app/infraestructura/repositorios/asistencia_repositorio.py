@@ -2,6 +2,7 @@ from typing import Optional, List
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.dominio.enums import Categoria
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento
 
 
@@ -16,6 +17,14 @@ class HorarioRepositorio:
         stmt = (
             select(HorarioEntrenamiento)
             .options(joinedload(HorarioEntrenamiento.entrenador))
+        )
+        return list(self.db.execute(stmt).scalars().unique().all())
+
+    def listar_por_categoria(self, categoria: Categoria) -> List[HorarioEntrenamiento]:
+        stmt = (
+            select(HorarioEntrenamiento)
+            .options(joinedload(HorarioEntrenamiento.entrenador))
+            .where(HorarioEntrenamiento.categoria == categoria)
         )
         return list(self.db.execute(stmt).scalars().unique().all())
 

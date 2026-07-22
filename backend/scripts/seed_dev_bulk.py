@@ -8,7 +8,7 @@ creates the minimum viable dataset, this script must be run manually:
     docker compose exec backend uv run python scripts/seed_dev_bulk.py
 
 It depends on seed_dev_base.py having already run at least once (needs the
-ENTRENADOR account, the 11 NivelRanking rows, the 25 HorarioEntrenamiento
+ENTRENADOR account, the 11 NivelRanking rows, the 26 HorarioEntrenamiento
 schedules, and the 2 TipoMembresia rows it creates). If any of those are
 missing, this script prints a warning and skips the dependent section instead
 of crashing.

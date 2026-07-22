@@ -25,7 +25,7 @@ from app.dominio.enums import (
     TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
     TipoPago, EstadoAsistencia, TipoEscuela, NivelTecnicoAlumno, TipoSangre, DiaSemana,
     EstadoSolicitudExtra, EstadoJustificativoRanking, TipoNotificacion,
-    TipoManoDominante,
+    TipoManoDominante, Categoria,
 )
 
 
@@ -354,6 +354,12 @@ class HorarioEntrenamiento(Base):
     dia_semana: Mapped[DiaSemana] = mapped_column(SAEnum(DiaSemana))
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time] = mapped_column(Time)
+
+    # E0X (gestión de horarios): categoría fija de audiencia/edad, separada
+    # de NivelRanking (que representa el nivel operativo del ranking mensual).
+    # NOT NULL: los 5 valores son obligatorios en todo horario a partir de esta
+    # migración -- ver alembic backfill que asigna categoria a filas existentes.
+    categoria: Mapped[Categoria] = mapped_column(SAEnum(Categoria))
 
     entrenador_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     entrenador: Mapped["Persona"] = relationship(
