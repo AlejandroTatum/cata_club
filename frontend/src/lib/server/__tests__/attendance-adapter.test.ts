@@ -66,7 +66,7 @@ describe("horarioLabel", () => {
 });
 
 describe("buildTrainingSchedule", () => {
-  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", entrenadorId: 2 };
+  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", entrenadorId: 2, nivelRankingId: null };
 
   it("maps a backend Horario into a TrainingSchedule with the resolved trainer name", () => {
     const personas = new Map([[2, { id: 2, nombres: "Carla", apellidos: "Trainer" }]]);
@@ -77,12 +77,31 @@ describe("buildTrainingSchedule", () => {
       horaFin: "16:30",
       entrenadorId: 2,
       entrenadorNombre: "Carla Trainer",
+      nivelRankingId: null,
     });
   });
 
   it("falls back to a placeholder name when the trainer isn't in the persona map", () => {
     const built = buildTrainingSchedule(horario, new Map());
     expect(built.entrenadorNombre).toBe("Entrenador 2");
+  });
+
+  // Slice 7 — response-only nivel_ranking_id exposure (see design "Schedule→group linkage")
+  it("passes through nivelRankingId when the horario is linked to a nivel", () => {
+    const linked: BackendHorario = { ...horario, nivelRankingId: 5 };
+    const built = buildTrainingSchedule(linked, new Map());
+    expect(built.nivelRankingId).toBe(5);
+  });
+
+  it("maps nivelRankingId to null when the horario has no linked nivel", () => {
+    const built = buildTrainingSchedule(horario, new Map());
+    expect(built.nivelRankingId).toBeNull();
+  });
+
+  it("defaults nivelRankingId to null when the backend field is absent (defensive, matches other fallbacks in this file)", () => {
+    const { nivelRankingId: _omit, ...withoutField } = horario;
+    const built = buildTrainingSchedule(withoutField as BackendHorario, new Map());
+    expect(built.nivelRankingId).toBeNull();
   });
 });
 

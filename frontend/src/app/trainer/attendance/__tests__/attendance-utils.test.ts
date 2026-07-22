@@ -12,6 +12,7 @@ import {
   buildRosterFromTabla,
   resolveEntrenadorId,
   resolveDisplayTrainerName,
+  deriveNivelIdFromSchedule,
   type SessionStudent,
 } from "../attendance-utils";
 import type { TablaRankingItem } from "@/services/api";
@@ -163,5 +164,35 @@ describe("resolveDisplayTrainerName", () => {
 
   it("falls back to a generic label for an admin when no schedule is selected yet", () => {
     expect(resolveDisplayTrainerName("admin", "Admin User", null)).toBe("Entrenador");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deriveNivelIdFromSchedule (Slice 7 — schedule→group linkage)
+// ---------------------------------------------------------------------------
+
+describe("deriveNivelIdFromSchedule", () => {
+  it("derives the linked nivel id when the schedule has nivelRankingId set", () => {
+    expect(deriveNivelIdFromSchedule({ nivelRankingId: 5 })).toBe(5);
+  });
+
+  it("returns null (manual-fallback path preserved) when nivelRankingId is null", () => {
+    expect(deriveNivelIdFromSchedule({ nivelRankingId: null })).toBeNull();
+  });
+
+  it("returns null when nivelRankingId is absent (optional/additive field)", () => {
+    expect(deriveNivelIdFromSchedule({})).toBeNull();
+  });
+
+  it("returns null when no schedule is selected yet", () => {
+    expect(deriveNivelIdFromSchedule(null)).toBeNull();
+  });
+
+  it("never fabricates or invents a nivel id — only reads the field the response exposes", () => {
+    // Negative assertion: passing an object with unrelated/extra fields must
+    // not cause the function to derive anything beyond nivelRankingId itself.
+    const scheduleLike = { id: 12, entrenadorId: 3, nivelRankingId: 7 };
+    expect(deriveNivelIdFromSchedule(scheduleLike)).toBe(7);
+    expect(deriveNivelIdFromSchedule({ ...scheduleLike, nivelRankingId: null })).toBeNull();
   });
 });

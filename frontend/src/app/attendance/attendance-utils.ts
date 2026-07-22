@@ -36,10 +36,15 @@ export interface ScheduleSlot {
  * `GET /api/attendance/schedules` (proxying FastAPI's `/asistencias/horarios`).
  *
  * Deliberately leaner than `ScheduleSlot`: the real `HorarioResponseDTO` has
- * no `cancha`, `cupoMaximo`, `activo`, or nivel/group linkage — those mock
- * fields have no backend equivalent (see `src/lib/server/attendance-adapter.ts`
- * for the documented gap). Only what the backend actually returns is modeled
- * here; the admin page renders accordingly.
+ * no `cancha`, `cupoMaximo`, or `activo` field — those mock fields have no
+ * backend equivalent (see `src/lib/server/attendance-adapter.ts` for the
+ * documented gap). Only what the backend actually returns is modeled here;
+ * the admin page renders accordingly.
+ *
+ * `nivelRankingId` (Slice 7) closes the previously-documented nivel/group
+ * linkage gap: `HorarioResponseDTO` now exposes it response-only, additive
+ * and optional so every existing caller of this shared interface (18+,
+ * including tests) keeps compiling unchanged.
  */
 export interface TrainingSchedule {
   id: number;
@@ -50,6 +55,13 @@ export interface TrainingSchedule {
   entrenadorId: number;
   /** Titular trainer's display name — resolved server-side from `/personas`. */
   entrenadorNombre: string;
+  /**
+   * The nivel (Grupo) this schedule is linked to, or `null` when not linked.
+   * Used by the trainer wizard to derive the roster without asking the
+   * trainer to pick a nivel manually — see
+   * `src/app/trainer/attendance/attendance-utils.ts`.
+   */
+  nivelRankingId?: number | null;
 }
 
 /** A recent attendance record, enriched with student/trainer names. */

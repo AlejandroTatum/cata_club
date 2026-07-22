@@ -3,19 +3,23 @@
  *
  * Extracted from page.tsx for testability — no React dependencies.
  *
- * Domain (Fase 3): the wizard now selects a real Horario
+ * Domain (Fase 3, updated Slice 7): the wizard selects a real Horario
  * (`GET /api/attendance/schedules`) and a real NivelRanking/"Grupo" roster
- * (`GET /api/ranking/niveles` + `GET /api/ranking/niveles/:id/tabla`)
- * *independently*, instead of deriving a single combined "session" from
- * Grupo.estudiantesIds like the old mock-backed AVAILABLE_SESSIONS did.
+ * (`GET /api/ranking/niveles` + `GET /api/ranking/niveles/:id/tabla`).
  *
- * That's not a UI preference — it's forced by a real backend gap: neither
- * `HorarioResponseDTO` nor `NivelRankingResponseDTO` exposes the
- * `nivel_ranking_id` link that exists on the `HorarioEntrenamiento` model,
- * so there is currently no way, through the API, to know which nivel a
- * horario belongs to (see src/lib/server/attendance-adapter.ts for the full
- * writeup). Asking the trainer to pick both explicitly is the honest
- * adaptation until that link is exposed.
+ * Historical gap (now partially closed): neither `HorarioResponseDTO` nor
+ * `NivelRankingResponseDTO` used to expose the `nivel_ranking_id` link that
+ * exists on the `HorarioEntrenamiento` model, so there was no way, through
+ * the API, to know which nivel a horario belongs to (see
+ * src/lib/server/attendance-adapter.ts for the full writeup). Asking the
+ * trainer to pick both explicitly was the honest adaptation.
+ *
+ * `HorarioResponseDTO` now exposes `nivelRankingId` (response-only,
+ * additive). `deriveNivelIdFromSchedule` below reads it: when set, the
+ * wizard auto-derives the nivel and fetches its real roster (never
+ * fabricates one client-side); when `null`, the explicit manual
+ * nivel-selection UI remains as the honest fallback — the gap isn't fully
+ * closed for horarios still unlinked to a nivel.
  */
 
 import type { EstadoAsistencia, UserRole } from "@/types/domain";
@@ -112,6 +116,19 @@ export function buildRosterFromTabla(items: TablaRankingItem[]): SessionStudent[
     name: item.personaNombreCompleto,
     attendance: "absent" as EstadoAsistencia,
   }));
+}
+
+/**
+ * Derive the nivel id to auto-select from a schedule's `nivelRankingId` link
+ * (Slice 7). Returns `null` when no schedule is selected yet or the
+ * selected schedule has no link, in which case the wizard falls back to the
+ * existing explicit manual nivel-selection UI. Only reads the field the
+ * response already exposes — never fabricates a nivel id or roster.
+ */
+export function deriveNivelIdFromSchedule(
+  schedule: Pick<TrainingSchedule, "nivelRankingId"> | null,
+): number | null {
+  return schedule?.nivelRankingId ?? null;
 }
 
 // ---------------------------------------------------------------------------

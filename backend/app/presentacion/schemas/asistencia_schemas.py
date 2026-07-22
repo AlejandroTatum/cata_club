@@ -15,6 +15,11 @@ class HorarioCreateDTO(BaseModel):
 
 class HorarioResponseDTO(ResponseBase, HorarioCreateDTO):
     id: int
+    # Additive, response-only: el modelo ya tiene esta FK (nullable) pero
+    # HorarioCreateDTO no la acepta -- crear/editar el vínculo queda fuera de
+    # alcance (ver design "Schedule→group linkage"). Solo se expone para que
+    # el frontend derive el roster de un horario ya ligado a un nivel.
+    nivel_ranking_id: Optional[int] = None
 
 
 class AsistenciaCreateDTO(BaseModel):

@@ -169,3 +169,66 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     expect(help).toHaveTextContent("no modifica la validación ni el significado actual");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Slice 7 — schedule→group linkage: derive roster when nivelRankingId is
+// set, preserve the explicit manual-selection fallback when it's null.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — schedule→group linkage (Slice 7)", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockResolvedValue([]);
+    mockFetchNivelesConOcupacion.mockResolvedValue([]);
+    mockFetchNivelRoster.mockResolvedValue([]);
+    mockRegisterAttendance.mockReset();
+  });
+
+  it("derives the linked nivel automatically and fetches its real roster, without asking the trainer to pick a group", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { id: 12, diaSemana: "lunes", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres", nivelRankingId: 4 },
+    ]);
+    mockFetchNivelesConOcupacion.mockResolvedValue([
+      { id: 4, numeroNivel: 2, nombre: "Intermedio", nivelCategoria: "intermedio", personasActuales: 1 },
+    ]);
+    mockFetchNivelRoster.mockResolvedValue([
+      { personaId: 9, personaNombreCompleto: "Ana López", posicionActual: 1, puntajeAcumulado: 20, estaEnRanking: true },
+    ]);
+
+    render(<TrainerAttendancePage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /lunes/i }));
+    // No manual "Intermedio" group button needed — the link is derived.
+    expect(screen.queryByRole("button", { name: /intermedio/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+
+    await waitFor(() => expect(mockFetchNivelRoster).toHaveBeenCalledWith(4));
+    // Roster comes from the real tabla response, never fabricated client-side.
+    expect(await screen.findByText("Ana López")).toBeInTheDocument();
+  });
+
+  it("keeps the explicit manual nivel-selection fallback when nivelRankingId is null", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { id: 12, diaSemana: "lunes", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres", nivelRankingId: null },
+    ]);
+    mockFetchNivelesConOcupacion.mockResolvedValue([
+      { id: 4, numeroNivel: 2, nombre: "Intermedio", nivelCategoria: "intermedio", personasActuales: 1 },
+    ]);
+    mockFetchNivelRoster.mockResolvedValue([
+      { personaId: 9, personaNombreCompleto: "Ana López", posicionActual: 1, puntajeAcumulado: 20, estaEnRanking: true },
+    ]);
+
+    render(<TrainerAttendancePage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /lunes/i }));
+    // Manual selection is still required and still honest — "Continuar" is
+    // disabled until the trainer picks a group explicitly.
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /intermedio/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+
+    await waitFor(() => expect(mockFetchNivelRoster).toHaveBeenCalledWith(4));
+  });
+});
