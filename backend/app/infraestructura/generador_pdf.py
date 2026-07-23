@@ -12,15 +12,22 @@ from __future__ import annotations
 import io
 from datetime import datetime, date
 from decimal import Decimal
+from pathlib import Path
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.lib.enums import TA_CENTER
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable,
+    HRFlowable, PageBreak,
 )
+
+_LOGO_PATH = Path(__file__).parent / "assets" / "cata-club-logo.jpeg"
+_ROJO_INSTITUCIONAL = "#D92128"
+_NEGRO_INSTITUCIONAL = "#111111"
+_FILAS_POR_PAGINA = 10
 
 
 def generar_comprobante_pago_pdf(
@@ -168,3 +175,146 @@ def _estilo_tabla() -> TableStyle:
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ])
+
+
+def _estilo_tabla_reporte() -> TableStyle:
+    """TableStyle de la tabla de filas para `generar_reporte_pdf`, con la
+    paleta institucional (rojo/negro) en lugar del azul del comprobante."""
+    return TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(_ROJO_INSTITUCIONAL)),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#BBBBBB")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor("#F5F5F5")]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ])
+
+
+def _dibujar_encabezado_pagina(canvas, doc) -> None:
+    """Callback `onFirstPage`/`onLaterPages` de `SimpleDocTemplate`: dibuja el
+    logo del club y una barra de acento roja institucional en TODAS las
+    páginas (incluida la página de "sin resultados"), independientemente del
+    contenido de la tabla."""
+    canvas.saveState()
+    ancho_pagina, alto_pagina = A4
+
+    if _LOGO_PATH.exists():
+        try:
+            canvas.drawImage(
+                str(_LOGO_PATH),
+                18 * mm, alto_pagina - 26 * mm,
+                width=22 * mm, height=22 * mm,
+                preserveAspectRatio=True, mask="auto",
+            )
+        except Exception:
+            # Un logo corrupto/ilegible no debe impedir generar el reporte.
+            pass
+
+    canvas.setFillColor(colors.HexColor(_ROJO_INSTITUCIONAL))
+    canvas.rect(0, alto_pagina - 28 * mm, ancho_pagina, 2 * mm, stroke=0, fill=1)
+
+    canvas.setFont("Helvetica", 8)
+    canvas.setFillColor(colors.HexColor(_NEGRO_INSTITUCIONAL))
+    canvas.drawRightString(
+        ancho_pagina - 18 * mm, 12 * mm,
+        f"Página {doc.page}",
+    )
+    canvas.restoreState()
+
+
+def generar_reporte_pdf(
+    *,
+    titulo: str,
+    columnas: list[str],
+    filas: list[list[str]],
+    generado_por: str | None = None,
+) -> bytes:
+    """
+    Construye un PDF tabular genérico (usado por los 3 reportes exportables
+    de `/reports`: etiquetas, nuevos por periodo, asistencia) en memoria y
+    devuelve bytes.
+
+    Reglas:
+      - `filas` se pagina manualmente en bloques de `_FILAS_POR_PAGINA` (10),
+        cada bloque como una `Table` independiente separada por `PageBreak()`,
+        para evitar que ReportLab corte una fila a la mitad en el borde de
+        página.
+      - El logo del club y la barra roja institucional se dibujan en TODAS
+        las páginas vía el callback `onFirstPage`/`onLaterPages`.
+      - Si `filas` está vacío se reemplaza la tabla por un `Paragraph`
+        centrado ("No hay resultados...") en vez de una tabla vacía; la
+        respuesta sigue siendo un PDF válido (HTTP 200).
+      - Esta función es independiente de `generar_comprobante_pago_pdf`
+        (no la modifica ni depende de ella).
+    """
+    buffer = io.BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=18 * mm,
+        rightMargin=18 * mm,
+        topMargin=32 * mm,
+        bottomMargin=18 * mm,
+        title=titulo,
+        author="Cata Club - Academia de Tenis",
+    )
+
+    estilos = getSampleStyleSheet()
+    estilo_titulo = ParagraphStyle(
+        "TituloReporte", parent=estilos["Title"],
+        fontSize=16, textColor=colors.HexColor(_NEGRO_INSTITUCIONAL), spaceAfter=4,
+    )
+    estilo_meta = ParagraphStyle(
+        "MetaReporte", parent=estilos["Normal"],
+        fontSize=9, textColor=colors.grey, spaceAfter=12,
+    )
+    estilo_vacio = ParagraphStyle(
+        "SinResultados", parent=estilos["Normal"],
+        fontSize=12, textColor=colors.HexColor(_NEGRO_INSTITUCIONAL),
+        alignment=TA_CENTER, spaceBefore=40,
+    )
+
+    fecha_generacion = datetime.now().strftime("%d/%m/%Y %H:%M")
+    meta_texto = f"Generado el {fecha_generacion}"
+    if generado_por:
+        meta_texto += f" por {generado_por}"
+
+    elementos: list = [
+        Paragraph(titulo, estilo_titulo),
+        Paragraph(meta_texto, estilo_meta),
+        HRFlowable(width="100%", thickness=1, color=colors.HexColor(_ROJO_INSTITUCIONAL)),
+        Spacer(1, 10),
+    ]
+
+    if not filas:
+        elementos.append(Paragraph(
+            "No hay resultados para los filtros seleccionados.", estilo_vacio,
+        ))
+    else:
+        bloques = [
+            filas[i:i + _FILAS_POR_PAGINA]
+            for i in range(0, len(filas), _FILAS_POR_PAGINA)
+        ]
+        for indice, bloque in enumerate(bloques):
+            datos_tabla = [columnas] + bloque
+            tabla = Table(datos_tabla, hAlign="LEFT", repeatRows=1)
+            tabla.setStyle(_estilo_tabla_reporte())
+            elementos.append(tabla)
+            if indice < len(bloques) - 1:
+                elementos.append(PageBreak())
+
+    doc.build(
+        elementos,
+        onFirstPage=_dibujar_encabezado_pagina,
+        onLaterPages=_dibujar_encabezado_pagina,
+    )
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes

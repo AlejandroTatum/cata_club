@@ -45,7 +45,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { fetchMembers, asignarRol, quitarRol, cambiarEstadoCuenta, fetchFichaMedica, actualizarFichaMedica, fetchTiposMembresia, crearMembresia, actualizarPersona } from "@/services/api";
+import { fetchMembers, obtenerRolesDePersona, asignarRol, quitarRol, cambiarEstadoCuenta, fetchFichaMedica, actualizarFichaMedica, fetchTiposMembresia, crearMembresia, actualizarPersona } from "@/services/api";
 import type { TipoMembresiaCatalogo } from "@/services/api";
 import { nivelToGrupo } from "@/app/groups/groups-page-utils";
 import { getUserInitials } from "@/lib/auth-utils";
@@ -520,12 +520,21 @@ function AccountRow({
   editModalOpen,
   onToggleEditModal,
 }: AccountRowProps): React.ReactElement {
+  // `roles`/`activo` start empty/true only as placeholders — they get
+  // overwritten by `obtenerRolesDePersona` as soon as the edit modal opens
+  // (see the `editModalOpen` effect below). Before that fetch resolves,
+  // `rolesReady` is false and the roles/estado controls stay disabled, so
+  // the checkboxes never render (or can be toggled) against a stale "no
+  // roles yet" placeholder — that mismatch was the original bug.
   const [roles, setRoles] = useState<BackendTipoRol[]>([]);
   const [activo, setActivo] = useState(true);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [rolesLoaded, setRolesLoaded] = useState(false);
   const [roleLoading, setRoleLoading] = useState<BackendTipoRol | null>(null);
   const [stateLoading, setStateLoading] = useState(false);
   const [roleError, setRoleError] = useState<string | null>(null);
   const [stateError, setStateError] = useState<string | null>(null);
+  const rolesReady = rolesLoaded && !rolesLoading;
   const statusBadge = getAccountStatusBadge(account);
   const personaId = Number(account.id);
 

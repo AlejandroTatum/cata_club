@@ -1,11 +1,13 @@
 /**
+ * GET /api/personas/[id]/roles — read current roles + activo (no mutation).
  * POST /api/personas/[id]/roles — assign a role.
  * DELETE /api/personas/[id]/roles?tipoRol=... — remove a role.
  *
  * BFF proxies to FastAPI's:
+ *   GET /personas/{persona_id}/roles
  *   POST /personas/{persona_id}/roles
  *   DELETE /personas/{persona_id}/roles/{tipo_rol}
- * Both are ADMINISTRADOR-only in the backend; we propagate its 401/403.
+ * All three are ADMINISTRADOR-only in the backend; we propagate its 401/403.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -19,6 +21,31 @@ interface RouteContext {
 
 interface AssignBody {
   tipoRol: BackendTipoRol;
+}
+
+export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
+  const personaId = Number(context.params.id);
+  if (Number.isNaN(personaId)) {
+    return NextResponse.json({ message: "El id de persona no es válido." }, { status: 400 });
+  }
+
+  const result = await backendFetchAuthed(request, `/personas/${personaId}/roles`, {
+    method: "GET",
+  });
+
+  if (!result.ok) {
+    return NextResponse.json({ message: "No se pudieron obtener los roles." }, { status: result.status });
+  }
+  if (!result.response.ok) {
+    return passthroughBackendError(result.response, "No se pudieron obtener los roles.");
+  }
+
+  const data = (await result.response.json()) as RolesResponse;
+  const response = NextResponse.json(data);
+  if (result.refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  }
+  return response;
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {

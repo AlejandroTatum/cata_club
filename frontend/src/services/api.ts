@@ -909,6 +909,13 @@ export async function crearMembresia(data: {
   });
 }
 
+/** Admin-only: read a persona's current roles + activo without mutating anything. */
+export async function obtenerRolesDePersona(personaId: number): Promise<RolesResponse> {
+  return request<RolesResponse>(apiEndpoint(`/personas/${personaId}/roles`), {
+    method: "GET",
+  });
+}
+
 /** Admin-only: assign a backend role to a persona. */
 export async function asignarRol(personaId: number, tipoRol: BackendTipoRol): Promise<RolesResponse> {
   return request<RolesResponse>(apiEndpoint(`/personas/${personaId}/roles`), {

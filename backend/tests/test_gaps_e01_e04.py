@@ -53,6 +53,36 @@ def test_asignar_y_quitar_rol(client):
     assert resp.json()["roles"] == []
 
 
+def test_obtener_roles_requiere_admin(client_sin_permisos):
+    resp = client_sin_permisos.get("/api/v1/personas/1/roles")
+    assert resp.status_code == 403
+
+
+def test_obtener_roles_refleja_estado_actual_sin_mutar(client):
+    persona = _crear_persona(client, "1744444444")
+    _registrar_credenciales(client, persona["cedula"], "u_roles@x.com")
+
+    # Sin roles asignados todavía: el GET debe reflejar eso, no un 404 ni un error.
+    resp = client.get(f"/api/v1/personas/{persona['id']}/roles")
+    assert resp.status_code == 200
+    assert resp.json()["roles"] == []
+    assert resp.json()["activo"] is True
+
+    client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ENTRENADOR"})
+    client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ALUMNO"})
+    client.patch(f"/api/v1/personas/{persona['id']}/cuenta/estado", json={"activo": False})
+
+    resp = client.get(f"/api/v1/personas/{persona['id']}/roles")
+    assert resp.status_code == 200
+    assert sorted(resp.json()["roles"]) == ["ALUMNO", "ENTRENADOR"]
+    assert resp.json()["activo"] is False
+
+    # Confirma que el GET no mutó nada: una segunda lectura da lo mismo.
+    resp = client.get(f"/api/v1/personas/{persona['id']}/roles")
+    assert sorted(resp.json()["roles"]) == ["ALUMNO", "ENTRENADOR"]
+    assert resp.json()["activo"] is False
+
+
 def test_login_real_funciona_tras_asignar_rol(client):
     """Antes de este fix, un Usuario nunca podía obtener ningún rol -> nunca
     pasaba GestorPermisos. Prueba end-to-end de que ahora sí funciona."""

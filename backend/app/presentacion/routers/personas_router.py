@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime, time, timezone
 
 from app.infraestructura.db import obtener_sesion
+from app.infraestructura.generador_pdf import generar_reporte_pdf
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaUpdateDTO,
     PersonaBusquedaDTO, RepresentadoCreateDTO,
@@ -22,6 +23,24 @@ from pydantic import BaseModel
 from app.presentacion.schemas.base import ResponseBase
 
 router = APIRouter(prefix="/personas", tags=["Personas"])
+
+_COLUMNAS_REPORTE_PERSONA = [
+    "Nombre", "Cédula", "Fecha Nac.", "Teléfono", "Prioridad Municipal", "Beca",
+]
+
+
+def _filas_reporte_persona(personas) -> list[list[str]]:
+    return [
+        [
+            f"{p.nombres} {p.apellidos}",
+            p.cedula,
+            p.fecha_nacimiento.strftime("%d/%m/%Y") if p.fecha_nacimiento else "",
+            p.telefono or "",
+            "Sí" if p.prioridad_municipal else "No",
+            f"{p.porcentaje_beca}%" if p.porcentaje_beca else "—",
+        ]
+        for p in personas
+    ]
 
 
 @router.post(
@@ -83,6 +102,70 @@ async def reporte_nuevos_por_periodo(
     inicio = datetime.combine(fecha_inicio, time.min, tzinfo=timezone.utc)
     fin = datetime.combine(fecha_fin, time.max, tzinfo=timezone.utc)
     return PersonaServicio(db).reporte_nuevos_por_periodo(inicio, fin)
+
+
+# --- Exportación PDF de los reportes de arriba (report-pdf-export) ----------
+# Re-ejecutan exactamente la misma consulta de servicio que su hermano JSON
+# (mismos filtros/validación) -- NUNCA confían en filas enviadas por el
+# cliente. Declarados junto a sus hermanos JSON, también ANTES de
+# `/{persona_id}` por la misma razón de ruteo documentada arriba.
+@router.get(
+    "/reportes/pdf",
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def reporte_por_etiquetas_pdf(
+    prioridad_municipal: Optional[bool] = Query(default=None),
+    becado: Optional[bool] = Query(default=None),
+    db: Session = Depends(obtener_sesion),
+):
+    personas = PersonaServicio(db).reporte_por_etiquetas(
+        prioridad_municipal=prioridad_municipal, becado=becado
+    )
+    pdf_bytes = generar_reporte_pdf(
+        titulo="Reporte de Personas por Etiquetas",
+        columnas=_COLUMNAS_REPORTE_PERSONA,
+        filas=_filas_reporte_persona(personas),
+    )
+    fecha_actual = date.today().isoformat()
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="reporte-etiquetas_{fecha_actual}.pdf"',
+        },
+    )
+
+
+@router.get(
+    "/reportes/nuevos-por-periodo/pdf",
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def reporte_nuevos_por_periodo_pdf(
+    fecha_inicio: date = Query(...),
+    fecha_fin: date = Query(...),
+    db: Session = Depends(obtener_sesion),
+):
+    if fecha_inicio >= fecha_fin:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La fecha de inicio debe ser anterior a la fecha de fin.",
+        )
+    inicio = datetime.combine(fecha_inicio, time.min, tzinfo=timezone.utc)
+    fin = datetime.combine(fecha_fin, time.max, tzinfo=timezone.utc)
+    personas = PersonaServicio(db).reporte_nuevos_por_periodo(inicio, fin)
+    pdf_bytes = generar_reporte_pdf(
+        titulo="Reporte de Nuevos Miembros por Período",
+        columnas=_COLUMNAS_REPORTE_PERSONA,
+        filas=_filas_reporte_persona(personas),
+    )
+    fecha_actual = date.today().isoformat()
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="reporte-periodo_{fecha_actual}.pdf"',
+        },
+    )
 
 
 # --- Selector de entrenador (dropdown al crear/editar un Horario) -----------
@@ -223,6 +306,20 @@ class RolesResponseDTO(ResponseBase, BaseModel):
 
 class EstadoCuentaDTO(BaseModel):
     activo: bool
+
+
+@router.get(
+    "/{persona_id}/roles", response_model=RolesResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def obtener_roles(persona_id: int, db: Session = Depends(obtener_sesion)):
+    """Lectura pura (no muta nada) del estado actual de roles/activo de una
+    persona. Existe para que el frontend pueda pre-cargar el estado real
+    antes de abrir el modal de edición de roles, en vez de asumir "sin
+    roles" / "activo" por defecto (bug: los checkboxes de rol arrancaban
+    todos destildados sin importar el estado real)."""
+    usuario = RolServicio(db).obtener_roles(persona_id)
+    return RolesResponseDTO(persona_id=persona_id, roles=[r.tipo_rol.value for r in usuario.roles], activo=usuario.activo)
 
 
 @router.post(

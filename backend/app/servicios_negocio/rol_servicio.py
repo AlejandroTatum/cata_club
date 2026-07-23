@@ -39,6 +39,14 @@ class RolServicio:
             )
         return usuario
 
+    def obtener_roles(self, persona_id: int) -> Usuario:
+        """Lectura pura: no muta nada, solo expone el estado actual de
+        roles/activo. Usado por `GET /personas/{id}/roles` para que el
+        frontend pueda pre-cargar el estado real antes de mostrar
+        toggles/checkboxes (evita que el modal de edición asuma "sin
+        roles" / "activo" por defecto)."""
+        return self._obtener_usuario_de_persona(persona_id)
+
     def asignar_rol(self, persona_id: int, tipo_rol: TipoRol) -> Usuario:
         usuario = self._obtener_usuario_de_persona(persona_id)
         if any(r.tipo_rol == tipo_rol for r in usuario.roles):
