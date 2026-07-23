@@ -53,6 +53,7 @@ import {
 import type { Horario, CrearHorarioDTO, ActualizarHorarioDTO, NivelConOcupacion, AlumnoHorario, Entrenador } from "@/services/api";
 import { groupHorarios, diffGroupSave, type StudentRef, type HorarioGroup } from "@/lib/groups-utils";
 import { CATEGORIA_METADATA, CATEGORIA_OPTIONS, diasPermitidos, horarioDe, type Categoria } from "@/services/categorias";
+import { countUniqueAlumnos } from "./groups-page-utils";
 
 const DIA_LABELS: Record<string, string> = {
   LUNES: "Lunes",
@@ -919,8 +920,8 @@ export default function GroupsPage(): React.ReactElement {
               ? pendingDeletionScope === "group"
                 ? `Se eliminará el horario completo (todos sus días: ${pendingDeletions
                     .map((p) => shortDiaLabel(p.diaSemana))
-                    .join(", ")}) y ${pendingDeletions.reduce((sum, p) => sum + p.alumnos.length, 0)} alumno(s) quedarán desasignados. Esta acción no se puede deshacer.`
-                : `${pendingDeletions.reduce((sum, p) => sum + p.alumnos.length, 0)} alumno(s) quedarán desasignados de: ${pendingDeletions
+                    .join(", ")}) y ${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados. Esta acción no se puede deshacer.`
+                : `${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados de: ${pendingDeletions
                     .map((p) => shortDiaLabel(p.diaSemana))
                     .join(", ")}. ¿Confirma la eliminación de esos días?`
               : ""

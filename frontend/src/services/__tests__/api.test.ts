@@ -33,6 +33,10 @@ import {
   desasignarAlumnoDeHorario,
   fetchEntrenadores,
   subirFotoPerfil,
+  downloadBlob,
+  exportPersonasPorEtiquetasPdf,
+  exportNuevosPorPeriodoPdf,
+  exportAsistenciaReportePdf,
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, Entrenador } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
@@ -677,6 +681,133 @@ describe("subirFotoPerfil", () => {
 
     const archivo = new File(["contenido"], "archivo.pdf", { type: "application/pdf" });
     await expect(subirFotoPerfil(archivo)).rejects.toThrow("Formato de archivo no permitido. Use JPG o PNG");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Report PDF export — downloadBlob + thin wrappers
+//
+// This suite runs in the `node` environment declared at the top of this
+// file, so `document`/`URL.createObjectURL` (browser download APIs) don't
+// exist as globals. Each test stubs the minimal shape `downloadBlob` needs
+// (an anchor-like element + createObjectURL/revokeObjectURL) via
+// `vi.stubGlobal`, restored in `afterEach` so it never leaks into other
+// suites in this file.
+// ---------------------------------------------------------------------------
+
+describe("downloadBlob / report PDF exports", () => {
+  const PDF_MAGIC_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // "%PDF"
+
+  let anchor: { href: string; download: string; click: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> };
+  let appendChildSpy: ReturnType<typeof vi.fn>;
+  let createObjectURLSpy: ReturnType<typeof vi.fn>;
+  let revokeObjectURLSpy: ReturnType<typeof vi.fn>;
+
+  function pdfResponse(contentDisposition?: string): Response {
+    const blob = new Blob([PDF_MAGIC_BYTES], { type: "application/pdf" });
+    const headers: Record<string, string> = { "Content-Type": "application/pdf" };
+    if (contentDisposition) headers["Content-Disposition"] = contentDisposition;
+    return new Response(blob, { status: 200, headers });
+  }
+
+  beforeEach(() => {
+    anchor = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
+    appendChildSpy = vi.fn();
+    createObjectURLSpy = vi.fn(() => "blob:mock-url");
+    revokeObjectURLSpy = vi.fn();
+
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => anchor),
+      body: { appendChild: appendChildSpy },
+    });
+    vi.stubGlobal("URL", {
+      createObjectURL: createObjectURLSpy,
+      revokeObjectURL: revokeObjectURLSpy,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  describe("downloadBlob", () => {
+    it("fetches the endpoint, creates an object URL, and clicks a temporary anchor with the header filename", async () => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        pdfResponse('attachment; filename="reporte-etiquetas_2026-07-23.pdf"'),
+      );
+
+      await downloadBlob("/api/personas/reportes/pdf", "fallback.pdf");
+
+      expect(global.fetch).toHaveBeenCalledWith("/api/personas/reportes/pdf");
+      expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+      expect(anchor.download).toBe("reporte-etiquetas_2026-07-23.pdf");
+      expect(anchor.href).toBe("blob:mock-url");
+      expect(appendChildSpy).toHaveBeenCalledWith(anchor);
+      expect(anchor.click).toHaveBeenCalledTimes(1);
+      expect(anchor.remove).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:mock-url");
+    });
+
+    it("falls back to the provided filename when Content-Disposition is absent", async () => {
+      vi.mocked(global.fetch).mockResolvedValue(pdfResponse());
+
+      await downloadBlob("/api/personas/reportes/pdf", "fallback.pdf");
+
+      expect(anchor.download).toBe("fallback.pdf");
+    });
+
+    it("throws a typed error on a non-2xx response", async () => {
+      vi.mocked(global.fetch).mockResolvedValue(errorResponse(403, { detail: "Permisos insuficientes" }));
+
+      await expect(downloadBlob("/api/personas/reportes/pdf", "fallback.pdf")).rejects.toThrow(
+        "Permisos insuficientes",
+      );
+      expect(createObjectURLSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("exportPersonasPorEtiquetasPdf", () => {
+    it("calls /api/personas/reportes/pdf with etiqueta filters", async () => {
+      vi.mocked(global.fetch).mockResolvedValue(pdfResponse());
+
+      await exportPersonasPorEtiquetasPdf({ prioridadMunicipal: true, becado: false });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/personas/reportes/pdf?prioridad_municipal=true&becado=false",
+      );
+    });
+  });
+
+  describe("exportNuevosPorPeriodoPdf", () => {
+    it("calls /api/personas/reportes/nuevos-por-periodo/pdf with the date range", async () => {
+      vi.mocked(global.fetch).mockResolvedValue(pdfResponse());
+
+      await exportNuevosPorPeriodoPdf("2026-01-01", "2026-12-31");
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/personas/reportes/nuevos-por-periodo/pdf?fecha_inicio=2026-01-01&fecha_fin=2026-12-31",
+      );
+    });
+  });
+
+  describe("exportAsistenciaReportePdf", () => {
+    it("calls /api/asistencias/reportes/pdf with the attendance filters", async () => {
+      vi.mocked(global.fetch).mockResolvedValue(pdfResponse());
+
+      await exportAsistenciaReportePdf({ fechaInicio: "2026-07-01", fechaFin: "2026-07-31", horarioId: 3 });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/asistencias/reportes/pdf?fechaInicio=2026-07-01&fechaFin=2026-07-31&horarioId=3",
+      );
+    });
+
+    it("calls with no query string when no filters are given", async () => {
+      vi.mocked(global.fetch).mockResolvedValue(pdfResponse());
+
+      await exportAsistenciaReportePdf();
+
+      expect(global.fetch).toHaveBeenCalledWith("/api/asistencias/reportes/pdf");
+    });
   });
 });
 

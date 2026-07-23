@@ -15,6 +15,7 @@ import {
   type SessionStudent,
 } from "../attendance-utils";
 import type { AlumnoHorario } from "@/services/api";
+import type { AttendanceRecord } from "@/app/attendance/attendance-utils";
 
 describe("nextAttendanceState", () => {
   it("cycles absent → present", () => {
@@ -147,6 +148,36 @@ describe("buildRosterFromAlumnoHorarios", () => {
   it("stringifies personaId for use as a stable React key / POST payload id", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
     expect(roster.every((s) => typeof s.id === "string")).toBe(true);
+  });
+
+  // Bug fix: reopening the "Tomar asistencia" wizard for a session that
+  // already has recorded attendance must show the existing records instead
+  // of defaulting everyone to "Ausente" — otherwise resubmitting duplicates
+  // rows (see backend upsert fix in registrar_asistencia).
+  it("prefills a student's attendance from an existing record for today's session instead of defaulting to absent", () => {
+    const existingRecords: AttendanceRecord[] = [
+      {
+        id: "500",
+        fecha: "2026-07-23",
+        horario: "Lunes 18:00 — 19:00",
+        personaId: 3,
+        estudiante: "Sofia Alumna",
+        estado: "present",
+        entrenador: "Coach Martinez",
+      },
+    ];
+
+    const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
+
+    expect(roster).toEqual([
+      { id: "3", name: "Sofia Alumna", attendance: "present" },
+      { id: "7", name: "Mateo Rodríguez", attendance: "absent" },
+    ]);
+  });
+
+  it("defaults to absent for every student when there are no existing records", () => {
+    const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, []);
+    expect(roster.every((s) => s.attendance === "absent")).toBe(true);
   });
 });
 

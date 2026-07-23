@@ -21,6 +21,8 @@ import {
   Building2,
   GraduationCap,
   CheckCircle,
+  Download,
+  Loader2,
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -29,6 +31,9 @@ import {
   fetchNuevosPorPeriodo,
   fetchAttendanceRecords,
   fetchTrainingSchedules,
+  exportPersonasPorEtiquetasPdf,
+  exportNuevosPorPeriodoPdf,
+  exportAsistenciaReportePdf,
 } from "@/services/api";
 import {
   ATTENDANCE_LABELS,
@@ -54,6 +59,7 @@ function ReportsContent(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   // Persona report results
   const [personaResults, setPersonaResults] = useState<PersonaReporte[]>([]);
@@ -204,6 +210,47 @@ function ReportsContent(): React.ReactElement {
       setAttendanceResults([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  /** Export the currently displayed persona report (etiquetas or periodo tab) as a PDF. */
+  async function handleExportPersonasPdf(): Promise<void> {
+    setExportingPdf(true);
+    setError(null);
+    try {
+      if (tab === "periodo") {
+        await exportNuevosPorPeriodoPdf(fechaInicio, fechaFin);
+      } else {
+        const filtros: { prioridadMunicipal?: boolean; becado?: boolean } = {};
+        if (useFilters) {
+          if (prioridadMunicipal) filtros.prioridadMunicipal = true;
+          if (becado) filtros.becado = true;
+        }
+        await exportPersonasPorEtiquetasPdf(filtros);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error al exportar el reporte en PDF.";
+      setError(message);
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
+  /** Export the currently displayed attendance report as a PDF. */
+  async function handleExportAsistenciaPdf(): Promise<void> {
+    setExportingPdf(true);
+    setError(null);
+    try {
+      const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number } = {};
+      if (attFechaInicio) params.fechaInicio = attFechaInicio;
+      if (attFechaFin) params.fechaFin = attFechaFin;
+      if (attHorarioId) params.horarioId = Number(attHorarioId);
+      await exportAsistenciaReportePdf(params);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error al exportar el reporte en PDF.";
+      setError(message);
+    } finally {
+      setExportingPdf(false);
     }
   }
 
@@ -423,6 +470,21 @@ function ReportsContent(): React.ReactElement {
             <h3 className="text-sm font-semibold text-cata-text">
               {filteredPersonaResults.length} persona{filteredPersonaResults.length !== 1 ? "s" : ""} encontrada{filteredPersonaResults.length !== 1 ? "s" : ""}
             </h3>
+            {personaResults.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleExportPersonasPdf()}
+                disabled={exportingPdf}
+                className="btn-secondary flex items-center gap-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {exportingPdf ? (
+                  <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />
+                ) : (
+                  <Download size={14} strokeWidth={1.5} />
+                )}
+                {exportingPdf ? "Exportando..." : "Exportar PDF"}
+              </button>
+            )}
           </div>
 
           {/* Local filters */}
@@ -563,6 +625,21 @@ function ReportsContent(): React.ReactElement {
             <h3 className="text-sm font-semibold text-cata-text">
               {attendanceResults.length} registro{attendanceResults.length !== 1 ? "s" : ""} encontrado{attendanceResults.length !== 1 ? "s" : ""}
             </h3>
+            {attendanceResults.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleExportAsistenciaPdf()}
+                disabled={exportingPdf}
+                className="btn-secondary flex items-center gap-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {exportingPdf ? (
+                  <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />
+                ) : (
+                  <Download size={14} strokeWidth={1.5} />
+                )}
+                {exportingPdf ? "Exportando..." : "Exportar PDF"}
+              </button>
+            )}
           </div>
 
           {attendanceResults.length === 0 ? (

@@ -9,7 +9,16 @@ def test_crear_persona_sin_rol_administrador_da_403(client_sin_permisos):
     assert resp.status_code == 403
 
 
-def test_listar_personas_no_requiere_rol_especifico(client_sin_permisos):
-    """GET de listado es de lectura general; solo las mutaciones exigen ADMINISTRADOR."""
+def test_listar_personas_sin_rol_administrador_da_403(client_sin_permisos):
+    """GET /personas/ expone PII completa (cédula, teléfono, fecha de
+    nacimiento, beca) del roster entero: exige ADMINISTRADOR igual que las
+    mutaciones, no basta con un token válido cualquiera."""
     resp = client_sin_permisos.get("/api/v1/personas/")
-    assert resp.status_code == 200
+    assert resp.status_code == 403
+
+
+def test_dashboard_stats_sin_rol_administrador_da_403(client_sin_permisos):
+    """GET /dashboard/stats expone estadísticas admin (personas, membresías,
+    pagos pendientes) del club entero: exige ADMINISTRADOR."""
+    resp = client_sin_permisos.get("/api/v1/dashboard/stats")
+    assert resp.status_code == 403

@@ -8,7 +8,7 @@
 import type { Grupo } from "@/types/domain";
 import type { StudentRef, GroupCardData } from "@/lib/groups-utils";
 import { getLevelLabel } from "@/lib/groups-utils";
-import type { NivelConOcupacion } from "@/services/api";
+import type { AlumnoHorario, NivelConOcupacion } from "@/services/api";
 
 // ---------------------------------------------------------------------------
 // Student group resolution
@@ -25,6 +25,25 @@ export function findStudentGroupId(
     if (g.estudiantesIds.includes(studentId)) return g.id;
   }
   return null;
+}
+
+/**
+ * Count distinct students across the día rows pending deletion. A group
+ * is stored as one `HorarioEntrenamiento` row per weekday, and a student
+ * enrolled in the group is assigned to every one of those rows — so a
+ * plain sum of `alumnos.length` across rows counts each student once per
+ * weekday instead of once per student.
+ */
+export function countUniqueAlumnos(
+  pendingDeletions: { alumnos: AlumnoHorario[] }[],
+): number {
+  const personaIds = new Set<number>();
+  for (const pending of pendingDeletions) {
+    for (const alumno of pending.alumnos) {
+      personaIds.add(alumno.personaId);
+    }
+  }
+  return personaIds.size;
 }
 
 /**

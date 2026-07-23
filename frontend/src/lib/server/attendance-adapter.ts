@@ -154,6 +154,7 @@ export function buildAttendanceRecord(
     id: String(asistencia.id),
     fecha: asistencia.fechaEntrenamiento,
     horario: horario ? horarioLabel(horario) : `Horario ${asistencia.horarioId}`,
+    personaId: asistencia.personaId,
     estudiante: personaFullName(personas.get(asistencia.personaId), `Persona ${asistencia.personaId}`),
     estado: ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND[asistencia.estado],
     entrenador: personaFullName(personas.get(asistencia.entrenadorId), `Persona ${asistencia.entrenadorId}`),

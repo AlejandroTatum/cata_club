@@ -59,6 +59,7 @@ import type { DiaSemana } from "@/types/domain";
 import {
   fetchTrainingSchedules,
   fetchAlumnosPorHorario,
+  fetchAttendanceRecords,
   registerAttendance,
   type RegisterAttendanceResult,
 } from "@/services/api";
@@ -177,8 +178,22 @@ export default function TrainerAttendancePage(): React.ReactElement {
     setRosterLoading(true);
     setRosterError(null);
     try {
-      const alumnoHorarios = await fetchAlumnosPorHorario(selectedScheduleId);
-      setStudents(buildRosterFromAlumnoHorarios(alumnoHorarios));
+      // The wizard always registers attendance for "today" (backend defaults
+      // fechaEntrenamiento to today's server date when omitted — see
+      // RegisterAttendanceRequest.fechaEntrenamiento). So "existing records
+      // for this session" means: attendance already recorded today for this
+      // horarioId. Prefilling from these avoids re-registering everyone as
+      // "Ausente" and creating duplicate rows when the wizard is reopened.
+      const today = new Date().toISOString().slice(0, 10);
+      const [alumnoHorarios, existingRecords] = await Promise.all([
+        fetchAlumnosPorHorario(selectedScheduleId),
+        fetchAttendanceRecords({
+          fechaInicio: today,
+          fechaFin: today,
+          horarioId: selectedScheduleId,
+        }),
+      ]);
+      setStudents(buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords));
       setStudentPage(1);
       setStep("mark-attendance");
     } catch (err) {

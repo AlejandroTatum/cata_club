@@ -110,6 +110,7 @@ describe("buildAttendanceRecord", () => {
       id: "1",
       fecha: "2026-07-18",
       horario: "Lunes 15:00 — 16:30",
+      personaId: 3,
       estudiante: "Sofia Alumna",
       estado: "present",
       entrenador: "Carla Trainer",

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, Response, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
 
 from app.dominio.enums import Categoria
 from app.infraestructura.db import obtener_sesion
+from app.infraestructura.generador_pdf import generar_reporte_pdf
 from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaResponseDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO,
@@ -80,6 +81,55 @@ async def reporte_asistencia(
     return AsistenciaServicio(db).generar_reporte(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+    )
+
+
+# --- Exportación PDF del reporte de asistencia (report-pdf-export) ---------
+# NOTA: gate deliberadamente MÁS ESTRECHO que su hermano JSON de arriba
+# (`/reportes`, que permite ADMINISTRADOR y ENTRENADOR). Solo ADMINISTRADOR
+# puede exportar el PDF -- requisito explícito del spec, no un descuido a
+# "arreglar" para igualar el endpoint JSON.
+@router.get(
+    "/reportes/pdf",
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def reporte_asistencia_pdf(
+    horario_id: Optional[int] = Query(default=None),
+    persona_id: Optional[int] = Query(default=None),
+    fecha_inicio: Optional[date] = Query(default=None),
+    fecha_fin: Optional[date] = Query(default=None),
+    db: Session = Depends(obtener_sesion),
+):
+    registros = AsistenciaServicio(db).generar_reporte(
+        horario_id=horario_id, persona_id=persona_id,
+        fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+    )
+    filas = [
+        [
+            a.fecha_entrenamiento.strftime("%d/%m/%Y") if a.fecha_entrenamiento else "",
+            (
+                f"{a.horario.dia_semana.value} {a.horario.hora_inicio.strftime('%H:%M')}"
+                f"–{a.horario.hora_fin.strftime('%H:%M')}"
+                if a.horario else ""
+            ),
+            f"{a.persona.nombres} {a.persona.apellidos}" if a.persona else "",
+            a.estado.value,
+            f"{a.entrenador.nombres} {a.entrenador.apellidos}" if a.entrenador else "",
+        ]
+        for a in registros
+    ]
+    pdf_bytes = generar_reporte_pdf(
+        titulo="Reporte de Asistencia",
+        columnas=["Fecha", "Horario", "Estudiante", "Estado", "Entrenador"],
+        filas=filas,
+    )
+    fecha_actual = date.today().isoformat()
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="reporte-asistencia_{fecha_actual}.pdf"',
+        },
     )
 
 

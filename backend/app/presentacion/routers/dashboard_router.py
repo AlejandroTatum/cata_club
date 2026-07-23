@@ -10,6 +10,7 @@ from app.dominio.enums import DiaSemana, EstadoMembresia, EstadoPago
 from app.dominio.modelos import HorarioEntrenamiento, Membresia, Pago, Persona
 from app.presentacion.schemas.dashboard_schemas import DashboardStatsDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.servicios_negocio.gestor_permisos import GestorPermisos
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -29,7 +30,7 @@ _WEEKDAY_MAP = {
 @router.get(
     "/stats",
     response_model=DashboardStatsDTO,
-    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
 async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardStatsDTO:
     total_personas = db.query(func.count(Persona.id)).scalar() or 0

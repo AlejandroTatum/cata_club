@@ -674,23 +674,23 @@ function AccountRow({
           </span>
         </td>
         <td className="hidden px-4 py-3.5 sm:table-cell">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`badge ${statusBadge.className}`}>
-              {statusBadge.label}
-            </span>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.currentTarget.focus();
-                onToggleEditModal();
-              }}
-              className="inline-flex items-center gap-1 rounded-lg border border-cata-border p-1.5 text-cata-text/50 transition-colors hover:bg-cata-red/10 hover:text-cata-red"
-              aria-label="Editar"
-              title="Editar miembro"
-            >
-              <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
-            </button>
-          </div>
+          <span className={`badge ${statusBadge.className}`}>
+            {statusBadge.label}
+          </span>
+        </td>
+        <td className="hidden px-4 py-3.5 text-right sm:table-cell">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.currentTarget.focus();
+              onToggleEditModal();
+            }}
+            className="inline-flex items-center gap-1 rounded-lg border border-cata-border p-1.5 text-cata-text/50 transition-colors hover:bg-cata-red/10 hover:text-cata-red"
+            aria-label="Editar"
+            title="Editar miembro"
+          >
+            <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
+          </button>
         </td>
       </tr>
       {editModalOpen &&
@@ -1064,6 +1064,9 @@ export default function MembersPage(): React.ReactElement {
                     <th className="hidden px-4 py-3 font-medium sm:table-cell">Contacto</th>
                     <th className="hidden px-4 py-3 text-center font-medium sm:table-cell">Estudiantes</th>
                     <th className="hidden px-4 py-3 font-medium sm:table-cell">Estado de membresía</th>
+                    <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">
+                      <span className="sr-only">Editar</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cata-border">

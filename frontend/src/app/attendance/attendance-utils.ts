@@ -58,6 +58,8 @@ export interface AttendanceRecord {
   id: string;
   fecha: string;
   horario: string;
+  /** Raw persona id of the student — used to match records back to a roster entry (e.g. prefilling the trainer wizard). */
+  personaId: number;
   estudiante: string;
   estado: EstadoAsistencia;
   entrenador: string;

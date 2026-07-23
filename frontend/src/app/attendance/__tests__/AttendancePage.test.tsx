@@ -60,6 +60,7 @@ function buildRecords(count: number): AttendanceRecord[] {
     id: `att-${i + 1}`,
     fecha: "2026-07-01",
     horario: "Lunes 15:00",
+    personaId: i + 1,
     estudiante: `Estudiante ${i + 1}`,
     estado: "present" as const,
     entrenador: "Coach Martinez",

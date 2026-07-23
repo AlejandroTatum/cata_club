@@ -87,12 +87,28 @@ class AsistenciaServicio:
         """entrenador_id se recibe explícito en cada registro (no se copia
         automáticamente del horario) para permitir sustituciones: por defecto
         el frontend puede pre-llenarlo con el titular del horario, pero el
-        usuario que registra puede cambiarlo si ese día dictó otro entrenador."""
+        usuario que registra puede cambiarlo si ese día dictó otro entrenador.
+
+        Hace upsert por (persona_id, horario_id, fecha_entrenamiento): si ya
+        existe un registro para esa combinación se actualiza en lugar de
+        insertar uno nuevo, para permitir reabrir el wizard de asistencia de
+        una sesión ya registrada sin generar filas duplicadas."""
         if not self.repo_persona.obtener_por_id(datos.persona_id):
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
         if not self.repo_horario.obtener_por_id(datos.horario_id):
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
         self._validar_entrenador(datos.entrenador_id)
+
+        existente = self.repo.buscar_por_persona_horario_fecha(
+            datos.persona_id, datos.horario_id, datos.fecha_entrenamiento
+        )
+        if existente:
+            existente.estado = datos.estado
+            existente.entrenador_id = datos.entrenador_id
+            existente.justificativo = datos.justificativo
+            existente.estado_justificativo = datos.estado_justificativo
+            return self.repo.actualizar(existente)
+
         return self.repo.crear(Asistencia(**datos.model_dump()))
 
     def historial_por_persona(self, persona_id: int) -> list[Asistencia]:

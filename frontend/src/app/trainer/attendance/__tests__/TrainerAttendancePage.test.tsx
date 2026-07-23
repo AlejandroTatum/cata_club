@@ -44,11 +44,13 @@ const mockUseAuth = vi.mocked(useAuth);
 
 const mockFetchTrainingSchedules = vi.fn().mockResolvedValue([]);
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
+const mockFetchAttendanceRecords = vi.fn().mockResolvedValue([]);
 const mockRegisterAttendance = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
+  fetchAttendanceRecords: (params: unknown) => mockFetchAttendanceRecords(params),
   registerAttendance: (request: unknown) => mockRegisterAttendance(request),
   fetchNotificaciones: vi.fn().mockResolvedValue([]),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
@@ -72,6 +74,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     mockReplace.mockReset();
     mockFetchTrainingSchedules.mockResolvedValue([]);
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
     mockRegisterAttendance.mockReset();
   });
 
@@ -172,6 +175,41 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     expect(screen.queryByText(/Nivel \d/)).not.toBeInTheDocument();
   });
 
+  it("pre-selects Presente for a student who already has an attendance record for today's session, instead of defaulting to Ausente", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
+    ]);
+    mockFetchAlumnosPorHorario.mockResolvedValue([ANA_ALUMNO_HORARIO]);
+    mockFetchAttendanceRecords.mockResolvedValue([
+      {
+        id: "900",
+        fecha: "2026-07-23",
+        horario: "Lunes 18:00 — 19:00",
+        personaId: 9,
+        estudiante: "Ana López",
+        estado: "present",
+        entrenador: "Coach Torres",
+      },
+    ]);
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+
+    await waitFor(() =>
+      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith(
+        expect.objectContaining({ horarioId: 12 }),
+      ),
+    );
+
+    const stateSelector = await screen.findByRole("group", { name: "Estado de asistencia de Ana López" });
+    expect(within(stateSelector).getByRole("button", { name: "Presente" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(stateSelector).getByRole("button", { name: "Ausente" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("shows an explanatory empty state and blocks final submit when the horario has no assigned alumnos", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
@@ -194,6 +232,7 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
     mockReplace.mockReset();
     mockFetchTrainingSchedules.mockResolvedValue([]);
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
     mockRegisterAttendance.mockReset();
   });
 

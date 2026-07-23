@@ -58,6 +58,7 @@ function makeRecords(n: number): AttendanceRecord[] {
     id: `att-${i + 1}`,
     fecha: "2026-07-22",
     horario: "Lunes 15:00",
+    personaId: i + 1,
     estudiante: `Alumno ${i + 1}`,
     estado: i % 2 === 0 ? "present" : "absent",
     entrenador: "Coach Martinez",

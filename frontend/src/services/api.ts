@@ -768,6 +768,107 @@ export async function fetchNuevosPorPeriodo(
   return request<PersonaReporte[]>(apiEndpoint(`/personas/reportes/nuevos-por-periodo?${qs.toString()}`));
 }
 
+// ---------------------------------------------------------------------------
+// Report PDF export — deliberately bypasses `request<T>()` (which always
+// calls `.json()`) since these responses are binary `application/pdf`
+// bodies. Auth still travels the same same-origin BFF path as every other
+// call in this file (see `getBaseUrl`'s doc comment) — a bare `<a href>`
+// straight to the backend could never carry the HttpOnly session cookie.
+// ---------------------------------------------------------------------------
+
+/** Extract a filename from a `Content-Disposition: attachment; filename="..."` header, if present. */
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * Fetch `endpoint` as a binary blob and trigger a browser download for it.
+ * Reads the filename from the response's `Content-Disposition` header when
+ * present, falling back to `fallbackFilename` otherwise. Throws
+ * `ApiClientError` on a non-2xx response, consistent with `request<T>()`'s
+ * error convention elsewhere in this file.
+ */
+export async function downloadBlob(endpoint: string, fallbackFilename: string): Promise<void> {
+  const url = `${getBaseUrl()}${endpoint}`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const errorBody: unknown = await response.json();
+      if (isApiErrorBody(errorBody)) {
+        message = errorBody.detail ?? errorBody.message ?? message;
+      }
+    } catch {
+      // ignore parse errors — use default message
+    }
+    throw new ApiClientError(message, response.status);
+  }
+
+  const blob = await response.blob();
+  const filename = filenameFromContentDisposition(response.headers.get("content-disposition")) ?? fallbackFilename;
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/** Export the "por etiquetas" persona report as a PDF and trigger its download. */
+export async function exportPersonasPorEtiquetasPdf(filtros: {
+  prioridadMunicipal?: boolean;
+  becado?: boolean;
+}): Promise<void> {
+  const qs = new URLSearchParams();
+  if (filtros.prioridadMunicipal !== undefined) qs.set("prioridad_municipal", String(filtros.prioridadMunicipal));
+  if (filtros.becado !== undefined) qs.set("becado", String(filtros.becado));
+  const query = qs.toString();
+  await downloadBlob(
+    apiEndpoint(`/personas/reportes/pdf${query ? `?${query}` : ""}`),
+    "reporte-etiquetas.pdf",
+  );
+}
+
+/** Export the "nuevos por período" persona report as a PDF and trigger its download. */
+export async function exportNuevosPorPeriodoPdf(fechaInicio: string, fechaFin: string): Promise<void> {
+  const qs = new URLSearchParams({
+    fecha_inicio: fechaInicio,
+    fecha_fin: fechaFin,
+  });
+  await downloadBlob(
+    apiEndpoint(`/personas/reportes/nuevos-por-periodo/pdf?${qs.toString()}`),
+    "reporte-periodo.pdf",
+  );
+}
+
+/** Export the attendance report as a PDF and trigger its download. */
+export async function exportAsistenciaReportePdf(params?: {
+  fechaInicio?: string;
+  fechaFin?: string;
+  horarioId?: number;
+  personaId?: number;
+}): Promise<void> {
+  const qs = new URLSearchParams();
+  if (params?.fechaInicio) qs.set("fechaInicio", params.fechaInicio);
+  if (params?.fechaFin) qs.set("fechaFin", params.fechaFin);
+  if (params?.horarioId !== undefined) qs.set("horarioId", String(params.horarioId));
+  if (params?.personaId !== undefined) qs.set("personaId", String(params.personaId));
+  const query = qs.toString();
+  await downloadBlob(
+    apiEndpoint(`/asistencias/reportes/pdf${query ? `?${query}` : ""}`),
+    "reporte-asistencia.pdf",
+  );
+}
+
 /** Search persons by name (autocomplete). */
 export async function searchStudents(
   query: string,

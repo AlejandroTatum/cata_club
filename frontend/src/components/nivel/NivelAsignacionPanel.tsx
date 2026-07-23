@@ -26,7 +26,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { Users, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Users, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, GraduationCap } from "lucide-react";
 import {
   fetchMembers,
   assignStudentToNivel,
@@ -43,11 +43,11 @@ import type { UserRole } from "@/types/domain";
 const NIVEL_PAGE_SIZE = 10;
 
 const NIVEL_COLOR_MAP: Record<string, string> = {
-  principiante: "bg-sky-100 text-sky-700",
-  intermedio: "bg-violet-100 text-violet-700",
-  avanzado: "bg-fuchsia-100 text-fuchsia-700",
+  principiante: "border border-sky-200 bg-sky-100 text-sky-700",
+  intermedio: "border border-violet-200 bg-violet-100 text-violet-700",
+  avanzado: "border border-fuchsia-200 bg-fuchsia-100 text-fuchsia-700",
 };
-const DEFAULT_BADGE_CLASS = "bg-gray-100 text-gray-400";
+const DEFAULT_BADGE_CLASS = "border border-gray-200 bg-gray-100 text-gray-400";
 
 function nivelBadge(
   niveles: NivelConOcupacion[],
@@ -377,18 +377,25 @@ function AsignarNivelTab({ students, niveles, loading, onOptimisticAssign, onBac
             </thead>
             <tbody className="divide-y divide-cata-border">
               {paginatedStudents.map((student) => (
-                <tr key={student.id}>
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-cata-text">
-                      {student.nombres} {student.apellidos}
-                    </span>
-                    {!student.activo && (
-                      <span className="ml-2 rounded bg-cata-bg px-1.5 py-0.5 text-[10px] font-medium text-cata-text/45">
-                        Inactivo
-                      </span>
-                    )}
+                <tr key={student.id} className="transition-colors hover:bg-cata-bg">
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cata-red/15">
+                        <GraduationCap size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+                      </div>
+                      <div>
+                        <span className="font-medium text-cata-text">
+                          {student.nombres} {student.apellidos}
+                        </span>
+                        {!student.activo && (
+                          <span className="ml-2 rounded bg-cata-bg px-1.5 py-0.5 text-[10px] font-medium text-cata-text/45">
+                            Inactivo
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-3.5 text-center">
                     {(() => {
                       const badge = nivelBadge(niveles, student.nivelRankingId);
                       return (
@@ -398,7 +405,7 @@ function AsignarNivelTab({ students, niveles, loading, onOptimisticAssign, onBac
                       );
                     })()}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3.5">
                     <select
                       aria-label={`Nuevo nivel para ${student.nombres} ${student.apellidos}`}
                       className="input-field w-24 py-1.5 text-sm"
@@ -415,7 +422,7 @@ function AsignarNivelTab({ students, niveles, loading, onOptimisticAssign, onBac
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3.5">
                     <button
                       type="button"
                       disabled={!drafts[student.id] || savingId === student.id}

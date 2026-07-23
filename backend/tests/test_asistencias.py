@@ -91,6 +91,50 @@ def test_asistencia_permite_entrenador_sustituto_distinto_al_titular(client, db_
     assert resp.json()["entrenadorId"] != horario["entrenadorId"]
 
 
+def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client, db_session):
+    """Bug confirmado: reabrir el wizard de "Tomar asistencia" de una sesión
+    ya registrada y volver a enviar no debe crear filas duplicadas -- debe
+    actualizar el registro existente para la misma (persona_id, horario_id,
+    fecha_entrenamiento)."""
+    entrenador = _crear_persona_api(client, "1710034065", "Carlos")
+    _convertir_en_entrenador(db_session, entrenador["id"])
+    alumno = _crear_persona_api(client, "1710034073", "Ana")
+
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={
+            "categoria": "JUVENIL", "dia_semana": "LUNES",
+            "entrenador_id": entrenador["id"],
+        },
+    ).json()
+
+    payload_base = {
+        "fecha_entrenamiento": str(date(2026, 7, 13)),
+        "persona_id": alumno["id"], "entrenador_id": entrenador["id"],
+        "horario_id": horario["id"],
+    }
+
+    primera = client.post(
+        "/api/v1/asistencias/",
+        json={**payload_base, "estado": "PRESENTE"},
+    )
+    assert primera.status_code == 201
+
+    segunda = client.post(
+        "/api/v1/asistencias/",
+        json={**payload_base, "estado": "AUSENTE"},
+    )
+    assert segunda.status_code == 201
+    assert segunda.json()["id"] == primera.json()["id"]
+
+    reporte = client.get(
+        f"/api/v1/asistencias/reportes?horario_id={horario['id']}"
+    ).json()
+    registros_alumno = [r for r in reporte if r["personaId"] == alumno["id"]]
+    assert len(registros_alumno) == 1
+    assert registros_alumno[0]["estado"] == "AUSENTE"
+
+
 def test_listar_alumnos_por_horario_incluye_edad_calculada(client, db_session):
     """`AlumnoHorarioDetalleDTO.edad` debe salir calculada a partir de
     `Persona.fecha_nacimiento` vía `_calcular_edad`, no hardcodeada ni

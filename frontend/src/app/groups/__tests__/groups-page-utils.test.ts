@@ -17,8 +17,52 @@ import {
   getCapacityBarColor,
   nivelToGrupo,
   buildGroupCardsFromNiveles,
+  countUniqueAlumnos,
 } from "../groups-page-utils";
-import type { NivelConOcupacion } from "@/services/api";
+import type { AlumnoHorario, NivelConOcupacion } from "@/services/api";
+
+function makeAlumno(personaId: number, horarioId: number): AlumnoHorario {
+  return {
+    id: personaId * 100 + horarioId,
+    personaId,
+    personaNombreCompleto: `Alumno ${personaId}`,
+    edad: 10,
+    horarioId,
+    horarioDia: "LUNES",
+    horarioHoraInicio: "15:00",
+    horarioHoraFin: "16:00",
+    fechaAsignacion: "2026-01-01",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// countUniqueAlumnos
+// ---------------------------------------------------------------------------
+
+describe("countUniqueAlumnos", () => {
+  it("counts each student once even when they appear in multiple día rows", () => {
+    // A group with 5 día rows where the same 3 students are enrolled in
+    // every row (real shape for a "Formativo"-style multi-day group) must
+    // report 3 unique students, not 15.
+    const pendingDeletions = [1, 2, 3, 4, 5].map((horarioId) => ({
+      alumnos: [makeAlumno(101, horarioId), makeAlumno(102, horarioId), makeAlumno(103, horarioId)],
+    }));
+    expect(countUniqueAlumnos(pendingDeletions)).toBe(3);
+  });
+
+  it("counts students who only appear in some rows exactly once", () => {
+    const pendingDeletions = [
+      { alumnos: [makeAlumno(101, 1), makeAlumno(102, 1)] },
+      { alumnos: [makeAlumno(101, 2)] },
+    ];
+    expect(countUniqueAlumnos(pendingDeletions)).toBe(2);
+  });
+
+  it("returns 0 for no pending deletions or empty rosters", () => {
+    expect(countUniqueAlumnos([])).toBe(0);
+    expect(countUniqueAlumnos([{ alumnos: [] }, { alumnos: [] }])).toBe(0);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // findStudentGroupId
