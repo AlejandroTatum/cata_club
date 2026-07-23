@@ -1,0 +1,20 @@
+services:
+  db:
+    ports: !override
+      - "5435:5432"
+  redis:
+    ports: !override
+      - "6381:6379"
+  mailpit:
+    ports: !override
+      - "1027:1025"
+      - "8027:8025"
+  backend:
+    ports: !override
+      - "8002:8000"
+  frontend:
+    ports: !override
+      - "3002:3000"
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8002/api/v1
