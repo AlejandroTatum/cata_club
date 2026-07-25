@@ -6,6 +6,14 @@
   con `index.html` como índice navegable. **Supersede a `docs/ux/prototipo-rediseno.html`** (14 vistas,
   23 jul), que queda como referencia histórica. `_sistema.css` es la especificación de tokens ejecutable:
   contiene coal/ball, alturas 40/32 px, stat 116 px, radius 14/10 y la gama de niveles l1–l10.
+- **EXCEPCIÓN — pantallas de autenticación:** para `/login`, `/register`, `/forgot-password` y
+  `/reset-password` la autoridad es `docs/ux/prototipo-rediseno.html` (sección `#stage-login`), NO
+  `docs/ux/prototipos/01-login.html`. Son dos composiciones distintas: la del prototipo de 14 vistas
+  es la aprobada (panel carbón `flex:1.1` más ancho que el formulario, titular de 42 px, `min-height`
+  660 px, eyebrow rojo "Panel de gestión", dato en línea, y en móvil el panel carbón se apila en vez
+  de ocultarse). Implementar contra `prototipos/01-login.html` fue precisamente el error que produjo
+  el login roto; el resto del documento (shell admin, tokens, vistas internas) sigue rigiéndose por
+  `docs/ux/prototipos/`.
 - **Auditoría UX (25 jul):** `.impeccable/critique/2026-07-25T04-37-47Z__frontend-src-app-landing.md`
   (landing, 20/36) y `__frontend-src-app.md` (app, 20/40). Incluyen medición real de navegador.
 - **Evaluación de usabilidad + backlog:** `docs/ux/evaluacion-usabilidad-rediseno.md` (73/100; meta ≥ 8,5 tras Fase 5)

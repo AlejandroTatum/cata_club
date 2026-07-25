@@ -1,10 +1,11 @@
 /**
  * Login Page — real backend authentication via the BFF (/api/auth/login).
  *
- * Layout is `AuthShell`, transcribed from `docs/ux/prototipos/01-login.html`.
- * The plan names that prototype the quality bar the whole redesign is measured
- * against, so this screen owns none of its own composition: coal panel, card,
- * and the security note below the card all come from the shared template.
+ * Layout is `AuthShell`, transcribed from the login stage of
+ * `docs/ux/prototipo-rediseno.html` (the approved 14-view prototype, which is
+ * the authority for the auth screens). This screen owns none of its own
+ * composition: coal panel, card, red eyebrow and the security note below the
+ * card all come from the shared template.
  *
  * The old mockup's "Acceso rápido (Demo)" shortcuts are intentionally not
  * implemented — real backend auth is wired up, so pre-filled demo credentials
@@ -204,26 +205,32 @@ export default function LoginPage(): React.ReactElement {
               {fieldErrors.password}
             </p>
           )}
-          {/* `.rowline` under the password field — the recovery escape hatch
-              sits with the control it belongs to, not floating below the CTA. */}
-          <div className="mt-2 flex justify-end">
-            <Link
-              href="/forgot-password"
-              className="text-xs font-semibold text-ink-2 transition-colors hover:text-cata-red"
-            >
-              ¿Olvidó su contraseña?
-            </Link>
-          </div>
         </div>
+
+        {/*
+         * The recovery escape hatch — `align-self:flex-end`, RED and 600 at
+         * 12.5px (prototype line 810). It is a peer of the fields, sitting
+         * between the last control and the CTA, not a footnote under it.
+         */}
+        <Link
+          href="/forgot-password"
+          className="self-end text-[12.5px] font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
+        >
+          ¿Olvidó su contraseña?
+        </Link>
 
         <Button type="submit" variant="primary" disabled={submitting} className="w-full">
           {submitting ? "Iniciando sesión…" : "Iniciar Sesión"}
         </Button>
       </form>
 
-      <p className="text-center text-xs text-ink-3">
+      {/* `.fcard` footer (line 812) — 12.5px muted, with the action in red. */}
+      <p className="text-center text-[12.5px] text-ink-3">
         ¿No tiene una cuenta?{" "}
-        <Link href="/register" className="font-bold text-ink transition-colors hover:text-cata-red">
+        <Link
+          href="/register"
+          className="font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
+        >
           Crear una
         </Link>
       </p>

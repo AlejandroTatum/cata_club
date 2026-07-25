@@ -3,10 +3,10 @@
  *
  * Expects `?token=xxx` in the URL (from the email link).
  *
- * This was the ONE auth screen that did not use `AuthShell` — confirmed in
- * `docs/ux/prototipos/04-restablecer-contrasenia.html`, whose note flags it as
- * "hoy rompe el layout". It now inherits the template without exception, so
- * all four public auth screens are the same composition.
+ * This was the ONE auth screen that did not use `AuthShell`, and it broke the
+ * layout outright. It now inherits the template without exception, so all four
+ * public auth screens are the same composition — the login stage of
+ * `docs/ux/prototipo-rediseno.html`, which is the authority for these screens.
  *
  * Two behaviors the prototype asks for and this screen now implements:
  *   - The password rules are shown BEFORE anything is typed and tick over
@@ -38,7 +38,10 @@ import { buildPasswordRules } from "./reset-password-utils";
 const EXPIRED_LINK_NOTE = (
   <>
     ¿El enlace ya venció?{" "}
-    <Link href="/forgot-password" className="font-bold text-ink transition-colors hover:text-cata-red">
+    <Link
+      href="/forgot-password"
+      className="font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
+    >
       Pedir uno nuevo
     </Link>{" "}
     — los enlaces duran 30 minutos.
@@ -245,10 +248,11 @@ function ResetPasswordContent(): React.ReactElement {
         </Button>
       </form>
 
-      <p className="text-center text-xs text-ink-3">
+      {/* `.fcard .aux` — 12.5px line with the action in red/600. */}
+      <p className="text-center text-[12.5px] text-ink-3">
         <Link
           href="/login"
-          className="inline-flex items-center gap-1.5 font-bold text-ink transition-colors hover:text-cata-red"
+          className="inline-flex items-center gap-1.5 font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
         >
           <ArrowLeft size={13} strokeWidth={2} aria-hidden="true" />
           Volver a Iniciar Sesión

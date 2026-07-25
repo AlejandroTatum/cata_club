@@ -109,10 +109,11 @@ export default function ForgotPasswordPage(): React.ReactElement {
         </form>
       )}
 
-      <p className="text-center text-xs text-ink-3">
+      {/* `.fcard .aux` — 12.5px line with the action in red/600. */}
+      <p className="text-center text-[12.5px] text-ink-3">
         <Link
           href="/login"
-          className="inline-flex items-center gap-1.5 font-bold text-ink transition-colors hover:text-cata-red"
+          className="inline-flex items-center gap-1.5 font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
         >
           <ArrowLeft size={13} strokeWidth={2} aria-hidden="true" />
           Volver a Iniciar Sesión

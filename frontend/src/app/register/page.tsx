@@ -504,9 +504,13 @@ export default function RegisterPage(): React.ReactElement {
           {/* The demo/placeholder disclaimer moved OUT of the card: it is a
               note about the screen, not a field of the form — see the
               `.authnote` slot on `AuthShell`. */}
-          <p className="text-center text-xs text-ink-3">
+          {/* `.fcard .aux` — 12.5px muted line with the action in red/600. */}
+          <p className="text-center text-[12.5px] text-ink-3">
             ¿Ya tiene una cuenta?{" "}
-            <Link href="/login" className="font-bold text-ink transition-colors hover:text-cata-red">
+            <Link
+              href="/login"
+              className="font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
+            >
               Iniciar sesión
             </Link>
           </p>
