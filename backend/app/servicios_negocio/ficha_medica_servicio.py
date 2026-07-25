@@ -37,11 +37,31 @@ class FichaMedicaServicio:
         return persona.ficha_medica
 
     def actualizar_por_persona(self, persona_id: int, datos: FichaMedicaUpdateDTO) -> FichaMedica:
-        """PATCH parcial: solo toca los campos que vienen en el payload.
-        `enfermedades`, si viene, REEMPLAZA la lista completa (ver docstring
-        del DTO) en vez de hacer append, para que el frontend controle el
-        estado final explícitamente."""
-        ficha = self.obtener_por_persona(persona_id)
+        """PATCH parcial con upsert: si la persona ya tiene ficha médica, solo
+        toca los campos que vienen en el payload. Si no tiene, la crea con los
+        datos proporcionados (requiere tipo_sangre)."""
+        persona = self.repo_persona.obtener_por_id(persona_id)
+        if not persona:
+            raise EntidadNoEncontrada(f"Persona con id {persona_id} no encontrada")
+
+        ficha = persona.ficha_medica
+
+        if ficha is None:
+            tipo_sangre = datos.tipo_sangre
+            if tipo_sangre is None:
+                raise EntidadNoEncontrada("No existe ficha médica para esta persona; tipo_sangre es requerido para crearla")
+            ficha = FichaMedica(
+                tipo_sangre=tipo_sangre,
+                persona_id=persona_id,
+                alergias=datos.alergias,
+                contacto_emergencia=datos.contacto_emergencia,
+                telefono_emergencia=datos.telefono_emergencia,
+            )
+            if datos.enfermedades:
+                for n in datos.enfermedades:
+                    ficha.enfermedades.append(Enfermedades(nombre_enfermedad=n))
+            return self.repo.crear(ficha)
+
         if datos.tipo_sangre is not None:
             ficha.tipo_sangre = datos.tipo_sangre
         if datos.enfermedades is not None:
