@@ -289,3 +289,109 @@ def test_crear_representado_ficha_medica_invalida_rechazada(client, db_session):
 
     assert db_session.query(Persona).filter(Persona.cedula == "1723456789").first() is None
     assert db_session.query(FichaMedica).count() == 0
+
+
+# --- Flujo 2: representado con credenciales (menores con cuenta propia) ----
+
+def test_crear_representado_con_credenciales_crea_usuario_y_rol(client, db_session):
+    representante = _crear_persona_representante(db_session)
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    payload = _payload_representado()
+    payload["correo"] = "menor@test.com"
+    payload["contrasenia"] = "clave12345"
+
+    resp = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=payload,
+    )
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["cedula"] == "1723456789"
+
+    hijo = db_session.query(Persona).filter(Persona.cedula == "1723456789").one()
+    usuario = db_session.query(Usuario).filter(Usuario.persona_id == hijo.id).one()
+    assert usuario.correo == "menor@test.com"
+    assert usuario.contrasenia != "clave12345"  # hasheada
+    roles = {r.tipo_rol for r in usuario.roles}
+    assert roles == {TipoRol.ALUMNO}
+
+
+def test_crear_representado_sin_credenciales_no_crea_usuario(client, db_session):
+    representante = _crear_persona_representante(db_session)
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    resp = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=_payload_representado(),
+    )
+    assert resp.status_code == 201
+    hijo = db_session.query(Persona).filter(Persona.cedula == "1723456789").one()
+    assert db_session.query(Usuario).filter(Usuario.persona_id == hijo.id).first() is None
+
+
+def test_crear_representado_correo_duplicado_rechazada(client, db_session):
+    representante = _crear_persona_representante(db_session, cedula="1710034065")
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    payload = _payload_representado()
+    payload["correo"] = "duplicado@test.com"
+    payload["contrasenia"] = "clave12345"
+
+    resp1 = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=payload,
+    )
+    assert resp1.status_code == 201
+
+    payload2 = _payload_representado(cedula="1723456790")
+    payload2["correo"] = "duplicado@test.com"
+    payload2["contrasenia"] = "clave12345"
+
+    resp2 = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=payload2,
+    )
+    assert resp2.status_code == 400
+    assert "correo" in resp2.json()["detail"].lower()
+
+
+def test_crear_representado_con_credenciales_correo_invalido_rechazado(client, db_session):
+    representante = _crear_persona_representante(db_session)
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    payload = _payload_representado()
+    payload["correo"] = "no-es-correo"
+    payload["contrasenia"] = "clave12345"
+
+    resp = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=payload,
+    )
+    assert resp.status_code == 422
+
+
+def test_crear_representado_con_credenciales_contrasenia_corta_rechazada(client, db_session):
+    representante = _crear_persona_representante(db_session)
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    payload = _payload_representado()
+    payload["correo"] = "menor@test.com"
+    payload["contrasenia"] = "123"
+
+    resp = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=payload,
+    )
+    assert resp.status_code == 422
+
+
+def test_crear_representado_admin_puede_usar_endpoint(client, db_session):
+    representante = _crear_persona_representante(db_session)
+    _restaurar_override_token(persona_id=999, roles=["ADMINISTRADOR"])
+
+    resp = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=_payload_representado(),
+    )
+    assert resp.status_code == 201
