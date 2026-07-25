@@ -1,8 +1,13 @@
 # Plan de implementación — Rediseño Cata Club "La Paleta"
 
-- **Fecha:** 23 de julio de 2026 · **Estado:** aprobado por Alejandro, pendiente de implementación vía SDD
-- **Prototipo aprobado (fuente de verdad visual):** `docs/ux/prototipo-rediseno.html` (14 vistas navegables, abrir en navegador)
-  — también publicado en https://claude.ai/code/artifact/344a61f3-b297-43a2-8b5e-2e2fa8bb5b14
+- **Fecha:** 23 de julio de 2026 · **Actualizado:** 25 de julio de 2026 tras la auditoría UX de dos superficies
+- **Estado:** aprobado por Alejandro; Fase 0 y Fase L implementadas en la rama `fix/ux-audit-remediation`
+- **Prototipo aprobado (fuente de verdad visual):** `docs/ux/prototipos/` — 30 vistas + `_sistema.css`,
+  con `index.html` como índice navegable. **Supersede a `docs/ux/prototipo-rediseno.html`** (14 vistas,
+  23 jul), que queda como referencia histórica. `_sistema.css` es la especificación de tokens ejecutable:
+  contiene coal/ball, alturas 40/32 px, stat 116 px, radius 14/10 y la gama de niveles l1–l10.
+- **Auditoría UX (25 jul):** `.impeccable/critique/2026-07-25T04-37-47Z__frontend-src-app-landing.md`
+  (landing, 20/36) y `__frontend-src-app.md` (app, 20/40). Incluyen medición real de navegador.
 - **Evaluación de usabilidad + backlog:** `docs/ux/evaluacion-usabilidad-rediseno.md` (73/100; meta ≥ 8,5 tras Fase 5)
 - **Logo:** `frontend/public/brand/cata-club-logo.jpeg` (montar siempre en disco blanco redondo)
 - **Credenciales dev:** admin@cataclub.com/admin12345 · entrenador@cataclub.com/trainer12345 · ana@/laura@ → alumno123
@@ -27,12 +32,48 @@ Concepto **"la paleta"**: goma roja `#D92128` + goma negra/carbón `#131316` + p
 4. Iconos: `lucide-react` (trazo 2px) — nav: layout-grid, users, trophy, calendar, credit-card, clipboard-check, file-text; search, bell, message-circle, lock, tag, sun, menu, send, x.
 5. Tests: unit de componentes UI (alturas, variantes) siguiendo el patrón de tests existente del repo.
 
+## FASE 0 — Defectos auditados (HECHA, commit `ade21ef`)
+
+Siete defectos verificados con medición, no con opinión. Todos con test que falla primero.
+
+1. ✅ `trainer/attendance`: el roster arrancaba en `"absent"`, así que tocar Continuar → Siguiente →
+   Confirmar registraba la sesión entera como ausente — y el roster paginaba de a 10 sobre 44, así que
+   los de la página 2 se enviaban ausentes en silencio. Centinela `UNMARKED` solo de frontend, contador
+   "Sin marcar" sobre el roster completo, acción "Marcar restantes presentes", envío bloqueado.
+2. ✅ Botones de estado de 30 px → 44 px en una sola fila, envueltos en `radiogroup`.
+3. ✅ `members`: "Guardar cambios" no guardaba nada (ambos botones compartían handler).
+4. ✅ `members`: crear membresía pedía recargar; ahora refresca sin desmontar el diálogo abierto.
+5. ✅ `payments`: overflow horizontal de 60 px a 390 px (fila de filtros sin `flex-wrap`).
+6. ✅ Contraste: "Sin asignar" 2,31:1 → 9,37:1; token `fuchsia-ink` para rosa sobre claro.
+7. ✅ Drawer móvil cerrado dejaba 11 controles en el orden de tabulación.
+
+## FASE L — Landing como embudo (HECHA)
+
+CTA de inscripción, WhatsApp con `wa.me`, navbar sticky, `metadata`/OpenGraph propios, banner de
+confianza sin datos inventados, contraste y responsive del bloque de horarios.
+
+**Hallazgo que cambió el plan:** `/register` se documenta a sí mismo como *"demo placeholder
+(no backend account creation yet)"* y le dice al visitante *"No se almacenó ningún dato"*. El flujo
+real de inscripción pública es `/student/enroll`, que sí postea al backend. Los CTA apuntan ahí.
+Decidir qué se hace con `/register` es una decisión de producto pendiente.
+
+**Datos removidos por no tener fuente verificada** (necesitan input del cliente):
+`+80 deportistas en formación` (era `TODO(client)`), el horario de contacto `Lun–Sáb 16:00–20:30`
+(era `TODO(client)` y contradecía los horarios publicados, 15:00–21:15), y "Alto rendimiento"
+como servicio del footer (no existe en el repo; los horarios dicen Competitivo/Selección).
+
 ## FASE 2 — Bugs funcionales (independiente, puede ir primero)
 
 1. **Rol representante roto:** laura@cataclub.com cae en `/unauthorized` tras login pero `/student` renderiza ("Rol no soportado"). Definir ruta de aterrizaje del representante (portal student con cards por hijo) y permitir `add-dependent`.
 2. **`/trainer/nivel` 403:** llama a `/api/members` (admin-only) — usar endpoint propio con permisos de trainer.
 3. **Wizard registro:** panel "RELLENAR DATOS DE PRUEBA (SOLO DESARROLLO)" detrás de flag de entorno.
-4. **Fechas `mm/dd/yyyy`** en UI español (reports, register) → dd/mm/yyyy.
+4. ~~**Fechas `mm/dd/yyyy`** en UI español (reports, register) → dd/mm/yyyy.~~ **DESMENTIDO por la
+   auditoría del 25 jul:** no existe ni un `mm/dd/yyyy` generado por la app. Las 6 llamadas a fecha
+   están pineadas a `es-EC` y hay cero `toLocaleDateString()` sin pinear. El problema real es otro y
+   pasa a la Fase 5: **ISO crudo conviviendo con formato largo en la misma fila** (en `/payments`,
+   PERÍODO muestra `2026-07-01 – 2026-08-12` y SUBIDO muestra `23 de julio de 2026`), más
+   `reports` mostrando `1990-01-01` en "Fecha Nac.". Único caso dependiente del entorno: los
+   `input[type=date]` de `/reports` renderizan según el locale del navegador, no del documento.
 5. Revisar redirect `/products` → `/payments` (deprecado, decidir si se elimina).
 
 ## FASE 3 — Pantallas admin

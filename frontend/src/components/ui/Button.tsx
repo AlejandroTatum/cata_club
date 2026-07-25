@@ -1,0 +1,78 @@
+/**
+ * Button — the single control height in the system.
+ *
+ * `_sistema.css` `.btn` (:167-176): 40px tall (`--h-ctl`), 16px horizontal
+ * padding, 10px radius (`--r-ctl`), 13px/600 label. `.btn.sm` (:173) is the
+ * in-table action: 32px (`--h-ctl-sm`), 12px padding, 12.5px label, 8px radius.
+ *
+ * Why this exists: the legacy `.btn-primary` in `globals.css` is nominally
+ * `px-5 py-2.5`, but callers override the padding and it ships at four
+ * different real heights. Here the height is a token, not a caller decision.
+ *
+ * Color rule (non-negotiable): red is reserved for the PRIMARY CTA and for
+ * destructive/error actions. A selected or active state is never red — it is
+ * coal plus the yellow ball dot (see `FilterPill`).
+ */
+
+import type { ButtonHTMLAttributes, ReactElement } from "react";
+import { cn } from "./cn";
+
+export type ButtonVariant = "primary" | "secondary" | "dark" | "ghost";
+export type ButtonSize = "md" | "sm";
+
+/** `.btn` base — shape, typography and focus ring, without any color. */
+const BASE =
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap border font-semibold " +
+  "transition-colors duration-150 " +
+  // `_sistema.css:80` — focus ring is the ball, 2px, offset 2px.
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball " +
+  // `.btn[disabled], .btn.off` (:176)
+  "disabled:cursor-not-allowed disabled:opacity-45";
+
+const SIZE: Record<ButtonSize, string> = {
+  md: "h-ctl rounded-ctl px-4 text-[13px]",
+  sm: "h-ctl-sm rounded-lg px-3 text-[12.5px]",
+};
+
+const VARIANT: Record<ButtonVariant, string> = {
+  // `.btn.pri` — the only red button. Hover is `--red-dark`.
+  primary: "bg-cata-red border-cata-red text-white hover:bg-cata-red-dark hover:border-cata-red-dark",
+  // `.btn` bare — white surface, `--line-2` border.
+  secondary: "bg-paper border-line-2 text-ink hover:bg-canvas",
+  // `.btn.dark` — coal. Secondary-but-emphatic actions ("+ Nuevo miembro").
+  dark: "bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2",
+  // `.btn.ghost` — no chrome at all.
+  ghost: "bg-transparent border-transparent text-ink-2 hover:bg-canvas hover:text-ink",
+};
+
+/**
+ * The class string for a given variant/size, exported so anchors and
+ * `next/link` can wear the button skin without cloning the values.
+ */
+export function buttonClasses(
+  variant: ButtonVariant = "secondary",
+  size: ButtonSize = "md",
+  className?: string,
+): string {
+  return cn(BASE, SIZE[size], VARIANT[variant], className);
+}
+
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+}
+
+export default function Button({
+  variant = "secondary",
+  size = "md",
+  className,
+  type = "button",
+  children,
+  ...rest
+}: ButtonProps): ReactElement {
+  return (
+    <button type={type} className={buttonClasses(variant, size, className)} {...rest}>
+      {children}
+    </button>
+  );
+}

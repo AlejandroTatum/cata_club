@@ -63,9 +63,12 @@
     color: #FFFFFF;
     border-radius: 0.75rem;
     transition: all 0.2s ease;
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium hover:bg-cata-red-light focus:outline-none focus:ring-2 focus:ring-cata-red/30 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-cata-red/30 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /* Single source of truth for the hover state. The `@apply` above used to
+     also carry `hover:bg-cata-red-light` (#E55157) — the same color this rule
+     sets, but declared twice for one class. Only this rule remains. */
   .btn-primary:hover {
     background-color: #E55157;
     transform: translateY(-1px);
@@ -101,33 +104,37 @@
     box-shadow: 0 0 0 3px rgba(217,33,40,0.2);
   }
 
-  .badge {
+  /* Badge — `.badge` is the base shape and each variant carries that same
+     shape, so `badge badge-success` and a bare `badge-success` render
+     identically. Call sites in the app use both spellings; neither is wrong.
+     New code should prefer the `Badge` primitive in `components/ui`. */
+  .badge,
+  .badge-success,
+  .badge-warning,
+  .badge-error,
+  .badge-neutral {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
   }
 
   .badge-success {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
     background-color: rgba(21,128,61,0.12);
     color: #15803D;
     border: 1px solid rgba(21,128,61,0.3);
   }
 
   .badge-warning {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
     background-color: rgba(146,64,14,0.12);
     color: #92400E;
     border: 1px solid rgba(146,64,14,0.3);
   }
 
   .badge-error {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
     background-color: rgba(185,28,28,0.1);
     color: #B91C1C;
     border: 1px solid rgba(185,28,28,0.3);
   }
 
   .badge-neutral {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
     background-color: rgba(55,65,81,0.08);
     color: #374151;
     border: 1px solid rgba(55,65,81,0.15);
@@ -173,11 +180,6 @@
 
 /* Subtle background texture — premium spa/Swiss aesthetic */
 @layer utilities {
-  .bg-subtle-dot {
-    background-image: radial-gradient(circle, rgba(217, 33, 40, 0.03) 1px, transparent 1px);
-    background-size: 24px 24px;
-  }
-
   .bg-logo-glow {
     background: radial-gradient(ellipse 50% 60% at 50% 40%, rgba(217, 33, 40, 0.04) 0%, transparent 70%);
   }
