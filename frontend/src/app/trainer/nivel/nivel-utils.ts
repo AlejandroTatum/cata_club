@@ -50,10 +50,35 @@ export interface NivelStudentRef {
 }
 
 /**
+ * Build the nivel student list from the lightweight alumnos-con-nivel
+ * endpoint (`fetchAlumnosConNivel`), accessible to both admin and trainer.
+ * The `actctivo` flag is unknown for this source and therefore defaults to
+ * `true` (the panel only needs to assign/move a nivel, not filter by estado).
+ */
+export function buildNivelStudentsFromAlumnos(
+  alumnos: ReadonlyArray<{
+    personaId: number;
+    nombres: string;
+    apellidos: string;
+    nivelRankingId: number | null;
+  }>,
+): NivelStudentRef[] {
+  return alumnos.map((a) => ({
+    id: String(a.personaId),
+    nombres: a.nombres,
+    apellidos: a.apellidos,
+    activo: true,
+    nivelRankingId: a.nivelRankingId,
+  }));
+}
+
+/**
  * Build the nivel student list from the real member accounts (fetched via
  * fetchMembers(), same source as src/app/groups/page.tsx). Each student's
  * `grupoId` (their current nivel_ranking id) doubles as their nivel
  * category — there's no separate concept on the backend.
+ *
+ * @deprecated Prefer buildNivelStudentsFromAlumnos (trainer-accessible).
  */
 export function buildNivelStudents(
   memberAccounts: ReadonlyArray<{

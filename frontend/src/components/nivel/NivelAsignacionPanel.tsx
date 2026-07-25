@@ -29,14 +29,19 @@ import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
 import { Users, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, GraduationCap } from "lucide-react";
 import {
-  fetchMembers,
+  fetchAlumnosConNivel,
+  fetchNivelesConOcupacion,
   assignStudentToNivel,
   moveStudentToNivel,
   ApiClientError,
   type NivelConOcupacion,
+  type AlumnoConNivel,
 } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
-import { buildNivelStudents } from "@/app/trainer/nivel/nivel-utils";
+import {
+  buildNivelStudentsFromAlumnos,
+  type NivelStudentRef,
+} from "@/app/trainer/nivel/nivel-utils";
 import { paginateRecords, getTotalPages } from "@/app/attendance/attendance-utils";
 import type { UserRole } from "@/types/domain";
 
@@ -81,19 +86,22 @@ export default function NivelAsignacionPanel({
   backHref,
   backLabel,
 }: NivelAsignacionPanelProps): React.ReactElement {
-  const [members, setMembers] = useState<Awaited<ReturnType<typeof fetchMembers>>["accounts"]>([]);
+  const [alumnos, setAlumnos] = useState<AlumnoConNivel[]>([]);
   const [niveles, setNiveles] = useState<NivelConOcupacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const membersRef = useRef(members);
-  membersRef.current = members;
+  const alumnosRef = useRef(alumnos);
+  alumnosRef.current = alumnos;
 
   const loadData = useCallback(async (): Promise<void> => {
     setLoading(true);
     setLoadError(null);
     try {
-      const { accounts: membersData, niveles: nivelesData } = await fetchMembers();
-      setMembers(membersData);
+      const [alumnosData, nivelesData] = await Promise.all([
+        fetchAlumnosConNivel(),
+        fetchNivelesConOcupacion(),
+      ]);
+      setAlumnos(alumnosData);
       setNiveles(nivelesData);
     } catch {
       setLoadError("No se pudieron cargar los estudiantes. Intente nuevamente.");
@@ -104,8 +112,11 @@ export default function NivelAsignacionPanel({
 
   const silentRefresh = useCallback(async (): Promise<void> => {
     try {
-      const { accounts: membersData, niveles: nivelesData } = await fetchMembers();
-      setMembers(membersData);
+      const [alumnosData, nivelesData] = await Promise.all([
+        fetchAlumnosConNivel(),
+        fetchNivelesConOcupacion(),
+      ]);
+      setAlumnos(alumnosData);
       setNiveles(nivelesData);
     } catch {
       /* swallow — data is stale but functional */
@@ -114,25 +125,14 @@ export default function NivelAsignacionPanel({
 
   const handleOptimisticAssign = useCallback(
     (studentId: string, newNivelId: number) => {
-      const currentMembers = membersRef.current;
-      let oldNivelId: number | null = null;
-      for (const account of currentMembers) {
-        for (const est of account.estudiantes) {
-          if (est.id === studentId && est.grupoId !== null) {
-            oldNivelId = Number(est.grupoId);
-            break;
-          }
-        }
-        if (oldNivelId !== null) break;
-      }
+      const numericId = Number(studentId);
+      const current = alumnosRef.current.find((a) => a.personaId === numericId);
+      const oldNivelId = current?.nivelRankingId ?? null;
 
-      setMembers((prev) =>
-        prev.map((account) => ({
-          ...account,
-          estudiantes: account.estudiantes.map((est) =>
-            est.id === studentId ? { ...est, grupoId: String(newNivelId) } : est,
-          ),
-        })),
+      setAlumnos((prev) =>
+        prev.map((a) =>
+          a.personaId === numericId ? { ...a, nivelRankingId: newNivelId } : a,
+        ),
       );
 
       setNiveles((prev) =>
@@ -162,7 +162,7 @@ export default function NivelAsignacionPanel({
     void loadData();
   }, [loadData]);
 
-  const students = buildNivelStudents(members);
+  const students = buildNivelStudentsFromAlumnos(alumnos);
 
   return (
     <ProtectedRoute allowedRoles={allowedRoles}>
@@ -199,7 +199,7 @@ export default function NivelAsignacionPanel({
 // ---------------------------------------------------------------------------
 
 interface AsignarNivelTabProps {
-  students: ReturnType<typeof buildNivelStudents>;
+  students: NivelStudentRef[];
   niveles: NivelConOcupacion[];
   loading: boolean;
   onOptimisticAssign: (studentId: string, newNivelId: number) => void;

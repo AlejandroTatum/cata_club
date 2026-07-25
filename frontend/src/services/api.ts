@@ -592,6 +592,31 @@ export async function fetchMembers(): Promise<MembersResponse> {
   return request<MembersResponse>(apiEndpoint("/members"));
 }
 
+/** Lightweight student row from GET /api/ranking/alumnos-con-nivel — accessible to admin and trainer. */
+export interface AlumnoConNivel {
+  personaId: number;
+  nombres: string;
+  apellidos: string;
+  nivelRankingId: number | null;
+}
+
+/**
+ * List all students (rol ALUMNO) with their current `nivelRankingId` (null if
+ * unassigned). Available to both admin and trainer; replaces `fetchMembers`
+ * for the nivel-asignation panel because `/personas/` is admin-only.
+ */
+export async function fetchAlumnosConNivel(): Promise<AlumnoConNivel[]> {
+  const items = await request<{ persona_id: number; nombres: string; apellidos: string; nivel_ranking_id: number | null }[]>(
+    apiEndpoint("/ranking/alumnos-con-nivel"),
+  );
+  return items.map((it) => ({
+    personaId: it.persona_id,
+    nombres: it.nombres,
+    apellidos: it.apellidos,
+    nivelRankingId: it.nivel_ranking_id,
+  }));
+}
+
 /**
  * Assign a student with no prior nivel/group (`grupoId === null`) to one —
  * `POST /ranking/asignar-nivel-inicial`. Backend-role-restricted to
@@ -739,6 +764,7 @@ export interface DashboardStats {
   activeMemberships: number;
   pendingPayments: number;
   todaySchedules: number;
+  personasSinMembresia: number;
 }
 
 /** Fetch aggregate dashboard stats, composed server-side from `/personas`, `/membresias/pagos*` and `/asistencias/horarios` — `GET /api/dashboard`. */
