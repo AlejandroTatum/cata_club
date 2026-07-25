@@ -5,17 +5,22 @@ import {
   CalendarDays,
   Eye,
   Facebook,
+  Flame,
+  Handshake,
   Instagram,
   MapPin,
+  MessageCircle,
   Navigation,
   Phone,
   Star,
   Target,
-  Trophy,
+  Timer,
+  Users,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import LandingMap from "./LandingMap";
 import LandingMotion from "./LandingMotion";
-import { landingConfig, type LandingSchedule } from "./landing-config";
+import { buildLandingStats, landingConfig, toWhatsAppLink, type LandingSchedule } from "./landing-config";
 
 interface SectionHeaderProps {
   eyebrow: string;
@@ -27,8 +32,21 @@ interface ScheduleCardProps extends LandingSchedule {}
 
 interface ValueCardProps {
   title: string;
+  icon: LucideIcon;
   children: React.ReactNode;
 }
+
+/**
+ * Where every "inscríbete" affordance points.
+ *
+ * `/student/enroll`, not `/register`: enroll is the real public enrollment
+ * wizard (it POSTs to the backend's public /enrollment, persists the student
+ * and auto-logs the user in, and is listed in PUBLIC_EXCEPTIONS in
+ * src/lib/middleware-utils.ts). `/register` is still a documented demo
+ * placeholder that stores nothing and whose only real exit is a button
+ * forwarding here — routing the funnel through it would add a dead step.
+ */
+const ENROLL_HREF = "/student/enroll";
 
 interface GalleryItem {
   src: string;
@@ -45,7 +63,7 @@ const GALLERY_ITEMS: GalleryItem[] = [
   {
     src: "/landing/gallery-competition.jpeg",
     alt: "Cata Club athletes at the South American U11-U13 Table Tennis Championship in Asunción, Paraguay",
-    caption: "Competencia internacional de tenis de mesa",
+    caption: "Sudamericano Sub-11 y Sub-13 · Asunción, Paraguay",
   },
   {
     src: "/landing/gallery-achievement.jpeg",
@@ -76,7 +94,7 @@ function Navbar(): React.ReactElement {
   return (
     <nav className="landing-navbar" aria-label="Navegación principal">
       <a className="landing-logo" href="#inicio" aria-label="Cata Club, inicio">
-        <Image src="/landing/cata-club-logo.jpeg" alt="" width={62} height={62} priority />
+        <Image src="/landing/cata-club-logo.jpeg" alt="" width={62} height={62} />
         <span className="landing-display"><small>TENIS DE MESA</small>Cata Club</span>
       </a>
       <div className="landing-nav-links">
@@ -85,7 +103,9 @@ function Navbar(): React.ReactElement {
         <a href="#galeria">Galería</a>
         <a href="#contacto">Soporte</a>
       </div>
-      <Link className="landing-button landing-nav-cta" href="/login">
+      {/* Deliberately quiet: existing members already know where to log in, so
+          this must not compete with the hero's registration CTA. */}
+      <Link className="landing-button-quiet landing-nav-cta" href="/login">
         ENTRAR <ArrowRight aria-hidden="true" />
       </Link>
     </nav>
@@ -99,10 +119,10 @@ function Hero(): React.ReactElement {
       <span className="landing-ribbon landing-ribbon-top" aria-hidden="true" />
       <div className="landing-hero-copy">
         <span className="landing-hero-brand"><b>Tenis de Mesa</b> · Cata Club</span>
-        <h1 className="landing-display" aria-label="Cata Club — Formando campeones para la vida">FORMANDO <span>CAMPEONES</span> PARA LA VIDA</h1>
+        <h1 className="landing-display">FORMANDO <span>CAMPEONES</span> PARA LA VIDA</h1>
         <p>Únete a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
         <div className="landing-hero-actions">
-          <Link className="landing-button" href="/login" aria-label="ENTRAR — Iniciar sesión">ENTRAR <ArrowRight aria-hidden="true" /></Link>
+          <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
           <a className="landing-button landing-button-outline" href="#nosotros">Conoce el club</a>
         </div>
         <div className="landing-hero-note"><Stars /><span>Club deportivo formativo · Fundado en 2013</span></div>
@@ -126,7 +146,7 @@ function Hero(): React.ReactElement {
 function Stats(): React.ReactElement {
   return (
     <section className="landing-stats" aria-label="Datos del club" data-motion-section data-testid="motion-section">
-      {landingConfig.stats.map((stat): React.ReactElement => (
+      {buildLandingStats().map((stat): React.ReactElement => (
         <div className="landing-stat" key={stat.label} data-reveal>
           <strong
             className="landing-display"
@@ -162,10 +182,10 @@ function MissionVision(): React.ReactElement {
   );
 }
 
-function ValueCard({ title, children }: ValueCardProps): React.ReactElement {
+function ValueCard({ title, icon: Icon, children }: ValueCardProps): React.ReactElement {
   return (
     <article className="landing-card landing-value" data-reveal>
-      <div className="landing-card-title"><span><Trophy aria-hidden="true" /></span><h3>{title}</h3></div>
+      <div className="landing-card-title"><span><Icon aria-hidden="true" /></span><h3>{title}</h3></div>
       <hr />
       <p>{children}</p>
     </article>
@@ -174,13 +194,13 @@ function ValueCard({ title, children }: ValueCardProps): React.ReactElement {
 
 function Values(): React.ReactElement {
   return (
-    <section className="landing-section landing-values" data-motion-section data-testid="motion-section">
+    <section className="landing-section landing-values" id="valores" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Lo que nos mueve" title="Nuestros Valores" />
       <div className="landing-value-row">
-        <ValueCard title="Respeto">Honramos a rivales, compañeros y entrenadores en cada encuentro.</ValueCard>
-        <ValueCard title="Disciplina">El progreso nace de la constancia y el entrenamiento diario.</ValueCard>
-        <ValueCard title="Esfuerzo">Cada punto se gana con entrega y dedicación total.</ValueCard>
-        <ValueCard title="Compañerismo">Crecemos como una familia, celebrando juntos cada logro.</ValueCard>
+        <ValueCard title="Respeto" icon={Handshake}>Honramos a rivales, compañeros y entrenadores en cada encuentro.</ValueCard>
+        <ValueCard title="Disciplina" icon={Timer}>El progreso nace de la constancia y el entrenamiento diario.</ValueCard>
+        <ValueCard title="Esfuerzo" icon={Flame}>Cada punto se gana con entrega y dedicación total.</ValueCard>
+        <ValueCard title="Compañerismo" icon={Users}>Crecemos como una familia, celebrando juntos cada logro.</ValueCard>
       </div>
     </section>
   );
@@ -188,11 +208,11 @@ function Values(): React.ReactElement {
 
 function Motto(): React.ReactElement {
   return (
-    <section className="landing-section landing-motto" aria-label="Lema del club" data-motion-section data-testid="motion-section">
+    <section className="landing-section landing-motto" aria-label="Únete al club" data-motion-section data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-paddle" aria-hidden="true"><i /></span>
-      <blockquote>“Formando <span>campeones</span> para la vida”</blockquote>
-      <p>Cada entrenamiento es una oportunidad para superarte.</p>
+      <p className="landing-motto-lead">Cada entrenamiento es una oportunidad para superarte.</p>
+      <Link className="landing-button" href={ENROLL_HREF}>Inscríbete ahora <ArrowRight aria-hidden="true" /></Link>
       <Stars />
     </section>
   );
@@ -205,7 +225,7 @@ function Gallery(): React.ReactElement {
       <div className="landing-gallery-row">
         {GALLERY_ITEMS.map((item): React.ReactElement => (
           <figure key={item.src} data-reveal>
-            <Image src={item.src} alt={item.alt} width={400} height={280} sizes="(max-width: 768px) 100vw, 33vw" priority />
+            <Image src={item.src} alt={item.alt} width={400} height={280} sizes="(max-width: 768px) 100vw, 33vw" />
             <figcaption>{item.caption}</figcaption>
           </figure>
         ))}
@@ -243,12 +263,22 @@ function Location(): React.ReactElement {
         <aside className="landing-contact" data-reveal>
           <h3>Información de contacto</h3>
           <p><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja</span></p>
-          <p><Phone className="landing-icon-whatsapp" aria-hidden="true" /><strong>Contactos</strong><span>{contact.whatsapp.join(" · ")}</span></p>
+          <p>
+            <Phone className="landing-icon-whatsapp" aria-hidden="true" /><strong>WhatsApp</strong>
+            <span className="landing-contact-numbers">
+              {contact.whatsapp.map((number): React.ReactElement => (
+                <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">{number}</a>
+              ))}
+            </span>
+          </p>
           <p><Facebook className="landing-icon-facebook" aria-hidden="true" /><strong>Facebook</strong><a href={contact.facebook} target="_blank" rel="noreferrer">Cata Club Loja</a></p>
           <p><Instagram className="landing-icon-instagram" aria-hidden="true" /><strong>Instagram</strong><a href={contact.instagram} target="_blank" rel="noreferrer">@cataclub_tenis_de_mesa</a></p>
           <p><CalendarDays aria-hidden="true" /><strong>Horario</strong><span>{contact.hours}</span></p>
-          <a className="landing-button" href="https://www.openstreetmap.org/?mlat=-4.0056095&mlon=-79.2046238#map=18/-4.0056095/-79.2046238" target="_blank" rel="noreferrer">
+          <a className="landing-button landing-button-outline" href="https://www.openstreetmap.org/?mlat=-4.0056095&mlon=-79.2046238#map=18/-4.0056095/-79.2046238" target="_blank" rel="noreferrer">
             <Navigation aria-hidden="true" /> Cómo llegar
+          </a>
+          <a className="landing-button landing-button-block" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
+            <MessageCircle aria-hidden="true" /> Escríbenos por WhatsApp
           </a>
         </aside>
       </div>
@@ -265,10 +295,10 @@ function Footer(): React.ReactElement {
           <div><span><Image src="/landing/cata-club-logo.jpeg" alt="" width={58} height={58} /></span><b className="landing-display"><small>TENIS DE MESA</small>Cata Club</b></div>
           <p>Formando campeones de tenis de mesa en Loja desde 2013.</p><Stars />
         </div>
-        <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Entrenamientos</a><a href="#horarios">Horarios</a><a href="#horarios">Categorías</a><a href="#horarios">Alto rendimiento</a></nav>
-        <nav aria-label="Nosotros"><h2>Nosotros</h2><a href="#nosotros">Misión y Visión</a><a href="#nosotros">Valores</a><a href="#galeria">Galería</a><a href="#contacto">Ubicación</a></nav>
+        <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Horarios y categorías</a><Link href={ENROLL_HREF}>Inscripciones</Link><a href="#contacto">Contacto</a></nav>
+        <nav aria-label="Nosotros"><h2>Nosotros</h2><a href="#nosotros">Misión y Visión</a><a href="#valores">Valores</a><a href="#galeria">Galería</a><a href="#contacto">Ubicación</a></nav>
       </div>
-      <div className="landing-footer-bottom">© 2026 Cata Club · Tenis de Mesa. Todos los derechos reservados.</div>
+      <div className="landing-footer-bottom">© {new Date().getFullYear()} Cata Club · Tenis de Mesa. Todos los derechos reservados.</div>
     </footer>
   );
 }
@@ -276,6 +306,7 @@ function Footer(): React.ReactElement {
 export default function LandingPage(): React.ReactElement {
   return (
     <div className="landing-page">
+      <a className="landing-skip-link" href="#inicio">Saltar al contenido</a>
       <LandingMotion />
       <Navbar /><Hero /><Stats /><MissionVision /><Values /><Motto /><Gallery /><Schedule /><Location /><Footer />
     </div>

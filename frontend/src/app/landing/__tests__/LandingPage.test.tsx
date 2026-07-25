@@ -1,15 +1,15 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { landingConfig } from "@/app/landing/landing-config";
+import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 import LandingPage from "@/app/landing/LandingPage";
 
 vi.mock("next/image", (): { __esModule: boolean; default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }) => React.ReactElement } => ({
   __esModule: true,
-  default: ({ priority: _priority, fill: _fill, sizes: _sizes, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }): React.ReactElement => (
+  default: ({ priority, fill: _fill, sizes: _sizes, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }): React.ReactElement => (
     // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt ?? ""} {...props} />
+    <img alt={alt ?? ""} data-priority={priority ? "true" : undefined} {...props} />
   ),
 }));
 
@@ -62,10 +62,8 @@ describe("LandingPage", (): void => {
   it("renders client-pending values from the centralized config", (): void => {
     render(<LandingPage />);
 
-    expect(screen.getByText(landingConfig.stats[1].value)).toBeInTheDocument();
-    expect(screen.getByText(landingConfig.stats[2].value)).toBeInTheDocument();
     expect(screen.getByText(landingConfig.schedules[0].hours)).toBeInTheDocument();
-    expect(screen.getByText(landingConfig.contact.whatsapp.join(" · "))).toBeInTheDocument();
+    expect(screen.getByText(landingConfig.contact.hours)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cata Club Loja" })).toHaveAttribute("href", landingConfig.contact.facebook);
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
   });
@@ -85,28 +83,125 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("links every ENTRAR action to login", (): void => {
+  it("points the hero's primary action at the live enrollment wizard", (): void => {
+    render(<LandingPage />);
+
+    const hero = document.querySelector(".landing-hero");
+    expect(hero).not.toBeNull();
+    const heroPrimary = within(hero as HTMLElement).getByRole("link", { name: /inscríbete/i });
+    expect(heroPrimary).toHaveAttribute("href", "/student/enroll");
+    expect(within(hero as HTMLElement).getByRole("link", { name: "Conoce el club" })).toHaveAttribute("href", "#nosotros");
+  });
+
+  it("never routes an enrollment CTA through the /register demo placeholder", (): void => {
+    render(<LandingPage />);
+
+    const enrollLinks = screen.getAllByRole("link", { name: /inscr/i });
+    expect(enrollLinks.length).toBeGreaterThanOrEqual(3);
+    enrollLinks.forEach((link): void => {
+      expect(link).toHaveAttribute("href", "/student/enroll");
+    });
+    expect(document.querySelectorAll('a[href="/register"]')).toHaveLength(0);
+  });
+
+  it("keeps a single, visually demoted login entry point in the navbar", (): void => {
     render(<LandingPage />);
 
     const loginLinks = screen.getAllByText("ENTRAR").map((label): HTMLAnchorElement | null => label.closest("a"));
-    expect(loginLinks).toHaveLength(2);
-    loginLinks.forEach((link): void => {
-      expect(link).toHaveAttribute("href", "/login");
-    });
-    expect(screen.getByRole("link", { name: "ENTRAR — Iniciar sesión" })).toHaveAttribute("href", "/login");
+    expect(loginLinks).toHaveLength(1);
+    expect(loginLinks[0]).toHaveAttribute("href", "/login");
+    expect(loginLinks[0]?.className).toContain("landing-button-quiet");
+    expect(loginLinks[0]?.className).not.toMatch(/(^|\s)landing-button(\s|$)/);
   });
 
-  it("describes the South American championship competition image", (): void => {
+  it("offers a mid-page enrollment CTA below the hero", (): void => {
+    render(<LandingPage />);
+
+    const motto = document.querySelector(".landing-motto");
+    expect(motto).not.toBeNull();
+    const mottoCta = within(motto as HTMLElement).getByRole("link");
+    expect(mottoCta).toHaveAttribute("href", "/student/enroll");
+  });
+
+  it("turns every WhatsApp contact number into a wa.me link", (): void => {
+    render(<LandingPage />);
+
+    landingConfig.contact.whatsapp.forEach((number): void => {
+      expect(screen.getByRole("link", { name: number })).toHaveAttribute("href", toWhatsAppLink(number));
+    });
+  });
+
+  it("closes the contact card with a primary WhatsApp CTA and demotes the directions link", (): void => {
+    render(<LandingPage />);
+
+    const contact = document.querySelector(".landing-contact");
+    expect(contact).not.toBeNull();
+
+    const whatsappCta = within(contact as HTMLElement).getByRole("link", { name: /escríbenos por whatsapp/i });
+    expect(whatsappCta).toHaveAttribute("href", toWhatsAppLink(landingConfig.contact.whatsapp[0]));
+    expect(whatsappCta.className).toContain("landing-button");
+    expect(contact?.lastElementChild).toBe(whatsappCta);
+
+    const directions = within(contact as HTMLElement).getByRole("link", { name: /cómo llegar/i });
+    expect(directions.className).toContain("landing-button-outline");
+  });
+
+  it("promotes the championship specifics into the visible gallery caption", (): void => {
     render(<LandingPage />);
 
     expect(screen.getByAltText("Cata Club athletes at the South American U11-U13 Table Tennis Championship in Asunción, Paraguay")).toBeInTheDocument();
-    expect(screen.getByText("Competencia internacional de tenis de mesa")).toBeInTheDocument();
+    expect(screen.getByText(/Sudamericano Sub-11 y Sub-13/i)).toHaveTextContent("Asunción, Paraguay");
   });
 
   it("exposes the active landing destination to assistive technology", (): void => {
     render(<LandingPage />);
 
     expect(screen.getByRole("link", { name: "Inicio" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("leaves the h1 free of a redundant aria-label", (): void => {
+    render(<LandingPage />);
+
+    expect(screen.getByRole("heading", { level: 1 })).not.toHaveAttribute("aria-label");
+  });
+
+  it("offers a skip link as the first focusable element", (): void => {
+    render(<LandingPage />);
+
+    const skipLink = screen.getByRole("link", { name: /saltar al contenido/i });
+    expect(skipLink).toHaveAttribute("href", "#inicio");
+    expect(document.querySelector(".landing-page")?.firstElementChild).toBe(skipLink);
+  });
+
+  it("reserves image priority for the LCP hero photo", (): void => {
+    render(<LandingPage />);
+
+    const prioritized = Array.from(document.querySelectorAll("img[data-priority='true']"));
+    expect(prioritized).toHaveLength(1);
+    expect(prioritized[0]).toHaveAttribute("src", "/landing/hero-photo.jpeg");
+  });
+
+  it("gives every value card its own icon", (): void => {
+    render(<LandingPage />);
+
+    const valueIcons = Array.from(document.querySelectorAll(".landing-value .landing-card-title svg"));
+    expect(valueIcons).toHaveLength(4);
+    expect(new Set(valueIcons.map((icon): string => icon.getAttribute("class") ?? "")).size).toBe(4);
+  });
+
+  it("gives every footer service link its own destination", (): void => {
+    render(<LandingPage />);
+
+    const services = screen.getByRole("navigation", { name: "Servicios" });
+    const hrefs = Array.from(services.querySelectorAll("a")).map((link): string | null => link.getAttribute("href"));
+    expect(hrefs.length).toBeGreaterThan(0);
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  it("derives the footer copyright year instead of hardcoding it", (): void => {
+    render(<LandingPage />);
+
+    expect(screen.getByText(new RegExp(`© ${new Date().getFullYear()}`))).toBeInTheDocument();
   });
 
   it("keeps reveal content in its final state when reduced motion is preferred", (): void => {

@@ -123,14 +123,14 @@ export default function RegisterPage(): React.ReactElement {
       subtitle="Regístrese en el sistema administrativo"
       headline={
         <>
-          Sumate a la
+          Súmate a la
           <br />
-          mesa. <em className="not-italic text-cata-red-light">Empezá</em>
+          mesa. <em className="not-italic text-cata-red-light">Empieza</em>
           <br />
           a jugar en serio.
         </>
       }
-      description="Creá tu cuenta para gestionar estudiantes, pagos y asistencia del club desde un solo lugar."
+      description="Crea tu cuenta para gestionar estudiantes, pagos y asistencia del club desde un solo lugar."
       showBackToSite
     >
       {demoSuccess ? (
