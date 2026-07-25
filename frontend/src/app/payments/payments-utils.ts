@@ -7,6 +7,7 @@
  */
 
 import type { PaymentValidationRequest } from "@/services/api";
+import { MONTH_ABBR } from "@/lib/format-utils";
 
 /** Requests per page for the payment validation queue table. */
 export const PAYMENTS_PAGE_SIZE = 10;
@@ -43,18 +44,8 @@ export function getTotalPages(
 // Humanised period (Fase 3 — prototype 09/10: "1 jul → 12 ago")
 // ---------------------------------------------------------------------------
 
-/**
- * Month abbreviations in es-EC, lowercase and without a trailing dot.
- *
- * NOTE: `attendance-utils.ts` carries the same table for "Hoy, 23 jul". Both
- * belong in `src/lib/format-utils.ts`, the declared single source of truth for
- * date grammar, but that module is frozen during this parallel redesign pass —
- * the duplication is deliberate and temporary.
- */
-const MONTH_ABBR = [
-  "ene", "feb", "mar", "abr", "may", "jun",
-  "jul", "ago", "sep", "oct", "nov", "dic",
-] as const;
+// The month vocabulary lives in `lib/format-utils.ts`, the single source of
+// truth for date grammar. This module owns the "1 jul → 12 ago" phrasing only.
 
 /** En dash (formatDateRange's own separator), em dash, or a plain hyphen. */
 const PERIOD_SEPARATOR = /\s+[–—-]\s+/;

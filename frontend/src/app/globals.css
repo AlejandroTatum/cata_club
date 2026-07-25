@@ -87,12 +87,18 @@
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-cata-text/65 transition-colors duration-200 hover:bg-cata-bg hover:text-cata-text focus:outline-none disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /*
+   * Height and radius come from the design-system tokens (h-ctl 40px,
+   * rounded-ctl 10px) so inputs match every other control. This rendered at
+   * 42px with a 12px radius: py-2.5 (20px) plus a 20px line-height plus 2px of
+   * border, which put every form field 2px off-system.
+   * `min-h-ctl` rather than `h-ctl` so a field that wraps can still grow.
+   */
   .input-field {
     background-color: #FFFFFF;
     border: 1px solid #E5E7EB;
-    border-radius: 0.75rem;
     color: #1F2937;
-    @apply w-full px-4 py-2.5 text-sm transition-all duration-200 placeholder:text-cata-text/35 focus:border-cata-red/40 focus:outline-none focus:ring-2 focus:ring-cata-red/15 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-all duration-200 placeholder:text-cata-text/35 focus:border-cata-red/40 focus:outline-none focus:ring-2 focus:ring-cata-red/15 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .input-field::placeholder {

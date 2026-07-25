@@ -49,6 +49,22 @@ function pad2(value: number): string {
 }
 
 /**
+ * Abbreviated Spanish month names, lowercase and unaccented.
+ *
+ * The one place this vocabulary is declared. Two screens humanise dates in
+ * their own way — attendance renders "Hoy, 23 jul", payments renders
+ * "1 jul → 12 ago" — but they must not each carry their own month table, which
+ * is how a fourth date grammar gets introduced by a typo. The humanising
+ * functions stay where they are; the vocabulary lives here.
+ *
+ * Indexed 0-11 to match `Date.prototype.getMonth()`.
+ */
+export const MONTH_ABBR = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+] as const;
+
+/**
  * Format a numeric amount as USD currency per Ecuadorian locale (`$24,00`).
  *
  * Normalizes ICU-version-dependent whitespace/literal parts by assembling

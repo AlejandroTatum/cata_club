@@ -10,6 +10,7 @@
 
 import type { DiaSemana, NivelTecnico, EstadoAsistencia } from "@/types/domain";
 import type { BadgeTone } from "@/components/ui/Badge";
+import { MONTH_ABBR } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -333,18 +334,11 @@ export function getTotalPages(
 // ---------------------------------------------------------------------------
 
 /**
- * Month abbreviations in es-EC, lowercase and without a trailing dot — the
- * vocabulary `_sistema.css`'s prototypes use ("1 jul → 12 ago", "Hoy, 23 jul").
- *
- * NOTE: `payments-utils.ts` carries the same table for the humanised payment
- * period. Both should collapse into `src/lib/format-utils.ts` — that module is
- * the declared single source of truth for date grammar — but it is frozen for
- * this parallel redesign pass, so the duplication is deliberate and temporary.
+ * Re-exported so existing importers of this module keep working; the table
+ * itself lives in `lib/format-utils.ts`, the single source of truth for date
+ * grammar. This module owns the "Hoy, 23 jul" phrasing, not the vocabulary.
  */
-export const MONTH_ABBR = [
-  "ene", "feb", "mar", "abr", "may", "jun",
-  "jul", "ago", "sep", "oct", "nov", "dic",
-] as const;
+export { MONTH_ABBR };
 
 /**
  * Parse either a date-only value ("YYYY-MM-DD") or a full ISO timestamp into a
