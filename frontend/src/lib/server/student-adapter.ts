@@ -72,6 +72,7 @@ export interface StudentProfileView {
   recentSessions: StudentSessionView[];
   membership: MembershipView | null;
   representante: { nombres: string; apellidos: string } | null;
+  representanteId: number | null;
 }
 
 /**
@@ -190,6 +191,7 @@ export function buildStudentProfileView(
     recentSessions,
     membership,
     representante,
+    representanteId: persona.representanteId,
   };
 }
 

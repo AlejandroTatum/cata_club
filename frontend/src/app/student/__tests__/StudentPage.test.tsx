@@ -56,13 +56,16 @@ vi.mock("@/contexts/AuthContext", () => ({
     isLoading: false,
     login: vi.fn(),
     logout: vi.fn(),
+    refreshSession: vi.fn(),
   }),
 }));
 
 const mockFetchStudentPortal = vi.fn();
+const mockIndependizarPersona = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchStudentPortal: () => mockFetchStudentPortal(),
+  independizarPersona: (...args: unknown[]) => mockIndependizarPersona(...args),
 }));
 
 const PORTAL: StudentPortalSummary = {
@@ -75,6 +78,7 @@ const PORTAL: StudentPortalSummary = {
     recentSessions: [],
     membership: null,
     representante: null,
+    representanteId: null,
   },
   representados: [],
   membershipPlans: [],

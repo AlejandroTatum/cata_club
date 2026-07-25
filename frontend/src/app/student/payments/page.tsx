@@ -306,6 +306,10 @@ function RenewPaymentForm({
       setError("La fecha de inicio debe ser anterior a la fecha de fin.");
       return;
     }
+    if (tipoPago === "TRANSFERENCIA" && !voucherFile) {
+      setError("El comprobante de transferencia es obligatorio.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {

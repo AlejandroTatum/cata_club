@@ -20,6 +20,7 @@ export interface EnrollmentStudent {
   cedula: string;
   fechaNacimiento: string;
   telefono: string;
+  institucionId?: number;
 }
 
 export interface EnrollmentCredentials {
@@ -42,6 +43,9 @@ export interface EnrollmentRequest {
   alumno: EnrollmentStudent;
   fichaMedica: EnrollmentMedicalRecord;
   credencialesAlumno?: EnrollmentCredentials;
+  /** Optional credentials for the minor (child enrollment). When provided,
+   *  a Usuario with rol ALUMNO is also created for the student. */
+  credencialesMenor?: EnrollmentCredentials;
   representante?: EnrollmentRepresentative;
 }
 

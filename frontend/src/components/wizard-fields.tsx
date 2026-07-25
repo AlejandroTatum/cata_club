@@ -38,6 +38,7 @@ interface WizardInputProps {
   icon?: ReactNode;
   pattern?: string;
   maxLength?: number;
+  minLength?: number;
   inputMode?: string;
 }
 
@@ -65,6 +66,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           disabled={opts.disabled}
           pattern={opts.pattern}
           maxLength={opts.maxLength}
+          minLength={opts.minLength}
           inputMode={(opts.inputMode ?? "text") as InputHTMLAttributes<HTMLInputElement>["inputMode"]}
           className={`input-field ${opts.icon ? "pl-10" : ""}`}
         />
@@ -145,11 +147,13 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         idPrefix={idPrefix} disabled={disabled} label="Nombres" value={props.nombres}
         onChange={props.onNombresChange} placeholder="p. ej. Juan Carlos" required
         icon={<User size={16} strokeWidth={1.5} aria-hidden="true" />}
+        pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <WizardInput
         idPrefix={idPrefix} disabled={disabled} label="Apellidos" value={props.apellidos}
         onChange={props.onApellidosChange} placeholder="p. ej. Rodríguez López" required
         icon={<User size={16} strokeWidth={1.5} aria-hidden="true" />}
+        pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <WizardInput
@@ -167,7 +171,8 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
       <WizardInput
         idPrefix={idPrefix} disabled={disabled} label="Teléfono" value={props.telefono}
         onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
-        icon={<Phone size={16} strokeWidth={1.5} aria-hidden="true" />} inputMode="tel"
+        icon={<Phone size={16} strokeWidth={1.5} aria-hidden="true" />}
+        pattern="[0-9]+" maxLength={10} minLength={7} inputMode="tel"
       />
       {props.fechaNacimiento && (
         <div className="rounded-xl bg-cata-bg p-3 text-xs text-cata-text/65">
@@ -208,11 +213,13 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
           idPrefix={idPrefix} disabled={disabled} label="Nombre del Contacto" value={props.contacto}
           onChange={props.onContactoChange} placeholder="p. ej. María Rodríguez" required
           icon={<UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />}
+          pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={150} minLength={3}
         />
         <WizardInput
           idPrefix={idPrefix} disabled={disabled} label="Teléfono de Emergencia" value={props.telefono}
           onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
-          icon={<Phone size={16} strokeWidth={1.5} aria-hidden="true" />} inputMode="tel"
+          icon={<Phone size={16} strokeWidth={1.5} aria-hidden="true" />}
+          pattern="[0-9]+" maxLength={10} minLength={7} inputMode="tel"
         />
       </div>
     </>

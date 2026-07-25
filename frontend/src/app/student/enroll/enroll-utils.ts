@@ -24,7 +24,7 @@ export const ENROLLMENT_TYPES = {
 export type EnrollmentType = (typeof ENROLLMENT_TYPES)[keyof typeof ENROLLMENT_TYPES];
 
 /** Wizard step identifiers. */
-export type WizardStep = "type" | "personal" | "club" | "health" | "summary";
+export type WizardStep = "type" | "personal" | "representative" | "health" | "summary";
 
 /** Shape of the enrollment form data. */
 export interface EnrollFormData {
@@ -36,6 +36,8 @@ export interface EnrollFormData {
   telefono: string;
   correo: string;
   contrasenia: string;
+  /** School/institution (child enrollment only) — optional. */
+  institucionId: string;
   nombreRepresentante: string;
   apellidosRepresentante: string;
   cedulaRepresentante: string;
@@ -55,7 +57,7 @@ export interface EnrollFormData {
 export const STEP_ORDER: WizardStep[] = [
   "type",
   "personal",
-  "club",
+  "representative",
   "health",
   "summary",
 ];
@@ -64,7 +66,7 @@ export const STEP_ORDER: WizardStep[] = [
 export const STEP_LABELS: Record<WizardStep, string> = {
   type: "Tipo de Inscripción",
   personal: "Datos del Estudiante",
-  club: "Cuenta y Representante",
+  representative: "Datos del Representante",
   health: "Salud y Emergencia",
   summary: "Resumen y Confirmación",
 };
@@ -79,6 +81,7 @@ export const initialFormData: EnrollFormData = {
   telefono: "",
   correo: "",
   contrasenia: "",
+  institucionId: "",
   nombreRepresentante: "",
   apellidosRepresentante: "",
   cedulaRepresentante: "",
@@ -118,18 +121,25 @@ export function validateEnrollStep(
       break;
     case "personal":
       errors.push(...validateStudent(data));
+      if (data.enrollmentType === ENROLLMENT_TYPES.SELF) {
+        errors.push(...validateStudentCredentials(data));
+      } else {
+        errors.push(...validateOptionalStudentCredentials(data));
+      }
       break;
-    case "club":
-      errors.push(...(data.enrollmentType === ENROLLMENT_TYPES.SELF
-        ? validateStudentCredentials(data)
-        : validateRepresentative(data)));
+    case "representative":
+      errors.push(...validateRepresentative(data));
       break;
     case "health":
       if (!isBloodType(data.tipoSangre)) errors.push("El tipo de sangre es obligatorio.");
       if (!data.contactoEmergencia.trim())
         errors.push("El nombre de contacto de emergencia es obligatorio.");
+      else if (data.contactoEmergencia.trim().length < 3)
+        errors.push("El nombre del contacto de emergencia debe tener al menos 3 caracteres.");
       if (!data.telefonoEmergencia.trim())
         errors.push("El teléfono de emergencia es obligatorio.");
+      else if (!/^\d{7,10}$/.test(data.telefonoEmergencia.trim()))
+        errors.push("El teléfono de emergencia debe tener entre 7 y 10 dígitos.");
       break;
     case "summary":
       break;
@@ -142,7 +152,10 @@ export function validateEnrollment(data: EnrollFormData): string[] {
     ...validateStudent(data),
     ...(data.enrollmentType === ENROLLMENT_TYPES.SELF
       ? validateStudentCredentials(data)
-      : validateRepresentative(data)),
+      : validateOptionalStudentCredentials(data)),
+    ...(data.enrollmentType === ENROLLMENT_TYPES.CHILD
+      ? validateRepresentative(data)
+      : []),
     ...validateEnrollStep("health", data),
   ];
 }
@@ -150,7 +163,9 @@ export function validateEnrollment(data: EnrollFormData): string[] {
 export function getEnrollmentErrorMessage(error: unknown): string {
   if (typeof error === "object" && error !== null && "status" in error) {
     const status = (error as Record<string, unknown>).status;
+    const message = (error as Record<string, unknown>).message;
     if (status === 400 || status === 422) {
+      if (typeof message === "string" && message.trim()) return message.trim();
       return "No se pudo validar la inscripción. Revise sus datos e intente nuevamente.";
     }
     if (status === 429) {
@@ -171,6 +186,7 @@ export function buildEnrollmentRequest(data: EnrollFormData): EnrollmentRequest 
   const alumno = {
     nombres: data.nombres.trim(), apellidos: data.apellidos.trim(), cedula: data.cedula.trim(),
     fechaNacimiento: data.fechaNacimiento, telefono: data.telefono.trim(),
+    ...(data.institucionId ? { institucionId: Number(data.institucionId) } : {}),
   };
   const fichaMedica = {
     tipoSangre: data.tipoSangre as BloodType, condicionesSalud: data.condicionesSalud.trim(),
@@ -181,7 +197,7 @@ export function buildEnrollmentRequest(data: EnrollFormData): EnrollmentRequest 
   if (data.enrollmentType === ENROLLMENT_TYPES.SELF) {
     return { alumno, fichaMedica, credencialesAlumno: { correo: data.correo.trim(), contrasenia: data.contrasenia } };
   }
-  return {
+  const result: EnrollmentRequest = {
     alumno, fichaMedica,
     representante: {
       nombres: data.nombreRepresentante.trim(), apellidos: data.apellidosRepresentante.trim(),
@@ -190,17 +206,26 @@ export function buildEnrollmentRequest(data: EnrollFormData): EnrollmentRequest 
       contrasenia: data.contraseniaRepresentante,
     },
   };
+  if (data.correo.trim() && data.contrasenia) {
+    result.credencialesMenor = { correo: data.correo.trim(), contrasenia: data.contrasenia };
+  }
+  return result;
 }
 
 function validateStudent(data: EnrollFormData): string[] {
   const errors: string[] = [];
   if (!data.nombres.trim()) errors.push("Los nombres son obligatorios.");
+  else if (data.nombres.trim().length < 3) errors.push("Los nombres deben tener al menos 3 caracteres.");
+  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.nombres.trim())) errors.push("Los nombres solo pueden contener letras y espacios.");
   if (!data.apellidos.trim()) errors.push("Los apellidos son obligatorios.");
+  else if (data.apellidos.trim().length < 3) errors.push("Los apellidos deben tener al menos 3 caracteres.");
+  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.apellidos.trim())) errors.push("Los apellidos solo pueden contener letras y espacios.");
   if (!data.fechaNacimiento) errors.push("La fecha de nacimiento es obligatoria.");
   else if (!isDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento ingresada no es válida.");
   if (!data.cedula.trim()) errors.push("La cédula de identidad es obligatoria.");
   else if (!/^\d{10}$/.test(data.cedula.trim())) errors.push("La cédula debe tener 10 dígitos.");
   if (!data.telefono.trim()) errors.push("El teléfono es obligatorio.");
+  else if (!/^\d{7,10}$/.test(data.telefono.trim())) errors.push("El teléfono debe tener entre 7 y 10 dígitos.");
   if (data.enrollmentType === ENROLLMENT_TYPES.SELF && calculateAge(data.fechaNacimiento) < 18) {
     errors.push("Los menores de edad no pueden autoinscribirse. Seleccione 'Inscribo a un hijo / dependiente' o un representante debe completar la inscripción.");
   }
@@ -214,13 +239,31 @@ function validateStudentCredentials(data: EnrollFormData): string[] {
   return errors;
 }
 
+function validateOptionalStudentCredentials(data: EnrollFormData): string[] {
+  const errors: string[] = [];
+  const hasCorreo = data.correo.trim().length > 0;
+  const hasContrasenia = data.contrasenia.length > 0;
+  if (hasCorreo || hasContrasenia) {
+    if (!hasCorreo) errors.push("El correo del estudiante es obligatorio si se desea crear una cuenta.");
+    else if (!isEmail(data.correo)) errors.push("El correo del estudiante no es válido.");
+    if (!hasContrasenia) errors.push("La contraseña del estudiante es obligatoria si se desea crear una cuenta.");
+    else if (data.contrasenia.length < 8) errors.push("La contraseña del estudiante debe tener al menos 8 caracteres.");
+  }
+  return errors;
+}
+
 function validateRepresentative(data: EnrollFormData): string[] {
   const errors: string[] = [];
   if (!data.nombreRepresentante.trim()) errors.push("Los nombres del representante son obligatorios.");
+  else if (data.nombreRepresentante.trim().length < 3) errors.push("Los nombres del representante deben tener al menos 3 caracteres.");
+  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.nombreRepresentante.trim())) errors.push("Los nombres del representante solo pueden contener letras y espacios.");
   if (!data.apellidosRepresentante.trim()) errors.push("Los apellidos del representante son obligatorios.");
+  else if (data.apellidosRepresentante.trim().length < 3) errors.push("Los apellidos del representante deben tener al menos 3 caracteres.");
+  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.apellidosRepresentante.trim())) errors.push("Los apellidos del representante solo pueden contener letras y espacios.");
   if (!/^\d{10}$/.test(data.cedulaRepresentante.trim())) errors.push("La cédula del representante debe tener 10 dígitos.");
   if (!isDate(data.fechaNacimientoRepresentante) || calculateAge(data.fechaNacimientoRepresentante) < 18) errors.push("El representante debe ser mayor de edad (18+).");
   if (!data.telefonoRepresentante.trim()) errors.push("El teléfono del representante es obligatorio.");
+  else if (!/^\d{7,10}$/.test(data.telefonoRepresentante.trim())) errors.push("El teléfono del representante debe tener entre 7 y 10 dígitos.");
   if (!isEmail(data.correoRepresentante)) errors.push("El correo del representante no es válido.");
   if (data.contraseniaRepresentante.length < 8) errors.push("La contraseña del representante debe tener al menos 8 caracteres.");
   return errors;

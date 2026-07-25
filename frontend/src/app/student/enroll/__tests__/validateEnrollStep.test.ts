@@ -50,11 +50,11 @@ describe("validateEnrollStep — type step", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Step: personal
+// Step: personal (student data + credentials)
 // ---------------------------------------------------------------------------
 
 describe("validateEnrollStep — personal step", () => {
-  it("returns no errors when all required fields are filled", () => {
+  it("returns no errors when all required fields are filled (self)", () => {
     const errors = validateEnrollStep("personal", validForm());
     expect(errors).toEqual([]);
   });
@@ -129,8 +129,6 @@ describe("validateEnrollStep — personal step", () => {
       validForm({
         enrollmentType: "child",
         fechaNacimiento: "2015-06-15", // minor, but child enrollment
-        nombreRepresentante: "María Rodríguez",
-        cedulaRepresentante: "0998765432",
       }),
     );
     expect(errors).toEqual([]);
@@ -161,11 +159,92 @@ describe("validateEnrollStep — personal step", () => {
     expect(errors).toEqual([]);
   });
 
-  // ---- Representante validation for "child" enrollment ----
+  // ---- Student credentials for self-enrollment (required) ----
 
+  it("requires valid email for self-enrollment", () => {
+    const errors = validateEnrollStep("personal", validForm({ correo: "" }));
+    expect(errors).toContain("El correo electrónico no es válido.");
+  });
+
+  it("requires password of at least 8 characters for self-enrollment", () => {
+    const errors = validateEnrollStep("personal", validForm({ contrasenia: "short" }));
+    expect(errors).toContain("La contraseña debe tener al menos 8 caracteres.");
+  });
+
+  it("accepts self-enrollment credentials", () => {
+    const errors = validateEnrollStep("personal", validForm());
+    expect(errors).toEqual([]);
+  });
+
+  it("does NOT collect a technical level", () => {
+    const errors = validateEnrollStep("personal", validForm());
+    expect(errors).toEqual([]);
+    // No error related to technical level should appear
+    const hasNivelError = errors.some((e) =>
+      /nivel|nivel t(e|é)cnico|nivel/i.test(e),
+    );
+    expect(hasNivelError).toBe(false);
+  });
+
+  // ---- Student credentials for child enrollment (optional) ----
+
+  it("accepts empty student credentials for child enrollment", () => {
+    const errors = validateEnrollStep(
+      "personal",
+      validForm({
+        enrollmentType: "child",
+        correo: "",
+        contrasenia: "",
+      }),
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it("requires valid email if student credentials provided for child", () => {
+    const errors = validateEnrollStep(
+      "personal",
+      validForm({
+        enrollmentType: "child",
+        correo: "invalid",
+        contrasenia: "",
+      }),
+    );
+    expect(errors).toContain("El correo del estudiante no es válido.");
+  });
+
+  it("requires password of at least 8 chars if student credentials provided for child", () => {
+    const errors = validateEnrollStep(
+      "personal",
+      validForm({
+        enrollmentType: "child",
+        correo: "lucas@example.com",
+        contrasenia: "short",
+      }),
+    );
+    expect(errors).toContain("La contraseña del estudiante debe tener al menos 8 caracteres.");
+  });
+
+  it("ignores malformed cedulaRepresentante for self enrollment", () => {
+    const errors = validateEnrollStep(
+      "personal",
+      validForm({
+        enrollmentType: "self",
+        cedulaRepresentante: "12345",
+      }),
+    );
+    expect(errors).not.toContain("La cédula del representante es obligatoria.");
+    expect(errors).not.toContain("La cédula del representante debe tener 10 dígitos.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Step: representative (child enrollment only)
+// ---------------------------------------------------------------------------
+
+describe("validateEnrollStep — representative step", () => {
   it("requires nombre representante for child enrollment", () => {
     const errors = validateEnrollStep(
-      "club",
+      "representative",
       validForm({
         enrollmentType: "child",
         nombreRepresentante: "",
@@ -176,7 +255,7 @@ describe("validateEnrollStep — personal step", () => {
 
   it("requires cedula representante for child enrollment", () => {
     const errors = validateEnrollStep(
-      "club",
+      "representative",
       validForm({
         enrollmentType: "child",
         nombreRepresentante: "María Rodríguez",
@@ -188,7 +267,7 @@ describe("validateEnrollStep — personal step", () => {
 
   it("validates cedula representante has 10 digits for child enrollment", () => {
     const errors = validateEnrollStep(
-      "club",
+      "representative",
       validForm({
         enrollmentType: "child",
         nombreRepresentante: "María Rodríguez",
@@ -200,7 +279,7 @@ describe("validateEnrollStep — personal step", () => {
 
   it("passes validation with valid representante data for child enrollment", () => {
     const errors = validateEnrollStep(
-      "club",
+      "representative",
       validForm({
         enrollmentType: "child",
         nombreRepresentante: "María Rodríguez",
@@ -215,35 +294,60 @@ describe("validateEnrollStep — personal step", () => {
     expect(errors).toEqual([]);
   });
 
-  it("does NOT require representante fields for self enrollment", () => {
+  it("requires representative email", () => {
     const errors = validateEnrollStep(
-      "club",
+      "representative",
       validForm({
-        enrollmentType: "self",
-        nombreRepresentante: "",
-        cedulaRepresentante: "",
+        enrollmentType: "child",
+        nombreRepresentante: "María",
+        apellidosRepresentante: "Rodríguez",
+        cedulaRepresentante: "0998765432",
+        fechaNacimientoRepresentante: "1980-01-15",
+        telefonoRepresentante: "0991234567",
+        correoRepresentante: "",
+        contraseniaRepresentante: "password8",
       }),
     );
-    // Self enrollment does not require representante data
-    expect(errors).not.toContain("El nombre del representante es obligatorio.");
-    expect(errors).not.toContain("La cédula del representante es obligatoria.");
+    expect(errors).toContain("El correo del representante no es válido.");
   });
 
-  it("ignores malformed cedulaRepresentante for self enrollment", () => {
+  it("requires representative password of at least 8 characters", () => {
     const errors = validateEnrollStep(
-      "personal",
+      "representative",
       validForm({
-        enrollmentType: "self",
-        cedulaRepresentante: "12345",
+        enrollmentType: "child",
+        nombreRepresentante: "María",
+        apellidosRepresentante: "Rodríguez",
+        cedulaRepresentante: "0998765432",
+        fechaNacimientoRepresentante: "1980-01-15",
+        telefonoRepresentante: "0991234567",
+        correoRepresentante: "maria@example.com",
+        contraseniaRepresentante: "short",
       }),
     );
-    expect(errors).not.toContain("La cédula del representante es obligatoria.");
-    expect(errors).not.toContain("La cédula del representante debe tener 10 dígitos.");
+    expect(errors).toContain("La contraseña del representante debe tener al menos 8 caracteres.");
+  });
+
+  it("requires representative must be 18 or older", () => {
+    const errors = validateEnrollStep(
+      "representative",
+      validForm({
+        enrollmentType: "child",
+        nombreRepresentante: "María",
+        apellidosRepresentante: "Rodríguez",
+        cedulaRepresentante: "0998765432",
+        fechaNacimientoRepresentante: "2015-06-15",
+        telefonoRepresentante: "0991234567",
+        correoRepresentante: "maria@example.com",
+        contraseniaRepresentante: "password8",
+      }),
+    );
+    expect(errors).toContain("El representante debe ser mayor de edad (18+).");
   });
 
   it("represents absent representante with whitespace correctly", () => {
     const errors = validateEnrollStep(
-      "club",
+      "representative",
       validForm({
         enrollmentType: "child",
         nombreRepresentante: "   ",
@@ -252,32 +356,6 @@ describe("validateEnrollStep — personal step", () => {
     );
     expect(errors).toContain("Los nombres del representante son obligatorios.");
     expect(errors).toContain("La cédula del representante debe tener 10 dígitos.");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Step: club
-// ---------------------------------------------------------------------------
-
-describe("validateEnrollStep — account step", () => {
-  it("accepts self enrollment credentials", () => {
-    const errors = validateEnrollStep("club", validForm());
-    expect(errors).toEqual([]);
-  });
-
-  it("requires a valid self enrollment email", () => {
-    const errors = validateEnrollStep("club", validForm({ correo: "" }));
-    expect(errors).toContain("El correo electrónico no es válido.");
-  });
-
-  it("does NOT collect a technical level", () => {
-    const errors = validateEnrollStep("club", validForm());
-    expect(errors).toEqual([]);
-    // No error related to technical level should appear
-    const hasNivelError = errors.some((e) =>
-      /nivel|nivel t(e|é)cnico|nivel/i.test(e),
-    );
-    expect(hasNivelError).toBe(false);
   });
 });
 

@@ -419,7 +419,7 @@ export interface PersonaBusqueda {
 // ---------------------------------------------------------------------------
 
 /** Notification type — mirrors backend's `TipoNotificacion` enum. */
-export type TipoNotificacion = "MIEMBRESIA_VENCIMIENTO_PROXIMO" | "PAGO_APROBADO" | "PAGO_RECHAZADO";
+export type TipoNotificacion = "MIEMBRESIA_VENCIMIENTO_PROXIMO" | "PAGO_APROBADO" | "PAGO_RECHAZADO" | "NUEVA_INSCRIPCION";
 
 /**
  * An in-app notification (`GET /ranking/notificaciones/mias`) —
