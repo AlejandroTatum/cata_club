@@ -3,8 +3,8 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Membresia, TipoMembresia
-from app.dominio.enums import EstadoMembresia
+from app.dominio.modelos import Membresia, TipoMembresia, Pago
+from app.dominio.enums import EstadoMembresia, EstadoPago
 
 
 class TipoMembresiaRepositorio:
@@ -112,7 +112,51 @@ class MembresiaRepositorio:
         )
         return list(self.db.execute(stmt).scalars().unique().all())
 
-    def listar(self, skip: int = 0, limit: int = 200) -> List[Membresia]:
+    def tiene_deudas_pendientes(self, persona_id: int) -> bool:
+        """True si la persona tiene deudas pendientes que impiden independizarse.
+
+        Dos condiciones bloqueantes:
+        1. Membresía INACTIVA sin ningún pago APROBADO (nunca pagó).
+        2. Cualquier membresía con al menos un pago PENDIENTE_VALIDACION
+           (pago enviado, esperando revisión del admin).
+        """
+        from sqlalchemy import and_, exists
+
+        # Condición 1: membresía INACTIVA sin pago APROBADO
+        stmt_inactiva_sin_pago = (
+            exists()
+            .where(
+                and_(
+                    Pago.membresia_id == Membresia.id,
+                    Pago.estado_pago == EstadoPago.APROBADO,
+                )
+            )
+        )
+        inactiva_sin_pago = (
+            self.db.query(Membresia)
+            .filter(
+                Membresia.persona_id == persona_id,
+                Membresia.estado == EstadoMembresia.INACTIVA,
+                ~stmt_inactiva_sin_pago,
+            )
+            .first()
+            is not None
+        )
+        if inactiva_sin_pago:
+            return True
+
+        # Condición 2: pago PENDIENTE_VALIDACION en cualquier membresía
+        stmt_pendiente = (
+            exists()
+            .where(
+                and_(
+                    Pago.membresia_id == Membresia.id,
+                    Membresia.persona_id == persona_id,
+                    Pago.estado_pago == EstadoPago.PENDIENTE_VALIDACION,
+                )
+            )
+        )
+        return self.db.query(stmt_pendiente).scalar()
         """Listado paginado de todas las membresías. Útil para dashboards
         que necesitan conocer el estado de todas las membresías sin hacer
         N+1 consultas individuales."""

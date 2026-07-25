@@ -119,3 +119,13 @@ class AsignacionRankingResponseDTO(ResponseBase, BaseModel):
     nivel_ranking_nombre: Optional[str] = None
     nivel_ranking_numero: int
     esta_en_ranking: bool
+
+
+class AlumnoConNivelDTO(ResponseBase, BaseModel):
+    """Listado ligero de alumnos con su nivel_ranking_id (o null si no tienen).
+    Accesible para ADMINISTRADOR y ENTRENADOR. Reemplaza el /personas/ (solo
+    admin) que la página /trainer/nivel no podía consumir."""
+    persona_id: int
+    nombres: str
+    apellidos: str
+    nivel_ranking_id: Optional[int] = None

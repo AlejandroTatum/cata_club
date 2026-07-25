@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
+from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.presentacion.schemas.auth_schemas import (
     RegistroUsuarioDTO, RefreshTokenDTO, UsuarioMeResponseDTO, LogoutResponseDTO,
     SolicitarRecuperacionDTO, SolicitarRecuperacionResponseDTO, RestablecerContraseniaDTO,
@@ -21,13 +22,17 @@ async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), d
     return AuthServicio(db).login(form.username, form.password)
 
 
-@router.post("/registro", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/registro",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
 @limiter.limit("3/minute")
 async def registro(request: Request, datos: RegistroUsuarioDTO, db: Session = Depends(obtener_sesion)):
     """
-    Endpoint público: crea el `Usuario` (credenciales) para una `Persona` que
-    ya existe. NO crea Persona — el alta de Persona sigue siendo exclusiva
-    del ADMINISTRADOR vía POST /personas.
+    Solo ADMINISTRADOR: crea el `Usuario` (credenciales) para una `Persona`
+    que ya existe. Antes era público (sin auth) — ahora está protegido
+    para que nadie pueda crear credenciales ajenas usando solo una cédula.
     """
     return AuthServicio(db).registrar_usuario(datos)
 

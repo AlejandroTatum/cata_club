@@ -3,6 +3,7 @@ from datetime import date, datetime
 from typing import Optional, List
 
 from app.dominio.enums import TipoEscuela, NivelTecnicoAlumno, TipoSangre, TipoManoDominante
+from pydantic import EmailStr
 from app.presentacion.schemas.base import ResponseBase
 from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
 
@@ -19,12 +20,12 @@ class InstitucionResponseDTO(ResponseBase, InstitucionCreateDTO):
 
 # --- Persona ---
 class PersonaCreateDTO(BaseModel):
-    nombres: str = Field(..., max_length=100)
-    apellidos: str = Field(..., max_length=100)
-    cedula: str = Field(..., min_length=10, max_length=10)
+    nombres: str = Field(..., min_length=1, max_length=100)
+    apellidos: str = Field(..., min_length=1, max_length=100)
+    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
     fecha_nacimiento: date
     foto_url: Optional[str] = None
-    telefono: str
+    telefono: str = Field(..., max_length=15)
     telefono_contacto: Optional[str] = Field(default=None, max_length=20)
     representante_id: Optional[int] = None
     direccion_id: Optional[int] = None
@@ -33,27 +34,37 @@ class PersonaCreateDTO(BaseModel):
 
 # --- Representado (portal autoservicio) -------------------------------------
 class RepresentadoCreateDTO(BaseModel):
-    """Payload minimal para que un representante autenticado agregue un
-    dependiente desde el portal (POST /personas/{persona_id}/representados).
-    Deliberadamente NO expone campos solo-admin de `PersonaCreateDTO`
-    (`representante_id`, `direccion_id`, `institucion_id`): el
-    `representante_id` lo fuerza el servicio desde el token, nunca el cliente."""
-    nombres: str = Field(..., max_length=100)
-    apellidos: str = Field(..., max_length=100)
-    cedula: str = Field(..., min_length=10, max_length=10)
+    """Payload para que un representante o administrador agregue un
+    dependiente (POST /personas/{persona_id}/representados).
+
+    Si se proporcionan `correo` y `contrasenia`, se crea también un
+    Usuario con rol ALUMNO para el menor (Opción B: menores con cuenta).
+    Si se omiten, solo se crea la Persona (comportamiento anterior)."""
+    nombres: str = Field(..., min_length=1, max_length=100)
+    apellidos: str = Field(..., min_length=1, max_length=100)
+    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
     fecha_nacimiento: date
-    telefono: str
+    telefono: str = Field(..., max_length=15, pattern=r"^\d{7,10}$")
     ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
+    correo: Optional[EmailStr] = None
+    contrasenia: Optional[str] = Field(default=None, min_length=8)
+    institucion_id: Optional[int] = None
 
 
 class PersonaUpdateDTO(BaseModel):
     nombres: Optional[str] = Field(default=None, min_length=1, max_length=100)
     apellidos: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    telefono: Optional[str] = Field(default=None, max_length=20)
+    telefono: Optional[str] = Field(default=None, max_length=20, pattern=r"^\d{7,10}$")
     telefono_contacto: Optional[str] = Field(default=None, max_length=20)
     foto_url: Optional[str] = None
     direccion_id: Optional[int] = None
     institucion_id: Optional[int] = None
+
+
+class IndependizarDTO(BaseModel):
+    """Payload para que un ex-menor (ya mayor de edad) o un administrador
+    independice a una persona de su representante legal."""
+    contrasenia: str = Field(..., min_length=8)
 
 
 class PersonaResponseDTO(ResponseBase, BaseModel):
@@ -118,7 +129,7 @@ class FichaMedicaCreateDTO(BaseModel):
     enfermedades: List[str] = Field(default_factory=list)  # nombres de enfermedades, opcional
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: Optional[str] = Field(default=None, max_length=150)
-    telefono_emergencia: Optional[str] = Field(default=None, max_length=15)
+    telefono_emergencia: Optional[str] = Field(default=None, max_length=15, pattern=r"^\d{7,10}$")
 
 
 class FichaMedicaUpdateDTO(BaseModel):
@@ -129,7 +140,7 @@ class FichaMedicaUpdateDTO(BaseModel):
     enfermedades: Optional[List[str]] = None
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: Optional[str] = Field(default=None, max_length=150)
-    telefono_emergencia: Optional[str] = Field(default=None, max_length=15)
+    telefono_emergencia: Optional[str] = Field(default=None, max_length=15, pattern=r"^\d{7,10}$")
 
 
 class FichaMedicaResponseDTO(ResponseBase, BaseModel):

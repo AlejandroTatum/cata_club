@@ -1,13 +1,18 @@
 from datetime import date
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Persona, FichaMedica, Enfermedades
+from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades
 from app.dominio.enums import TipoRol
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
+from app.seguridad.gestor_auth import GestorAutenticacion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
-from app.infraestructura.repositorios.usuario_ficha_repositorio import FichaMedicaRepositorio
+from app.infraestructura.repositorios.usuario_ficha_repositorio import (
+    UsuarioRepositorio, FichaMedicaRepositorio,
+)
+from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
+from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.presentacion.schemas.persona_schemas import (
-    PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO,
+    PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO, IndependizarDTO,
 )
 
 
@@ -36,6 +41,8 @@ class PersonaServicio:
     def __init__(self, db: Session):
         self.db = db
         self.repo = PersonaRepositorio(db)
+        self.repo_usuario = UsuarioRepositorio(db)
+        self.repo_rol = RolRepositorio(db)
 
     def registrar_persona(self, datos: PersonaCreateDTO) -> Persona:
         if self.repo.obtener_por_cedula(datos.cedula):
@@ -71,16 +78,16 @@ class PersonaServicio:
         return self.repo.crear(nueva_persona)
 
     def crear_representado(self, representante_id: int, datos: RepresentadoCreateDTO) -> Persona:
-        """Autoservicio del portal: un representante ya autenticado agrega un
-        dependiente (hijo). Crea únicamente la Persona (vía `registrar_persona`,
-        reusando las reglas de edad/duplicado/tutor sin cambios) más su
-        `FichaMedica` si se proporcionó — NO crea `Usuario` ni asigna roles
-        (mirrors `EnrollmentServicio.enroll`, sin la parte de credenciales).
+        """Crea un dependiente (menor) para un representante o desde el panel admin.
+
+        Flujo:
+        1. Crear Persona (vía `registrar_persona`, reusando reglas de edad/duplicado).
+        2. Crear FichaMedica si se proporcionó.
+        3. Si se proporcionaron `correo` + `contrasenia`: crear Usuario con
+           rol ALUMNO para el menor (Opción B: menores con cuenta propia).
 
         Nota: igual que `EnrollmentServicio`, cada `repo.crear()` hace su
-        propio commit (no hay una única transacción de BD); si la creación de
-        la ficha médica falla después del commit de la Persona, queda un
-        Persona huérfano sin ficha. Riesgo heredado, no introducido aquí."""
+        propio commit. Riesgo heredado, no introducido aquí."""
         persona_datos = PersonaCreateDTO(
             nombres=datos.nombres,
             apellidos=datos.apellidos,
@@ -88,6 +95,7 @@ class PersonaServicio:
             fecha_nacimiento=datos.fecha_nacimiento,
             telefono=datos.telefono,
             representante_id=representante_id,
+            institucion_id=datos.institucion_id,
         )
         representado = self.registrar_persona(persona_datos)
 
@@ -103,7 +111,30 @@ class PersonaServicio:
                 ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
             FichaMedicaRepositorio(self.db).crear(ficha)
 
+        # Opción B: si el admin/representante provee credenciales,
+        # crear también el Usuario + rol ALUMNO para el menor.
+        if datos.correo and datos.contrasenia:
+            if self.repo_usuario.obtener_por_correo(datos.correo):
+                raise EntidadDuplicada("El correo ya está en uso por otra cuenta")
+            from app.seguridad.gestor_auth import GestorAutenticacion
+            hash_pw = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
+            usuario = Usuario(
+                correo=datos.correo,
+                contrasenia=hash_pw,
+                persona_id=representado.id,
+            )
+            self.repo_usuario.crear(usuario)
+            self._asignar_rol(usuario, TipoRol.ALUMNO)
+
         return representado
+
+    def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
+        """Asigna un rol al usuario si aún no lo tiene (idempotente)."""
+        if any(r.tipo_rol == tipo_rol for r in usuario.roles):
+            return
+        rol = self.repo_rol.obtener_o_crear(tipo_rol)
+        usuario.roles.append(rol)
+        self.db.commit()
 
     def listar_personas(self, skip: int = 0, limit: int = 50) -> tuple[list[Persona], int]:
         items = self.repo.listar(skip, limit)
@@ -133,6 +164,46 @@ class PersonaServicio:
     def eliminar_persona(self, persona_id: int) -> None:
         persona = self.obtener_persona(persona_id)
         self.repo.eliminar(persona)
+
+    def independizar(self, persona_id: int, datos: IndependizarDTO) -> Persona:
+        """Permite a un ex-menor (mayor de edad) independizarse de su
+        representante legal. Validaciones:
+        1. La persona debe existir y tener representante_id.
+        2. Debe ser mayor de edad (>= 18).
+        3. La contraseña proporcionada debe coincidir con la del Usuario.
+        4. No debe tener deudas pendientes (membresías sin pago o pagos
+           pendientes de validación).
+
+        Resultado: representante_id = None, se asigna rol REPRESENTANTE."""
+        persona = self.obtener_persona(persona_id)
+
+        if not persona.representante_id:
+            raise OperacionInvalida("Esta persona no tiene un representante legal asociado.")
+
+        edad = _calcular_edad(persona.fecha_nacimiento)
+        if edad < EDAD_MAYORIA_EDAD:
+            raise OperacionInvalida(
+                f"La persona debe ser mayor de edad ({EDAD_MAYORIA_EDAD}+ años) "
+                f"para independizarse (calculado: {edad})."
+            )
+
+        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
+        if not usuario:
+            raise EntidadNoEncontrada("Esta persona no tiene una cuenta de usuario activa.")
+        if not GestorAutenticacion.verificar_contrasenia(datos.contrasenia, usuario.contrasenia):
+            raise EntidadDuplicada("La contraseña proporcionada es incorrecta.")
+
+        if MembresiaRepositorio(self.db).tiene_deudas_pendientes(persona_id):
+            raise OperacionInvalida(
+                "No es posible independizarse: existen membresías o pagos pendientes. "
+                "Regularice su situación antes de continuar."
+            )
+
+        persona.representante_id = None
+        self.repo.actualizar(persona, {"representante_id": None})
+        self._asignar_rol(usuario, TipoRol.REPRESENTANTE)
+
+        return persona
 
     # --- Reportes (E04-RF014) --------------------------------------------------
     def reporte_nuevos_por_periodo(self, fecha_inicio, fecha_fin) -> list[Persona]:

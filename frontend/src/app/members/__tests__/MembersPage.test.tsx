@@ -724,6 +724,10 @@ describe("MembersPage — Registrar pago inline form", () => {
     expect(await within(dialog).findByText(/Inicio:/)).toBeInTheDocument();
     expect(await within(dialog).findByText(/Fin:/)).toBeInTheDocument();
 
+    // Switch payment method to EFECTIVO so no voucher is required
+    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
+    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
+
     const submitBtn = within(dialog).getByRole("button", { name: /registrar pago/i });
     fireEvent.click(submitBtn);
 

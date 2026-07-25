@@ -211,13 +211,13 @@ interface HeaderProps {
  * that already carries identity + a "volver al sitio" link — the app
  * header would duplicate that and break the full-height layout.
  */
-const AUTH_SHELL_ROUTES = new Set(["/login", "/register", "/forgot-password"]);
+const AUTH_SHELL_ROUTES = new Set(["/login", "/forgot-password"]);
 
 /**
  * Routes that render their own sidebar shell (see `AppShell`), which
  * already carries identity, navigation, and a logout control — the top
- * header would duplicate that. `/student/enroll` keeps the top-nav
- * header since its wizard is out of scope for the AppShell migration.
+ * header would duplicate that. Each of these pages wraps its content in
+ * `<AppShell>`, whose own sidebar replaces this top nav.
  */
 const APP_SHELL_ROUTES = new Set([
   "/dashboard",
@@ -235,6 +235,7 @@ const APP_SHELL_ROUTES = new Set([
   "/student/enroll",
   "/student/add-dependent",
   "/profile",
+  "/admin/crear-cuenta",
 ]);
 
 export default function Header({ hideOnLanding = false }: HeaderProps): React.ReactElement | null {

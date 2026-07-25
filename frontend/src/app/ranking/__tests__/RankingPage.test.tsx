@@ -10,7 +10,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 import RankingPage from "@/app/ranking/page";
 import type { NivelConOcupacion } from "@/services/api";
-import type { MemberAccount } from "@/app/members/members-utils";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -60,7 +59,8 @@ vi.mock("@/contexts/ToastContext", () => ({
   }),
 }));
 
-const mockFetchMembers = vi.fn();
+const mockFetchAlumnosConNivel = vi.fn();
+const mockFetchNivelesConOcupacion = vi.fn();
 const mockAssignStudentToNivel = vi.fn();
 const mockMoveStudentToNivel = vi.fn();
 
@@ -74,7 +74,8 @@ vi.mock("@/services/api", () => {
     }
   }
   return {
-    fetchMembers: () => mockFetchMembers(),
+    fetchAlumnosConNivel: () => mockFetchAlumnosConNivel(),
+    fetchNivelesConOcupacion: () => mockFetchNivelesConOcupacion(),
     assignStudentToNivel: (personaId: number, nivelId: number) => mockAssignStudentToNivel(personaId, nivelId),
     moveStudentToNivel: (personaId: number, nivelId: number) => mockMoveStudentToNivel(personaId, nivelId),
     fetchNotificaciones: vi.fn().mockResolvedValue([]),
@@ -108,40 +109,17 @@ const NIVELES: NivelConOcupacion[] = [
   },
 ];
 
-const ACCOUNT: MemberAccount = {
-  id: "acc-1",
-  role: "representante",
-  nombres: "María",
-  apellidos: "González",
-  telefono: "0999999999",
-  estudiantes: [
-    {
-      id: "10",
-      nombres: "Sofía",
-      apellidos: "González",
-      grupoId: null,
-      activo: true,
-      membresia: null,
-      ultimoPago: null,
-    },
-    {
-      id: "11",
-      nombres: "Pedro",
-      apellidos: "Ramírez",
-      grupoId: "1",
-      activo: true,
-      membresia: null,
-      ultimoPago: null,
-    },
-  ],
-};
-
 describe("RankingPage — admin Niveles screen (copy of trainer's Nivel)", () => {
   beforeEach(() => {
-    mockFetchMembers.mockReset();
+    mockFetchAlumnosConNivel.mockReset();
+    mockFetchNivelesConOcupacion.mockReset();
     mockAssignStudentToNivel.mockReset();
     mockMoveStudentToNivel.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT], niveles: NIVELES });
+    mockFetchAlumnosConNivel.mockResolvedValue([
+      { personaId: 10, nombres: "Sofía", apellidos: "González", nivelRankingId: null },
+      { personaId: 11, nombres: "Pedro", apellidos: "Ramírez", nivelRankingId: 1 },
+    ]);
+    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
     mockShowError.mockClear();
     mockShowSuccess.mockClear();
   });
@@ -185,23 +163,13 @@ describe("RankingPage — admin Niveles screen (copy of trainer's Nivel)", () =>
   });
 
   it("paginates the student list at 10 per page, with prev/next controls", async () => {
-    const manyStudents: MemberAccount = {
-      id: "acc-many",
-      role: "representante",
-      nombres: "Ana",
-      apellidos: "Pérez",
-      telefono: "0999999999",
-      estudiantes: Array.from({ length: 15 }, (_, i) => ({
-        id: String(100 + i),
-        nombres: `Estudiante${i}`,
-        apellidos: "Test",
-        grupoId: null,
-        activo: true,
-        membresia: null,
-        ultimoPago: null,
-      })),
-    };
-    mockFetchMembers.mockResolvedValue({ accounts: [manyStudents], niveles: NIVELES });
+    const manyStudents = Array.from({ length: 15 }, (_, i) => ({
+      personaId: 100 + i,
+      nombres: `Estudiante${i}`,
+      apellidos: "Test",
+      nivelRankingId: null,
+    }));
+    mockFetchAlumnosConNivel.mockResolvedValue(manyStudents);
 
     render(<RankingPage />);
     await screen.findByText("Estudiantes (15)");

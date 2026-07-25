@@ -8,13 +8,15 @@ from app.infraestructura.db import obtener_sesion
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaUpdateDTO,
-    PersonaBusquedaDTO, RepresentadoCreateDTO,
+    PersonaBusquedaDTO, RepresentadoCreateDTO, IndependizarDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
     EntrenadorResponseDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
+from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
+from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.antecedentes_club_servicio import AntecedentesClubServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
@@ -43,6 +45,18 @@ def _personas_a_filas(personas) -> list[list[str]]:
     return filas
 
 router = APIRouter(prefix="/personas", tags=["Personas"])
+
+
+# --- Flujo 1: creación de cuenta completa desde el admin --------------------
+@router.post(
+    "/admin/cuentas",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def crear_cuenta_admin(datos: AdminCrearCuentaDTO, db: Session = Depends(obtener_sesion)):
+    """Crea Persona + Usuario + Rol en un solo request (JUGADOR / REPRESENTANTE / MENOR).
+    Retorna tokens JWT para auto-login inmediato del admin y de la cuenta creada."""
+    return AdminCuentaServicio(db).crear_cuenta(datos)
 
 
 @router.post(
@@ -206,7 +220,7 @@ async def listar_representados(
 @router.post(
     "/{persona_id}/representados", response_model=PersonaResponseDTO,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(GestorPermisos(["REPRESENTANTE"]))],
+    dependencies=[Depends(GestorPermisos(["REPRESENTANTE", "ADMINISTRADOR"]))],
 )
 async def crear_representado(
     persona_id: int,
@@ -214,9 +228,33 @@ async def crear_representado(
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
     db: Session = Depends(obtener_sesion),
 ):
-    if persona_id != token_payload.get("persona_id"):
+    roles_usuario = token_payload.get("roles", [])
+    es_propietario = persona_id == token_payload.get("persona_id")
+    es_admin = "ADMINISTRADOR" in roles_usuario
+    if not es_propietario and not es_admin:
         raise PermisosInsuficientes("Permisos insuficientes para esta operación")
     return PersonaServicio(db).crear_representado(persona_id, datos)
+
+
+# --- Independizar (Flujo 4): ex-menor se independiza del representante --
+@router.post(
+    "/{persona_id}/independizar", response_model=PersonaResponseDTO,
+    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+)
+async def independizar_persona(
+    persona_id: int,
+    datos: IndependizarDTO,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    """Permite a una persona independizarse de su representante legal.
+    Solo puede ejecutarlo la propia persona o un ADMINISTRADOR."""
+    roles_usuario = token_payload.get("roles", [])
+    es_propietario = persona_id == token_payload.get("persona_id")
+    es_admin = "ADMINISTRADOR" in roles_usuario
+    if not es_propietario and not es_admin:
+        raise PermisosInsuficientes("Permisos insuficientes para esta operación")
+    return PersonaServicio(db).independizar(persona_id, datos)
 
 
 @router.patch(
@@ -323,3 +361,22 @@ async def quitar_rol(persona_id: int, tipo_rol: TipoRol, db: Session = Depends(o
 async def cambiar_estado_cuenta(persona_id: int, datos: EstadoCuentaDTO, db: Session = Depends(obtener_sesion)):
     usuario = RolServicio(db).cambiar_estado_cuenta(persona_id, datos.activo)
     return RolesResponseDTO(persona_id=persona_id, roles=[r.tipo_rol.value for r in usuario.roles], activo=usuario.activo)
+
+
+# --- Instituciones educativas (selector para inscripción de menores) --------
+
+class InstitucionResponseDTO(ResponseBase, BaseModel):
+    id: int
+    nombre: str
+    tipo_escuela: str
+
+
+@router.get("/instituciones", response_model=List[InstitucionResponseDTO])
+async def listar_instituciones(db: Session = Depends(obtener_sesion)):
+    """Lista todas las instituciones educativas (para selector en wizard de inscripción)."""
+    from app.infraestructura.repositorios.institucion_repositorio import InstitucionRepositorio
+    instituciones = InstitucionRepositorio(db).listar()
+    return [
+        InstitucionResponseDTO(id=i.id, nombre=i.nombre, tipo_escuela=i.tipo_escuela.value)
+        for i in instituciones
+    ]

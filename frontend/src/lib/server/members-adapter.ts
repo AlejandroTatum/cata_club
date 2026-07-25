@@ -152,9 +152,14 @@ export function buildMemberAccounts(
     const children = childrenByRepresentante.get(root.id) ?? [];
     const estudiantesSource = children.length > 0 ? children : [root];
 
+    // All root personas are adults (minors always have representanteId set),
+    // and self-enrollment now assigns the REPRESENTANTE role to every adult
+    // self-enrollee. Without a bulk roles endpoint (gap #1 in the module
+    // docstring), we label every root as "representante" — the admin edit
+    // modal already shows/toggles the actual backend roles.
     return {
       id: String(root.id),
-      role: children.length > 0 ? "representante" : "estudiante",
+      role: "representante" as const,
       nombres: root.nombres,
       apellidos: root.apellidos,
       telefono: root.telefono,

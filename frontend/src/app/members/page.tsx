@@ -15,6 +15,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -45,6 +46,7 @@ import {
   Pencil,
   X,
   Upload,
+  UserPlus,
 } from "lucide-react";
 import { fetchMembers, obtenerRolesDePersona, asignarRol, quitarRol, cambiarEstadoCuenta, actualizarPersona, fetchFichaMedica, actualizarFichaMedica, fetchTiposMembresia, crearMembresia, registrarPago } from "@/services/api";
 import type { TipoMembresiaCatalogo, RegistrarPagoInput } from "@/services/api";
@@ -284,6 +286,10 @@ function StudentEditPanel({ student, grupos }: StudentRowProps): React.ReactElem
     }
     if (!student.membresia?.id) {
       setPaymentError("No se encontró la membresía.");
+      return;
+    }
+    if (paymentTipoPago === "TRANSFERENCIA" && !paymentVoucherFile) {
+      setPaymentError("El comprobante de transferencia es obligatorio.");
       return;
     }
     setPaymentLoading(true);
@@ -1241,8 +1247,16 @@ export default function MembersPage(): React.ReactElement {
               aria-label="Buscar miembros"
             />
           </div>
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
-            {FILTER_CHIPS.map((chip) => {
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/admin/crear-cuenta"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-cata-red px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80"
+            >
+              <UserPlus size={13} strokeWidth={2} aria-hidden="true" />
+              Crear cuenta
+            </Link>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
+              {FILTER_CHIPS.map((chip) => {
               const isActive = activeFlag === chip.flag;
               const count = countAccountsMatchingFlag(accounts, chip.flag);
               return (
@@ -1268,6 +1282,7 @@ export default function MembersPage(): React.ReactElement {
                 </button>
               );
             })}
+            </div>
           </div>
         </div>
 

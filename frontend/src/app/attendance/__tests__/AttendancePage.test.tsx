@@ -124,10 +124,14 @@ describe("AttendancePage — visible records pagination (PR8b)", () => {
     await screen.findByText("Página 1 de 2");
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
-    expect(await screen.findByText("Página 2 de 2")).toBeInTheDocument();
+    // The "Página X de Y" string is split across multiple text nodes by JSX
+    // interpolation (`Página {page} de {total}`), so a plain findByText string
+    // match is flaky across re-renders. Match on the normalized textContent
+    // of the wrapping <p> instead.
+    expect(await screen.findByText((_content, element) => element?.textContent === "Página 2 de 2")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /siguiente/i })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: /anterior/i }));
-    expect(await screen.findByText("Página 1 de 2")).toBeInTheDocument();
+    expect(await screen.findByText((_content, element) => element?.textContent === "Página 1 de 2")).toBeInTheDocument();
   });
 });

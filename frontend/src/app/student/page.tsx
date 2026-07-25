@@ -6,7 +6,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ContextualHelp from "@/components/ContextualHelp";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchStudentPortal } from "@/services/api";
+import { fetchStudentPortal, independizarPersona } from "@/services/api";
 import type { StudentPortalSummary, StudentProfileSummary, MembershipSummary } from "@/services/api";
 import { ATTENDANCE_LABELS, ATTENDANCE_BADGE_TOKENS } from "@/app/attendance/attendance-utils";
 import { derivePortalMode, isRepresentative, isMinor, describeRanking } from "./student-utils";
@@ -19,11 +19,13 @@ import {
   ChevronDown,
   GraduationCap,
   UserPlus,
+  UserMinus,
   ArrowRight,
   Trophy,
   RefreshCw,
   Clock,
 } from "lucide-react";
+import AgeUpConfirmation from "@/components/AgeUpConfirmation";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -305,9 +307,11 @@ function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.
 function ActivePortalView({
   data,
   hasAlumnoRole,
+  onIndependizar,
 }: {
   data: StudentPortalSummary;
   hasAlumnoRole: boolean;
+  onIndependizar: () => void;
 }): React.ReactElement {
   const managedProfiles: StudentProfileSummary[] =
     hasAlumnoRole && data.self ? [data.self, ...data.representados] : data.representados;
@@ -394,6 +398,16 @@ function ActivePortalView({
             <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
           </Link>
         )}
+        {!selfIsMinor && data.self?.representanteId != null && (
+          <button
+            type="button"
+            onClick={onIndependizar}
+            className="inline-flex items-center gap-2 rounded-xl border border-cata-red/20 bg-cata-surface px-4 py-2.5 text-sm font-medium text-cata-red transition-all duration-200 hover:bg-cata-red/10"
+          >
+            <UserMinus size={16} strokeWidth={1.5} aria-hidden="true" />
+            Independizarse del representante
+          </button>
+        )}
       </div>
 
       {selectedIsMinor && selectedProfile.representante && (
@@ -436,12 +450,14 @@ function ActivePortalView({
 // ---------------------------------------------------------------------------
 
 function StudentPortalContent(): React.ReactElement {
-  const { session } = useAuth();
+  const { session, refreshSession } = useAuth();
   const personaId = session?.user.id ?? "";
   const hasAlumnoRole = session?.user.role === "estudiante";
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [reloadToken, setReloadToken] = useState(0);
+  const [showAgeUpModal, setShowAgeUpModal] = useState(false);
+  const [ageUpLoading, setAgeUpLoading] = useState(false);
 
   useEffect(() => {
     if (!personaId) return;
@@ -463,6 +479,19 @@ function StudentPortalContent(): React.ReactElement {
     };
   }, [personaId, reloadToken]);
 
+  async function handleAgeUpConfirm(contrasenia: string): Promise<void> {
+    if (!personaId) return;
+    setAgeUpLoading(true);
+    try {
+      await independizarPersona(Number(personaId), contrasenia);
+      await refreshSession();
+      setReloadToken((n) => n + 1);
+      setShowAgeUpModal(false);
+    } finally {
+      setAgeUpLoading(false);
+    }
+  }
+
   return (
     <AppShell eyebrow="Área de Estudiantes" title="Portal de Cuenta">
       {state.status === "loading" && <LoadingCard />}
@@ -471,8 +500,13 @@ function StudentPortalContent(): React.ReactElement {
         (derivePortalMode(hasAlumnoRole, state.data.representados.length) === "pending" ? (
           <PendingEnrollmentView data={state.data} />
         ) : (
-          <ActivePortalView data={state.data} hasAlumnoRole={hasAlumnoRole} />
+          <ActivePortalView data={state.data} hasAlumnoRole={hasAlumnoRole} onIndependizar={() => setShowAgeUpModal(true)} />
         ))}
+      <AgeUpConfirmation
+        open={showAgeUpModal}
+        onConfirm={handleAgeUpConfirm}
+        onCancel={() => setShowAgeUpModal(false)}
+      />
     </AppShell>
   );
 }

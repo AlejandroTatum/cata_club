@@ -134,7 +134,7 @@ describe("Header", (): void => {
 
   // --- Auth shell routes (login, register, forgot-password) ---
 
-  it.each(["/login", "/register", "/forgot-password"])(
+  it.each(["/login", "/forgot-password"])(
     "hides the header on the %s auth-shell route",
     (route): void => {
       mockPathname.mockReturnValue(route);
@@ -157,6 +157,11 @@ describe("Header", (): void => {
     "/trainer/nivel",
     "/reports",
     "/student",
+    "/student/payments",
+    "/student/enroll",
+    "/student/add-dependent",
+    "/profile",
+    "/admin/crear-cuenta",
   ])("hides the header on the %s app-shell route", (route): void => {
     mockPathname.mockReturnValue(route);
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin"));

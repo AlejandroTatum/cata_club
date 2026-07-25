@@ -227,8 +227,8 @@ export default function LoginPage(): React.ReactElement {
       {/* Auth companion links */}
       <p className="mt-6 text-center text-sm text-cata-text/65">
         ¿No tiene una cuenta?{" "}
-        <Link href="/register" className="font-medium text-cata-red transition-colors hover:text-cata-red-light">
-          Crear una
+        <Link href="/student/enroll" className="font-medium text-cata-red transition-colors hover:text-cata-red-light">
+          Inscribirse
         </Link>
       </p>
 

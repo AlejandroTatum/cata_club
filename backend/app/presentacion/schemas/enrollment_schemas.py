@@ -15,22 +15,31 @@ from app.dominio.enums import TipoSangre, NivelTecnicoAlumno, TipoManoDominante
 
 class EnrollmentRepresentanteDTO(BaseModel):
     """Datos del representante legal (solo para inscripción de hijo/dependiente)."""
-    nombres: str = Field(..., max_length=100)
-    apellidos: str = Field(..., max_length=100)
-    cedula: str = Field(..., min_length=10, max_length=10)
+    nombres: str = Field(..., min_length=1, max_length=100)
+    apellidos: str = Field(..., min_length=1, max_length=100)
+    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
     fecha_nacimiento: date
-    telefono: str = Field(..., max_length=15)
+    telefono: str = Field(..., max_length=15, pattern=r"^\d{7,10}$")
     correo: EmailStr
     contrasenia: str = Field(..., min_length=8)
 
 
 class EnrollmentAlumnoDTO(BaseModel):
-    """Datos del alumno a inscribir."""
-    nombres: str = Field(..., max_length=100)
-    apellidos: str = Field(..., max_length=100)
-    cedula: str = Field(..., min_length=10, max_length=10)
+    """Datos del alumno a inscribir.
+
+    Para inscripción "child" (representante inscribe hijo menor):
+      Opcionalmente incluir `correo` + `contrasenia` para crear también
+      un Usuario con rol ALUMNO (Opción B: menores con cuenta propia).
+    Para inscripción "self" (adulto): las credenciales van en
+      `credenciales_alumno`."""
+    nombres: str = Field(..., min_length=1, max_length=100)
+    apellidos: str = Field(..., min_length=1, max_length=100)
+    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
     fecha_nacimiento: date
-    telefono: str = Field(..., max_length=15)
+    telefono: str = Field(..., max_length=15, pattern=r"^\d{7,10}$")
+    correo: Optional[EmailStr] = None
+    contrasenia: Optional[str] = Field(default=None, min_length=8)
+    institucion_id: Optional[int] = None
 
 
 class EnrollmentCredencialesDTO(BaseModel):
@@ -44,8 +53,8 @@ class EnrollmentFichaMedicaDTO(BaseModel):
     tipo_sangre: TipoSangre = TipoSangre.DESCONOCIDO
     enfermedades: List[str] = Field(default_factory=list)
     alergias: Optional[str] = Field(default=None, max_length=255)
-    contacto_emergencia: Optional[str] = Field(default=None, max_length=150)
-    telefono_emergencia: Optional[str] = Field(default=None, max_length=15)
+    contacto_emergencia: str = Field(..., min_length=1, max_length=150)
+    telefono_emergencia: str = Field(..., max_length=15, pattern=r"^\d{7,10}$")
 
 
 class EnrollmentAntecedentesDTO(BaseModel):

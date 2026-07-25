@@ -12,6 +12,7 @@ from app.presentacion.schemas.ranking_schemas import (
     NivelRankingCreateDTO, NivelRankingResponseDTO, NivelRankingConOcupacionDTO,
     AsignarNivelInicialDTO, RankingResponseDTO, TablaRankingItemDTO,
     PerfilRankingAlumnoDTO, NotificacionResponseDTO, AsignacionRankingResponseDTO,
+    AlumnoConNivelDTO,
 )
 
 router = APIRouter(prefix="/ranking", tags=["ranking"])
@@ -44,6 +45,17 @@ async def listar_niveles(db: Session = Depends(obtener_sesion)):
 async def listar_asignaciones(db: Session = Depends(obtener_sesion)):
     """Listado de todos los alumnos en el ranking (con su nivel y posición)."""
     return RankingServicio(db).listar_asignaciones()
+
+
+@router.get(
+    "/alumnos-con-nivel", response_model=List[AlumnoConNivelDTO],
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN_O_ENTRENADOR))],
+)
+async def listar_alumnos_con_nivel(db: Session = Depends(obtener_sesion)):
+    """Lista ligera de alumnos con su nivel_ranking_id actual — accesible para
+    ADMINISTRADOR y ENTRENADOR. Reemplaza la dependencia del panel de nivel
+    con /personas/ (solo admin), que lasciaba al entrenador sin acceso."""
+    return RankingServicio(db).listar_alumnos_con_nivel()
 
 
 @router.get(

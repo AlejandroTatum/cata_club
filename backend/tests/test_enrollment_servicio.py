@@ -1,7 +1,9 @@
 from datetime import date
 
+import pytest
+
 from app.dominio.enums import TipoRol
-from app.dominio.modelos import Usuario
+from app.dominio.modelos import Persona, Usuario
 from app.presentacion.schemas.enrollment_schemas import (
     EnrollmentAlumnoDTO,
     EnrollmentCreateDTO,
@@ -63,3 +65,218 @@ def test_autoinscripcion_jugador_persiste_rol_mas_alla_del_flush(db_session):
     usuario = db_session.query(Usuario).filter(Usuario.correo == "jugador@example.com").one()
     roles = {r.tipo_rol for r in usuario.roles}
     assert roles == {TipoRol.ALUMNO}
+
+
+# --- Flujo 3: inscripción de menor con credenciales propias ----------------
+
+def test_inscripcion_menor_con_credenciales_crea_usuario_menor(db_session):
+    """Cuando el representante provee credencialesMenor, se crea también
+    un Usuario + ALUMNO para el menor con esas credenciales."""
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ),
+        alumno=EnrollmentAlumnoDTO(
+            nombres="Lucas", apellidos="Martinez", cedula="1723456789",
+            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
+            correo="lucas@example.com", contrasenia="password8",
+        ),
+    )
+    EnrollmentServicio(db_session).enroll(datos)
+
+    # Representante tiene su cuenta
+    usuario_rep = db_session.query(Usuario).filter(Usuario.correo == "sofia@example.com").one()
+    roles_rep = {r.tipo_rol for r in usuario_rep.roles}
+    assert roles_rep == {TipoRol.REPRESENTANTE, TipoRol.ALUMNO}
+
+    # Menor tiene su propia cuenta
+    usuario_menor = db_session.query(Usuario).filter(Usuario.correo == "lucas@example.com").one()
+    roles_menor = {r.tipo_rol for r in usuario_menor.roles}
+    assert roles_menor == {TipoRol.ALUMNO}
+
+    # El menor apunta al mismo representante
+    alumno = db_session.query(Persona).filter(Persona.cedula == "1723456789").one()
+    assert alumno.representante_id is not None
+
+
+def test_inscripcion_menor_sin_credenciales_no_crea_usuario_menor(db_session):
+    """Sin credencialesMenor, solo se crea cuenta del representante."""
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(),
+    )
+    EnrollmentServicio(db_session).enroll(datos)
+
+    # Solo el representante tiene cuenta
+    assert db_session.query(Usuario).filter(Usuario.correo == "sofia@example.com").count() == 1
+    assert db_session.query(Usuario).filter(Usuario.correo != "sofia@example.com").count() == 0
+
+
+def test_inscripcion_menor_correo_duplicado_rechazada(db_session):
+    """Si el correo del menor ya está en uso, se rechaza."""
+    # Crear un usuario con ese correo primero
+    persona = Persona(
+        nombres="Existente", apellidos="Test", cedula="1799999999",
+        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+    )
+    db_session.add(persona)
+    db_session.flush()
+    usuario = Usuario(
+        correo="ocupado@example.com", contrasenia="hash",
+        persona_id=persona.id,
+    )
+    db_session.add(usuario)
+    db_session.commit()
+
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ),
+        alumno=EnrollmentAlumnoDTO(
+            nombres="Lucas", apellidos="Martinez", cedula="1723456789",
+            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
+            correo="ocupado@example.com", contrasenia="password8",
+        ),
+    )
+    from app.dominio.excepciones import EntidadDuplicada
+    with pytest.raises(EntidadDuplicada, match="correo"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
+# --- Validación de campos del enrollment -----------------------------------
+
+def test_alumno_menor_sin_representante_rechazado(db_session):
+    """Un menor (5-17 años) sin representante debe ser rechazado."""
+    datos = EnrollmentCreateDTO(
+        alumno=_alumno_dto(),
+    )
+    from app.dominio.excepciones import OperacionInvalida
+    with pytest.raises(OperacionInvalida, match="representante"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
+def test_alumno_menor_de_5_anos_rechazado(db_session):
+    """Alumnos menores de 5 años no son admitidos."""
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ),
+        alumno=EnrollmentAlumnoDTO(
+            nombres="Bebé", apellidos="Martinez", cedula="1723456789",
+            fecha_nacimiento=date(2026, 1, 1), telefono="0991234567",
+        ),
+    )
+    from app.dominio.excepciones import OperacionInvalida
+    with pytest.raises(OperacionInvalida, match="edad"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
+def test_alumno_cedula_duplicada_rechazada(db_session):
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(cedula="1712345678"),  # misma cédula que representante
+    )
+    from app.dominio.excepciones import EntidadDuplicada
+    with pytest.raises(EntidadDuplicada, match="cédula"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
+def test_representante_cedula_duplicada_rechazada(db_session):
+    """Si la cédula del representante ya existe, se rechaza."""
+    persona = Persona(
+        nombres="Existente", apellidos="Test", cedula="1712345678",
+        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+    )
+    db_session.add(persona)
+    db_session.commit()
+
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(cedula="1798765432"),
+    )
+    from app.dominio.excepciones import EntidadDuplicada
+    with pytest.raises(EntidadDuplicada, match="cédula"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
+def test_representante_menor_de_edad_rechazado(db_session):
+    """El representante debe ser mayor de 18 años."""
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Menor Rep", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(2012, 5, 20), telefono="0991234567",
+            correo="menorrep@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(),
+    )
+    from app.dominio.excepciones import OperacionInvalida
+    with pytest.raises(OperacionInvalida, match="mayor de edad"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
+def test_representante_correo_duplicado_rechazado(db_session):
+    """Si el correo del representante ya está en uso, se rechaza."""
+    persona = Persona(
+        nombres="Existente", apellidos="Test", cedula="1799999999",
+        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+    )
+    db_session.add(persona)
+    db_session.flush()
+    usuario = Usuario(
+        correo="ocupado@example.com", contrasenia="hash",
+        persona_id=persona.id,
+    )
+    db_session.add(usuario)
+    db_session.commit()
+
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="ocupado@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(),
+    )
+    from app.dominio.excepciones import EntidadDuplicada
+    with pytest.raises(EntidadDuplicada, match="correo"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
+def test_credenciales_menor_correo_invalido_rechazado_schema(db_session):
+    """Pydantic rechaza correoMenor con formato inválido en EnrollmentAlumnoDTO."""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        EnrollmentAlumnoDTO(
+            nombres="Lucas", apellidos="Martinez", cedula="1723456789",
+            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
+            correo="no-es-correo", contrasenia="password8",
+        )
+
+
+def test_credenciales_menor_contrasenia_corta_rechazada_schema(db_session):
+    """Pydantic rechaza contraseniaMenor con < 8 caracteres."""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        EnrollmentAlumnoDTO(
+            nombres="Lucas", apellidos="Martinez", cedula="1723456789",
+            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
+            correo="lucas@test.com", contrasenia="123",
+        )

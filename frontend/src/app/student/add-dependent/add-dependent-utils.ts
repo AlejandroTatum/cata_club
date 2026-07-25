@@ -1,9 +1,10 @@
 /**
  * Pure utility functions for the authenticated "Add Dependent" wizard.
  *
- * A short, 3-step counterpart to `enroll-utils.ts` (child data → medical
- * record → summary/confirm) for a representante already logged into the
- * portal — no account/credentials step, since no new `Usuario` is created.
+ * 4-step wizard (child data → credentials → medical record → summary/confirm)
+ * for a representante already logged into the portal. If the representative
+ * provides credentials for the minor, a Usuario with rol ALUMNO is also
+ * created (Option B: minors with own account).
  *
  * Extracted for testability — no React dependencies.
  */
@@ -15,15 +16,16 @@ import type { TipoSangre } from "@/types/domain";
 // Types
 // ---------------------------------------------------------------------------
 
-/** Wizard step identifiers — 3 steps only (not the public 5-step enroll flow). */
-export type AddDependentStep = "child" | "health" | "summary";
+/** Wizard step identifiers — 4 steps (child, credentials, health, summary). */
+export type AddDependentStep = "child" | "credentials" | "health" | "summary";
 
 /** Step order used by the wizard. */
-export const ADD_DEPENDENT_STEP_ORDER: AddDependentStep[] = ["child", "health", "summary"];
+export const ADD_DEPENDENT_STEP_ORDER: AddDependentStep[] = ["child", "credentials", "health", "summary"];
 
 /** Human-readable labels for each step, in Spanish. */
 export const ADD_DEPENDENT_STEP_LABELS: Record<AddDependentStep, string> = {
   child: "Datos del Dependiente",
+  credentials: "Cuenta de Acceso (Opcional)",
   health: "Ficha Médica",
   summary: "Resumen y Confirmación",
 };
@@ -35,6 +37,9 @@ export interface AddDependentFormData {
   fechaNacimiento: string;
   cedula: string;
   telefono: string;
+  correo: string;
+  contrasenia: string;
+  institucionId: string;
   tipoSangre: TipoSangre | "";
   /** Raw comma-separated input — parsed into a string[] by `buildRepresentadoPayload`. */
   enfermedades: string;
@@ -50,6 +55,9 @@ export const initialAddDependentFormData: AddDependentFormData = {
   fechaNacimiento: "",
   cedula: "",
   telefono: "",
+  correo: "",
+  contrasenia: "",
+  institucionId: "",
   tipoSangre: "",
   enfermedades: "",
   alergias: "",
@@ -89,6 +97,8 @@ export function validateAddDependentStep(
   switch (step) {
     case "child":
       return validateChildData(data);
+    case "credentials":
+      return validateCredentialsData(data);
     case "health":
       return validateHealthData(data);
     case "summary":
@@ -98,19 +108,42 @@ export function validateAddDependentStep(
 
 /** Validate the whole form at once (all steps) — used before final submit. */
 export function validateAddDependentForm(data: AddDependentFormData): string[] {
-  return [...validateChildData(data), ...validateHealthData(data)];
+  return [...validateChildData(data), ...validateCredentialsData(data), ...validateHealthData(data)];
 }
 
 function validateChildData(data: AddDependentFormData): string[] {
   const errors: string[] = [];
   if (!data.nombres.trim()) errors.push("Los nombres son obligatorios.");
+  else if (data.nombres.trim().length < 3) errors.push("Los nombres deben tener al menos 3 caracteres.");
+  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.nombres.trim())) errors.push("Los nombres solo pueden contener letras y espacios.");
   if (!data.apellidos.trim()) errors.push("Los apellidos son obligatorios.");
+  else if (data.apellidos.trim().length < 3) errors.push("Los apellidos deben tener al menos 3 caracteres.");
+  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.apellidos.trim())) errors.push("Los apellidos solo pueden contener letras y espacios.");
   if (!data.fechaNacimiento) errors.push("La fecha de nacimiento es obligatoria.");
   else if (!isValidDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento ingresada no es válida.");
   else if (isFutureDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento no puede ser en el futuro.");
   if (!data.cedula.trim()) errors.push("La cédula de identidad es obligatoria.");
   else if (!/^\d{10}$/.test(data.cedula.trim())) errors.push("La cédula debe tener 10 dígitos.");
   if (!data.telefono.trim()) errors.push("El teléfono es obligatorio.");
+  else if (!/^\d{7,10}$/.test(data.telefono.trim())) errors.push("El teléfono debe tener entre 7 y 10 dígitos.");
+  return errors;
+}
+
+/**
+ * Validate credentials: optional, but if either `correo` or `contrasenia`
+ * is provided, BOTH must be present and valid.
+ */
+function validateCredentialsData(data: AddDependentFormData): string[] {
+  const errors: string[] = [];
+  const hasCorreo = data.correo.trim().length > 0;
+  const hasContrasenia = data.contrasenia.length > 0;
+
+  if (hasCorreo || hasContrasenia) {
+    if (!hasCorreo) errors.push("El correo electrónico es obligatorio si se desea crear una cuenta.");
+    else if (!isEmail(data.correo)) errors.push("El correo electrónico no es válido.");
+    if (!hasContrasenia) errors.push("La contraseña es obligatoria si se desea crear una cuenta.");
+    else if (data.contrasenia.length < 8) errors.push("La contraseña debe tener al menos 8 caracteres.");
+  }
   return errors;
 }
 
@@ -119,13 +152,21 @@ function validateHealthData(data: AddDependentFormData): string[] {
   if (!isTipoSangre(data.tipoSangre)) errors.push("El tipo de sangre es obligatorio.");
   if (!data.contactoEmergencia.trim())
     errors.push("El nombre de contacto de emergencia es obligatorio.");
+  else if (data.contactoEmergencia.trim().length < 3)
+    errors.push("El nombre del contacto de emergencia debe tener al menos 3 caracteres.");
   if (!data.telefonoEmergencia.trim())
     errors.push("El teléfono de emergencia es obligatorio.");
+  else if (!/^\d{7,10}$/.test(data.telefonoEmergencia.trim()))
+    errors.push("El teléfono de emergencia debe tener entre 7 y 10 dígitos.");
   return errors;
 }
 
 function isTipoSangre(value: string): value is TipoSangre {
   return TIPO_SANGRE_VALUES.includes(value as TipoSangre);
+}
+
+function isEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 function isValidDate(value: string): boolean {
@@ -191,9 +232,12 @@ function parseEnfermedades(raw: string): string[] {
  * Build the `RepresentadoCreatePayload` sent to `crearRepresentado`, matching
  * the backend's `RepresentadoCreateDTO` shape (camelCase here — the BFF
  * route converts to snake_case before calling FastAPI).
+ *
+ * If the user provided optional `correo` + `contrasenia`, they are included
+ * in the payload so the backend also creates a `Usuario` with rol ALUMNO.
  */
 export function buildRepresentadoPayload(data: AddDependentFormData): RepresentadoCreatePayload {
-  return {
+  const payload: RepresentadoCreatePayload = {
     nombres: data.nombres.trim(),
     apellidos: data.apellidos.trim(),
     cedula: data.cedula.trim(),
@@ -207,4 +251,12 @@ export function buildRepresentadoPayload(data: AddDependentFormData): Representa
       ...(data.telefonoEmergencia.trim() ? { telefonoEmergencia: data.telefonoEmergencia.trim() } : {}),
     },
   };
+  if (data.correo.trim() && data.contrasenia) {
+    payload.correo = data.correo.trim();
+    payload.contrasenia = data.contrasenia;
+  }
+  if (data.institucionId) {
+    payload.institucionId = Number(data.institucionId);
+  }
+  return payload;
 }

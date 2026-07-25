@@ -27,6 +27,7 @@ import {
   Activity,
   AlertTriangle,
   UserPlus,
+  UserMinus,
   PieChart,
 } from "lucide-react";
 import Link from "next/link";
@@ -89,6 +90,12 @@ function buildStatCards(stats: DashboardStats): StatCardData[] {
       label: "Horarios de Hoy",
       value: stats.todaySchedules,
       trend: "up",
+    },
+    {
+      icon: UserMinus,
+      label: "Personas sin Membresía",
+      value: stats.personasSinMembresia,
+      trend: stats.personasSinMembresia > 0 ? "alert" : "up",
     },
   ];
 }
@@ -154,7 +161,7 @@ export default function DashboardPage(): React.ReactElement {
             <p className="text-sm text-cata-text/50">Cargando estadísticas...</p>
           </div>
         ) : (
-          <div className="mb-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mb-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {statCards.map((stat) => {
               const isAlert = stat.trend === "alert";
               return (

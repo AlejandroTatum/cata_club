@@ -37,7 +37,7 @@ from app.infraestructura.repositorios.ranking_repositorio import (
 from app.presentacion.schemas.ranking_schemas import (
     NivelRankingCreateDTO, AsignarNivelInicialDTO,
     NivelRankingConOcupacionDTO, TablaRankingItemDTO, PerfilRankingAlumnoDTO,
-    AsignacionRankingResponseDTO,
+    AsignacionRankingResponseDTO, AlumnoConNivelDTO,
 )
 
 
@@ -110,6 +110,28 @@ class RankingServicio:
                     nivel_ranking_nombre=nivel.nombre if nivel else None,
                     nivel_ranking_numero=nivel.numero_nivel if nivel else 0,
                     esta_en_ranking=r.esta_en_ranking,
+                )
+            )
+        return resultado
+
+    def listar_alumnos_con_nivel(self) -> list[AlumnoConNivelDTO]:
+        """Lista todos los alumnos (rol ALUMNO) con su nivel_ranking_id actual.
+        Si no tienen Ranking creado, `nivel_ranking_id` es null. Accesible para
+        ADMINISTRADOR y ENTRENADOR — reemplaza la dependencia con /personas/."""
+        from app.dominio.enums import TipoRol
+        alumnos = PersonaRepositorio(self.db).listar_por_rol(TipoRol.ALUMNO)
+        resultado: list[AlumnoConNivelDTO] = []
+        for alumno in alumnos:
+            ranking = self.repo.obtener_por_persona(alumno.id)
+            nivel_id = None
+            if ranking is not None and ranking.esta_en_ranking:
+                nivel_id = ranking.nivel_ranking_id
+            resultado.append(
+                AlumnoConNivelDTO(
+                    persona_id=alumno.id,
+                    nombres=alumno.nombres,
+                    apellidos=alumno.apellidos,
+                    nivel_ranking_id=nivel_id,
                 )
             )
         return resultado
