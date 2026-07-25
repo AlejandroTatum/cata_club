@@ -25,13 +25,13 @@ import {
   ArrowRight,
   Clock,
   Activity,
-  AlertTriangle,
   UserPlus,
   PieChart,
 } from "lucide-react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
+import { ErrorState, LoadingState } from "@/components/ui";
 import { fetchDashboardStats, fetchAttendanceRecords, type DashboardStats } from "@/services/api";
 import { buildAttendanceStats, type AttendanceDayStats } from "@/app/attendance/attendance-utils";
 import AttendanceStatusChart from "./AttendanceStatusChart";
@@ -135,24 +135,17 @@ export default function DashboardPage(): React.ReactElement {
         title="Panel de Control"
       >
         {error && (
-          <div
-            className="mb-6 flex items-center gap-2 rounded-xl border border-cata-red/30 bg-cata-red/10 px-4 py-3 text-sm text-cata-red"
-            role="alert"
-          >
-            <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
-            {error}
-            <button type="button" onClick={() => void loadStats()} className="btn-ghost ml-auto text-xs">
-              Reintentar
-            </button>
-          </div>
+          <ErrorState
+            className="mb-6"
+            title="No se pudieron cargar las estadísticas"
+            message={error}
+            onRetry={() => void loadStats()}
+          />
         )}
 
         {/* Stats grid */}
         {loading && !stats ? (
-          <div className="mb-12 flex items-center justify-center gap-2 py-16">
-            <Clock size={16} strokeWidth={1.5} className="animate-spin text-cata-text/65" aria-hidden="true" />
-            <p className="text-sm text-cata-text/50">Cargando estadísticas...</p>
-          </div>
+          <LoadingState className="mb-12" label="Cargando estadísticas…" />
         ) : (
           <div className="mb-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {statCards.map((stat) => {

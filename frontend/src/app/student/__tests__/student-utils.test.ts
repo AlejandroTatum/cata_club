@@ -48,7 +48,7 @@ describe("describeRanking", () => {
     const ranking: StudentRankingSummary = { status: "unavailable", reason: "forbidden" };
     const result = describeRanking(ranking);
     expect(result.label).toBe("No disponible");
-    expect(result.badgeClass).toBe("badge-warning");
+    expect(result.tone).toBe("warn");
   });
 
   it("describes an unavailable/error ranking", () => {
@@ -64,7 +64,7 @@ describe("describeRanking", () => {
     };
     const result = describeRanking(ranking);
     expect(result.label).toBe("Sin nivel asignado");
-    expect(result.badgeClass).toBe("badge-warning");
+    expect(result.tone).toBe("warn");
   });
 
   it("describes an active ranking without exposing position/points (removed — frozen data, no writer since cerrar_mes() removal)", () => {
@@ -77,6 +77,6 @@ describe("describeRanking", () => {
     expect(result.label).toBe("Intermedios");
     expect(result.detail).toBe("Activo en este nivel.");
     expect(result.detail).not.toMatch(/Posición|pts/);
-    expect(result.badgeClass).toBe("badge-success");
+    expect(result.tone).toBe("ok");
   });
 });

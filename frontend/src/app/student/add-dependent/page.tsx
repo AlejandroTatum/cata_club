@@ -256,7 +256,7 @@ function AddDependentContent(): React.ReactElement {
           label: "Alergias",
           value: formData.alergias,
           onChange: (v) => updateField("alergias", v),
-          placeholder: "p. ej. Alergia al polvo, al látex, a picaduras de insectos...",
+          placeholder: "p. ej. Alergia al polvo, al látex, a picaduras de insectos…",
           icon: <AlertTriangle size={16} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
@@ -269,7 +269,7 @@ function AddDependentContent(): React.ReactElement {
           onTelefonoChange={(v) => updateField("telefonoEmergencia", v)}
         />
 
-        <div className="rounded-xl border border-amber-500/30 bg-amber-900/20 p-3 text-xs text-amber-400">
+        <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
           <p className="flex items-center gap-1.5 font-medium">
             <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
@@ -441,7 +441,7 @@ function AddDependentContent(): React.ReactElement {
                 className="btn-primary shadow-soft disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? (
-                  "Agregando..."
+                  "Agregando…"
                 ) : (
                   <>
                     <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />

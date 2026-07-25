@@ -104,41 +104,16 @@
     box-shadow: 0 0 0 3px rgba(217,33,40,0.2);
   }
 
-  /* Badge — `.badge` is the base shape and each variant carries that same
-     shape, so `badge badge-success` and a bare `badge-success` render
-     identically. Call sites in the app use both spellings; neither is wrong.
-     New code should prefer the `Badge` primitive in `components/ui`. */
-  .badge,
-  .badge-success,
-  .badge-warning,
-  .badge-error,
-  .badge-neutral {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
-  }
+  /* The `.badge` / `.badge-success` / `.badge-warning` / `.badge-error` /
+     `.badge-neutral` family used to live here. It was one of FOUR badge
+     vocabularies in the app, and it accepted two spellings of itself
+     (`badge badge-success` and a bare `badge-success`) that rendered
+     identically — so even the single class had two dialects.
 
-  .badge-success {
-    background-color: rgba(21,128,61,0.12);
-    color: #15803D;
-    border: 1px solid rgba(21,128,61,0.3);
-  }
-
-  .badge-warning {
-    background-color: rgba(146,64,14,0.12);
-    color: #92400E;
-    border: 1px solid rgba(146,64,14,0.3);
-  }
-
-  .badge-error {
-    background-color: rgba(185,28,28,0.1);
-    color: #B91C1C;
-    border: 1px solid rgba(185,28,28,0.3);
-  }
-
-  .badge-neutral {
-    background-color: rgba(55,65,81,0.08);
-    color: #374151;
-    border: 1px solid rgba(55,65,81,0.15);
-  }
+     It has no consumers left: every status pill now renders through the
+     `Badge` primitive in `components/ui`, whose tones come from the
+     `state-*` tokens. The classes are deleted rather than deprecated,
+     because a deprecated CSS class is an invitation. */
 
   .alert-error {
     @apply flex items-center gap-2 rounded-lg border px-3 py-2 text-xs;

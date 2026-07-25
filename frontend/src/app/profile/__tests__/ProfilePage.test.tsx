@@ -181,7 +181,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     expect(screen.getByText(/fecha de registro/i)).toBeInTheDocument();
     // Formatted fechaCreacion also appears twice (hero "Miembro desde" +
     // column 1 "Fecha de registro").
-    expect(screen.getAllByText("10 de marzo de 2024").length).toBe(2);
+    expect(screen.getAllByText("10/03/2024").length).toBe(2);
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -208,7 +208,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     expect(screen.getByText("ENTRENADOR")).toBeInTheDocument();
     // Different fechaCreacion than the admin fixture — proves the date is
     // computed from `perfil.fechaCreacion`, not hardcoded.
-    expect(screen.getAllByText("2 de noviembre de 2025").length).toBe(2);
+    expect(screen.getAllByText("02/11/2025").length).toBe(2);
   });
 
   it("does not render nombres/apellidos/roles as editable inputs", async () => {

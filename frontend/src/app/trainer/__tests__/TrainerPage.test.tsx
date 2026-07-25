@@ -92,7 +92,10 @@ describe("TrainerPage — Historial de Asistencias (integrado)", () => {
     expect(await screen.findByText("Alumno 1")).toBeInTheDocument();
     expect(screen.getByText("Alumno 2")).toBeInTheDocument();
     // 10 filas comparten fecha y horario en la página 1 → usar getAllByText.
-    expect(screen.getAllByText("2026-07-22").length).toBeGreaterThan(0);
+    // La fecha se renderiza en el único formato del producto (dd/mm/yyyy),
+    // nunca como el ISO crudo que devuelve la API.
+    expect(screen.getAllByText("22/07/2026").length).toBeGreaterThan(0);
+    expect(screen.queryByText("2026-07-22")).not.toBeInTheDocument();
     expect(screen.getAllByText("Lunes 15:00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Presente").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Ausente").length).toBeGreaterThan(0);

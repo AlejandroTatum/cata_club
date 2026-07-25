@@ -34,7 +34,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
-import { Users, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, GraduationCap } from "lucide-react";
+import { Users, CheckCircle2, GraduationCap } from "lucide-react";
+import { EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
 import {
   fetchAlumnosParaNivel,
   fetchNivelesConOcupacion,
@@ -178,16 +179,7 @@ export default function NivelAsignacionPanel({
         <BackLink href={backHref} label={backLabel} />
 
         {loadError && (
-          <div
-            className="mb-6 flex items-center gap-2 rounded-xl border border-cata-red/30 bg-cata-red/10 px-4 py-3 text-sm text-cata-red"
-            role="alert"
-          >
-            <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
-            {loadError}
-            <button type="button" onClick={() => void loadData()} className="btn-ghost ml-auto text-xs">
-              Reintentar
-            </button>
-          </div>
+          <ErrorState className="mb-6" message={loadError} onRetry={() => void loadData()} />
         )}
 
         <AsignarNivelTab
@@ -366,19 +358,19 @@ function AsignarNivelTab({ students, niveles, loading, onOptimisticAssign, onBac
       )}
 
       {loading ? (
-        <div className="flex flex-col items-center py-12 text-center">
-          <p className="text-sm text-cata-text/50">Cargando estudiantes…</p>
-        </div>
+        <LoadingState label="Cargando estudiantes…" />
       ) : students.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-center">
-          <Users size={32} strokeWidth={1.5} className="mb-3 text-cata-text/20" aria-hidden="true" />
-          <p className="text-sm text-cata-text/50">No hay estudiantes registrados.</p>
-        </div>
+        <EmptyState
+          icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+          title="No hay estudiantes registrados"
+          description="Cuando se inscriba el primer alumno, aparecerá aquí para asignarle un nivel."
+        />
       ) : filteredStudents.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-center">
-          <Users size={32} strokeWidth={1.5} className="mb-3 text-cata-text/20" aria-hidden="true" />
-          <p className="text-sm text-cata-text/50">No se encontraron estudiantes con ese criterio.</p>
-        </div>
+        <EmptyState
+          icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+          title="No se encontraron estudiantes"
+          description="Ningún estudiante coincide con la búsqueda y los filtros activos."
+        />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -445,7 +437,7 @@ function AsignarNivelTab({ students, niveles, loading, onOptimisticAssign, onBac
                       className="btn-secondary py-1.5 text-xs"
                     >
                       {savingId === student.id ? (
-                        "Guardando..."
+                        "Guardando…"
                       ) : successIds.has(student.id) ? (
                         <>
                           <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />
@@ -465,33 +457,15 @@ function AsignarNivelTab({ students, niveles, loading, onOptimisticAssign, onBac
 
       {/* Paginación */}
       {!loading && filteredStudents.length > NIVEL_PAGE_SIZE && (
-        <div className="flex items-center justify-between border-t border-cata-border bg-cata-bg px-4 py-3">
-          <p className="text-xs text-cata-text/65">
-            Página {page} de {totalPages} · {filteredStudents.length} estudiante{filteredStudents.length !== 1 ? "s" : ""}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Página anterior"
-            >
-              <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-              Anterior
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Página siguiente"
-            >
-              Siguiente
-              <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-            </button>
-          </div>
-        </div>
+        <Pagination
+          className="mt-0 border-t border-cata-border bg-cata-bg px-4 py-3"
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          totalItems={filteredStudents.length}
+          pageSize={NIVEL_PAGE_SIZE}
+          itemNoun="estudiante"
+        />
       )}
     </div>
   );

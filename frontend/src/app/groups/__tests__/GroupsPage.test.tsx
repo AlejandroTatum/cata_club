@@ -1008,7 +1008,8 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
     fireEvent.click(screen.getByLabelText("Lunes"));
     fireEvent.click(screen.getByRole("button", { name: /crear horario/i }));
 
-    expect(await screen.findByText(/seleccion[aá] un entrenador/i)).toBeInTheDocument();
+    // Español neutro (usted), no voseo: "Seleccione", nunca "Seleccioná".
+    expect(await screen.findByText(/seleccione un entrenador/i)).toBeInTheDocument();
     expect(mockCrearHorario).not.toHaveBeenCalled();
   });
 
@@ -1022,7 +1023,7 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
     expect(within(select).getByRole("option", { name: "Entrenador Siete", selected: true })).toBeInTheDocument();
   });
 
-  it("reflects the loading state (disabled + 'Cargando...') instead of a silently empty dropdown while entrenadores are still being fetched", async () => {
+  it("reflects the loading state (disabled + 'Cargando…') instead of a silently empty dropdown while entrenadores are still being fetched", async () => {
     let resolveEntrenadores: (value: typeof DEFAULT_ENTRENADORES) => void = () => {};
     mockFetchEntrenadores.mockReset();
     mockFetchEntrenadores.mockReturnValue(
@@ -1036,7 +1037,8 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
 
     const select = (await screen.findByLabelText("Entrenador")) as HTMLSelectElement;
     expect(select).toBeDisabled();
-    expect(within(select).getByText("Cargando...")).toBeInTheDocument();
+    // U+2026, the product's one ellipsis — never three periods.
+    expect(within(select).getByText("Cargando…")).toBeInTheDocument();
 
     resolveEntrenadores(DEFAULT_ENTRENADORES);
     await waitFor(() => expect(select).toBeEnabled());

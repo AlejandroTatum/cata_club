@@ -25,66 +25,47 @@ import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
 import {
   Calendar,
-  Clock,
   UserCheck,
   ClipboardCheck,
   CheckCircle2,
-  XCircle,
-  AlertTriangle,
   Clock3,
-  HelpCircle,
-  ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { fetchTrainingSchedules, fetchAttendanceRecords } from "@/services/api";
+import { formatDate } from "@/lib/format-utils";
+import {
+  Badge,
+  buttonClasses,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Pagination,
+} from "@/components/ui";
 import {
   buildAttendanceStats,
-  getAttendanceBadgeTokens,
-  ATTENDANCE_LABELS,
+  getAttendanceBadgeTone,
+  getAttendanceLabel,
   paginateRecords,
   getTotalPages,
+  ATTENDANCE_PAGE_SIZE,
   type AttendanceRecord,
   type TrainingSchedule,
 } from "./attendance-utils";
 
 // ---------------------------------------------------------------------------
-// Attendance state icon
+// Attendance state badge
 // ---------------------------------------------------------------------------
 
-interface AttendanceIconProps {
-  estado: string;
-}
-
-function AttendanceIcon({ estado }: AttendanceIconProps): React.ReactElement {
-  const { iconClass } = getAttendanceBadgeTokens(estado);
-  switch (estado) {
-    case "present":
-      return <CheckCircle2 size={12} strokeWidth={2} className={iconClass} aria-hidden="true" />;
-    case "absent":
-      return <XCircle size={12} strokeWidth={2} className={iconClass} aria-hidden="true" />;
-    case "late":
-      return <Clock3 size={12} strokeWidth={2} className={iconClass} aria-hidden="true" />;
-    case "justified":
-      return <AlertTriangle size={12} strokeWidth={2} className={iconClass} aria-hidden="true" />;
-    default:
-      return <HelpCircle size={12} strokeWidth={2} className={iconClass} aria-hidden="true" />;
-  }
-}
-
-interface AttendanceBadgeProps {
-  estado: string;
-}
-
-function AttendanceBadge({ estado }: AttendanceBadgeProps): React.ReactElement {
-  const base = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium";
-  const { badgeClass } = getAttendanceBadgeTokens(estado);
-  const safeLabel = ATTENDANCE_LABELS[estado as keyof typeof ATTENDANCE_LABELS] ?? "Desconocido";
-  return (
-    <span className={`${base} ${badgeClass}`}>
-      <AttendanceIcon estado={estado} />
-      {safeLabel}
-    </span>
-  );
+/**
+ * The four attendance states, rendered through the shared `Badge`.
+ *
+ * The per-state icon that used to prefix the label is gone: `Badge` already
+ * carries a `currentColor` dot, so an icon on top of it was a second status
+ * marker for one status — and the `AlertTriangle` used for "justificado" read
+ * as a warning about a state that is, by definition, fine.
+ */
+function AttendanceBadge({ estado }: { estado: string }): React.ReactElement {
+  return <Badge tone={getAttendanceBadgeTone(estado)}>{getAttendanceLabel(estado)}</Badge>;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,24 +124,11 @@ export default function AttendancePage(): React.ReactElement {
         <BackLink href="/dashboard" label="Volver al Panel" />
 
         {/* Loading state */}
-        {loading && (
-          <div className="flex items-center justify-center py-16">
-            <div className="flex items-center gap-2">
-              <Clock size={16} strokeWidth={1.5} className="animate-spin text-cata-text/65" aria-hidden="true" />
-              <p className="text-sm text-cata-text/50">Cargando horarios y asistencias...</p>
-            </div>
-          </div>
-        )}
+        {loading && <LoadingState label="Cargando horarios y asistencias…" />}
 
         {/* Error state */}
         {error && !loading && (
-          <div className="card mb-8 border border-red-200 bg-red-50 p-6 text-center">
-            <XCircle size={32} strokeWidth={1.5} className="mx-auto mb-3 text-red-700" aria-hidden="true" />
-            <p className="text-sm text-cata-red">{error}</p>
-            <button type="button" onClick={() => loadData()} className="btn-ghost mt-3 text-xs text-cata-red">
-              Reintentar
-            </button>
-          </div>
+          <ErrorState className="mb-8" message={error} onRetry={() => loadData()} />
         )}
 
         {!loading && !error && (
@@ -180,7 +148,10 @@ export default function AttendancePage(): React.ReactElement {
                   </p>
                 </div>
               </div>
-              <Link href="/trainer/attendance" className="btn-primary w-full shadow-soft sm:w-auto">
+              <Link
+                href="/trainer/attendance"
+                className={buttonClasses("primary", "md", "w-full sm:w-auto")}
+              >
                 Tomar asistencia
                 <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
               </Link>
@@ -264,8 +235,8 @@ export default function AttendancePage(): React.ReactElement {
                         <tbody className="divide-y divide-cata-border">
                           {paginatedRecords.map((record) => (
                             <tr key={record.id} className="transition-colors hover:bg-cata-bg">
-                              <td className="px-4 py-3 text-xs text-cata-text/65">
-                                {record.fecha}
+                              <td className="px-4 py-3 text-xs tabular-nums text-cata-text/65">
+                                {formatDate(record.fecha)}
                               </td>
                               <td className="px-4 py-3 text-xs text-cata-text">
                                 {record.horario}
@@ -290,39 +261,28 @@ export default function AttendancePage(): React.ReactElement {
                   </div>
 
                   {recordsTotalPages > 1 && (
-                    <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
-                      <p className="text-sm font-semibold text-cata-text">
-                        Página {recordsPage} de {recordsTotalPages}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setRecordsPage((p) => Math.max(1, p - 1))}
-                          disabled={recordsPage <= 1}
-                          className="btn-secondary px-4 py-2 text-xs"
-                        >
-                          <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-                          Anterior
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setRecordsPage((p) => Math.min(recordsTotalPages, p + 1))}
-                          disabled={recordsPage >= recordsTotalPages}
-                          className="btn-secondary px-4 py-2 text-xs"
-                        >
-                          Siguiente
-                          <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                        </button>
-                      </div>
-                    </div>
+                    <Pagination
+                      page={recordsPage}
+                      totalPages={recordsTotalPages}
+                      onPageChange={setRecordsPage}
+                      totalItems={records.length}
+                      pageSize={ATTENDANCE_PAGE_SIZE}
+                      itemNoun="registro"
+                    />
                   )}
                 </>
               ) : (
-                <div className="card flex flex-col items-center py-12 text-center">
-                  <UserCheck size={32} strokeWidth={1.5} className="mb-3 text-cata-text/20" aria-hidden="true" />
-                  <p className="text-sm text-cata-text/50">
-                    Aún no hay registros de asistencia.
-                  </p>
+                <div className="card">
+                  <EmptyState
+                    icon={<UserCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
+                    title="Aún no hay registros de asistencia"
+                    description="Cuando se registre una sesión de entrenamiento, sus asistencias aparecerán aquí."
+                    action={
+                      <Link href="/trainer/attendance" className={buttonClasses("primary")}>
+                        Tomar asistencia
+                      </Link>
+                    }
+                  />
                 </div>
               )}
             </div>

@@ -8,24 +8,28 @@
  * No React dependencies — pure functions for testability.
  */
 
-import type { DiaSemana, NivelTecnico, EstadoAsistencia, Grupo } from "@/types/domain";
+import type { DiaSemana, NivelTecnico, EstadoAsistencia } from "@/types/domain";
+import type { BadgeTone } from "@/components/ui/Badge";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** A training schedule slot, displayed in the admin overview. */
+/**
+ * A training schedule slot, displayed in the admin overview.
+ *
+ * The `nivel` field this interface used to carry was marked `@deprecated`
+ * ("technical level belongs to Grupo, not ScheduleSlot") and its only reader
+ * was `getScheduleLevelLabel`, itself uncalled. Both are gone: a deprecated
+ * field nobody reads is not backward compatibility, it is a second answer to
+ * "what level is this?" sitting in the type where someone will eventually
+ * believe it. Level comes from `Grupo.nivel`.
+ */
 export interface ScheduleSlot {
   id: string;
   diaSemana: DiaSemana;
   horaInicio: string;
   horaFin: string;
-  /**
-   * @deprecated — Technical level belongs to Grupo, not ScheduleSlot.
-   * Kept for backward compatibility with mock data; do NOT use for domain
-   * decisions. Derive display level from the linked Grupo.nivel instead.
-   */
-  nivel: NivelTecnico;
   cancha: string;
   cupoMaximo: number;
   activo: boolean;
@@ -141,9 +145,57 @@ const FALLBACK_BADGE_TOKENS: AttendanceBadgeTokens = {
  *
  * Returns a neutral fallback for unknown/unexpected estado values — never
  * throws, avoids rendering an unstyled badge for bad runtime data.
+ *
+ * Still the source of truth for the ICON colour (see `AttendanceStateIcon` in
+ * the admin attendance page). The BADGE now renders through the `Badge`
+ * primitive via `getAttendanceBadgeTone` below; `badgeClass` remains for the
+ * one caller that tints a toggle surface rather than a pill.
  */
 export function getAttendanceBadgeTokens(estado: string): AttendanceBadgeTokens {
   return ATTENDANCE_BADGE_TOKENS[estado as EstadoAsistencia] ?? FALLBACK_BADGE_TOKENS;
+}
+
+/**
+ * `Badge` tone for each attendance state.
+ *
+ * The audit singled out `ATTENDANCE_BADGE_TOKENS` as the one concept in the
+ * app with real cross-screen integrity: a single shared map, with
+ * `trainer/page.tsx` carrying an explicit comment refusing to re-declare it.
+ * That integrity is the thing worth keeping, so the migration onto the `Badge`
+ * primitive happens HERE, in the same module, as one more map over the same
+ * four keys — not as four `tone=` literals sprinkled across five screens where
+ * they could drift apart again.
+ *
+ * The tones mirror `Badge`'s own doc comment: presente → ok, tardanza → warn,
+ * justificado → neutral, ausente → bad. `justified` moves from blue to neutral
+ * because the design system has no blue state pair; a justified absence is
+ * informational, which is exactly what neutral means.
+ */
+export const ATTENDANCE_BADGE_TONES: Record<EstadoAsistencia, BadgeTone> = {
+  present: "ok",
+  absent: "bad",
+  late: "warn",
+  justified: "neutral",
+};
+
+/**
+ * Get the `Badge` tone for an attendance estado.
+ *
+ * Mirrors `getAttendanceBadgeTokens`' defensive contract: an unknown runtime
+ * value renders neutral rather than throwing or rendering an unstyled pill.
+ */
+export function getAttendanceBadgeTone(estado: string): BadgeTone {
+  return ATTENDANCE_BADGE_TONES[estado as EstadoAsistencia] ?? "neutral";
+}
+
+/**
+ * Label for an attendance estado, tolerant of unknown runtime values.
+ *
+ * Pairs with `getAttendanceBadgeTone` so a badge never renders an empty pill
+ * for data the backend added after this build shipped.
+ */
+export function getAttendanceLabel(estado: string): string {
+  return ATTENDANCE_LABELS[estado as EstadoAsistencia] ?? "Desconocido";
 }
 
 // Mock data has moved to src/mocks/attendance.ts.
@@ -228,13 +280,6 @@ export function formatNivel(nivel: NivelTecnico): string {
   return NIVEL_LABELS[nivel] ?? `Nivel desconocido: ${nivel}`;
 }
 
-/**
- * Count active schedules from a list.
- */
-export function countActiveSchedules(schedules: ScheduleSlot[]): number {
-  return schedules.filter((s) => s.activo).length;
-}
-
 const JS_DAY_INDEX_TO_DIA_SEMANA: DiaSemana[] = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"];
 
 /**
@@ -245,30 +290,6 @@ const JS_DAY_INDEX_TO_DIA_SEMANA: DiaSemana[] = ["dom", "lun", "mar", "mie", "ju
  */
 export function jsDayIndexToDiaSemana(dayIndex: number): DiaSemana {
   return JS_DAY_INDEX_TO_DIA_SEMANA[dayIndex] ?? "lun";
-}
-
-// ---------------------------------------------------------------------------
-// Schedule ↔ Group reconciliation helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Build a map of scheduleId → linked group names.
- *
- * Used by the admin Asistencias page to show which groups link
- * to each schedule slot.
- */
-export function buildScheduleGroupMap(
-  grupos: Grupo[],
-): Record<string, string[]> {
-  const map: Record<string, string[]> = {};
-  for (const grupo of grupos) {
-    if (!grupo.horariosIds) continue;
-    for (const horarioId of grupo.horariosIds) {
-      if (!map[horarioId]) map[horarioId] = [];
-      map[horarioId].push(grupo.nombre);
-    }
-  }
-  return map;
 }
 
 // ---------------------------------------------------------------------------
@@ -340,30 +361,4 @@ export function groupSchedulesByDay(
       schedules: daySchedules ?? [],
     }))
     .sort((a, b) => dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day));
-}
-
-/**
- * Derive the display level label for a schedule slot.
- *
- * Prefers the linked group's technical level (Grupo.nivel) over the
- * deprecated ScheduleSlot.nivel. Falls back to formatNivel(slot.nivel)
- * only when no group links to this schedule.
- *
- * Tie-breaking: when multiple groups share a schedule WITH MISMATCHED
- * levels, the first group found wins. This is a known limitation —
- * groups sharing a schedule should have the same level in practice.
- * See tests for the documented behavior.
- */
-export function getScheduleLevelLabel(
-  slot: ScheduleSlot,
-  grupos: Grupo[],
-): string {
-  const linkedGrupos = grupos.filter(
-    (g) => g.horariosIds?.includes(slot.id),
-  );
-  if (linkedGrupos.length > 0) {
-    const level = linkedGrupos[0].nivel;
-    return NIVEL_LABELS[level] ?? formatNivel(level);
-  }
-  return formatNivel(slot.nivel);
 }

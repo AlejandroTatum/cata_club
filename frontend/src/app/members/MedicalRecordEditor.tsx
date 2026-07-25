@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, Save, CheckCircle2, Stethoscope, Plus } from "lucide-react";
 import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
+import { ErrorState, LoadingState } from "@/components/ui";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 
 interface MedicalRecordEditorProps {
@@ -91,26 +92,17 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
   }
 
   if (state.status === "loading") {
-    return (
-      <div className="mt-4 flex items-center gap-2 text-sm text-cata-text/50">
-        <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-        Cargando ficha médica...
-      </div>
-    );
+    return <LoadingState className="mt-4" label="Cargando ficha médica…" />;
   }
 
   if (state.status === "error") {
     return (
-      <div className="mt-4 rounded-xl border border-cata-red/30 bg-cata-red/10 p-4 text-sm text-cata-red">
-        {state.message}
-        <button
-          type="button"
-          onClick={() => setReloadToken((n) => n + 1)}
-          className="btn-ghost ml-4 text-xs"
-        >
-          Reintentar
-        </button>
-      </div>
+      <ErrorState
+        className="mt-4"
+        title="No se pudo cargar la ficha médica"
+        message={state.message}
+        onRetry={() => setReloadToken((n) => n + 1)}
+      />
     );
   }
 
@@ -211,7 +203,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           ) : (
             <Save size={14} strokeWidth={1.5} aria-hidden="true" />
           )}
-          {saving ? "Guardando..." : "Guardar ficha médica"}
+          {saving ? "Guardando…" : "Guardar ficha médica"}
         </button>
         {saveError && (
           <p className="text-sm text-cata-red" role="alert">

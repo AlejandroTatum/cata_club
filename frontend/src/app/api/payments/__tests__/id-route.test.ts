@@ -151,7 +151,7 @@ describe("PUT /api/payments/[id] — approve", () => {
     expect(body).toEqual({
       id: "42",
       studentName: "Sofia Alumna",
-      membershipPeriod: "2026-07-01 – 2026-07-31",
+      membershipPeriod: "01/07/2026 – 31/07/2026",
       membershipType: "Mensual (Mañana)",
       expectedAmount: 85,
       paymentMethod: "Transferencia",

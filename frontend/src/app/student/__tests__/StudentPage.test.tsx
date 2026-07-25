@@ -188,7 +188,8 @@ describe("StudentPage — membership display", () => {
     const heading = await screen.findByRole("heading", { name: /sin membresía/i });
     expect(heading).toBeInTheDocument();
     const card = heading.closest("section")!;
-    expect(card).toHaveTextContent("Aún no tenés una membresía");
+    // Español neutro: "tenés" es voseo rioplatense y el producto es ecuatoriano.
+    expect(card).toHaveTextContent("Aún no tiene una membresía");
   });
 
   it("shows pendiente de activación for INACTIVA state", async () => {

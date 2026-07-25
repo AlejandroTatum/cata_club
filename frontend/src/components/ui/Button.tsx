@@ -14,6 +14,7 @@
  * coal plus the yellow ball dot (see `FilterPill`).
  */
 
+import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactElement } from "react";
 import { cn } from "./cn";
 
@@ -62,17 +63,26 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
 }
 
-export default function Button({
-  variant = "secondary",
-  size = "md",
-  className,
-  type = "button",
-  children,
-  ...rest
-}: ButtonProps): ReactElement {
+/**
+ * Ref-forwarding, because a primitive that cannot hold a ref is a primitive
+ * some call sites have to opt out of — `ConfirmDialog`'s focus trap needs to
+ * focus its own confirm button, and "this control can't take a ref" is exactly
+ * the kind of excuse that grows a fifth bespoke button.
+ */
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = "secondary", size = "md", className, type = "button", children, ...rest },
+  ref,
+): ReactElement {
   return (
-    <button type={type} className={buttonClasses(variant, size, className)} {...rest}>
+    <button
+      ref={ref}
+      type={type}
+      className={buttonClasses(variant, size, className)}
+      {...rest}
+    >
       {children}
     </button>
   );
-}
+});
+
+export default Button;

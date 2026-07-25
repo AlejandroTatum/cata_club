@@ -22,6 +22,7 @@ import { enrollStudent } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
+import BackLink from "@/components/BackLink";
 import { WizardInput, WizardTextarea, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
 import { BLOOD_TYPES } from "@/types/enrollment";
 import {
@@ -320,7 +321,7 @@ export default function EnrollPage(): React.ReactElement {
         </div>
 
         {formData.enrollmentType === "child" && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-900/20 p-3 text-xs text-amber-400">
+          <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
             <p className="flex items-center gap-1.5 font-medium">
               <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
               Inscripción de dependiente
@@ -494,7 +495,7 @@ export default function EnrollPage(): React.ReactElement {
           value: formData.condicionesSalud,
           onChange: (v) => updateField("condicionesSalud", v),
           placeholder:
-            "p. ej. Asma, diabetes, problemas cardíacos, lesiones previas...",
+            "p. ej. Asma, diabetes, problemas cardíacos, lesiones previas…",
           icon: <Heart size={16} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
@@ -504,7 +505,7 @@ export default function EnrollPage(): React.ReactElement {
           value: formData.alergias,
           onChange: (v) => updateField("alergias", v),
           placeholder:
-            "p. ej. Alergia al polvo, al látex, a picaduras de insectos...",
+            "p. ej. Alergia al polvo, al látex, a picaduras de insectos…",
           icon: <AlertTriangle size={16} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
@@ -523,12 +524,12 @@ export default function EnrollPage(): React.ReactElement {
           value: formData.observaciones,
           onChange: (v) => updateField("observaciones", v),
           placeholder:
-            "Cualquier otra información relevante que el club deba conocer...",
+            "Cualquier otra información relevante que el club deba conocer…",
           icon: <FileText size={16} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
 
-        <div className="rounded-xl border border-amber-500/30 bg-amber-900/20 p-3 text-xs text-amber-400">
+        <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
           <p className="flex items-center gap-1.5 font-medium">
             <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
@@ -735,6 +736,22 @@ export default function EnrollPage(): React.ReactElement {
       ) : (
 
         <div className="py-8">
+          {/* One back-navigation rule: a sub-page carries a `BackLink` at the
+              TOP, where back navigation lives everywhere else in the product.
+              This used to be a centred text link at the very bottom of a
+              five-step wizard — the one place a visitor who wants out is not
+              looking.
+
+              The destination is conditional because this wizard is public
+              (see PUBLIC_EXCEPTIONS in src/lib/middleware-utils.ts): most
+              visitors arrive from the landing with no account, and sending
+              them to `/student` would bounce them straight to /login, which
+              is the wall the landing funnel exists to route around. */}
+          <BackLink
+            href={isAuthenticated ? "/student" : "/"}
+            label={isAuthenticated ? "Volver a Mi Cuenta" : "Volver al inicio"}
+          />
+
           {/* Hero Banner */}
           <div className="relative mb-10 overflow-hidden rounded-3xl border border-cata-border bg-cata-surface px-6 py-10 shadow-elevated sm:px-10 sm:py-12">
             <div className="absolute inset-0 bg-logo-glow" />
@@ -841,7 +858,7 @@ export default function EnrollPage(): React.ReactElement {
                     className="btn-primary shadow-soft disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitting ? (
-                      "Inscribiendo..."
+                      "Inscribiendo…"
                     ) : (
                       <>
                         <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
@@ -854,19 +871,6 @@ export default function EnrollPage(): React.ReactElement {
             </form>
           </div>
 
-          {/* Navigation link — this wizard is public (see PUBLIC_EXCEPTIONS in
-              src/lib/middleware-utils.ts), so most visitors arrive from the
-              landing with no account. Sending them to `/student` would bounce
-              them straight to /login, which is the wall the landing funnel
-              exists to route around. */}
-          <p className="mt-6 text-center text-sm text-cata-text/65">
-            <Link
-              href={isAuthenticated ? "/student" : "/"}
-              className="font-medium text-cata-red transition-colors hover:text-cata-red-light"
-            >
-              {isAuthenticated ? <>&larr; Volver a Mi Cuenta</> : <>&larr; Volver al inicio</>}
-            </Link>
-          </p>
         </div>
       )}
     </>

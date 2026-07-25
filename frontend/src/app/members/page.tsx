@@ -20,7 +20,16 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ContextualHelp from "@/components/ContextualHelp";
 import BackLink from "@/components/BackLink";
-import PaginationControls from "@/components/PaginationControls";
+import {
+  Badge,
+  Button,
+  buttonClasses,
+  EmptyState,
+  ErrorState,
+  FilterPill,
+  LoadingState,
+  Pagination,
+} from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -34,9 +43,7 @@ import {
   Mail,
   GraduationCap,
   CheckCircle2,
-  XCircle,
   Building2,
-  AlertTriangle,
   Stethoscope,
   Loader2,
   Plus,
@@ -60,16 +67,16 @@ import {
   getNivelLabelFromGrupo,
   paginateAccounts,
   getTotalPages,
+  MEMBERS_PAGE_SIZE,
   MEMBERS_AGGREGATE_LIMIT,
   MEMBERSHIP_STATUS_LABELS,
-  MEMBERSHIP_STATUS_BADGE,
+  MEMBERSHIP_STATUS_TONE,
   PAYMENT_STATUS_LABELS,
-  PAYMENT_STATUS_BADGE,
+  PAYMENT_STATUS_TONE,
   getPayerTypeLabel,
   type MemberAccount,
   type MemberStudentSummary,
   type MemberFilterFlag,
-  type PaymentStatus,
 } from "./members-utils";
 import type { Grupo, BackendTipoRol, FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
@@ -82,26 +89,9 @@ const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "sin-grupo", label: "Sin grupo asignado" },
 ];
 
-// ---------------------------------------------------------------------------
-// Payment status icon helper
-// ---------------------------------------------------------------------------
-
-interface PaymentStatusIconProps {
-  estado: PaymentStatus;
-}
-
-function PaymentStatusIcon({ estado }: PaymentStatusIconProps): React.ReactElement | null {
-  switch (estado) {
-    case "aprobado":
-      return <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />;
-    case "pendiente_validacion":
-      return <Clock size={12} strokeWidth={2} aria-hidden="true" />;
-    case "rechazado":
-      return <XCircle size={12} strokeWidth={2} aria-hidden="true" />;
-    default:
-      return null;
-  }
-}
+// The per-state `PaymentStatusIcon` that used to prefix the payment badge is
+// gone: `Badge` already carries a `currentColor` dot, so the icon was a second
+// status marker for one status.
 
 // ---------------------------------------------------------------------------
 // Stat Card
@@ -175,16 +165,16 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
   const membershipLabel = student.membresia
     ? MEMBERSHIP_STATUS_LABELS[student.membresia.estado]
     : "Sin membresía";
-  const membershipBadge = student.membresia
-    ? MEMBERSHIP_STATUS_BADGE[student.membresia.estado]
-    : "badge-neutral";
+  const membershipTone = student.membresia
+    ? MEMBERSHIP_STATUS_TONE[student.membresia.estado]
+    : "neutral";
 
   const paymentLabel = student.ultimoPago
     ? PAYMENT_STATUS_LABELS[student.ultimoPago.estado]
     : "Sin pagos";
-  const paymentBadge = student.ultimoPago
-    ? PAYMENT_STATUS_BADGE[student.ultimoPago.estado]
-    : "badge-neutral";
+  const paymentTone = student.ultimoPago
+    ? PAYMENT_STATUS_TONE[student.ultimoPago.estado]
+    : "neutral";
 
   const nivelDisplay = getNivelLabelFromGrupo(student.grupoId, grupos);
   const personaId = Number(student.id);
@@ -256,9 +246,9 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
         <div>
           <dt className="text-cata-text/50">Estado</dt>
           <dd className="mt-1">
-            <span className={student.activo ? "badge-success" : "badge-error"}>
+            <Badge tone={student.activo ? "ok" : "bad"}>
               {student.activo ? "Activo" : "Inactivo"}
-            </span>
+            </Badge>
           </dd>
         </div>
         <div>
@@ -271,7 +261,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
           <dt className="text-cata-text/50">Membresía</dt>
           <dd className="mt-1">
             {student.membresia ? (
-              <span className={membershipBadge}>{membershipLabel}</span>
+              <Badge tone={membershipTone}>{membershipLabel}</Badge>
             ) : (
               <span className="text-cata-text/40">Sin membresía</span>
             )}
@@ -281,10 +271,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
           <dt className="text-cata-text/50">Último pago</dt>
           <dd className="mt-1">
             {student.ultimoPago ? (
-              <span className={paymentBadge}>
-                <PaymentStatusIcon estado={student.ultimoPago.estado} />
-                {paymentLabel}
-              </span>
+              <Badge tone={paymentTone}>{paymentLabel}</Badge>
             ) : (
               <span className="text-cata-text/40">No registrado</span>
             )}
@@ -318,10 +305,10 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
               onChange={(e) => setSelectedTipoId(e.target.value ? Number(e.target.value) : "")}
               className="w-full rounded-lg border border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text"
             >
-              <option value="">Seleccionar tipo...</option>
+              <option value="">Seleccionar tipo…</option>
               {tiposMembresia.map((tipo) => (
                 <option key={tipo.id} value={tipo.id}>
-                  {tipo.categoria} — ${tipo.precio} ({tipo.modalidad})
+                  {tipo.categoria} — {formatCurrency(tipo.precio)} ({tipo.modalidad})
                 </option>
               ))}
             </select>
@@ -624,7 +611,7 @@ function AccountRow({
                 {getPayerTypeLabel(account.role)}
               </p>
               <div className="mt-1 flex items-center gap-2 sm:hidden">
-                <span className={statusBadge.className}>{statusBadge.label}</span>
+                <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
                 <button
                   type="button"
                   onClick={(event) => {
@@ -659,9 +646,9 @@ function AccountRow({
           </span>
         </td>
         <td className="hidden px-4 py-3.5 sm:table-cell">
-          <span className={`badge ${statusBadge.className}`}>
+          <Badge tone={statusBadge.tone}>
             {statusBadge.label}
-          </span>
+          </Badge>
         </td>
         <td className="hidden px-4 py-3.5 text-right sm:table-cell">
           <button
@@ -710,9 +697,9 @@ function AccountRow({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <span className={activo ? "badge-success" : "badge-error"}>
+                <Badge tone={activo ? "ok" : "bad"}>
                   {activo ? "Activo" : "Inactivo"}
-                </span>
+                </Badge>
                 <button
                   ref={closeButtonRef}
                   type="button"
@@ -790,7 +777,11 @@ function AccountRow({
                           type="button"
                           onClick={() => void toggleEstado()}
                           disabled={stateLoading || !rolesReady}
-                          className={`${activo ? "badge-success" : "badge-error"} cursor-pointer disabled:opacity-50`}
+                          className={`h-badge inline-flex cursor-pointer items-center gap-1.5 rounded-full px-[11px] text-[11.5px] font-bold disabled:opacity-50 ${
+                            activo
+                              ? "bg-state-ok-bg text-state-ok"
+                              : "bg-state-bad-bg text-state-bad"
+                          }`}
                           aria-pressed={activo}
                         >
                           {stateLoading || rolesLoading ? (
@@ -800,7 +791,7 @@ function AccountRow({
                           ) : (
                             <ToggleLeft size={12} aria-hidden="true" />
                           )}
-                          {stateLoading ? "Actualizando..." : rolesLoading ? "Cargando..." : activo ? "Activa" : "Inactiva"}
+                          {stateLoading ? "Actualizando…" : rolesLoading ? "Cargando…" : activo ? "Activa" : "Inactiva"}
                         </button>
                       </dd>
                     </div>
@@ -810,7 +801,7 @@ function AccountRow({
                       type="button"
                       onClick={() => void handleSaveInfo()}
                       disabled={infoSaving}
-                      className="btn-primary inline-flex items-center gap-1.5 py-1.5 text-xs disabled:opacity-50"
+                      className={buttonClasses("primary", "sm")}
                     >
                       {infoSaving ? (
                         <Loader2 size={12} className="animate-spin" aria-hidden="true" />
@@ -820,7 +811,7 @@ function AccountRow({
                       {/* Explicit scope: this button only PATCHes
                           nombres/apellidos/teléfono. Roles, estado, ficha
                           médica and membresía each save themselves. */}
-                      {infoSaving ? "Guardando..." : "Guardar nombre, apellido y teléfono"}
+                      {infoSaving ? "Guardando…" : "Guardar nombre, apellido y teléfono"}
                     </button>
                     {infoSuccess && (
                       <p className="flex items-center gap-1 text-xs text-cata-state-ok" role="status">
@@ -1026,16 +1017,12 @@ export default function MembersPage(): React.ReactElement {
         <BackLink href="/dashboard" label="Volver al Panel" />
 
         {error && (
-          <div
-            className="mb-6 flex items-center gap-2 rounded-xl border border-cata-red/30 bg-cata-red/10 px-4 py-3 text-sm text-cata-red"
-            role="alert"
-          >
-            <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
-            {error}
-            <button type="button" onClick={() => void loadMembers()} className="btn-ghost ml-auto text-xs">
-              Reintentar
-            </button>
-          </div>
+          <ErrorState
+            className="mb-6"
+            title="No se pudieron cargar los miembros"
+            message={error}
+            onRetry={() => void loadMembers()}
+          />
         )}
 
         {/* Stats grid */}
@@ -1079,38 +1066,21 @@ export default function MembersPage(): React.ReactElement {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por nombre o correo..."
+              placeholder="Buscar por nombre o correo…"
               className="input-field pl-9"
               aria-label="Buscar miembros"
             />
           </div>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
-            {FILTER_CHIPS.map((chip) => {
-              const isActive = activeFlag === chip.flag;
-              const count = countAccountsMatchingFlag(accounts, chip.flag);
-              return (
-                <button
-                  key={chip.flag}
-                  type="button"
-                  onClick={() => setActiveFlag(chip.flag)}
-                  aria-pressed={isActive}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    isActive
-                      ? "border-cata-red bg-cata-red/10 text-cata-red"
-                      : "border-cata-border text-cata-text/65 hover:bg-cata-bg"
-                  }`}
-                >
-                  {chip.label}
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                      isActive ? "bg-cata-red/20" : "bg-cata-bg"
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+            {FILTER_CHIPS.map((chip) => (
+              <FilterPill
+                key={chip.flag}
+                label={chip.label}
+                count={countAccountsMatchingFlag(accounts, chip.flag)}
+                active={activeFlag === chip.flag}
+                onClick={() => setActiveFlag(chip.flag)}
+              />
+            ))}
           </div>
         </div>
 
@@ -1121,8 +1091,8 @@ export default function MembersPage(): React.ReactElement {
           </ContextualHelp>
         )}
         {loading ? (
-          <div className="card flex flex-col items-center py-16 text-center">
-            <p className="text-sm text-cata-text/50">Cargando miembros…</p>
+          <div className="card">
+            <LoadingState label="Cargando miembros…" />
           </div>
         ) : filteredAccounts.length > 0 ? (
           <div className="card overflow-hidden">
@@ -1167,35 +1137,43 @@ export default function MembersPage(): React.ReactElement {
         ) : null}
 
         {!loading && filteredAccounts.length > 0 && totalPages > 1 && (
-          <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            totalItems={filteredAccounts.length}
+            pageSize={MEMBERS_PAGE_SIZE}
+            itemNoun="miembro"
+          />
         )}
 
         {!loading && filteredAccounts.length === 0 && (
-          /* Empty state */
-          <div className="card flex flex-col items-center py-16 text-center">
-            <Users
-              size={32}
-              strokeWidth={1.5}
-              className="mb-3 text-cata-text/20"
-              aria-hidden="true"
+          <div className="card">
+            <EmptyState
+              icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+              title={
+                searchTerm || activeFlag !== "all"
+                  ? "No se encontraron miembros"
+                  : "Aún no hay miembros registrados"
+              }
+              description={
+                searchTerm || activeFlag !== "all"
+                  ? "Ningún miembro coincide con la búsqueda y los filtros activos."
+                  : "Cuando se registre la primera cuenta, aparecerá en este listado."
+              }
+              action={
+                searchTerm || activeFlag !== "all" ? (
+                  <Button
+                    onClick={() => {
+                      setSearchTerm("");
+                      setActiveFlag("all");
+                    }}
+                  >
+                    Limpiar búsqueda
+                  </Button>
+                ) : undefined
+              }
             />
-            <p className="text-sm text-cata-text/50">
-              {searchTerm || activeFlag !== "all"
-                ? "No se encontraron miembros con ese criterio de búsqueda."
-                : "Aún no hay miembros registrados."}
-            </p>
-            {(searchTerm || activeFlag !== "all") && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm("");
-                  setActiveFlag("all");
-                }}
-                className="btn-ghost mt-3 text-xs"
-              >
-                Limpiar búsqueda
-              </button>
-            )}
           </div>
         )}
       </AppShell>

@@ -19,8 +19,6 @@ import {
   CheckCircle,
   Download,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
   Wallet,
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -38,8 +36,8 @@ import {
   type ValidationStatus,
 } from "@/services/api";
 import {
-  ATTENDANCE_LABELS,
-  ATTENDANCE_BADGE_TOKENS,
+  getAttendanceBadgeTone,
+  getAttendanceLabel,
   formatDay,
   type AttendanceRecord,
   type TrainingSchedule,
@@ -51,33 +49,31 @@ import {
   getAsistenciaReportTotalPages,
   paginatePagosResults,
   getPagosReportTotalPages,
+  PERSONA_REPORT_PAGE_SIZE,
+  ASISTENCIA_REPORT_PAGE_SIZE,
+  PAGOS_REPORT_PAGE_SIZE,
 } from "@/app/reports/reports-utils";
-import { formatCurrency, formatDate } from "@/lib/format-utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
+import { Badge, EmptyState, FilterPill, Pagination } from "@/components/ui";
+import {
+  PAGOS_ESTADO_OPTIONS,
+  VALIDATION_STATUS_LABELS,
+  VALIDATION_STATUS_TONES,
+} from "@/lib/status-badges";
 import type { PersonaReporte } from "@/types/domain";
 
 type ReportTab = "periodo" | "asistencia" | "pagos";
 
-/** Filter dropdown options — labels reused verbatim from `payments/page.tsx`'s
- *  filter tabs, values match `EstadoPago` (empty = no filter). */
-const PAGOS_ESTADO_OPTIONS: { value: string; label: string }[] = [
-  { value: "", label: "Todas" },
-  { value: "PENDIENTE_VALIDACION", label: "Pendientes" },
-  { value: "APROBADO", label: "Validados" },
-  { value: "RECHAZADO", label: "Rechazados" },
+const REPORT_TABS: { key: ReportTab; label: string }[] = [
+  { key: "periodo", label: "Por Período" },
+  { key: "asistencia", label: "Asistencia" },
+  { key: "pagos", label: "Pagos" },
 ];
 
-/** Badge color scheme copied from `payments/page.tsx`'s `validationStatusStyles`. */
-const PAGOS_VALIDATION_STATUS_STYLES: Record<ValidationStatus, string> = {
-  pendiente: "badge-warning",
-  validado: "badge-success",
-  rechazado: "badge-error",
-};
-
-const PAGOS_VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
-  pendiente: "Pendiente",
-  validado: "Validado",
-  rechazado: "Rechazado",
-};
+// The payment status vocabulary (options, labels, badge tones) used to be
+// re-declared here, with a comment admitting it was copied from
+// `payments/page.tsx`. It now lives once in `@/lib/status-badges` — a copy
+// that announces itself as a copy is still a second source of truth.
 
 export default function ReportsPage(): React.ReactElement {
   return (
@@ -365,41 +361,21 @@ function ReportsContent(): React.ReactElement {
     >
       <BackLink href="/dashboard" label="Volver al Panel" />
 
-      {/* Tab selector */}
-      <div className="mb-6 flex gap-1 rounded-xl bg-cata-bg p-1">
-        <button
-          onClick={() => switchTab("periodo")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-            tab === "periodo"
-              ? "bg-white text-cata-text shadow-soft"
-              : "text-cata-text/65 hover:text-cata-text"
-          }`}
-        >
-          <Calendar size={15} strokeWidth={1.5} />
-          Por Período
-        </button>
-        <button
-          onClick={() => switchTab("asistencia")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-            tab === "asistencia"
-              ? "bg-white text-cata-text shadow-soft"
-              : "text-cata-text/65 hover:text-cata-text"
-          }`}
-        >
-          <CheckCircle size={15} strokeWidth={1.5} />
-          Asistencia
-        </button>
-        <button
-          onClick={() => switchTab("pagos")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-            tab === "pagos"
-              ? "bg-white text-cata-text shadow-soft"
-              : "text-cata-text/65 hover:text-cata-text"
-          }`}
-        >
-          <Wallet size={15} strokeWidth={1.5} />
-          Pagos
-        </button>
+      {/* Report selector.
+          Was a bespoke segmented bar whose selected state (white chip on a
+          grey trough) was a fifth way of saying "this one is chosen". Same
+          three options, same behaviour, now in the one selected-state idiom
+          the rest of the app uses. The redesign into preset cards
+          (`docs/ux/prototipos/18-reportes.html`) is a later phase. */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        {REPORT_TABS.map((t) => (
+          <FilterPill
+            key={t.key}
+            label={t.label}
+            active={tab === t.key}
+            onClick={() => switchTab(t.key)}
+          />
+        ))}
       </div>
 
       {/* ---- Periodo tab ---- */}
@@ -441,7 +417,7 @@ function ReportsContent(): React.ReactElement {
               className="btn-primary flex items-center gap-2"
             >
               <Search size={15} strokeWidth={1.5} />
-              {loading ? "Buscando..." : "Buscar"}
+              {loading ? "Buscando…" : "Buscar"}
             </button>
           </div>
         </form>
@@ -502,7 +478,7 @@ function ReportsContent(): React.ReactElement {
               className="btn-primary flex items-center gap-2"
             >
               <Search size={15} strokeWidth={1.5} />
-              {loading ? "Buscando..." : "Buscar"}
+              {loading ? "Buscando…" : "Buscar"}
             </button>
           </div>
           <p className="mt-3 text-xs text-cata-text/45">
@@ -565,7 +541,7 @@ function ReportsContent(): React.ReactElement {
               className="btn-primary flex items-center gap-2"
             >
               <Search size={15} strokeWidth={1.5} />
-              {loading ? "Buscando..." : "Buscar"}
+              {loading ? "Buscando…" : "Buscar"}
             </button>
           </div>
           <p className="mt-3 text-xs text-cata-text/45">
@@ -622,7 +598,7 @@ function ReportsContent(): React.ReactElement {
                 ) : (
                   <Download size={14} strokeWidth={1.5} />
                 )}
-                {exportingPdf ? "Generando..." : "Exportar PDF"}
+                {exportingPdf ? "Generando…" : "Exportar PDF"}
               </button>
             )}
           </div>
@@ -634,12 +610,11 @@ function ReportsContent(): React.ReactElement {
           )}
 
           {attendanceResults.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <CheckCircle size={32} className="mx-auto mb-3 text-cata-text/25" strokeWidth={1.5} />
-              <p className="text-sm text-cata-text/55">
-                No se encontraron registros de asistencia con los filtros seleccionados.
-              </p>
-            </div>
+            <EmptyState
+              icon={<CheckCircle size={21} strokeWidth={1.5} aria-hidden="true" />}
+              title="No se encontraron registros de asistencia"
+              description="Ningún registro coincide con los filtros seleccionados. Amplíe el rango de fechas o quite el filtro de horario."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -653,58 +628,36 @@ function ReportsContent(): React.ReactElement {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cata-border">
-                  {paginatedAttendanceResults.map((record) => {
-                    const tokens = ATTENDANCE_BADGE_TOKENS[record.estado] ?? {
-                      badgeClass: "bg-cata-border/40 text-cata-text/65",
-                      iconClass: "text-cata-text/65",
-                    };
-                    return (
-                      <tr key={record.id} className="transition-colors hover:bg-cata-bg/30">
-                        <td className="px-6 py-3 text-cata-text/65">{record.fecha}</td>
-                        <td className="px-6 py-3 text-cata-text/65">{record.horario}</td>
-                        <td className="px-6 py-3">
-                          <span className="font-medium text-cata-text">{record.estudiante}</span>
-                        </td>
-                        <td className="px-6 py-3">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tokens.badgeClass}`}>
-                            {ATTENDANCE_LABELS[record.estado] ?? record.estado}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3 text-cata-text/65">{record.entrenador}</td>
-                      </tr>
-                    );
-                  })}
+                  {paginatedAttendanceResults.map((record) => (
+                    <tr key={record.id} className="transition-colors hover:bg-cata-bg/30">
+                      <td className="px-6 py-3 tabular-nums text-cata-text/65">{formatDate(record.fecha)}</td>
+                      <td className="px-6 py-3 text-cata-text/65">{record.horario}</td>
+                      <td className="px-6 py-3">
+                        <span className="font-medium text-cata-text">{record.estudiante}</span>
+                      </td>
+                      <td className="px-6 py-3">
+                        <Badge tone={getAttendanceBadgeTone(record.estado)}>
+                          {getAttendanceLabel(record.estado)}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-3 text-cata-text/65">{record.entrenador}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
 
           {attendanceResults.length > 0 && asistenciaTotalPages > 1 && (
-            <div className="flex flex-col items-center justify-between gap-3 border-t border-cata-border px-6 py-4 sm:flex-row">
-              <p className="text-sm font-semibold text-cata-text">
-                Página {asistenciaPage} de {asistenciaTotalPages}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAsistenciaPage((p) => Math.max(1, p - 1))}
-                  disabled={asistenciaPage <= 1}
-                  className="btn-secondary px-4 py-2 text-xs"
-                >
-                  <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-                  Anterior
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAsistenciaPage((p) => Math.min(asistenciaTotalPages, p + 1))}
-                  disabled={asistenciaPage >= asistenciaTotalPages}
-                  className="btn-secondary px-4 py-2 text-xs"
-                >
-                  Siguiente
-                  <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              className="mt-0 border-t border-cata-border px-6 py-4"
+              page={asistenciaPage}
+              totalPages={asistenciaTotalPages}
+              onPageChange={setAsistenciaPage}
+              totalItems={attendanceResults.length}
+              pageSize={ASISTENCIA_REPORT_PAGE_SIZE}
+              itemNoun="registro"
+            />
           )}
         </div>
       )}
@@ -728,7 +681,7 @@ function ReportsContent(): React.ReactElement {
                 ) : (
                   <Download size={14} strokeWidth={1.5} />
                 )}
-                {exportingPdf ? "Generando..." : "Exportar PDF"}
+                {exportingPdf ? "Generando…" : "Exportar PDF"}
               </button>
             )}
           </div>
@@ -740,12 +693,11 @@ function ReportsContent(): React.ReactElement {
           )}
 
           {pagosResults.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <Wallet size={32} className="mx-auto mb-3 text-cata-text/25" strokeWidth={1.5} />
-              <p className="text-sm text-cata-text/55">
-                No se encontraron pagos con los filtros seleccionados.
-              </p>
-            </div>
+            <EmptyState
+              icon={<Wallet size={21} strokeWidth={1.5} aria-hidden="true" />}
+              title="No se encontraron pagos"
+              description="Ningún pago coincide con los filtros seleccionados. Amplíe el rango de fechas o elija otro estado."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -770,15 +722,13 @@ function ReportsContent(): React.ReactElement {
                         {pago.responsablePagoName ?? "-"}
                       </td>
                       <td className="px-6 py-3 text-cata-text/65">{pago.membershipPeriod}</td>
-                      <td className="px-6 py-3 text-cata-text/65">{formatCurrency(pago.expectedAmount)}</td>
+                      <td className="px-6 py-3 tabular-nums text-cata-text/65">{formatCurrency(pago.expectedAmount)}</td>
                       <td className="px-6 py-3 text-cata-text/65">{pago.paymentMethod}</td>
-                      <td className="px-6 py-3 text-cata-text/65">{formatDate(pago.uploadedAt)}</td>
+                      <td className="px-6 py-3 tabular-nums text-cata-text/65">{formatDateTime(pago.uploadedAt)}</td>
                       <td className="px-6 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${PAGOS_VALIDATION_STATUS_STYLES[pago.validationStatus]}`}
-                        >
-                          {PAGOS_VALIDATION_STATUS_LABELS[pago.validationStatus]}
-                        </span>
+                        <Badge tone={VALIDATION_STATUS_TONES[pago.validationStatus]}>
+                          {VALIDATION_STATUS_LABELS[pago.validationStatus]}
+                        </Badge>
                       </td>
                     </tr>
                   ))}
@@ -788,31 +738,15 @@ function ReportsContent(): React.ReactElement {
           )}
 
           {pagosResults.length > 0 && pagosTotalPages > 1 && (
-            <div className="flex flex-col items-center justify-between gap-3 border-t border-cata-border px-6 py-4 sm:flex-row">
-              <p className="text-sm font-semibold text-cata-text">
-                Página {pagosPage} de {pagosTotalPages}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPagosPage((p) => Math.max(1, p - 1))}
-                  disabled={pagosPage <= 1}
-                  className="btn-secondary px-4 py-2 text-xs"
-                >
-                  <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-                  Anterior
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPagosPage((p) => Math.min(pagosTotalPages, p + 1))}
-                  disabled={pagosPage >= pagosTotalPages}
-                  className="btn-secondary px-4 py-2 text-xs"
-                >
-                  Siguiente
-                  <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              className="mt-0 border-t border-cata-border px-6 py-4"
+              page={pagosPage}
+              totalPages={pagosTotalPages}
+              onPageChange={setPagosPage}
+              totalItems={pagosResults.length}
+              pageSize={PAGOS_REPORT_PAGE_SIZE}
+              itemNoun="pago"
+            />
           )}
         </div>
       )}
@@ -851,7 +785,7 @@ function PersonaReportTable({
   paginatedPersonaResults: PersonaReporte[];
   page: number;
   totalPages: number;
-  onPageChange: (updater: (page: number) => number) => void;
+  onPageChange: (page: number) => void;
   searchTerm: string;
   setSearchTerm: (value: string) => void;
   edadMin: string;
@@ -880,7 +814,7 @@ function PersonaReportTable({
             ) : (
               <Download size={14} strokeWidth={1.5} />
             )}
-            {exportingPdf ? "Generando..." : "Exportar PDF"}
+            {exportingPdf ? "Generando…" : "Exportar PDF"}
           </button>
         )}
       </div>
@@ -905,7 +839,7 @@ function PersonaReportTable({
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Nombre, apellido o cédula..."
+                placeholder="Nombre, apellido o cédula…"
                 className="input-field py-1.5 pl-8 text-xs"
               />
             </div>
@@ -953,14 +887,15 @@ function PersonaReportTable({
       )}
 
       {filteredPersonaResults.length === 0 ? (
-        <div className="px-6 py-12 text-center">
-          <Users size={32} className="mx-auto mb-3 text-cata-text/25" strokeWidth={1.5} />
-          <p className="text-sm text-cata-text/55">
-            {personaResults.length > 0
-              ? "No se encontraron personas con los filtros locales aplicados."
-              : "No se encontraron personas con los filtros seleccionados."}
-          </p>
-        </div>
+        <EmptyState
+          icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+          title="No se encontraron personas"
+          description={
+            personaResults.length > 0
+              ? "Hay resultados en este rango de fechas, pero ninguno pasa los filtros locales de búsqueda y edad."
+              : "Ninguna persona coincide con los filtros seleccionados. Pruebe con un rango de fechas más amplio."
+          }
+        />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -984,8 +919,8 @@ function PersonaReportTable({
                   <td className="px-6 py-3 text-cata-text/65">
                     {persona.cedula}
                   </td>
-                  <td className="px-6 py-3 text-cata-text/65">
-                    {persona.fechaNacimiento}
+                  <td className="px-6 py-3 tabular-nums text-cata-text/65">
+                    {formatDate(persona.fechaNacimiento)}
                   </td>
                   <td className="px-6 py-3 text-cata-text/65">
                     {calcAge(persona.fechaNacimiento)} años
@@ -1001,31 +936,15 @@ function PersonaReportTable({
       )}
 
       {filteredPersonaResults.length > 0 && totalPages > 1 && (
-        <div className="flex flex-col items-center justify-between gap-3 border-t border-cata-border px-6 py-4 sm:flex-row">
-          <p className="text-sm font-semibold text-cata-text">
-            Página {page} de {totalPages}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onPageChange((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="btn-secondary px-4 py-2 text-xs"
-            >
-              <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-              Anterior
-            </button>
-            <button
-              type="button"
-              onClick={() => onPageChange((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="btn-secondary px-4 py-2 text-xs"
-            >
-              Siguiente
-              <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-            </button>
-          </div>
-        </div>
+        <Pagination
+          className="mt-0 border-t border-cata-border px-6 py-4"
+          page={page}
+          totalPages={totalPages}
+          onPageChange={onPageChange}
+          totalItems={filteredPersonaResults.length}
+          pageSize={PERSONA_REPORT_PAGE_SIZE}
+          itemNoun="persona"
+        />
       )}
     </div>
   );

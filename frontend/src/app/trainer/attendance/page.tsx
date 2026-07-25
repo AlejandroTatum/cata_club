@@ -59,6 +59,8 @@ import {
   type SessionStudent,
 } from "./attendance-utils";
 import { getAttendanceBadgeTokens, formatDay, groupSchedulesByDay, paginateRecords, getTotalPages } from "@/app/attendance/attendance-utils";
+import BackLink from "@/components/BackLink";
+import { EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DiaSemana } from "@/types/domain";
 import {
@@ -143,13 +145,20 @@ export default function TrainerAttendancePage(): React.ReactElement {
     loadOptions();
   }, [loadOptions]);
 
+  /**
+   * One feedback rule, product-wide (see `payments/page.tsx` for the other
+   * half of it): the TOAST carries the outcome of an action the user just
+   * took; an INLINE block carries a blocker attached to a specific control.
+   *
+   * `submitError` is an outcome — the registration failed — with no control
+   * left to attach it to, so it toasts. `rosterError` blocks the "Continuar"
+   * button it renders directly above, so it stays inline and does NOT also
+   * toast: this screen used to fire both channels for that one failure, the
+   * same duplication the payments queue had for a successful approval.
+   */
   useEffect(() => {
     if (submitError) showError(submitError);
   }, [submitError, showError]);
-
-  useEffect(() => {
-    if (rosterError) showError(rosterError);
-  }, [rosterError, showError]);
 
   // Reset student page when search filter changes.
   useEffect(() => {
@@ -334,7 +343,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
             Seleccione el horario de entrenamiento:
           </p>
           {schedules.length === 0 ? (
-            <p className="text-sm text-cata-text/45">No hay horarios registrados.</p>
+            <EmptyState
+              icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
+              title="No hay horarios registrados"
+              description="Sin un horario no se puede tomar lista. Pida a administración que registre uno."
+            />
           ) : (
             <div className="space-y-2">
               {dayGroups.map((group) => {
@@ -419,7 +432,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
           disabled={!selectedScheduleId || rosterLoading}
           className="btn-primary w-full shadow-soft"
         >
-          {rosterLoading ? "Cargando estudiantes..." : "Continuar"}
+          {rosterLoading ? "Cargando estudiantes…" : "Continuar"}
           <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
 
@@ -508,7 +521,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Filtrar alumnos por nombre..."
+                placeholder="Filtrar alumnos por nombre…"
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
                 className="w-full rounded-lg border border-cata-border bg-white px-4 py-2.5 text-sm text-cata-text placeholder:text-cata-text/40 focus:border-cata-red focus:outline-none focus:ring-1 focus:ring-cata-red"
@@ -589,33 +602,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
                 {/* Student list pagination */}
                 {filteredStudents.length > WIZARD_PAGE_SIZE && (
-                  <div className="flex items-center justify-between rounded-xl border border-cata-border bg-cata-bg px-4 py-3">
-                    <p className="text-xs text-cata-text/65">
-                      Página {studentPage} de {totalStudentPages} · {filteredStudents.length} alumno{filteredStudents.length !== 1 ? "s" : ""}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setStudentPage((p) => Math.max(1, p - 1))}
-                        disabled={studentPage === 1}
-                        className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                        aria-label="Página anterior"
-                      >
-                        <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-                        Anterior
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setStudentPage((p) => Math.min(totalStudentPages, p + 1))}
-                        disabled={studentPage === totalStudentPages}
-                        className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                        aria-label="Página siguiente"
-                      >
-                        Siguiente
-                        <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
+                  <Pagination
+                    className="mt-0 rounded-xl border border-cata-border bg-cata-bg px-4 py-3"
+                    page={studentPage}
+                    totalPages={totalStudentPages}
+                    onPageChange={setStudentPage}
+                    totalItems={filteredStudents.length}
+                    pageSize={WIZARD_PAGE_SIZE}
+                    itemNoun="alumno"
+                  />
                 )}
               </>
             )}
@@ -719,6 +714,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
       <AppShell eyebrow="Tomar asistencia" title="Pasar lista">
+      {!confirmed && (
+        <BackLink
+          href={backHref}
+          label={session?.user?.role === "admin" ? "Volver a Asistencias" : "Volver al Panel del Entrenador"}
+        />
+      )}
       {confirmed ? (
         <div className="flex min-h-[50vh] items-center justify-center py-8">
           <div className="w-full max-w-lg text-center">
@@ -748,19 +749,20 @@ export default function TrainerAttendancePage(): React.ReactElement {
               </p>
             )}
             {result && result.failed.length > 0 && (
-              <div className="mb-8 rounded-xl border border-amber-500/30 bg-amber-900/20 p-3 text-left text-xs text-amber-400">
+              <div className="mb-8 rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-left text-xs text-state-warn">
                 <p className="flex items-center gap-1.5 font-medium">
                   <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
                   {result.failed.length} registro(s) no se pudieron guardar
                 </p>
-                <p className="mt-1 text-amber-700/80">
+                <p className="mt-1 text-state-warn/80">
                   Vuelva a intentar el registro para esos estudiantes desde una nueva sesión.
                 </p>
               </div>
             )}
-            {(!result || result.failed.length === 0) && <div className="mb-8" />}
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            {/* The gap below used to be an empty `<div className="mb-8" />`
+                rendered only when there was no failure block — layout by
+                placeholder. It is now margin on the element that needs it. */}
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <button type="button" onClick={handleReset} className="btn-primary shadow-soft">
                 Registrar Otra Asistencia
               </button>
@@ -773,24 +775,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
       ) : (
         <div>
           {/* Loading state */}
-          {loading && (
-            <div className="flex items-center justify-center py-16">
-              <div className="flex items-center gap-2">
-                <Clock size={16} strokeWidth={1.5} className="animate-spin text-cata-text/65" aria-hidden="true" />
-                <p className="text-sm text-cata-text/50">Cargando horarios y grupos...</p>
-              </div>
-            </div>
-          )}
+          {loading && <LoadingState label="Cargando horarios y grupos…" />}
 
           {/* Error state */}
           {loadError && !loading && (
-            <div className="card mb-8 border border-red-200 bg-red-50 p-6 text-center">
-              <XCircle size={32} strokeWidth={1.5} className="mx-auto mb-3 text-red-700" aria-hidden="true" />
-              <p className="text-sm text-cata-red">{loadError}</p>
-              <button type="button" onClick={() => loadOptions()} className="btn-ghost mt-3 text-xs text-cata-red">
-                Reintentar
-              </button>
-            </div>
+            <ErrorState className="mb-8" message={loadError} onRetry={() => loadOptions()} />
           )}
 
           {!loading && !loadError && (
@@ -885,7 +874,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               className="btn-primary shadow-soft"
                             >
                               {submitting ? (
-                                "Registrando..."
+                                "Registrando…"
                               ) : (
                                 <>
                                   <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
@@ -901,15 +890,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 </form>
               </div>
 
-              {/* Navigation link */}
-              <p className="mt-6 text-center text-sm text-cata-text/65">
-                <Link
-                  href={backHref}
-                  className="font-medium text-cata-red transition-colors hover:text-cata-red-light"
-                >
-                  &larr; {session?.user?.role === "admin" ? "Volver a Asistencias" : "Volver al Panel del Entrenador"}
-                </Link>
-              </p>
             </>
           )}
         </div>

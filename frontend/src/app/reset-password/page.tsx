@@ -219,7 +219,7 @@ function ResetPasswordContent(): React.ReactElement {
                 disabled={submitting || passwordError !== null}
                 className="btn-primary w-full shadow-soft"
               >
-                {submitting ? "Restableciendo..." : "Restablecer Contraseña"}
+                {submitting ? "Restableciendo…" : "Restablecer Contraseña"}
               </button>
             </form>
           </div>

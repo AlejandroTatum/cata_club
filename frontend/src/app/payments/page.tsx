@@ -50,9 +50,24 @@ import type {
 import { fetchPaymentValidations, updatePaymentValidation } from "@/services/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import { useToast } from "@/contexts/ToastContext";
-import { paginatePaymentRequests, getTotalPages } from "@/app/payments/payments-utils";
+import { paginatePaymentRequests, getTotalPages, PAYMENTS_PAGE_SIZE } from "@/app/payments/payments-utils";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  FilterPill,
+  LoadingState,
+  Pagination,
+} from "@/components/ui";
+import {
+  VALIDATION_STATUS_LABELS,
+  VALIDATION_STATUS_TONES,
+  MEMBERSHIP_STATUS_LABELS,
+  MEMBERSHIP_STATUS_TONES,
+} from "@/lib/status-badges";
 
-type FilterKey = "all" | "pendiente" | "validado" | "rechazado";
+type FilterKey = "all" | ValidationStatus;
 
 const filters: { key: FilterKey; label: string }[] = [
   { key: "all", label: "Todas" },
@@ -61,22 +76,11 @@ const filters: { key: FilterKey; label: string }[] = [
   { key: "rechazado", label: "Rechazados" },
 ];
 
-const membershipStatusLabels: Record<MembershipStatus, string> = {
-  activa: "Activa",
-  vencida: "Vencida",
-  suspendida: "Suspendida",
-};
-
-const membershipStatusStyles: Record<MembershipStatus, string> = {
-  activa: "badge-success",
-  vencida: "badge-error",
-  suspendida: "badge-error",
-};
-
-const validationStatusStyles: Record<ValidationStatus, string> = {
-  pendiente: "badge-warning",
-  validado: "badge-success",
-  rechazado: "badge-error",
+/** Feminine plural agreeing with "solicitudes", for the filtered empty state. */
+const EMPTY_FILTER_NOUN: Record<ValidationStatus, string> = {
+  pendiente: "pendientes",
+  validado: "validadas",
+  rechazado: "rechazadas",
 };
 
 export default function PaymentsPage(): React.ReactElement {
@@ -91,7 +95,6 @@ export default function PaymentsPage(): React.ReactElement {
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectionValidationError, setRejectionValidationError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const [page, setPage] = useState(1);
@@ -114,6 +117,17 @@ export default function PaymentsPage(): React.ReactElement {
     loadRequests();
   }, [loadRequests]);
 
+  /**
+   * One feedback channel: the toast.
+   *
+   * This screen used to fire an inline banner AND a toast for the same
+   * approval, so a single click produced two confirmations of one event —
+   * while members fired only a toast and trainer attendance fired only an
+   * inline block. The rule now, everywhere: an outcome the user just caused
+   * is a toast; only state that must persist on the page (a validation
+   * message attached to a field, a load that failed and can be retried) is
+   * rendered inline.
+   */
   useEffect(() => {
     if (actionError) showError(actionError);
   }, [actionError, showError]);
@@ -142,13 +156,20 @@ export default function PaymentsPage(): React.ReactElement {
     rejected: requests.filter((r) => r.validationStatus === "rechazado").length,
   };
 
+  /** The same numbers, keyed the way the filter pills need them. */
+  const filterCounts: Record<FilterKey, number> = {
+    all: counts.total,
+    pendiente: counts.pending,
+    validado: counts.approved,
+    rechazado: counts.rejected,
+  };
+
   function handleSelect(request: PaymentValidationRequest): void {
     setSelectedRequest(request);
     setShowRejectForm(false);
     setRejectionReason("");
     setRejectionValidationError(null);
     setActionError(null);
-    setSuccessMessage(null);
     setPreviewUnavailable(false);
   }
 
@@ -158,14 +179,12 @@ export default function PaymentsPage(): React.ReactElement {
     setRejectionReason("");
     setRejectionValidationError(null);
     setActionError(null);
-    setSuccessMessage(null);
   }
 
   async function handleApprove(): Promise<void> {
     if (!selectedRequest) return;
     setActionLoading("approve");
     setActionError(null);
-    setSuccessMessage(null);
     try {
       const updated = await updatePaymentValidation(selectedRequest.id, {
         action: "approved",
@@ -174,7 +193,6 @@ export default function PaymentsPage(): React.ReactElement {
         prev.map((r) => (r.id === updated.id ? updated : r)),
       );
       setSelectedRequest(updated);
-      setSuccessMessage("Pago aprobado. La membresía ahora está activa.");
       showSuccess("Pago aprobado. La membresía ahora está activa.");
     } catch (err) {
       console.error("[payments] approve failed", err);
@@ -210,7 +228,6 @@ export default function PaymentsPage(): React.ReactElement {
     setActionLoading("reject");
     setActionError(null);
     setRejectionValidationError(null);
-    setSuccessMessage(null);
     try {
       const updated = await updatePaymentValidation(selectedRequest.id, {
         action: "rejected",
@@ -221,7 +238,6 @@ export default function PaymentsPage(): React.ReactElement {
       );
       setSelectedRequest(updated);
       setShowRejectForm(false);
-      setSuccessMessage("Pago rechazado. El estado de la membresía se mantiene sin cambios.");
       showSuccess("Pago rechazado. El estado de la membresía se mantiene sin cambios.");
     } catch (err) {
       console.error("[payments] reject failed", err);
@@ -290,61 +306,49 @@ export default function PaymentsPage(): React.ReactElement {
             <div className="mb-6 flex flex-wrap items-center gap-2">
               <Filter size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
               <h2 className="text-lg font-bold text-cata-text mr-2">Filtrar por Estado</h2>
+              {/* Counts were already computed for the stat cards above; the
+                  pills just never showed them, which is the only thing that
+                  made this filter row a different idiom from members'. */}
               {filters.map((f) => (
-                <button
+                <FilterPill
                   key={f.key}
-                  type="button"
+                  label={f.label}
+                  count={filterCounts[f.key]}
+                  active={activeFilter === f.key}
                   onClick={() => setActiveFilter(f.key)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                    activeFilter === f.key
-                      ? "bg-cata-red/15 text-cata-red"
-                      : "bg-cata-bg text-cata-text/65 hover:bg-cata-border/60"
-                  }`}
-                >
-                  {f.label}
-                </button>
+                />
               ))}
             </div>
 
             {/* Loading state */}
-            {loading && (
-              <div className="flex items-center justify-center py-16">
-                <div className="flex items-center gap-2">
-                  <Clock size={16} strokeWidth={1.5} className="animate-spin text-cata-text/65" aria-hidden="true" />
-                  <p className="text-sm text-cata-text/50">Cargando solicitudes...</p>
-                </div>
-              </div>
-            )}
+            {loading && <LoadingState label="Cargando solicitudes…" />}
 
             {/* Error state */}
             {error && !loading && (
-              <div className="card border border-red-200 bg-red-50 p-6 text-center">
-                <XCircle size={32} strokeWidth={1.5} className="mx-auto mb-3 text-red-700" aria-hidden="true" />
-                <p className="text-sm text-cata-red">{error}</p>
-                <button
-                  type="button"
-                  onClick={() => loadRequests()}
-                  className="btn-ghost mt-3 text-xs text-cata-red"
-                >
-                  Reintentar
-                </button>
-              </div>
+              <ErrorState message={error} onRetry={() => loadRequests()} />
             )}
 
             {/* Empty state */}
             {!loading && !error && filtered.length === 0 && (
-              <div className="card flex flex-col items-center py-16 text-center">
-                <ShieldCheck
-                  size={32}
-                  strokeWidth={1.5}
-                  className="mb-3 text-cata-text/20"
-                  aria-hidden="true"
+              <div className="card">
+                <EmptyState
+                  icon={<ShieldCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
+                  title={
+                    activeFilter === "all"
+                      ? "Aún no hay solicitudes de validación de pago"
+                      : `No hay solicitudes ${EMPTY_FILTER_NOUN[activeFilter]}`
+                  }
+                  description={
+                    activeFilter === "all"
+                      ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
+                      : "Pruebe con otro estado para ver el resto de la cola."
+                  }
+                  action={
+                    activeFilter === "all" ? undefined : (
+                      <Button onClick={() => setActiveFilter("all")}>Ver todas</Button>
+                    )
+                  }
                 />
-                <p className="text-sm text-cata-text/50">
-                  {activeFilter === "all"
-                    ? "Aún no hay solicitudes de validación de pago."
-                    : `No hay solicitudes ${activeFilter === "pendiente" ? "pendientes" : activeFilter === "validado" ? "validadas" : "rechazadas"}.`}
-                </p>
               </div>
             )}
 
@@ -391,22 +395,9 @@ export default function PaymentsPage(): React.ReactElement {
                             {formatDateTime(req.uploadedAt)}
                           </td>
                           <td className="px-4 py-3">
-                            <span className={validationStatusStyles[req.validationStatus]}>
-                              {req.validationStatus === "pendiente" && (
-                                <Clock size={12} strokeWidth={2} aria-hidden="true" />
-                              )}
-                              {req.validationStatus === "validado" && (
-                                <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />
-                              )}
-                              {req.validationStatus === "rechazado" && (
-                                <XCircle size={12} strokeWidth={2} aria-hidden="true" />
-                              )}
-                              {req.validationStatus === "pendiente"
-                                ? "Pendiente"
-                                : req.validationStatus === "validado"
-                                  ? "Validado"
-                                  : "Rechazado"}
-                            </span>
+                            <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
+                              {VALIDATION_STATUS_LABELS[req.validationStatus]}
+                            </Badge>
                           </td>
                         </tr>
                       ))}
@@ -415,31 +406,16 @@ export default function PaymentsPage(): React.ReactElement {
                 </div>
 
                 {totalPages > 1 && (
-                  <div className="flex flex-col items-center justify-between gap-3 border-t border-cata-border px-4 py-3 sm:flex-row">
-                    <p className="text-sm font-semibold text-cata-text">
-                      Página {page} de {totalPages}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        disabled={page <= 1}
-                        className="btn-secondary px-4 py-2 text-xs"
-                      >
-                        <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-                        Anterior
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={page >= totalPages}
-                        className="btn-secondary px-4 py-2 text-xs"
-                      >
-                        Siguiente
-                        <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
+                  <Pagination
+                    className="mt-0 border-t border-cata-border px-4 py-3"
+                    page={page}
+                    totalPages={totalPages}
+                    onPageChange={setPage}
+                    totalItems={filtered.length}
+                    pageSize={PAYMENTS_PAGE_SIZE}
+                    itemNoun="solicitud"
+                    itemNounPlural="solicitudes"
+                  />
                 )}
               </div>
             )}
@@ -457,14 +433,6 @@ export default function PaymentsPage(): React.ReactElement {
               Volver a la lista
             </button>
 
-            {/* Success feedback */}
-            {successMessage && (
-              <div className="mb-6 flex items-center gap-2 rounded-xl border border-cata-state-ok/30 bg-cata-state-ok/10 px-4 py-3 text-sm text-cata-state-ok">
-                <CheckCircle2 size={16} strokeWidth={1.5} className="shrink-0" aria-hidden="true" />
-                {successMessage}
-              </div>
-            )}
-
             <div className="grid gap-6 lg:grid-cols-5">
               {/* Left: Payment details */}
               <div className="lg:col-span-3 space-y-6">
@@ -477,15 +445,12 @@ export default function PaymentsPage(): React.ReactElement {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Estado Actual</p>
-                      <span className={`mt-1 inline-flex items-center gap-1.5 ${membershipStatusStyles[selectedRequest.currentMembershipStatus]}`}>
-                        {selectedRequest.currentMembershipStatus === "activa" && (
-                          <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />
-                        )}
-                        {(selectedRequest.currentMembershipStatus === "vencida" || selectedRequest.currentMembershipStatus === "suspendida") && (
-                          <XCircle size={12} strokeWidth={2} aria-hidden="true" />
-                        )}
-                        {membershipStatusLabels[selectedRequest.currentMembershipStatus]}
-                      </span>
+                      <Badge
+                        className="mt-1"
+                        tone={MEMBERSHIP_STATUS_TONES[selectedRequest.currentMembershipStatus]}
+                      >
+                        {MEMBERSHIP_STATUS_LABELS[selectedRequest.currentMembershipStatus]}
+                      </Badge>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Tipo de Membresía</p>
@@ -542,7 +507,7 @@ export default function PaymentsPage(): React.ReactElement {
                       <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Subido el</p>
                       <div className="mt-1 flex items-center gap-1.5 text-sm text-cata-text/65">
                         <Clock size={14} strokeWidth={1.5} className="shrink-0" aria-hidden="true" />
-                        {formatDate(selectedRequest.uploadedAt)}
+                        {formatDateTime(selectedRequest.uploadedAt)}
                       </div>
                     </div>
                   </div>
@@ -689,7 +654,7 @@ export default function PaymentsPage(): React.ReactElement {
                           className="btn-primary w-full bg-cata-state-ok shadow-soft hover:bg-cata-state-ok/90"
                         >
                           {actionLoading === "approve" ? (
-                            "Procesando..."
+                            "Procesando…"
                           ) : (
                             <>
                               <ThumbsUp size={15} strokeWidth={2} aria-hidden="true" />
@@ -724,7 +689,7 @@ export default function PaymentsPage(): React.ReactElement {
                               setRejectionReason(e.target.value);
                               setRejectionValidationError(null);
                             }}
-                            placeholder="Explique por qué se rechaza el comprobante de pago..."
+                            placeholder="Explique por qué se rechaza el comprobante de pago…"
                             className="input-field resize-y"
                             disabled={actionLoading !== null}
                           />
@@ -740,7 +705,7 @@ export default function PaymentsPage(): React.ReactElement {
                             className="btn-primary flex-1 shadow-soft"
                           >
                             {actionLoading === "reject" ? (
-                              "Procesando..."
+                              "Procesando…"
                             ) : (
                               "Confirmar Rechazo"
                             )}

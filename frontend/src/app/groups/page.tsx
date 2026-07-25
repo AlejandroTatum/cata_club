@@ -1,5 +1,18 @@
 /**
- * Gestión de Horarios — Admin page for managing training schedules.
+ * Horarios — Admin page for managing training schedules.
+ *
+ * NAMING (three names, one thing — read this before renaming anything):
+ *   - USER-FACING name: **Horarios**. That is what the nav says
+ *     (`lib/auth-utils.ts`), what the page title says, and what the approved
+ *     prototype says (`docs/ux/prototipos/14-horarios.html`). It is the only
+ *     name a user ever sees.
+ *   - ROUTE: `/groups`, kept because it is linked from bookmarks, tests and
+ *     the middleware route table.
+ *   - DOMAIN TYPE: `Grupo` / `HorarioEntrenamiento` in `types/domain.ts`,
+ *     mirroring the backend's own vocabulary.
+ * Renaming the route or the domain type is a refactor with a blast radius
+ * across the API layer and the backend; it is deliberately NOT part of the
+ * consistency pass. The user-facing name is the one that had to converge.
  *
  * Lists all HorarioEntrenamiento records with day, time, trainer, and
  * assigned training level. Shows which students belong to each schedule
@@ -38,7 +51,7 @@ import {
   UserMinus,
 } from "lucide-react";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import PaginationControls from "@/components/PaginationControls";
+import { buttonClasses, Button, EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
 import {
   fetchHorarios,
   crearHorario,
@@ -55,7 +68,12 @@ import {
 import type { Horario, CrearHorarioDTO, ActualizarHorarioDTO, NivelConOcupacion, AlumnoHorario, Entrenador } from "@/services/api";
 import { groupHorarios, diffGroupSave, type StudentRef, type HorarioGroup } from "@/lib/groups-utils";
 import { CATEGORIA_METADATA, CATEGORIA_OPTIONS, diasPermitidos, horarioDe, type Categoria } from "@/services/categorias";
-import { countUniqueAlumnos, paginateHorarioGroups, getHorarioGroupsTotalPages } from "./groups-page-utils";
+import {
+  countUniqueAlumnos,
+  paginateHorarioGroups,
+  getHorarioGroupsTotalPages,
+  HORARIO_GROUPS_PAGE_SIZE,
+} from "./groups-page-utils";
 
 const DIA_LABELS: Record<string, string> = {
   LUNES: "Lunes",
@@ -409,12 +427,12 @@ export default function GroupsPage(): React.ReactElement {
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (selectedDias.size === 0) {
-      setFormError("Seleccioná al menos un día.");
+      setFormError("Seleccione al menos un día.");
       return;
     }
     const entrenadorId = formData.entrenador_id;
     if (entrenadorId === null) {
-      setFormError("Seleccioná un entrenador.");
+      setFormError("Seleccione un entrenador.");
       return;
     }
     setFormSubmitting(true);
@@ -613,10 +631,10 @@ export default function GroupsPage(): React.ReactElement {
             >
               <option value="">
                 {entrenadoresLoading
-                  ? "Cargando..."
+                  ? "Cargando…"
                   : entrenadores.length === 0
                     ? "No hay entrenadores registrados"
-                    : "Seleccionar entrenador..."}
+                    : "Seleccionar entrenador…"}
               </option>
               {entrenadores.map((entrenador) => (
                 <option key={entrenador.id} value={entrenador.id}>
@@ -664,13 +682,13 @@ export default function GroupsPage(): React.ReactElement {
             </div>
           </div>
           <div className="sm:col-span-2 lg:col-span-4 flex gap-2">
-            <button type="submit" disabled={formSubmitting} className="btn-primary inline-flex items-center gap-1.5 text-xs">
+            <Button type="submit" variant="primary" size="sm" disabled={formSubmitting}>
               {formSubmitting && <Loader2 size={12} className="animate-spin" aria-hidden="true" />}
               {editingGroup !== null ? "Guardar cambios" : "Crear horario"}
-            </button>
-            <button type="button" onClick={closeExpanded} className="btn-secondary text-xs">
+            </Button>
+            <Button size="sm" onClick={closeExpanded}>
               Cancelar
-            </button>
+            </Button>
           </div>
         </form>
       </>
@@ -692,16 +710,13 @@ export default function GroupsPage(): React.ReactElement {
               Asignar alumnos al horario
             </h3>
           </div>
-          <button type="button" onClick={closeExpanded} className="btn-secondary text-xs">
+          <Button size="sm" onClick={closeExpanded}>
             Cerrar
-          </button>
+          </Button>
         </div>
 
         {cargandoAlumnos ? (
-          <div className="flex items-center gap-2 py-4 text-sm text-cata-text/50">
-            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-            Cargando alumnos...
-          </div>
+          <LoadingState label="Cargando alumnos…" />
         ) : (
           <>
             {alumnosPorHorario.length > 0 && (
@@ -738,7 +753,7 @@ export default function GroupsPage(): React.ReactElement {
                   value={alumnoSeleccionado ?? ""}
                   onChange={(e) => setAlumnoSeleccionado(e.target.value ? Number(e.target.value) : null)}
                 >
-                  <option value="">Seleccionar alumno...</option>
+                  <option value="">Seleccionar alumno…</option>
                   {allStudents
                     .filter((s) => s.activo && !alumnosPorHorario.some((a) => a.personaId === Number(s.id)))
                     .map((s) => (
@@ -777,16 +792,7 @@ export default function GroupsPage(): React.ReactElement {
         <BackLink href="/dashboard" label="Volver al Panel" />
 
         {loadError && (
-          <div
-            className="mb-4 flex items-center gap-2 rounded-xl border border-cata-red/30 bg-cata-red/10 px-4 py-3 text-sm text-cata-red"
-            role="alert"
-          >
-            <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
-            {loadError}
-            <button type="button" onClick={() => void loadData()} className="btn-ghost ml-auto text-xs">
-              Reintentar
-            </button>
-          </div>
+          <ErrorState className="mb-4" message={loadError} onRetry={() => void loadData()} />
         )}
 
         {notification && (
@@ -814,14 +820,10 @@ export default function GroupsPage(): React.ReactElement {
               Horarios de Entrenamiento ({horarios.length})
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={openCreateForm}
-            className="btn-primary inline-flex items-center gap-1.5 text-xs"
-          >
+          <Button variant="primary" size="sm" onClick={openCreateForm}>
             <Plus size={14} strokeWidth={2} aria-hidden="true" />
             Nuevo Horario
-          </button>
+          </Button>
         </div>
 
         {expandedGroup?.key === NEW_GROUP_KEY && (
@@ -831,9 +833,8 @@ export default function GroupsPage(): React.ReactElement {
         )}
 
         {loading ? (
-          <div className="card flex flex-col items-center py-12 text-center">
-            <Loader2 size={24} className="mb-3 animate-spin text-cata-text/30" aria-hidden="true" />
-            <p className="text-sm text-cata-text/50">Cargando horarios…</p>
+          <div className="card">
+            <LoadingState label="Cargando horarios…" />
           </div>
         ) : horarios.length > 0 ? (
           <div className="space-y-3">
@@ -926,28 +927,29 @@ export default function GroupsPage(): React.ReactElement {
         ) : null}
 
         {!loading && horarioGroups.length > 0 && totalPages > 1 && (
-          <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            totalItems={horarioGroups.length}
+            pageSize={HORARIO_GROUPS_PAGE_SIZE}
+            itemNoun="horario"
+          />
         )}
 
         {!loading && horarios.length === 0 && (
-          <div className="card flex flex-col items-center py-16 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-cata-red/10">
-              <Calendar size={28} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            </div>
-            <h3 className="mb-1 text-base font-bold text-cata-text">
-              No hay horarios configurados
-            </h3>
-            <p className="mb-4 max-w-sm text-sm text-cata-text/50">
-              Creá un horario de entrenamiento para empezar a gestionar los grupos.
-            </p>
-            <button
-              type="button"
-              onClick={openCreateForm}
-              className="btn-primary inline-flex items-center gap-1.5 text-xs"
-            >
-              <Plus size={14} strokeWidth={2} aria-hidden="true" />
-              Crear primer horario
-            </button>
+          <div className="card">
+            <EmptyState
+              icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
+              title="No hay horarios configurados"
+              description="Cree un horario de entrenamiento para empezar a asignarle alumnos."
+              action={
+                <Button variant="primary" onClick={openCreateForm}>
+                  <Plus size={14} strokeWidth={2} aria-hidden="true" />
+                  Crear primer horario
+                </Button>
+              }
+            />
           </div>
         )}
 

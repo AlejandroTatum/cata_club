@@ -111,7 +111,7 @@ export default function RegisterPage(): React.ReactElement {
   if (isLoading) {
     return (
       <div className="auth-shell flex min-h-screen items-center justify-center">
-        <p className="text-sm text-cata-text/65">Cargando sesión...</p>
+        <p className="text-sm text-cata-text/65">Cargando sesión…</p>
       </div>
     );
   }
@@ -153,7 +153,7 @@ export default function RegisterPage(): React.ReactElement {
               disabled={navigating}
               className="btn-primary w-full justify-center"
             >
-              {navigating ? "Redirigiendo..." : "Inscribirse"}
+              {navigating ? "Redirigiendo…" : "Inscribirse"}
               {!navigating && <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />}
             </button>
             <button
@@ -507,7 +507,7 @@ export default function RegisterPage(): React.ReactElement {
                 enrollment flow — see /student/enroll. */}
 
             <button type="submit" disabled={submitting} className="btn-primary mt-2 w-full shadow-soft">
-              {submitting ? "Creando cuenta..." : "Crear Cuenta"}
+              {submitting ? "Creando cuenta…" : "Crear Cuenta"}
             </button>
           </form>
 

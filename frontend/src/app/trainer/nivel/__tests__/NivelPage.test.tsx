@@ -186,7 +186,7 @@ describe("NivelPage", () => {
     fireEvent.change(screen.getByLabelText(/filtrar por nivel actual/i), { target: { value: "1" } });
 
     await waitFor(() => {
-      expect(screen.getByText("No se encontraron estudiantes con ese criterio.")).toBeInTheDocument();
+      expect(screen.getByText("No se encontraron estudiantes")).toBeInTheDocument();
     });
   });
 
@@ -197,9 +197,9 @@ describe("NivelPage", () => {
     fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "nadie-existe" } });
 
     await waitFor(() => {
-      expect(screen.getByText("No se encontraron estudiantes con ese criterio.")).toBeInTheDocument();
+      expect(screen.getByText("No se encontraron estudiantes")).toBeInTheDocument();
     });
-    expect(screen.queryByText("No hay estudiantes registrados.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No hay estudiantes registrados")).not.toBeInTheDocument();
   });
 
   describe("assignment feedback", () => {

@@ -28,17 +28,22 @@ import {
   UserCheck,
   ClipboardList,
   ArrowRight,
-  Clock,
-  XCircle,
   Trophy,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { fetchTrainingSchedules, fetchAttendanceRecords } from "@/services/api";
+import { formatDate } from "@/lib/format-utils";
+import {
+  Badge,
+  EmptyState,
+  ErrorState,
+  FilterPill,
+  LoadingState,
+  Pagination,
+} from "@/components/ui";
 import {
   buildAttendanceStats,
-  getAttendanceBadgeTokens,
-  ATTENDANCE_LABELS,
+  getAttendanceBadgeTone,
+  getAttendanceLabel,
   jsDayIndexToDiaSemana,
   formatDay,
   paginateRecords,
@@ -70,16 +75,13 @@ interface AttendanceStateBadgeProps {
 
 /**
  * Local equivalent of the admin `AttendancePage`'s (unexported) badge —
- * reuses the SAME shared color tokens/labels so estado colors stay
+ * reuses the SAME shared tone/label helpers so estado colors stay
  * byte-identical to the admin view instead of a second drifting mapping.
+ * The shape now comes from the `Badge` primitive rather than a hand-rolled
+ * pill, so "byte-identical" is true of the geometry too, not just the color.
  */
 function AttendanceStateBadge({ estado }: Readonly<AttendanceStateBadgeProps>): React.ReactElement {
-  const { badgeClass } = getAttendanceBadgeTokens(estado);
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
-      {ATTENDANCE_LABELS[estado] ?? "Desconocido"}
-    </span>
-  );
+  return <Badge tone={getAttendanceBadgeTone(estado)}>{getAttendanceLabel(estado)}</Badge>;
 }
 
 export default function TrainerPage(): React.ReactElement {
@@ -257,24 +259,11 @@ export default function TrainerPage(): React.ReactElement {
         </div>
 
         {/* Loading state */}
-        {loading && (
-          <div className="flex items-center justify-center py-16">
-            <div className="flex items-center gap-2">
-              <Clock size={16} strokeWidth={1.5} className="animate-spin text-cata-text/65" aria-hidden="true" />
-              <p className="text-sm text-cata-text/50">Cargando resumen de hoy...</p>
-            </div>
-          </div>
-        )}
+        {loading && <LoadingState label="Cargando resumen de hoy…" />}
 
         {/* Error state */}
         {error && !loading && (
-          <div className="card mb-8 border border-red-200 bg-red-50 p-6 text-center">
-            <XCircle size={32} strokeWidth={1.5} className="mx-auto mb-3 text-red-700" aria-hidden="true" />
-            <p className="text-sm text-cata-red">{error}</p>
-            <button type="button" onClick={() => loadData()} className="btn-ghost mt-3 text-xs text-cata-red">
-              Reintentar
-            </button>
-          </div>
+          <ErrorState className="mb-8" message={error} onRetry={() => loadData()} />
         )}
 
         {/* Stats cards */}
@@ -328,19 +317,17 @@ export default function TrainerPage(): React.ReactElement {
             <div>
               <span className="mb-2 block text-xs font-medium text-cata-text/65">Rango de fechas</span>
               <div className="flex flex-wrap gap-2">
+                {/* A closed set of four — pills, not bespoke buttons. The old
+                    active state was red, which the design system reserves for
+                    the primary CTA and for destructive/error: a red "Hoy"
+                    read as an alarm about today. */}
                 {DATE_PRESETS.map((preset) => (
-                  <button
+                  <FilterPill
                     key={preset.key}
-                    type="button"
+                    label={preset.label}
+                    active={datePreset === preset.key}
                     onClick={() => setDatePreset(preset.key)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      datePreset === preset.key
-                        ? "border-cata-red bg-cata-red/10 text-cata-red"
-                        : "border-cata-border text-cata-text/65 hover:bg-cata-surface"
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
+                  />
                 ))}
               </div>
               {datePreset === "custom" && (
@@ -397,7 +384,7 @@ export default function TrainerPage(): React.ReactElement {
                 <span className="mb-1 block text-xs font-medium text-cata-text/65">Alumno</span>
                 <StudentSearch
                   onSelect={handleStudentSelect}
-                  placeholder="Buscar alumno..."
+                  placeholder="Buscar alumno…"
                   resetSignal={studentSearchReset}
                 />
                 {selectedStudent && (
@@ -417,28 +404,11 @@ export default function TrainerPage(): React.ReactElement {
           </div>
 
           {/* History loading state */}
-          {historyLoading && (
-            <div className="flex items-center justify-center py-16">
-              <div className="flex items-center gap-2">
-                <Clock size={16} strokeWidth={1.5} className="animate-spin text-cata-text/65" aria-hidden="true" />
-                <p className="text-sm text-cata-text/50">Cargando historial...</p>
-              </div>
-            </div>
-          )}
+          {historyLoading && <LoadingState label="Cargando historial…" />}
 
           {/* History error state */}
           {historyError && !historyLoading && (
-            <div className="card mb-4 border border-red-200 bg-red-50 p-6 text-center">
-              <XCircle size={32} strokeWidth={1.5} className="mx-auto mb-3 text-red-700" aria-hidden="true" />
-              <p className="text-sm text-cata-red">{historyError}</p>
-              <button
-                type="button"
-                onClick={() => loadHistory()}
-                className="btn-ghost mt-3 text-xs text-cata-red"
-              >
-                Reintentar
-              </button>
-            </div>
+            <ErrorState className="mb-4" message={historyError} onRetry={() => loadHistory()} />
           )}
 
           {/* History table / empty state */}
@@ -460,7 +430,7 @@ export default function TrainerPage(): React.ReactElement {
                       <tbody className="divide-y divide-cata-border">
                         {paginatedRecords.map((record) => (
                           <tr key={record.id} className="transition-colors hover:bg-cata-bg">
-                            <td className="px-4 py-3 text-xs text-cata-text/65">{record.fecha}</td>
+                            <td className="px-4 py-3 text-xs tabular-nums text-cata-text/65">{formatDate(record.fecha)}</td>
                             <td className="px-4 py-3 text-sm font-medium text-cata-text">{record.estudiante}</td>
                             <td className="px-4 py-3 text-xs text-cata-text">{record.horario}</td>
                             <td className="px-4 py-3">
@@ -473,43 +443,25 @@ export default function TrainerPage(): React.ReactElement {
                     </table>
                   </div>
 
-                  {/* Pagination */}
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-between border-t border-cata-border bg-cata-bg px-4 py-3">
-                      <p className="text-xs text-cata-text/65">
-                        Página {historyPage} de {totalPages} · {historyRecords.length} registro{historyRecords.length !== 1 ? "s" : ""}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                          disabled={historyPage === 1}
-                          className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                          aria-label="Página anterior"
-                        >
-                          <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-                          Anterior
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setHistoryPage((p) => Math.min(totalPages, p + 1))}
-                          disabled={historyPage === totalPages}
-                          className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                          aria-label="Página siguiente"
-                        >
-                          Siguiente
-                          <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                        </button>
-                      </div>
-                    </div>
+                    <Pagination
+                      className="mt-0 border-t border-cata-border bg-cata-bg px-4 py-3"
+                      page={historyPage}
+                      totalPages={totalPages}
+                      onPageChange={setHistoryPage}
+                      totalItems={historyRecords.length}
+                      pageSize={HISTORY_PAGE_SIZE}
+                      itemNoun="registro"
+                    />
                   )}
                 </div>
               ) : (
-                <div className="card flex flex-col items-center py-12 text-center">
-                  <ClipboardList size={32} strokeWidth={1.5} className="mb-3 text-cata-text/20" aria-hidden="true" />
-                  <p className="text-sm text-cata-text/50">
-                    No se encontraron registros de asistencia para los filtros seleccionados.
-                  </p>
+                <div className="card">
+                  <EmptyState
+                    icon={<ClipboardList size={21} strokeWidth={1.5} aria-hidden="true" />}
+                    title="No se encontraron registros de asistencia"
+                    description="Ningún registro coincide con los filtros seleccionados. Amplíe el rango de fechas o quite un filtro."
+                  />
                 </div>
               )}
             </>

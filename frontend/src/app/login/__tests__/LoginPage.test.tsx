@@ -81,7 +81,7 @@ describe("LoginPage", () => {
 
     render(<LoginPage />);
 
-    expect(screen.getByText("Cargando sesión...")).toBeInTheDocument();
+    expect(screen.getByText("Cargando sesión…")).toBeInTheDocument();
     expect(screen.queryByLabelText("Correo electrónico")).not.toBeInTheDocument();
   });
 
@@ -90,7 +90,7 @@ describe("LoginPage", () => {
 
     render(<LoginPage />);
 
-    expect(screen.getByText("Cargando sesión...")).toBeInTheDocument();
+    expect(screen.getByText("Cargando sesión…")).toBeInTheDocument();
     expect(screen.queryByLabelText("Correo electrónico")).not.toBeInTheDocument();
     expect(mockReplace).toHaveBeenCalledWith("/dashboard");
   });
@@ -101,7 +101,7 @@ describe("LoginPage", () => {
     render(<LoginPage />);
 
     expect(screen.getByLabelText("Correo electrónico")).toBeInTheDocument();
-    expect(screen.queryByText("Cargando sesión...")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cargando sesión…")).not.toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 

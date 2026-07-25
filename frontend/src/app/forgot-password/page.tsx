@@ -64,7 +64,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
           no <em className="not-italic text-cata-red-light">el partido</em>.
         </>
       }
-      description="Recuperá el acceso a tu cuenta en un par de pasos. La gestión del club no se detiene."
+      description="Recupera el acceso a tu cuenta en un par de pasos. La gestión del club no se detiene."
     >
       {submitted ? (
         /* Confirmation card — deliberately identical regardless of whether
@@ -113,7 +113,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
             </div>
 
             <button type="submit" disabled={submitting} className="btn-primary w-full shadow-soft">
-              {submitting ? "Enviando..." : "Enviar enlace de recuperación"}
+              {submitting ? "Enviando…" : "Enviar enlace de recuperación"}
             </button>
           </form>
         </div>

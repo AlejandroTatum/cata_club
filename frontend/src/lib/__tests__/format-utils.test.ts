@@ -1,9 +1,16 @@
 /**
- * Tests for shared formatting utilities (formatCurrency, formatDate).
+ * Tests for shared formatting utilities (formatCurrency, formatDate,
+ * formatDateShort, formatDateTime, formatDateRange).
  */
 
 import { describe, it, expect } from "vitest";
-import { formatCurrency, formatDate, formatDateTime } from "../format-utils";
+import {
+  formatCurrency,
+  formatDate,
+  formatDateShort,
+  formatDateTime,
+  formatDateRange,
+} from "../format-utils";
 
 // ---------------------------------------------------------------------------
 // formatCurrency
@@ -31,10 +38,20 @@ describe("formatCurrency", () => {
     expect(formatCurrency(Infinity)).toBe("$0,00");
     expect(formatCurrency(-Infinity)).toBe("$0,00");
   });
+
+  it("coerces numeric strings so raw API values never leak a second format", () => {
+    expect(formatCurrency("24")).toBe("$24,00");
+    expect(formatCurrency("24.5")).toBe("$24,50");
+  });
+
+  it("returns the zero placeholder for null/undefined", () => {
+    expect(formatCurrency(null)).toBe("$0,00");
+    expect(formatCurrency(undefined)).toBe("$0,00");
+  });
 });
 
 // ---------------------------------------------------------------------------
-// formatDate
+// formatDate — the single canonical dd/mm/yyyy rendering
 // ---------------------------------------------------------------------------
 
 describe("formatDate", () => {
@@ -48,18 +65,39 @@ describe("formatDate", () => {
     expect(formatDate("2021-02-29")).toBe("");
   });
 
-  it("formats a valid ISO date string", () => {
-    const result = formatDate("2026-06-28T10:30:00Z");
-    expect(result).toContain("2026");
-    expect(result).toMatch(/junio/i);
-    expect(result).toContain("28");
+  it("renders dd/mm/yyyy with zero padding", () => {
+    expect(formatDate("2014-03-15")).toBe("15/03/2014");
+    expect(formatDate("2026-06-08")).toBe("08/06/2026");
   });
 
-  it("renders a date-only string as the correct calendar day", () => {
-    const result = formatDate("2014-03-15");
-    expect(result).toContain("15");
-    expect(result).toMatch(/marzo/i);
-    expect(result).toContain("2014");
+  it("renders a full ISO timestamp as dd/mm/yyyy", () => {
+    expect(formatDate("2026-06-28T10:30:00Z")).toBe("28/06/2026");
+  });
+
+  it("keeps a date-only string on its own calendar day (America/Guayaquil is UTC-5)", () => {
+    // Anchored at noon UTC: never rolls back to the previous day.
+    expect(formatDate("2026-01-01")).toBe("01/01/2026");
+    expect(formatDate("2026-12-31")).toBe("31/12/2026");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatDateShort — same grammar, two-digit year, for dense table cells
+// ---------------------------------------------------------------------------
+
+describe("formatDateShort", () => {
+  it("returns empty string for empty or invalid input", () => {
+    expect(formatDateShort("")).toBe("");
+    expect(formatDateShort("not-a-date")).toBe("");
+  });
+
+  it("renders dd/mm/yy", () => {
+    expect(formatDateShort("2014-03-15")).toBe("15/03/14");
+    expect(formatDateShort("2026-06-08")).toBe("08/06/26");
+  });
+
+  it("uses the same day/month digits as formatDate", () => {
+    expect(formatDateShort("2026-06-28T10:30:00Z")).toBe("28/06/26");
   });
 });
 
@@ -77,19 +115,34 @@ describe("formatDateTime", () => {
     expect(formatDateTime("2026-13-01")).toBe("");
   });
 
-  it("formats a valid ISO date string with time", () => {
+  it("renders the date part in the same dd/mm/yyyy grammar as formatDate", () => {
     const result = formatDateTime("2026-06-28T10:30:00Z");
-    expect(result).toContain("2026");
-    expect(result).toMatch(/junio/i);
-    expect(result).toContain("28");
-    expect(result).toContain("·");
-    // Time part should be present in HH:MM format
-    expect(result).toMatch(/\d{1,2}:\d{2}/);
+    expect(result.startsWith("28/06/2026 · ")).toBe(true);
+    expect(result).toMatch(/^\d{2}\/\d{2}\/\d{4} · \d{2}:\d{2}$/);
   });
 
-  it("includes time for afternoon timestamps", () => {
+  it("renders time in 24-hour form", () => {
     const result = formatDateTime("2026-06-28T14:15:00Z");
-    expect(result).toContain("·");
-    expect(result).toMatch(/\d{1,2}:\d{2}/);
+    expect(result).toMatch(/^\d{2}\/\d{2}\/\d{4} · \d{2}:\d{2}$/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatDateRange
+// ---------------------------------------------------------------------------
+
+describe("formatDateRange", () => {
+  it("joins two dates with an en dash", () => {
+    expect(formatDateRange("2026-07-01", "2026-08-12")).toBe("01/07/2026 – 12/08/2026");
+  });
+
+  it("falls back to whichever side is present", () => {
+    expect(formatDateRange("2026-07-01", "")).toBe("01/07/2026");
+    expect(formatDateRange("", "2026-08-12")).toBe("12/08/2026");
+  });
+
+  it("returns an empty string when neither side is a date", () => {
+    expect(formatDateRange("", "")).toBe("");
+    expect(formatDateRange("nope", "nope")).toBe("");
   });
 });

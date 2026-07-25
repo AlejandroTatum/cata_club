@@ -60,7 +60,9 @@ import {
 import type { StudentPortalSummary, StudentProfileSummary, MembershipSummary } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
 import { describeRanking } from "@/app/student/student-utils";
-import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_BADGE } from "@/app/members/members-utils";
+import { Badge, ErrorState, LoadingState } from "@/components/ui";
+import type { BadgeTone } from "@/components/ui/Badge";
+import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
 // Reused as-is (not duplicated) for consistency — this is the same
 // backend-estado -> frontend-estado mapping `members-adapter.ts` reuses;
 // it's a pure value object with no server-only APIs, safe in a client bundle.
@@ -103,10 +105,10 @@ function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] || fullName;
 }
 
-function describeMembership(membership: MembershipSummary | null): { label: string; badgeClass: string } | null {
+function describeMembership(membership: MembershipSummary | null): { label: string; tone: BadgeTone } | null {
   if (!membership) return null;
   const estado = MEMBERSHIP_STATUS_BY_ESTADO[membership.estado as keyof typeof MEMBERSHIP_STATUS_BY_ESTADO];
-  return { label: MEMBERSHIP_STATUS_LABELS[estado], badgeClass: MEMBERSHIP_STATUS_BADGE[estado] };
+  return { label: MEMBERSHIP_STATUS_LABELS[estado], tone: MEMBERSHIP_STATUS_TONE[estado] };
 }
 
 const NO_MEMBERSHIP_FALLBACK = "No disponible — consulte con administración";
@@ -127,39 +129,10 @@ type StudentLoadState =
   | { status: "error"; message: string }
   | { status: "ready"; data: StudentPortalSummary };
 
-// ---------------------------------------------------------------------------
-// Loading / error blocks — shared shape for both branches
-// ---------------------------------------------------------------------------
-
-function LoadingBlock({ text }: { text: string }): React.ReactElement {
-  return (
-    <div className="flex min-h-[50vh] items-center justify-center">
-      <p className="text-sm text-cata-text/65">{text}</p>
-    </div>
-  );
-}
-
-function ErrorBlock({
-  message,
-  onRetry,
-  showIcon,
-}: {
-  message: string;
-  onRetry: () => void;
-  showIcon?: boolean;
-}): React.ReactElement {
-  return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3">
-      {showIcon && <AlertTriangle size={28} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-      <p role="alert" className="text-sm text-cata-red">
-        {message}
-      </p>
-      <button type="button" onClick={onRetry} className="btn-ghost text-xs">
-        Reintentar
-      </button>
-    </div>
-  );
-}
+// The local `LoadingBlock` (plain text, no indicator) and `ErrorBlock` (a
+// fifth error shape, whose icon was optional so the same failure looked
+// different depending on which branch produced it) are gone. Both branches now
+// render the shared `LoadingState` / `ErrorState`.
 
 // ---------------------------------------------------------------------------
 // Representado summary card — read-only, same data source as /student
@@ -202,7 +175,7 @@ function StudentSummaryCard({ profile }: StudentSummaryCardProps): React.ReactEl
           </dt>
           <dd>
             {membership ? (
-              <span className={`badge ${membership.badgeClass}`}>{membership.label}</span>
+              <Badge tone={membership.tone}>{membership.label}</Badge>
             ) : (
               <span className="text-sm text-cata-text/65">{NO_MEMBERSHIP_FALLBACK}</span>
             )}
@@ -446,13 +419,10 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               <p className="text-sm text-cata-text/65">{correoDisplay}</p>
               <div className="mt-1.5">
                 {props.kind === "staff" ? (
-                  <span className="badge badge-neutral">
-                    <Shield size={11} strokeWidth={1.5} aria-hidden="true" />
-                    {roleLabel}
-                  </span>
+                  <Badge>{roleLabel}</Badge>
                 ) : self ? (
                   membership ? (
-                    <span className={`badge ${membership.badgeClass}`}>{membership.label}</span>
+                    <Badge tone={membership.tone}>{membership.label}</Badge>
                   ) : (
                     <span className="text-xs text-cata-text/65">{NO_MEMBERSHIP_FALLBACK}</span>
                   )
@@ -610,7 +580,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                     ) : (
                       <Save size={14} strokeWidth={1.5} aria-hidden="true" />
                     )}
-                    {saving ? "Guardando..." : "Guardar"}
+                    {saving ? "Guardando…" : "Guardar"}
                   </button>
                   <button
                     type="button"
@@ -651,9 +621,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                 <p className="text-xs font-medium text-cata-text/65">Roles asignados</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {props.perfil.roles.map((rol) => (
-                    <span key={rol} className="badge badge-neutral">
-                      {rol}
-                    </span>
+                    <Badge key={rol}>{rol}</Badge>
                   ))}
                 </div>
               </>
@@ -661,7 +629,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               membership ? (
                 <>
                   <p className="text-xs font-medium text-cata-text/65">Estado de la membresía</p>
-                  <span className={`badge mt-2 ${membership.badgeClass}`}>{membership.label}</span>
+                  <Badge className="mt-2" tone={membership.tone}>{membership.label}</Badge>
                 </>
               ) : (
                 <p className="text-sm text-cata-text/65">{NO_MEMBERSHIP_FALLBACK}</p>
@@ -702,7 +670,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                   className="btn-secondary w-full items-center gap-2 disabled:opacity-50"
                 >
                   <KeyRound size={14} strokeWidth={1.5} aria-hidden="true" />
-                  {requestingPassword ? "Enviando..." : "Cambiar contraseña"}
+                  {requestingPassword ? "Enviando…" : "Cambiar contraseña"}
                 </button>
                 {passwordMessage && (
                   <p role="status" className="mt-2 text-sm text-cata-state-ok">
@@ -844,13 +812,12 @@ function ProfileContent(): React.ReactElement | null {
   let content: React.ReactNode;
   if (isStudentRole) {
     if (studentState.status === "loading") {
-      content = <LoadingBlock text="Cargando su cuenta..." />;
+      content = <LoadingState className="min-h-[50vh] justify-center" label="Cargando su cuenta…" />;
     } else if (studentState.status === "error") {
       content = (
-        <ErrorBlock
+        <ErrorState
           message={studentState.message}
           onRetry={() => setStudentReload((n) => n + 1)}
-          showIcon
         />
       );
     } else {
@@ -867,9 +834,9 @@ function ProfileContent(): React.ReactElement | null {
       );
     }
   } else if (staffState.status === "loading") {
-    content = <LoadingBlock text="Cargando perfil..." />;
+    content = <LoadingState className="min-h-[50vh] justify-center" label="Cargando perfil…" />;
   } else if (staffState.status === "error") {
-    content = <ErrorBlock message={staffState.message} onRetry={() => setStaffReload((n) => n + 1)} />;
+    content = <ErrorState message={staffState.message} onRetry={() => setStaffReload((n) => n + 1)} />;
   } else {
     content = (
       <ProfileLayout

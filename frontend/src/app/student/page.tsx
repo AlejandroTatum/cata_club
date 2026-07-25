@@ -8,7 +8,10 @@ import ContextualHelp from "@/components/ContextualHelp";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchStudentPortal, fetchPagosDePersona, subirVoucherPago } from "@/services/api";
 import type { StudentPortalSummary, StudentProfileSummary, PagoPersona, MembershipSummary } from "@/services/api";
-import { ATTENDANCE_LABELS, ATTENDANCE_BADGE_TOKENS } from "@/app/attendance/attendance-utils";
+import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
+import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
+import { Badge, EmptyState, ErrorState, LoadingState } from "@/components/ui";
+import { VALIDATION_STATUS_LABELS, VALIDATION_STATUS_TONES, toValidationStatus } from "@/lib/status-badges";
 import { derivePortalMode, isRepresentative, describeRanking } from "./student-utils";
 import {
   Calendar,
@@ -43,27 +46,6 @@ type LoadState =
 // Small presentational pieces
 // ---------------------------------------------------------------------------
 
-function LoadingCard(): React.ReactElement {
-  return (
-    <div className="card flex min-h-[40vh] items-center justify-center p-6 text-center">
-      <p className="text-sm text-cata-text/50">Cargando su cuenta...</p>
-    </div>
-  );
-}
-
-function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void }): React.ReactElement {
-  return (
-    <div className="card p-6 text-center">
-      <AlertTriangle size={28} strokeWidth={1.5} className="mx-auto mb-3 text-cata-red" aria-hidden="true" />
-      <p className="mb-4 text-sm text-cata-text/65">{message}</p>
-      <button type="button" onClick={onRetry} className="btn-secondary mx-auto inline-flex items-center gap-2">
-        <RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />
-        Reintentar
-      </button>
-    </div>
-  );
-}
-
 function MembershipCard({ membership }: { membership: MembershipSummary | null }): React.ReactElement {
   if (!membership) {
     return (
@@ -78,7 +60,7 @@ function MembershipCard({ membership }: { membership: MembershipSummary | null }
           </div>
         </div>
         <p className="text-xs leading-relaxed text-cata-text/55">
-          Aún no tenés una membresía registrada. Consulte con administración.
+          Aún no tiene una membresía registrada. Consulte con administración.
         </p>
       </section>
     );
@@ -97,12 +79,12 @@ function MembershipCard({ membership }: { membership: MembershipSummary | null }
           </div>
         </div>
         <p className="text-xs leading-relaxed text-cata-text/55">
-          Tu membresía fue creada pero espera la validación del primer pago.
+          Su membresía fue creada pero espera la validación del primer pago.
         </p>
         {membership.categoria && (
           <p className="mt-1 text-xs text-cata-text/65">
             Plan: {membership.categoria} {membership.franjaHoraria ? `(${membership.franjaHoraria})` : ""}
-            {membership.montoAplicado ? ` — $${membership.montoAplicado}` : ""}
+            {membership.montoAplicado ? ` — ${formatCurrency(membership.montoAplicado)}` : ""}
           </p>
         )}
       </section>
@@ -121,15 +103,15 @@ function MembershipCard({ membership }: { membership: MembershipSummary | null }
             {membership.estado === "ACTIVA" ? "Activa" : "Vencida"}
           </h2>
         </div>
-        <span className={membership.estado === "ACTIVA" ? "badge-success" : "badge-error"}>
+        <Badge tone={membership.estado === "ACTIVA" ? "ok" : "bad"}>
           {membership.estado === "ACTIVA" ? "Activa" : "Vencida"}
-        </span>
+        </Badge>
       </div>
       {membership.categoria && (
         <div className="space-y-0.5 text-xs text-cata-text/65">
           <p>Plan: {membership.categoria} {membership.franjaHoraria ? `(${membership.franjaHoraria})` : ""}</p>
           <p>Modalidad: {membership.modalidad === "PERSONALIZADA" ? "Personalizada" : "Mensual"}</p>
-          {membership.montoAplicado && <p>Monto: ${membership.montoAplicado}</p>}
+          {membership.montoAplicado && <p>Monto: {formatCurrency(membership.montoAplicado)}</p>}
         </div>
       )}
     </section>
@@ -149,16 +131,11 @@ function RankingCard({ profile }: { profile: StudentProfileSummary }): React.Rea
           <p className="text-sm font-medium text-cata-text/65">Ranking</p>
           <p className="text-lg font-bold tracking-tight text-cata-text">{display.label}</p>
         </div>
-        <span className={display.badgeClass}>{profile.ranking.status === "available" ? "Disponible" : "No disponible"}</span>
+        <Badge tone={display.tone}>{profile.ranking.status === "available" ? "Disponible" : "No disponible"}</Badge>
       </div>
       <p className="text-sm text-cata-text/65">{display.detail}</p>
     </div>
   );
-}
-
-function formatSessionDate(iso: string): string {
-  const d = new Date(iso + "T12:00:00");
-  return d.toLocaleDateString("es-EC", { weekday: "long", day: "numeric", month: "short" });
 }
 
 function RecentSessionsSection({ profile }: { profile: StudentProfileSummary }): React.ReactElement {
@@ -169,30 +146,31 @@ function RecentSessionsSection({ profile }: { profile: StudentProfileSummary }):
         <h2 className="text-lg font-bold text-cata-text">Actividad Reciente — {profile.nombres}</h2>
       </div>
       {profile.recentSessions.length === 0 ? (
-        <div className="card p-6 text-center">
-          <p className="text-sm text-cata-text/50">Aún no hay asistencias registradas.</p>
+        <div className="card">
+          <EmptyState
+            icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
+            title="Aún no hay asistencias registradas"
+            description="Las sesiones aparecerán aquí en cuanto el entrenador tome lista."
+          />
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {profile.recentSessions.map((session) => {
-            const tokens = ATTENDANCE_BADGE_TOKENS[session.estado];
-            return (
-              <div key={`${session.fecha}-${session.horario}`} className="card-hover p-5">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
-                    <Calendar size={18} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-cata-text">{formatSessionDate(session.fecha)}</p>
-                    <p className="mt-0.5 text-xs text-cata-text/55">{session.horario}</p>
-                    <span className={`mt-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${tokens.badgeClass}`}>
-                      {ATTENDANCE_LABELS[session.estado]}
-                    </span>
-                  </div>
+          {profile.recentSessions.map((session) => (
+            <div key={`${session.fecha}-${session.horario}`} className="card-hover p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
+                  <Calendar size={18} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold tabular-nums text-cata-text">{formatDate(session.fecha)}</p>
+                  <p className="mt-0.5 text-xs text-cata-text/55">{session.horario}</p>
+                  <Badge className="mt-2" tone={getAttendanceBadgeTone(session.estado)}>
+                    {getAttendanceLabel(session.estado)}
+                  </Badge>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
     </section>
@@ -214,26 +192,18 @@ const TIPO_PAGO_LABEL: Record<PagoPersona["tipoPago"], string> = {
   TRANSFERENCIA: "Transferencia",
 };
 
+/**
+ * Payment status, in the product's one payment-status vocabulary.
+ *
+ * This used to be a third bespoke declaration: it invented
+ * `bg-emerald-50 text-emerald-700` for approved (a green that is not the state
+ * token) and, worse, painted "Pendiente" with `bg-amber-900/20 text-amber-400`
+ * — a dark-theme pair stranded on a light card. That was the single badge a
+ * parent most needs to read, and it was the least legible thing on the page.
+ */
 function PagoEstadoBadge({ estado }: { estado: PagoPersona["estadoPago"] }): React.ReactElement {
-  if (estado === "APROBADO") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-        <CheckCircle2 size={10} strokeWidth={2} aria-hidden="true" /> Aprobado
-      </span>
-    );
-  }
-  if (estado === "RECHAZADO") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-cata-red">
-        <XCircle size={10} strokeWidth={2} aria-hidden="true" /> Rechazado
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-900/20 px-2 py-0.5 text-xs font-medium text-amber-400">
-      <Clock size={10} strokeWidth={2} aria-hidden="true" /> Pendiente
-    </span>
-  );
+  const status = toValidationStatus(estado);
+  return <Badge tone={VALIDATION_STATUS_TONES[status]}>{VALIDATION_STATUS_LABELS[status]}</Badge>;
 }
 
 type PagosState =
@@ -298,7 +268,7 @@ function PagosSection({ personaId }: { personaId: string }): React.ReactElement 
         <h2 className="text-lg font-bold text-cata-text">Pagos</h2>
       </div>
       <p className="mb-4 text-xs text-cata-text/65">
-        Historial de pagos registrados. Adjuntá el comprobante de transferencia para validar tu pago.
+        Historial de pagos registrados. Adjunte el comprobante de transferencia para validar su pago.
       </p>
 
       <input
@@ -317,19 +287,23 @@ function PagosSection({ personaId }: { personaId: string }): React.ReactElement 
       )}
 
       {state.status === "loading" && (
-        <div className="card p-6 text-center">
-          <p className="text-sm text-cata-text/50">Cargando historial de pagos...</p>
+        <div className="card">
+          <LoadingState label="Cargando historial de pagos…" />
         </div>
       )}
 
       {state.status === "error" && (
-        <ErrorCard message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
+        <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
 
       {state.status === "ready" &&
         (state.pagos.length === 0 ? (
-          <div className="card p-6 text-center">
-            <p className="text-sm text-cata-text/50">Todavía no hay pagos registrados.</p>
+          <div className="card">
+            <EmptyState
+              icon={<CreditCard size={21} strokeWidth={1.5} aria-hidden="true" />}
+              title="Todavía no hay pagos registrados"
+              description="Cuando se registre un pago de membresía, aparecerá aquí con su comprobante y su estado."
+            />
           </div>
         ) : (
           <div className="grid gap-3">
@@ -343,8 +317,8 @@ function PagosSection({ personaId }: { personaId: string }): React.ReactElement 
                     <CreditCard size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-cata-text">
-                      ${pago.monto} · {pago.fechaInicio} – {pago.fechaFin}
+                    <p className="text-sm font-medium tabular-nums text-cata-text">
+                      {formatCurrency(pago.monto)} · {formatDateRange(pago.fechaInicio, pago.fechaFin)}
                     </p>
                     <p className="text-xs text-cata-text/65">{TIPO_PAGO_LABEL[pago.tipoPago]}</p>
                     {pago.voucherUrl && (
@@ -379,7 +353,7 @@ function PagosSection({ personaId }: { personaId: string }): React.ReactElement 
                       ) : (
                         <Upload size={12} strokeWidth={1.5} />
                       )}
-                      {uploadingId === pago.id ? "Subiendo..." : "Subir comprobante"}
+                      {uploadingId === pago.id ? "Subiendo…" : "Subir comprobante"}
                     </button>
                   )}
                   <PagoEstadoBadge estado={pago.estadoPago} />
@@ -397,8 +371,12 @@ function PagosSection({ personaId }: { personaId: string }): React.ReactElement 
 function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.ReactElement {
   if (data.membershipPlans.length === 0) {
     return (
-      <div className="card p-6 text-center">
-        <p className="text-sm text-cata-text/50">No hay planes de membresía disponibles en este momento.</p>
+      <div className="card">
+        <EmptyState
+          icon={<ShieldCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
+          title="No hay planes de membresía disponibles"
+          description="El catálogo de planes está vacío en este momento. Consulte con administración."
+        />
       </div>
     );
   }
@@ -411,7 +389,7 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
           </div>
           <h3 className="text-base font-bold text-cata-text">{plan.nombre}</h3>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-extrabold text-cata-text">${plan.precio.toFixed(2)}</span>
+            <span className="text-2xl font-extrabold tabular-nums text-cata-text">{formatCurrency(plan.precio)}</span>
           </div>
           <p className="mt-1 text-xs text-cata-text/65">{plan.franjaHoraria}</p>
         </div>
@@ -548,9 +526,12 @@ function ActivePortalView({
       </div>
 
       {selectedProfile === null ? (
-        <div className="card p-6 text-center">
-          <User size={32} strokeWidth={1.5} className="mx-auto mb-3 text-cata-text/20" aria-hidden="true" />
-          <p className="text-sm text-cata-text/50">No se encontraron estudiantes asociados a esta cuenta.</p>
+        <div className="card">
+          <EmptyState
+            icon={<User size={21} strokeWidth={1.5} aria-hidden="true" />}
+            title="No se encontraron estudiantes asociados a esta cuenta"
+            description="Inscríbase como jugador o agregue un hijo/dependiente para empezar."
+          />
         </div>
       ) : (
         <>
@@ -601,8 +582,14 @@ function StudentPortalContent(): React.ReactElement {
 
   return (
     <AppShell eyebrow="Área de estudiantes" title="Mi cuenta">
-      {state.status === "loading" && <LoadingCard />}
-      {state.status === "error" && <ErrorCard message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />}
+      {state.status === "loading" && (
+        <div className="card">
+          <LoadingState label="Cargando su cuenta…" />
+        </div>
+      )}
+      {state.status === "error" && (
+        <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
+      )}
       {state.status === "ready" &&
         (derivePortalMode(hasAlumnoRole, state.data.representados.length) === "pending" ? (
           <PendingEnrollmentView data={state.data} />

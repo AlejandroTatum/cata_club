@@ -112,11 +112,11 @@ export default function LoginPage(): React.ReactElement {
   // Skipped while the welcome overlay is up: `isAuthenticated`/`session`
   // flip true around the same time as a successful login, and without this
   // guard that would replace the page (and the overlay's backdrop) with
-  // this plain "Cargando sesión..." div instead.
+  // this plain "Cargando sesión…" div instead.
   if (!welcome && (isLoading || (isAuthenticated && session))) {
     return (
       <div className="auth-shell flex min-h-screen items-center justify-center">
-        <p className="text-sm text-cata-text/65">Cargando sesión...</p>
+        <p className="text-sm text-cata-text/65">Cargando sesión…</p>
       </div>
     );
   }
@@ -132,7 +132,7 @@ export default function LoginPage(): React.ReactElement {
         <>
           Cada punto
           <br />
-          cuenta. <em className="not-italic text-cata-red-light">Llevalo</em>
+          cuenta. <em className="not-italic text-cata-red-light">Llévalo</em>
           <br />
           bien anotado.
         </>
@@ -220,7 +220,7 @@ export default function LoginPage(): React.ReactElement {
         </div>
 
         <button type="submit" disabled={submitting} className="btn-primary w-full shadow-soft">
-          {submitting ? "Iniciando sesión..." : "Iniciar Sesión"}
+          {submitting ? "Iniciando sesión…" : "Iniciar Sesión"}
         </button>
       </form>
 

@@ -37,6 +37,8 @@ export function isRepresentative(representadosCount: number): boolean {
   return representadosCount > 0;
 }
 
+import type { BadgeTone } from "@/components/ui/Badge";
+
 // ---------------------------------------------------------------------------
 // Ranking display
 // ---------------------------------------------------------------------------
@@ -44,7 +46,8 @@ export function isRepresentative(representadosCount: number): boolean {
 export interface RankingDisplay {
   label: string;
   detail: string;
-  badgeClass: string;
+  /** `Badge` tone, not a class string — colour lives in the primitive. */
+  tone: BadgeTone;
 }
 
 /**
@@ -61,15 +64,15 @@ export interface RankingDisplay {
 export function describeRanking(ranking: StudentRankingSummary): RankingDisplay {
   if (ranking.status === "unavailable") {
     return ranking.reason === "forbidden"
-      ? { label: "No disponible", detail: "Solo el propio alumno puede ver este perfil.", badgeClass: "badge-warning" }
-      : { label: "No disponible", detail: "No se pudo consultar el ranking en este momento.", badgeClass: "badge-warning" };
+      ? { label: "No disponible", detail: "Solo el propio alumno puede ver este perfil.", tone: "warn" }
+      : { label: "No disponible", detail: "No se pudo consultar el ranking en este momento.", tone: "warn" };
   }
   if (!ranking.estaEnRanking) {
-    return { label: "Sin nivel asignado", detail: "Aún no fue asignado a un nivel de ranking.", badgeClass: "badge-warning" };
+    return { label: "Sin nivel asignado", detail: "Aún no fue asignado a un nivel de ranking.", tone: "warn" };
   }
   return {
     label: ranking.nivelNombre ?? "Nivel sin nombre",
     detail: "Activo en este nivel.",
-    badgeClass: "badge-success",
+    tone: "ok",
   };
 }
