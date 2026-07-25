@@ -2,7 +2,9 @@
 Tests de autenticación: registro, /me, refresh y logout.
 
 Cubre:
-  - Registro exitoso: persona existente sin usuario -> 201 + tokens.
+  - Registro exitoso (solo ADMINISTRADOR): persona existente sin usuario -> 201 + tokens.
+  - Registro sin token -> 401.
+  - Registro con token no-admin -> 403.
   - Registro falla si la cédula no tiene Persona asociada -> 404.
   - Registro falla si la persona ya tiene usuario -> 400.
   - Registro falla si el correo ya existe para otro usuario -> 400.
@@ -51,7 +53,7 @@ def _crear_usuario_para_persona(db_session, persona, correo=None, roles=None):
 
 def _quitar_override_token():
     """Quita el override global del token del conftest para que los endpoints
-    públicos (/auth/registro, /auth/refresh) no reciban un token falso. Para
+    públicos (/auth/refresh) no reciban un token falso. Para
     /auth/me se restaura manualmente el override según el test."""
     from main import app
     app.dependency_overrides.pop(GestorAutenticacion.decodificar_token, None)
@@ -64,9 +66,14 @@ def _restaurar_override_token(correo="user@cataclub.test", persona_id=1, roles=N
     }
 
 
-# --- Registro --------------------------------------------------------------
+def _override_admin_token():
+    """Configura el override del token con rol ADMINISTRADOR para endpoints protegidos."""
+    _restaurar_override_token(correo="admin@cataclub.test", persona_id=1, roles=["ADMINISTRADOR"])
+
+
+# --- Registro (solo ADMINISTRADOR) -----------------------------------------
 def test_registro_exitoso_persona_sin_usuario(client, db_session):
-    _quitar_override_token()
+    _override_admin_token()
     _crear_persona(db_session, cedula="1710034065")
 
     resp = client.post(
@@ -84,53 +91,58 @@ def test_registro_exitoso_persona_sin_usuario(client, db_session):
     assert body["token_type"] == "bearer"
 
 
-def test_registro_falla_si_cedula_no_tiene_persona(client, db_session):
+def test_registro_sin_token_devuelve_401(client, db_session):
     _quitar_override_token()
-    # No creamos ninguna persona con esta cédula:
+    _crear_persona(db_session, cedula="1710034060")
     resp = client.post(
         "/api/v1/auth/registro",
-        json={
-            "cedula": "9999999999",
-            "correo": "x@cataclub.com",
-            "contrasenia": "clave12345",
-        },
+        json={"cedula": "1710034060", "correo": "x@cataclub.com", "contrasenia": "clave12345"},
+    )
+    assert resp.status_code == 401
+
+
+def test_registro_con_rol_no_admin_devuelve_403(client, db_session):
+    _restaurar_override_token(roles=["ALUMNO"])
+    _crear_persona(db_session, cedula="1710034061")
+    resp = client.post(
+        "/api/v1/auth/registro",
+        json={"cedula": "1710034061", "correo": "x@cataclub.com", "contrasenia": "clave12345"},
+    )
+    assert resp.status_code == 403
+
+
+def test_registro_falla_si_cedula_no_tiene_persona(client, db_session):
+    _override_admin_token()
+    resp = client.post(
+        "/api/v1/auth/registro",
+        json={"cedula": "9999999999", "correo": "x@cataclub.com", "contrasenia": "clave12345"},
     )
     assert resp.status_code == 404
     assert "cédula" in resp.json()["detail"].lower() or "administrador" in resp.json()["detail"].lower()
 
 
 def test_registro_falla_si_persona_ya_tiene_usuario(client, db_session):
-    _quitar_override_token()
+    _override_admin_token()
     persona = _crear_persona(db_session, cedula="1710034073")
     _crear_usuario_para_persona(db_session, persona, correo="usado@cataclub.com")
 
     resp = client.post(
         "/api/v1/auth/registro",
-        json={
-            "cedula": "1710034073",
-            "correo": "otro@cataclub.com",
-            "contrasenia": "clave12345",
-        },
+        json={"cedula": "1710034073", "correo": "otro@cataclub.com", "contrasenia": "clave12345"},
     )
     assert resp.status_code == 400
     assert "cuenta" in resp.json()["detail"].lower()
 
 
 def test_registro_falla_si_correo_ya_existe(client, db_session):
-    _quitar_override_token()
-    # Persona 1 con usuario, correo ya ocupado:
+    _override_admin_token()
     p1 = _crear_persona(db_session, cedula="1710034081", nombres="Carlos")
     _crear_usuario_para_persona(db_session, p1, correo="repetido@cataclub.com")
 
-    # Persona 2 sin usuario; intento registrar con el correo ya usado:
     _crear_persona(db_session, cedula="1710034099", nombres="Diego")
     resp = client.post(
         "/api/v1/auth/registro",
-        json={
-            "cedula": "1710034099",
-            "correo": "repetido@cataclub.com",
-            "contrasenia": "clave12345",
-        },
+        json={"cedula": "1710034099", "correo": "repetido@cataclub.com", "contrasenia": "clave12345"},
     )
     assert resp.status_code == 400
     assert "correo" in resp.json()["detail"].lower()
