@@ -67,14 +67,18 @@ describe("buildLandingStats", (): void => {
     const years = stats.find((stat): boolean => stat.label === "Años formando deportistas");
 
     expect(years?.value).toBe("17");
-    expect(years?.numericValue).toBe(17);
   });
 
-  it("renders the founding year statically so it never runs on an odometer", (): void => {
-    const founded = buildLandingStats(new Date(2026, 6, 25)).find((stat): boolean => stat.value === String(FOUNDING_DATE.year));
+  it("carries every figure as a ready-to-render string, with no odometer seed", (): void => {
+    const stats = buildLandingStats(new Date(2026, 6, 25));
 
-    expect(founded).toBeDefined();
-    expect(founded?.numericValue).toBeUndefined();
+    expect(stats.find((stat): boolean => stat.value === String(FOUNDING_DATE.year))).toBeDefined();
+    // A count-up seed is what let the trust band render 0 for a real 12: the
+    // figure must reach the DOM as text and stay there.
+    stats.forEach((stat): void => {
+      expect(stat.value).not.toBe("");
+      expect(Object.keys(stat)).toEqual(["value", "label"]);
+    });
   });
 
   it("carries no unverified athlete count", (): void => {

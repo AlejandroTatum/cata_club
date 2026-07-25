@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
+import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import LandingPage from "@/app/landing/LandingPage";
 
 vi.mock("next/image", (): { __esModule: boolean; default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }) => React.ReactElement } => ({
@@ -202,6 +202,25 @@ describe("LandingPage", (): void => {
     render(<LandingPage />);
 
     expect(screen.getByText(new RegExp(`© ${new Date().getFullYear()}`))).toBeInTheDocument();
+  });
+
+  /**
+   * Regression: the trust band read "0 — Años formando deportistas". The server
+   * rendered the real 12, then the count-up seeded itself at 0 and overwrote
+   * `textContent`, so a ScrollTrigger that never fired left 0 on screen. No
+   * element may hand a figure to an animation that can show less than the truth.
+   */
+  it("renders the founding-years figure at its real value with motion enabled", (): void => {
+    reducedMotion = false;
+
+    render(<LandingPage />);
+
+    const years = yearsSinceFounding();
+    expect(years).toBeGreaterThan(0);
+    const figure = screen.getByText("Años formando deportistas").parentElement?.querySelector("strong");
+    expect(figure).toHaveTextContent(String(years));
+    expect(figure).not.toHaveTextContent("0");
+    expect(document.querySelectorAll("[data-counter]")).toHaveLength(0);
   });
 
   it("keeps reveal content in its final state when reduced motion is preferred", (): void => {

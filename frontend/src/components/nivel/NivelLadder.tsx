@@ -1,43 +1,53 @@
 /**
  * NivelLadder — "la escalera", the club's training ladder rendered as what it
- * actually is: an ordinal scale where 1 is the top and 10 the base.
+ * actually is: an ordinal scale where the first rung is the top.
  *
- * Transcribed from `docs/ux/prototipos/13-niveles.html:83-94` and the
- * `_sistema.css` rules it uses:
+ * TWO NUMBERS, ONE RUNG — the defect this component was rebuilt to fix. The
+ * club's ELEVEN levels are NAMED "1A", "1B", "2", "3" … "10" against
+ * `numero_nivel` 1…11, so from the third rung down the name and the rank are
+ * different numbers. The previous ladder put both on the same row — a chip
+ * reading "3" next to a name reading "2" — which is the most confusing thing a
+ * screen can do with two integers.
  *
- *   `.ladder` (:276)  column flex, no gap — the rows carry the rhythm
- *   `.rung`   (:277)  60px (`--h-row`), 20px side padding, 14px gap, a
- *                     `--line` bottom rule suppressed on the last rung
- *   `.rung::before`   (:279-281) the connecting rail: 2px of `--line` at
- *                     left:34px (20px padding + half of the 28px chip), cut
- *                     back 30px at the top of the first rung and 30px at the
- *                     bottom of the last one so it starts and ends at a chip
- *                     rather than running off the card
- *   `.lv`     (:282)  the rank chip — rendered through `LevelChip`, which owns
- *                     the l1–l10 ramp, plus the 4px `--paper` ring that makes
- *                     the chip punch a hole in the rail
- *   `.rung .nm` (:283) 96px fixed name column
- *   `.avs`    (:285-288) the -9px overlapped avatar stack, `+N` counter last
+ * The rule now: THE NAME LEADS, THE RANK IS SUBORDINATE. The name is what
+ * people say out loud ("está en el 2"), so it is the only number rendered. The
+ * rank is carried by the things that do not need a digit — reading order (the
+ * list is an `<ol>`, sorted ascending, so reading order IS rank order), the
+ * rail that threads the rungs together, and the node's darkness, which fades
+ * from solid at the top to faint at the base. It stays announceable through the
+ * node's "Puesto N de la escalera" title for anyone who needs the exact rank.
+ *
+ * The roster shows NAMES. It used to be a stack of grey two-letter initials
+ * ("AC LA EB +3"), from which you could not tell who was on a rung — the one
+ * thing a level roster exists to answer.
+ *
+ * Layout transcribed from `docs/ux/prototipos/13-niveles.html` and the
+ * `_sistema.css` rules it uses: `.rung` (:277) 20px side padding and a
+ * `--line` bottom rule suppressed on the last rung; `.rung::before` (:279-281)
+ * the 2px rail at left:34px, cut back 30px at the first and last rung so it
+ * starts and ends at a node rather than running off the card. The fixed 60px
+ * row height is now a minimum: a rung carries real names, which wrap.
  *
  * Product rules this component exists to enforce (settled, not preferences):
- *   - 1 is the top of the ladder, 10 the base. The list is an `<ol>` and is
- *     sorted ascending so that reading order IS rank order.
+ *   - The first rung is the top of the ladder. Reading order is rank order.
  *   - NO occupancy anywhere: no meters, no "N/M" fractions, no minimum-headcount
  *     warning. `cuposDisponibles`/`necesitaRevision` exist in the API payload
  *     and deliberately never reach this component's props.
- *   - ONE action per rung: "Asignar". There is no "Promover".
+ *   - ONE action per rung, and it says what it assigns: "Asignar estudiantes".
+ *     There is no "Promover".
  */
 
-import type { ReactElement, ReactNode } from "react";
-import { Button, LevelChip, cn, isLevel } from "@/components/ui";
-import { getUserInitials } from "@/lib/auth-utils";
+"use client";
 
-/** How many avatars a rung shows before collapsing the rest into `+N`. */
-const MAX_AVATARS = 3;
+import { useState, type ReactElement, type ReactNode } from "react";
+import { Button, cn } from "@/components/ui";
+
+/** How many names a rung shows before collapsing the rest behind "+N más". */
+const MAX_NAMES = 3;
 
 export interface LadderStudent {
   id: string;
-  /** Full display name — initials are derived from it. */
+  /** Full display name. */
   nombre: string;
 }
 
@@ -48,8 +58,9 @@ export interface LadderStudent {
 export interface LadderRung {
   /** `nivel_ranking.id` — the value the assign endpoints take. */
   id: number;
-  /** The rank. 1 is the top. */
+  /** The rank. The lowest is the top of the ladder. */
   numeroNivel: number;
+  /** The club's own name for the rung — "1A", "2", "10". */
   nombre: string;
   students: LadderStudent[];
 }
@@ -62,37 +73,92 @@ export interface NivelLadderProps {
   openNivelId?: number | null;
   /** Inline panel rendered under the open rung. */
   renderPanel?: (nivelId: number) => ReactNode;
+  /**
+   * Students the page-level search matched. Their names are picked out on the
+   * rung and their rung's roster opens in full, so "where is Juan?" is answered
+   * by looking at the ladder rather than by trusting a separate result list.
+   */
+  highlightIds?: ReadonlySet<string>;
   className?: string;
 }
 
-/** The overlapped initials stack — `_sistema.css` `.avs` (:285-288). */
-function AvatarStack({ students }: { students: LadderStudent[] }): ReactElement | null {
-  if (students.length === 0) return null;
-
-  const shown = students.slice(0, MAX_AVATARS);
-  const rest = students.length - shown.length;
-  const disc =
-    "flex h-7 w-7 flex-none items-center justify-center rounded-full border-2 " +
-    "text-[10px] font-bold -ml-[9px] first:ml-0";
-
+/**
+ * The rung's node on the rail.
+ *
+ * Carries the rank WITHOUT a digit: `depth` (0 at the top, 1 at the base) fades
+ * the node from solid ink to faint, so the ladder still reads as a descent. An
+ * opacity computed from position needs no per-rung colour token and cannot
+ * drift out of step with a ladder that gains or loses a rung.
+ */
+function RungNode({
+  numeroNivel,
+  depth,
+  open,
+}: {
+  numeroNivel: number;
+  depth: number;
+  open: boolean;
+}): ReactElement {
+  const title = `Puesto ${numeroNivel} de la escalera`;
   return (
     <span
-      className="flex"
-      // The stack is decorative shorthand for the roster; the rung's
-      // accessible summary below carries the real, countable information.
-      aria-hidden="true"
+      title={title}
+      className={cn(
+        "relative z-[1] flex h-7 w-7 flex-none items-center justify-center rounded-lg ring-4 ring-paper",
+        open ? "bg-coal" : "bg-ink",
+      )}
+      style={open ? undefined : { opacity: 1 - depth * 0.62 }}
     >
+      <span className="sr-only">{title}</span>
+      <span
+        aria-hidden="true"
+        className={cn("h-2 w-2 rounded-full", open ? "bg-ball" : "bg-paper")}
+      />
+    </span>
+  );
+}
+
+/** The rung's roster, as names. Collapses past `MAX_NAMES` unless asked. */
+function RosterNames({
+  students,
+  expanded,
+  onExpand,
+  highlightIds,
+}: {
+  students: LadderStudent[];
+  expanded: boolean;
+  onExpand: () => void;
+  highlightIds: ReadonlySet<string>;
+}): ReactElement {
+  if (students.length === 0) {
+    return <span className="text-[12.5px] text-ink-3">Sin estudiantes</span>;
+  }
+
+  const shown = expanded ? students : students.slice(0, MAX_NAMES);
+  const rest = students.length - shown.length;
+
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
       {shown.map((student) => (
         <span
           key={student.id}
           title={student.nombre}
-          className={cn(disc, "border-paper bg-state-neutral-bg text-state-neutral")}
+          className={cn(
+            "rounded-[6px] px-1.5 py-0.5 text-[12.5px] text-ink-2",
+            highlightIds.has(student.id) && "bg-ball font-bold text-ball-ink",
+          )}
         >
-          {getUserInitials(student.nombre)}
+          {student.nombre}
         </span>
       ))}
       {rest > 0 ? (
-        <span className={cn(disc, "border-line-2 bg-paper text-ink-3")}>+{rest}</span>
+        <button
+          type="button"
+          onClick={onExpand}
+          className="rounded-[6px] px-1.5 py-0.5 text-[12.5px] font-semibold text-ink-3 underline underline-offset-2 hover:text-ink"
+        >
+          +{rest} más
+        </button>
       ) : null}
     </span>
   );
@@ -103,84 +169,85 @@ export default function NivelLadder({
   onAssign,
   openNivelId = null,
   renderPanel,
+  highlightIds,
   className,
 }: NivelLadderProps): ReactElement {
+  const [expandedRungs, setExpandedRungs] = useState<ReadonlySet<number>>(new Set());
+  const highlighted = highlightIds ?? new Set<string>();
+
   // Sorted here rather than trusted from the caller: reading order IS rank
   // order on this screen, so it is not something a call site gets to get wrong.
   const ordered = [...rungs].sort((a, b) => a.numeroNivel - b.numeroNivel);
+  const lastIndex = ordered.length - 1;
+
+  function expandRoster(nivelId: number): void {
+    setExpandedRungs((prev) => new Set(prev).add(nivelId));
+  }
 
   return (
     <ol className={cn("flex flex-col", className)}>
       {ordered.map((rung, index) => {
         const isFirst = index === 0;
-        const isLast = index === ordered.length - 1;
+        const isLast = index === lastIndex;
+        const isOpen = openNivelId === rung.id;
         const count = rung.students.length;
+        const hasMatch = rung.students.some((student) => highlighted.has(student.id));
 
         return (
           <li key={rung.id} className={cn("border-b border-line", isLast && "border-b-0")}>
             <div
               className={cn(
-                "relative flex h-row items-center gap-3.5 px-5",
+                "relative flex min-h-row flex-wrap items-center gap-x-3.5 gap-y-2 px-5 py-2.5",
                 // The rail. `content-['']` is what makes the pseudo-element real.
                 "before:absolute before:left-[34px] before:w-0.5 before:bg-line before:content-['']",
                 isFirst ? "before:top-[30px]" : "before:top-0",
                 isLast ? "before:bottom-[30px]" : "before:bottom-0",
               )}
             >
-              {isLevel(rung.numeroNivel) ? (
-                <LevelChip
-                  level={rung.numeroNivel}
-                  // "Puesto", not "Nivel": in the real data the club's level
-                  // NAMES ("1A", "1B", "2", … "10") are not the same numbers as
-                  // `numero_nivel` (1…11), because the top level is split in
-                  // two. `numero_nivel` is the rank — the thing the l1–l10 ramp
-                  // encodes — and the name beside the chip is what the club
-                  // calls that rung. Labelling the chip "Nivel 3" next to a
-                  // rung named "2" would assert something false.
-                  label={`Puesto ${rung.numeroNivel} de la escalera`}
-                  className="relative z-[1] ring-4 ring-paper"
-                />
-              ) : (
-                // The ramp is defined for ten rungs only. A club that adds an
-                // eleventh gets an honest neutral chip rather than a colour
-                // invented on the spot.
-                <span
-                  title={`Puesto ${rung.numeroNivel} de la escalera`}
-                  className="relative z-[1] flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-state-neutral-bg text-xs font-extrabold text-state-neutral ring-4 ring-paper"
-                >
-                  {rung.numeroNivel}
-                </span>
-              )}
+              <RungNode
+                numeroNivel={rung.numeroNivel}
+                depth={lastIndex === 0 ? 0 : index / lastIndex}
+                open={isOpen}
+              />
 
+              {/* The club's own name for the rung, and the only number on it. */}
               <span
                 title={rung.nombre}
-                className="w-24 flex-none truncate text-sm font-semibold text-ink"
+                className="w-20 flex-none truncate text-sm font-bold text-ink"
               >
                 {rung.nombre}
               </span>
 
-              <AvatarStack students={rung.students} />
+              <span className="min-w-[150px] flex-1">
+                <RosterNames
+                  students={rung.students}
+                  expanded={expandedRungs.has(rung.id) || hasMatch}
+                  onExpand={() => expandRoster(rung.id)}
+                  highlightIds={highlighted}
+                />
+              </span>
 
-              {/* The countable version of the avatar stack. Visually hidden
-                  because the stack already says it, but a screen reader gets
-                  the number instead of a row of initials. */}
+              {/* The countable version of the roster. Visually redundant with
+                  the names, but a screen reader gets the number outright. */}
               <span className="sr-only">
                 {count === 1 ? "1 estudiante" : `${count} estudiantes`}
               </span>
 
-              <span className="flex-1" />
-
               <Button
                 size="sm"
+                // `ml-auto` only bites when the row wraps on a narrow screen:
+                // the action stays at the right edge instead of dropping onto
+                // the rail it would otherwise sit on top of.
+                className="ml-auto flex-none"
                 onClick={() => onAssign(rung.id)}
-                aria-expanded={openNivelId === rung.id}
+                aria-expanded={isOpen}
                 aria-label={`Asignar estudiantes al nivel ${rung.nombre}`}
               >
-                Asignar
+                Asignar estudiantes
               </Button>
             </div>
 
-            {openNivelId === rung.id && renderPanel ? renderPanel(rung.id) : null}
+            {isOpen && renderPanel ? renderPanel(rung.id) : null}
           </li>
         );
       })}

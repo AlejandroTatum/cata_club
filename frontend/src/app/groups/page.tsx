@@ -28,6 +28,20 @@
  * truth this mirrors via `@/services/categorias`. The backend derives and
  * validates `hora_inicio`/`hora_fin`/`dia_semana` server-side; the client
  * never submits them as freeform values anymore.
+ *
+ * v3 (one card per training group): the display unit is the CATEGORÍA, not the
+ * `Horario` row. The club runs five fixed groups, each meeting Monday–Friday at
+ * a fixed hour, and the backend stores that as one row per categoría × weekday
+ * — twenty-six rows for five groups. Rendering a card per row produced
+ * twenty-six near-identical cards ("Lunes 15:00 — 16:00 · Formativo · 44
+ * inscriptos", then the same for Martes, …) describing the same students five
+ * times over. The weekday filter went with it: five cards do not need filtering.
+ *
+ * What the card must never do is round the data to the ideal. The day set, the
+ * time range, the entrenadores and the headcount are all derived from the rows
+ * that actually exist — so the live Saturday `COMPETITIVO` row reads as "Lunes a
+ * viernes + sábado", a categoría staffed by two entrenadores shows both, and a
+ * student enrolled in only some weekdays is reported instead of averaged away.
  */
 
 "use client";
@@ -48,7 +62,7 @@ import {
   UserMinus,
 } from "lucide-react";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Button, EmptyState, ErrorState, FilterPill, LoadingState } from "@/components/ui";
+import { Badge, Button, EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import {
   fetchHorarios,
   crearHorario,
@@ -63,28 +77,24 @@ import {
   ApiClientError,
 } from "@/services/api";
 import type { Horario, CrearHorarioDTO, ActualizarHorarioDTO, NivelConOcupacion, AlumnoHorario, Entrenador } from "@/services/api";
-import { groupHorarios, diffGroupSave, type StudentRef, type HorarioGroup } from "@/lib/groups-utils";
+import {
+  groupHorarios,
+  diffGroupSave,
+  type StudentRef,
+  type HorarioGroup,
+  type HorarioGroupRow,
+} from "@/lib/groups-utils";
 import { CATEGORIA_METADATA, CATEGORIA_OPTIONS, diasPermitidos, horarioDe, type Categoria } from "@/services/categorias";
 import {
   countUniqueAlumnos,
-  buildHorarioSlots,
-  filterSlotsByDia,
-  countSlotsByDia,
-  DIA_ORDER,
-  DIA_FILTER_ALL,
+  buildCategoriaCards,
+  formatDiaSet,
+  countInscriptos,
+  countInscriptosParciales,
+  DIA_LABELS,
+  type CategoriaCard,
+  type PersonasPorHorario,
 } from "./groups-page-utils";
-
-const DIA_LABELS: Record<string, string> = {
-  LUNES: "Lunes",
-  MARTES: "Martes",
-  MIERCOLES: "Miércoles",
-  JUEVES: "Jueves",
-  VIERNES: "Viernes",
-  SABADO: "Sábado",
-  DOMINGO: "Domingo",
-};
-
-const DIA_OPTIONS = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
 
 function formatTime(timeStr: string): string {
   const [h, m] = timeStr.split(":");
@@ -96,9 +106,14 @@ function shortDiaLabel(dia: string): string {
   return (DIA_LABELS[dia] ?? dia).slice(0, 3);
 }
 
-/** Card title, e.g. "Lunes 15:00 — 16:00" (`14-horarios.html`). */
-function slotTitle(dia: string, horaInicio: string, horaFin: string): string {
-  return `${DIA_LABELS[dia] ?? dia} ${formatTime(horaInicio)} — ${formatTime(horaFin)}`;
+/** The categoría's label, falling back to its raw value for an unknown one. */
+function categoriaLabel(categoria: string): string {
+  return CATEGORIA_METADATA[categoria as Categoria]?.label ?? categoria;
+}
+
+/** Card title, e.g. "Formativo · 15:00 — 16:00", used for accessible names. */
+function cardTitle(card: CategoriaCard): string {
+  return `${categoriaLabel(card.categoria)} · ${formatTime(card.horaInicio)} — ${formatTime(card.horaFin)}`;
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -122,12 +137,11 @@ interface PendingDayDeletion {
 /**
  * Single accordion state — at most one card's panel is expanded at a time.
  *
- * `key` is the `Horario.id` of the expanded día card (as a string), or
- * `NEW_GROUP_KEY` for the create-new flow, which has no existing card to nest
- * under. It used to be a `HorarioGroup.key`; the grid now renders one card per
- * weekday session, so the card — not the group — is what expands. Both panels
- * still act on the whole GROUP the card belongs to: editing manages the
- * group's día-set and enrollment is group-wide.
+ * `key` is the expanded card's `categoria`, or `NEW_GROUP_KEY` for the
+ * create-new flow, which has no existing card to nest under. The card is the
+ * categoría now, so both panels act on the whole categoría: the roster is the
+ * union across every weekday row, and editing walks the categoría's editable
+ * `HorarioGroup`s (normally exactly one).
  */
 interface ExpandedGroupState {
   key: string;
@@ -200,34 +214,36 @@ export default function GroupsPage(): React.ReactElement {
   const [entrenadores, setEntrenadores] = useState<Entrenador[]>([]);
   const [entrenadoresLoading, setEntrenadoresLoading] = useState(true);
 
-  /** Weekday pill currently selected — `DIA_FILTER_ALL` shows the whole week. */
-  const [diaFilter, setDiaFilter] = useState<string>(DIA_FILTER_ALL);
-
   /**
-   * Enrolled headcount per `Horario.id`, for the "N inscriptos" line.
+   * Enrolled person-ids per `Horario.id`, for the card's "N inscriptos" line.
+   *
+   * Ids rather than counts because the card counts a CATEGORÍA: a student
+   * belongs to every weekday of their group, so summing the per-row counts
+   * would report 220 students for the 44 who actually train. The union needs
+   * the identities.
    *
    * BACKEND GAP: `GET /groups/horarios` returns no enrollment count, and there
-   * is no bulk roster endpoint — the only way to know how many students a
-   * session has is one `GET /groups/horarios/{id}/alumnos` per row. So the
-   * counts are fetched in parallel AFTER the schedules render, and a row that
-   * fails simply has no count line. Rendering "0 inscriptos" for a request
-   * that never answered would be a lie, and this figure is the one the club
-   * plans around.
+   * is no bulk roster endpoint — the only way to know who a session has is one
+   * `GET /groups/horarios/{id}/alumnos` per row. So the rosters are fetched in
+   * parallel AFTER the schedules render, and a categoría with any unanswered
+   * row simply has no count line. Rendering an undercount for a request that
+   * never answered would be a lie, and this figure is the one the club plans
+   * around.
    */
-  const [inscriptosPorHorario, setInscriptosPorHorario] = useState<Record<number, number>>({});
+  const [personasPorHorario, setPersonasPorHorario] = useState<PersonasPorHorario>({});
 
   const showNotification = useCallback((type: "success" | "error", message: string): void => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 4000);
   }, []);
 
-  /** Loads the roster for a whole día-group: fetches every underlying row's
+  /** Loads the roster for a whole categoría: fetches every underlying row's
    * assignees and deduplicates by `personaId` (a student assigned — even
    * inconsistently, to only some días — must appear exactly once). */
-  const cargarAlumnosDelGrupo = useCallback(async (group: HorarioGroup): Promise<void> => {
+  const cargarAlumnosDelGrupo = useCallback(async (rows: readonly HorarioGroupRow[]): Promise<void> => {
     setCargandoAlumnos(true);
     try {
-      const listasPorDia = await Promise.all(group.rows.map((row) => fetchAlumnosPorHorario(row.id)));
+      const listasPorDia = await Promise.all(rows.map((row) => fetchAlumnosPorHorario(row.id)));
       const porPersona = new Map<number, AlumnoHorario>();
       for (const lista of listasPorDia) {
         for (const alumno of lista) {
@@ -242,7 +258,7 @@ export default function GroupsPage(): React.ReactElement {
     }
   }, [showNotification]);
 
-  /** Assigns the selected student to EVERY día row of the group — a student
+  /** Assigns the selected student to EVERY día row of the categoría — a student
    * belongs to the whole grupo, not to one día. Per-row failures (e.g. an
    * inconsistent prior assignment already covering that specific row) don't
    * abort the loop; the outcome is reported as a normal success if at least
@@ -250,13 +266,13 @@ export default function GroupsPage(): React.ReactElement {
    * when every failure was the benign "ya estaba asignado" case (HTTP 400).
    * Any other failure (network, 404, etc.) is a real error and must never be
    * swallowed into a success message. */
-  const handleAsignarAlumno = useCallback(async (group: HorarioGroup): Promise<void> => {
+  const handleAsignarAlumno = useCallback(async (rows: readonly HorarioGroupRow[]): Promise<void> => {
     if (!alumnoSeleccionado) return;
     setAsignandoAlumno(true);
     try {
       let asignados = 0;
       let primerErrorReal: unknown = null;
-      for (const row of group.rows) {
+      for (const row of rows) {
         try {
           await asignarAlumnoAHorario({ persona_id: alumnoSeleccionado, horario_id: row.id });
           asignados++;
@@ -284,20 +300,20 @@ export default function GroupsPage(): React.ReactElement {
         showSuccess(message);
         setAlumnoSeleccionado(null);
       }
-      await cargarAlumnosDelGrupo(group);
+      await cargarAlumnosDelGrupo(rows);
     } finally {
       setAsignandoAlumno(false);
     }
   }, [alumnoSeleccionado, cargarAlumnosDelGrupo, showNotification, showSuccess, showError]);
 
-  /** Unassigns the student from EVERY día row of the group, same all-días
+  /** Unassigns the student from EVERY día row of the categoría, same all-días
    * criterion as assignment. A per-row 404 ("no había asignación en esa
    * fila") is the only benign outcome this endpoint can produce, so it's
    * swallowed; any other failure is real and must surface as an error
    * instead of the "desasignado" success message. */
-  const handleDesasignarAlumno = useCallback(async (group: HorarioGroup, personaId: number): Promise<void> => {
+  const handleDesasignarAlumno = useCallback(async (rows: readonly HorarioGroupRow[], personaId: number): Promise<void> => {
     let primerErrorReal: unknown = null;
-    for (const row of group.rows) {
+    for (const row of rows) {
       try {
         await desasignarAlumnoDeHorario(personaId, row.id);
       } catch (err) {
@@ -318,7 +334,7 @@ export default function GroupsPage(): React.ReactElement {
       showNotification("success", "Alumno desasignado del horario.");
       showSuccess("Alumno desasignado del horario.");
     }
-    await cargarAlumnosDelGrupo(group);
+    await cargarAlumnosDelGrupo(rows);
   }, [cargarAlumnosDelGrupo, showNotification, showSuccess, showError]);
 
   const loadData = useCallback(async (): Promise<void> => {
@@ -377,8 +393,8 @@ export default function GroupsPage(): React.ReactElement {
   }, [loadData, cargarEntrenadores]);
 
   /**
-   * Fill in the per-session headcounts once the schedules are known. Kept out
-   * of `loadData`'s `Promise.all` deliberately: this is N extra requests for a
+   * Fill in the per-session rosters once the schedules are known. Kept out of
+   * `loadData`'s `Promise.all` deliberately: this is N extra requests for a
    * secondary line of text, and it must never delay or fail the grid itself.
    */
   useEffect(() => {
@@ -389,18 +405,18 @@ export default function GroupsPage(): React.ReactElement {
       horarios.map(async (horario) => {
         try {
           const alumnos = await fetchAlumnosPorHorario(horario.id);
-          return [horario.id, alumnos.length] as const;
+          return [horario.id, alumnos.map((alumno) => alumno.personaId)] as const;
         } catch {
           return null;
         }
       }),
     ).then((results) => {
       if (cancelled) return;
-      const counts: Record<number, number> = {};
+      const rosters: Record<number, number[]> = {};
       for (const result of results) {
-        if (result) counts[result[0]] = result[1];
+        if (result) rosters[result[0]] = [...result[1]];
       }
-      setInscriptosPorHorario(counts);
+      setPersonasPorHorario(rosters);
     });
 
     return () => {
@@ -411,19 +427,12 @@ export default function GroupsPage(): React.ReactElement {
   const horarioGroups = useMemo(() => groupHorarios(horarios), [horarios]);
 
   /**
-   * One card per weekday session, all of them on screen at once. The list
-   * used to be paginated ten día-GROUPS at a time; the approved prototype
-   * (`14-horarios.html`) shows the whole week's grid, because the question
-   * this screen answers ("what runs on Thursday?") is a scanning question and
-   * a pager is the wrong instrument for it.
+   * One card per training group. Five categorías, five cards — the whole
+   * screen fits without pagination or filtering, which is the point: the
+   * questions this screen answers ("who trains at 15:00?", "who runs
+   * Competitivo?") are about the group, and the weekday was never the subject.
    */
-  const slots = useMemo(() => buildHorarioSlots(horarioGroups), [horarioGroups]);
-  const slotCountsByDia = useMemo(() => countSlotsByDia(slots), [slots]);
-  const visibleSlots = useMemo(() => filterSlotsByDia(slots, diaFilter), [slots, diaFilter]);
-  const groupsByKey = useMemo(
-    () => new Map(horarioGroups.map((group) => [group.key, group])),
-    [horarioGroups],
-  );
+  const categoriaCards = useMemo(() => buildCategoriaCards(horarioGroups), [horarioGroups]);
 
   function openCreateForm(): void {
     setEditingGroup(null);
@@ -433,24 +442,43 @@ export default function GroupsPage(): React.ReactElement {
     setExpandedGroup({ key: NEW_GROUP_KEY, tab: "editar" });
   }
 
-  function openEditForm(slotId: number, group: HorarioGroup): void {
+  /** Loads a group into the edit form. `null` clears it back to the chooser,
+   * which only appears when a categoría has more than one editable group. */
+  function selectEditingGroup(group: HorarioGroup | null): void {
     setEditingGroup(group);
+    setFormError(null);
+    if (group === null) {
+      setFormData(EMPTY_FORM);
+      setSelectedDias(new Set());
+      return;
+    }
     setFormData({
       categoria: (group.categoria as Categoria) ?? DEFAULT_CATEGORIA,
       entrenador_id: group.entrenadorId,
       nivel_ranking_id: group.nivelRankingId,
     });
     setSelectedDias(new Set(group.rows.map((row) => row.diaSemana)));
-    setFormError(null);
-    setExpandedGroup({ key: String(slotId), tab: "editar" });
   }
 
-  /** Opens the "Alumnos" accordion tab under a día card — loads the roster for
-   * the WHOLE group (every día row), not a single día (a student belongs to
-   * the whole recurring grupo, not one día). */
-  function openAlumnosTab(slotId: number, group: HorarioGroup): void {
-    setExpandedGroup({ key: String(slotId), tab: "alumnos" });
-    void cargarAlumnosDelGrupo(group);
+  /**
+   * Opens the "Editar" accordion tab under a categoría card.
+   *
+   * A categoría normally has exactly one editable group, so the form opens
+   * straight onto it. When its weekdays disagree on entrenador or nivel there
+   * is more than one, and the panel opens on a chooser instead of silently
+   * editing the first — that split is real and the admin has to see it.
+   */
+  function openEditForm(card: CategoriaCard): void {
+    selectEditingGroup(card.groups.length === 1 ? card.groups[0] : null);
+    setExpandedGroup({ key: card.categoria, tab: "editar" });
+  }
+
+  /** Opens the "Alumnos" accordion tab under a categoría card — loads the
+   * roster for every weekday row at once (a student belongs to the whole
+   * recurring grupo, not one día). */
+  function openAlumnosTab(card: CategoriaCard): void {
+    setExpandedGroup({ key: card.categoria, tab: "alumnos" });
+    void cargarAlumnosDelGrupo(card.rows);
   }
 
   /** Collapses whichever accordion panel (editar or alumnos) is open. */
@@ -777,19 +805,79 @@ export default function GroupsPage(): React.ReactElement {
     );
   }
 
+  /**
+   * The "Editar" accordion panel of a categoría card.
+   *
+   * Goes straight to the form in the normal case (one editable group per
+   * categoría). When the categoría's weekdays are split across several groups
+   * — different entrenador or nivel on different days — it asks which one
+   * first, because there is no single answer to "edit this categoría" then and
+   * picking silently would hide the split.
+   */
+  function renderEditPanel(card: CategoriaCard): React.ReactElement {
+    if (editingGroup === null && card.groups.length > 1) {
+      return (
+        <>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h3 className="flex-1 text-sm font-bold text-ink">
+              Editar {categoriaLabel(card.categoria)}
+            </h3>
+            <Button size="sm" onClick={closeExpanded}>
+              Cerrar
+            </Button>
+          </div>
+          <p className="mb-3 text-[12.5px] text-ink-3">
+            Los días de esta categoría no comparten entrenador ni nivel, así que se
+            configuran por separado. Elija cuál editar.
+          </p>
+          <ul className="overflow-hidden rounded-ctl border border-line">
+            {card.groups.map((group) => {
+              const entrenador = entrenadores.find((e) => e.id === group.entrenadorId);
+              const dias = formatDiaSet(group.rows.map((row) => row.diaSemana));
+              return (
+                <li
+                  key={group.key}
+                  className="flex min-h-drow flex-wrap items-center gap-3 border-b border-line px-3 py-2 last:border-b-0"
+                >
+                  <span className="min-w-0 flex-1 text-[13px] text-ink">
+                    {dias}
+                    <span className="text-ink-3">
+                      {" · "}
+                      {entrenador?.nombreCompleto ?? "Entrenador sin asignar"}
+                    </span>
+                  </span>
+                  <Button
+                    size="sm"
+                    className="flex-none"
+                    onClick={() => selectEditingGroup(group)}
+                    aria-label={`Editar los días ${dias} de ${categoriaLabel(card.categoria)}`}
+                  >
+                    Editar
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      );
+    }
+    return renderHorarioForm();
+  }
+
   /** Roster/assign panel — real enrollment via `fetchAlumnosPorHorario`,
    * rendered inline (PR3a). Assignment/unassignment/roster act on the WHOLE
    * grupo (every underlying `horario_id` día row) at once — there is no
    * per-día selection anymore, since a student belongs to every día of the
    * grupo, never to a single loose day. */
-  function renderAlumnosPanel(group: HorarioGroup): React.ReactElement {
+  function renderAlumnosPanel(card: CategoriaCard): React.ReactElement {
+    const rows = card.rows;
     return (
       <>
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <UserPlus size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
             <h3 className="text-sm font-bold text-cata-text">
-              Asignar alumnos al horario
+              Alumnos de {categoriaLabel(card.categoria)}
             </h3>
           </div>
           <Button size="sm" onClick={closeExpanded}>
@@ -812,7 +900,7 @@ export default function GroupsPage(): React.ReactElement {
                       <span className="text-sm text-cata-text">{a.personaNombreCompleto} · {a.edad} años</span>
                       <button
                         type="button"
-                        onClick={() => void handleDesasignarAlumno(group, a.personaId)}
+                        onClick={() => void handleDesasignarAlumno(rows, a.personaId)}
                         className="rounded-lg border border-cata-border p-1 text-cata-text/50 transition-colors hover:bg-red-50 hover:text-cata-red"
                         title="Desasignar alumno"
                       >
@@ -847,7 +935,7 @@ export default function GroupsPage(): React.ReactElement {
               </div>
               <button
                 type="button"
-                onClick={() => void handleAsignarAlumno(group)}
+                onClick={() => void handleAsignarAlumno(rows)}
                 disabled={!alumnoSeleccionado || asignandoAlumno}
                 className="btn-primary inline-flex items-center gap-1.5 text-xs"
               >
@@ -901,27 +989,6 @@ export default function GroupsPage(): React.ReactElement {
           </div>
         )}
 
-        {/* Weekday filter — `14-horarios.html`'s `.pills` row. "Todos" carries
-            the total; each day carries its own session count, so an empty day
-            is visible as a zero rather than as a blank grid after clicking. */}
-        <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Filtrar por día">
-          <FilterPill
-            label="Todos"
-            count={slots.length}
-            active={diaFilter === DIA_FILTER_ALL}
-            onClick={() => setDiaFilter(DIA_FILTER_ALL)}
-          />
-          {DIA_ORDER.filter((dia) => (slotCountsByDia[dia] ?? 0) > 0).map((dia) => (
-            <FilterPill
-              key={dia}
-              label={DIA_LABELS[dia] ?? dia}
-              count={slotCountsByDia[dia] ?? 0}
-              active={diaFilter === dia}
-              onClick={() => setDiaFilter(dia)}
-            />
-          ))}
-        </div>
-
         {expandedGroup?.key === NEW_GROUP_KEY && (
           <div className="card mb-6 p-5">
             {renderHorarioForm()}
@@ -932,80 +999,94 @@ export default function GroupsPage(): React.ReactElement {
           <div className="card">
             <LoadingState label="Cargando horarios…" />
           </div>
-        ) : visibleSlots.length > 0 ? (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(258px,1fr))] gap-3.5">
-            {visibleSlots.map((slot) => {
-              const group = groupsByKey.get(slot.groupKey);
-              if (!group) return null;
-
-              // Deletion (inside the edit panel) removes the WHOLE group —
-              // every día row — so every card of that group busies out.
-              const isDeleting = group.rows.some((row) => row.id === deletingId);
-              const slotKey = String(slot.id);
-              const isExpanded = expandedGroup?.key === slotKey;
-              const entrenador = entrenadores.find((e) => e.id === slot.entrenadorId);
-              const inscriptos = inscriptosPorHorario[slot.id];
-              const categoriaLabel = (
-                CATEGORIA_METADATA[slot.categoria as Categoria] ??
-                CATEGORIA_METADATA[DEFAULT_CATEGORIA]
-              ).label;
+        ) : categoriaCards.length > 0 ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3.5">
+            {categoriaCards.map((card) => {
+              // Deletion (inside the edit panel) removes a whole group — every
+              // one of its día rows — so the categoría's card busies out.
+              const isDeleting = card.rows.some((row) => row.id === deletingId);
+              const isExpanded = expandedGroup?.key === card.categoria;
+              const rangoEdad = CATEGORIA_METADATA[card.categoria as Categoria]?.rango_edad;
+              const nombresEntrenadores = card.entrenadorIds.map(
+                (id) => entrenadores.find((e) => e.id === id)?.nombreCompleto ?? "Sin asignar",
+              );
+              const inscriptos = countInscriptos(card.rows, personasPorHorario);
+              const parciales = countInscriptosParciales(card.rows, personasPorHorario);
 
               return (
                 <div
-                  key={slot.id}
+                  key={card.categoria}
                   data-testid="horario-card"
                   // An expanded card carries a whole form; letting it span the
                   // grid keeps that form readable instead of squeezing it into
-                  // a 258px column.
+                  // a 300px column.
                   className={`card flex flex-col gap-[9px] p-5 ${isExpanded ? "col-span-full" : ""}`}
                 >
-                  <b className="text-[15px] tracking-[-0.015em] text-ink">
-                    {slotTitle(slot.diaSemana, slot.horaInicio, slot.horaFin)}
-                  </b>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <b className="flex-1 text-[15px] tracking-[-0.015em] text-ink">
+                      {categoriaLabel(card.categoria)}
+                    </b>
+                    {rangoEdad ? <Badge>{rangoEdad}</Badge> : null}
+                  </div>
 
-                  {/* Trainer and categoria. The prototype's second line reads
-                      "Entrenador: … · Mesa 2"; there is no table/court field
-                      on `Horario` (id, diaSemana, horaInicio, horaFin,
-                      categoria, entrenadorId, nivelRankingId), so the real
-                      categoria takes that slot rather than an invented mesa.
-                      Level is deliberately absent — settled product decision. */}
-                  <p className="text-[13px] text-ink-3">
-                    Entrenador: {entrenador?.nombreCompleto ?? "Sin asignar"} ·{" "}
-                    <span>{categoriaLabel}</span>
+                  {/* Days and time, both derived from the rows that exist. A
+                      categoría that drifts off Monday–Friday says so here —
+                      the live Saturday COMPETITIVO row reads "Lunes a viernes
+                      + sábado" rather than being rounded to the norm. */}
+                  <p className="text-[13px] text-ink-2">
+                    {formatDiaSet(card.dias)} · {formatTime(card.horaInicio)} —{" "}
+                    {formatTime(card.horaFin)}
                   </p>
 
-                  {inscriptos !== undefined && (
-                    <p className="text-[13px] font-semibold text-ink-2">
+                  {/* Every entrenador of the categoría, not just the first:
+                      more than one means its weekdays are staffed differently,
+                      which the admin has to see. Level is deliberately absent
+                      — settled product decision. */}
+                  <p className="text-[13px] text-ink-3">
+                    {nombresEntrenadores.length === 1 ? "Entrenador" : "Entrenadores"}:{" "}
+                    {nombresEntrenadores.join(" · ")}
+                  </p>
+
+                  {inscriptos !== null && (
+                    <p className="text-[13px] font-semibold text-ink">
                       {inscriptos} inscripto{inscriptos === 1 ? "" : "s"}
+                    </p>
+                  )}
+
+                  {parciales > 0 && (
+                    <p className="text-[12px] text-ink-3">
+                      {parciales === 1
+                        ? "1 alumno no está inscripto en todos los días."
+                        : `${parciales} alumnos no están inscriptos en todos los días.`}
                     </p>
                   )}
 
                   <div className="mt-0.5 flex flex-wrap gap-[7px]">
                     <Button
                       size="sm"
-                      onClick={() => openAlumnosTab(slot.id, group)}
+                      onClick={() => openAlumnosTab(card)}
                       disabled={isDeleting}
-                      aria-label={`Ver alumnos de ${slotTitle(slot.diaSemana, slot.horaInicio, slot.horaFin)}`}
+                      aria-label={`Ver alumnos de ${cardTitle(card)}`}
                     >
                       Ver alumnos
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => openEditForm(slot.id, group)}
+                      onClick={() => openEditForm(card)}
                       disabled={isDeleting}
-                      aria-label={`Editar ${slotTitle(slot.diaSemana, slot.horaInicio, slot.horaFin)}`}
+                      aria-label={`Editar ${cardTitle(card)}`}
                     >
                       Editar
                     </Button>
                   </div>
 
                   {isExpanded && expandedGroup.tab === "editar" && (
-                    <div className="mt-3 border-t border-line pt-4">{renderHorarioForm()}</div>
+                    <div className="mt-3 border-t border-line pt-4">{renderEditPanel(card)}</div>
                   )}
 
                   {isExpanded && expandedGroup.tab === "alumnos" && (
                     <div className="mt-3 border-t border-line pt-4">
-                      {renderAlumnosPanel(group)}
+                      {renderAlumnosPanel(card)}
                     </div>
                   )}
                 </div>
@@ -1013,17 +1094,6 @@ export default function GroupsPage(): React.ReactElement {
             })}
           </div>
         ) : null}
-
-        {!loading && slots.length > 0 && visibleSlots.length === 0 && (
-          <div className="card">
-            <EmptyState
-              icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
-              title="No hay horarios ese día"
-              description="Ningún horario de entrenamiento cae en el día seleccionado."
-              action={<Button onClick={() => setDiaFilter(DIA_FILTER_ALL)}>Ver todos los días</Button>}
-            />
-          </div>
-        )}
 
         {!loading && horarios.length === 0 && (
           <div className="card">

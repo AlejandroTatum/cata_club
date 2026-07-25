@@ -1,7 +1,6 @@
 export interface LandingStat {
+  /** The figure exactly as it must appear. Rendered as text and never animated. */
   value: string;
-  numericValue?: number;
-  prefix?: string;
   label: string;
 }
 
@@ -69,9 +68,11 @@ export function yearsSinceFounding(now: Date = new Date()): number {
 export function buildLandingStats(now: Date = new Date()): LandingStat[] {
   const years = yearsSinceFounding(now);
   return [
-    // Rendered statically: an odometer counting 0 → 2013 reads as a bug.
+    // Every figure is rendered statically. An odometer counting 0 → 2013 reads
+    // as a bug, and a count-up on a two-digit number adds nothing while it can
+    // still strand the band at 0 whenever its trigger does not fire.
     { value: String(FOUNDING_DATE.year), label: "Fundado el 10 de octubre" },
-    { value: String(years), numericValue: years, label: "Años formando deportistas" },
+    { value: String(years), label: "Años formando deportistas" },
     { value: "Loja", label: "Junto al Coliseo Ciudad de Loja" },
   ];
 }

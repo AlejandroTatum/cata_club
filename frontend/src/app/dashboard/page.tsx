@@ -8,18 +8,22 @@
  * four duplicated sidebar links, above three stat cards that answered nothing
  * in particular. So:
  *
- *   · A coal hero carrying ONE number — how many payments are waiting — plus
- *     how many of them have been waiting over a week, and the button that acts
- *     on it. Nothing else lives in the hero.
- *   · A pulse of three stats: Miembros, Membresías activas (with a progress
- *     track) and Asistencia over the last four weeks (with sparkbars).
+ *   · A coal hero carrying ONE number — how many payments are waiting — and
+ *     the button that acts on it. Its sub-line appears only when it has
+ *     something to say. Nothing else lives in the hero.
+ *   · A pulse of three stats: Miembros, Membresías activas and Asistencia over
+ *     the last four weeks. All three share one internal grammar.
  *   · "Actividad reciente", derived from data the admin surfaces already
  *     fetch — see `buildActivityFeed` for why this needs no new endpoint and
  *     what its ceiling is. The comment that used to live here declaring the
  *     feed impossible is gone with it.
- *   · The 4-state donut, untouched: its `<table>` legend, per-arc `<title>` and
- *     bidirectional hover/focus were one of the audit's three named strengths.
+ *   · The 4-state donut. Its `<table>` legend, per-arc `<title>` and
+ *     bidirectional hover/focus were one of the audit's three named strengths
+ *     and are untouched — only its flow and its text colors changed.
  *   · `quickActions` is deleted.
+ *
+ * The feed and the donut share one row below the pulse. The page was otherwise
+ * a stack of equal-weight full-width white cards with no path for the eye.
  */
 
 "use client";
@@ -50,45 +54,13 @@ import {
 } from "./dashboard-utils";
 import AttendanceStatusChart from "./AttendanceStatusChart";
 
-/** How many activity rows the card shows before deferring to the full lists. */
-const ACTIVITY_LIMIT = 6;
-
-/** The `.track` progress bar from `_sistema.css` (:222). */
-function ProgressTrack({ percent }: { percent: number }): React.ReactElement {
-  const clamped = Math.max(0, Math.min(100, percent));
-  return (
-    <span className="block h-1.5 w-full overflow-hidden rounded-full bg-line">
-      <span className="block h-full rounded-full bg-coal" style={{ width: `${clamped}%` }} />
-    </span>
-  );
-}
-
 /**
- * The `.spark` sparkbars from `_sistema.css` (:224). Coal bars, never colored:
- * colour lives in badges and pills, and a stat is not either of those.
+ * How many activity rows the card shows before deferring to the full lists.
  *
- * `role="img"` with a spelled-out label because four bars with no axis are
- * unreadable to anyone not looking at them.
+ * Five, not six: the feed now shares its row with the donut, and a card that
+ * outgrows its neighbour is back to dominating the page.
  */
-function Sparkbars({ bars }: { bars: { startIso: string; ratePercent: number }[] }): React.ReactElement {
-  return (
-    <span
-      role="img"
-      aria-label={`Asistencia por semana: ${bars
-        .map((bar) => `${bar.ratePercent}%`)
-        .join(", ")} (de la más antigua a la más reciente)`}
-      className="flex h-5 items-end gap-1"
-    >
-      {bars.map((bar) => (
-        <span
-          key={bar.startIso}
-          className="w-2 rounded-sm bg-coal"
-          style={{ height: `${Math.max(bar.ratePercent, 4)}%`, minHeight: "2px" }}
-        />
-      ))}
-    </span>
-  );
-}
+const ACTIVITY_LIMIT = 5;
 
 export default function DashboardPage(): React.ReactElement {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -141,6 +113,21 @@ export default function DashboardPage(): React.ReactElement {
   const membershipPercent =
     totalPersonas > 0 ? Math.round((activeMemberships / totalPersonas) * 100) : 0;
 
+  /**
+   * The hero's second line, or nothing at all.
+   *
+   * It used to fall back to "Ninguno lleva más de una semana esperando" — a
+   * negative spending the most valuable space on the screen to report that
+   * there is nothing to report. The line now appears only when it carries a
+   * reason to act now, or when the queue being empty is itself the news.
+   */
+  const heroNote =
+    overAWeek > 0
+      ? `${overAWeek} ${overAWeek === 1 ? "lleva" : "llevan"} más de una semana esperando`
+      : pendingPayments === 0
+        ? "La cola está al día"
+        : null;
+
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell eyebrow="Panel administrativo" title="Panel de Control">
@@ -168,14 +155,15 @@ export default function DashboardPage(): React.ReactElement {
                     ? "Pago espera tu validación"
                     : "Pagos esperan tu validación"}
                 </span>
-                <span className="mt-1 flex items-center gap-2 text-[13px] text-white/60">
-                  <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
-                  {overAWeek > 0
-                    ? `${overAWeek} ${overAWeek === 1 ? "lleva" : "llevan"} más de una semana esperando`
-                    : pendingPayments > 0
-                      ? "Ninguno lleva más de una semana esperando"
-                      : "La cola está al día"}
-                </span>
+                {heroNote && (
+                  <span
+                    data-testid="hero-note"
+                    className="mt-1 flex items-center gap-2 text-[13px] text-white/60"
+                  >
+                    <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
+                    {heroNote}
+                  </span>
+                )}
               </span>
               <Link href="/payments" className={buttonClasses("primary")}>
                 {pendingPayments > 0 ? "Revisar ahora" : "Ver pagos"}
@@ -183,60 +171,92 @@ export default function DashboardPage(): React.ReactElement {
               </Link>
             </section>
 
-            {/* Pulse */}
+            {/*
+              Pulse — one internal grammar across all three tiles: uppercase
+              label, ink figure with its unit, one caption line.
+
+              The tiles used to close on three different things — a caption, a
+              progress track, four sparkbars — which read as three unrelated
+              widgets rather than one pulse. Miembros has no ratio the API
+              supplies, so no meter could be made uniform; the captions carry
+              the numbers the widgets only gestured at, which is what the
+              sparkbars' own aria-label already conceded they could not.
+            */}
             <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <StatCard label="Miembros" value={totalPersonas} hint="personas registradas" />
               <StatCard
                 label="Membresías activas"
                 value={activeMemberships}
                 unit={`de ${totalPersonas}`}
-                hint={<ProgressTrack percent={membershipPercent} />}
+                hint={`${membershipPercent}% del total`}
               />
               <StatCard
                 label="Asistencia · 4 semanas"
                 value={fourWeeks.ratePercent}
                 unit="%"
-                hint={<Sparkbars bars={fourWeeks.bars} />}
+                hint={`${fourWeeks.present} de ${fourWeeks.total} presentes`}
               />
             </div>
           </>
         )}
 
-        {activity.length > 0 && (
-          <section className="mb-5 overflow-hidden rounded-card border border-line bg-paper">
-            <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
-              <h2 className="flex-1 text-[15px] font-bold text-ink">Actividad reciente</h2>
-              <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
-                Ver todo
-              </Link>
-            </div>
-            <ul className="divide-y divide-line">
-              {activity.map((event) => (
-                <li key={event.id} className="flex items-center gap-3 px-[18px] py-3">
-                  <span
-                    aria-hidden="true"
-                    className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-canvas text-[11.5px] font-bold text-ink-2"
-                  >
-                    {event.initials}
-                  </span>
-                  <span className="min-w-0 flex-1 text-[13.5px] text-ink-2">
-                    <b className="font-semibold text-ink">{event.subject}</b> {event.detail}
-                  </span>
-                  <span className="flex-none text-[11.5px] text-ink-3">
-                    {formatHumanDate(event.at)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        {/*
+          Below the pulse the page used to be a stack of equal-weight full-width
+          white cards — hero, stats, feed, donut — with no grouping and no path
+          for the eye. Neither the feed nor the donut needs the full width, so
+          they share one row: the feed takes the flexible column, the donut a
+          fixed narrower one. Each still stands alone when the other has no data.
+        */}
+        <div
+          data-testid="dashboard-lower"
+          className={`grid items-start gap-4 ${
+            // Only split the row when there are in fact two cards to split it
+            // between: a lone card holds the full width rather than sitting
+            // beside an empty 340px track.
+            activity.length > 0 && attendanceStats.totalStudents > 0
+              ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]"
+              : ""
+          }`}
+        >
+          {activity.length > 0 && (
+            <section
+              data-testid="activity-feed"
+              className="overflow-hidden rounded-card border border-line bg-paper"
+            >
+              <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
+                <h2 className="flex-1 text-[15px] font-bold text-ink">Actividad reciente</h2>
+                <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
+                  Ver todo
+                </Link>
+              </div>
+              <ul className="divide-y divide-line">
+                {activity.map((event) => (
+                  <li key={event.id} className="flex items-center gap-3 px-[18px] py-3">
+                    <span
+                      aria-hidden="true"
+                      className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-canvas text-[11.5px] font-bold text-ink-2"
+                    >
+                      {event.initials}
+                    </span>
+                    <span className="min-w-0 flex-1 text-[13.5px] text-ink-2">
+                      <b className="font-semibold text-ink">{event.subject}</b> {event.detail}
+                    </span>
+                    <span className="flex-none text-[11.5px] text-ink-3">
+                      {formatHumanDate(event.at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-        {attendanceStats.totalStudents > 0 && (
-          <section className="rounded-card border border-line bg-paper p-[18px]">
-            <h2 className="mb-4 text-[15px] font-bold text-ink">Distribución de asistencias</h2>
-            <AttendanceStatusChart stats={attendanceStats} />
-          </section>
-        )}
+          {attendanceStats.totalStudents > 0 && (
+            <section className="rounded-card border border-line bg-paper p-[18px]">
+              <h2 className="mb-4 text-[15px] font-bold text-ink">Distribución de asistencias</h2>
+              <AttendanceStatusChart stats={attendanceStats} />
+            </section>
+          )}
+        </div>
       </AppShell>
     </ProtectedRoute>
   );

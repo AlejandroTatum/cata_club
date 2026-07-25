@@ -273,9 +273,10 @@ function initialsFor(name: string): string {
  * returned, so this is "the latest inside what was already loaded", not a
  * history — which is why the card's action sends the reader to the full lists.
  *
- * Attendance is grouped per session (date + horario + trainer) rather than per
- * student: 12 rows saying the same trainer marked the same class is a log, not
- * a feed.
+ * Two groupings keep this a feed rather than a log. Attendance is grouped per
+ * session (date + horario + trainer) rather than per student: 12 rows saying
+ * the same trainer marked the same class is a log. And a payment is one row,
+ * never an upload row plus a validation row for the same request.
  */
 export function buildActivityFeed(
   requests: PaymentValidationRequest[],
@@ -285,20 +286,21 @@ export function buildActivityFeed(
   const events: ActivityEvent[] = [];
 
   for (const request of requests) {
-    if (toSortableTime(request.uploadedAt) !== null) {
-      const payer = request.responsablePagoName || request.representativeName || request.studentName;
-      events.push({
-        id: `pay-up-${request.id}`,
-        kind: "payment-uploaded",
-        initials: initialsFor(payer),
-        subject: payer,
-        detail: `subió un comprobante de ${formatCurrency(request.expectedAmount)}`,
-        at: request.uploadedAt,
-      });
-    }
-
+    const amount = formatCurrency(request.expectedAmount);
     const resolved = request.validationStatus === "validado" || request.validationStatus === "rechazado";
-    if (resolved && request.validatedAt && toSortableTime(request.validatedAt) !== null) {
+    const resolvedAt =
+      resolved && request.validatedAt && toSortableTime(request.validatedAt) !== null
+        ? request.validatedAt
+        : null;
+
+    /**
+     * ONE row per request, never two. Emitting the upload and its validation
+     * separately put the same person on the feed twice on the same day — six
+     * rows carrying three facts — so the resolution absorbs the upload and
+     * states the amount the upload used to carry. When the resolution instant
+     * is unusable the upload still stands on its own, so no payment is lost.
+     */
+    if (resolvedAt) {
       const verb = request.validationStatus === "validado" ? "validado" : "rechazado";
       events.push({
         id: `pay-res-${request.id}`,
@@ -306,9 +308,22 @@ export function buildActivityFeed(
         initials: initialsFor(request.studentName),
         subject: request.studentName,
         detail: request.validatedBy
-          ? `tiene su pago ${verb} por ${request.validatedBy}`
-          : `tiene su pago ${verb}`,
-        at: request.validatedAt,
+          ? `tiene su pago de ${amount} ${verb} por ${request.validatedBy}`
+          : `tiene su pago de ${amount} ${verb}`,
+        at: resolvedAt,
+      });
+      continue;
+    }
+
+    if (toSortableTime(request.uploadedAt) !== null) {
+      const payer = request.responsablePagoName || request.representativeName || request.studentName;
+      events.push({
+        id: `pay-up-${request.id}`,
+        kind: "payment-uploaded",
+        initials: initialsFor(payer),
+        subject: payer,
+        detail: `subió un comprobante de ${amount}`,
+        at: request.uploadedAt,
       });
     }
   }

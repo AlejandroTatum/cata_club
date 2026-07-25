@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import DashboardPage from "@/app/dashboard/page";
 import type { PaymentValidationRequest } from "@/services/api";
 import type { AttendanceRecord } from "@/app/attendance/attendance-utils";
@@ -121,14 +121,16 @@ describe("DashboardPage — the hero carries one number and one action", () => {
     expect(ageing.closest("[aria-hidden='true']")).toBeNull();
   });
 
-  it("says so plainly when nothing has been waiting a week", async () => {
+  it("stays quiet instead of spending the hero on a negative", async () => {
     mockFetchPaymentValidations.mockResolvedValue([pendingPayment("a", 1)]);
 
     render(<DashboardPage />);
 
-    expect(
-      await screen.findByText("Ninguno lleva más de una semana esperando"),
-    ).toBeInTheDocument();
+    await screen.findByText("14");
+    // "Ninguno lleva más de una semana esperando" is dead weight in the most
+    // valuable space on the screen: the sub-line earns its place or is absent.
+    expect(screen.queryByText(/ninguno lleva/i)).toBeNull();
+    expect(screen.queryByTestId("hero-note")).toBeNull();
   });
 
   it("switches the call to action when the queue is empty", async () => {
@@ -191,14 +193,19 @@ describe("DashboardPage — the three-stat pulse", () => {
     expect(screen.getByText("100")).toBeInTheDocument();
   });
 
-  it("describes the sparkbars for anyone who cannot see them", async () => {
-    mockFetchAttendanceRecords.mockResolvedValue([todayRecord("1")]);
+  it("gives all three tiles the same internal grammar: label, figure, caption", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([todayRecord("1"), todayRecord("2")]);
 
     render(<DashboardPage />);
 
-    expect(
-      await screen.findByRole("img", { name: /asistencia por semana/i }),
-    ).toBeInTheDocument();
+    await screen.findByText("Miembros");
+    // A caption, a progress bar and four sparkbars side by side read as three
+    // unrelated things rather than one pulse. Every tile now closes on a plain
+    // caption line — and the caption says what the widget only gestured at.
+    expect(screen.queryByRole("img", { name: /asistencia por semana/i })).toBeNull();
+    expect(screen.getByText("personas registradas")).toBeInTheDocument();
+    expect(screen.getByText("39% del total")).toBeInTheDocument();
+    expect(screen.getByText("2 de 2 presentes")).toBeInTheDocument();
   });
 });
 
@@ -216,6 +223,29 @@ describe("DashboardPage — actividad reciente", () => {
     expect(await screen.findByText("Actividad reciente")).toBeInTheDocument();
     expect(screen.getByText(/subió un comprobante de \$25,00/)).toBeInTheDocument();
     expect(screen.getByText(/registró la lista de Lunes 15:00 — 16:00 · 2 estudiantes/)).toBeInTheDocument();
+  });
+
+  it("caps the feed so it cannot dominate the page", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockFetchPaymentValidations.mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => pendingPayment(`p${i}`, i + 1)),
+    );
+
+    render(<DashboardPage />);
+
+    const feed = await screen.findByTestId("activity-feed");
+    expect(within(feed).getAllByRole("listitem").length).toBeLessThanOrEqual(5);
+  });
+
+  it("groups the feed and the donut side by side instead of stacking full-width cards", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([todayRecord("1")]);
+    mockFetchPaymentValidations.mockResolvedValue([pendingPayment("a", 1)]);
+
+    render(<DashboardPage />);
+
+    const lower = await screen.findByTestId("dashboard-lower");
+    expect(within(lower).getByTestId("activity-feed")).toBeInTheDocument();
+    expect(within(lower).getByTestId("attendance-donut")).toBeInTheDocument();
   });
 
   it("omits the card entirely when there is nothing to show", async () => {

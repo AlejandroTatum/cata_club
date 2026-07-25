@@ -2,12 +2,15 @@
  * Component tests for RankingPage (admin) — "la escalera".
  *
  * The screen used to be a per-student table with a nivel `<select>` per row.
- * It is now the ladder itself: one rung per nivel, ordered 1→10, with the
- * roster as an avatar stack and a single "Asignar" action that opens an
- * assignment panel scoped to that rung.
+ * It is now the ladder itself: one rung per nivel, ordered by rank, with the
+ * roster shown as NAMES and a single action that opens an assignment panel
+ * scoped to that rung — plus a page-level person finder and a block for the
+ * students who have no level yet.
  *
- * These tests exist mostly to keep two settled product rules from silently
- * regressing: no occupancy indicator of any kind, and no "Promover" action.
+ * These tests exist mostly to keep settled product rules from silently
+ * regressing: no occupancy indicator of any kind, no "Promover", one number
+ * per rung (the club's name, never the rank beside it), and the unassigned
+ * students reachable.
  *
  * @vitest-environment jsdom
  */
@@ -137,6 +140,22 @@ const ROSTER: AlumnoParaNivel[] = [
   { personaId: 12, nombres: "Carla", apellidos: "Vera", activo: true, representanteId: null, nivelRankingId: 3 },
 ];
 
+/**
+ * The ladder is the page's only `<ol>`; the unassigned block and the search
+ * results are `<ul>`s of student rows. Scoping to it keeps "one rung per
+ * nivel" from accidentally counting those rows.
+ */
+function rungs(): HTMLElement[] {
+  const ladder = document.querySelector("ol");
+  if (ladder === null) throw new Error("la escalera no está renderizada");
+  return within(ladder).getAllByRole("listitem");
+}
+
+/** Waits for the ladder to have loaded, without matching a `<select>` option. */
+async function waitForLadder(): Promise<void> {
+  await screen.findByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" });
+}
+
 describe("RankingPage — la escalera", () => {
   beforeEach(() => {
     mockFetchAlumnosParaNivel.mockReset().mockResolvedValue(ROSTER);
@@ -153,50 +172,64 @@ describe("RankingPage — la escalera", () => {
 
   it("renders one rung per nivel, ordered with 1 at the top", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
-    const rungs = screen.getAllByRole("listitem");
-    expect(rungs).toHaveLength(3);
-    expect(rungs[0]).toHaveTextContent("Nivel Cima");
-    expect(rungs[1]).toHaveTextContent("Nivel Medio");
-    expect(rungs[2]).toHaveTextContent("Nivel Base");
+    expect(rungs()).toHaveLength(3);
+    expect(rungs()[0]).toHaveTextContent("Nivel Cima");
+    expect(rungs()[1]).toHaveTextContent("Nivel Medio");
+    expect(rungs()[2]).toHaveTextContent("Nivel Base");
   });
 
   it("labels each rung with its rank chip", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
-    const rungs = screen.getAllByRole("listitem");
-    expect(within(rungs[0]).getByTitle("Puesto 1 de la escalera")).toBeInTheDocument();
-    expect(within(rungs[1]).getByTitle("Puesto 2 de la escalera")).toBeInTheDocument();
-    expect(within(rungs[2]).getByTitle("Puesto 3 de la escalera")).toBeInTheDocument();
+    expect(within(rungs()[0]).getByTitle("Puesto 1 de la escalera")).toBeInTheDocument();
+    expect(within(rungs()[1]).getByTitle("Puesto 2 de la escalera")).toBeInTheDocument();
+    expect(within(rungs()[2]).getByTitle("Puesto 3 de la escalera")).toBeInTheDocument();
   });
 
-  it("shows the roster of each rung as an avatar stack of initials", async () => {
+  it("shows each rung's roster as real names, not two-letter initials", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
-    const rungs = screen.getAllByRole("listitem");
     // Pedro Ramírez sits on nivel 1, Carla Vera on nivel 3.
-    expect(within(rungs[0]).getByTitle("Pedro Ramírez")).toHaveTextContent("PR");
-    expect(within(rungs[2]).getByTitle("Carla Vera")).toHaveTextContent("CV");
-    expect(within(rungs[0]).getByText("1 estudiante")).toBeInTheDocument();
-    expect(within(rungs[1]).getByText("0 estudiantes")).toBeInTheDocument();
+    expect(within(rungs()[0]).getByTitle("Pedro Ramírez")).toHaveTextContent("Pedro Ramírez");
+    expect(within(rungs()[2]).getByTitle("Carla Vera")).toHaveTextContent("Carla Vera");
+    expect(within(rungs()[0]).getByText("1 estudiante")).toBeInTheDocument();
+    expect(within(rungs()[1]).getByText("0 estudiantes")).toBeInTheDocument();
+    expect(within(rungs()[1]).getByText("Sin estudiantes")).toBeInTheDocument();
+  });
+
+  it("renders ONE number per rung — the club's name, never the rank beside it", async () => {
+    render(<RankingPage />);
+    await waitForLadder();
+
+    // The rank is announceable but never rendered as a digit next to the
+    // name: "Nivel 3" sitting beside a rung named "2" was the screen's worst
+    // ambiguity, and the club's name is the one people say out loud.
+    const rung = rungs()[2];
+    expect(within(rung).getByTitle("Nivel Base")).toBeInTheDocument();
+    // The rank is carried by the node's accessible title, not by a digit.
+    expect(within(rung).queryByText("3")).not.toBeInTheDocument();
+    expect(within(rung).getByTitle("Puesto 3 de la escalera")).toBeInTheDocument();
   });
 
   it("shows exactly two stats — Estudiantes asignados and Niveles — and no judgement", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     expect(screen.getByText("Estudiantes asignados")).toBeInTheDocument();
     expect(screen.getByText("de 3 estudiantes")).toBeInTheDocument();
     // "Niveles" also names the sidebar nav entry, so scope to the stat's hint.
-    expect(screen.getByText("1 es la cima")).toBeInTheDocument();
+    // The hint names the REAL top rung instead of hardcoding "1" — the club's
+    // top level is called "1A", and its rank is not its name.
+    expect(screen.getByText("Nivel Cima es la cima")).toBeInTheDocument();
   });
 
   it("renders no occupancy indicator anywhere — no fraction, no cupos, no 'Bajo mínimo'", async () => {
     const { container } = render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/cupos?/i);
@@ -211,7 +244,7 @@ describe("RankingPage — la escalera", () => {
 
   it("offers 'Asignar' as the only rung action — never 'Promover'", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     expect(screen.getAllByRole("button", { name: /^asignar estudiantes a/i })).toHaveLength(3);
     expect(screen.queryByRole("button", { name: /promover/i })).not.toBeInTheDocument();
@@ -219,17 +252,19 @@ describe("RankingPage — la escalera", () => {
 
   it("opens an assignment panel scoped to the rung that was clicked", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
 
     expect(await screen.findByText("Asignar estudiantes al nivel Nivel Medio")).toBeInTheDocument();
-    expect(screen.getByText("Sofía González")).toBeInTheDocument();
+    expect(
+      within(rungs()[1]).getByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
+    ).toBeInTheDocument();
   });
 
   it("assigns an unassigned student to the rung's nivel via asignar-nivel-inicial", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
     fireEvent.click(
@@ -245,7 +280,7 @@ describe("RankingPage — la escalera", () => {
 
   it("moves an already-assigned student via mover-de-nivel, under the same 'Asignar' label", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
     fireEvent.click(
@@ -260,7 +295,7 @@ describe("RankingPage — la escalera", () => {
 
   it("marks a student already on the open rung as such instead of offering to re-assign them", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" }));
 
@@ -272,22 +307,24 @@ describe("RankingPage — la escalera", () => {
 
   it("filters the assignment panel by name", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
     fireEvent.change(await screen.findByLabelText(/buscar estudiante para el nivel nivel medio/i), {
       target: { value: "sofía" },
     });
 
+    // Scoped to the open rung, which contains its panel: Pedro's NAME is also
+    // on his own rung now, and the ladder is not what the panel filter filters.
     await waitFor(() => {
-      expect(screen.queryByText("Pedro Ramírez")).not.toBeInTheDocument();
+      expect(within(rungs()[1]).queryByText("Pedro Ramírez")).not.toBeInTheDocument();
     });
-    expect(screen.getByText("Sofía González")).toBeInTheDocument();
+    expect(within(rungs()[1]).getByText("Sofía González")).toBeInTheDocument();
   });
 
   it("moves the student's avatar onto the target rung after a successful assignment", async () => {
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
     fireEvent.click(
@@ -295,15 +332,14 @@ describe("RankingPage — la escalera", () => {
     );
 
     await waitFor(() => {
-      const rungs = screen.getAllByRole("listitem");
-      expect(within(rungs[1]).getByTitle("Sofía González")).toBeInTheDocument();
+        expect(within(rungs()[1]).getByTitle("Sofía González")).toBeInTheDocument();
     });
   });
 
   it("surfaces a real backend failure instead of a false success", async () => {
     mockAssignStudentToNivel.mockRejectedValue(new Error("boom"));
     render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
     fireEvent.click(
@@ -317,7 +353,7 @@ describe("RankingPage — la escalera", () => {
   it("clears the pending 'Asignado' reset timer on unmount", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { unmount } = render(<RankingPage />);
-    await screen.findByText("Nivel Cima");
+    await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
     fireEvent.click(
@@ -341,6 +377,109 @@ describe("RankingPage — la escalera", () => {
     expect(
       await screen.findByText("No se pudieron cargar los niveles. Intente nuevamente."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("RankingPage — finding a student and placing the unassigned", () => {
+  beforeEach(() => {
+    mockFetchAlumnosParaNivel.mockReset().mockResolvedValue(ROSTER);
+    mockFetchNivelesConOcupacion.mockReset().mockResolvedValue(NIVELES);
+    mockAssignStudentToNivel.mockReset().mockResolvedValue(undefined);
+    mockMoveStudentToNivel.mockReset().mockResolvedValue(undefined);
+    mockShowError.mockClear();
+    mockShowSuccess.mockClear();
+  });
+
+  function search(term: string): void {
+    fireEvent.change(screen.getByLabelText("Buscar un estudiante en toda la escalera"), {
+      target: { value: term },
+    });
+  }
+
+  it("lists the students who have no level, instead of only counting them", async () => {
+    render(<RankingPage />);
+    await waitForLadder();
+
+    const block = screen.getByRole("heading", { name: "Sin nivel asignado (1)" });
+    const section = block.closest("section") as HTMLElement;
+    expect(within(section).getByText("Sofía González")).toBeInTheDocument();
+  });
+
+  it("places an unassigned student on the level picked in their own row", async () => {
+    render(<RankingPage />);
+    await waitForLadder();
+
+    fireEvent.change(screen.getByLabelText("Nivel de destino para Sofía González"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Asignar a Sofía González" }));
+
+    await waitFor(() => {
+      expect(mockAssignStudentToNivel).toHaveBeenCalledWith(10, 2);
+    });
+    expect(mockMoveStudentToNivel).not.toHaveBeenCalled();
+  });
+
+  it("will not act until a destination level is chosen", async () => {
+    render(<RankingPage />);
+    await waitForLadder();
+
+    expect(screen.getByRole("button", { name: "Asignar a Sofía González" })).toBeDisabled();
+  });
+
+  it("finds a student by name and points at the rung they are on", async () => {
+    render(<RankingPage />);
+    await waitForLadder();
+
+    search("ramirez");
+
+    const results = screen.getByRole("heading", { name: "Resultados de la búsqueda (1)" });
+    const section = results.closest("section") as HTMLElement;
+    expect(within(section).getByText("Pedro Ramírez")).toBeInTheDocument();
+    expect(within(section).getByText("Nivel Nivel Cima")).toBeInTheDocument();
+    // And he is picked out on his own rung, which is where the question
+    // "where is Juan?" is really answered.
+    expect(within(rungs()[0]).getByTitle("Pedro Ramírez").className).toContain("bg-ball");
+  });
+
+  it("moves the student found by the search, from the search result itself", async () => {
+    render(<RankingPage />);
+    await waitForLadder();
+
+    search("ramirez");
+    fireEvent.change(screen.getByLabelText("Nivel de destino para Pedro Ramírez"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mover a Pedro Ramírez" }));
+
+    await waitFor(() => {
+      expect(mockMoveStudentToNivel).toHaveBeenCalledWith(11, 2);
+    });
+    expect(mockAssignStudentToNivel).not.toHaveBeenCalled();
+  });
+
+  it("says so when nobody matches, instead of showing an empty list", async () => {
+    render(<RankingPage />);
+    await waitForLadder();
+
+    search("zzz");
+
+    expect(await screen.findByText("Ningún estudiante coincide")).toBeInTheDocument();
+  });
+
+  it("never offers a student their current level as a destination", async () => {
+    render(<RankingPage />);
+    await waitForLadder();
+
+    search("ramirez");
+    const options = within(
+      screen.getByLabelText("Nivel de destino para Pedro Ramírez"),
+    ).getAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Elegir nivel…",
+      "Nivel Medio",
+      "Nivel Base",
+    ]);
   });
 });
 

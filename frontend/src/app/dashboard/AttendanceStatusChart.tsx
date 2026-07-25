@@ -7,7 +7,17 @@
  * dashboard-utils.ts#buildDonutArcs. Legend rows carry every value as text
  * (not hidden behind hover), so the chart is fully readable without
  * pointer/keyboard interaction; hover/focus on either the arc or its legend
- * row highlights both.
+ * row highlights both. None of that changes here — the reflow below is
+ * presentation only.
+ *
+ * Two presentation fixes:
+ *   · Stacked, never side-by-side. The card now shares its row with the
+ *     activity feed, so the legend gets the column's full width instead of
+ *     ~180px for three numeric columns.
+ *   · Legend text migrated off the legacy `cata-*` palette onto the ink ramp.
+ *     `text-cata-text/50` measured 3.05:1 — below AA. The percentage column is
+ *     `ink-3-strong`, which holds on `paper` (5.26:1) AND on the `canvas` fill
+ *     the row takes while hovered (4.83:1), where plain `ink-3` slips to 4.24.
  */
 
 "use client";
@@ -35,7 +45,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
   );
 
   return (
-    <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
+    <div className="flex flex-col items-center gap-5">
       <svg
         width={SIZE}
         height={SIZE}
@@ -83,7 +93,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
           y={SIZE / 2}
           textAnchor="middle"
           dominantBaseline="middle"
-          className="rotate-90 fill-cata-text text-2xl font-bold"
+          className="rotate-90 fill-ink text-2xl font-bold"
           style={{ transformOrigin: "center", transformBox: "fill-box" }}
         >
           {stats.totalStudents}
@@ -92,13 +102,13 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
 
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-cata-border text-xs font-medium uppercase tracking-wider text-cata-text/65">
+          <tr className="border-b border-line text-xs font-medium uppercase tracking-wider text-ink-3-strong">
             <th className="py-2 font-medium">Estado</th>
             <th className="py-2 text-right font-medium">Registros</th>
             <th className="py-2 text-right font-medium">Porcentaje</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-cata-border">
+        <tbody className="divide-y divide-line">
           {segments.map((segment) => {
             const isHovered = hovered === segment.estado;
             return (
@@ -106,10 +116,10 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
                 key={segment.estado}
                 onMouseEnter={() => setHovered(segment.estado)}
                 onMouseLeave={() => setHovered((prev) => (prev === segment.estado ? null : prev))}
-                className={`transition-colors ${isHovered ? "bg-cata-bg" : ""}`}
+                className={`transition-colors ${isHovered ? "bg-canvas" : ""}`}
               >
                 <td className="py-2">
-                  <span className="flex items-center gap-2.5 text-cata-text/65">
+                  <span className="flex items-center gap-2.5 text-ink-2">
                     <span
                       aria-hidden="true"
                       className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -118,8 +128,8 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
                     {segment.label}
                   </span>
                 </td>
-                <td className="py-2 text-right font-semibold text-cata-text">{segment.value}</td>
-                <td className="py-2 text-right text-xs text-cata-text/50">{segment.percentage}%</td>
+                <td className="py-2 text-right font-semibold text-ink">{segment.value}</td>
+                <td className="py-2 text-right text-xs text-ink-3-strong">{segment.percentage}%</td>
               </tr>
             );
           })}

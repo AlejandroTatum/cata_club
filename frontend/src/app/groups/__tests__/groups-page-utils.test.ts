@@ -18,11 +18,11 @@ import {
   nivelToGrupo,
   buildGroupCardsFromNiveles,
   countUniqueAlumnos,
-  buildHorarioSlots,
-  filterSlotsByDia,
-  countSlotsByDia,
+  buildCategoriaCards,
+  formatDiaSet,
+  countInscriptos,
+  countInscriptosParciales,
   DIA_ORDER,
-  DIA_FILTER_ALL,
 } from "../groups-page-utils";
 import type { AlumnoHorario, NivelConOcupacion } from "@/services/api";
 import type { HorarioGroup } from "@/lib/groups-utils";
@@ -349,10 +349,15 @@ describe("buildGroupCardsFromNiveles", () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildHorarioSlots / filterSlotsByDia / countSlotsByDia (día-card grid)
+// buildCategoriaCards / formatDiaSet / countInscriptos (categoria-card grid)
 // ---------------------------------------------------------------------------
 
-const SLOT_GROUPS: HorarioGroup[] = [
+/**
+ * Mirrors the shape the live database actually holds: one `HorarioEntrenamiento`
+ * row per categoria × weekday, all five weekdays for four categorias and a
+ * sixth Saturday row for COMPETITIVO.
+ */
+const CATEGORIA_GROUPS: HorarioGroup[] = [
   {
     key: "competitivo-18",
     categoria: "COMPETITIVO",
@@ -373,60 +378,147 @@ const SLOT_GROUPS: HorarioGroup[] = [
     horaFin: "16:00",
     entrenadorId: 2,
     nivelRankingId: null,
-    rows: [{ id: 201, diaSemana: "LUNES" }],
+    rows: [
+      { id: 201, diaSemana: "LUNES" },
+      { id: 202, diaSemana: "MARTES" },
+    ],
+  },
+  // Same categoria as the group above, different entrenador: `groupHorarios`
+  // splits it into its own editable unit, but it is still the SAME training
+  // group in the club's eyes and must land on the same card.
+  {
+    key: "formativo-15-b",
+    categoria: "FORMATIVO",
+    horaInicio: "15:00",
+    horaFin: "16:00",
+    entrenadorId: 7,
+    nivelRankingId: null,
+    rows: [{ id: 203, diaSemana: "VIERNES" }],
   },
 ];
 
-describe("buildHorarioSlots", () => {
-  it("expands every día row of every group into its own slot", () => {
-    expect(buildHorarioSlots(SLOT_GROUPS)).toHaveLength(4);
+describe("buildCategoriaCards", () => {
+  it("renders one card per categoria, not one per categoria × weekday", () => {
+    const cards = buildCategoriaCards(CATEGORIA_GROUPS);
+    expect(cards.map((card) => card.categoria)).toEqual(["FORMATIVO", "COMPETITIVO"]);
   });
 
-  it("orders by weekday first and start time second, so reading order is week order", () => {
-    const slots = buildHorarioSlots(SLOT_GROUPS);
-    expect(slots.map((slot) => [slot.diaSemana, slot.horaInicio])).toEqual([
-      ["LUNES", "15:00"],
-      ["LUNES", "18:00"],
-      ["MIERCOLES", "18:00"],
-      ["SABADO", "18:00"],
+  it("orders the cards by start time, the way the club's afternoon runs", () => {
+    const cards = buildCategoriaCards(CATEGORIA_GROUPS);
+    expect(cards.map((card) => card.horaInicio)).toEqual(["15:00", "18:00"]);
+  });
+
+  it("merges every editable group of a categoria onto its single card", () => {
+    const [formativo] = buildCategoriaCards(CATEGORIA_GROUPS);
+    expect(formativo.groups.map((group) => group.key)).toEqual([
+      "formativo-15",
+      "formativo-15-b",
     ]);
+    expect(formativo.rows.map((row) => row.id)).toEqual([201, 202, 203]);
   });
 
-  it("carries the owning group's key so a slot can still be edited as a group", () => {
-    const slots = buildHorarioSlots(SLOT_GROUPS);
-    expect(slots.find((slot) => slot.id === 201)?.groupKey).toBe("formativo-15");
-    expect(slots.find((slot) => slot.id === 103)?.groupKey).toBe("competitivo-18");
+  it("derives the day set from the rows, in week order, without duplicates", () => {
+    const cards = buildCategoriaCards(CATEGORIA_GROUPS);
+    expect(cards[0].dias).toEqual(["LUNES", "MARTES", "VIERNES"]);
+    expect(cards[1].dias).toEqual(["LUNES", "MIERCOLES", "SABADO"]);
+  });
+
+  it("surfaces every distinct entrenador of the categoria, so a split is visible", () => {
+    const cards = buildCategoriaCards(CATEGORIA_GROUPS);
+    expect(cards[0].entrenadorIds).toEqual([2, 7]);
+    expect(cards[1].entrenadorIds).toEqual([1]);
   });
 
   it("returns an empty list for no groups", () => {
-    expect(buildHorarioSlots([])).toEqual([]);
+    expect(buildCategoriaCards([])).toEqual([]);
   });
 });
 
-describe("filterSlotsByDia", () => {
-  it("returns everything for the 'todos' sentinel", () => {
-    const slots = buildHorarioSlots(SLOT_GROUPS);
-    expect(filterSlotsByDia(slots, DIA_FILTER_ALL)).toHaveLength(4);
+describe("formatDiaSet", () => {
+  it("collapses the full working week into 'Lunes a viernes'", () => {
+    expect(formatDiaSet(["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"])).toBe(
+      "Lunes a viernes",
+    );
   });
 
-  it("keeps only the sessions of the chosen weekday", () => {
-    const slots = buildHorarioSlots(SLOT_GROUPS);
-    const lunes = filterSlotsByDia(slots, "LUNES");
-    expect(lunes.map((slot) => slot.id)).toEqual([201, 101]);
+  it("names the Saturday exception instead of hiding it", () => {
+    expect(
+      formatDiaSet(["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"]),
+    ).toBe("Lunes a viernes + sábado");
   });
 
-  it("returns an empty list for a weekday with no sessions", () => {
-    expect(filterSlotsByDia(buildHorarioSlots(SLOT_GROUPS), "DOMINGO")).toEqual([]);
+  it("names both weekend exceptions", () => {
+    expect(
+      formatDiaSet([
+        "LUNES",
+        "MARTES",
+        "MIERCOLES",
+        "JUEVES",
+        "VIERNES",
+        "SABADO",
+        "DOMINGO",
+      ]),
+    ).toBe("Lunes a viernes + sábado y domingo");
+  });
+
+  it("lists the days one by one when the week is incomplete", () => {
+    expect(formatDiaSet(["LUNES", "MIERCOLES", "VIERNES"])).toBe(
+      "Lunes, miércoles y viernes",
+    );
+  });
+
+  it("reads a single day as that day", () => {
+    expect(formatDiaSet(["JUEVES"])).toBe("Jueves");
+  });
+
+  it("says so rather than inventing a week when there are no days", () => {
+    expect(formatDiaSet([])).toBe("Sin días asignados");
+  });
+
+  it("ignores the order it is given and answers in week order", () => {
+    expect(formatDiaSet(["VIERNES", "LUNES"])).toBe("Lunes y viernes");
   });
 });
 
-describe("countSlotsByDia", () => {
-  it("counts sessions per weekday and omits weekdays with none", () => {
-    expect(countSlotsByDia(buildHorarioSlots(SLOT_GROUPS))).toEqual({
-      LUNES: 2,
-      MIERCOLES: 1,
-      SABADO: 1,
-    });
+describe("countInscriptos", () => {
+  const rows = [
+    { id: 1, diaSemana: "LUNES" },
+    { id: 2, diaSemana: "MARTES" },
+  ];
+
+  it("counts each student once across every día row of the categoria", () => {
+    expect(countInscriptos(rows, { 1: [10, 11, 12], 2: [10, 11, 12] })).toBe(3);
+  });
+
+  it("counts a student enrolled in only one día of the categoria", () => {
+    expect(countInscriptos(rows, { 1: [10, 11, 12], 2: [10, 11] })).toBe(3);
+  });
+
+  it("returns null rather than a lie when a row's roster never answered", () => {
+    expect(countInscriptos(rows, { 1: [10, 11] })).toBeNull();
+  });
+
+  it("returns 0 for a categoria whose every día is empty", () => {
+    expect(countInscriptos(rows, { 1: [], 2: [] })).toBe(0);
+  });
+});
+
+describe("countInscriptosParciales", () => {
+  const rows = [
+    { id: 1, diaSemana: "LUNES" },
+    { id: 2, diaSemana: "MARTES" },
+  ];
+
+  it("counts the students who are missing from at least one día", () => {
+    expect(countInscriptosParciales(rows, { 1: [10, 11, 12], 2: [10, 11] })).toBe(1);
+  });
+
+  it("counts nobody when every student attends every día", () => {
+    expect(countInscriptosParciales(rows, { 1: [10, 11], 2: [11, 10] })).toBe(0);
+  });
+
+  it("claims nothing while a row's roster is still missing", () => {
+    expect(countInscriptosParciales(rows, { 1: [10, 11] })).toBe(0);
   });
 });
 

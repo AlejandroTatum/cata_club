@@ -286,12 +286,39 @@ describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () 
   });
 });
 
-describe("GroupsPage — weekday card grid (14-horarios.html)", () => {
+describe("GroupsPage — categoria card grid (one card per training group)", () => {
   const RECURRING_ROWS = [
     { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
     { id: 102, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
     { id: 103, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
   ];
+
+  /** The club's real shape: five weekdays of one categoria, plus its Saturday. */
+  const FULL_WEEK_ROWS = [
+    ...["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"].map((dia, i) => ({
+      id: 110 + i,
+      diaSemana: dia,
+      horaInicio: "18:00",
+      horaFin: "20:00",
+      categoria: "COMPETITIVO",
+      entrenadorId: 1,
+      nivelRankingId: 2,
+    })),
+  ];
+
+  function alumno(personaId: number, horarioId: number) {
+    return {
+      id: personaId * 1000 + horarioId,
+      personaId,
+      personaNombreCompleto: `Alumno ${personaId}`,
+      edad: 12,
+      horarioId,
+      horarioDia: "LUNES",
+      horarioHoraInicio: "18:00",
+      horarioHoraFin: "20:00",
+      fechaAsignacion: "2026-01-01",
+    };
+  }
 
   beforeEach(() => {
     mockFetchMembers.mockReset();
@@ -303,16 +330,36 @@ describe("GroupsPage — weekday card grid (14-horarios.html)", () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
   });
 
-  it("renders one card per weekday session, titled with its day and time range", async () => {
+  it("renders ONE card for a categoria, not one per weekday row", async () => {
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    expect(screen.getAllByTestId("horario-card")).toHaveLength(3);
-    expect(screen.getByText("Lunes 18:00 — 20:00")).toBeInTheDocument();
-    expect(screen.getByText("Miércoles 18:00 — 20:00")).toBeInTheDocument();
-    expect(screen.getByText("Viernes 18:00 — 20:00")).toBeInTheDocument();
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(1);
+    expect(screen.getByText("Competitivo")).toBeInTheDocument();
+  });
+
+  it("states the day set and the time range once, derived from the rows", async () => {
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(
+      screen.getByText("Lunes, miércoles y viernes · 18:00 — 20:00"),
+    ).toBeInTheDocument();
+  });
+
+  it("names the Saturday exception instead of rounding it to Lunes a viernes", async () => {
+    mockFetchHorarios.mockResolvedValue(FULL_WEEK_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(
+      screen.getByText("Lunes a viernes + sábado · 18:00 — 20:00"),
+    ).toBeInTheDocument();
   });
 
   it("carries no level information on the cards (settled product decision)", async () => {
@@ -327,7 +374,7 @@ describe("GroupsPage — weekday card grid (14-horarios.html)", () => {
   });
 
   it("names the trainer and the categoria, not a fabricated table/mesa", async () => {
-    mockFetchHorarios.mockResolvedValue([RECURRING_ROWS[0]]);
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
@@ -336,85 +383,123 @@ describe("GroupsPage — weekday card grid (14-horarios.html)", () => {
     await waitFor(() => {
       expect(within(card).getByText(/entrenador uno/i)).toBeInTheDocument();
     });
-    expect(within(card).getByText(/competitivo/i)).toBeInTheDocument();
+    expect(within(card).getByText("Competitivo")).toBeInTheDocument();
     expect(card.textContent).not.toMatch(/mesa/i);
   });
 
-  it("shows the enrolled headcount per session as a flat count", async () => {
-    mockFetchHorarios.mockResolvedValue([RECURRING_ROWS[0]]);
-    mockFetchAlumnosPorHorario.mockResolvedValue([
-      { id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", edad: 10, horarioId: 101, horarioDia: "LUNES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
-      { id: 2, personaId: 11, personaNombreCompleto: "Bruno Díaz", edad: 11, horarioId: 101, horarioDia: "LUNES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
-    ]);
-
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await waitForHorarios();
-
-    expect(await screen.findByText("2 inscriptos")).toBeInTheDocument();
-  });
-
-  it("omits the headcount rather than claiming zero when the roster request fails", async () => {
-    mockFetchHorarios.mockResolvedValue([RECURRING_ROWS[0]]);
-    mockFetchAlumnosPorHorario.mockRejectedValue(new Error("network"));
-
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await waitForHorarios();
-
-    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalled());
-    expect(screen.queryByText(/inscripto/i)).not.toBeInTheDocument();
-  });
-
-  it("filters the grid down to a single weekday, and back to the whole week", async () => {
+  it("counts each student once across the categoria's weekdays, not once per weekday", async () => {
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
-
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await waitForHorarios();
-
-    fireEvent.click(screen.getByRole("button", { name: /^miércoles/i }));
-    await waitFor(() => {
-      expect(screen.getAllByTestId("horario-card")).toHaveLength(1);
-    });
-    expect(screen.getByText("Miércoles 18:00 — 20:00")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
-    await waitFor(() => {
-      expect(screen.getAllByTestId("horario-card")).toHaveLength(3);
-    });
-  });
-
-  it("keeps rows with a different entrenador_id as separate cards on the same day", async () => {
-    mockFetchHorarios.mockResolvedValue([
-      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: null },
-      { id: 202, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2, nivelRankingId: null },
-    ]);
-
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await waitForHorarios();
-
-    expect(screen.getAllByTestId("horario-card")).toHaveLength(2);
-    await waitFor(() => {
-      expect(screen.getByText(/entrenador uno/i)).toBeInTheDocument();
-    });
-    expect(screen.getByText(/entrenador dos/i)).toBeInTheDocument();
-  });
-
-  it("does not paginate — every session of the week is on screen at once", async () => {
-    mockFetchHorarios.mockResolvedValue(
-      Array.from({ length: 26 }, (_, i) => ({
-        id: 1000 + i,
-        diaSemana: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"][i % 6],
-        horaInicio: "15:00",
-        horaFin: "16:00",
-        categoria: "FORMATIVO",
-        entrenadorId: (i % 2) + 1,
-        nivelRankingId: null,
-      })),
+    // The same two students train Monday, Wednesday and Friday. Summing the
+    // rows would report six; the group has two.
+    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
+      Promise.resolve([alumno(10, horarioId), alumno(11, horarioId)]),
     );
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    expect(screen.getAllByTestId("horario-card")).toHaveLength(26);
+    expect(await screen.findByText("2 inscriptos")).toBeInTheDocument();
+    expect(screen.queryByText("6 inscriptos")).not.toBeInTheDocument();
+  });
+
+  it("reports the students who are not enrolled in every día of the categoria", async () => {
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
+      Promise.resolve(
+        horarioId === 101
+          ? [alumno(10, horarioId), alumno(11, horarioId)]
+          : [alumno(10, horarioId)],
+      ),
+    );
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(await screen.findByText("2 inscriptos")).toBeInTheDocument();
+    expect(
+      screen.getByText("1 alumno no está inscripto en todos los días."),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the headcount rather than undercounting when a roster request fails", async () => {
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
+      horarioId === 103
+        ? Promise.reject(new Error("network"))
+        : Promise.resolve([alumno(10, horarioId)]),
+    );
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(3));
+    expect(screen.queryByText(/inscripto/i)).not.toBeInTheDocument();
+  });
+
+  it("has no weekday filter left — five cards do not need filtering", async () => {
+    mockFetchHorarios.mockResolvedValue(FULL_WEEK_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.queryByRole("group", { name: /filtrar por día/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^miércoles/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps a categoria whose weekdays have different trainers on ONE card, naming both", async () => {
+    mockFetchHorarios.mockResolvedValue([
+      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: null },
+      { id: 202, diaSemana: "MARTES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2, nivelRankingId: null },
+    ]);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(1);
+    const card = screen.getAllByTestId("horario-card")[0];
+    await waitFor(() => {
+      expect(within(card).getByText(/entrenador uno/i)).toBeInTheDocument();
+    });
+    expect(within(card).getByText(/entrenador dos/i)).toBeInTheDocument();
+  });
+
+  it("asks which configuration to edit when a categoria's weekdays are split", async () => {
+    mockFetchHorarios.mockResolvedValue([
+      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: null },
+      { id: 202, diaSemana: "MARTES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2, nivelRankingId: null },
+    ]);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: /^editar formativo/i }));
+    await screen.findByRole("heading", { name: "Editar Formativo" });
+    expect(screen.queryByRole("heading", { name: "Editar Horario" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /editar los días martes/i }));
+    await screen.findByRole("heading", { name: "Editar Horario" });
+  });
+
+  it("collapses the club's twenty-six rows into its five training groups", async () => {
+    const CATEGORIAS = ["FORMATIVO", "INFANTIL", "JUVENIL", "COMPETITIVO", "ADULTOS"];
+    mockFetchHorarios.mockResolvedValue(
+      CATEGORIAS.flatMap((categoria, c) =>
+        ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"].map((dia, d) => ({
+          id: 1000 + c * 10 + d,
+          diaSemana: dia,
+          horaInicio: `1${5 + c}:00`,
+          horaFin: `1${6 + c}:00`,
+          categoria,
+          entrenadorId: 1,
+          nivelRankingId: null,
+        })),
+      ),
+    );
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(5);
     expect(screen.queryByRole("button", { name: /página siguiente/i })).not.toBeInTheDocument();
   });
 });
@@ -452,7 +537,7 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
     expect(verAlumnosButton).toHaveTextContent(/ver alumnos/i);
 
     fireEvent.click(verAlumnosButton);
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Competitivo" });
   });
 });
 
@@ -468,11 +553,13 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
     mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
   });
 
-  it("falls back to DEFAULT_CATEGORIA's label instead of crashing when categoria doesn't match any known key", async () => {
+  it("shows the raw value instead of crashing — or mislabelling it as Formativo", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    expect(screen.getAllByTestId("horario-card")[0]).toHaveTextContent(/formativo/i);
+    const card = screen.getAllByTestId("horario-card")[0];
+    expect(card).toHaveTextContent("NO_EXISTE");
+    expect(card).not.toHaveTextContent(/formativo/i);
   });
 });
 
@@ -580,9 +667,11 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
 });
 
 describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
+  // Two categorias, therefore two cards: the accordion is per card, and the
+  // card is the categoria now.
   const GROUPS = [
     { id: 401, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: null },
-    { id: 402, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2, nivelRankingId: null },
+    { id: 402, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 2, nivelRankingId: null },
   ];
 
   beforeEach(() => {
@@ -640,7 +729,7 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
     await screen.findByRole("heading", { name: "Editar Horario" });
 
     fireEvent.click(within(cardB).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Competitivo" });
 
     expect(screen.queryByRole("heading", { name: "Editar Horario" })).not.toBeInTheDocument();
   });
@@ -654,7 +743,7 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
     await screen.findByRole("heading", { name: "Editar Horario" });
 
     fireEvent.click(within(cardA).getByRole("button", { name: /ver alumnos/i }));
-    const alumnosHeading = await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    const alumnosHeading = await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     expect(cardA.contains(alumnosHeading)).toBe(true);
     expect(screen.queryByRole("heading", { name: "Editar Horario" })).not.toBeInTheDocument();
   });
@@ -677,7 +766,10 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     { id: 601, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: 2 },
     { id: 602, diaSemana: "MIERCOLES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: 2 },
   ];
-  const SINGLE_DIA_ROW = { id: 603, diaSemana: "VIERNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 9, nivelRankingId: 2 };
+  // A second training group — a different categoria, therefore a different
+  // card. It exists to prove the roster union stops at the categoria it
+  // belongs to instead of pooling every schedule on the screen.
+  const SINGLE_DIA_ROW = { id: 603, diaSemana: "VIERNES", horaInicio: "20:00", horaFin: "21:15", categoria: "ADULTOS", entrenadorId: 9, nivelRankingId: 2 };
 
   // Nivel-matched (grupoId "2") but NEVER enrolled via AlumnoHorario for any
   // row above — proves the roster is sourced from fetchAlumnosPorHorario, not
@@ -752,7 +844,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
 
     expect(await screen.findByText("Ana Pérez · 12 años")).toBeInTheDocument();
     expect(await screen.findByText("Bruno Díaz · 15 años")).toBeInTheDocument();
@@ -764,7 +856,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
 
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(601));
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
@@ -782,7 +874,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
 
     expect(screen.queryByRole("button", { name: "Lun" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mié" })).not.toBeInTheDocument();
@@ -795,7 +887,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     fireEvent.change(screen.getByLabelText("Seleccionar alumno"), { target: { value: "70" } });
@@ -820,7 +912,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     fireEvent.change(screen.getByLabelText("Seleccionar alumno"), { target: { value: "70" } });
@@ -840,7 +932,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     fireEvent.change(screen.getByLabelText("Seleccionar alumno"), { target: { value: "70" } });
@@ -860,7 +952,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     const anaRow = (await screen.findByText("Ana Pérez · 12 años")).closest("div") as HTMLElement;
@@ -881,7 +973,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Asignar alumnos al horario" });
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     const anaRow = (await screen.findByText("Ana Pérez · 12 años")).closest("div") as HTMLElement;

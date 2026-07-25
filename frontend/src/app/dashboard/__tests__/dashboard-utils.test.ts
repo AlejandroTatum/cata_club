@@ -236,7 +236,7 @@ describe("buildActivityFeed", () => {
     });
   });
 
-  it("adds a second event once the payment is resolved", () => {
+  it("collapses an upload and its resolution into a single row", () => {
     const feed = buildActivityFeed(
       [
         buildRequest({
@@ -247,12 +247,58 @@ describe("buildActivityFeed", () => {
       ],
       [],
     );
-    expect(feed).toHaveLength(2);
+    // One request is one fact: "it was paid and then validated". Two rows for
+    // the same person on the same day read as clutter, not as history.
+    expect(feed).toHaveLength(1);
     expect(feed[0]).toMatchObject({
       kind: "payment-validated",
       subject: "Sofia Vera Zamora",
-      detail: "tiene su pago validado por Admin Dev",
+      detail: "tiene su pago de $25,00 validado por Admin Dev",
     });
+    // Carried at the resolution instant — the newer of the two.
+    expect(feed[0].at).toBe(new Date(2026, 6, 23, 8, 0).toISOString());
+  });
+
+  it("names the rejection rather than glossing it as a resolution", () => {
+    const feed = buildActivityFeed(
+      [
+        buildRequest({
+          validationStatus: "rechazado",
+          validatedAt: new Date(2026, 6, 23, 8, 0).toISOString(),
+        }),
+      ],
+      [],
+    );
+    expect(feed).toHaveLength(1);
+    expect(feed[0]).toMatchObject({
+      kind: "payment-rejected",
+      detail: "tiene su pago de $25,00 rechazado",
+    });
+  });
+
+  it("falls back to the upload when a resolved payment carries no usable resolution date", () => {
+    const feed = buildActivityFeed(
+      [buildRequest({ validationStatus: "validado", validatedAt: "no es una fecha" })],
+      [],
+    );
+    // Losing the resolution instant must not lose the payment itself.
+    expect(feed).toHaveLength(1);
+    expect(feed[0]).toMatchObject({ kind: "payment-uploaded", subject: "Laura Vera" });
+  });
+
+  it("never emits two rows for the same payment request", () => {
+    const feed = buildActivityFeed(
+      [
+        buildRequest({
+          id: "req-9",
+          validationStatus: "validado",
+          validatedAt: new Date(2026, 6, 23, 8, 0).toISOString(),
+        }),
+      ],
+      [],
+    );
+    expect(new Set(feed.map((event) => event.id)).size).toBe(feed.length);
+    expect(feed.filter((event) => event.id.includes("req-9"))).toHaveLength(1);
   });
 
   it("collapses one session's records into a single event with the head count", () => {
