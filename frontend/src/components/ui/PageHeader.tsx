@@ -41,12 +41,19 @@ export default function PageHeader({
     <header className={cn("flex flex-wrap items-center gap-3", className)}>
       <div className="min-w-0 flex-1">
         {eyebrow ? (
-          <p className="mb-[3px] text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+          // `ink-3-strong`, not `ink-3`: the eyebrow is the smallest type in
+          // the product (10.5px) and it always sits on the `canvas` grey the
+          // shell paints behind the header, where `ink-3` measures 4.24:1 and
+          // misses AA. One rule, so every screen's kicker is fixed at once.
+          <p className="mb-[3px] text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong">
             {eyebrow}
           </p>
         ) : null}
         <h1 className="text-[26px] font-extrabold tracking-[-0.03em] text-ink">{title}</h1>
-        {subtitle ? <p className="mt-1 text-[13px] text-ink-3">{subtitle}</p> : null}
+        {/* Same surface as the eyebrow, same correction: 13px/400 `ink-3` on
+            the `canvas` grey is 4.24:1, and the subtitle is normal-size text,
+            so AA asks for the full 4.5:1 here too. */}
+        {subtitle ? <p className="mt-1 text-[13px] text-ink-3-strong">{subtitle}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>

@@ -146,7 +146,18 @@ export default function TrainerPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["trainer"]}>
-      <AppShell eyebrow="Área de entrenadores" title={`Hola, ${firstNameOf(session?.user?.name)}`}>
+      {/*
+       * The `<h1>` is a greeting on purpose — this is the one screen a trainer
+       * opens standing at courtside, and it should sound like a person. But a
+       * greeting is not a page name, and every other authenticated screen names
+       * itself, so the subtitle carries "Mi día" — the same name the sidebar
+       * and the browser tab use — instead of overwriting the welcome.
+       */}
+      <AppShell
+        eyebrow="Área de entrenadores"
+        title={`Hola, ${firstNameOf(session?.user?.name)}`}
+        subtitle="Mi día — tu próxima sesión y el resumen de la última lista."
+      >
         {loading && <LoadingState label="Cargando tu día…" />}
 
         {error && !loading && <ErrorState message={error} onRetry={() => loadData()} />}

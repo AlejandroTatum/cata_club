@@ -59,14 +59,22 @@ const AA_NORMAL_TEXT = 4.5;
 // Token values under test
 // ---------------------------------------------------------------------------
 
-const cata = (tailwindConfig.theme?.extend?.colors as { cata: Record<string, string> }).cata;
+const colors = tailwindConfig.theme?.extend?.colors as Record<string, unknown>;
+const group = (key: string): Record<string, string> => colors[key] as Record<string, string>;
+
+const cata = group("cata");
+const ink = group("ink");
+const state = group("state");
+const coal = group("coal");
 
 /** Page background shared by /trainer, /dashboard and friends. */
 const PAGE_BG = "#F9FAFB";
-/** Tailwind `gray-100`, the "Sin asignar" badge fill. */
-const GRAY_100 = "#F3F4F6";
-/** Tailwind `gray-700`, the badge's text color after the fix. */
-const GRAY_700 = "#374151";
+/** `--canvas` — what the shell paints behind every page header. */
+const CANVAS = colors.canvas as string;
+/** `--paper` — the card/control surface. */
+const PAPER = colors.paper as string;
+/** The `.tbl thead th` fill: the one value the spec spells as a literal. */
+const THEAD_BG = "#FAFAFB";
 
 describe("contrastRatio helper", () => {
   it("returns 21 for black on white", () => {
@@ -82,15 +90,102 @@ describe("contrastRatio helper", () => {
   });
 });
 
-describe("/ranking — 'Sin asignar' nivel badge", () => {
-  // Measured at 2.31:1 (gray-400 #9CA3AF on gray-100) — the worst pair in the
-  // whole app, and it labels a real, actionable state.
-  it("no longer uses the gray-400 that measured 2.31:1", () => {
-    expect(contrastRatio("#9CA3AF", GRAY_100)).toBeLessThan(AA_NORMAL_TEXT);
+describe("/ranking — the unassigned-level chip", () => {
+  // This used to guard a `Badge` reading "Sin asignar" in Tailwind greys. That
+  // badge is gone: the unassigned rung on /ranking is now the `—` chip
+  // (page.tsx:283-289), which wears the system's own neutral state pair. The
+  // coverage follows the shipping markup rather than the retired one.
+  it("meets AA for the em-dash chip on the neutral tint", () => {
+    expect(contrastRatio(state.neutral, state["neutral-bg"])).toBeGreaterThanOrEqual(
+      AA_NORMAL_TEXT,
+    );
   });
 
-  it("meets AA with gray-700 on the gray-100 badge fill", () => {
-    expect(contrastRatio(GRAY_700, GRAY_100)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  it("confirms the gray-400 the retired badge used would still fail today", () => {
+    // Kept as a tripwire: 2.31:1 was the worst pair the audit found, and it is
+    // the shape of mistake ("just use a lighter grey") most likely to recur.
+    expect(contrastRatio("#9CA3AF", "#F3F4F6")).toBeLessThan(AA_NORMAL_TEXT);
+  });
+});
+
+describe("muted text on the canvas grey — kicker, subtitle, table head", () => {
+  // The kicker ("Panel administrativo", "Área de entrenadores", …) and the
+  // subtitle are two rules in PageHeader.tsx, and both sit on the `canvas` grey
+  // the shell paints behind the header. The table head is the same problem on
+  // the `#FAFAFB` fill.
+  it("confirms ink-3 fails on both micro-label surfaces", () => {
+    expect(contrastRatio(ink["3"], CANVAS)).toBeLessThan(AA_NORMAL_TEXT);
+    expect(contrastRatio(ink["3"], THEAD_BG)).toBeLessThan(AA_NORMAL_TEXT);
+  });
+
+  it("keeps ink-3 itself, because it passes on paper", () => {
+    // Why a companion and not a darker `ink-3`: the shared token is correct
+    // everywhere it sits on `paper`, and darkening it would drag every muted
+    // 12–13px line in the product darker for no accessibility gain.
+    expect(contrastRatio(ink["3"], PAPER)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA with ink-3-strong on canvas, paper and the table-head fill", () => {
+    expect(contrastRatio(ink["3-strong"], CANVAS)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(ink["3-strong"], PAPER)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(ink["3-strong"], THEAD_BG)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("stays lighter than ink-2, so the eyebrow does not read as body ink", () => {
+    expect(contrastRatio(ink["3-strong"], CANVAS)).toBeLessThan(
+      contrastRatio(ink["2"], CANVAS),
+    );
+  });
+});
+
+describe("status badges — each foreground on its own -bg tint", () => {
+  // `Badge` renders an 11.5px/700 label in `text-state-X` on `bg-state-X-bg`;
+  // ErrorState, Stepper, ChatWidget and the enrollment notices reuse the same
+  // pairing. The pair is the token's whole purpose, so it is the pair that has
+  // to clear AA.
+  it.each(["ok", "warn", "bad", "neutral"])("meets AA for %s", (tone) => {
+    expect(contrastRatio(state[tone], state[`${tone}-bg`])).toBeGreaterThanOrEqual(
+      AA_NORMAL_TEXT,
+    );
+  });
+
+  it("confirms the three values the spec originally shipped did not", () => {
+    // 4.49:1, 4.46:1 and 4.27:1 — all under, all measured.
+    expect(contrastRatio("#157F3D", state["ok-bg"])).toBeLessThan(AA_NORMAL_TEXT);
+    expect(contrastRatio("#B45309", state["warn-bg"])).toBeLessThan(AA_NORMAL_TEXT);
+    expect(contrastRatio("#D92128", state["bad-bg"])).toBeLessThan(AA_NORMAL_TEXT);
+  });
+
+  it("also improves the same foregrounds on paper and canvas", () => {
+    for (const tone of ["ok", "warn", "bad"]) {
+      expect(contrastRatio(state[tone], PAPER)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(state[tone], CANVAS)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+});
+
+describe("sidebar rail — the two sub-labels on coal", () => {
+  // Both are white at a fractional alpha, so the real foreground is the
+  // composite against the surface underneath.
+  const RAIL = coal.DEFAULT;
+  /** The user card is `bg-white/[0.06]` over the rail. */
+  const USER_CARD = compositeOver(PAPER, RAIL, 0.06);
+
+  it("confirms the alphas the redesign shipped were under AA", () => {
+    // "Panel de gestión" at 0.42 → 4.10:1, "Entrenador" at 0.45 → 4.35:1.
+    expect(contrastRatio(compositeOver(PAPER, RAIL, 0.42), RAIL)).toBeLessThan(AA_NORMAL_TEXT);
+    expect(contrastRatio(compositeOver(PAPER, USER_CARD, 0.45), USER_CARD)).toBeLessThan(
+      AA_NORMAL_TEXT,
+    );
+  });
+
+  it("meets AA at 50% on both surfaces", () => {
+    expect(contrastRatio(compositeOver(PAPER, RAIL, 0.5), RAIL)).toBeGreaterThanOrEqual(
+      AA_NORMAL_TEXT,
+    );
+    expect(contrastRatio(compositeOver(PAPER, USER_CARD, 0.5), USER_CARD)).toBeGreaterThanOrEqual(
+      AA_NORMAL_TEXT,
+    );
   });
 });
 

@@ -7,8 +7,7 @@
  *
  * 1. The shared BackLink (src/components/BackLink.tsx) renders a real
  *    next/link `<a href>` to a fixed parent route — never router.back() —
- *    on /members, /payments, and /ranking (NivelAsignacionPanel, shared
- *    with /trainer/nivel).
+ *    on /members, /payments, and /ranking.
  * 2. useToast() (src/contexts/ToastContext.tsx) surfaces a visible toast
  *    after a mutating action — covered here via /payments' reject flow
  *    (error path, since it needs no extra setup beyond one mocked request).
@@ -114,7 +113,7 @@ test.describe("Back navigation + toasts", () => {
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 
-  test("ranking (admin): BackLink -> /dashboard via the shared NivelAsignacionPanel", async ({ page }) => {
+  test("ranking (admin): BackLink -> /dashboard", async ({ page }) => {
     await loginAsAdmin(page);
     await page.route("**/api/members", (route) =>
       fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),

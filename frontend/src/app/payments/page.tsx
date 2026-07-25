@@ -226,6 +226,38 @@ function ProofViewer({
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
+// Focus management for the queue ⇄ detail swap
+// ---------------------------------------------------------------------------
+
+/** Marks a queue row's action button so focus can find it again on the way back. */
+const QUEUE_ACTION_ATTR = "data-payment-action";
+
+/**
+ * Move focus back to the queue row action for `requestId`.
+ *
+ * The queue renders every request twice — once in the desktop table, once as a
+ * mobile card — so the id alone does not identify a single element. Rather than
+ * duplicating the `md:` breakpoint in JavaScript, this tries each candidate and
+ * keeps the first one that actually took focus: a `display: none` element
+ * ignores `focus()`, so the hidden view drops out on its own.
+ *
+ * Returns false when the row is gone (filtered out, or on another page), in
+ * which case the caller leaves focus alone rather than sending it somewhere
+ * arbitrary.
+ */
+function focusQueueAction(requestId: string | null): boolean {
+  if (!requestId || typeof document === "undefined") return false;
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLElement>(`[${QUEUE_ACTION_ATTR}]`),
+  ).filter((el) => el.getAttribute(QUEUE_ACTION_ATTR) === requestId);
+  for (const el of candidates) {
+    el.focus();
+    if (document.activeElement === el) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 
 export default function PaymentsPage(): React.ReactElement {
   const { showSuccess, showError } = useToast();
@@ -332,6 +364,35 @@ export default function PaymentsPage(): React.ReactElement {
 
   /** The pending queue as it stood before the in-flight decision resolves. */
   const pendingBeforeDecision = useRef<PaymentValidationRequest[]>([]);
+
+  /**
+   * Opening a payment swaps the queue out for the detail IN PLACE — same URL,
+   * same `<main>`, no dialog. Without help, that leaves focus on a button that
+   * has just been unmounted, and the browser drops it to `<body>`: a keyboard
+   * admin who pressed Enter on "Revisar" landed back at the top of the
+   * document, ahead of the whole sidebar, with no idea the view had changed.
+   *
+   * So: focus moves to the detail's heading on open, and returns to the row
+   * action it came from on the way back. Deliberately NOT `role="dialog"` and
+   * NOT a focus trap — this is a view swap, and describing it as a modal would
+   * promise a background that is still there and an Escape that closes it.
+   */
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null);
+  /** The last request the detail showed — the row to hand focus back to. */
+  const lastDetailId = useRef<string | null>(null);
+  const detailWasOpen = useRef(false);
+
+  useEffect(() => {
+    const isOpen = selectedRequest !== null;
+    if (isOpen) {
+      lastDetailId.current = selectedRequest.id;
+      // Only on open: prev/next keep focus on the pager the admin is clicking.
+      if (!detailWasOpen.current) detailHeadingRef.current?.focus();
+    } else if (detailWasOpen.current) {
+      focusQueueAction(lastDetailId.current);
+    }
+    detailWasOpen.current = isOpen;
+  }, [selectedRequest]);
 
   function applyDecision(updated: PaymentValidationRequest): void {
     setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
@@ -476,6 +537,7 @@ export default function PaymentsPage(): React.ReactElement {
                           size="sm"
                           variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
                           aria-label={actionLabel(req)}
+                          data-payment-action={req.id}
                           onClick={() => setSelectedId(req.id)}
                         >
                           {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
@@ -511,6 +573,7 @@ export default function PaymentsPage(): React.ReactElement {
                       size="sm"
                       variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
                       aria-label={actionLabel(req)}
+                      data-payment-action={req.id}
                       onClick={() => setSelectedId(req.id)}
                     >
                       {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
@@ -590,7 +653,14 @@ export default function PaymentsPage(): React.ReactElement {
         <div className="grid gap-5 lg:grid-cols-5">
           <div className="flex flex-col gap-5 lg:col-span-3">
             <section className="overflow-hidden rounded-card border border-line bg-paper">
-              <h2 className="border-b border-line px-[18px] py-4 text-[15px] font-bold text-ink">
+              {/* `tabIndex={-1}` so the effect above can put focus here when
+                  the detail opens: reachable programmatically, never a Tab
+                  stop of its own. */}
+              <h2
+                ref={detailHeadingRef}
+                tabIndex={-1}
+                className="border-b border-line px-[18px] py-4 text-[15px] font-bold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ball"
+              >
                 Detalle de la solicitud
               </h2>
               <DetailRow label="Estudiante">{request.studentName}</DetailRow>

@@ -43,6 +43,13 @@ describe("design tokens — ink and surfaces (_sistema.css:29-35)", () => {
     });
   });
 
+  it("carries the AA-safe companion for 10.5px/700 micro labels", () => {
+    // `ink-3` passes on `paper` and fails on `canvas`/`#FAFAFB`, so the ramp
+    // keeps its value and the kicker/table-head treatment takes this one.
+    // The ratios are asserted in lib/__tests__/color-contrast.test.ts.
+    expect(nested("ink")["3-strong"]).toBe("#6B6B76");
+  });
+
   it("carries both hairlines", () => {
     expect(nested("line")).toMatchObject({ DEFAULT: "#E9E9EC", "2": "#D8D8DE" });
   });
@@ -56,13 +63,13 @@ describe("design tokens — ink and surfaces (_sistema.css:29-35)", () => {
 describe("design tokens — the four state pairs (_sistema.css:38-41)", () => {
   it("carries every foreground with its -bg companion", () => {
     expect(nested("state")).toEqual({
-      ok: "#157F3D",
+      ok: "#137739",
       "ok-bg": "#E7F4EC",
-      warn: "#B45309",
+      warn: "#A94D08",
       "warn-bg": "#FBF0E2",
       neutral: "#63636E",
       "neutral-bg": "#EFEFF2",
-      bad: "#D92128",
+      bad: "#C51B22",
       "bad-bg": "#FBE9EA",
     });
   });
@@ -73,10 +80,16 @@ describe("design tokens — the four state pairs (_sistema.css:38-41)", () => {
     expect(colors.neutral).toBeUndefined();
   });
 
-  it("uses the same red for `bad` as the brand red, per the spec", () => {
-    // `--bad: #D92128` is literally `--red`: destructive and error share the
-    // one red, and nothing else is allowed to use it.
-    expect(nested("state").bad).toBe((colors.cata as Record<string, string>).red);
+  it("keeps `bad` in the brand red family without reusing the CTA red exactly", () => {
+    // The spec shipped `--bad` as literally `--red` (#D92128). That made the
+    // error/destructive TEXT color identical to the fill of the primary CTA —
+    // two jobs, one value — and the text job failed AA at 4.27:1 on its own
+    // `bad-bg` tint. `bad` is now one notch darker so the pair passes; the CTA
+    // red is untouched, because white on #D92128 was never the problem.
+    // The rule "red is reserved for the CTA and for destructive/error" holds.
+    const brandRed = (colors.cata as Record<string, string>).red;
+    expect(brandRed).toBe("#D92128");
+    expect(nested("state").bad).not.toBe(brandRed);
   });
 });
 

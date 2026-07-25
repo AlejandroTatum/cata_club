@@ -28,6 +28,24 @@ const config: Config = {
           DEFAULT: "#17181C",
           "2": "#4A4A55",
           "3": "#74747F",
+          /**
+           * AA-safe companion to `ink-3` for muted text that sits on the
+           * `canvas` grey or the `#FAFAFB` table-head fill — the page kicker,
+           * the page subtitle, the table header. NOT a replacement for `ink-3`.
+           *
+           * `ink-3` measures 4.62:1 on `paper`, which passes; it only slips to
+           * 4.24:1 once the surface underneath is the `canvas` grey (and 4.43:1
+           * on the `#FAFAFB` table-head fill). Darkening the shared token to
+           * cover those two tints would drag every muted 12–13px line in the
+           * product several stops darker for no accessibility gain, so the
+           * shared token stays and this one carries the small-bold usage:
+           * 4.83:1 on `canvas`, 5.26:1 on `paper`.
+           *
+           * `ink-2` was the other candidate, but at 8.03:1 on `canvas` it reads
+           * as body ink and collapses the eyebrow→title→subtitle hierarchy the
+           * kicker exists to create.
+           */
+          "3-strong": "#6B6B76",
         },
         /** Hairlines. `--line` for dividers, `--line-2` for control borders. */
         line: {
@@ -41,14 +59,24 @@ const config: Config = {
 
         // Status pairs (foreground + `-bg` fill). Namespaced under `state-` so
         // `neutral` does not shadow Tailwind's built-in neutral scale.
+        //
+        // ok/warn/bad are one notch darker than `_sistema.css` shipped them
+        // (#157F3D / #B45309 / #D92128). Each foreground is defined to be read
+        // ON its own `-bg` tint — that is the pair's entire purpose — and the
+        // original three measured 4.49:1, 4.46:1 and 4.27:1 there, all under
+        // AA's 4.5:1 for the 11.5px/700 badge label. Unlike `ink-3`, these had
+        // no surface where the lighter value was the correct choice, so there
+        // was nothing to preserve: the corrected values are strictly better
+        // everywhere they appear (on `paper` 5.0 → 5.6-5.9, on `canvas`
+        // 4.6 → 5.1-5.5). `_sistema.css` carries the same correction.
         state: {
-          ok: "#157F3D",
+          ok: "#137739",
           "ok-bg": "#E7F4EC",
-          warn: "#B45309",
+          warn: "#A94D08",
           "warn-bg": "#FBF0E2",
           neutral: "#63636E",
           "neutral-bg": "#EFEFF2",
-          bad: "#D92128",
+          bad: "#C51B22",
           "bad-bg": "#FBE9EA",
         },
 

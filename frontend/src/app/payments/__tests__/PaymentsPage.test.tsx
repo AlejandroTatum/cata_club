@@ -221,6 +221,54 @@ describe("PaymentsPage — the queue is operable without a mouse", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 2b. Focus follows the view swap
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
+  /** The detail's heading, which is where focus is supposed to land. */
+  function detailHeading(): HTMLElement {
+    return screen.getByRole("heading", { name: /detalle de la solicitud/i });
+  }
+
+  it("moves focus into the detail when a request opens", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    // Opening replaces the queue in place, so the button that was focused is
+    // unmounted; without this the browser drops focus to <body> and a keyboard
+    // admin restarts from the top of the document.
+    await waitFor(() => expect(document.activeElement).toBe(detailHeading()));
+    expect(detailHeading()).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("returns focus to the row action it came from", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /volver a la cola/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /volver a la cola/i }));
+
+    await screen.findByTestId("payments-table");
+    const action = within(queueTable()).getByRole("button", {
+      name: /revisar el pago de Juan Pérez/i,
+    });
+    await waitFor(() => expect(document.activeElement).toBe(action));
+  });
+
+  it("does not pretend to be a modal", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /volver a la cola/i });
+
+    // An in-page view swap, not a dialog: no `role="dialog"`, no `aria-modal`,
+    // no focus trap. Calling it a dialog would promise a background that is
+    // still there and an Escape key that closes it.
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector("[aria-modal]")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 3. Queue position and auto-advance
 // ---------------------------------------------------------------------------
 

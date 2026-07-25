@@ -397,7 +397,10 @@ export default function AppShell({
               <span className="block truncate text-[13.5px] font-bold tracking-[-0.01em]">
                 Cata Club
               </span>
-              <span className="mt-px block truncate text-[9.5px] font-bold uppercase tracking-[0.12em] text-white/[0.42]">
+              {/* 50%, not the spec's 42%: white at 0.42 over `coal` composites
+                  to 4.10:1, under AA. At 0.50 it measures 5.36:1 and still
+                  reads as the quieter second line under the club name. */}
+              <span className="mt-px block truncate text-[9.5px] font-bold uppercase tracking-[0.12em] text-white/50">
                 {getAreaLabel(role)}
               </span>
             </span>
@@ -530,7 +533,10 @@ export default function AppShell({
                   <span className="block truncate text-[12.5px] font-semibold">
                     {session.user.name}
                   </span>
-                  <span className="block truncate text-[11px] text-white/45">
+                  {/* Same correction as the brand's area label: the user card
+                      sits on `bg-white/[0.06]` over `coal` (#212124), where
+                      white at 0.45 is 4.35:1. At 0.50 it measures 5.04:1. */}
+                  <span className="block truncate text-[11px] text-white/50">
                     {getRoleLabel(session.user.role)}
                   </span>
                 </span>

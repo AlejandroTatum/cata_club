@@ -2,7 +2,10 @@
  * Table primitives — `.tbl` from `_sistema.css` (:238-244).
  *
  *   thead th : `--h-thead` 44px, 16px padding, 10.5px/700/.1em uppercase in
- *              `--ink-3`, `#FAFAFB` fill, `--line` bottom rule
+ *              `--ink-3-strong`, `#FAFAFB` fill, `--line` bottom rule
+ *              (the spec shipped `--ink-3` here, which measures 4.43:1 on the
+ *              `#FAFAFB` fill — the same sub-AA micro-label the page kicker
+ *              had, so it takes the same companion token)
  *   tbody td : `--h-row` 60px, 16px padding, 13.5px in `--ink-2`, `--line`
  *              bottom rule, suppressed on the last row
  *   .nm / .sb: the two-line identity cell (14px/600 `--ink` over 11.5px
@@ -77,7 +80,7 @@ export function TableHeaderCell({
       scope="col"
       className={cn(
         "h-thead whitespace-nowrap border-b border-line bg-[#FAFAFB] px-4",
-        "text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3",
+        "text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong",
         align === "right" ? "text-right" : "text-left",
         className,
       )}
