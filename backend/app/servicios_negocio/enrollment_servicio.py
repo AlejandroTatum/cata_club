@@ -175,7 +175,8 @@ class EnrollmentServicio:
                 persona_id=alumno.id,
             )
             self.repo_usuario.crear(usuario)
-            self._asignar_rol(usuario, TipoRol.REPRESENTANTE)
+            # Autoinscripción de un adulto jugador: solo ALUMNO (sin representante
+            # involucrado, no hereda el rol REPRESENTANTE del flujo de menor).
             self._asignar_rol(usuario, TipoRol.ALUMNO)
             self._notificar_nueva_inscripcion(alumno)
             return self._emitir_tokens(usuario)
