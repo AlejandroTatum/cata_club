@@ -95,6 +95,12 @@ function Carnet({
   const level = levelTagLabel(profile);
   const membership = membershipTag(profile.membership);
   const facts: { label: string; value: string }[] = [];
+  // "Socio desde" rather than the prototype's "MIEMBRO Nº · DESDE": the backend
+  // has no member-number concept, and printing the surrogate persona id as one
+  // would invent an identity-document field. The activation date IS real.
+  if (profile.membership?.fechaActivacion) {
+    facts.push({ label: "Socio desde", value: formatDate(profile.membership.fechaActivacion) });
+  }
   if (profile.membership?.categoria) facts.push({ label: "Plan", value: profile.membership.categoria });
   if (profile.membership?.franjaHoraria) facts.push({ label: "Franja", value: profile.membership.franjaHoraria });
   if (coverageEnd) facts.push({ label: "Cobertura hasta", value: formatDate(coverageEnd) });

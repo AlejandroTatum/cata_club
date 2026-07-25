@@ -104,6 +104,12 @@ export interface BackendMembresiaPropia {
   personaId: number;
   montoAplicado?: string;
   tipoMembresiaId?: number;
+  /**
+   * Present on `MembresiaResponseDTO` (membresia_pago_schemas.py:33), which is
+   * what `/membresias/mias` returns. It used to be dropped here, which is why
+   * the student card had no "socio desde" date to show.
+   */
+  fechaActivacion?: string;
 }
 
 /** Enriched membership view for a single persona — built server-side. */
@@ -115,6 +121,7 @@ export interface MembershipView {
   categoria: string | null;
   modalidad: string | null;
   franjaHoraria: string | null;
+  fechaActivacion: string | null;
 }
 
 export function buildMembershipView(
@@ -130,6 +137,7 @@ export function buildMembershipView(
     categoria: tipo?.categoria ?? null,
     modalidad: tipo?.modalidad ?? null,
     franjaHoraria: tipo?.franjaHoraria ?? null,
+    fechaActivacion: mem.fechaActivacion ?? null,
   };
 }
 

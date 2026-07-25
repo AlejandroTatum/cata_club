@@ -178,6 +178,7 @@ const MEMBRESIA: MembershipSummary = {
   categoria: "Mensual",
   modalidad: "MENSUAL",
   franjaHoraria: "Tarde",
+  fechaActivacion: "2026-03-15T00:00:00Z",
 };
 
 function pago(overrides: Partial<PagoPersona>): PagoPersona {

@@ -705,6 +705,8 @@ export interface MembershipSummary {
   categoria: string | null;
   modalidad: string | null;
   franjaHoraria: string | null;
+  /** Activation date, i.e. "socio desde". Null when the backend omits it. */
+  fechaActivacion: string | null;
 }
 
 /** A real `TipoMembresia` catalog entry (`GET /membresias/tipos`) — replaces the old hardcoded `membershipPlans` array. */
