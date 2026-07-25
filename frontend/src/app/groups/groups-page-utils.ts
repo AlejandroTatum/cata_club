@@ -321,6 +321,28 @@ function joinWithY(parts: string[]): string {
 }
 
 /**
+ * The weekday track a categoría is read against, in week order.
+ *
+ * The row shows the whole week a group MAY meet (`CATEGORIA_METADATA.dias` —
+ * Lunes a viernes for four of the five categorías, plus Sábado for
+ * Competitivo) and marks the días it actually runs, so "Competitivo also
+ * trains on Saturday" and "these rows skip Martes" are both readable at a
+ * glance instead of only in prose.
+ *
+ * It is a union, not just the allowed set: a categoría whose rows drift
+ * outside their allowed días (or one with no metadata at all, like an
+ * unrecognized `categoria` value) must still show every día it really uses
+ * rather than dropping it off the end of the track.
+ */
+export function buildDiaTrack(
+  permitidos: readonly string[],
+  dias: readonly string[],
+): string[] {
+  const present = new Set([...permitidos, ...dias]);
+  return DIA_ORDER.filter((dia) => present.has(dia));
+}
+
+/**
  * Roster person-ids per `Horario.id`. A row absent from the map is a request
  * that never answered — not an empty roster.
  */

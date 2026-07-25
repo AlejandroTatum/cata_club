@@ -2,17 +2,28 @@
  * /profile — the account screen, transcribed from
  * `docs/ux/prototipos/25-perfil.html`.
  *
- * Four blocks at a 760px measure, not a grid of cramped boxes:
+ * Four blocks at the prototype's 820px measure, not a grid of cramped boxes:
  *
- *   1. `.idcard` — a 72px coal/ball avatar, the name, the correo, the role
- *      badge. Nothing else. Per the prototype's own decision note, "Estado de
- *      cuenta" does not earn a section: it is one binary fact, so it folds
- *      into a badge beside the role.
+ *   1. `.idcard` — a 72px coal/ball avatar, the name and the correo on the
+ *      left; a rail of account facts on the right (rol, membresía, nivel,
+ *      miembro desde — whichever of them this account actually has). Per the
+ *      prototype's own decision note, "Estado de cuenta" does not earn a
+ *      section: it is one binary fact, so it folds in beside the role.
  *   2. "Datos personales" — a list of 56px `.drow`s, ONE datum per row, an
  *      uppercase 150px label on the left and the value in bold on the right.
  *   3. "Seguridad" — the same row pattern, carrying actions instead of values.
  *   4. "Estudiantes a mi cargo" — kept, because for a representante it is the
  *      reason to open this page at all.
+ *
+ * ## Why the content starts high
+ *
+ * The page used to open with a "Volver al Panel" link, then a line carrying
+ * nothing but "Editar datos", and only then the identity card — which landed
+ * at y=317 of a 900px viewport, i.e. ~35% down, with the first two thirds of
+ * the screen spent on chrome. Both rows are gone: the action moved into
+ * `PageHeader`'s own row (`.rowline` in the prototype) via `AppShell`'s
+ * `actions` slot, and the back link went with it because `25-perfil.html`
+ * draws none — the shell's sidebar is the way back.
  *
  * Data sources are unchanged:
  *
@@ -47,7 +58,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import BackLink from "@/components/BackLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import {
@@ -60,7 +70,7 @@ import {
 } from "@/services/api";
 import type { StudentPortalSummary, StudentProfileSummary, MembershipSummary } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
-import { personInitials } from "@/app/student/student-utils";
+import { personInitials, describeRanking } from "@/app/student/student-utils";
 import { Badge, Button, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
@@ -138,6 +148,57 @@ function DetailRow({
         {note && <span className="text-xs font-normal text-ink-3">{note}</span>}
       </span>
       {action && <span className="flex-none">{action}</span>}
+    </div>
+  );
+}
+
+/**
+ * The shell every state of this page shares. Keeping the eyebrow/title/
+ * subtitle in ONE place stops loading, error and the loaded layout from
+ * drifting apart now that the loaded layout owns its own `AppShell` (it has
+ * to, because the header's action depends on the layout's edit state).
+ *
+ * The voice is usted: the tú of the auth screens is marketing copy and stops
+ * at the door.
+ */
+function ProfileShell({
+  actions,
+  children,
+}: {
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <AppShell
+      eyebrow="Su cuenta"
+      title="Perfil"
+      subtitle="Gestione su información y consulte su estado en el club."
+      actions={actions}
+    >
+      {children}
+    </AppShell>
+  );
+}
+
+/**
+ * One fact on the identity card's right-hand rail: a 10.5px uppercase label
+ * over the value, same label treatment as `.drow .k`.
+ *
+ * The rail exists because the card used to be an avatar, a name, a correo and
+ * a large white void to their right. Every item here is a value the page has
+ * already fetched — a slot with no source is not rendered at all.
+ */
+function IdentityFact({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">{label}</p>
+      <div className="flex items-center text-sm font-semibold text-ink">{children}</div>
     </div>
   );
 }
@@ -324,42 +385,53 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     props.kind === "staff" ? props.perfil.telefono : (props.perfil?.telefono ?? "");
   const fechaCreacion = props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
 
+  const nivel =
+    props.kind === "student" && self && self.ranking.status === "available" && self.ranking.estaEnRanking
+      ? describeRanking(self.ranking).label
+      : null;
+
+  // The page action lives in `PageHeader`'s own row (`.rowline` in
+  // `25-perfil.html`), passed up through `AppShell`. It used to sit on a line
+  // of its own below a "Volver al Panel" link, and those two rows together
+  // pushed the identity card to ~35% of the viewport before anything was read.
+  const headerAction =
+    props.kind === "student" ? (
+      <Link href="/student" className={buttonClasses("secondary")}>
+        Ver portal completo
+        <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+      </Link>
+    ) : editing ? (
+      <>
+        <Button variant="ghost" onClick={cancelEditing} disabled={saving}>
+          <X size={14} strokeWidth={1.5} aria-hidden="true" />
+          Cancelar
+        </Button>
+        <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
+          {saving ? (
+            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Save size={14} strokeWidth={1.5} aria-hidden="true" />
+          )}
+          {saving ? "Guardando…" : "Guardar"}
+        </Button>
+      </>
+    ) : (
+      <Button onClick={startEditing}>Editar datos</Button>
+    );
+
   return (
-    <div className="mx-auto w-full max-w-[760px] space-y-5">
-      {props.kind === "staff" && (
-        <BackLink href={props.role === "admin" ? "/dashboard" : "/trainer"} label="Volver al Panel" />
-      )}
-
-      {/* Header action row — "Editar datos" lives HERE, at the top of the
-          page, not buried at the bottom of a column. */}
-      <div className="flex items-center justify-end gap-3">
-        {props.kind === "student" ? (
-          <Link href="/student" className={buttonClasses("secondary")}>
-            Ver portal completo
-            <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
-          </Link>
-        ) : editing ? (
-          <>
-            <Button variant="ghost" onClick={cancelEditing} disabled={saving}>
-              <X size={14} strokeWidth={1.5} aria-hidden="true" />
-              Cancelar
-            </Button>
-            <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
-              {saving ? (
-                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Save size={14} strokeWidth={1.5} aria-hidden="true" />
-              )}
-              {saving ? "Guardando…" : "Guardar"}
-            </Button>
-          </>
-        ) : (
-          <Button onClick={startEditing}>Editar datos</Button>
-        )}
-      </div>
-
-      {/* 1 — `.idcard`: avatar, name, correo, badges. Nothing else. */}
-      <section data-testid="profile-hero" className="card flex items-center gap-[18px] px-6 py-[22px]">
+    <ProfileShell actions={headerAction}>
+      {/* `.canvas` at `max-width: 820px` (`25-perfil.html`), not 760: at 1440
+          the shell leaves ~1137px of content area, and 820 is the measure the
+          prototype's own main column uses. */}
+      <div className="mx-auto w-full max-w-[820px] space-y-5">
+      {/* 1 — `.idcard`: the identity on the left, the account facts it can
+          prove on the right. */}
+      <section
+        data-testid="profile-hero"
+        className="card flex flex-col gap-5 px-6 py-[22px] sm:flex-row sm:items-center sm:gap-6"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-[18px]">
         <div className="relative flex-none">
           <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-coal text-2xl font-extrabold text-ball">
             {currentFotoUrl ? (
@@ -397,18 +469,40 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         </div>
         <div className="min-w-0">
           <p className="text-xl font-bold tracking-[-0.02em] text-ink">{fullName}</p>
-          <p className="mb-2 mt-0.5 text-[13px] text-ink-3">{correoDisplay}</p>
-          <div className="flex flex-wrap gap-2">
-            <Badge>{roleLabel}</Badge>
-            {membership && <Badge tone={membership.tone}>{membership.label}</Badge>}
-          </div>
-          {props.kind === "student" && self && !membership && (
-            <p className="mt-2 text-xs text-ink-3">Membresía: {NO_MEMBERSHIP_FALLBACK}</p>
-          )}
+          <p className="mt-0.5 text-[13px] text-ink-3">{correoDisplay}</p>
           {fotoError && (
             <p role="alert" className="mt-2 text-xs text-cata-red">
               {fotoError}
             </p>
+          )}
+        </div>
+        </div>
+
+        {/* The rail. Rol and Membresía keep their badge treatment — they are
+            states, not free text — while Nivel and Miembro desde read as
+            values. Nothing here is derived or estimated: `nivel` is dropped
+            outright when the ranking call came back unavailable, and
+            "Miembro desde" only appears once `fetchMiPerfil()` has resolved.
+
+            Two facts the prototype draws are still absent, for want of a
+            source: "Cuenta activa" (no `activo` flag on `UsuarioMeResponseDTO`)
+            and "Cédula" (admin-only, via `/personas/{id}`). */}
+        <div className="flex flex-wrap gap-x-8 gap-y-4 border-t border-line pt-5 sm:flex-none sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+          <IdentityFact label="Rol">
+            <Badge>{roleLabel}</Badge>
+          </IdentityFact>
+          {props.kind === "student" && self && (
+            <IdentityFact label="Membresía">
+              {membership ? (
+                <Badge tone={membership.tone}>{membership.label}</Badge>
+              ) : (
+                <span className="text-xs font-normal text-ink-3">{NO_MEMBERSHIP_FALLBACK}</span>
+              )}
+            </IdentityFact>
+          )}
+          {nivel && <IdentityFact label="Nivel">{nivel}</IdentityFact>}
+          {fechaCreacion && (
+            <IdentityFact label="Miembro desde">{formatDate(fechaCreacion)}</IdentityFact>
           )}
         </div>
       </section>
@@ -435,7 +529,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             telefonoDisplay || "—"
           )}
         </DetailRow>
-        {fechaCreacion && <DetailRow label="Miembro desde">{formatDate(fechaCreacion)}</DetailRow>}
+        {/* "Miembro desde" is NOT a row: it is account metadata, it lives on
+            the identity card's rail, and repeating it here would be the same
+            datum printed twice on one screen. */}
         {props.kind === "student" && (
           <DetailRow>
             <span className="text-xs font-normal text-ink-3">
@@ -499,7 +595,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           ))}
         </CardSection>
       )}
-    </div>
+      </div>
+    </ProfileShell>
   );
 }
 
@@ -601,16 +698,12 @@ function ProfileContent(): React.ReactElement | null {
 
   if (role === null) return null;
 
-  let content: React.ReactNode;
+  // `ProfileLayout` renders its OWN `AppShell` — the page action has to reach
+  // `PageHeader`'s row, and the edit state that decides which action it is
+  // lives inside the layout. Loading and error get the plain shell.
   if (isStudentRole) {
-    if (studentState.status === "loading") {
-      content = <LoadingState className="min-h-[50vh] justify-center" label="Cargando su cuenta…" />;
-    } else if (studentState.status === "error") {
-      content = (
-        <ErrorState message={studentState.message} onRetry={() => setStudentReload((n) => n + 1)} />
-      );
-    } else {
-      content = (
+    if (studentState.status === "ready") {
+      return (
         <ProfileLayout
           kind="student"
           role={role}
@@ -622,12 +715,8 @@ function ProfileContent(): React.ReactElement | null {
         />
       );
     }
-  } else if (staffState.status === "loading") {
-    content = <LoadingState className="min-h-[50vh] justify-center" label="Cargando perfil…" />;
-  } else if (staffState.status === "error") {
-    content = <ErrorState message={staffState.message} onRetry={() => setStaffReload((n) => n + 1)} />;
-  } else {
-    content = (
+  } else if (staffState.status === "ready") {
+    return (
       <ProfileLayout
         kind="staff"
         role={role}
@@ -638,10 +727,24 @@ function ProfileContent(): React.ReactElement | null {
     );
   }
 
+  const pending = isStudentRole ? studentState : staffState;
+
   return (
-    <AppShell eyebrow="Tu cuenta" title="Perfil" subtitle="Gestiona tu información y consulta tu estado en el sistema.">
-      {content}
-    </AppShell>
+    <ProfileShell>
+      {pending.status === "loading" ? (
+        <LoadingState
+          className="min-h-[50vh] justify-center"
+          label={isStudentRole ? "Cargando su cuenta…" : "Cargando perfil…"}
+        />
+      ) : (
+        <ErrorState
+          message={pending.status === "error" ? pending.message : ""}
+          onRetry={() =>
+            isStudentRole ? setStudentReload((n) => n + 1) : setStaffReload((n) => n + 1)
+          }
+        />
+      )}
+    </ProfileShell>
   );
 }
 

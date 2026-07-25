@@ -261,12 +261,15 @@ describe("ProfilePage — student/representante summary view", () => {
     // Full name appears twice by design (hero card + "Información personal"
     // column, same as the staff branch).
     expect((await screen.findAllByText("Sofía Alumna")).length).toBe(2);
-    // Membership state is ONE badge beside the role — the prototype's own
-    // decision: a binary fact does not earn a section of its own.
+    // Membership state is ONE badge in the identity card's rail — the
+    // prototype's own decision: a binary fact does not earn a section.
+    const hero = screen.getByTestId("profile-hero");
     expect(screen.getAllByText("Activa").length).toBe(1);
-    // The ranking level is NOT repeated here: it lives on the carnet at
-    // /student, which is the thing a parent actually screenshots.
-    expect(screen.queryByText("Nivel 3")).not.toBeInTheDocument();
+    expect(within(hero).getByText("Membresía")).toBeInTheDocument();
+    // The level the portal already returns fills the rail's third slot. It is
+    // read from `ranking.nivelNombre`, so it is real or it is absent.
+    expect(within(hero).getByText("Nivel")).toBeInTheDocument();
+    expect(within(hero).getByText("Nivel 3")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -293,9 +296,12 @@ describe("ProfilePage — student/representante summary view", () => {
     );
 
     expect((await screen.findAllByText("Sofía Alumna")).length).toBe(2);
-    expect(
-      screen.getByText(/Membresía: No disponible — consulte con administración/),
-    ).toBeInTheDocument();
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText("Membresía")).toBeInTheDocument();
+    expect(within(hero).getByText("No disponible — consulte con administración")).toBeInTheDocument();
+    // The ranking call failed, so no level is claimed — the slot is dropped,
+    // never filled with a guess.
+    expect(within(hero).queryByText("Nivel")).not.toBeInTheDocument();
   });
 
   it("renders one row per representado for a representante session, always showing the honest 'no disponible' note for their membership (the backend never scopes /membresias/mias to a dependent, only to the caller) (triangulation)", async () => {
@@ -617,7 +623,8 @@ describe("ProfilePage — unified layout structure", () => {
     await screen.findAllByText("Ana Admin");
     expect(screen.getByRole("heading", { level: 1, name: "Perfil" })).toBeInTheDocument();
     expect(
-      screen.getByText("Gestiona tu información y consulta tu estado en el sistema."),
+      // Usted, not tú: the marketing voice stops at the auth screens.
+      screen.getByText("Gestione su información y consulte su estado en el club."),
     ).toBeInTheDocument();
     expect(screen.getByTestId("profile-hero")).toBeInTheDocument();
     expect(screen.getByTestId("profile-column-info")).toBeInTheDocument();
@@ -898,38 +905,52 @@ describe("ProfilePage — the redesigned account layout", () => {
     await screen.findAllByText("Ana Admin");
   }
 
-  it("puts 'Editar datos' in the header, above the content", async () => {
+  it("puts the page action in the page header row, not floating above the content", async () => {
     await renderAdmin();
 
     const button = screen.getByRole("button", { name: /editar datos/i });
-    const info = screen.getByTestId("profile-column-info");
-    expect(info.contains(button)).toBe(false);
-    // Header row precedes the identity card in document order.
-    expect(
-      button.compareDocumentPosition(screen.getByTestId("profile-hero")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    // It belongs to the SAME header row as the page title — it used to sit on
+    // a line of its own between the header and the identity card, which is
+    // what pushed the first real content ~40% down the viewport.
+    const header = button.closest("header");
+    expect(header).not.toBeNull();
+    expect(within(header as HTMLElement).getByRole("heading", { name: "Perfil" })).toBeInTheDocument();
+    expect(screen.getByTestId("profile-column-info").contains(button)).toBe(false);
   });
 
-  it("keeps the identity card to the avatar, name, correo and role badge", async () => {
+  it("does not repeat a back link the shell's own sidebar already provides", async () => {
+    await renderAdmin();
+
+    // `docs/ux/prototipos/25-perfil.html` draws no back link: the sidebar is
+    // the way back, and the extra row only cost vertical space above the fold.
+    expect(screen.queryByRole("link", { name: /volver al panel/i })).not.toBeInTheDocument();
+  });
+
+  it("gives the identity card the account facts it can prove, on its right", async () => {
     await renderAdmin();
 
     const hero = screen.getByTestId("profile-hero");
     expect(within(hero).getByText("Ana Admin")).toBeInTheDocument();
     expect(within(hero).getByText("ana.admin@cataclub.com")).toBeInTheDocument();
+    // The meta rail — every value real and already fetched.
+    expect(within(hero).getByText("Rol")).toBeInTheDocument();
     expect(within(hero).getByText("Administrador")).toBeInTheDocument();
-    // Nothing else: no phone, no dates, no membership numbers.
+    expect(within(hero).getByText("Miembro desde")).toBeInTheDocument();
+    expect(within(hero).getByText("10/03/2024")).toBeInTheDocument();
+    // Contact data still belongs to the 56px rows, not to the card.
     expect(within(hero).queryByText("099111222")).not.toBeInTheDocument();
-    expect(within(hero).queryByText("10/03/2024")).not.toBeInTheDocument();
   });
 
   it("lays personal data out as one datum per row, never as a data grid", async () => {
     await renderAdmin();
 
     const info = screen.getByTestId("profile-column-info");
-    for (const label of ["Nombres", "Correo", "Teléfono", "Miembro desde"]) {
+    for (const label of ["Nombres", "Correo", "Teléfono"]) {
       expect(within(info).getByText(label)).toBeInTheDocument();
     }
+    // "Miembro desde" is account metadata, not personal data: it moved to the
+    // identity card's rail and must NOT also be repeated as a row.
+    expect(within(info).queryByText("Miembro desde")).not.toBeInTheDocument();
     // The correo note sits inline on the right of its own row.
     expect(within(info).getByText(/lo gestiona el club/i)).toBeInTheDocument();
   });

@@ -22,6 +22,7 @@ import {
   formatDiaSet,
   countInscriptos,
   countInscriptosParciales,
+  buildDiaTrack,
   DIA_ORDER,
 } from "../groups-page-utils";
 import type { AlumnoHorario, NivelConOcupacion } from "@/services/api";
@@ -519,6 +520,30 @@ describe("countInscriptosParciales", () => {
 
   it("claims nothing while a row's roster is still missing", () => {
     expect(countInscriptosParciales(rows, { 1: [10, 11] })).toBe(0);
+  });
+});
+
+describe("buildDiaTrack", () => {
+  const LUN_SAB = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"];
+
+  it("lays out every día the categoría may meet, in week order", () => {
+    expect(buildDiaTrack(LUN_SAB, ["LUNES", "MIERCOLES"])).toEqual(LUN_SAB);
+  });
+
+  it("keeps a día the rows actually use even when it is outside the allowed set", () => {
+    expect(buildDiaTrack(["LUNES", "MARTES"], ["DOMINGO"])).toEqual([
+      "LUNES",
+      "MARTES",
+      "DOMINGO",
+    ]);
+  });
+
+  it("falls back to the días that exist when the categoría has no metadata", () => {
+    expect(buildDiaTrack([], ["MARTES", "LUNES"])).toEqual(["LUNES", "MARTES"]);
+  });
+
+  it("never repeats a día present in both sets", () => {
+    expect(buildDiaTrack(["LUNES"], ["LUNES"])).toEqual(["LUNES"]);
   });
 });
 

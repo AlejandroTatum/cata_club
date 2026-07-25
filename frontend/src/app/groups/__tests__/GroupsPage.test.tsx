@@ -362,6 +362,37 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     ).toBeInTheDocument();
   });
 
+  it("lays the categoria's week out as día markers, flagging the ones it actually runs", async () => {
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const card = screen.getAllByTestId("horario-card")[0];
+    const markers = within(card).getAllByTestId("dia-marker");
+
+    // COMPETITIVO may meet Lunes–Sábado; these rows only use Lun/Mié/Vie.
+    expect(markers.map((marker) => marker.dataset.dia)).toEqual([
+      "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO",
+    ]);
+    expect(
+      markers.filter((marker) => marker.dataset.active === "true").map((marker) => marker.dataset.dia),
+    ).toEqual(["LUNES", "MIERCOLES", "VIERNES"]);
+  });
+
+  it("shows the live Sábado row as an active día marker, not a missing one", async () => {
+    mockFetchHorarios.mockResolvedValue(FULL_WEEK_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const card = screen.getAllByTestId("horario-card")[0];
+    const sabado = within(card)
+      .getAllByTestId("dia-marker")
+      .find((marker) => marker.dataset.dia === "SABADO");
+    expect(sabado?.dataset.active).toBe("true");
+  });
+
   it("carries no level information on the cards (settled product decision)", async () => {
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
 
@@ -560,6 +591,16 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
     const card = screen.getAllByTestId("horario-card")[0];
     expect(card).toHaveTextContent("NO_EXISTE");
     expect(card).not.toHaveTextContent(/formativo/i);
+  });
+
+  it("falls back to the días that exist when the categoría has no allowed-day metadata", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const card = screen.getAllByTestId("horario-card")[0];
+    const markers = within(card).getAllByTestId("dia-marker");
+    expect(markers.map((marker) => marker.dataset.dia)).toEqual(["LUNES"]);
+    expect(markers[0].dataset.active).toBe("true");
   });
 });
 

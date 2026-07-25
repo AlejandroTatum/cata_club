@@ -42,6 +42,17 @@
  * that actually exist — so the live Saturday `COMPETITIVO` row reads as "Lunes a
  * viernes + sábado", a categoría staffed by two entrenadores shows both, and a
  * student enrolled in only some weekdays is reported instead of averaged away.
+ *
+ * v4 (full-width rows): five cards in an auto-fill grid left the screen mostly
+ * empty — five small boxes across the top of a 1400px page. The collapse to five
+ * groups was right; the container was not. The group is a full-width row now,
+ * and the width it gains is spent on facts that were cramped or invisible
+ * before: the categoría's whole week as día markers (so "Competitivo also trains
+ * on Saturday" and "these rows skip Martes" are readable without parsing prose),
+ * the entrenadores one per line instead of joined by a separator, and the
+ * partial-enrolment note on its own footnote line. Below `xl` the five columns
+ * stack and each one carries the label the header strip carries on desktop —
+ * five columns on a 390px phone is five squashed columns.
  */
 
 "use client";
@@ -91,6 +102,7 @@ import {
   formatDiaSet,
   countInscriptos,
   countInscriptosParciales,
+  buildDiaTrack,
   DIA_LABELS,
   type CategoriaCard,
   type PersonasPorHorario,
@@ -118,6 +130,75 @@ function cardTitle(card: CategoriaCard): string {
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
+}
+
+/**
+ * The column track the header strip and every group row share — declared once
+ * so the labels above the list keep pointing at the values below them.
+ *
+ * Only from `xl` up. The five tracks need ~834px of content width and the
+ * shell's sidebar takes 236px of the viewport, so below `xl` the columns would
+ * be pushed past the card's edge (and clipped by its `overflow-hidden`). There
+ * the row is a stack instead, and each cell carries its own label
+ * (`CellLabel`) — five columns squeezed into 390px is five unreadable columns.
+ *
+ * The action column is a fixed width, not `auto`: the header strip and the
+ * rows are separate grid containers, so an `auto` track would size itself to
+ * each container's own content and the labels would stop lining up with the
+ * values under them.
+ */
+const ROW_COLUMNS =
+  "xl:grid xl:grid-cols-[minmax(140px,0.95fr)_minmax(200px,1.25fr)_minmax(110px,0.75fr)_minmax(92px,0.5fr)_192px] " +
+  "xl:items-center xl:gap-x-5";
+
+/** `.tbl thead th` typography — the header strip and the stacked cell labels. */
+const CELL_LABEL = "text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong";
+
+/**
+ * A cell's own label. Visible below `xl`, where the stacked row has no header
+ * strip above it; from `xl` up it goes `sr-only` rather than `hidden`, because
+ * the visible header strip is `aria-hidden` and a bare "Entrenador Uno" with no
+ * label announced before it is not a row a screen reader can read.
+ */
+function CellLabel({ children }: { children: React.ReactNode }): React.ReactElement {
+  return <span className={`mb-1 block ${CELL_LABEL} xl:sr-only`}>{children}</span>;
+}
+
+/**
+ * The categoría's week, as one marker per día.
+ *
+ * Coal fill means the group meets that día; the outlined ones are días it is
+ * allowed to meet on but does not. That is what the extra width buys: the
+ * Saturday `COMPETITIVO` row and a categoría that skips a weekday both become
+ * visible at a glance instead of only in the sentence above.
+ *
+ * `aria-hidden` on purpose — the schedule line right above states the same day
+ * set in words ("Lunes a viernes + sábado"), so a screen reader gets the fact
+ * once as prose instead of six unlabeled chips. These are read-only markers,
+ * never selectable filters, so they carry no ball dot.
+ */
+function DiaTrack({ track, dias }: { track: string[]; dias: string[] }): React.ReactElement {
+  const activos = new Set(dias);
+  return (
+    <ul className="flex flex-wrap gap-1" aria-hidden="true">
+      {track.map((dia) => {
+        const activo = activos.has(dia);
+        return (
+          <li
+            key={dia}
+            data-testid="dia-marker"
+            data-dia={dia}
+            data-active={activo ? "true" : "false"}
+            className={`h-badge inline-flex min-w-[38px] items-center justify-center rounded-full px-2 text-[11.5px] font-bold ${
+              activo ? "bg-coal text-white" : "border border-dashed border-line-2 text-ink-3"
+            }`}
+          >
+            {shortDiaLabel(dia)}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 /** Shared (non-día) fields edited across the whole day-group at once — PR2b. */
@@ -1000,98 +1081,149 @@ export default function GroupsPage(): React.ReactElement {
             <LoadingState label="Cargando horarios…" />
           </div>
         ) : categoriaCards.length > 0 ? (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3.5">
-            {categoriaCards.map((card) => {
-              // Deletion (inside the edit panel) removes a whole group — every
-              // one of its día rows — so the categoría's card busies out.
-              const isDeleting = card.rows.some((row) => row.id === deletingId);
-              const isExpanded = expandedGroup?.key === card.categoria;
-              const rangoEdad = CATEGORIA_METADATA[card.categoria as Categoria]?.rango_edad;
-              const nombresEntrenadores = card.entrenadorIds.map(
-                (id) => entrenadores.find((e) => e.id === id)?.nombreCompleto ?? "Sin asignar",
-              );
-              const inscriptos = countInscriptos(card.rows, personasPorHorario);
-              const parciales = countInscriptosParciales(card.rows, personasPorHorario);
+          <div className="card overflow-hidden">
+            {/* Column legend, once for the whole list instead of a repeated
+                micro-label inside each of the five rows. Hidden below `xl`,
+                where the rows stack and carry their own labels. */}
+            <div
+              className={`hidden h-thead border-b border-line bg-[#FAFAFB] px-5 ${CELL_LABEL} ${ROW_COLUMNS}`}
+              aria-hidden="true"
+            >
+              <span>Grupo</span>
+              <span>Horario</span>
+              <span>Entrenador</span>
+              <span>Alumnos</span>
+              <span />
+            </div>
 
-              return (
-                <div
-                  key={card.categoria}
-                  data-testid="horario-card"
-                  // An expanded card carries a whole form; letting it span the
-                  // grid keeps that form readable instead of squeezing it into
-                  // a 300px column.
-                  className={`card flex flex-col gap-[9px] p-5 ${isExpanded ? "col-span-full" : ""}`}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <b className="flex-1 text-[15px] tracking-[-0.015em] text-ink">
-                      {categoriaLabel(card.categoria)}
-                    </b>
-                    {rangoEdad ? <Badge>{rangoEdad}</Badge> : null}
-                  </div>
+            <ul className="divide-y divide-line">
+              {categoriaCards.map((card) => {
+                // Deletion (inside the edit panel) removes a whole group — every
+                // one of its día rows — so the categoría's row busies out.
+                const isDeleting = card.rows.some((row) => row.id === deletingId);
+                const isExpanded = expandedGroup?.key === card.categoria;
+                const metadata = CATEGORIA_METADATA[card.categoria as Categoria];
+                const rangoEdad = metadata?.rango_edad;
+                // An unrecognized `categoria` has no metadata, so the track
+                // falls back to the días the rows themselves carry.
+                const diaTrack = buildDiaTrack(metadata?.dias ?? [], card.dias);
+                const entrenadoresDelGrupo = card.entrenadorIds.map((id) => ({
+                  id,
+                  nombre: entrenadores.find((e) => e.id === id)?.nombreCompleto ?? "Sin asignar",
+                }));
+                const inscriptos = countInscriptos(card.rows, personasPorHorario);
+                const parciales = countInscriptosParciales(card.rows, personasPorHorario);
 
-                  {/* Days and time, both derived from the rows that exist. A
-                      categoría that drifts off Monday–Friday says so here —
-                      the live Saturday COMPETITIVO row reads "Lunes a viernes
-                      + sábado" rather than being rounded to the norm. */}
-                  <p className="text-[13px] text-ink-2">
-                    {formatDiaSet(card.dias)} · {formatTime(card.horaInicio)} —{" "}
-                    {formatTime(card.horaFin)}
-                  </p>
+                return (
+                  <li key={card.categoria} data-testid="horario-card" className="px-5 py-4">
+                    {/* Three shapes, one row: a stack on a phone, two columns
+                        on the tablet/small-laptop band where the five tracks do
+                        not fit but a single column wastes half the width, and
+                        the full five-column row from `xl` up. */}
+                    <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <b className="text-[15px] tracking-[-0.015em] text-ink">
+                          {categoriaLabel(card.categoria)}
+                        </b>
+                        {rangoEdad ? <Badge>{rangoEdad}</Badge> : null}
+                      </div>
 
-                  {/* Every entrenador of the categoría, not just the first:
-                      more than one means its weekdays are staffed differently,
-                      which the admin has to see. Level is deliberately absent
-                      — settled product decision. */}
-                  <p className="text-[13px] text-ink-3">
-                    {nombresEntrenadores.length === 1 ? "Entrenador" : "Entrenadores"}:{" "}
-                    {nombresEntrenadores.join(" · ")}
-                  </p>
+                      {/* Days and time, both derived from the rows that exist. A
+                          categoría that drifts off Monday–Friday says so here —
+                          the live Saturday COMPETITIVO row reads "Lunes a viernes
+                          + sábado" rather than being rounded to the norm — and the
+                          track below it marks which días those are. */}
+                      <div className="min-w-0">
+                        <CellLabel>Horario</CellLabel>
+                        <p className="text-[13px] text-ink-2">
+                          {formatDiaSet(card.dias)} · {formatTime(card.horaInicio)} —{" "}
+                          {formatTime(card.horaFin)}
+                        </p>
+                        <div className="mt-2">
+                          <DiaTrack track={diaTrack} dias={card.dias} />
+                        </div>
+                      </div>
 
-                  {inscriptos !== null && (
-                    <p className="text-[13px] font-semibold text-ink">
-                      {inscriptos} inscripto{inscriptos === 1 ? "" : "s"}
-                    </p>
-                  )}
+                      {/* Every entrenador of the categoría, one per line rather
+                          than joined by a separator: more than one means its
+                          weekdays are staffed differently, which the admin has to
+                          see. Level is deliberately absent — settled product
+                          decision. */}
+                      <div className="min-w-0">
+                        <CellLabel>
+                          {entrenadoresDelGrupo.length === 1 ? "Entrenador" : "Entrenadores"}
+                        </CellLabel>
+                        {entrenadoresDelGrupo.map((entrenador) => (
+                          <p key={entrenador.id} className="text-[13px] text-ink-2">
+                            {entrenador.nombre}
+                          </p>
+                        ))}
+                      </div>
 
-                  {parciales > 0 && (
-                    <p className="text-[12px] text-ink-3">
-                      {parciales === 1
-                        ? "1 alumno no está inscripto en todos los días."
-                        : `${parciales} alumnos no están inscriptos en todos los días.`}
-                    </p>
-                  )}
+                      {/* Distinct students across the categoría's días. Absent
+                          rather than zero while any roster is still unanswered —
+                          the club plans around this figure. */}
+                      <div className={`min-w-0 ${inscriptos === null ? "hidden xl:block" : ""}`}>
+                        {inscriptos !== null && (
+                          <>
+                            <CellLabel>Alumnos</CellLabel>
+                            <p className="text-[15px] font-semibold text-ink">
+                              {inscriptos} inscripto{inscriptos === 1 ? "" : "s"}
+                            </p>
+                          </>
+                        )}
+                      </div>
 
-                  <div className="mt-0.5 flex flex-wrap gap-[7px]">
-                    <Button
-                      size="sm"
-                      onClick={() => openAlumnosTab(card)}
-                      disabled={isDeleting}
-                      aria-label={`Ver alumnos de ${cardTitle(card)}`}
-                    >
-                      Ver alumnos
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => openEditForm(card)}
-                      disabled={isDeleting}
-                      aria-label={`Editar ${cardTitle(card)}`}
-                    >
-                      Editar
-                    </Button>
-                  </div>
-
-                  {isExpanded && expandedGroup.tab === "editar" && (
-                    <div className="mt-3 border-t border-line pt-4">{renderEditPanel(card)}</div>
-                  )}
-
-                  {isExpanded && expandedGroup.tab === "alumnos" && (
-                    <div className="mt-3 border-t border-line pt-4">
-                      {renderAlumnosPanel(card)}
+                      <div className="flex gap-2 md:col-span-2 md:justify-end xl:col-span-1 xl:justify-end">
+                        <Button
+                          size="sm"
+                          className="flex-1 md:flex-none"
+                          onClick={() => openAlumnosTab(card)}
+                          disabled={isDeleting}
+                          aria-label={`Ver alumnos de ${cardTitle(card)}`}
+                        >
+                          Ver alumnos
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1 md:flex-none"
+                          onClick={() => openEditForm(card)}
+                          disabled={isDeleting}
+                          aria-label={`Editar ${cardTitle(card)}`}
+                        >
+                          Editar
+                        </Button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+
+                    {/* Its own line under the whole row: the sentence is too long
+                        to sit inside a column without wrapping to three lines, and
+                        it qualifies the headcount rather than replacing it. */}
+                    {parciales > 0 && (
+                      <p className="mt-3 flex items-center gap-2 text-[12px] text-ink-3">
+                        <span
+                          aria-hidden="true"
+                          className="h-1.5 w-1.5 flex-none rounded-full bg-state-warn"
+                        />
+                        {parciales === 1
+                          ? "1 alumno no está inscripto en todos los días."
+                          : `${parciales} alumnos no están inscriptos en todos los días.`}
+                      </p>
+                    )}
+
+                    {isExpanded && expandedGroup.tab === "editar" && (
+                      <div className="mt-4 border-t border-line pt-4">{renderEditPanel(card)}</div>
+                    )}
+
+                    {isExpanded && expandedGroup.tab === "alumnos" && (
+                      <div className="mt-4 border-t border-line pt-4">
+                        {renderAlumnosPanel(card)}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         ) : null}
 
