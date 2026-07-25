@@ -211,7 +211,7 @@ interface HeaderProps {
  * that already carries identity + a "volver al sitio" link — the app
  * header would duplicate that and break the full-height layout.
  */
-const AUTH_SHELL_ROUTES = new Set(["/login", "/register", "/forgot-password"]);
+const AUTH_SHELL_ROUTES = new Set(["/login", "/forgot-password"]);
 
 /**
  * Routes that render their own sidebar shell (see `AppShell`), which

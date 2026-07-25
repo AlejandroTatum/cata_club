@@ -1,6 +1,6 @@
 /**
  * AuthShell — shared split-screen layout for the public auth screens
- * (/login, /register, /forgot-password), matching the final mockups
+ * (/login, /forgot-password), matching the final mockups
  * (`design/admin-login-mockup-v1.html` and siblings).
  *
  * Left: dark marketing panel with brand identity, a short headline/copy

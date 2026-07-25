@@ -134,7 +134,7 @@ describe("Header", (): void => {
 
   // --- Auth shell routes (login, register, forgot-password) ---
 
-  it.each(["/login", "/register", "/forgot-password"])(
+  it.each(["/login", "/forgot-password"])(
     "hides the header on the %s auth-shell route",
     (route): void => {
       mockPathname.mockReturnValue(route);
