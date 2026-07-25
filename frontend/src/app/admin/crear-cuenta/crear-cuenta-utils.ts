@@ -15,15 +15,16 @@
 export type AccountType = "JUGADOR" | "REPRESENTANTE" | "MENOR";
 
 /** Wizard step identifiers. */
-export type CrearCuentaStep = "type" | "personal" | "credentials" | "summary";
+export type CrearCuentaStep = "type" | "personal" | "health" | "credentials" | "summary";
 
 /** Step order used by the wizard. */
-export const CREAR_CUENTA_STEP_ORDER: CrearCuentaStep[] = ["type", "personal", "credentials", "summary"];
+export const CREAR_CUENTA_STEP_ORDER: CrearCuentaStep[] = ["type", "personal", "health", "credentials", "summary"];
 
 /** Human-readable labels for each step, in Spanish. */
 export const CREAR_CUENTA_STEP_LABELS: Record<CrearCuentaStep, string> = {
   type: "Tipo de Cuenta",
   personal: "Datos Personales",
+  health: "Ficha Médica",
   credentials: "Credenciales de Acceso",
   summary: "Resumen y Confirmación",
 };
@@ -46,7 +47,7 @@ export interface CrearCuentaFormData {
   contrasenia: string;
   representanteId: number | "";
   institucionId: string;
-  /** Medical record fields (optional, MENOR only). */
+  /** Medical record fields (optional for all account types). */
   tipoSangre: string;
   condicionesSalud: string;
   alergias: string;
@@ -86,6 +87,8 @@ export function validateCrearCuentaStep(
       return validateType(data);
     case "personal":
       return validatePersonal(data);
+    case "health":
+      return validateMedical(data);
     case "credentials":
       return validateCredentials(data);
     case "summary":
@@ -146,8 +149,11 @@ function validateCredentials(data: CrearCuentaFormData): string[] {
 }
 
 function validateMedical(data: CrearCuentaFormData): string[] {
-  if (data.accountType !== "MENOR") return [];
   const errors: string[] = [];
+  const hasAnyMedicalData =
+    data.tipoSangre || data.condicionesSalud.trim() || data.alergias.trim() ||
+    data.contactoEmergencia.trim() || data.telefonoEmergencia.trim();
+  if (!hasAnyMedicalData) return errors;
   if (!BLOOD_TYPE_OPTIONS.includes(data.tipoSangre as typeof BLOOD_TYPE_OPTIONS[number])) {
     errors.push("El tipo de sangre es obligatorio.");
   }

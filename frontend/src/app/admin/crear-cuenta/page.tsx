@@ -35,6 +35,7 @@ import {
   AlertTriangle,
   FileText,
   Search,
+  Heart,
 } from "lucide-react";
 import {
   CREAR_CUENTA_STEP_ORDER,
@@ -71,6 +72,7 @@ function CrearCuentaContent(): React.ReactElement {
   const [searchingRepresentante, setSearchingRepresentante] = useState(false);
   const [representanteSelected, setRepresentanteSelected] = useState<{ id: number; nombre: string } | null>(null);
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
+  const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
 
   const currentIndex = CREAR_CUENTA_STEP_ORDER.indexOf(step);
   const isFirst = currentIndex === 0;
@@ -166,7 +168,7 @@ function CrearCuentaContent(): React.ReactElement {
           ? Number(formData.representanteId)
           : undefined,
         ...(formData.institucionId ? { institucionId: Number(formData.institucionId) } : {}),
-        ...(formData.accountType === "MENOR" && formData.tipoSangre
+        ...(formData.tipoSangre
           ? {
               fichaMedica: {
                 tipoSangre: formData.tipoSangre,
@@ -355,7 +357,27 @@ function CrearCuentaContent(): React.ReactElement {
         {/* School selector — only for MENOR type */}
         {formData.accountType === "MENOR" && instituciones.length > 0 && (
           <div className="mt-4">
-            <label htmlFor="crear-cuenta-institucion" className="mb-1.5 block text-sm font-medium text-cata-text">
+            <label htmlFor="crear-cuenta-tipo-escuela" className="mb-1.5 block text-sm font-medium text-cata-text">
+              Tipo de Escuela
+            </label>
+            <select
+              id="crear-cuenta-tipo-escuela"
+              value={tipoEscuelaFilter}
+              onChange={(e) => {
+                setTipoEscuelaFilter(e.target.value);
+                updateField("institucionId", "");
+              }}
+              disabled={submitting}
+              className="input-field"
+            >
+              <option value="">Todos los tipos</option>
+              <option value="PARTICULAR">Particular</option>
+              <option value="FISCAL">Fiscal</option>
+              <option value="FISCOMISIONAL">Fiscomisional</option>
+              <option value="MUNICIPAL">Municipal</option>
+            </select>
+
+            <label htmlFor="crear-cuenta-institucion" className="mb-1.5 mt-3 block text-sm font-medium text-cata-text">
               Escuela / Institución
             </label>
             <p className="mb-2 text-xs text-cata-text/50">
@@ -369,11 +391,13 @@ function CrearCuentaContent(): React.ReactElement {
               className="input-field"
             >
               <option value="">Sin institución asignada</option>
-              {instituciones.map((inst) => (
-                <option key={inst.id} value={String(inst.id)}>
-                  {inst.nombre} ({inst.tipoEscuela})
-                </option>
-              ))}
+              {instituciones
+                .filter((inst) => !tipoEscuelaFilter || inst.tipoEscuela === tipoEscuelaFilter)
+                .map((inst) => (
+                  <option key={inst.id} value={String(inst.id)}>
+                    {inst.nombre} ({inst.tipoEscuela})
+                  </option>
+                ))}
             </select>
           </div>
         )}
@@ -428,77 +452,75 @@ function CrearCuentaContent(): React.ReactElement {
             )}
           </div>
         )}
+      </div>
+    );
+  }
 
-        {/* Medical record fields — MENOR only */}
-        {formData.accountType === "MENOR" && (
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <h3 className="mb-2 text-sm font-semibold text-emerald-800">
-              Ficha Medica
-            </h3>
-            <p className="mb-3 text-xs text-emerald-600">
-              Informacion medica del menor (opcional pero recomendada).
-            </p>
+  function renderHealthStep(): React.ReactElement {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm leading-relaxed text-cata-text/65">
+          Información médica del estudiante (opcional pero recomendada).
+        </p>
 
-            <div className="mb-3">
-              <label htmlFor="crear-cuenta-tipo-sangre" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Tipo de Sangre <span className="ml-0.5 text-cata-red">*</span>
-              </label>
-              <select
-                id="crear-cuenta-tipo-sangre"
-                value={formData.tipoSangre}
-                onChange={(e) => updateField("tipoSangre", e.target.value)}
-                disabled={submitting}
-                className="input-field"
-              >
-                <option value="">Seleccione tipo de sangre</option>
-                {BLOOD_TYPE_OPTIONS.map((bt) => (
-                  <option key={bt} value={bt}>{bt.replace(/_/g, " ")}</option>
-                ))}
-              </select>
-            </div>
-
-            <WizardInput
-              idPrefix="crear-cuenta"
-              label="Condiciones de Salud"
-              value={formData.condicionesSalud}
-              onChange={(v) => updateField("condicionesSalud", v)}
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <div className="mb-3">
+            <label htmlFor="crear-cuenta-tipo-sangre" className="mb-1.5 block text-sm font-medium text-cata-text">
+              Tipo de Sangre
+            </label>
+            <select
+              id="crear-cuenta-tipo-sangre"
+              value={formData.tipoSangre}
+              onChange={(e) => updateField("tipoSangre", e.target.value)}
               disabled={submitting}
-              placeholder="p. ej. Asma, diabetes (separar con comas)"
-            />
-
-            <WizardInput
-              idPrefix="crear-cuenta"
-              label="Alergias"
-              value={formData.alergias}
-              onChange={(v) => updateField("alergias", v)}
-              disabled={submitting}
-              placeholder="p. ej. Penicilina, mariscos"
-            />
-
-            <WizardInput
-              idPrefix="crear-cuenta"
-              label="Contacto de Emergencia"
-              value={formData.contactoEmergencia}
-              onChange={(v) => updateField("contactoEmergencia", v)}
-              disabled={submitting}
-              required
-              placeholder="p. ej. Maria Lopez (madre)"
-            />
-
-            <WizardInput
-              idPrefix="crear-cuenta"
-              label="Telefono de Emergencia"
-              value={formData.telefonoEmergencia}
-              onChange={(v) => updateField("telefonoEmergencia", v)}
-              disabled={submitting}
-              required
-              pattern="[0-9]+"
-              maxLength={10}
-              minLength={7}
-              inputMode="tel"
-            />
+              className="input-field"
+            >
+              <option value="">Seleccione tipo de sangre</option>
+              {BLOOD_TYPE_OPTIONS.map((bt) => (
+                <option key={bt} value={bt}>{bt.replace(/_/g, " ")}</option>
+              ))}
+            </select>
           </div>
-        )}
+
+          <WizardInput
+            idPrefix="crear-cuenta"
+            label="Condiciones de Salud"
+            value={formData.condicionesSalud}
+            onChange={(v) => updateField("condicionesSalud", v)}
+            disabled={submitting}
+            placeholder="p. ej. Asma, diabetes (separar con comas)"
+          />
+
+          <WizardInput
+            idPrefix="crear-cuenta"
+            label="Alergias"
+            value={formData.alergias}
+            onChange={(v) => updateField("alergias", v)}
+            disabled={submitting}
+            placeholder="p. ej. Penicilina, mariscos"
+          />
+
+          <WizardInput
+            idPrefix="crear-cuenta"
+            label="Contacto de Emergencia"
+            value={formData.contactoEmergencia}
+            onChange={(v) => updateField("contactoEmergencia", v)}
+            disabled={submitting}
+            placeholder="p. ej. Maria Lopez (madre)"
+          />
+
+          <WizardInput
+            idPrefix="crear-cuenta"
+            label="Telefono de Emergencia"
+            value={formData.telefonoEmergencia}
+            onChange={(v) => updateField("telefonoEmergencia", v)}
+            disabled={submitting}
+            pattern="[0-9]+"
+            maxLength={10}
+            minLength={7}
+            inputMode="tel"
+          />
+        </div>
       </div>
     );
   }
@@ -617,7 +639,7 @@ function CrearCuentaContent(): React.ReactElement {
           </dl>
         </div>
 
-        {formData.accountType === "MENOR" && formData.tipoSangre && (
+        {formData.tipoSangre && (
           <div className="card-hover p-4">
             <div className="mb-3 flex items-center gap-2">
               <FileText size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
@@ -680,7 +702,7 @@ function CrearCuentaContent(): React.ReactElement {
   // ---- Render ----
 
   return (
-    <>
+    <AppShell eyebrow="Administración" title="Crear Cuenta">
       {confirmed ? (
         <div className="flex min-h-[75vh] items-center justify-center py-12">
           <div className="w-full max-w-lg text-center">
@@ -723,27 +745,8 @@ function CrearCuentaContent(): React.ReactElement {
           </div>
         </div>
       ) : (
-        <div className="py-8">
+        <div>
           <BackLink href="/members" label="Volver a Miembros" />
-
-          {/* Hero Banner */}
-          <div className="relative mb-10 overflow-hidden rounded-3xl border border-cata-border bg-cata-surface px-6 py-10 shadow-elevated sm:px-10 sm:py-12">
-            <div className="absolute inset-0 bg-logo-glow" />
-            <div className="relative z-10 flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-cata-red">
-                  <GraduationCap size={14} strokeWidth={2} aria-hidden="true" />
-                  Administración
-                </div>
-                <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-cata-text sm:text-4xl">
-                  Crear Cuenta
-                </h1>
-                <p className="mt-2 max-w-lg text-sm leading-relaxed text-cata-text/60">
-                  Cree una cuenta completa (Persona + Usuario + Rol) en un solo paso.
-                </p>
-              </div>
-            </div>
-          </div>
 
           {/* Progress bar */}
           <div className="mb-8">
@@ -766,6 +769,7 @@ function CrearCuentaContent(): React.ReactElement {
             <div className="mb-6 flex items-center gap-2">
               {step === "type" && <GraduationCap size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
               {step === "personal" && <User size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
+              {step === "health" && <Heart size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
               {step === "credentials" && <Lock size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
               {step === "summary" && <FileText size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
               <h2 className="text-lg font-semibold text-cata-text">
@@ -776,6 +780,7 @@ function CrearCuentaContent(): React.ReactElement {
             <form onSubmit={handleConfirm}>
               {step === "type" && renderTypeStep()}
               {step === "personal" && renderPersonalStep()}
+              {step === "health" && renderHealthStep()}
               {step === "credentials" && renderCredentialsStep()}
               {step === "summary" && renderSummary()}
 
@@ -807,7 +812,7 @@ function CrearCuentaContent(): React.ReactElement {
           </div>
         </div>
       )}
-    </>
+    </AppShell>
   );
 }
 
