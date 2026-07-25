@@ -124,7 +124,9 @@ describe("RegisterPage", () => {
     render(<RegisterPage />);
 
     expect(
-      screen.getByRole("heading", { name: /crear su cuenta/i }),
+      // The heading now comes from `AuthShell`'s card title
+      // (`02-registro.html:55` — "Crear una cuenta").
+      screen.getByRole("heading", { name: /crear una cuenta/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /crear cuenta/i }),

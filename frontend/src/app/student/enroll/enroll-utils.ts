@@ -69,6 +69,25 @@ export const STEP_LABELS: Record<WizardStep, string> = {
   summary: "Resumen y Confirmación",
 };
 
+/**
+ * One-word names for the stepper pills — the visitor must see what the five
+ * steps ARE from step one, not "Paso 2 de 5".
+ *
+ * The approved prototype (`docs/ux/prototipos/05-inscripcion.html`) names the
+ * fourth step "Membresía". This wizard's fourth step is NOT membership: the
+ * public `POST /enrollment` contract takes `alumno`, `fichaMedica` and either
+ * `credencialesAlumno` or `representante` — no plan, no amount. Creating a
+ * `Membresia` is `POST /membresias`, which is ADMINISTRADOR-only. The step
+ * collects the medical record, so it is named for what it collects.
+ */
+export const STEP_SHORT_LABELS: Record<WizardStep, string> = {
+  type: "Tipo",
+  personal: "Estudiante",
+  club: "Contacto",
+  health: "Salud",
+  summary: "Confirmar",
+};
+
 /** Default empty form data. */
 export const initialFormData: EnrollFormData = {
   enrollmentType: ENROLLMENT_TYPES.SELF,
@@ -117,19 +136,18 @@ export function validateEnrollStep(
       // Always valid — player and representative options are acceptable.
       break;
     case "personal":
-      errors.push(...validateStudent(data));
+      errors.push(...collect(fieldsForStep("personal", data.enrollmentType), data));
       break;
     case "club":
+      // NOT `fieldsForStep`: the aggregate check for a child enrollment covers
+      // the representante's identity too, so reaching the summary with a blank
+      // representante is impossible even if a step were skipped.
       errors.push(...(data.enrollmentType === ENROLLMENT_TYPES.SELF
         ? validateStudentCredentials(data)
         : validateRepresentative(data)));
       break;
     case "health":
-      if (!isBloodType(data.tipoSangre)) errors.push("El tipo de sangre es obligatorio.");
-      if (!data.contactoEmergencia.trim())
-        errors.push("El nombre de contacto de emergencia es obligatorio.");
-      if (!data.telefonoEmergencia.trim())
-        errors.push("El teléfono de emergencia es obligatorio.");
+      errors.push(...collect(HEALTH_FIELDS, data));
       break;
     case "summary":
       break;
@@ -212,38 +230,193 @@ export function buildEnrollmentRequest(data: EnrollFormData): EnrollmentRequest 
   };
 }
 
-function validateStudent(data: EnrollFormData): string[] {
-  const errors: string[] = [];
-  if (!data.nombres.trim()) errors.push("Los nombres son obligatorios.");
-  if (!data.apellidos.trim()) errors.push("Los apellidos son obligatorios.");
-  if (!data.fechaNacimiento) errors.push("La fecha de nacimiento es obligatoria.");
-  else if (!isDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento ingresada no es válida.");
-  if (!data.cedula.trim()) errors.push("La cédula de identidad es obligatoria.");
-  else if (!/^\d{10}$/.test(data.cedula.trim())) errors.push("La cédula debe tener 10 dígitos.");
-  if (!data.telefono.trim()) errors.push("El teléfono es obligatorio.");
-  if (data.enrollmentType === ENROLLMENT_TYPES.SELF && calculateAge(data.fechaNacimiento) < 18) {
-    errors.push("Los menores de edad no pueden autoinscribirse. Seleccione 'Inscribo a un hijo / dependiente' o un representante debe completar la inscripción.");
+// ---------------------------------------------------------------------------
+// Per-field validation
+//
+// The wizard's error prevention (the audit's finding) needs the message BESIDE
+// the field, not only in a list at the bottom of the card. Every rule is
+// declared once here, per field; the flat `string[]` APIs above are composed
+// from these same rules so a message can never drift between the two surfaces.
+// ---------------------------------------------------------------------------
+
+/** A form field the wizard can point an error at. */
+export type EnrollField = keyof EnrollFormData;
+
+/** Field → its first unmet rule. A field with no entry is currently valid. */
+export type EnrollFieldErrors = Partial<Record<EnrollField, string>>;
+
+/** Digits only — a phone or cédula typed with spaces or dashes still counts. */
+export function digitsOf(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string | null>> = {
+  nombres: (d) => (d.nombres.trim() ? null : "Los nombres son obligatorios."),
+  apellidos: (d) => (d.apellidos.trim() ? null : "Los apellidos son obligatorios."),
+  fechaNacimiento: (d) => {
+    if (!d.fechaNacimiento) return "La fecha de nacimiento es obligatoria.";
+    if (!isDate(d.fechaNacimiento)) return "La fecha de nacimiento ingresada no es válida.";
+    if (d.enrollmentType === ENROLLMENT_TYPES.SELF && calculateAge(d.fechaNacimiento) < 18) {
+      return "Los menores de edad no pueden autoinscribirse. Seleccione 'Inscribo a un hijo / dependiente' o un representante debe completar la inscripción.";
+    }
+    return null;
+  },
+  cedula: (d) => {
+    if (!d.cedula.trim()) return "La cédula de identidad es obligatoria.";
+    return /^\d{10}$/.test(d.cedula.trim()) ? null : "La cédula debe tener 10 dígitos.";
+  },
+  telefono: (d) => {
+    if (!d.telefono.trim()) return "El teléfono es obligatorio.";
+    return digitsOf(d.telefono).length === 10 ? null : "El teléfono debe tener 10 dígitos.";
+  },
+  correo: (d) => (isEmail(d.correo) ? null : "El correo electrónico no es válido."),
+  contrasenia: (d) =>
+    d.contrasenia.length >= 8 ? null : "La contraseña debe tener al menos 8 caracteres.",
+  nombreRepresentante: (d) =>
+    d.nombreRepresentante.trim() ? null : "Los nombres del representante son obligatorios.",
+  apellidosRepresentante: (d) =>
+    d.apellidosRepresentante.trim() ? null : "Los apellidos del representante son obligatorios.",
+  cedulaRepresentante: (d) =>
+    /^\d{10}$/.test(d.cedulaRepresentante.trim())
+      ? null
+      : "La cédula del representante debe tener 10 dígitos.",
+  fechaNacimientoRepresentante: (d) =>
+    isDate(d.fechaNacimientoRepresentante) && calculateAge(d.fechaNacimientoRepresentante) >= 18
+      ? null
+      : "El representante debe ser mayor de edad (18+).",
+  telefonoRepresentante: (d) => {
+    if (!d.telefonoRepresentante.trim()) return "El teléfono del representante es obligatorio.";
+    return digitsOf(d.telefonoRepresentante).length === 10
+      ? null
+      : "El teléfono del representante debe tener 10 dígitos.";
+  },
+  correoRepresentante: (d) =>
+    isEmail(d.correoRepresentante) ? null : "El correo del representante no es válido.",
+  contraseniaRepresentante: (d) =>
+    d.contraseniaRepresentante.length >= 8
+      ? null
+      : "La contraseña del representante debe tener al menos 8 caracteres.",
+  tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
+  contactoEmergencia: (d) =>
+    d.contactoEmergencia.trim() ? null : "El nombre de contacto de emergencia es obligatorio.",
+  telefonoEmergencia: (d) => {
+    if (!d.telefonoEmergencia.trim()) return "El teléfono de emergencia es obligatorio.";
+    return digitsOf(d.telefonoEmergencia).length === 10
+      ? null
+      : "El teléfono de emergencia debe tener 10 dígitos.";
+  },
+};
+
+const STUDENT_FIELDS: EnrollField[] = [
+  "nombres",
+  "apellidos",
+  "fechaNacimiento",
+  "cedula",
+  "telefono",
+];
+
+const CREDENTIAL_FIELDS: EnrollField[] = ["correo", "contrasenia"];
+
+/** Representante fields rendered on the "personal" step (beside the student's own). */
+const REPRESENTATIVE_IDENTITY_FIELDS: EnrollField[] = ["nombreRepresentante", "cedulaRepresentante"];
+
+/** Representante fields rendered on the "club" step. */
+const REPRESENTATIVE_CONTACT_FIELDS: EnrollField[] = [
+  "apellidosRepresentante",
+  "fechaNacimientoRepresentante",
+  "telefonoRepresentante",
+  "correoRepresentante",
+  "contraseniaRepresentante",
+];
+
+const HEALTH_FIELDS: EnrollField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
+
+/**
+ * The fields a given step actually renders — so a disabled "Siguiente" can
+ * only ever blame something the visitor can see on screen.
+ */
+export function fieldsForStep(step: WizardStep, type: EnrollmentType): EnrollField[] {
+  const isChild = type === ENROLLMENT_TYPES.CHILD;
+  switch (step) {
+    case "type":
+      return [];
+    case "personal":
+      return isChild ? [...STUDENT_FIELDS, ...REPRESENTATIVE_IDENTITY_FIELDS] : STUDENT_FIELDS;
+    case "club":
+      return isChild ? REPRESENTATIVE_CONTACT_FIELDS : CREDENTIAL_FIELDS;
+    case "health":
+      return HEALTH_FIELDS;
+    case "summary":
+      return [];
+  }
+}
+
+function collect(fields: EnrollField[], data: EnrollFormData): string[] {
+  return fields.map((field) => FIELD_RULES[field]?.(data) ?? null).filter((m): m is string => m !== null);
+}
+
+/** Every unmet rule on the current step, keyed by the field that owns it. */
+export function validateEnrollFields(step: WizardStep, data: EnrollFormData): EnrollFieldErrors {
+  const errors: EnrollFieldErrors = {};
+  for (const field of fieldsForStep(step, data.enrollmentType)) {
+    const message = FIELD_RULES[field]?.(data) ?? null;
+    if (message !== null) errors[field] = message;
   }
   return errors;
 }
 
+/** Whether the step's "Siguiente" may be enabled. */
+export function isStepComplete(step: WizardStep, data: EnrollFormData): boolean {
+  return Object.keys(validateEnrollFields(step, data)).length === 0;
+}
+
+/** Field → the label the visitor actually reads on screen, for the blocked-button explanation. */
+const FIELD_LABELS: Partial<Record<EnrollField, string>> = {
+  nombres: "Nombres",
+  apellidos: "Apellidos",
+  fechaNacimiento: "Fecha de nacimiento",
+  cedula: "Cédula de identidad",
+  telefono: "Teléfono",
+  correo: "Correo electrónico",
+  contrasenia: "Contraseña",
+  nombreRepresentante: "Nombres del representante",
+  apellidosRepresentante: "Apellidos del representante",
+  cedulaRepresentante: "Cédula del representante",
+  fechaNacimientoRepresentante: "Fecha de nacimiento del representante",
+  telefonoRepresentante: "Teléfono del representante",
+  correoRepresentante: "Correo del representante",
+  contraseniaRepresentante: "Contraseña del representante",
+  tipoSangre: "Tipo de sangre",
+  contactoEmergencia: "Nombre del contacto de emergencia",
+  telefonoEmergencia: "Teléfono de emergencia",
+};
+
+/**
+ * Why "Siguiente" is disabled, in one sentence naming the fields.
+ *
+ * A disabled control that does not say what is missing is a dead end — the
+ * audit's error-prevention finding. Returns `null` when nothing is missing.
+ */
+export function describeStepBlocker(errors: EnrollFieldErrors): string | null {
+  const labels = (Object.keys(errors) as EnrollField[])
+    .map((field) => FIELD_LABELS[field])
+    .filter((label): label is string => Boolean(label));
+  if (labels.length === 0) return null;
+  if (labels.length === 1) return `Para continuar, revise: ${labels[0]}.`;
+  const last = labels[labels.length - 1];
+  return `Para continuar, revise: ${labels.slice(0, -1).join(", ")} y ${last}.`;
+}
+
+function validateStudent(data: EnrollFormData): string[] {
+  return collect(STUDENT_FIELDS, data);
+}
+
 function validateStudentCredentials(data: EnrollFormData): string[] {
-  const errors: string[] = [];
-  if (!isEmail(data.correo)) errors.push("El correo electrónico no es válido.");
-  if (data.contrasenia.length < 8) errors.push("La contraseña debe tener al menos 8 caracteres.");
-  return errors;
+  return collect(CREDENTIAL_FIELDS, data);
 }
 
 function validateRepresentative(data: EnrollFormData): string[] {
-  const errors: string[] = [];
-  if (!data.nombreRepresentante.trim()) errors.push("Los nombres del representante son obligatorios.");
-  if (!data.apellidosRepresentante.trim()) errors.push("Los apellidos del representante son obligatorios.");
-  if (!/^\d{10}$/.test(data.cedulaRepresentante.trim())) errors.push("La cédula del representante debe tener 10 dígitos.");
-  if (!isDate(data.fechaNacimientoRepresentante) || calculateAge(data.fechaNacimientoRepresentante) < 18) errors.push("El representante debe ser mayor de edad (18+).");
-  if (!data.telefonoRepresentante.trim()) errors.push("El teléfono del representante es obligatorio.");
-  if (!isEmail(data.correoRepresentante)) errors.push("El correo del representante no es válido.");
-  if (data.contraseniaRepresentante.length < 8) errors.push("La contraseña del representante debe tener al menos 8 caracteres.");
-  return errors;
+  return collect([...REPRESENTATIVE_IDENTITY_FIELDS, ...REPRESENTATIVE_CONTACT_FIELDS], data);
 }
 
 function isDate(value: string): boolean {

@@ -38,7 +38,17 @@ const PUBLIC_EXCEPTION_PREFIXES = ["/student/enroll"] as const;
  * `AuthShell`) with a dark brand panel that already carries identity plus a
  * "volver al sitio" link.
  */
-const AUTH_SHELL_PREFIXES = ["/login", "/register", "/forgot-password"] as const;
+const AUTH_SHELL_PREFIXES = [
+  "/login",
+  "/register",
+  "/forgot-password",
+  // `/reset-password` was missing here, so it was the one credential screen
+  // that got the public top header stacked on top of its own composition —
+  // the "hoy rompe el layout" flag on `docs/ux/prototipos/04-restablecer-
+  // contrasenia.html`. It renders `AuthShell` now, so it must claim the auth
+  // chrome like its three siblings.
+  "/reset-password",
+] as const;
 
 /**
  * Screens that own their entire composition.

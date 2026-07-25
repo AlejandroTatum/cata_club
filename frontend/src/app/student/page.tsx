@@ -1,33 +1,35 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import ContextualHelp from "@/components/ContextualHelp";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchStudentPortal, fetchPagosDePersona, subirVoucherPago } from "@/services/api";
 import type { StudentPortalSummary, StudentProfileSummary, PagoPersona, MembershipSummary } from "@/services/api";
 import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
 import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
-import { Badge, EmptyState, ErrorState, LoadingState } from "@/components/ui";
+import { Badge, Button, EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import { VALIDATION_STATUS_LABELS, VALIDATION_STATUS_TONES, toValidationStatus } from "@/lib/status-badges";
-import { derivePortalMode, isRepresentative, describeRanking } from "./student-utils";
+import {
+  derivePortalMode,
+  isRepresentative,
+  describeRanking,
+  findUploadablePago,
+  parseLevelNumber,
+  resolveCoverageEnd,
+  resolveMonthlyAmount,
+  summarizeRecentAttendance,
+} from "./student-utils";
 import {
   Calendar,
   ShieldCheck,
   CreditCard,
-  AlertTriangle,
   User,
   ChevronDown,
-  GraduationCap,
   UserPlus,
   ArrowRight,
-  Trophy,
-  RefreshCw,
-  Clock,
-  CheckCircle2,
-  XCircle,
   Upload,
   Paperclip,
   Loader2,
@@ -42,134 +44,110 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; data: StudentPortalSummary };
 
+type PagosState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; pagos: PagoPersona[] };
+
 // ---------------------------------------------------------------------------
-// Small presentational pieces
+// The club membership card (`.carnet`, _sistema.css:291-304)
+//
+// This is the one thing a parent screenshots, so it is an identity document
+// and is held to that standard: every field on it is real. The prototype's
+// "Miembro nº", "Desde" and "Renueva" are NOT rendered — see the block comment
+// above `parseLevelNumber` in student-utils.ts for where each one dies.
 // ---------------------------------------------------------------------------
 
-function MembershipCard({ membership }: { membership: MembershipSummary | null }): React.ReactElement {
-  if (!membership) {
-    return (
-      <section className="card-hover p-4 sm:p-5" aria-labelledby="membership-unavailable-title">
-        <div className="mb-2 flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
-            <ShieldCheck size={18} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-cata-text/65">Membresía</p>
-            <h2 id="membership-unavailable-title" className="text-lg font-bold tracking-tight text-cata-text">Sin membresía</h2>
-          </div>
-        </div>
-        <p className="text-xs leading-relaxed text-cata-text/55">
-          Aún no tiene una membresía registrada. Consulte con administración.
-        </p>
-      </section>
-    );
-  }
-
-  if (membership.estado === "INACTIVA") {
-    return (
-      <section className="card-hover p-4 sm:p-5" aria-labelledby="membership-inactive-title">
-        <div className="mb-2 flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100">
-            <Clock size={18} strokeWidth={1.5} className="text-amber-600" aria-hidden="true" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-cata-text/65">Membresía</p>
-            <h2 id="membership-inactive-title" className="text-lg font-bold tracking-tight text-cata-text">Pendiente de activación</h2>
-          </div>
-        </div>
-        <p className="text-xs leading-relaxed text-cata-text/55">
-          Su membresía fue creada pero espera la validación del primer pago.
-        </p>
-        {membership.categoria && (
-          <p className="mt-1 text-xs text-cata-text/65">
-            Plan: {membership.categoria} {membership.franjaHoraria ? `(${membership.franjaHoraria})` : ""}
-            {membership.montoAplicado ? ` — ${formatCurrency(membership.montoAplicado)}` : ""}
-          </p>
-        )}
-      </section>
-    );
-  }
-
-  return (
-    <section className="card-hover p-4 sm:p-5" aria-labelledby="membership-status-title">
-      <div className="mb-2 flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
-          <ShieldCheck size={18} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-cata-text/65">Membresía</p>
-          <h2 id="membership-status-title" className="text-lg font-bold tracking-tight text-cata-text">
-            {membership.estado === "ACTIVA" ? "Activa" : "Vencida"}
-          </h2>
-        </div>
-        <Badge tone={membership.estado === "ACTIVA" ? "ok" : "bad"}>
-          {membership.estado === "ACTIVA" ? "Activa" : "Vencida"}
-        </Badge>
-      </div>
-      {membership.categoria && (
-        <div className="space-y-0.5 text-xs text-cata-text/65">
-          <p>Plan: {membership.categoria} {membership.franjaHoraria ? `(${membership.franjaHoraria})` : ""}</p>
-          <p>Modalidad: {membership.modalidad === "PERSONALIZADA" ? "Personalizada" : "Mensual"}</p>
-          {membership.montoAplicado && <p>Monto: {formatCurrency(membership.montoAplicado)}</p>}
-        </div>
-      )}
-    </section>
-  );
+function levelTagLabel(profile: StudentProfileSummary): string | null {
+  const { ranking } = profile;
+  if (ranking.status !== "available" || !ranking.estaEnRanking) return null;
+  const rung = parseLevelNumber(ranking.nivelNombre);
+  if (rung !== null) return `Nivel ${rung}`;
+  return ranking.nivelNombre;
 }
 
-/** Real `TipoMembresia` catalog cards for the pending-enrollment view — replaces the old hardcoded `membershipPlans` array. */
-function RankingCard({ profile }: { profile: StudentProfileSummary }): React.ReactElement {
-  const display = describeRanking(profile.ranking);
+function membershipTag(membership: MembershipSummary | null): { label: string; active: boolean } {
+  if (!membership) return { label: "Sin membresía", active: false };
+  if (membership.estado === "ACTIVA") return { label: "Membresía activa", active: true };
+  if (membership.estado === "INACTIVA") return { label: "Membresía pendiente", active: false };
+  return { label: "Membresía vencida", active: false };
+}
+
+function CarnetFact({ label, value }: { label: string; value: string }): React.ReactElement {
   return (
-    <div className="card-hover p-4 sm:p-5">
-      <div className="mb-3 flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
-          <Trophy size={18} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-cata-text/65">Ranking</p>
-          <p className="text-lg font-bold tracking-tight text-cata-text">{display.label}</p>
-        </div>
-        <Badge tone={display.tone}>{profile.ranking.status === "available" ? "Disponible" : "No disponible"}</Badge>
-      </div>
-      <p className="text-sm text-cata-text/65">{display.detail}</p>
+    <div>
+      <span className="block text-[9px] font-normal uppercase tracking-[0.12em] text-white/40">
+        {label}
+      </span>
+      <b className="text-[12.5px] font-bold tabular-nums">{value}</b>
     </div>
   );
 }
 
-function RecentSessionsSection({ profile }: { profile: StudentProfileSummary }): React.ReactElement {
+function Carnet({
+  profile,
+  coverageEnd,
+}: {
+  profile: StudentProfileSummary;
+  coverageEnd: string | null;
+}): React.ReactElement {
+  const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
+  const level = levelTagLabel(profile);
+  const membership = membershipTag(profile.membership);
+  const facts: { label: string; value: string }[] = [];
+  if (profile.membership?.categoria) facts.push({ label: "Plan", value: profile.membership.categoria });
+  if (profile.membership?.franjaHoraria) facts.push({ label: "Franja", value: profile.membership.franjaHoraria });
+  if (coverageEnd) facts.push({ label: "Cobertura hasta", value: formatDate(coverageEnd) });
+
   return (
-    <section className="mb-8">
-      <div className="mb-4 flex items-center gap-2">
-        <Calendar size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-        <h2 className="text-lg font-bold text-cata-text">Actividad Reciente — {profile.nombres}</h2>
-      </div>
-      {profile.recentSessions.length === 0 ? (
-        <div className="card">
-          <EmptyState
-            icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
-            title="Aún no hay asistencias registradas"
-            description="Las sesiones aparecerán aquí en cuanto el entrenador tome lista."
-          />
+    <section
+      data-testid="student-carnet"
+      aria-label={`Carnet de socio de ${fullName}`}
+      className="relative flex flex-col gap-3.5 overflow-hidden rounded-card bg-gradient-to-br from-coal to-[#2A2A33] px-6 py-[22px] text-white"
+    >
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-[46px] -top-[46px] h-[150px] w-[150px] rounded-full bg-ball/[0.08]"
+      />
+
+      <div className="relative z-10 flex items-center gap-[11px]">
+        <span className="flex h-[30px] w-[30px] flex-none items-center justify-center overflow-hidden rounded-full bg-white">
+          <Image src="/brand/cata-club-logo.jpeg" alt="" width={30} height={30} className="h-[30px] w-[30px] object-cover" />
+        </span>
+        <div>
+          <b className="block text-[12.5px] font-bold">Cata Club</b>
+          <span className="block text-[10px] uppercase tracking-[0.12em] text-white/45">Tenis de mesa</span>
         </div>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {profile.recentSessions.map((session) => (
-            <div key={`${session.fecha}-${session.horario}`} className="card-hover p-5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
-                  <Calendar size={18} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold tabular-nums text-cata-text">{formatDate(session.fecha)}</p>
-                  <p className="mt-0.5 text-xs text-cata-text/55">{session.horario}</p>
-                  <Badge className="mt-2" tone={getAttendanceBadgeTone(session.estado)}>
-                    {getAttendanceLabel(session.estado)}
-                  </Badge>
-                </div>
-              </div>
-            </div>
+      </div>
+
+      <p className="relative z-10 text-2xl font-extrabold tracking-[-0.03em]">{fullName}</p>
+
+      <div className="relative z-10 flex flex-wrap gap-2">
+        {level !== null ? (
+          <span className="h-badge inline-flex items-center rounded-full bg-l9 px-[11px] text-[11.5px] font-bold text-ink">
+            {level}
+          </span>
+        ) : (
+          <span className="h-badge inline-flex items-center rounded-full bg-white/[0.11] px-[11px] text-[11.5px] font-bold text-white">
+            Sin nivel asignado
+          </span>
+        )}
+        <span
+          className={
+            membership.active
+              ? "h-badge inline-flex items-center gap-1.5 rounded-full bg-state-ok/20 px-[11px] text-[11.5px] font-bold text-[#7BE8A4]"
+              : "h-badge inline-flex items-center gap-1.5 rounded-full bg-white/[0.11] px-[11px] text-[11.5px] font-bold text-white"
+          }
+        >
+          <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-current" />
+          {membership.label}
+        </span>
+      </div>
+
+      {facts.length > 0 && (
+        <div className="relative z-10 flex flex-wrap gap-x-[26px] gap-y-2 border-t border-white/10 pt-[13px]">
+          {facts.map((fact) => (
+            <CarnetFact key={fact.label} label={fact.label} value={fact.value} />
           ))}
         </div>
       )}
@@ -178,13 +156,52 @@ function RecentSessionsSection({ profile }: { profile: StudentProfileSummary }):
 }
 
 // ---------------------------------------------------------------------------
-// Pagos section — read-only payment history (`GET
-// /membresias/pagos/persona/:personaId`), any status, so a student can see
-// every payment on record including a rejected one with the admin's
-// `motivoRechazo`. Uploading a new comprobante / registering a payment is a
-// separate, bigger feature not built here (see `POST /membresias/pagos` and
-// `.../voucher`, both already exist backend-side but have no student-facing
-// UI yet).
+// Training panel — carries one real fact, never a projected schedule.
+//
+// `attendance-adapter.ts` documents that Horario has no link to the persona or
+// nivel it serves, so "tu próximo entrenamiento" cannot be derived per student.
+// The panel therefore reports the LAST recorded session plus the attendance
+// recap, both of which are real records.
+// ---------------------------------------------------------------------------
+
+function TrainingPanel({ profile }: { profile: StudentProfileSummary }): React.ReactElement {
+  const last = profile.recentSessions[0] ?? null;
+  const recap = summarizeRecentAttendance(profile.recentSessions);
+
+  return (
+    <section className="card p-5" aria-labelledby="training-panel-title">
+      <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+        Sus entrenamientos
+      </p>
+      <h2 id="training-panel-title" className="text-[17px] font-bold tracking-tight text-ink">
+        {last ? `${last.horario} · ${formatDate(last.fecha)}` : "Todavía no hay entrenamientos registrados"}
+      </h2>
+      <p className="mt-1.5 text-[13px] text-ink-3">
+        {recap ? (
+          recap.total === 1 ? (
+            <>
+              De su última sesión registrada asistió a{" "}
+              <b className="font-semibold text-ink">{recap.attended} de 1</b>.
+            </>
+          ) : (
+            <>
+              De sus últimas {recap.total} sesiones registradas asistió a{" "}
+              <b className="font-semibold text-ink">
+                {recap.attended} de {recap.total}
+              </b>
+              .
+            </>
+          )
+        ) : (
+          "Su asistencia aparecerá aquí en cuanto el entrenador tome lista."
+        )}
+      </p>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pagos
 // ---------------------------------------------------------------------------
 
 const TIPO_PAGO_LABEL: Record<PagoPersona["tipoPago"], string> = {
@@ -206,37 +223,73 @@ function PagoEstadoBadge({ estado }: { estado: PagoPersona["estadoPago"] }): Rea
   return <Badge tone={VALIDATION_STATUS_TONES[status]}>{VALIDATION_STATUS_LABELS[status]}</Badge>;
 }
 
-type PagosState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; pagos: PagoPersona[] };
+/**
+ * The actionable empty state: the resolved amount plus the way to act on it.
+ *
+ * The figure is `Membresia.monto_aplicado` (via `/membresias/mias`) — never a
+ * catalog price, never a guess. When it cannot be resolved the card still
+ * explains what happens next, with no number attached.
+ *
+ * The upload button only appears when there is a real `Pago` row to attach the
+ * file to (`POST /membresias/pagos/{id}/voucher`). A student cannot open a
+ * payment period themselves: `POST /membresias/pagos` exists backend-side and
+ * now authorizes the owner, but no client method or route handler exposes it,
+ * so offering the button with nothing behind it would be a dead control.
+ */
+function PagosEmptyState({
+  amount,
+  uploadablePagoId,
+  uploading,
+  onUpload,
+}: {
+  amount: string | null;
+  uploadablePagoId: number | null;
+  uploading: boolean;
+  onUpload: (pagoId: number) => void;
+}): React.ReactElement {
+  return (
+    <div className="flex flex-col items-start gap-2.5 p-6">
+      {amount !== null ? (
+        <p className="text-[22px] font-extrabold tracking-[-0.03em] text-ink">
+          Su mensualidad: {formatCurrency(amount)}
+        </p>
+      ) : (
+        <p className="text-[17px] font-bold tracking-tight text-ink">Todavía no hay pagos registrados</p>
+      )}
+      <p className="text-[13px] text-ink-3">
+        {uploadablePagoId !== null
+          ? "Adjunte el comprobante de su transferencia y el club lo valida."
+          : "El club abre el período de pago y luego usted adjunta el comprobante desde aquí."}
+      </p>
+      {uploadablePagoId !== null && (
+        <Button variant="primary" disabled={uploading} onClick={() => onUpload(uploadablePagoId)}>
+          {uploading ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Upload size={14} strokeWidth={1.5} aria-hidden="true" />}
+          {uploading ? "Subiendo…" : "Subir comprobante"}
+        </Button>
+      )}
+    </div>
+  );
+}
 
-function PagosSection({ personaId }: { personaId: string }): React.ReactElement {
-  const [state, setState] = useState<PagosState>({ status: "loading" });
-  const [reloadToken, setReloadToken] = useState(0);
+function PagosSection({
+  state,
+  membership,
+  onRetry,
+  onUploaded,
+}: {
+  state: PagosState;
+  membership: MembershipSummary | null;
+  onRetry: () => void;
+  onUploaded: () => void;
+}): React.ReactElement {
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingUploadPagoId, setPendingUploadPagoId] = useState<number | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setState({ status: "loading" });
-    fetchPagosDePersona(personaId)
-      .then((pagos) => {
-        if (!cancelled) setState({ status: "ready", pagos });
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setState({
-          status: "error",
-          message: error instanceof Error ? error.message : "No se pudo cargar el historial de pagos.",
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [personaId, reloadToken]);
+  const pagos = state.status === "ready" ? state.pagos : [];
+  const amount = resolveMonthlyAmount(membership);
+  const uploadable = findUploadablePago(pagos);
 
   function handleSelectFile(pagoId: number): void {
     setPendingUploadPagoId(pagoId);
@@ -251,7 +304,7 @@ function PagosSection({ personaId }: { personaId: string }): React.ReactElement 
     setUploadError(null);
     try {
       await subirVoucherPago(pendingUploadPagoId, file);
-      setReloadToken((n) => n + 1);
+      onUploaded();
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "No se pudo subir el comprobante.");
     } finally {
@@ -262,111 +315,157 @@ function PagosSection({ personaId }: { personaId: string }): React.ReactElement 
   }
 
   return (
-    <section className="mb-8">
-      <div className="mb-4 flex items-center gap-2">
-        <CreditCard size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-        <h2 className="text-lg font-bold text-cata-text">Pagos</h2>
+    <section className="card overflow-hidden" aria-labelledby="pagos-title">
+      <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+        <CreditCard size={16} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+        <h2 id="pagos-title" className="flex-1 text-[13px] font-bold text-ink">
+          Mis pagos
+        </h2>
       </div>
-      <p className="mb-4 text-xs text-cata-text/65">
-        Historial de pagos registrados. Adjunte el comprobante de transferencia para validar su pago.
-      </p>
 
       <input
         ref={fileInputRef}
         type="file"
         accept="image/jpeg,image/png,application/pdf"
         className="hidden"
+        data-testid="voucher-input"
         onChange={(e) => { void handleFileChange(e); }}
       />
 
       {uploadError && (
-        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-cata-red" role="alert">
+        <div className="mx-5 mt-4 rounded-ctl border border-state-bad/20 bg-state-bad-bg px-3 py-2 text-xs text-state-bad" role="alert">
           {uploadError}
-          <button type="button" onClick={() => setUploadError(null)} className="ml-2 underline">Cerrar</button>
+          <button type="button" onClick={() => setUploadError(null)} className="ml-2 underline">
+            Cerrar
+          </button>
         </div>
       )}
 
-      {state.status === "loading" && (
-        <div className="card">
-          <LoadingState label="Cargando historial de pagos…" />
-        </div>
-      )}
+      {state.status === "loading" && <LoadingState label="Cargando su historial de pagos…" />}
 
       {state.status === "error" && (
-        <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
+        <div className="p-5">
+          <ErrorState message={state.message} onRetry={onRetry} />
+        </div>
       )}
 
       {state.status === "ready" &&
         (state.pagos.length === 0 ? (
-          <div className="card">
-            <EmptyState
-              icon={<CreditCard size={21} strokeWidth={1.5} aria-hidden="true" />}
-              title="Todavía no hay pagos registrados"
-              description="Cuando se registre un pago de membresía, aparecerá aquí con su comprobante y su estado."
-            />
-          </div>
+          <PagosEmptyState
+            amount={amount}
+            uploadablePagoId={null}
+            uploading={false}
+            onUpload={handleSelectFile}
+          />
         ) : (
-          <div className="grid gap-3">
-            {state.pagos.map((pago) => (
-              <div
-                key={pago.id}
-                className="card-hover flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
-                    <CreditCard size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium tabular-nums text-cata-text">
+          <>
+            {uploadable !== null && (
+              <PagosEmptyState
+                amount={uploadable.monto}
+                uploadablePagoId={uploadable.id}
+                uploading={uploadingId === uploadable.id}
+                onUpload={handleSelectFile}
+              />
+            )}
+            <ul className="flex flex-col border-t border-line">
+              {state.pagos.map((pago) => (
+                <li
+                  key={pago.id}
+                  className="flex flex-col gap-2 border-b border-line px-5 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-semibold tabular-nums text-ink">
                       {formatCurrency(pago.monto)} · {formatDateRange(pago.fechaInicio, pago.fechaFin)}
                     </p>
-                    <p className="text-xs text-cata-text/65">{TIPO_PAGO_LABEL[pago.tipoPago]}</p>
+                    <p className="text-xs text-ink-3">{TIPO_PAGO_LABEL[pago.tipoPago]}</p>
                     {pago.voucherUrl && (
                       <a
                         href={pago.voucherUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-xs text-cata-red hover:underline"
+                        className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-ink underline"
                       >
-                        <Paperclip size={10} strokeWidth={1.5} />
+                        <Paperclip size={10} strokeWidth={1.5} aria-hidden="true" />
                         Ver comprobante
                       </a>
                     )}
                     {pago.estadoPago === "RECHAZADO" && pago.motivoRechazo && (
-                      <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-                        <p className="text-xs font-semibold text-cata-red">Motivo de rechazo</p>
-                        <p className="text-xs text-cata-red/80">{pago.motivoRechazo}</p>
+                      <div className="mt-2 rounded-ctl border border-state-bad/20 bg-state-bad-bg px-3 py-2">
+                        <p className="text-xs font-semibold text-state-bad">Motivo de rechazo</p>
+                        <p className="text-xs text-state-bad/80">{pago.motivoRechazo}</p>
                       </div>
                     )}
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!pago.voucherUrl && pago.estadoPago !== "APROBADO" && (
-                    <button
-                      type="button"
-                      onClick={() => handleSelectFile(pago.id)}
-                      disabled={uploadingId === pago.id}
-                      className="inline-flex items-center gap-1 rounded-lg border border-cata-border px-2.5 py-1.5 text-xs font-medium text-cata-text transition-colors hover:border-cata-red/30 hover:text-cata-red disabled:opacity-50"
-                    >
-                      {uploadingId === pago.id ? (
-                        <Loader2 size={12} className="animate-spin" />
-                      ) : (
-                        <Upload size={12} strokeWidth={1.5} />
-                      )}
-                      {uploadingId === pago.id ? "Subiendo…" : "Subir comprobante"}
-                    </button>
-                  )}
-                  <PagoEstadoBadge estado={pago.estadoPago} />
-                </div>
-              </div>
-            ))}
-          </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {!pago.voucherUrl && pago.estadoPago !== "APROBADO" && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleSelectFile(pago.id)}
+                        disabled={uploadingId === pago.id}
+                      >
+                        {uploadingId === pago.id ? (
+                          <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Upload size={12} strokeWidth={1.5} aria-hidden="true" />
+                        )}
+                        {uploadingId === pago.id ? "Subiendo…" : "Subir comprobante"}
+                      </Button>
+                    )}
+                    <PagoEstadoBadge estado={pago.estadoPago} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         ))}
     </section>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Recent sessions
+// ---------------------------------------------------------------------------
 
+function RecentSessionsSection({ profile }: { profile: StudentProfileSummary }): React.ReactElement {
+  return (
+    <section className="card overflow-hidden" aria-labelledby="sessions-title">
+      <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+        <Calendar size={16} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+        <h2 id="sessions-title" className="flex-1 text-[13px] font-bold text-ink">
+          Asistencia reciente
+        </h2>
+      </div>
+      {profile.recentSessions.length === 0 ? (
+        <EmptyState
+          icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
+          title="Aún no hay asistencias registradas"
+          description="Las sesiones aparecerán aquí en cuanto el entrenador tome lista."
+        />
+      ) : (
+        <ul className="flex flex-col">
+          {profile.recentSessions.map((session) => (
+            <li
+              key={`${session.fecha}-${session.horario}`}
+              className="flex h-drow items-center gap-4 border-b border-line px-5 last:border-b-0"
+            >
+              <span className="w-[150px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+                {formatDate(session.fecha)}
+              </span>
+              <span className="flex-1 text-sm font-semibold text-ink">{session.horario}</span>
+              <Badge tone={getAttendanceBadgeTone(session.estado)}>
+                {getAttendanceLabel(session.estado)}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Membership plan catalog — pending-enrollment view only
+// ---------------------------------------------------------------------------
 
 function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.ReactElement {
   if (data.membershipPlans.length === 0) {
@@ -381,17 +480,14 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
     );
   }
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2">
       {data.membershipPlans.map((plan) => (
-        <div key={plan.id} className="card-hover flex flex-col p-5 sm:p-6">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cata-red/15">
-            <ShieldCheck size={18} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-          </div>
-          <h3 className="text-base font-bold text-cata-text">{plan.nombre}</h3>
-          <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-extrabold tabular-nums text-cata-text">{formatCurrency(plan.precio)}</span>
-          </div>
-          <p className="mt-1 text-xs text-cata-text/65">{plan.franjaHoraria}</p>
+        <div key={plan.id} className="card flex flex-col p-5">
+          <h3 className="text-base font-bold text-ink">{plan.nombre}</h3>
+          <span className="mt-2 text-2xl font-extrabold tabular-nums text-ink">
+            {formatCurrency(plan.precio)}
+          </span>
+          <p className="mt-1 text-xs text-ink-3">{plan.franjaHoraria}</p>
         </div>
       ))}
     </div>
@@ -406,34 +502,26 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
 
 function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.ReactElement {
   return (
-    <div className="mb-8">
-      <div className="mb-6 rounded-2xl border border-cata-border bg-cata-bg p-6">
-        <div className="mb-3 flex items-center gap-2">
-          <UserPlus size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-          <h2 className="text-lg font-bold text-cata-text">Bienvenido a Cata Club</h2>
-        </div>
-        <p className="text-sm leading-relaxed text-cata-text/65">
-          Su cuenta está creada pero todavía no tiene una matrícula activa. Elija el plan que mejor se
-          adapte a sus necesidades y complete su inscripción, o inscriba a un hijo/dependiente, para
-          comenzar a entrenar.
+    <div className="mx-auto w-full max-w-[760px] space-y-5">
+      <section className="card p-6">
+        <h2 className="text-[17px] font-bold tracking-tight text-ink">Bienvenido a Cata Club</h2>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink-3">
+          Su cuenta está creada pero todavía no tiene una matrícula activa. Complete su inscripción para
+          empezar a entrenar.
         </p>
-        <p className="mt-3 text-xs leading-relaxed text-cata-text/45">
-          Una vez inscrito, desde su portal podrá agregar hijos o dependientes si necesita gestionar las
-          membresías de su familia.
-        </p>
-      </div>
+      </section>
 
       <MembershipPlansGrid data={data} />
 
-      <div className="mt-8 flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-center">
-        <Link href="/student/enroll?type=self" className="btn-primary inline-flex items-center gap-2 shadow-soft">
+      <div className="flex flex-wrap gap-3">
+        <Link href="/student/enroll?type=self" className={buttonClasses("primary")}>
           <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />
-          Inscribirme como Jugador
+          Inscribirme como jugador
           <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
         </Link>
-        <Link href="/student/enroll?type=child" className="btn-secondary inline-flex items-center gap-2">
+        <Link href="/student/enroll?type=child" className={buttonClasses("secondary")}>
           <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />
-          Inscribir hijo/dependiente
+          Inscribir a un hijo o dependiente
           <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
         </Link>
       </div>
@@ -448,9 +536,11 @@ function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.
 function ActivePortalView({
   data,
   hasAlumnoRole,
+  greetingName,
 }: {
   data: StudentPortalSummary;
   hasAlumnoRole: boolean;
+  greetingName: string;
 }): React.ReactElement {
   const managedProfiles: StudentProfileSummary[] =
     hasAlumnoRole && data.self ? [data.self, ...data.representados] : data.representados;
@@ -467,26 +557,59 @@ function ActivePortalView({
 
   const representative = isRepresentative(data.representados.length);
   const selectedProfile = managedProfiles.find((p) => p.personaId === selectedId) ?? managedProfiles[0] ?? null;
+  const selectedPersonaId = selectedProfile?.personaId ?? "";
+
+  // Payments are fetched here rather than inside `PagosSection` because the
+  // carnet also needs them: the only real "coverage until" date in the system
+  // is the furthest `fechaFin` among approved payments.
+  const [pagosState, setPagosState] = useState<PagosState>({ status: "loading" });
+  const [pagosReloadToken, setPagosReloadToken] = useState(0);
+
+  useEffect(() => {
+    if (!selectedPersonaId) return;
+    let cancelled = false;
+    setPagosState({ status: "loading" });
+    fetchPagosDePersona(selectedPersonaId)
+      .then((pagos) => {
+        if (!cancelled) setPagosState({ status: "ready", pagos });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setPagosState({
+          status: "error",
+          message: error instanceof Error ? error.message : "No se pudo cargar el historial de pagos.",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPersonaId, pagosReloadToken]);
+
+  const coverageEnd = useMemo(
+    () => (pagosState.status === "ready" ? resolveCoverageEnd(pagosState.pagos) : null),
+    [pagosState],
+  );
 
   return (
-    <>
-      {representative && (
-        <div className="mb-4 flex items-center gap-2">
-          <span className="text-xs text-cata-text/65">Gestiona {managedProfiles.length} estudiante(s)</span>
-        </div>
-      )}
+    <div className="mx-auto w-full max-w-[760px] space-y-5">
+      {/* An h2, not an h1: `AppShell` already renders the page's own h1 ("Mi
+          cuenta") above <main>, and a second h1 would give the page two. */}
+      <h2 className="text-[26px] font-extrabold tracking-[-0.03em] text-ink">Hola, {greetingName}</h2>
 
+      {/* Guardian → dependent switcher. The audit named this genuinely
+          club-specific: a representante lands on one child and swaps to the
+          next without leaving the page. */}
       {managedProfiles.length > 1 && (
-        <div className="mb-4">
-          <label htmlFor="student-select" className="text-xs font-medium text-cata-text/45">
-            Seleccionar estudiante
+        <div className="flex flex-wrap items-center gap-3">
+          <label htmlFor="student-select" className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+            Estudiante
           </label>
-          <div className="relative mt-1 inline-block">
+          <div className="relative">
             <select
               id="student-select"
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}
-              className="appearance-none rounded-xl border border-cata-border bg-cata-surface px-4 py-2 pr-10 text-sm font-medium text-cata-text shadow-sm transition-colors hover:border-cata-red/30 focus:border-cata-red/40 focus:outline-none focus:ring-2 focus:ring-cata-red/10"
+              className="h-ctl appearance-none rounded-ctl border border-line-2 bg-paper pl-3.5 pr-10 text-[13px] font-semibold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball"
             >
               {managedProfiles.map((profile) => (
                 <option key={profile.personaId} value={profile.personaId}>
@@ -497,60 +620,71 @@ function ActivePortalView({
             <ChevronDown
               size={14}
               strokeWidth={1.5}
-              className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-cata-text/65"
+              className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-3"
               aria-hidden="true"
             />
           </div>
         </div>
       )}
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <Link
-          href={representative ? "/student/add-dependent" : "/student/enroll?type=child"}
-          className="inline-flex items-center gap-2 rounded-xl bg-cata-red/15 px-4 py-2.5 text-sm font-medium text-cata-red transition-all duration-200 hover:bg-cata-red/25"
-        >
-          <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />
-          {representative ? "Agregar hijo/dependiente" : "Inscribir hijo/dependiente"}
-          <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
-        </Link>
-        {!hasAlumnoRole && (
-          <Link
-            href="/student/enroll?type=self"
-            className="inline-flex items-center gap-2 rounded-xl bg-cata-red/15 px-4 py-2.5 text-sm font-medium text-cata-red transition-all duration-200 hover:bg-cata-red/25"
-          >
-            <GraduationCap size={16} strokeWidth={1.5} aria-hidden="true" />
-            Unirme como jugador
-            <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
-          </Link>
-        )}
-      </div>
-
       {selectedProfile === null ? (
         <div className="card">
           <EmptyState
             icon={<User size={21} strokeWidth={1.5} aria-hidden="true" />}
             title="No se encontraron estudiantes asociados a esta cuenta"
-            description="Inscríbase como jugador o agregue un hijo/dependiente para empezar."
+            description="Inscríbase como jugador o agregue un hijo o dependiente para empezar."
           />
         </div>
       ) : (
         <>
-          <div className="mb-8 grid gap-4 sm:grid-cols-2">
-            <RankingCard profile={selectedProfile} />
-            <MembershipCard membership={selectedProfile.membership} />
-          </div>
-
+          <Carnet profile={selectedProfile} coverageEnd={coverageEnd} />
+          <TrainingPanel profile={selectedProfile} />
+          <PagosSection
+            state={pagosState}
+            membership={selectedProfile.membership}
+            onRetry={() => setPagosReloadToken((n) => n + 1)}
+            onUploaded={() => setPagosReloadToken((n) => n + 1)}
+          />
           <RecentSessionsSection profile={selectedProfile} />
-          <PagosSection personaId={selectedProfile.personaId} />
         </>
       )}
-    </>
+
+      {/* Contextual CTAs. A self-managed student with no dependents sees
+          neither: "Inscribir hijo/dependiente" used to point them at the
+          PUBLIC enrollment wizard, which creates a whole second account and
+          user — and `/student/add-dependent` is gated to `representante`, so
+          they could not use the honest route either. Offering it was worse
+          than offering nothing. */}
+      {(representative || !hasAlumnoRole) && (
+        <div className="flex flex-wrap gap-3 pt-1">
+          {representative && (
+            <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
+              <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />
+              Agregar hijo o dependiente
+              <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+            </Link>
+          )}
+          {!hasAlumnoRole && (
+            <Link href="/student/enroll?type=self" className={buttonClasses("secondary")}>
+              <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />
+              Unirme como jugador
+              <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
+
+/** First given name — "Hola, Ana", not "Hola, Ana Maria Garcia Lopez". */
+function firstNameOf(fullName: string): string {
+  return fullName.trim().split(/\s+/)[0] || fullName;
+}
 
 function StudentPortalContent(): React.ReactElement {
   const { session } = useAuth();
@@ -580,6 +714,11 @@ function StudentPortalContent(): React.ReactElement {
     };
   }, [personaId, reloadToken]);
 
+  const greetingName =
+    state.status === "ready" && state.data.self
+      ? firstNameOf(state.data.self.nombres)
+      : firstNameOf(session?.user.name ?? "");
+
   return (
     <AppShell eyebrow="Área de estudiantes" title="Mi cuenta">
       {state.status === "loading" && (
@@ -594,7 +733,11 @@ function StudentPortalContent(): React.ReactElement {
         (derivePortalMode(hasAlumnoRole, state.data.representados.length) === "pending" ? (
           <PendingEnrollmentView data={state.data} />
         ) : (
-          <ActivePortalView data={state.data} hasAlumnoRole={hasAlumnoRole} />
+          <ActivePortalView
+            data={state.data}
+            hasAlumnoRole={hasAlumnoRole}
+            greetingName={greetingName}
+          />
         ))}
     </AppShell>
   );

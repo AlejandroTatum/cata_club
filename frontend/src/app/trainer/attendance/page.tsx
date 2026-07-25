@@ -1,20 +1,42 @@
 /**
- * Trainer Attendance Registration — real, persisted flow.
+ * Trainer Attendance — "Pasar lista"
+ * (`docs/ux/prototipos/20-tomar-lista.html`).
  *
- * Multi-step wizard for registering attendance in training sessions,
- * backed by real data end-to-end:
- *   - Schedule (Horario) selection from `GET /api/attendance/schedules`,
- *     with the roster loaded directly from that Horario's assigned alumnos
+ * Three steps, backed by real data end to end:
+ *   - Horario selection from `GET /api/attendance/schedules`, with the roster
+ *     loaded from that Horario's assigned alumnos
  *     (`GET /api/groups/horarios/:id/alumnos`).
- *   - Student attendance marking (present/absent/late/justified).
- *   - Confirmation + real persistence via `POST /api/attendance/records`
- *     (one real `POST /asistencias` per student, see
- *     src/lib/server/attendance-adapter.ts).
+ *   - Marking, on 48px single-line fiches.
+ *   - Confirmation + persistence via `POST /api/attendance/records`.
  *
- * Domain rules:
- *   - Horario/session is NOT owned by one trainer.
- *   - Any trainer can register attendance in any available session.
- *   - The system records which trainer took the attendance.
+ * Domain rules: a Horario is not owned by one trainer, any trainer may file a
+ * session, and the system records who did.
+ *
+ * ## Data-integrity guarantees this screen must never lose
+ *
+ * The roster starts on the `UNMARKED` sentinel, the "Sin marcar" counter spans
+ * the FULL roster (not the visible page), and both the advance and the submit
+ * are blocked while anyone is undecided. Before that, a trainer could tap
+ * Continuar → Siguiente → Confirmar and file a whole session as a no-show,
+ * including students they never scrolled to.
+ *
+ * The redesign is layered ON TOP of that, and every piece of it is subordinate
+ * to it:
+ *   - Tapping a fiche cycles the state, but `cycleWizardAttendance` can never
+ *     return to `UNMARKED`, and the four explicit 44px controls stay present
+ *     and stay a `radiogroup` — the tap is an accelerator, not a replacement.
+ *   - The draft in `sessionStorage` only ever persists the four REAL states,
+ *     keyed by horario + date; see the rules block in `attendance-utils.ts`.
+ *
+ * ## What the audit found, and where it is answered
+ *
+ *   - 40 simultaneous targets on one screen → the fiche is one target for the
+ *     common case; the four controls are the deliberate path.
+ *   - No sticky commit → the totals + Continuar bar is `sticky bottom-0`, so
+ *     the trainer never scrolls the card to reach it.
+ *   - No draft persistence → a phone call no longer costs the session.
+ *   - "N registro(s) no se pudieron guardar" without naming anyone → the
+ *     failures are listed by name.
  */
 
 "use client";
@@ -24,7 +46,6 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 
-import StudentSearch from "@/components/StudentSearch";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import {
@@ -40,17 +61,21 @@ import {
   ChevronRight,
   ChevronDown,
   AlertTriangle,
-  ClipboardList,
-  HelpCircle,
-  XCircle,
 } from "lucide-react";
 import {
   ATTENDANCE_LABELS,
   ATTENDANCE_STATES,
   UNMARKED,
+  applyAttendanceDraft,
+  attendanceDraftKey,
+  clearAttendanceDraft,
   countByState,
   countUnmarked,
+  cycleWizardAttendance,
+  loadAttendanceDraft,
   markUnmarkedAsPresent,
+  resolveFailedStudentNames,
+  saveAttendanceDraft,
   toAttendanceMarks,
   buildAttendanceSummary,
   buildRosterFromAlumnoHorarios,
@@ -58,9 +83,17 @@ import {
   resolveDisplayTrainerName,
   type SessionStudent,
 } from "./attendance-utils";
-import { getAttendanceBadgeTokens, formatDay, groupSchedulesByDay, paginateRecords, getTotalPages } from "@/app/attendance/attendance-utils";
+import {
+  getAttendanceBadgeTokens,
+  getAttendanceBadgeTone,
+  formatDay,
+  groupSchedulesByDay,
+  paginateRecords,
+  getTotalPages,
+} from "@/app/attendance/attendance-utils";
 import BackLink from "@/components/BackLink";
-import { EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
+import { Badge, Button, EmptyState, ErrorState, LoadingState, Pagination, Stepper, buttonClasses } from "@/components/ui";
+import { getUserInitials } from "@/lib/auth-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DiaSemana } from "@/types/domain";
 import {
@@ -80,10 +113,11 @@ type WizardStep = "select-session" | "mark-attendance" | "confirm";
 
 const STEP_ORDER: WizardStep[] = ["select-session", "mark-attendance", "confirm"];
 
+/** The card heading per step. */
 const STEP_LABELS: Record<WizardStep, string> = {
-  "select-session": "Seleccionar Horario",
-  "mark-attendance": "Registrar Asistencia",
-  confirm: "Confirmar y Finalizar",
+  "select-session": "Elegí el horario",
+  "mark-attendance": "Pasar lista",
+  confirm: "Confirmar y finalizar",
 };
 
 // ---------------------------------------------------------------------------
@@ -99,6 +133,21 @@ const ATTENDANCE_ICONS: Record<EstadoAsistencia, React.ReactNode> = {
   late: <Timer size={16} strokeWidth={2} aria-hidden="true" />,
   justified: <FileText size={16} strokeWidth={2} aria-hidden="true" />,
 };
+
+/** Plural labels for the save bar's running totals. */
+const TOTAL_LABELS: Record<EstadoAsistencia, [singular: string, plural: string]> = {
+  present: ["Presente", "Presentes"],
+  late: ["Tardanza", "Tardanzas"],
+  justified: ["Justificado", "Justificados"],
+  absent: ["Ausente", "Ausentes"],
+};
+
+/** Best news first — the same order every attendance surface reads in. */
+const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -120,6 +169,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
   const [rosterError, setRosterError] = useState<string | null>(null);
 
   const [students, setStudents] = useState<SessionStudent[]>([]);
+  const [sessionDate, setSessionDate] = useState<string | null>(null);
+  const [restoredFromDraft, setRestoredFromDraft] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
   const [studentPage, setStudentPage] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -153,8 +204,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
    * `submitError` is an outcome — the registration failed — with no control
    * left to attach it to, so it toasts. `rosterError` blocks the "Continuar"
    * button it renders directly above, so it stays inline and does NOT also
-   * toast: this screen used to fire both channels for that one failure, the
-   * same duplication the payments queue had for a successful approval.
+   * toast.
    */
   useEffect(() => {
     if (submitError) showError(submitError);
@@ -168,9 +218,17 @@ export default function TrainerAttendancePage(): React.ReactElement {
   const currentIndex = STEP_ORDER.indexOf(step);
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === STEP_ORDER.length - 1;
-  const progress = ((currentIndex + 1) / STEP_ORDER.length) * 100;
 
   const selectedSchedule = schedules.find((s) => s.id === selectedScheduleId) ?? null;
+
+  /** The draft's key — null until a session is actually chosen. */
+  const draftKey = useMemo(
+    () =>
+      selectedScheduleId !== null && sessionDate
+        ? attendanceDraftKey(selectedScheduleId, sessionDate)
+        : null,
+    [selectedScheduleId, sessionDate],
+  );
 
   // Admins may register attendance on a trainer's behalf (backend requires
   // entrenadorId to belong to an actual ENTRENADOR — see attendance-utils.ts).
@@ -197,19 +255,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
     setRosterError(null);
     try {
       // The wizard always registers attendance for "today" (the backend
-      // defaults fechaEntrenamiento to today's server date when omitted —
-      // see RegisterAttendanceRequest.fechaEntrenamiento). Re-opening the
-      // wizard for a session that already has today's attendance recorded
-      // must show those existing marks, not silently default everyone back
-      // to "absent" — otherwise resubmitting flips already-present students
-      // to absent (see backend upsert in registrar_asistencia, which now
-      // updates on this same persona+horario+fecha match instead of
-      // inserting a duplicate row).
-      const today = new Date().toISOString().slice(0, 10);
+      // defaults fechaEntrenamiento to today's server date when omitted).
+      // Re-opening the wizard for a session that already has today's
+      // attendance recorded must show those existing marks, not silently
+      // default everyone back to unmarked.
+      const today = todayIso();
       // The prefill fetch is a convenience, not a requirement: if it fails,
-      // fall back to an empty list rather than failing the whole roster load
-      // (buildRosterFromAlumnoHorarios already defaults to "absent" when a
-      // student has no matching existing record).
+      // fall back to an empty list rather than failing the whole roster load.
       const [alumnoHorarios, existingRecords] = await Promise.all([
         fetchAlumnosPorHorario(selectedScheduleId),
         fetchAttendanceRecords({ fechaInicio: today, fechaFin: today, horarioId: selectedScheduleId }).catch(
@@ -219,7 +271,17 @@ export default function TrainerAttendancePage(): React.ReactElement {
           },
         ),
       ]);
-      setStudents(buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords));
+
+      // Order matters: server records first, then the trainer's own in-progress
+      // draft on top — the draft is the newer intent. Neither can produce
+      // `UNMARKED`, so a student nobody has decided on stays undecided.
+      const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
+      const draft = loadAttendanceDraft(attendanceDraftKey(selectedScheduleId, today));
+      const withDraft = applyAttendanceDraft(roster, draft);
+
+      setSessionDate(today);
+      setRestoredFromDraft(withDraft !== roster && countUnmarked(withDraft) < countUnmarked(roster));
+      setStudents(withDraft);
       setStudentPage(1);
       setStep("mark-attendance");
     } catch (err) {
@@ -256,9 +318,28 @@ export default function TrainerAttendancePage(): React.ReactElement {
     });
   }
 
+  /** Every path that changes a mark funnels through here, so does the draft. */
+  const commitStudents = useCallback(
+    (next: SessionStudent[]): void => {
+      setStudents(next);
+      setRestoredFromDraft(false);
+      if (draftKey) saveAttendanceDraft(draftKey, next);
+    },
+    [draftKey],
+  );
+
   function handleDirectAttendanceSet(studentIndex: number, state: EstadoAsistencia): void {
-    setStudents((prev) =>
-      prev.map((s, i) => (i === studentIndex ? { ...s, attendance: state } : s)),
+    commitStudents(
+      students.map((s, i) => (i === studentIndex ? { ...s, attendance: state } : s)),
+    );
+  }
+
+  /** The whole fiche is tappable — one target for the common case. */
+  function handleCycleAttendance(studentIndex: number): void {
+    commitStudents(
+      students.map((s, i) =>
+        i === studentIndex ? { ...s, attendance: cycleWizardAttendance(s.attendance) } : s,
+      ),
     );
   }
 
@@ -268,7 +349,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
    * preserved. Applies to the whole roster, not just the visible page.
    */
   function handleMarkRemainingPresent(): void {
-    setStudents((prev) => markUnmarkedAsPresent(prev));
+    commitStudents(markUnmarkedAsPresent(students));
   }
 
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
@@ -289,6 +370,9 @@ export default function TrainerAttendancePage(): React.ReactElement {
       });
       setResult(registration);
       setConfirmed(true);
+      // The session is filed; the draft has nothing left to protect. Kept when
+      // some records failed, so a retry still starts from the trainer's marks.
+      if (draftKey && registration.failed.length === 0) clearAttendanceDraft(draftKey);
     } catch (err) {
       console.error("[trainer/attendance] registerAttendance failed", err);
       setSubmitError("No se pudo registrar la asistencia. Intente nuevamente.");
@@ -298,8 +382,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
   }
 
   function handleReset(): void {
+    if (draftKey) clearAttendanceDraft(draftKey);
     setStep("select-session");
     setSelectedScheduleId(null);
+    setSessionDate(null);
+    setRestoredFromDraft(false);
     setStudents([]);
     setConfirmed(false);
     setSubmitting(false);
@@ -330,18 +417,29 @@ export default function TrainerAttendancePage(): React.ReactElement {
   // "0 sin marcar" while off-screen students were still undecided — the exact
   // silent-data-loss path this guard exists to close.
   const unmarkedCount = useMemo(() => countUnmarked(students), [students]);
+  const presentCount = useMemo(() => countByState(students, "present"), [students]);
   const unmarkedReasonId = "attendance-unmarked-reason";
+
+  /** The named steps — step 1 carries the decision already made. */
+  const stepNames = useMemo(
+    () => [
+      selectedSchedule
+        ? `Horario · ${formatDay(selectedSchedule.diaSemana)} ${selectedSchedule.horaInicio}`
+        : "Horario",
+      "Pasar lista",
+      "Confirmar",
+    ],
+    [selectedSchedule],
+  );
 
   // ---- Step renderers ----
 
   function renderSessionSelection(): React.ReactElement {
     const dayGroups = groupSchedulesByDay(schedules);
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-5">
         <div>
-          <p className="mb-3 text-sm leading-relaxed text-cata-text/65">
-            Seleccione el horario de entrenamiento:
-          </p>
+          <p className="mb-3 text-[13px] text-ink-3">Seleccione el horario de entrenamiento:</p>
           {schedules.length === 0 ? (
             <EmptyState
               icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
@@ -349,40 +447,37 @@ export default function TrainerAttendancePage(): React.ReactElement {
               description="Sin un horario no se puede tomar lista. Pida a administración que registre uno."
             />
           ) : (
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               {dayGroups.map((group) => {
                 const isExpanded = expandedDays.has(group.day);
                 const panelId = `schedule-day-${group.day}`;
                 return (
-                  <div key={group.day} className="overflow-hidden rounded-xl border border-cata-border bg-cata-surface">
+                  <div key={group.day} className="overflow-hidden rounded-ctl border border-line bg-paper">
                     <button
                       type="button"
                       onClick={() => toggleDay(group.day)}
                       aria-expanded={isExpanded}
                       aria-controls={panelId}
-                      className="flex w-full items-center justify-between gap-2.5 p-4 text-left transition-colors duration-150 hover:bg-cata-bg/40"
+                      className="flex min-h-[52px] w-full items-center justify-between gap-2.5 px-4 py-3 text-left transition-colors hover:bg-canvas"
                     >
                       <span className="flex items-center gap-2.5">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
-                          <Calendar size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                        </div>
-                        <span className="text-sm font-bold text-cata-text">{group.label}</span>
-                        <span className="text-xs text-cata-text/45">
+                        <span className="text-sm font-bold text-ink">{group.label}</span>
+                        <span className="text-xs text-ink-3">
                           ({group.schedules.length}{" "}
                           {group.schedules.length === 1 ? "horario" : "horarios"})
                         </span>
                       </span>
                       <ChevronDown
                         size={16}
-                        strokeWidth={1.5}
-                        className={`shrink-0 text-cata-text/45 transition-transform duration-150 ${
+                        strokeWidth={2}
+                        className={`shrink-0 text-ink-3 transition-transform duration-150 ${
                           isExpanded ? "rotate-180" : ""
                         }`}
                         aria-hidden="true"
                       />
                     </button>
                     {isExpanded && (
-                      <div id={panelId} className="grid gap-2 border-t border-cata-border p-3 sm:grid-cols-2">
+                      <div id={panelId} className="grid gap-2 border-t border-line p-3 sm:grid-cols-2">
                         {group.schedules.map((sched) => {
                           const isActive = sched.id === selectedScheduleId;
                           return (
@@ -390,24 +485,26 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               key={sched.id}
                               type="button"
                               onClick={() => setSelectedScheduleId(sched.id)}
-                              className={`card-hover p-5 text-left transition-all duration-150 ${
+                              aria-pressed={isActive}
+                              // Selection is coal + the yellow ball dot, never
+                              // a red fill — red is CTA and destructive only.
+                              className={`flex min-h-[56px] flex-col justify-center gap-1 rounded-ctl border px-4 py-3 text-left transition-colors ${
                                 isActive
-                                  ? "ring-2 ring-cata-red/30 border-cata-red/20"
-                                  : ""
+                                  ? "border-coal bg-paper shadow-[0_0_0_1px_theme(colors.coal.DEFAULT)]"
+                                  : "border-line-2 bg-paper hover:border-ink-3"
                               }`}
                             >
-                              <div className="rounded-lg bg-cata-bg/60 px-3 py-2">
-                                <p className="flex items-center gap-1.5 text-xs text-cata-text/70">
-                                  <Clock size={13} strokeWidth={1.5} className="text-cata-red/70" aria-hidden="true" />
-                                  <span className="font-semibold text-cata-text">{sched.horaInicio}</span>
-                                  <span className="text-cata-text/40">a</span>
-                                  <span className="font-semibold text-cata-text">{sched.horaFin}</span>
-                                </p>
-                                <p className="mt-1 flex items-center gap-1.5 text-xs text-cata-text/55">
-                                  <UserCheck size={12} strokeWidth={1.5} aria-hidden="true" />
-                                  {sched.entrenadorNombre}
-                                </p>
-                              </div>
+                              <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ink">
+                                <Clock size={14} strokeWidth={2} className="text-ink-3" aria-hidden="true" />
+                                {sched.horaInicio} — {sched.horaFin}
+                                {isActive && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="ml-auto h-1.5 w-1.5 rounded-full bg-ball ring-2 ring-coal"
+                                  />
+                                )}
+                              </span>
+                              <span className="text-[11.5px] text-ink-3">{sched.entrenadorNombre}</span>
                             </button>
                           );
                         })}
@@ -426,17 +523,16 @@ export default function TrainerAttendancePage(): React.ReactElement {
           </div>
         )}
 
-        <button
+        <Button
           type="button"
+          variant="primary"
           onClick={handleContinueToRoster}
           disabled={!selectedScheduleId || rosterLoading}
-          className="btn-primary w-full shadow-soft"
+          className="w-full"
         >
           {rosterLoading ? "Cargando estudiantes…" : "Continuar"}
-          <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-        </button>
-
-
+          <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+        </Button>
       </div>
     );
   }
@@ -444,132 +540,158 @@ export default function TrainerAttendancePage(): React.ReactElement {
   function renderMarkAttendance(): React.ReactElement | null {
     if (!selectedSchedule) return null;
 
-    const presentCount = countByState(students, "present");
-    const absentCount = countByState(students, "absent");
-    const lateCount = countByState(students, "late");
-    const justifiedCount = countByState(students, "justified");
-
     return (
-      <div className="space-y-4">
-        {/* Session context */}
-        <div className="rounded-xl border border-cata-border bg-cata-surface p-4">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cata-red/15">
-              <Calendar size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            </div>
-            <span className="font-medium text-cata-text">
-              {formatDay(selectedSchedule.diaSemana)}
-            </span>
-            <span className="text-cata-text/65">&middot;</span>
-            <span className="text-cata-text/65">
-              {selectedSchedule.horaInicio} — {selectedSchedule.horaFin}
-            </span>
-          </div>
-          {/* Live counts */}
-          <div className="mt-3 flex flex-wrap gap-3 text-xs">
-            <span className="inline-flex items-center gap-1 rounded-full bg-cata-state-ok/10 px-2 py-0.5 font-medium text-cata-state-ok">
-              <UserCheck size={11} strokeWidth={2} aria-hidden="true" />
-              {presentCount} Presentes
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700">
-              <UserX size={11} strokeWidth={2} aria-hidden="true" />
-              {absentCount} Ausentes
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
-              <Timer size={11} strokeWidth={2} aria-hidden="true" />
-              {lateCount} Tardanzas
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
-              <FileText size={11} strokeWidth={2} aria-hidden="true" />
-              {justifiedCount} Justificados
-            </span>
-            {/* Undecided students — the roster starts fully unmarked, and this
-                count spans every page, so students the trainer has not
-                scrolled to are visible here instead of silently going out as
-                absent. */}
-            {unmarkedCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-cata-text/35 bg-cata-bg px-2 py-0.5 font-medium text-cata-text/75">
-                <HelpCircle size={11} strokeWidth={2} aria-hidden="true" />
-                {unmarkedCount} Sin marcar
+      <div className="flex flex-col gap-4">
+        {/*
+         * The coal header: the live marker the trainer glances at, the session
+         * it belongs to, and the one-tap shortcut for the common case.
+         */}
+        <div className="flex flex-wrap items-center gap-5 rounded-card bg-coal px-[22px] py-[18px] text-white">
+          <span
+            aria-live="polite"
+            className="text-[40px] font-extrabold leading-none tracking-[-0.05em] tabular-nums"
+          >
+            {presentCount}
+            <span className="text-[20px] text-white/50">/{students.length}</span>
+          </span>
+          <span className="flex min-w-[170px] flex-1 flex-col gap-1">
+            <b className="text-[15px] font-bold">presentes</b>
+            <span className="flex flex-wrap items-center gap-1.5 text-[13px] text-white/60">
+              {/* Kept as its own node: "Lunes" is the day, the range is the
+                  time, and they are two different facts. */}
+              <span>{formatDay(selectedSchedule.diaSemana)}</span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {selectedSchedule.horaInicio} — {selectedSchedule.horaFin}
               </span>
-            )}
-          </div>
-
+            </span>
+          </span>
+          {unmarkedCount > 0 && (
+            <button
+              type="button"
+              onClick={handleMarkRemainingPresent}
+              className="inline-flex h-ctl items-center gap-2 rounded-ctl border border-white/25 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-white/10"
+            >
+              <UserCheck size={14} strokeWidth={2} aria-hidden="true" />
+              Marcar restantes presentes
+            </button>
+          )}
         </div>
 
-        {/* Student list with attendance toggle */}
+        {restoredFromDraft && (
+          <p className="rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
+            Recuperamos las marcas que habías hecho en esta sesión. Revisalas antes de continuar.
+          </p>
+        )}
+
         {students.length === 0 ? (
-          <div className="card flex flex-col items-center py-10 text-center">
-            <Users size={28} strokeWidth={1.5} className="mb-2 text-cata-text/20" aria-hidden="true" />
-            <p className="text-sm text-cata-text/50">Este horario no tiene alumnos asignados.</p>
-          </div>
+          <EmptyState
+            icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+            title="Este horario no tiene alumnos asignados."
+            description="Pida a administración que asigne alumnos a este horario para poder tomar lista."
+          />
         ) : (
           <>
-            {/* Bulk action — the common case is near-full attendance, so
-                clearing the remaining rows in one tap has to be cheaper than
-                marking each student individually. */}
-            {unmarkedCount > 0 && (
-              <button
-                type="button"
-                onClick={handleMarkRemainingPresent}
-                className="btn-secondary min-h-[44px] w-full text-sm"
-              >
-                <UserCheck size={14} strokeWidth={1.5} aria-hidden="true" />
-                Marcar restantes presentes
-              </button>
-            )}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Filtrar alumnos por nombre…"
-                value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value)}
-                className="w-full rounded-lg border border-cata-border bg-white px-4 py-2.5 text-sm text-cata-text placeholder:text-cata-text/40 focus:border-cata-red focus:outline-none focus:ring-1 focus:ring-cata-red"
-                aria-label="Filtrar alumnos"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              {TOTAL_ORDER.map((state) => (
+                <Badge key={state} tone={getAttendanceBadgeTone(state)}>
+                  {ATTENDANCE_LABELS[state]}
+                </Badge>
+              ))}
+              <span className="text-xs text-ink-3">Toca la ficha para cambiar el estado</span>
             </div>
+
+            <input
+              type="text"
+              placeholder="Filtrar alumnos por nombre…"
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              aria-label="Filtrar alumnos"
+              className="h-ctl w-full rounded-ctl border border-line-2 bg-paper px-[13px] text-[13.5px] text-ink placeholder:text-ink-3 focus:border-cata-red focus:outline-none focus:ring-[3px] focus:ring-cata-red/10"
+            />
+
             {filteredStudents.length === 0 ? (
-              <div className="card flex flex-col items-center py-10 text-center">
-                <Users size={28} strokeWidth={1.5} className="mb-2 text-cata-text/20" aria-hidden="true" />
-                <p className="text-sm text-cata-text/50">No se encontraron alumnos con ese nombre.</p>
-              </div>
+              <EmptyState
+                icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+                title="No se encontraron alumnos con ese nombre."
+                description="Revisá el filtro o borralo para volver a ver la lista completa."
+              />
             ) : (
               <>
-                <div className="space-y-2">
+                <ul className="flex flex-col gap-2">
                   {paginatedStudents.map((student) => {
                     const idx = students.findIndex((s) => s.id === student.id);
                     const isUnmarked = student.attendance === UNMARKED;
                     const nameId = `student-name-${student.id}`;
                     const groupLabelId = `attendance-label-${student.id}`;
+                    const stateLabel = isUnmarked
+                      ? "Sin marcar"
+                      : ATTENDANCE_LABELS[student.attendance as EstadoAsistencia];
                     return (
-                      <div
+                      <li
                         key={student.id}
                         data-attendance={student.attendance}
-                        className={`card-hover flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${
-                          isUnmarked ? "border-dashed border-cata-text/35" : ""
+                        className={`flex flex-col overflow-hidden rounded-ctl border bg-paper sm:h-12 sm:flex-row sm:items-center ${
+                          isUnmarked ? "border-dashed border-ink-3/50" : "border-line-2"
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cata-red/15">
-                            <UserCheck size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                          </div>
-                          <span id={nameId} className="text-sm font-medium text-cata-text">
+                        {/*
+                         * `.fiche` — 48px, avatar + name + state, and the WHOLE
+                         * surface is the target. Sibling of the radiogroup, not
+                         * its parent: nesting controls inside a button is
+                         * invalid and unreachable by keyboard.
+                         */}
+                        <button
+                          type="button"
+                          onClick={() => handleCycleAttendance(idx)}
+                          aria-label={`${student.name}: ${stateLabel}. Cambiar estado`}
+                          // `shrink-0` + `w-full`, and `flex-1` only from `sm`:
+                          // on a phone the row is a COLUMN, where a bare
+                          // `flex-1` (flex-basis 0) collapsed the 48px fiche to
+                          // its 28px content height — the one dimension the
+                          // prototype is explicit about.
+                          className="flex h-12 w-full min-w-0 shrink-0 items-center gap-[11px] px-[13px] text-left transition-colors hover:bg-canvas sm:w-auto sm:flex-1"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-state-neutral-bg text-[10px] font-bold text-state-neutral"
+                          >
+                            {getUserInitials(student.name)}
+                          </span>
+                          <span
+                            id={nameId}
+                            className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink"
+                          >
                             {student.name}
                           </span>
-                        </div>
+                          {isUnmarked ? (
+                            <span className="h-badge inline-flex flex-none items-center rounded-full border border-dashed border-line-2 px-[11px] text-[11.5px] font-bold text-ink-3">
+                              Sin marcar
+                            </span>
+                          ) : (
+                            <Badge
+                              tone={getAttendanceBadgeTone(student.attendance)}
+                              className="flex-none"
+                            >
+                              {stateLabel}
+                            </Badge>
+                          )}
+                        </button>
 
                         {/*
-                         * A radiogroup, not a fieldset of `aria-pressed` toggles:
-                         * the four states are mutually exclusive, and toggle
-                         * buttons announce as four independent switches that
-                         * never convey that exclusivity. The group is labelled
-                         * by the rendered student name so the accessible name
-                         * can never drift from what is on screen.
+                         * A radiogroup, not a fieldset of `aria-pressed`
+                         * toggles: the four states are mutually exclusive, and
+                         * toggle buttons announce as four independent switches
+                         * that never convey that exclusivity. The group is
+                         * labelled by the RENDERED student name, so the
+                         * accessible name can never drift from what is on
+                         * screen. This is the deliberate path; the tap above is
+                         * the accelerator.
                          */}
                         <div
                           role="radiogroup"
                           aria-labelledby={`${groupLabelId} ${nameId}`}
-                          className="grid w-full grid-cols-4 gap-1 sm:w-auto"
+                          className="grid w-full grid-cols-4 gap-0.5 border-t border-line p-1 sm:h-full sm:w-auto sm:border-l sm:border-t-0 sm:p-0.5"
                         >
                           <span id={groupLabelId} className="sr-only">
                             Estado de asistencia de
@@ -583,27 +705,27 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                 role="radio"
                                 onClick={() => handleDirectAttendanceSet(idx, state)}
                                 aria-checked={isActive}
-                                className={`inline-flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 py-1.5 text-[11px] font-medium leading-tight transition-all duration-150 sm:flex-row sm:gap-1 sm:px-2.5 sm:text-xs ${
+                                title={ATTENDANCE_LABELS[state]}
+                                className={`inline-flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-[10px] font-semibold leading-tight transition-colors ${
                                   isActive
-                                    ? `border-current/20 ${getAttendanceBadgeTokens(state).badgeClass}`
-                                    : "border-transparent text-cata-text/45 hover:border-cata-border hover:text-cata-text/65"
+                                    ? `border-transparent ${getAttendanceBadgeTokens(state).badgeClass}`
+                                    : "border-transparent text-ink-3 hover:bg-canvas hover:text-ink"
                                 }`}
                               >
                                 {ATTENDANCE_ICONS[state]}
-                                <span>{ATTENDANCE_LABELS[state]}</span>
+                                <span className="sm:sr-only">{ATTENDANCE_LABELS[state]}</span>
                               </button>
                             );
                           })}
                         </div>
-                      </div>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
 
-                {/* Student list pagination */}
                 {filteredStudents.length > WIZARD_PAGE_SIZE && (
                   <Pagination
-                    className="mt-0 rounded-xl border border-cata-border bg-cata-bg px-4 py-3"
+                    className="mt-0 rounded-ctl border border-line bg-canvas px-4 py-3"
                     page={studentPage}
                     totalPages={totalStudentPages}
                     onPageChange={setStudentPage}
@@ -617,13 +739,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
           </>
         )}
 
-        {/* Trainer attribution reminder */}
-        <div className="rounded-xl border border-cata-border bg-cata-bg p-3 text-xs text-cata-text/65">
-          <span className="flex items-center gap-1.5 font-medium text-cata-text">
-            <UserCheck size={12} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            Registrando como: {trainerName}
-          </span>
-        </div>
+        <p className="text-xs text-ink-3">Registrando como: {trainerName}</p>
       </div>
     );
   }
@@ -631,81 +747,71 @@ export default function TrainerAttendancePage(): React.ReactElement {
   function renderConfirmation(): React.ReactElement | null {
     if (!selectedSchedule) return null;
 
-    const presentCount = countByState(students, "present");
-    const absentCount = countByState(students, "absent");
-    const lateCount = countByState(students, "late");
-    const justifiedCount = countByState(students, "justified");
-    const summary = buildAttendanceSummary(students);
-
     return (
-      <div className="space-y-5">
-        <p className="text-sm leading-relaxed text-cata-text/65">
-          Revise el resumen antes de confirmar el registro de asistencia:
+      <div className="flex flex-col gap-4">
+        <p className="text-[13px] text-ink-3">
+          Revisá el resumen antes de confirmar el registro de asistencia:
         </p>
 
-        {/* Session data */}
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Calendar size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Sesión
-            </h3>
-          </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <dt className="text-cata-text/65">Horario</dt>
-            <dd className="font-medium text-cata-text">
-              {formatDay(selectedSchedule.diaSemana)} {selectedSchedule.horaInicio} — {selectedSchedule.horaFin}
+        <dl className="overflow-hidden rounded-ctl border border-line">
+          <div className="flex h-drow items-center gap-4 border-b border-line px-5">
+            <dt className="w-[160px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+              Horario
+            </dt>
+            <dd className="flex-1 text-sm font-semibold text-ink">
+              {formatDay(selectedSchedule.diaSemana)} {selectedSchedule.horaInicio} —{" "}
+              {selectedSchedule.horaFin}
             </dd>
-          </dl>
-        </div>
+          </div>
+          <div className="flex h-drow items-center gap-4 border-b border-line px-5">
+            <dt className="w-[160px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+              Registra
+            </dt>
+            <dd className="flex-1 text-sm font-semibold text-ink">{trainerName}</dd>
+          </div>
+          <div className="flex min-h-drow items-center gap-4 px-5 py-3">
+            <dt className="w-[160px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+              Resultado
+            </dt>
+            <dd className="flex flex-1 flex-wrap gap-2">
+              {TOTAL_ORDER.map((state) => (
+                <Badge key={state} tone={getAttendanceBadgeTone(state)}>
+                  {countByState(students, state)} {ATTENDANCE_LABELS[state].toLowerCase()}
+                </Badge>
+              ))}
+            </dd>
+          </div>
+        </dl>
 
-        {/* Attendance summary */}
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Users size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Resumen de Asistencia
-            </h3>
-          </div>
-          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-lg bg-cata-state-ok/10 p-3 text-center">
-              <p className="text-lg font-bold text-cata-state-ok">{presentCount}</p>
-              <p className="text-xs text-cata-state-ok/80">Presentes</p>
-            </div>
-            <div className="rounded-lg bg-red-50 p-3 text-center">
-              <p className="text-lg font-bold text-red-700">{absentCount}</p>
-              <p className="text-xs text-red-700/80">Ausentes</p>
-            </div>
-            <div className="rounded-lg bg-amber-50 p-3 text-center">
-              <p className="text-lg font-bold text-amber-700">{lateCount}</p>
-              <p className="text-xs text-amber-700/80">Tardanzas</p>
-            </div>
-            <div className="rounded-lg bg-blue-50 p-3 text-center">
-              <p className="text-lg font-bold text-blue-700">{justifiedCount}</p>
-              <p className="text-xs text-blue-700/80">Justificados</p>
-            </div>
-          </div>
-          <p className="text-xs text-cata-text/45">{summary}</p>
-        </div>
-
-        {/* Trainer attribution */}
-        <div className="rounded-xl border border-cata-state-ok/30 bg-cata-state-ok/10 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <UserCheck size={14} strokeWidth={1.5} className="text-cata-state-ok" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-state-ok">
-              Asistencia Registrada Por
-            </h3>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <UserCheck size={16} strokeWidth={1.5} className="text-cata-state-ok" aria-hidden="true" />
-            <span className="font-medium text-cata-state-ok">{trainerName}</span>
-          </div>
-          <p className="mt-1 text-xs text-cata-state-ok/80">
-            {trainerName} será registrado como el entrenador que tomó la asistencia
-            de {students.length} estudiantes en esta sesión.
-          </p>
-        </div>
+        <p className="text-xs text-ink-3">
+          Se registrará la asistencia de {students.length}{" "}
+          {students.length === 1 ? "estudiante" : "estudiantes"}.
+        </p>
       </div>
+    );
+  }
+
+  /** Running totals for the save bar — the same numbers, one glance. */
+  function renderTotals(): React.ReactElement {
+    return (
+      <span className="min-w-[250px] flex-1 text-xs text-ink-3">
+        {TOTAL_ORDER.map((state, index) => {
+          const count = countByState(students, state);
+          const [singular, plural] = TOTAL_LABELS[state];
+          return (
+            <span key={state}>
+              {index > 0 ? " · " : ""}
+              <span>{`${count} ${count === 1 ? singular : plural}`}</span>
+            </span>
+          );
+        })}
+        {unmarkedCount > 0 && (
+          <>
+            {" · "}
+            <span className="font-bold text-state-warn">{`${unmarkedCount} Sin marcar`}</span>
+          </>
+        )}
+      </span>
     );
   }
 
@@ -723,50 +829,62 @@ export default function TrainerAttendancePage(): React.ReactElement {
       {confirmed ? (
         <div className="flex min-h-[50vh] items-center justify-center py-8">
           <div className="w-full max-w-lg text-center">
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-cata-state-ok/10">
-              <CheckCircle size={32} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-state-ok-bg">
+              <CheckCircle size={32} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
             </div>
-            <h2 className="mb-3 text-2xl font-bold tracking-tight text-cata-text">
+            <h2 className="mb-3 text-2xl font-bold tracking-tight text-ink">
               Asistencia Registrada
             </h2>
-            <p className="mb-2 text-sm leading-relaxed text-cata-text/65">
+            <p className="mb-2 text-sm leading-relaxed text-ink-2">
               La asistencia para{" "}
-              <strong className="text-cata-text">
+              <strong className="text-ink">
                 {selectedSchedule
                   ? `${formatDay(selectedSchedule.diaSemana)} ${selectedSchedule.horaInicio} — ${selectedSchedule.horaFin}`
                   : "el horario seleccionado"}
               </strong>{" "}
               ha sido registrada exitosamente.
             </p>
-            <p className="mb-2 text-sm leading-relaxed text-cata-text/65">
-              <strong className="text-cata-text">{trainerName}</strong> figura como
+            <p className="mb-2 text-sm leading-relaxed text-ink-2">
+              <strong className="text-ink">{trainerName}</strong> figura como
               el entrenador que tomó la asistencia de{" "}
-              <strong className="text-cata-text">{result?.createdCount ?? 0} estudiantes</strong>.
+              <strong className="text-ink">{result?.createdCount ?? 0} estudiantes</strong>.
             </p>
             {students.length > 0 && (
-              <p className="mb-4 text-xs text-cata-text/40">
-                {buildAttendanceSummary(students)}
-              </p>
+              <p className="mb-4 text-xs text-ink-3">{buildAttendanceSummary(students)}</p>
             )}
             {result && result.failed.length > 0 && (
-              <div className="mb-8 rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-left text-xs text-state-warn">
-                <p className="flex items-center gap-1.5 font-medium">
-                  <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
-                  {result.failed.length} registro(s) no se pudieron guardar
+              /*
+               * NAME the students. This used to say "N registro(s) no se
+               * pudieron guardar" and then ask the trainer to retry for
+               * students it refused to identify — leaving them to re-mark the
+               * whole roster to find out who was missing.
+               */
+              <div
+                role="alert"
+                className="mb-8 rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3.5 text-left text-xs text-state-warn"
+              >
+                <p className="flex items-center gap-1.5 font-bold">
+                  <AlertTriangle size={13} strokeWidth={2} aria-hidden="true" />
+                  {result.failed.length === 1
+                    ? "No se pudo guardar 1 registro"
+                    : `No se pudieron guardar ${result.failed.length} registros`}
                 </p>
-                <p className="mt-1 text-state-warn/80">
-                  Vuelva a intentar el registro para esos estudiantes desde una nueva sesión.
+                <ul className="mt-1.5 list-inside list-disc font-semibold">
+                  {resolveFailedStudentNames(result.failed, students).map((name) => (
+                    <li key={name}>{name}</li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 text-state-warn/80">
+                  Volvé a tomar lista de este horario para reintentar con estos alumnos — el resto
+                  ya quedó guardado.
                 </p>
               </div>
             )}
-            {/* The gap below used to be an empty `<div className="mb-8" />`
-                rendered only when there was no failure block — layout by
-                placeholder. It is now margin on the element that needs it. */}
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <button type="button" onClick={handleReset} className="btn-primary shadow-soft">
+              <Button type="button" variant="primary" onClick={handleReset}>
                 Registrar Otra Asistencia
-              </button>
-              <Link href={backHref} className="btn-secondary">
+              </Button>
+              <Link href={backHref} className={buttonClasses("secondary")}>
                 Volver al Panel
               </Link>
             </div>
@@ -774,96 +892,79 @@ export default function TrainerAttendancePage(): React.ReactElement {
         </div>
       ) : (
         <div>
-          {/* Loading state */}
-          {loading && <LoadingState label="Cargando horarios y grupos…" />}
+          {loading && <LoadingState label="Cargando horarios…" />}
 
-          {/* Error state */}
           {loadError && !loading && (
             <ErrorState className="mb-8" message={loadError} onRetry={() => loadOptions()} />
           )}
 
           {!loading && !loadError && (
             <>
-              {/* Progress bar */}
-              <div className="mb-8">
-                <div className="mb-2 flex items-center justify-between text-xs text-cata-text/45">
-                  <span>
-                    Paso {currentIndex + 1} de {STEP_ORDER.length}
-                  </span>
-                  <span>{STEP_LABELS[step]}</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-cata-border">
-                  <div
-                    className="h-full rounded-full bg-cata-red transition-all duration-400 ease-out"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
+              {/* The stepper is NAMED: "Horario · Lunes 15:00" tells you what
+                  you already decided; "Paso 2 de 3" does not. */}
+              <Stepper
+                className="mb-5"
+                steps={stepNames}
+                current={currentIndex + 1}
+                label="Pasos para tomar asistencia"
+              />
 
-              {/* Form card */}
-              <div className="card mx-auto max-w-2xl p-6 sm:p-8">
-                <div className="mb-6 flex items-center gap-2">
-                  <ClipboardList size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                  <h2 className="text-lg font-semibold text-cata-text">
-                    {STEP_LABELS[step]}
-                  </h2>
-                </div>
+              <div className="mx-auto max-w-3xl">
+                <div className="rounded-card border border-line bg-paper p-5 sm:p-6">
+                  <h2 className="mb-4 text-[13px] font-bold text-ink">{STEP_LABELS[step]}</h2>
 
-                <form onSubmit={handleConfirm}>
-                  {/* Step content */}
-                  {step === "select-session" && renderSessionSelection()}
-                  {step === "mark-attendance" && renderMarkAttendance()}
-                  {step === "confirm" && renderConfirmation()}
+                  <form onSubmit={handleConfirm}>
+                    {step === "select-session" && renderSessionSelection()}
+                    {step === "mark-attendance" && renderMarkAttendance()}
+                    {step === "confirm" && renderConfirmation()}
 
-                  {/* Navigation buttons */}
-                  {step !== "select-session" && (
-                    <div className="mt-8 flex items-center justify-between gap-3">
-                      <div>
+                    {/*
+                     * The commit bar. `sticky bottom-0` so the trainer never
+                     * scrolls the whole card to reach Siguiente — the audit
+                     * found exactly that, on the screen where the commit
+                     * matters most.
+                     */}
+                    {step !== "select-session" && (
+                      <div className="sticky bottom-0 -mx-5 mt-5 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-5 py-3.5 backdrop-blur sm:-mx-6 sm:px-6">
                         {!isFirst && (
-                          <button
-                            type="button"
-                            onClick={handleBack}
-                            disabled={submitting}
-                            className="btn-ghost"
-                          >
-                            <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+                          <Button type="button" variant="ghost" onClick={handleBack} disabled={submitting}>
+                            <ChevronLeft size={14} strokeWidth={2} aria-hidden="true" />
                             Atrás
-                          </button>
+                          </Button>
                         )}
-                      </div>
 
-                      <div className="flex flex-col items-end gap-2">
-                        {/* Visible, announced reason the advance button is
-                            disabled — a disabled control with no explanation
-                            reads as a broken wizard. */}
-                        {unmarkedCount > 0 && (
-                          <p
-                            id={unmarkedReasonId}
-                            role="status"
-                            className="text-xs font-medium text-cata-text/75"
-                          >
-                            {unmarkedCount === 1
-                              ? "Falta 1 alumno por marcar"
-                              : `Faltan ${unmarkedCount} alumnos por marcar`}
-                          </p>
-                        )}
-                        <div className="flex gap-3">
+                        {step === "mark-attendance" && renderTotals()}
+
+                        <div className="ml-auto flex flex-col items-end gap-1.5">
+                          {/* Visible, announced reason the advance button is
+                              disabled — a disabled control with no explanation
+                              reads as a broken wizard. */}
+                          {unmarkedCount > 0 && (
+                            <p
+                              id={unmarkedReasonId}
+                              role="status"
+                              className="text-xs font-semibold text-ink-2"
+                            >
+                              {unmarkedCount === 1
+                                ? "Falta 1 alumno por marcar"
+                                : `Faltan ${unmarkedCount} alumnos por marcar`}
+                            </p>
+                          )}
                           {!isLast ? (
-                            <button
+                            <Button
                               type="button"
+                              variant="primary"
                               onClick={handleNext}
                               disabled={students.length === 0 || unmarkedCount > 0}
                               aria-describedby={unmarkedCount > 0 ? unmarkedReasonId : undefined}
-                              className="btn-primary shadow-soft"
                             >
                               Siguiente
-                              <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                            </button>
-                          ) : null}
-
-                          {isLast && (
-                            <button
+                              <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+                            </Button>
+                          ) : (
+                            <Button
                               type="submit"
+                              variant="primary"
                               disabled={
                                 submitting ||
                                 entrenadorPersonaId === null ||
@@ -871,7 +972,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                 unmarkedCount > 0
                               }
                               aria-describedby={unmarkedCount > 0 ? unmarkedReasonId : undefined}
-                              className="btn-primary shadow-soft"
                             >
                               {submitting ? (
                                 "Registrando…"
@@ -881,15 +981,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                   Confirmar Asistencia
                                 </>
                               )}
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </div>
-                    </div>
-                  )}
-                </form>
+                    )}
+                  </form>
+                </div>
               </div>
-
             </>
           )}
         </div>

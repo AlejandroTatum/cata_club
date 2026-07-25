@@ -86,6 +86,56 @@ export function nextAttendanceState(
 }
 
 /**
+ * The order tapping a student's row walks through
+ * (`docs/ux/prototipos/20-tomar-lista.html`):
+ *
+ *   Sin marcar → Presente → Tardanza → Justificado → Ausente → Presente → …
+ *
+ * "Presente" comes first because it is the overwhelmingly common answer: one
+ * tap should settle the common case, not the rarest one.
+ *
+ * `UNMARKED` is an ENTRY point only — the cycle never returns to it. Tapping
+ * is an accelerator over the four explicit controls, and an accelerator that
+ * can silently un-decide a student would hand back exactly the ambiguity the
+ * sentinel exists to remove. A trainer who wants to undo a mark has the four
+ * explicit controls right there.
+ */
+export function cycleWizardAttendance(current: WizardAttendance): EstadoAsistencia {
+  switch (current) {
+    case UNMARKED:
+      return "present";
+    case "present":
+      return "late";
+    case "late":
+      return "justified";
+    case "justified":
+      return "absent";
+    case "absent":
+    default:
+      return "present";
+  }
+}
+
+/**
+ * Names of the students whose records the backend could not save.
+ *
+ * `RegisterAttendanceResult.failed` comes back as `{ personaId, message }[]`.
+ * The screen used to report "N registro(s) no se pudieron guardar" and then
+ * ask the trainer to retry "for those students" — students it refused to
+ * identify. Ids are matched against the roster the trainer just worked
+ * through; an id with no matching row falls back to the id itself rather than
+ * disappearing from the list, because a partially-named failure is still more
+ * actionable than a count.
+ */
+export function resolveFailedStudentNames(
+  failed: { personaId: number }[],
+  students: SessionStudent[],
+): string[] {
+  const nameById = new Map(students.map((s) => [s.id, s.name]));
+  return failed.map((f) => nameById.get(String(f.personaId)) ?? `Alumno #${f.personaId}`);
+}
+
+/**
  * Count how many students have a given attendance state.
  *
  * `UNMARKED` students match none of the four real states, so they are never
@@ -169,6 +219,125 @@ export function buildRosterFromAlumnoHorarios(
     name: item.personaNombreCompleto,
     attendance: estadoByPersonaId.get(item.personaId) ?? (UNMARKED as WizardAttendance),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Draft persistence
+//
+// The audit's finding: a phone call mid-roll-call loses the whole session,
+// because nothing survives the component unmounting. The draft below closes
+// that WITHOUT weakening the `UNMARKED` guarantee, and the rules are what make
+// that true:
+//
+//   1. Only the four REAL states are ever written or read. `UNMARKED` is never
+//      persisted, so a draft can never restore a student to "undecided" and it
+//      can never introduce a mark the trainer did not make.
+//   2. The key includes the horario AND the date, so yesterday's draft can
+//      never be replayed onto today's session.
+//   3. Restoring only ever narrows: a student absent from the draft keeps
+//      whatever the roster gave them (a server record, or `UNMARKED`).
+//   4. Anything malformed is discarded wholesale rather than partially
+//      trusted.
+//
+// `sessionStorage`, not `localStorage`: a draft is scoped to the tab the
+// trainer is standing there with, and must not outlive it on a shared device.
+// ---------------------------------------------------------------------------
+
+/** Per-session key: a draft is only ever valid for its own horario + date. */
+export function attendanceDraftKey(horarioId: number, fecha: string): string {
+  return `cata_attendance_draft:${horarioId}:${fecha}`;
+}
+
+/** id → state, holding only the four real states. */
+export type AttendanceDraft = Record<string, EstadoAsistencia>;
+
+function isEstadoAsistencia(value: unknown): value is EstadoAsistencia {
+  return typeof value === "string" && (ATTENDANCE_STATES as string[]).includes(value);
+}
+
+/**
+ * Project the roster onto a draft. Undecided students are simply not in it —
+ * see rule 1 above.
+ */
+export function toAttendanceDraft(students: SessionStudent[]): AttendanceDraft {
+  const draft: AttendanceDraft = {};
+  for (const student of students) {
+    if (student.attendance !== UNMARKED) draft[student.id] = student.attendance;
+  }
+  return draft;
+}
+
+/**
+ * Parse a stored draft, keeping only entries that are a real state. Returns
+ * `null` for anything that is not a plain object of such entries, so a
+ * corrupted or tampered-with value is dropped rather than half-applied.
+ */
+export function parseAttendanceDraft(raw: string | null): AttendanceDraft | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+
+  const draft: AttendanceDraft = {};
+  for (const [id, estado] of Object.entries(parsed as Record<string, unknown>)) {
+    if (isEstadoAsistencia(estado)) draft[id] = estado;
+  }
+  return draft;
+}
+
+/**
+ * Overlay a draft onto a freshly built roster.
+ *
+ * Only students already ON the roster can be affected, and only by a real
+ * state — so this can add decisions the trainer made, never invent students
+ * and never un-decide anyone.
+ */
+export function applyAttendanceDraft(
+  students: SessionStudent[],
+  draft: AttendanceDraft | null,
+): SessionStudent[] {
+  if (!draft) return students;
+  return students.map((student) => {
+    const drafted = draft[student.id];
+    return drafted ? { ...student, attendance: drafted } : student;
+  });
+}
+
+/**
+ * Persist the draft. Storage can be unavailable (private browsing, quota,
+ * SSR) — losing draft persistence must never take the roll call down with it.
+ */
+export function saveAttendanceDraft(key: string, students: SessionStudent[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage?.setItem(key, JSON.stringify(toAttendanceDraft(students)));
+  } catch {
+    // Best-effort: the wizard works exactly as before without it.
+  }
+}
+
+/** Read a stored draft, or `null` when there is none / storage is unavailable. */
+export function loadAttendanceDraft(key: string): AttendanceDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return parseAttendanceDraft(window.sessionStorage?.getItem(key) ?? null);
+  } catch {
+    return null;
+  }
+}
+
+/** Drop the draft — called once the session is actually filed. */
+export function clearAttendanceDraft(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage?.removeItem(key);
+  } catch {
+    // Ignore.
+  }
 }
 
 // ---------------------------------------------------------------------------

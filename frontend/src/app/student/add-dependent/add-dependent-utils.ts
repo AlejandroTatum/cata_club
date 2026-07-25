@@ -28,6 +28,18 @@ export const ADD_DEPENDENT_STEP_LABELS: Record<AddDependentStep, string> = {
   summary: "Resumen y Confirmación",
 };
 
+/**
+ * One-word names for the stepper pills — the same named-stepper contract the
+ * public wizard uses (`STEP_SHORT_LABELS` in enroll-utils.ts). This flow has
+ * three steps, not five, because it creates neither a `Usuario` nor a
+ * representante: the caller is already both.
+ */
+export const ADD_DEPENDENT_SHORT_LABELS: Record<AddDependentStep, string> = {
+  child: "Estudiante",
+  health: "Salud",
+  summary: "Confirmar",
+};
+
 /** Shape of the add-dependent wizard form data. */
 export interface AddDependentFormData {
   nombres: string;
@@ -101,27 +113,126 @@ export function validateAddDependentForm(data: AddDependentFormData): string[] {
   return [...validateChildData(data), ...validateHealthData(data)];
 }
 
-function validateChildData(data: AddDependentFormData): string[] {
-  const errors: string[] = [];
-  if (!data.nombres.trim()) errors.push("Los nombres son obligatorios.");
-  if (!data.apellidos.trim()) errors.push("Los apellidos son obligatorios.");
-  if (!data.fechaNacimiento) errors.push("La fecha de nacimiento es obligatoria.");
-  else if (!isValidDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento ingresada no es válida.");
-  else if (isFutureDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento no puede ser en el futuro.");
-  if (!data.cedula.trim()) errors.push("La cédula de identidad es obligatoria.");
-  else if (!/^\d{10}$/.test(data.cedula.trim())) errors.push("La cédula debe tener 10 dígitos.");
-  if (!data.telefono.trim()) errors.push("El teléfono es obligatorio.");
+// ---------------------------------------------------------------------------
+// Per-field validation — same contract as the public wizard: the message goes
+// BESIDE the field, and "Siguiente" stays shut until the step is clean.
+// ---------------------------------------------------------------------------
+
+/** A form field this wizard can point an error at. */
+export type AddDependentField = keyof AddDependentFormData;
+
+/** Field → its first unmet rule. A field with no entry is currently valid. */
+export type AddDependentFieldErrors = Partial<Record<AddDependentField, string>>;
+
+function digitsOf(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) => string | null>> = {
+  nombres: (d) => (d.nombres.trim() ? null : "Los nombres son obligatorios."),
+  apellidos: (d) => (d.apellidos.trim() ? null : "Los apellidos son obligatorios."),
+  fechaNacimiento: (d) => {
+    if (!d.fechaNacimiento) return "La fecha de nacimiento es obligatoria.";
+    if (!isValidDate(d.fechaNacimiento)) return "La fecha de nacimiento ingresada no es válida.";
+    if (isFutureDate(d.fechaNacimiento)) return "La fecha de nacimiento no puede ser en el futuro.";
+    return null;
+  },
+  cedula: (d) => {
+    if (!d.cedula.trim()) return "La cédula de identidad es obligatoria.";
+    return /^\d{10}$/.test(d.cedula.trim()) ? null : "La cédula debe tener 10 dígitos.";
+  },
+  telefono: (d) => {
+    if (!d.telefono.trim()) return "El teléfono es obligatorio.";
+    return digitsOf(d.telefono).length === 10 ? null : "El teléfono debe tener 10 dígitos.";
+  },
+  tipoSangre: (d) => (isTipoSangre(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
+  contactoEmergencia: (d) =>
+    d.contactoEmergencia.trim() ? null : "El nombre de contacto de emergencia es obligatorio.",
+  telefonoEmergencia: (d) => {
+    if (!d.telefonoEmergencia.trim()) return "El teléfono de emergencia es obligatorio.";
+    return digitsOf(d.telefonoEmergencia).length === 10
+      ? null
+      : "El teléfono de emergencia debe tener 10 dígitos.";
+  },
+};
+
+const CHILD_FIELDS: AddDependentField[] = [
+  "nombres",
+  "apellidos",
+  "fechaNacimiento",
+  "cedula",
+  "telefono",
+];
+
+const HEALTH_FIELDS: AddDependentField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
+
+/** The fields a given step actually renders. */
+export function fieldsForAddDependentStep(step: AddDependentStep): AddDependentField[] {
+  switch (step) {
+    case "child":
+      return CHILD_FIELDS;
+    case "health":
+      return HEALTH_FIELDS;
+    case "summary":
+      return [];
+  }
+}
+
+/** Every unmet rule on the current step, keyed by the field that owns it. */
+export function validateAddDependentFields(
+  step: AddDependentStep,
+  data: AddDependentFormData,
+): AddDependentFieldErrors {
+  const errors: AddDependentFieldErrors = {};
+  for (const field of fieldsForAddDependentStep(step)) {
+    const message = FIELD_RULES[field]?.(data) ?? null;
+    if (message !== null) errors[field] = message;
+  }
   return errors;
 }
 
+/** Whether the step's "Siguiente" may be enabled. */
+export function isAddDependentStepComplete(
+  step: AddDependentStep,
+  data: AddDependentFormData,
+): boolean {
+  return Object.keys(validateAddDependentFields(step, data)).length === 0;
+}
+
+const FIELD_LABELS: Partial<Record<AddDependentField, string>> = {
+  nombres: "Nombres",
+  apellidos: "Apellidos",
+  fechaNacimiento: "Fecha de nacimiento",
+  cedula: "Cédula de identidad",
+  telefono: "Teléfono",
+  tipoSangre: "Tipo de sangre",
+  contactoEmergencia: "Nombre del contacto de emergencia",
+  telefonoEmergencia: "Teléfono de emergencia",
+};
+
+/** Why "Siguiente" is disabled, in one sentence naming the fields. `null` when nothing is missing. */
+export function describeAddDependentBlocker(errors: AddDependentFieldErrors): string | null {
+  const labels = (Object.keys(errors) as AddDependentField[])
+    .map((field) => FIELD_LABELS[field])
+    .filter((label): label is string => Boolean(label));
+  if (labels.length === 0) return null;
+  if (labels.length === 1) return `Para continuar, revise: ${labels[0]}.`;
+  const last = labels[labels.length - 1];
+  return `Para continuar, revise: ${labels.slice(0, -1).join(", ")} y ${last}.`;
+}
+
+function collect(fields: AddDependentField[], data: AddDependentFormData): string[] {
+  return fields
+    .map((field) => FIELD_RULES[field]?.(data) ?? null)
+    .filter((message): message is string => message !== null);
+}
+
+function validateChildData(data: AddDependentFormData): string[] {
+  return collect(CHILD_FIELDS, data);
+}
+
 function validateHealthData(data: AddDependentFormData): string[] {
-  const errors: string[] = [];
-  if (!isTipoSangre(data.tipoSangre)) errors.push("El tipo de sangre es obligatorio.");
-  if (!data.contactoEmergencia.trim())
-    errors.push("El nombre de contacto de emergencia es obligatorio.");
-  if (!data.telefonoEmergencia.trim())
-    errors.push("El teléfono de emergencia es obligatorio.");
-  return errors;
+  return collect(HEALTH_FIELDS, data);
 }
 
 function isTipoSangre(value: string): value is TipoSangre {

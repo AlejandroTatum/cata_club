@@ -1,60 +1,89 @@
 /**
- * /unauthorized — Explicit landing page for the "unsupported role" state.
+ * /unauthorized — the "your account has no role yet" screen.
  *
  * Reached by an AUTHENTICATED user whose backend `roles` (ADMINISTRADOR,
  * ENTRENADOR, REPRESENTANTE, ALUMNO) are empty or entirely unrecognized —
- * see `mapBackendRoleToUserRole` in src/lib/server/auth.ts, which maps
- * that case to the `"unsupported"` UserRole instead of silently falling
- * back. For the representante case, REPRESENTANTE is a recognized backend
- * role and maps to "representante", not "unsupported".
+ * see `mapBackendRoleToUserRole` in src/lib/server/auth.ts, which maps that
+ * case to the `"unsupported"` UserRole instead of silently falling back.
  *
  * Gated the same way every other role-restricted page is gated — via
- * ProtectedRoute with allowedRoles={["unsupported"]} — rather than a
- * special case. That single, central mechanism (canAccess + getDefaultRoute
- * in src/lib/auth-utils.ts) is what prevents both directions of the
- * failure mode this page exists for:
+ * ProtectedRoute with allowedRoles={["unsupported"]} — rather than a special
+ * case. That single, central mechanism (canAccess + getDefaultRoute in
+ * src/lib/auth-utils.ts) is what prevents both directions of the failure mode
+ * this page exists for:
  *   - An "unsupported" user hitting any real protected page gets redirected
- *     here by ProtectedRoute (getDefaultRoute("unsupported") === "/unauthorized").
- *   - A user with a real role who navigates here directly gets redirected
- *     to THEIR default route instead of seeing this page pointlessly.
+ *     here (getDefaultRoute("unsupported") === "/unauthorized").
+ *   - A user with a real role who navigates here gets sent to THEIR default.
  *   - An unauthenticated visitor gets sent to /login, same as any other
- *     protected page — no loop, since this page terminates the redirect
- *     chain for the one role it allows.
+ *     protected page — no loop, since this page terminates the chain.
+ *
+ * ## No chrome, on purpose
+ *
+ * `resolveShellKind("/unauthorized")` returns "standalone", and the note on
+ * `docs/ux/prototipos/26-sin-rol.html` says why: an account with no role has
+ * nowhere to navigate, and offering it an empty menu is worse than offering
+ * nothing. The usability evaluation scores this screen as the MODEL for error
+ * recovery — it says what happened AND what to do — so it carries the pattern
+ * the rest of the product copies: what happened → what to do → one action.
+ *
+ * Because there is no sidebar, there is also no "Ayuda y soporte" entry to
+ * open the assistant from. That is the one case the prototype keeps a local
+ * trigger for: "Contactar al club" mounts `ChatWidget` right here.
  */
 
 "use client";
 
+import { useState } from "react";
+import Image from "next/image";
+import { LogOut, MessageCircle } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ChatWidget from "@/components/chatbot/ChatWidget";
 import { useAuth } from "@/contexts/AuthContext";
-import { ShieldAlert, LogOut } from "lucide-react";
+import { Button } from "@/components/ui";
 
 function UnauthorizedContent(): React.ReactElement {
-  const { session, logout } = useAuth();
+  const { logout } = useAuth();
+  const [chatOpen, setChatOpen] = useState(false);
 
   return (
-    <div className="flex min-h-[75vh] items-center justify-center py-12">
-      <div className="w-full max-w-sm text-center">
-        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-cata-red/10">
-          <ShieldAlert size={30} className="text-cata-red" strokeWidth={1.5} aria-hidden="true" />
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-cata-text">
-          Cuenta sin rol asignado
+    <div className="flex min-h-screen items-center justify-center bg-canvas p-6">
+      <div className="flex w-full max-w-[440px] flex-col items-center gap-3.5 rounded-[18px] border border-line bg-paper px-8 py-10 text-center shadow-[0_4px_24px_rgba(0,0,0,0.05)]">
+        <span className="relative block h-16 w-16 shrink-0 overflow-hidden rounded-full bg-coal">
+          <Image
+            src="/brand/cata-club-logo.jpeg"
+            alt="Cata Club"
+            fill
+            sizes="64px"
+            className="object-cover"
+            priority
+          />
+        </span>
+
+        <h1 className="m-0 text-balance text-[20px] font-bold tracking-[-0.02em] text-ink">
+          Tu cuenta todavía no tiene rol
         </h1>
-        <p className="mt-3 text-sm leading-relaxed text-cata-text/65">
-          Su cuenta{session?.user.name ? ` (${session.user.name})` : ""} no
-          tiene un rol reconocido por el sistema. Contacte a un administrador
-          del club para que le asigne un rol (Administrador, Entrenador,
-          Representante o Alumno).
+
+        {/* What happened, then what to do — in that order, in one paragraph. */}
+        <p className="m-0 text-sm leading-relaxed text-ink-3">
+          El club todavía no te asignó un rol. Escríbenos por el chat de ayuda o espera
+          el correo de confirmación — apenas te lo asignen, entras directo.
         </p>
-        <button
-          type="button"
-          onClick={() => void logout()}
-          className="mt-8 inline-flex items-center gap-2 rounded-xl bg-cata-red px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cata-red-light"
-        >
-          <LogOut size={15} strokeWidth={1.5} aria-hidden="true" />
-          Cerrar Sesión
-        </button>
+
+        <div className="mt-1.5 flex flex-wrap justify-center gap-2.5">
+          {/* Coal, not red: red is the primary CTA and the destructive colour,
+              and "contactar al club" is neither. */}
+          <Button variant="dark" onClick={(): void => setChatOpen(true)} aria-expanded={chatOpen}>
+            <MessageCircle size={15} strokeWidth={2} aria-hidden="true" />
+            Contactar al club
+          </Button>
+          <Button variant="secondary" onClick={(): void => void logout()}>
+            <LogOut size={15} strokeWidth={2} aria-hidden="true" />
+            Cerrar sesión
+          </Button>
+        </div>
       </div>
+
+      <ChatWidget open={chatOpen} onClose={(): void => setChatOpen(false)} />
     </div>
   );
 }

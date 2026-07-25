@@ -61,8 +61,11 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
         // "Asistencias" is the record list, this one is the act of taking it.
         // One word apart, they used to read as the same destination.
         { href: "/trainer/attendance", label: "Pasar lista" },
-        // Same concept as the admin's "/ranking" — therefore the same word.
-        { href: "/trainer/nivel", label: "Niveles" },
+        // No "Niveles" row. `docs/ux/prototipos/19-entrenador.html` settles it:
+        // the trainer's navigation is TWO items, "Niveles se elimina y con esa
+        // ruta se va el 403". Level assignment stays an admin action at
+        // `/ranking`; `/trainer/nivel` no longer exists, so a link to it would
+        // be a 404 in the sidebar.
       );
       break;
     case "representante":

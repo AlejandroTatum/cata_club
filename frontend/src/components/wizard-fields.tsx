@@ -7,6 +7,7 @@
 import type { InputHTMLAttributes, ReactElement, ReactNode } from "react";
 import { User, Calendar, Hash, Phone, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { calculateAge } from "@/app/student/enroll/enroll-utils";
+import { Button } from "@/components/ui";
 
 const ACCENTED_CHARS: Record<string, string> = {
   á: "a", é: "e", í: "i", ó: "o", ú: "u", ü: "u", ñ: "n",
@@ -39,10 +40,23 @@ interface WizardInputProps {
   pattern?: string;
   maxLength?: number;
   inputMode?: string;
+  /**
+   * The field's own validation message, shown BESIDE the field
+   * (`_sistema.css` `.input.err` + `.errmsg`). Passing `undefined` keeps the
+   * field in its resting state — callers surface an error only once the
+   * visitor has touched the field, so a pristine form is never a wall of red.
+   */
+  error?: string;
+  /** Neutral guidance under the field (`.hint`), shown only when there is no error. */
+  hint?: string;
+  /** Fired when the field loses focus — callers use it to mark the field "touched". */
+  onBlur?: () => void;
 }
 
 export function WizardInput(opts: WizardInputProps): ReactElement {
   const fieldId = `${opts.idPrefix}-${slugifyLabel(opts.label)}`;
+  const messageId = `${fieldId}-message`;
+  const hasError = Boolean(opts.error);
   return (
     <div className="mb-4">
       <label htmlFor={fieldId} className="mb-1.5 block text-sm font-medium text-cata-text">
@@ -60,15 +74,30 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           type={opts.type ?? "text"}
           value={opts.value}
           onChange={(e) => opts.onChange(e.target.value)}
+          onBlur={opts.onBlur}
           placeholder={opts.placeholder}
           required={opts.required}
           disabled={opts.disabled}
           pattern={opts.pattern}
           maxLength={opts.maxLength}
+          aria-invalid={hasError || undefined}
+          aria-describedby={opts.error || opts.hint ? messageId : undefined}
           inputMode={(opts.inputMode ?? "text") as InputHTMLAttributes<HTMLInputElement>["inputMode"]}
-          className={`input-field ${opts.icon ? "pl-10" : ""}`}
+          className={`input-field ${opts.icon ? "pl-10" : ""} ${
+            hasError ? "border-cata-red ring-[3px] ring-cata-red/10" : ""
+          }`}
         />
       </div>
+      {hasError ? (
+        <p id={messageId} className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
+          <AlertTriangle size={13} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+          {opts.error}
+        </p>
+      ) : opts.hint ? (
+        <p id={messageId} className="mt-1.5 text-xs text-ink-3">
+          {opts.hint}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -117,6 +146,15 @@ export function WizardTextarea(opts: WizardTextareaProps): ReactElement {
   );
 }
 
+/** Per-field messages for the five identity inputs, keyed the same way the wizards key their form state. */
+export interface PersonIdentityErrors {
+  nombres?: string;
+  apellidos?: string;
+  fechaNacimiento?: string;
+  cedula?: string;
+  telefono?: string;
+}
+
 interface PersonIdentityFieldsProps {
   idPrefix: string;
   disabled: boolean;
@@ -130,49 +168,73 @@ interface PersonIdentityFieldsProps {
   onFechaNacimientoChange: (v: string) => void;
   onCedulaChange: (v: string) => void;
   onTelefonoChange: (v: string) => void;
+  /** Live validation messages, already filtered by the caller to the fields the visitor has touched. */
+  errors?: PersonIdentityErrors;
+  /** Marks a field as touched, so its message only appears after the visitor has left it. */
+  onFieldBlur?: (field: keyof PersonIdentityErrors) => void;
   /** Extra content appended after the "Edad calculada" preview — e.g. `/student/enroll`'s minor-without-representative warning, which `/student/add-dependent` doesn't need. */
   renderAgeWarning?: (age: number) => ReactNode;
+}
+
+/** How many digits an Ecuadorian cédula carries. Mirrors the backend's own rule. */
+const CEDULA_DIGITS = 10;
+
+function digitCount(value: string): number {
+  return value.replace(/\D/g, "").length;
 }
 
 /** Nombres/apellidos/fecha de nacimiento/cédula/teléfono + a live "Edad calculada" preview — shared by both wizards, which collect the same person-identity shape for their respective subject (student or dependent). */
 export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactElement {
   const { idPrefix, disabled } = props;
+  const errors = props.errors ?? {};
   const age = calculateAge(props.fechaNacimiento);
   const ageValid = !isNaN(age);
+  const cedulaTyped = digitCount(props.cedula);
   return (
     <>
       <WizardInput
         idPrefix={idPrefix} disabled={disabled} label="Nombres" value={props.nombres}
         onChange={props.onNombresChange} placeholder="p. ej. Juan Carlos" required
         icon={<User size={16} strokeWidth={1.5} aria-hidden="true" />}
+        error={errors.nombres} onBlur={() => props.onFieldBlur?.("nombres")}
       />
       <WizardInput
         idPrefix={idPrefix} disabled={disabled} label="Apellidos" value={props.apellidos}
         onChange={props.onApellidosChange} placeholder="p. ej. Rodríguez López" required
         icon={<User size={16} strokeWidth={1.5} aria-hidden="true" />}
+        error={errors.apellidos} onBlur={() => props.onFieldBlur?.("apellidos")}
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <WizardInput
           idPrefix={idPrefix} disabled={disabled} label="Fecha de Nacimiento" value={props.fechaNacimiento}
           onChange={props.onFechaNacimientoChange} type="date" required
           icon={<Calendar size={16} strokeWidth={1.5} aria-hidden="true" />}
+          error={errors.fechaNacimiento} onBlur={() => props.onFieldBlur?.("fechaNacimiento")}
         />
         <WizardInput
           idPrefix={idPrefix} disabled={disabled} label="Cédula de Identidad" value={props.cedula}
           onChange={props.onCedulaChange} placeholder="p. ej. 1712345678" required
           icon={<Hash size={16} strokeWidth={1.5} aria-hidden="true" />}
-          pattern="[0-9]{10}" maxLength={10} inputMode="numeric"
+          pattern="[0-9]{10}" maxLength={CEDULA_DIGITS} inputMode="numeric"
+          error={errors.cedula} onBlur={() => props.onFieldBlur?.("cedula")}
+          hint={
+            cedulaTyped > 0 && cedulaTyped < CEDULA_DIGITS
+              ? `Lleva ${cedulaTyped} de ${CEDULA_DIGITS} dígitos.`
+              : `${CEDULA_DIGITS} dígitos, sin guiones.`
+          }
         />
       </div>
       <WizardInput
         idPrefix={idPrefix} disabled={disabled} label="Teléfono" value={props.telefono}
         onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
         icon={<Phone size={16} strokeWidth={1.5} aria-hidden="true" />} inputMode="tel"
+        error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
+        hint="Diez dígitos, con o sin espacios."
       />
       {props.fechaNacimiento && (
-        <div className="rounded-xl bg-cata-bg p-3 text-xs text-cata-text/65">
+        <div className="rounded-ctl bg-canvas p-3 text-xs text-ink-3">
           Edad calculada:{" "}
-          <span className="font-medium text-cata-text">
+          <span className="font-semibold text-ink">
             {ageValid ? `${age} años` : "—"}
           </span>
           {ageValid && props.renderAgeWarning?.(age)}
@@ -189,6 +251,10 @@ interface EmergencyContactFieldsProps {
   telefono: string;
   onContactoChange: (v: string) => void;
   onTelefonoChange: (v: string) => void;
+  contactoError?: string;
+  telefonoError?: string;
+  onContactoBlur?: () => void;
+  onTelefonoBlur?: () => void;
 }
 
 /** "Contacto de Emergencia" section (divider + header + 2 fields) — shared by both wizards' health/medical step. */
@@ -196,10 +262,10 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
   const { idPrefix, disabled } = props;
   return (
     <>
-      <div className="my-8 h-px bg-cata-border" />
+      <div className="my-8 h-px bg-line" />
       <div className="mb-3 flex items-center gap-2">
-        <Phone size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-        <p className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
+        <Phone size={14} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
           Contacto de Emergencia
         </p>
       </div>
@@ -208,11 +274,14 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
           idPrefix={idPrefix} disabled={disabled} label="Nombre del Contacto" value={props.contacto}
           onChange={props.onContactoChange} placeholder="p. ej. María Rodríguez" required
           icon={<UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />}
+          error={props.contactoError} onBlur={props.onContactoBlur}
         />
         <WizardInput
           idPrefix={idPrefix} disabled={disabled} label="Teléfono de Emergencia" value={props.telefono}
           onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
           icon={<Phone size={16} strokeWidth={1.5} aria-hidden="true" />} inputMode="tel"
+          error={props.telefonoError} onBlur={props.onTelefonoBlur}
+          hint="Diez dígitos, con o sin espacios."
         />
       </div>
     </>
@@ -226,6 +295,10 @@ interface WizardNavigationProps {
   submitting: boolean;
   onBack: () => void;
   onNext: () => void;
+  /** Blocks "Siguiente" until every field on the step is valid. */
+  nextDisabled?: boolean;
+  /** Why "Siguiente" is blocked, shown under it — a disabled control that does not say what is missing is a dead end. */
+  nextBlockedReason?: string;
   /** The final step's submit button — its label/disabled condition differ per wizard, so the caller renders it. */
   submitButton: ReactNode;
 }
@@ -245,31 +318,27 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
         </div>
       )}
 
-      <div className="mt-8 flex items-center justify-between gap-3">
+      <div className="mt-8 flex items-start justify-between gap-3">
         <div>
           {!props.isFirst && (
-            <button
-              type="button"
-              onClick={props.onBack}
-              disabled={props.submitting}
-              className="btn-ghost"
-            >
+            <Button variant="ghost" onClick={props.onBack} disabled={props.submitting}>
               <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
               Atrás
-            </button>
+            </Button>
           )}
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-col items-end gap-1.5">
           {!props.isLast ? (
-            <button
-              type="button"
-              onClick={props.onNext}
-              className="btn-primary shadow-soft"
-            >
-              Siguiente
-              <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-            </button>
+            <>
+              <Button variant="primary" onClick={props.onNext} disabled={props.nextDisabled}>
+                Siguiente
+                <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
+              </Button>
+              {props.nextDisabled && props.nextBlockedReason && (
+                <p className="max-w-xs text-right text-xs text-ink-3">{props.nextBlockedReason}</p>
+              )}
+            </>
           ) : props.submitButton}
         </div>
       </div>

@@ -16,7 +16,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { enrollStudent } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,34 +24,55 @@ import { useToast } from "@/contexts/ToastContext";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import BackLink from "@/components/BackLink";
 import { WizardInput, WizardTextarea, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
+import { Stepper, buttonClasses } from "@/components/ui";
 import { BLOOD_TYPES } from "@/types/enrollment";
 import {
-  User,
   UserPlus,
-  Calendar,
-  Heart,
   CheckCircle,
   AlertTriangle,
-  GraduationCap,
-  Baby,
   Hash,
+  Heart,
   FileText,
 } from "lucide-react";
 import {
   calculateAge,
   buildEnrollmentRequest,
+  describeStepBlocker,
   ENROLLMENT_TYPES,
   getEnrollmentErrorMessage,
   isDemoQuickFillEnabled,
+  validateEnrollFields,
   validateEnrollStep,
   validateEnrollment,
   STEP_ORDER,
   STEP_LABELS,
+  STEP_SHORT_LABELS,
   initialFormData,
+  type EnrollField,
   type EnrollFormData,
   type EnrollmentType,
   type WizardStep,
 } from "./enroll-utils";
+
+// ---------------------------------------------------------------------------
+// Step 1 — the two ways into the club. Transcribed from
+// `docs/ux/prototipos/05-inscripcion.html:57-67`.
+// ---------------------------------------------------------------------------
+
+const ENROLLMENT_CHOICES: { value: EnrollmentType; title: string; description: string }[] = [
+  {
+    value: ENROLLMENT_TYPES.SELF,
+    title: "Jugador",
+    description:
+      "Me inscribo yo al club. Soy mayor de edad y gestiono mi propia cuenta como estudiante.",
+  },
+  {
+    value: ENROLLMENT_TYPES.CHILD,
+    title: "Representante",
+    description:
+      "Gestiono la inscripción de un hijo o dependiente. El estudiante es distinto de mi cuenta.",
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -67,12 +88,26 @@ export default function EnrollPage(): React.ReactElement {
   const [confirmed, setConfirmed] = useState(false);
   const [summaryReviewed, setSummaryReviewed] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [touched, setTouched] = useState<Set<EnrollField>>(new Set());
   const queryAppliedRef = useRef(false);
 
   const currentIndex = STEP_ORDER.indexOf(step);
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === STEP_ORDER.length - 1;
-  const progress = ((currentIndex + 1) / STEP_ORDER.length) * 100;
+
+  // Live validation: recomputed on every keystroke, but only SHOWN for a field
+  // the visitor has already left, so a pristine form is never a wall of red.
+  const fieldErrors = useMemo(() => validateEnrollFields(step, formData), [step, formData]);
+  const stepComplete = Object.keys(fieldErrors).length === 0;
+  const blockedReason = describeStepBlocker(fieldErrors);
+
+  function shownError(field: EnrollField): string | undefined {
+    return touched.has(field) ? fieldErrors[field] : undefined;
+  }
+
+  function markTouched(field: EnrollField): void {
+    setTouched((prev) => (prev.has(field) ? prev : new Set(prev).add(field)));
+  }
 
   // Support ?type=self/?type=player or ?type=child/?type=representative
   // to preselect the enrollment flow from external CTAs.
@@ -169,6 +204,7 @@ export default function EnrollPage(): React.ReactElement {
     setSubmitting(false);
     setSummaryReviewed(false);
     setFormErrors([]);
+    setTouched(new Set());
   }
 
   // ---- Demo helper — quick-fill for testing convenience ----
@@ -220,24 +256,37 @@ export default function EnrollPage(): React.ReactElement {
     setConfirmed(false);
     setSummaryReviewed(false);
     setSubmitting(false);
+    setTouched(new Set());
   }
 
   // ---- Render helpers ----
 
-  function renderInput(opts: {
-    label: string;
-    value: string;
-    onChange: (v: string) => void;
-    placeholder?: string;
-    type?: string;
-    required?: boolean;
-    icon?: React.ReactNode;
-    pattern?: string;
-    maxLength?: number;
-    inputMode?: string;
-    disabled?: boolean;
-  }): React.ReactElement {
-    return <WizardInput idPrefix="enroll" {...opts} disabled={opts.disabled ?? submitting} />;
+  /** A wizard input already wired to the live per-field validation for `field`. */
+  function renderField(
+    field: EnrollField,
+    opts: {
+      label: string;
+      value: string;
+      onChange: (v: string) => void;
+      placeholder?: string;
+      type?: string;
+      required?: boolean;
+      icon?: React.ReactNode;
+      pattern?: string;
+      maxLength?: number;
+      inputMode?: string;
+      hint?: string;
+    },
+  ): React.ReactElement {
+    return (
+      <WizardInput
+        idPrefix="enroll"
+        {...opts}
+        disabled={submitting}
+        error={shownError(field)}
+        onBlur={() => markTouched(field)}
+      />
+    );
   }
 
   function renderTextarea(opts: {
@@ -261,92 +310,50 @@ export default function EnrollPage(): React.ReactElement {
           Seleccione el tipo de inscripción que desea realizar:
         </p>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {/* Self enrollment — Jugador */}
-          <button
-            type="button"
-            onClick={() => updateField("enrollmentType", "self")}
-            className={`rounded-xl border-2 p-5 text-left transition-all duration-200 ${
-              formData.enrollmentType === "self"
-                ? "border-cata-red/40 bg-cata-red/10 ring-1 ring-cata-red/20"
-                : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
-            }`}
-          >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cata-red/15">
-              <GraduationCap size={20} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            </div>
-            <h3 className="mb-1 font-semibold text-cata-text">
-              Jugador
-            </h3>
-            <p className="text-xs leading-relaxed text-cata-text/65">
-              Quiero inscribirme yo al club. Soy mayor de edad y gestiono mi
-              propia cuenta como estudiante.
-            </p>
-            {formData.enrollmentType === "self" && (
-              <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-cata-red">
-                <CheckCircle size={12} strokeWidth={2} aria-hidden="true" />
-                Seleccionado
-              </span>
-            )}
-          </button>
-
-          {/* Child / dependent enrollment */}
-          <button
-            type="button"
-            onClick={() => updateField("enrollmentType", "child")}
-            className={`rounded-xl border-2 p-5 text-left transition-all duration-200 ${
-              formData.enrollmentType === "child"
-                ? "border-cata-red/40 bg-cata-red/10 ring-1 ring-cata-red/20"
-                : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
-            }`}
-          >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-              <Baby size={20} strokeWidth={1.5} className="text-blue-700" aria-hidden="true" />
-            </div>
-            <h3 className="mb-1 font-semibold text-cata-text">
-              Representante
-            </h3>
-            <p className="text-xs leading-relaxed text-cata-text/65">
-              Quiero gestionar la inscripción de un hijo/dependiente.
-              El estudiante es distinto de mi cuenta.
-            </p>
-            {formData.enrollmentType === "child" && (
-              <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-cata-red">
-                <CheckCircle size={12} strokeWidth={2} aria-hidden="true" />
-                Seleccionado
-              </span>
-            )}
-          </button>
-
+        {/* `.choice` (_sistema.css:323-328). Even height via `items-stretch` +
+            `h-full`, so the two cards never step on each other. Selection is
+            coal plus the yellow ball dot — NEVER red: red belongs to the
+            primary CTA and to destructive actions only. */}
+        <div className="grid items-stretch gap-4 sm:grid-cols-2">
+          {ENROLLMENT_CHOICES.map((choice) => {
+            const selected = formData.enrollmentType === choice.value;
+            return (
+              <button
+                key={choice.value}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => updateField("enrollmentType", choice.value)}
+                className={`flex h-full flex-col gap-[7px] rounded-card border p-[17px_18px] text-left transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball ${
+                  selected
+                    ? "border-coal bg-paper ring-1 ring-coal"
+                    : "border-line-2 bg-paper hover:bg-canvas"
+                }`}
+              >
+                <b className="text-[14.5px] font-bold text-ink">{choice.title}</b>
+                <p className="text-[13px] leading-relaxed text-ink-3">{choice.description}</p>
+                {selected && (
+                  <span className="h-badge mt-1 inline-flex items-center gap-1.5 self-start rounded-full bg-coal px-[11px] text-[11.5px] font-bold text-white">
+                    <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
+                    Seleccionado
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        {formData.enrollmentType === "child" && (
-          <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
-            <p className="flex items-center gap-1.5 font-medium">
-              <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
-              Inscripción de dependiente
-            </p>
-            <p className="mt-1 text-amber-700/80">
-              Como representante, usted será el responsable de pago de este estudiante.
-              Los datos del estudiante se registrarán por separado de su cuenta.
-              Complete los datos del representante para identificar al adulto
-              responsable.
-            </p>
-          </div>
-        )}
-
-        {formData.enrollmentType === "self" && (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-900/20 p-3 text-xs text-emerald-400">
-            <p className="flex items-center gap-1.5 font-medium">
-              <CheckCircle size={12} strokeWidth={2} aria-hidden="true" />
-              Inscripción como jugador
-            </p>
-            <p className="mt-1 text-emerald-700/80">
-              Usted será el estudiante titular de la cuenta. No se requieren datos
-              de representante.
-            </p>
-          </div>
-        )}
+        <div className="card p-4">
+          <p className="text-[13px] font-bold text-ink">
+            {formData.enrollmentType === "self"
+              ? "Inscripción como jugador"
+              : "Inscripción de dependiente"}
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">
+            {formData.enrollmentType === "self"
+              ? "Usted será el estudiante titular de la cuenta. No se requieren datos de representante."
+              : "Usted será el responsable de pago de este estudiante. Los datos del estudiante se registran por separado de su cuenta."}
+          </p>
+        </div>
       </div>
     );
   }
@@ -374,9 +381,17 @@ export default function EnrollPage(): React.ReactElement {
           onFechaNacimientoChange={(v) => updateField("fechaNacimiento", v)}
           onCedulaChange={(v) => updateField("cedula", v)}
           onTelefonoChange={(v) => updateField("telefono", v)}
+          errors={{
+            nombres: shownError("nombres"),
+            apellidos: shownError("apellidos"),
+            fechaNacimiento: shownError("fechaNacimiento"),
+            cedula: shownError("cedula"),
+            telefono: shownError("telefono"),
+          }}
+          onFieldBlur={(field) => markTouched(field)}
           renderAgeWarning={(age) =>
             age < 18 && formData.enrollmentType === "self" && (
-              <span className="ml-1 text-amber-700">
+              <span className="ml-1 text-state-warn">
                 — Los menores de edad requieren un representante.
               </span>
             )
@@ -390,7 +405,7 @@ export default function EnrollPage(): React.ReactElement {
 
             <div>
               <div className="mb-4 flex items-center gap-2">
-                <UserPlus size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+                <UserPlus size={16} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
                 <h3 className="text-sm font-semibold text-cata-text">
                   Datos del Representante
                 </h3>
@@ -400,7 +415,7 @@ export default function EnrollPage(): React.ReactElement {
                 del estudiante:
               </p>
 
-              {renderInput({
+              {renderField("nombreRepresentante", {
                 label: "Nombres del Representante",
                 value: formData.nombreRepresentante,
                 onChange: (v) => updateField("nombreRepresentante", v),
@@ -409,7 +424,7 @@ export default function EnrollPage(): React.ReactElement {
                 icon: <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />,
               })}
 
-              {renderInput({
+              {renderField("cedulaRepresentante", {
                 label: "Cédula del Representante",
                 value: formData.cedulaRepresentante,
                 onChange: (v) => updateField("cedulaRepresentante", v),
@@ -419,14 +434,15 @@ export default function EnrollPage(): React.ReactElement {
                 pattern: "[0-9]{10}",
                 maxLength: 10,
                 inputMode: "numeric",
+                hint: "10 dígitos, sin guiones.",
               })}
 
-              <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-xs text-purple-700">
-                <p className="flex items-center gap-1.5 font-medium">
+              <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
+                <p className="flex items-center gap-1.5 font-semibold">
                   <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
                   Representante mayor de edad
                 </p>
-                <p className="mt-1 text-purple-700/80">
+                <p className="mt-1">
                   El representante debe ser mayor de edad (18+). Al inscribir a
                   un dependiente, usted confirma que es legalmente responsable
                   del menor.
@@ -450,16 +466,16 @@ export default function EnrollPage(): React.ReactElement {
         </p>
         {isSelfEnrollment ? (
           <>
-            {renderInput({ label: "Correo electrónico", value: formData.correo, onChange: (v) => updateField("correo", v), type: "email", required: true })}
-            {renderInput({ label: "Contraseña", value: formData.contrasenia, onChange: (v) => updateField("contrasenia", v), type: "password", required: true })}
+            {renderField("correo", { label: "Correo electrónico", value: formData.correo, onChange: (v) => updateField("correo", v), type: "email", required: true })}
+            {renderField("contrasenia", { label: "Contraseña", value: formData.contrasenia, onChange: (v) => updateField("contrasenia", v), type: "password", required: true, hint: "Al menos 8 caracteres." })}
           </>
         ) : (
           <>
-            {renderInput({ label: "Apellidos del Representante", value: formData.apellidosRepresentante, onChange: (v) => updateField("apellidosRepresentante", v), required: true })}
-            {renderInput({ label: "Fecha de Nacimiento del Representante", value: formData.fechaNacimientoRepresentante, onChange: (v) => updateField("fechaNacimientoRepresentante", v), type: "date", required: true })}
-            {renderInput({ label: "Teléfono del Representante", value: formData.telefonoRepresentante, onChange: (v) => updateField("telefonoRepresentante", v), inputMode: "tel", required: true })}
-            {renderInput({ label: "Correo electrónico del Representante", value: formData.correoRepresentante, onChange: (v) => updateField("correoRepresentante", v), type: "email", required: true })}
-            {renderInput({ label: "Contraseña del Representante", value: formData.contraseniaRepresentante, onChange: (v) => updateField("contraseniaRepresentante", v), type: "password", required: true })}
+            {renderField("apellidosRepresentante", { label: "Apellidos del Representante", value: formData.apellidosRepresentante, onChange: (v) => updateField("apellidosRepresentante", v), required: true })}
+            {renderField("fechaNacimientoRepresentante", { label: "Fecha de Nacimiento del Representante", value: formData.fechaNacimientoRepresentante, onChange: (v) => updateField("fechaNacimientoRepresentante", v), type: "date", required: true })}
+            {renderField("telefonoRepresentante", { label: "Teléfono del Representante", value: formData.telefonoRepresentante, onChange: (v) => updateField("telefonoRepresentante", v), inputMode: "tel", required: true, hint: "Diez dígitos, con o sin espacios." })}
+            {renderField("correoRepresentante", { label: "Correo electrónico del Representante", value: formData.correoRepresentante, onChange: (v) => updateField("correoRepresentante", v), type: "email", required: true })}
+            {renderField("contraseniaRepresentante", { label: "Contraseña del Representante", value: formData.contraseniaRepresentante, onChange: (v) => updateField("contraseniaRepresentante", v), type: "password", required: true, hint: "Al menos 8 caracteres." })}
           </>
         )}
       </div>
@@ -481,13 +497,21 @@ export default function EnrollPage(): React.ReactElement {
             id="enroll-tipo-de-sangre"
             value={formData.tipoSangre}
             onChange={(e) => updateField("tipoSangre", e.target.value as EnrollFormData["tipoSangre"])}
+            onBlur={() => markTouched("tipoSangre")}
             required
             disabled={submitting}
-            className="input-field"
+            aria-invalid={shownError("tipoSangre") ? true : undefined}
+            className={`input-field ${shownError("tipoSangre") ? "border-cata-red ring-[3px] ring-cata-red/10" : ""}`}
           >
             <option value="">Seleccione una opción</option>
             {Object.values(BLOOD_TYPES).map((bloodType) => <option key={bloodType} value={bloodType}>{bloodType.replace("_", " ")}</option>)}
           </select>
+          {shownError("tipoSangre") && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
+              <AlertTriangle size={13} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+              {shownError("tipoSangre")}
+            </p>
+          )}
         </div>
 
         {renderTextarea({
@@ -517,6 +541,10 @@ export default function EnrollPage(): React.ReactElement {
           telefono={formData.telefonoEmergencia}
           onContactoChange={(v) => updateField("contactoEmergencia", v)}
           onTelefonoChange={(v) => updateField("telefonoEmergencia", v)}
+          contactoError={shownError("contactoEmergencia")}
+          telefonoError={shownError("telefonoEmergencia")}
+          onContactoBlur={() => markTouched("contactoEmergencia")}
+          onTelefonoBlur={() => markTouched("telefonoEmergencia")}
         />
 
         {renderTextarea({
@@ -543,140 +571,86 @@ export default function EnrollPage(): React.ReactElement {
     );
   }
 
+  /** One 56px detail row with the step it came from — `.drow` (_sistema.css:247-250). */
+  function summaryRow(
+    label: string,
+    value: React.ReactNode,
+    correctStep: WizardStep,
+  ): React.ReactElement {
+    return (
+      <div key={label} className="flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0">
+        <span className="w-[150px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+          {label}
+        </span>
+        <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
+        <button
+          type="button"
+          onClick={() => setStep(correctStep)}
+          className={buttonClasses("secondary", "sm", "flex-none")}
+        >
+          Corregir
+        </button>
+      </div>
+    );
+  }
+
   function renderSummary(): React.ReactElement {
-    const age = formData.fechaNacimiento
-      ? calculateAge(formData.fechaNacimiento)
-      : null;
+    const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
+    const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
+    const isChild = formData.enrollmentType === ENROLLMENT_TYPES.CHILD;
     return (
       <div className="space-y-4">
         <p className="text-sm leading-relaxed text-cata-text/65">
-          Revise la información antes de confirmar la inscripción:
+          Esto es lo que vamos a crear. Corrija cualquier bloque antes de confirmar:
         </p>
 
-        {/* Enrollment type */}
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <GraduationCap size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Tipo de Inscripción
-            </h3>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            {formData.enrollmentType === "self" && (
-              <>
-                <GraduationCap size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                <span>Jugador — El estudiante es el titular de la cuenta</span>
-              </>
-            )}
-            {formData.enrollmentType === "child" && (
-              <>
-                <Baby size={16} strokeWidth={1.5} className="text-blue-700" aria-hidden="true" />
-                <span>Representante — Inscripción de dependiente gestionada por un adulto</span>
-              </>
-            )}
-          </div>
+        {/* One list of 56px rows, one datum per row — replaces four cramped
+            two-column grids. Each row links back to the step that owns it. */}
+        <div className="overflow-hidden rounded-card border border-line">
+          {summaryRow(
+            "Tipo",
+            isChild ? "Representante — inscribe a un dependiente" : "Jugador — titular de su propia cuenta",
+            "type",
+          )}
+          {summaryRow(
+            "Estudiante",
+            `${formData.nombres} ${formData.apellidos}`.trim() + ageLabel,
+            "personal",
+          )}
+          {summaryRow("Cédula", formData.cedula || "—", "personal")}
+          {summaryRow("Teléfono", formData.telefono || "—", "personal")}
+          {isChild
+            ? summaryRow(
+                "Representante",
+                `${formData.nombreRepresentante} ${formData.apellidosRepresentante}`.trim() || "—",
+                "personal",
+              )
+            : null}
+          {summaryRow(
+            isChild ? "Correo del representante" : "Correo",
+            (isChild ? formData.correoRepresentante : formData.correo) || "—",
+            "club",
+          )}
+          {summaryRow("Tipo de sangre", formData.tipoSangre.replace("_", " ") || "—", "health")}
+          {summaryRow(
+            "Contacto de emergencia",
+            `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
+            "health",
+          )}
+          {summaryRow("Condiciones de salud", formData.condicionesSalud || "Ninguna reportada", "health")}
+          {summaryRow("Alergias", formData.alergias || "Ninguna reportada", "health")}
+          {formData.observaciones
+            ? summaryRow("Observaciones", formData.observaciones, "health")
+            : null}
         </div>
 
-        {/* Student data */}
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <User size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Datos del Estudiante
-            </h3>
-          </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <dt className="text-cata-text/65">Nombres</dt>
-            <dd className="font-medium text-cata-text">{formData.nombres}</dd>
-            <dt className="text-cata-text/65">Apellidos</dt>
-            <dd className="font-medium text-cata-text">{formData.apellidos}</dd>
-            <dt className="text-cata-text/65">Fecha de Nacimiento</dt>
-            <dd className="font-medium text-cata-text">
-              {formData.fechaNacimiento}
-              {age !== null && (
-                <span className="ml-2 text-cata-text/45">({age} años)</span>
-              )}
-            </dd>
-            <dt className="text-cata-text/65">Cédula</dt>
-            <dd className="font-medium text-cata-text">{formData.cedula}</dd>
-            <dt className="text-cata-text/65">Teléfono</dt>
-            <dd className="font-medium text-cata-text">{formData.telefono}</dd>
-          </dl>
-        </div>
+        <p className="text-[13px] leading-relaxed text-ink-3">
+          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"}.
+          Después podrá subir el comprobante:{" "}
+          <b className="font-semibold text-ink">el club lo valida y recién ahí se activa la membresía</b>.
+        </p>
 
-        {/* Representante data — for child enrollment */}
-        {formData.enrollmentType === "child" && (
-          <div className="card-hover p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <UserPlus size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-                Datos del Representante
-              </h3>
-            </div>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <dt className="text-cata-text/65">Nombres</dt>
-              <dd className="font-medium text-cata-text">
-                {formData.nombreRepresentante || (
-                  <span className="text-cata-text/45">—</span>
-                )}
-              </dd>
-              <dt className="text-cata-text/65">Cédula</dt>
-              <dd className="font-medium text-cata-text">
-                {formData.cedulaRepresentante || (
-                  <span className="text-cata-text/45">—</span>
-                )}
-              </dd>
-              <dt className="text-cata-text/65">Contacto</dt>
-              <dd className="font-medium text-cata-text">{formData.telefonoRepresentante}</dd>
-              <dt className="text-cata-text/65">Correo</dt>
-              <dd className="font-medium text-cata-text">{formData.correoRepresentante}</dd>
-            </dl>
-          </div>
-        )}
-
-        {/* Health */}
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Heart size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Salud y Emergencia
-            </h3>
-          </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <dt className="text-cata-text/65">Condiciones de Salud</dt>
-            <dd className="font-medium text-cata-text">
-              {formData.condicionesSalud || (
-                <span className="text-cata-text/45">Ninguna reportada</span>
-              )}
-            </dd>
-            <dt className="text-cata-text/65">Alergias</dt>
-            <dd className="font-medium text-cata-text">
-              {formData.alergias || (
-                <span className="text-cata-text/45">Ninguna reportada</span>
-              )}
-            </dd>
-            <dt className="text-cata-text/65">Tipo de Sangre</dt>
-            <dd className="font-medium text-cata-text">{formData.tipoSangre.replace("_", " ")}</dd>
-            <dt className="text-cata-text/65">Contacto de Emergencia</dt>
-            <dd className="font-medium text-cata-text">
-              {formData.contactoEmergencia}
-            </dd>
-            <dt className="text-cata-text/65">Teléfono de Emergencia</dt>
-            <dd className="font-medium text-cata-text">
-              {formData.telefonoEmergencia}
-            </dd>
-            {formData.observaciones && (
-              <>
-                <dt className="text-cata-text/65">Observaciones</dt>
-                <dd className="font-medium text-cata-text">
-                  {formData.observaciones}
-                </dd>
-              </>
-            )}
-          </dl>
-        </div>
-
-        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-canvas p-4 text-sm text-ink-2">
           <input
             type="checkbox"
             checked={summaryReviewed}
@@ -684,11 +658,11 @@ export default function EnrollPage(): React.ReactElement {
               setSummaryReviewed(e.target.checked);
               setFormErrors([]);
             }}
-            className="mt-0.5 h-4 w-4 rounded border-emerald-200 text-emerald-700 focus:ring-emerald-200"
+            className="mt-0.5 h-4 w-4 rounded border-line-2 text-coal focus:ring-ball"
           />
           <span>
             Revisé el resumen y confirmo que la información está correcta.
-            <span className="mt-1 block text-xs text-emerald-400/75">
+            <span className="mt-1 block text-xs text-ink-3">
               Esto evita finalizar la inscripción por accidente al llegar al último paso.
             </span>
           </span>
@@ -735,7 +709,7 @@ export default function EnrollPage(): React.ReactElement {
         </div>
       ) : (
 
-        <div className="py-8">
+        <div className="mx-auto w-full max-w-[760px] px-4 py-8">
           {/* One back-navigation rule: a sub-page carries a `BackLink` at the
               TOP, where back navigation lives everywhere else in the product.
               This used to be a centred text link at the very bottom of a
@@ -752,42 +726,28 @@ export default function EnrollPage(): React.ReactElement {
             label={isAuthenticated ? "Volver a Mi Cuenta" : "Volver al inicio"}
           />
 
-          {/* Hero Banner */}
-          <div className="relative mb-10 overflow-hidden rounded-3xl border border-cata-border bg-cata-surface px-6 py-10 shadow-elevated sm:px-10 sm:py-12">
-            <div className="absolute inset-0 bg-logo-glow" />
-            <div className="relative z-10 flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-cata-red">
-                  <UserPlus size={14} strokeWidth={2} aria-hidden="true" />
-                  Inscripción
-                </div>
-                <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-cata-text sm:text-4xl">
-                  Inscripción de Estudiante
-                </h1>
-                <p className="mt-2 max-w-lg text-sm leading-relaxed text-cata-text/60">
-                  Complete los pasos para inscribir a un estudiante en Cata Club.
-                  {formData.enrollmentType === "self" && " Inscripción como jugador."}
-                  {formData.enrollmentType === "child" && " Usted actúa como representante."}
-                </p>
-              </div>
-            </div>
+          {/* Step header + the NAMED stepper. The five steps are named from
+              step one: "Paso 2 de 5" anticipates nothing, "Contacto" does. */}
+          <div className="mb-6">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+              Paso {currentIndex + 1} de {STEP_ORDER.length}
+            </p>
+            <h1 className="mt-1 text-[26px] font-extrabold tracking-[-0.03em] text-ink">
+              Inscripción de estudiante
+            </h1>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">
+              Cinco pasos y queda dentro del club.
+              {formData.enrollmentType === "self" && " Se inscribe usted como jugador."}
+              {formData.enrollmentType === "child" && " Usted actúa como representante."}
+            </p>
           </div>
 
-          {/* Progress bar */}
-          <div className="mb-8">
-            <div className="mb-2 flex items-center justify-between text-xs text-cata-text/45">
-              <span>
-                Paso {currentIndex + 1} de {STEP_ORDER.length}
-              </span>
-              <span>{STEP_LABELS[step]}</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-cata-border">
-              <div
-                className="h-full rounded-full bg-cata-red transition-all duration-400 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
+          <Stepper
+            className="mb-8"
+            label="Pasos de la inscripción"
+            current={currentIndex + 1}
+            steps={STEP_ORDER.map((s) => STEP_SHORT_LABELS[s])}
+          />
 
           {/* Demo helper — quick-fill for testing convenience. The "(solo
               desarrollo)" label used to be the ONLY thing stopping this from
@@ -824,17 +784,8 @@ export default function EnrollPage(): React.ReactElement {
           )}
 
           {/* Form card */}
-          <div className="card mx-auto max-w-2xl p-6 sm:p-8">
-            <div className="mb-6 flex items-center gap-2">
-              {step === "type" && <GraduationCap size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "personal" && <User size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "club" && <Calendar size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "health" && <Heart size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "summary" && <FileText size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              <h2 className="text-lg font-semibold text-cata-text">
-                {STEP_LABELS[step]}
-              </h2>
-            </div>
+          <div className="card p-6 sm:p-8">
+            <h2 className="mb-6 text-[13px] font-bold text-ink">{STEP_LABELS[step]}</h2>
 
             <form onSubmit={handleConfirm}>
               {/* Step content */}
@@ -851,18 +802,20 @@ export default function EnrollPage(): React.ReactElement {
                 submitting={submitting}
                 onBack={handleBack}
                 onNext={handleNext}
+                nextDisabled={!stepComplete}
+                nextBlockedReason={blockedReason ?? undefined}
                 submitButton={
                   <button
                     type="submit"
                     disabled={submitting || !summaryReviewed}
-                    className="btn-primary shadow-soft disabled:cursor-not-allowed disabled:opacity-50"
+                    className={buttonClasses("primary", "md", "disabled:cursor-not-allowed")}
                   >
                     {submitting ? (
                       "Inscribiendo…"
                     ) : (
                       <>
                         <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
-                        Confirmar Inscripción
+                        Confirmar inscripción
                       </>
                     )}
                   </button>

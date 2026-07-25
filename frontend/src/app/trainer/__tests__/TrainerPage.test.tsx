@@ -1,14 +1,19 @@
 /**
- * Component tests for the trainer dashboard, covering the integrated
- * "Historial de Asistencias" list (filterable + paginated 10-per-page)
- * that was merged into the dashboard below the stats cards.
+ * Component tests for the trainer's "Mi día"
+ * (`docs/ux/prototipos/19-entrenador.html`).
+ *
+ * The screen was rebuilt around a single decision — pass the list for the
+ * next session — so these tests are mostly about what is NOT on it any more:
+ * no stat cards, no filter panel, no paginated history table, and no level
+ * information or Niveles entry point anywhere.
  *
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import TrainerPage from "@/app/trainer/page";
+import { OPEN_HELP_CHAT_EVENT, type OpenHelpChatDetail } from "@/components/shell/AppShell";
 import type { TrainingSchedule, AttendanceRecord } from "@/app/attendance/attendance-utils";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 
@@ -17,7 +22,7 @@ vi.mock("@/components/ProtectedRoute", () => ({
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => createAuthenticatedAuth("trainer", "Coach Martinez"),
+  useAuth: () => createAuthenticatedAuth("trainer", "Carlos Mendoza"),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -27,187 +32,278 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("next/link", () => ({
   __esModule: true,
-  default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children: React.ReactNode; href: string }) => (
+  default: ({
+    children,
+    href,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children: React.ReactNode; href: string }) => (
     <a href={href} {...props}>
       {children}
     </a>
   ),
 }));
 
-vi.mock("@/components/StudentSearch", () => ({
+vi.mock("next/image", () => ({
   __esModule: true,
-  default: ({ onSelect }: { onSelect: (alumno: { id: number; nombres: string; apellidos: string }) => void }) => (
-    <button
-      type="button"
-      onClick={() => onSelect({ id: 1, nombres: "Ana", apellidos: "López" })}
-      aria-label="Buscar alumno"
-    >
-      Buscar alumno
-    </button>
-  ),
+  // eslint-disable-next-line @next/next/no-img-element
+  default: ({ alt }: { alt: string }) => <img alt={alt} />,
 }));
-
-const SCHEDULES: TrainingSchedule[] = [
-  { id: 1, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30", entrenadorId: 42, entrenadorNombre: "Coach Martinez", nivelRankingId: null },
-  { id: 2, diaSemana: "mar", horaInicio: "17:00", horaFin: "18:00", entrenadorId: 42, entrenadorNombre: "Coach Martinez", nivelRankingId: null },
-];
-
-/** 12 records to verify pagination shows >1 page. */
-function makeRecords(n: number): AttendanceRecord[] {
-  return Array.from({ length: n }, (_, i) => ({
-    id: `att-${i + 1}`,
-    fecha: "2026-07-22",
-    horario: "Lunes 15:00",
-    personaId: i + 1,
-    estudiante: `Alumno ${i + 1}`,
-    estado: i % 2 === 0 ? "present" : "absent",
-    entrenador: "Coach Martinez",
-  }));
-}
 
 const mockFetchTrainingSchedules = vi.fn();
 const mockFetchAttendanceRecords = vi.fn();
+const mockFetchAlumnosPorHorario = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
+  fetchAlumnosPorHorario: (id: number) => mockFetchAlumnosPorHorario(id),
+  fetchNotificaciones: vi.fn().mockResolvedValue([]),
+  marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
 
-/** True for the single-day range used by the today's stat cards, not the history list. */
-function isSingleDayRange(params: { fechaInicio?: string; fechaFin?: string } | undefined): boolean {
-  return !!params && params.fechaInicio === params.fechaFin;
+// ---------------------------------------------------------------------------
+// Fixtures. Monday 2026-07-20 at 14:35 — 25 minutes before the 15:00 session.
+// ---------------------------------------------------------------------------
+
+const NOW = new Date(2026, 6, 20, 14, 35);
+
+function schedule(id: number, horaInicio: string, horaFin: string): TrainingSchedule {
+  return {
+    id,
+    diaSemana: "lun",
+    horaInicio,
+    horaFin,
+    entrenadorId: 42,
+    entrenadorNombre: "Carlos Mendoza",
+    nivelRankingId: 9,
+  };
 }
 
-describe("TrainerPage — Historial de Asistencias (integrado)", () => {
+const TODAY_SCHEDULES: TrainingSchedule[] = [
+  schedule(1, "15:00", "16:00"),
+  schedule(2, "16:00", "17:00"),
+  schedule(3, "17:00", "18:00"),
+  // A Tuesday session that must never reach today's hero.
+  { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
+];
+
+function record(
+  estado: AttendanceRecord["estado"],
+  estudiante: string,
+  fecha = "2026-07-20",
+): AttendanceRecord {
+  return {
+    id: `${estudiante}-${fecha}-${estado}`,
+    fecha,
+    horario: "Lunes 15:00 — 16:00",
+    personaId: 1,
+    estudiante,
+    estado,
+    entrenador: "Carlos Mendoza",
+  };
+}
+
+const MONTH_RECORDS: AttendanceRecord[] = [
+  record("present", "Sofia Vera"),
+  record("present", "Diego Mendoza"),
+  record("late", "Ana Garcia"),
+  record("justified", "Melany Quimis"),
+  record("absent", "Luis Lopez"),
+  record("absent", "Luis Lopez", "2026-07-13"),
+  record("absent", "Luis Lopez", "2026-07-06"),
+];
+
+describe("TrainerPage — Mi día", () => {
   beforeEach(() => {
-    mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
-    mockFetchAttendanceRecords.mockReset().mockImplementation((params) =>
-      Promise.resolve(isSingleDayRange(params) ? [] : makeRecords(12)),
-    );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(NOW);
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(new Array(12).fill({}));
   });
 
-  it("renders the history records with fecha, alumno, horario, estado and entrenador", async () => {
-    render(<TrainerPage />);
-
-    expect(await screen.findByText("Alumno 1")).toBeInTheDocument();
-    expect(screen.getByText("Alumno 2")).toBeInTheDocument();
-    // 10 filas comparten fecha y horario en la página 1 → usar getAllByText.
-    // La fecha se renderiza en el único formato del producto (dd/mm/yyyy),
-    // nunca como el ISO crudo que devuelve la API.
-    expect(screen.getAllByText("22/07/2026").length).toBeGreaterThan(0);
-    expect(screen.queryByText("2026-07-22")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Lunes 15:00").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Presente").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Ausente").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Coach Martinez").length).toBeGreaterThan(0);
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("paginates 10 records per page and shows a next button", async () => {
+  it("greets the trainer by first name", async () => {
     render(<TrainerPage />);
 
-    // Page 1: rows 1..10. Page 2: rows 11..12.
-    expect(await screen.findByText("Alumno 1")).toBeInTheDocument();
-    expect(screen.getByText("Alumno 10")).toBeInTheDocument();
-    expect(screen.queryByText("Alumno 11")).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Hola, Carlos" }),
+    ).toBeInTheDocument();
+  });
 
-    expect(screen.getByText(/Página 1 de 2/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Página siguiente" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Página anterior" })).toBeDisabled();
+  it("leads with the next session, the countdown and the roster count", async () => {
+    render(<TrainerPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
+    // "inscritos", never "esperan": the count is of AlumnoHorario rows, and no
+    // DTO says who actually turned up. `find`, not `get`: the roster count is
+    // fetched separately once the next session resolves.
+    expect(
+      await screen.findByText(/En 25 minutos · 12 estudiantes inscritos/),
+    ).toBeInTheDocument();
+    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(1);
+  });
+
+  it("offers exactly one primary action, and it is Pasar lista", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    // Scoped to the page body: the shell's sidebar carries its own "Pasar
+    // lista" nav row, which is navigation, not the screen's CTA.
+    const page = within(screen.getByRole("main"));
+    const cta = page.getByRole("link", { name: /Pasar lista/ });
+    expect(cta).toHaveAttribute("href", "/trainer/attendance");
+    expect(page.getAllByRole("link", { name: /Pasar lista/ })).toHaveLength(1);
+  });
+
+  it("lists what comes after the hero on one line, not as a second list", async () => {
+    render(<TrainerPage />);
+
+    await screen.findByText("Lunes 15:00 — 16:00");
+    const after = screen.getByText(/Después:/);
+    expect(after).toHaveTextContent("16:00");
+    expect(after).toHaveTextContent("17:00");
+  });
+
+  it("keeps the hero honest when the day is over", async () => {
+    vi.setSystemTime(new Date(2026, 6, 20, 21, 0));
+    render(<TrainerPage />);
+
+    expect(await screen.findByText("Ya no quedan sesiones hoy")).toBeInTheDocument();
+    expect(screen.queryByText(/Después:/)).not.toBeInTheDocument();
+    // Even with nothing scheduled, the way to take a list stays reachable.
+    expect(
+      within(screen.getByRole("main")).getByRole("link", { name: /Pasar lista/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("says so plainly when there is nothing scheduled today at all", async () => {
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
+    ]);
+    render(<TrainerPage />);
+
+    expect(await screen.findByText("Hoy no tienes sesiones")).toBeInTheDocument();
+  });
+
+  it("does not block the hero when the roster count cannot be loaded", async () => {
+    mockFetchAlumnosPorHorario.mockRejectedValue(new Error("boom"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(<TrainerPage />);
+
+    expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
+    // The countdown survives; only the roster clause is dropped.
+    expect(screen.getByText(/En 25 minutos/)).toBeInTheDocument();
+    expect(screen.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Última lista — a result, plus something to do about it.
+  // -------------------------------------------------------------------------
+
+  it("summarizes the most recent list with all four state counts", async () => {
+    render(<TrainerPage />);
+
+    expect(await screen.findByText(/Última lista/)).toBeInTheDocument();
+    expect(screen.getByText("2 presente")).toBeInTheDocument();
+    expect(screen.getByText("1 tardanza")).toBeInTheDocument();
+    expect(screen.getByText("1 justificado")).toBeInTheDocument();
+    expect(screen.getByText("1 ausente")).toBeInTheDocument();
+  });
+
+  it("names the student piling up absences and offers a way to act on it", async () => {
+    render(<TrainerPage />);
+
+    await screen.findByText(/Última lista/);
+    expect(screen.getByText("Luis Lopez")).toBeInTheDocument();
+    expect(screen.getByText("3 ausencias")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Avisar al club/ })).toBeInTheDocument();
+  });
+
+  it("opens the help assistant with the notice already written", async () => {
+    const listener = vi.fn();
+    window.addEventListener(OPEN_HELP_CHAT_EVENT, listener);
+
+    render(<TrainerPage />);
+    await screen.findByText(/Última lista/);
+    fireEvent.click(screen.getByRole("button", { name: /Avisar al club/ }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const detail = (listener.mock.calls[0][0] as CustomEvent<OpenHelpChatDetail>).detail;
+    expect(detail.draft).toBe("Hola, quiero avisar que Luis Lopez suma 3 ausencias este mes.");
+    window.removeEventListener(OPEN_HELP_CHAT_EVENT, listener);
+  });
+
+  it("stays quiet about absences when nobody has reached the threshold", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([
+      record("present", "Sofia Vera"),
+      record("absent", "Luis Lopez"),
+    ]);
+    render(<TrainerPage />);
+
+    await screen.findByText(/Última lista/);
+    expect(screen.queryByRole("button", { name: /Avisar al club/ })).not.toBeInTheDocument();
+  });
+
+  it("shows an actionable empty state when no list has been filed this month", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    render(<TrainerPage />);
+
+    expect(
+      await screen.findByText("Todavía no registraste ninguna lista este mes"),
+    ).toBeInTheDocument();
+  });
+
+  it("sends the history to its own view instead of embedding it", async () => {
+    render(<TrainerPage />);
+
+    const link = await screen.findByRole("link", { name: "Ver historial" });
+    expect(link).toHaveAttribute("href", "/trainer/attendance/history");
+    // The table, its filter panel and its pager are gone from this screen.
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Filtrar por horario")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Página siguiente" })).not.toBeInTheDocument();
+  });
+
+  it("recovers from a failed load with a retry", async () => {
+    mockFetchTrainingSchedules.mockRejectedValueOnce(new Error("boom"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(<TrainerPage />);
+
+    expect(await screen.findByText(/No se pudo cargar tu día/)).toBeInTheDocument();
+    mockFetchTrainingSchedules.mockResolvedValue(TODAY_SCHEDULES);
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Alumno 11")).toBeInTheDocument();
-      expect(screen.queryByText("Alumno 1")).not.toBeInTheDocument();
+      expect(screen.getByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
     });
   });
 
-  it("switches to a custom date range and validates fin >= inicio", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Alumno 1");
+  // -------------------------------------------------------------------------
+  // Settled product decisions.
+  // -------------------------------------------------------------------------
 
-    fireEvent.click(screen.getByRole("button", { name: "Rango personalizado" }));
-    expect(screen.getByLabelText("Fecha de inicio")).toBeInTheDocument();
-
-    // Set an invalid range where fin < inicio → should show the validation error.
-    fireEvent.change(screen.getByLabelText("Fecha de inicio"), { target: { value: "2026-07-22" } });
-    fireEvent.change(screen.getByLabelText("Fecha límite"), { target: { value: "2026-07-21" } });
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("La fecha límite no puede ser menor que la fecha de inicio."),
-      ).toBeInTheDocument();
-    });
-  });
-
-  it("re-fetches when the horario filter changes", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Alumno 1");
-    mockFetchAttendanceRecords.mockClear();
-
-    fireEvent.change(screen.getByLabelText("Filtrar por horario"), { target: { value: "2" } });
-
-    await waitFor(() => {
-      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith(
-        expect.objectContaining({ horarioId: 2 }),
-      );
-    });
-  });
-
-  it("shows an empty state when there are no records in range", async () => {
-    mockFetchAttendanceRecords.mockImplementation(() => Promise.resolve([]));
+  it("shows no level information and no Niveles entry point anywhere", async () => {
     render(<TrainerPage />);
 
-    expect(await screen.findByText(/no se encontraron registros/i)).toBeInTheDocument();
+    await screen.findByText("Lunes 15:00 — 16:00");
+    expect(screen.queryByText(/Nivel/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Niveles/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Gestionar Nivel/i })).not.toBeInTheDocument();
   });
 
-  it("shows an error state with Reintentar that retries the fetch", async () => {
-    mockFetchAttendanceRecords.mockImplementation((params) =>
-      isSingleDayRange(params) ? Promise.resolve([]) : Promise.reject(new Error("boom")),
-    );
+  it("no longer stacks quick-action and stat cards above the fold", async () => {
     render(<TrainerPage />);
 
-    expect(await screen.findByText(/no se pudieron cargar los registros/i)).toBeInTheDocument();
-    const retryButtons = screen.getAllByRole("button", { name: "Reintentar" });
-    expect(retryButtons.length).toBeGreaterThan(0);
-
-    mockFetchAttendanceRecords.mockImplementation((params) =>
-      Promise.resolve(isSingleDayRange(params) ? [] : makeRecords(12)),
-    );
-    fireEvent.click(retryButtons[retryButtons.length - 1]);
-
-    expect(await screen.findByText("Alumno 1")).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// WCAG AA contrast (P1). The quick-action cards painted their title and
-// subtitle in the raw brand pink (`text-cata-fuchsia`, and `/60` for the
-// subtitle) on a `bg-cata-fuchsia/10` tint — 3.4:1 and 2.2:1 respectively,
-// both below AA's 4.5:1 for normal text. They now use the `fuchsia-ink`
-// token; the numeric proof lives in src/lib/__tests__/color-contrast.test.ts.
-// ---------------------------------------------------------------------------
-
-describe("TrainerPage — quick-action card contrast", () => {
-  beforeEach(() => {
-    mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
-    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
-  });
-
-  it.each([
-    ["Registrar Asistencia", "Sesiones de hoy en unos pasos"],
-    ["Gestionar Nivel", "Asignar nivel a estudiantes"],
-  ])("uses the AA-passing ink token for the '%s' card title and subtitle", (title, subtitle) => {
-    render(<TrainerPage />);
-
-    const titleEl = screen.getByText(title);
-    expect(titleEl).toHaveClass("text-cata-fuchsia-ink");
-    expect(titleEl).not.toHaveClass("text-cata-fuchsia");
-
-    // The subtitle was `text-cata-fuchsia/60`; 60% alpha of the brand pink is
-    // 2.15:1 on the card tint. 90% of the ink token clears AA.
-    const subtitleEl = screen.getByText(subtitle);
-    expect(subtitleEl).toHaveClass("text-cata-fuchsia-ink/90");
-    expect(subtitleEl).not.toHaveClass("text-cata-fuchsia/60");
+    await screen.findByText("Lunes 15:00 — 16:00");
+    expect(screen.queryByText("Registrar Asistencia")).not.toBeInTheDocument();
+    expect(screen.queryByText("Horarios de Hoy")).not.toBeInTheDocument();
+    expect(screen.queryByText("Asistencias Registradas Hoy")).not.toBeInTheDocument();
+    expect(screen.queryByText("Presentes Hoy")).not.toBeInTheDocument();
   });
 });

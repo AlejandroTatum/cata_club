@@ -92,6 +92,14 @@ vi.mock("@/services/api", () => ({
 import { useAuth } from "@/contexts/AuthContext";
 import { createAuthenticatedAuth, createUnauthenticatedAuth } from "@/components/__tests__/test-utils";
 
+/**
+ * The control that opens the mobile drawer for the role these suites render
+ * (admin). Since `27-movil.html`, an admin reaches the drawer through the tab
+ * bar's "Más" instead of a hamburger — the drawer itself, and every guarantee
+ * asserted about it below, is unchanged.
+ */
+const MOBILE_NAV_TRIGGER = "Más secciones";
+
 const mockUseAuth = vi.mocked(useAuth);
 
 describe("AppShell", (): void => {
@@ -131,8 +139,12 @@ describe("AppShell", (): void => {
   it("derives nav links from the admin role and excludes Inicio", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
-    expect(screen.getByRole("link", { name: /Miembros/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Horarios" })).toBeInTheDocument();
+    // Scoped to the sidebar: an admin now also gets a bottom tab bar whose
+    // "Miembros" tab points at the same route, so an unscoped query matches
+    // two links by design.
+    const sidebarNav = within(screen.getByRole("navigation", { name: "Navegación principal" }));
+    expect(sidebarNav.getByRole("link", { name: /Miembros/i })).toBeInTheDocument();
+    expect(sidebarNav.getByRole("link", { name: "Horarios" })).toBeInTheDocument();
     // "Inicio" is represented by the brand logo link, not a separate nav row.
     expect(screen.queryByRole("link", { name: /^Inicio$/i })).not.toBeInTheDocument();
   });
@@ -196,17 +208,61 @@ describe("AppShell", (): void => {
   it("opens and closes the mobile sidebar", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: /Abrir menú/i }));
+    fireEvent.click(screen.getByRole("button", { name: MOBILE_NAV_TRIGGER }));
     fireEvent.click(screen.getByRole("button", { name: /Cerrar menú/i }));
     // No assertion needed beyond "didn't throw" — the sidebar's open state
     // only affects a translate-x CSS class, not conditional rendering.
-    expect(screen.getByRole("button", { name: /Abrir menú/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: MOBILE_NAV_TRIGGER })).toBeInTheDocument();
   });
 
-  it("makes the mobile navigation entry point visibly discoverable", (): void => {
+  // -------------------------------------------------------------------------
+  // Mobile navigation entry point. It differs by role on purpose: admin gets
+  // the bottom tab bar from `docs/ux/prototipos/27-movil.html` (four
+  // destinations at thumb height, the rest behind "Más"); every other role
+  // keeps the hamburger, because a 4-up bar with two empty slots is worse
+  // than a menu.
+  // -------------------------------------------------------------------------
+
+  it("gives an admin a bottom tab bar with the four prototype destinations", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
+    const tabBar = within(screen.getByRole("navigation", { name: /móvil/i }));
+    expect(tabBar.getByRole("link", { name: "Panel" })).toHaveAttribute("href", "/dashboard");
+    expect(tabBar.getByRole("link", { name: "Miembros" })).toHaveAttribute("href", "/members");
+    expect(tabBar.getByRole("link", { name: "Pagos" })).toHaveAttribute("href", "/payments");
+    expect(tabBar.getByRole("button", { name: "Más secciones" })).toBeInTheDocument();
+  });
+
+  it("replaces the admin hamburger with the tab bar's Más entry", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    expect(screen.queryByRole("button", { name: "Abrir menú principal" })).not.toBeInTheDocument();
+    // "Más" opens the SAME drawer, so nothing became unreachable.
+    fireEvent.click(screen.getByRole("button", { name: "Más secciones" }));
+    expect(screen.getByRole("button", { name: /Cerrar menú/i })).toBeInTheDocument();
+  });
+
+  it("gives every touch target in the tab bar at least 44px", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    const tabBar = screen.getByRole("navigation", { name: /móvil/i });
+    const targets = [
+      ...within(tabBar).getAllByRole("link"),
+      ...within(tabBar).getAllByRole("button"),
+    ];
+    expect(targets).toHaveLength(4);
+    for (const target of targets) {
+      expect(target).toHaveClass("min-h-[44px]");
+    }
+  });
+
+  it("keeps the hamburger — and renders no tab bar — for a non-admin role", (): void => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
+
+    render(<AppShell title="Panel">{null}</AppShell>);
+
     expect(screen.getByRole("button", { name: "Abrir menú principal" })).toHaveTextContent("Menú");
+    expect(screen.queryByRole("navigation", { name: /móvil/i })).not.toBeInTheDocument();
   });
 
   // --- Command palette ---
@@ -324,12 +380,12 @@ describe("AppShell", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
     fireEvent.click(screen.getByRole("button", { name: /Colapsar menú/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Abrir menú/i }));
+    fireEvent.click(screen.getByRole("button", { name: MOBILE_NAV_TRIGGER }));
     fireEvent.click(screen.getByRole("button", { name: /Cerrar menú/i }));
 
     // Mobile open/close still works after collapsing the desktop sidebar —
     // the two toggles remain functionally independent.
-    expect(screen.getByRole("button", { name: /Abrir menú/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: MOBILE_NAV_TRIGGER })).toBeInTheDocument();
   });
 
   // --- Regression: collapse toggle must stay reachable in both states ---
@@ -446,7 +502,7 @@ describe("AppShell — closed mobile drawer leaves the tab order", (): void => {
     stubViewport(false);
 
     const { container } = render(<AppShell title="Dashboard">{null}</AppShell>);
-    fireEvent.click(screen.getByRole("button", { name: /Abrir menú/i }));
+    fireEvent.click(screen.getByRole("button", { name: MOBILE_NAV_TRIGGER }));
 
     const aside = container.querySelector("aside") as HTMLElement;
     expect(aside).toHaveClass("translate-x-0");

@@ -107,7 +107,7 @@ describe("Header", (): void => {
     // A neutral route that isn't landing, an auth-shell route, an app-shell
     // route, or a standalone screen (those all hide the header entirely — see
     // the dedicated describe blocks below).
-    mockPathname.mockReturnValue("/reset-password");
+    mockPathname.mockReturnValue("/contacto");
     mockUseAuth.mockReset();
     // Default: not loading, not authenticated
     mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
@@ -125,7 +125,7 @@ describe("Header", (): void => {
   });
 
   it("shows the header on a non-landing route when landing hiding is requested", (): void => {
-    mockPathname.mockReturnValue("/reset-password");
+    mockPathname.mockReturnValue("/contacto");
 
     render(<Header hideOnLanding />);
 
@@ -134,7 +134,7 @@ describe("Header", (): void => {
 
   // --- Auth shell routes (login, register, forgot-password) ---
 
-  it.each(["/login", "/register", "/forgot-password"])(
+  it.each(["/login", "/register", "/forgot-password", "/reset-password"])(
     "hides the header on the %s auth-shell route",
     (route): void => {
       mockPathname.mockReturnValue(route);
@@ -292,11 +292,13 @@ describe("Header", (): void => {
 
     render(<Header />);
 
-    // Trainer gets Inicio + Mi día + Pasar lista + Niveles
+    // Trainer gets Inicio + Mi día + Pasar lista. No "Niveles": level
+    // assignment is an admin action, and `/trainer/nivel` no longer exists
+    // (`docs/ux/prototipos/19-entrenador.html`).
     expect(screen.getByRole("link", { name: /Inicio/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Mi día" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Niveles" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Niveles" })).not.toBeInTheDocument();
 
     // The nav must not carry an English label — see auth-utils.
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
@@ -343,10 +345,10 @@ describe("Header", (): void => {
   // `getNavLinksForRole` with a synthetic link list on a neutral route.
   it("marks the active link with aria-current=\"page\"", (): void => {
     mockGetNavLinksForRole.mockReturnValueOnce([
-      { href: "/reset-password", label: "Inicio" },
+      { href: "/contacto", label: "Inicio" },
       { href: "/somewhere-else", label: "Otro" },
     ]);
-    mockPathname.mockReturnValue("/reset-password");
+    mockPathname.mockReturnValue("/contacto");
     mockUseAuth.mockReturnValue(
       createAuthenticatedAuth("trainer", "Carlos Entrenador"),
     );
@@ -359,10 +361,10 @@ describe("Header", (): void => {
 
   it("does not apply aria-current to non-current route links", (): void => {
     mockGetNavLinksForRole.mockReturnValueOnce([
-      { href: "/reset-password", label: "Inicio" },
+      { href: "/contacto", label: "Inicio" },
       { href: "/somewhere-else", label: "Otro" },
     ]);
-    mockPathname.mockReturnValue("/reset-password");
+    mockPathname.mockReturnValue("/contacto");
     mockUseAuth.mockReturnValue(
       createAuthenticatedAuth("trainer", "Carlos Entrenador"),
     );

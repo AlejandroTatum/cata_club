@@ -18,7 +18,7 @@
 
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -28,23 +28,26 @@ import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal, crearRepresentado } from "@/services/api";
 import { calculateAge } from "@/app/student/enroll/enroll-utils";
 import { WizardTextarea, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
+import { Stepper, buttonClasses } from "@/components/ui";
 import { BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
 import {
-  User,
   Heart,
   CheckCircle,
   AlertTriangle,
-  FileText,
 } from "lucide-react";
 import {
   ADD_DEPENDENT_STEP_ORDER,
   ADD_DEPENDENT_STEP_LABELS,
+  ADD_DEPENDENT_SHORT_LABELS,
+  describeAddDependentBlocker,
   initialAddDependentFormData,
+  validateAddDependentFields,
   validateAddDependentStep,
   validateAddDependentForm,
   buildRepresentadoPayload,
   getAddDependentErrorMessage,
+  type AddDependentField,
   type AddDependentFormData,
   type AddDependentStep,
 } from "./add-dependent-utils";
@@ -63,6 +66,7 @@ function AddDependentContent(): React.ReactElement {
   const [submitting, setSubmitting] = useState(false);
   const [summaryReviewed, setSummaryReviewed] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [touched, setTouched] = useState<Set<AddDependentField>>(new Set());
 
   const [representanteId, setRepresentanteId] = useState<number | null>(null);
   const [loadingRepresentante, setLoadingRepresentante] = useState(true);
@@ -72,7 +76,20 @@ function AddDependentContent(): React.ReactElement {
   const currentIndex = ADD_DEPENDENT_STEP_ORDER.indexOf(step);
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === ADD_DEPENDENT_STEP_ORDER.length - 1;
-  const progress = ((currentIndex + 1) / ADD_DEPENDENT_STEP_ORDER.length) * 100;
+
+  // Same live-validation contract as the public wizard: recomputed on every
+  // keystroke, shown only for fields the visitor has already left.
+  const fieldErrors = useMemo(() => validateAddDependentFields(step, formData), [step, formData]);
+  const stepComplete = Object.keys(fieldErrors).length === 0;
+  const blockedReason = describeAddDependentBlocker(fieldErrors);
+
+  function shownError(field: AddDependentField): string | undefined {
+    return touched.has(field) ? fieldErrors[field] : undefined;
+  }
+
+  function markTouched(field: AddDependentField): void {
+    setTouched((prev) => (prev.has(field) ? prev : new Set(prev).add(field)));
+  }
 
   // Source the representante's own persona_id from the portal summary —
   // never decoded from the JWT client-side (see module docstring).
@@ -211,6 +228,14 @@ function AddDependentContent(): React.ReactElement {
           onFechaNacimientoChange={(v) => updateField("fechaNacimiento", v)}
           onCedulaChange={(v) => updateField("cedula", v)}
           onTelefonoChange={(v) => updateField("telefono", v)}
+          errors={{
+            nombres: shownError("nombres"),
+            apellidos: shownError("apellidos"),
+            fechaNacimiento: shownError("fechaNacimiento"),
+            cedula: shownError("cedula"),
+            telefono: shownError("telefono"),
+          }}
+          onFieldBlur={(field) => markTouched(field)}
         />
       </div>
     );
@@ -231,9 +256,11 @@ function AddDependentContent(): React.ReactElement {
             id="add-dependent-tipo-de-sangre"
             value={formData.tipoSangre}
             onChange={(e) => updateField("tipoSangre", e.target.value as TipoSangre)}
+            onBlur={() => markTouched("tipoSangre")}
             required
             disabled={submitting}
-            className="input-field"
+            aria-invalid={shownError("tipoSangre") ? true : undefined}
+            className={`input-field ${shownError("tipoSangre") ? "border-cata-red ring-[3px] ring-cata-red/10" : ""}`}
           >
             <option value="">Seleccione una opción</option>
             {Object.values(BLOOD_TYPES).map((bloodType) => (
@@ -242,6 +269,12 @@ function AddDependentContent(): React.ReactElement {
               </option>
             ))}
           </select>
+          {shownError("tipoSangre") && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
+              <AlertTriangle size={13} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+              {shownError("tipoSangre")}
+            </p>
+          )}
         </div>
 
         {renderTextarea({
@@ -267,6 +300,10 @@ function AddDependentContent(): React.ReactElement {
           telefono={formData.telefonoEmergencia}
           onContactoChange={(v) => updateField("contactoEmergencia", v)}
           onTelefonoChange={(v) => updateField("telefonoEmergencia", v)}
+          contactoError={shownError("contactoEmergencia")}
+          telefonoError={shownError("telefonoEmergencia")}
+          onContactoBlur={() => markTouched("contactoEmergencia")}
+          onTelefonoBlur={() => markTouched("telefonoEmergencia")}
         />
 
         <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
@@ -283,68 +320,61 @@ function AddDependentContent(): React.ReactElement {
     );
   }
 
+  /** One 56px detail row with the step it came from — `.drow` (_sistema.css:247-250). */
+  function summaryRow(
+    label: string,
+    value: React.ReactNode,
+    correctStep: AddDependentStep,
+  ): React.ReactElement {
+    return (
+      <div className="flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0">
+        <span className="w-[150px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+          {label}
+        </span>
+        <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
+        <button
+          type="button"
+          onClick={() => setStep(correctStep)}
+          className={buttonClasses("secondary", "sm", "flex-none")}
+        >
+          Corregir
+        </button>
+      </div>
+    );
+  }
+
   function renderSummary(): React.ReactElement {
     const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
+    const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
     return (
       <div className="space-y-4">
         <p className="text-sm leading-relaxed text-cata-text/65">
-          Revise la información antes de agregar al dependiente:
+          Esto es lo que vamos a crear. Corrija cualquier bloque antes de confirmar:
         </p>
 
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <User size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Datos del Dependiente
-            </h3>
-          </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <dt className="text-cata-text/65">Nombres</dt>
-            <dd className="font-medium text-cata-text">{formData.nombres}</dd>
-            <dt className="text-cata-text/65">Apellidos</dt>
-            <dd className="font-medium text-cata-text">{formData.apellidos}</dd>
-            <dt className="text-cata-text/65">Fecha de Nacimiento</dt>
-            <dd className="font-medium text-cata-text">
-              {formData.fechaNacimiento}
-              {age !== null && !isNaN(age) && (
-                <span className="ml-2 text-cata-text/45">({age} años)</span>
-              )}
-            </dd>
-            <dt className="text-cata-text/65">Cédula</dt>
-            <dd className="font-medium text-cata-text">{formData.cedula}</dd>
-            <dt className="text-cata-text/65">Teléfono</dt>
-            <dd className="font-medium text-cata-text">{formData.telefono}</dd>
-          </dl>
+        <div className="overflow-hidden rounded-card border border-line">
+          {summaryRow(
+            "Dependiente",
+            `${formData.nombres} ${formData.apellidos}`.trim() + ageLabel,
+            "child",
+          )}
+          {summaryRow("Cédula", formData.cedula || "—", "child")}
+          {summaryRow("Teléfono", formData.telefono || "—", "child")}
+          {summaryRow(
+            "Tipo de sangre",
+            formData.tipoSangre ? formData.tipoSangre.replace("_", " ") : "—",
+            "health",
+          )}
+          {summaryRow(
+            "Contacto de emergencia",
+            `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
+            "health",
+          )}
+          {summaryRow("Enfermedades", formData.enfermedades || "Ninguna reportada", "health")}
+          {summaryRow("Alergias", formData.alergias || "Ninguna reportada", "health")}
         </div>
 
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Heart size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Salud y Emergencia
-            </h3>
-          </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <dt className="text-cata-text/65">Enfermedades</dt>
-            <dd className="font-medium text-cata-text">
-              {formData.enfermedades || <span className="text-cata-text/45">Ninguna reportada</span>}
-            </dd>
-            <dt className="text-cata-text/65">Alergias</dt>
-            <dd className="font-medium text-cata-text">
-              {formData.alergias || <span className="text-cata-text/45">Ninguna reportada</span>}
-            </dd>
-            <dt className="text-cata-text/65">Tipo de Sangre</dt>
-            <dd className="font-medium text-cata-text">
-              {formData.tipoSangre ? formData.tipoSangre.replace("_", " ") : "—"}
-            </dd>
-            <dt className="text-cata-text/65">Contacto de Emergencia</dt>
-            <dd className="font-medium text-cata-text">{formData.contactoEmergencia}</dd>
-            <dt className="text-cata-text/65">Teléfono de Emergencia</dt>
-            <dd className="font-medium text-cata-text">{formData.telefonoEmergencia}</dd>
-          </dl>
-        </div>
-
-        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-canvas p-4 text-sm text-ink-2">
           <input
             type="checkbox"
             checked={summaryReviewed}
@@ -352,11 +382,11 @@ function AddDependentContent(): React.ReactElement {
               setSummaryReviewed(e.target.checked);
               setFormErrors([]);
             }}
-            className="mt-0.5 h-4 w-4 rounded border-emerald-200 text-emerald-700 focus:ring-emerald-200"
+            className="mt-0.5 h-4 w-4 rounded border-line-2 text-coal focus:ring-ball"
           />
           <span>
             Revisé el resumen y confirmo que la información está correcta.
-            <span className="mt-1 block text-xs text-emerald-400/75">
+            <span className="mt-1 block text-xs text-ink-3">
               Esto evita agregar el dependiente por accidente al llegar al último paso.
             </span>
           </span>
@@ -377,34 +407,28 @@ function AddDependentContent(): React.ReactElement {
       title="Agregar dependiente"
       subtitle="Complete los pasos para agregar un nuevo dependiente a su cuenta de representante."
     >
+      <div className="mx-auto w-full max-w-[760px]">
       <BackLink href="/student" label="Volver" />
 
-      {/* Progress bar */}
-      <div className="mb-8">
-        <div className="mb-2 flex items-center justify-between text-xs text-cata-text/45">
-          <span>
-            Paso {currentIndex + 1} de {ADD_DEPENDENT_STEP_ORDER.length}
-          </span>
-          <span>{ADD_DEPENDENT_STEP_LABELS[step]}</span>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-cata-border">
-          <div
-            className="h-full rounded-full bg-cata-red transition-all duration-400 ease-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+      {/* Named stepper — the same contract as the public wizard. */}
+      <div className="mb-6">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+          Paso {currentIndex + 1} de {ADD_DEPENDENT_STEP_ORDER.length}
+        </p>
       </div>
 
+      <Stepper
+        className="mb-8"
+        label="Pasos para agregar un dependiente"
+        current={currentIndex + 1}
+        steps={ADD_DEPENDENT_STEP_ORDER.map((s) => ADD_DEPENDENT_SHORT_LABELS[s])}
+      />
+
       {/* Form card */}
-      <div className="card mx-auto max-w-2xl p-6 sm:p-8">
-        <div className="mb-6 flex items-center gap-2">
-          {step === "child" && <User size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-          {step === "health" && <Heart size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-          {step === "summary" && <FileText size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-          <h2 className="text-lg font-semibold text-cata-text">
-            {ADD_DEPENDENT_STEP_LABELS[step]}
-          </h2>
-        </div>
+      <div className="card p-6 sm:p-8">
+        <h2 className="mb-6 text-[13px] font-bold text-ink">
+          {ADD_DEPENDENT_STEP_LABELS[step]}
+        </h2>
 
         {representanteLoadError && (
           <div className="alert-error mb-6 items-start" role="alert">
@@ -434,24 +458,27 @@ function AddDependentContent(): React.ReactElement {
             submitting={submitting}
             onBack={handleBack}
             onNext={handleNext}
+            nextDisabled={!stepComplete}
+            nextBlockedReason={blockedReason ?? undefined}
             submitButton={
               <button
                 type="submit"
                 disabled={submitting || !summaryReviewed || loadingRepresentante}
-                className="btn-primary shadow-soft disabled:cursor-not-allowed disabled:opacity-50"
+                className={buttonClasses("primary", "md", "disabled:cursor-not-allowed")}
               >
                 {submitting ? (
                   "Agregando…"
                 ) : (
                   <>
                     <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
-                    Agregar Dependiente
+                    Agregar dependiente
                   </>
                 )}
               </button>
             }
           />
         </form>
+      </div>
       </div>
     </AppShell>
   );

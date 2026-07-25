@@ -42,6 +42,27 @@ vi.mock("@/contexts/AuthContext", () => ({
 import { useAuth } from "@/contexts/AuthContext";
 const mockUseAuth = vi.mocked(useAuth);
 
+/**
+ * A trainer whose session id is a real persona id. `resolveEntrenadorId`
+ * parses it with `Number(...)`, and a non-numeric id resolves to `null`, which
+ * disables "Confirmar Asistencia" — so any test that files a session needs it.
+ */
+function trainerAuthWithPersonaId(id = "17"): ReturnType<typeof createAuthenticatedAuth> {
+  const auth = createAuthenticatedAuth("trainer", "Coach Torres");
+  if (auth.session) auth.session.user.id = id;
+  return auth;
+}
+
+/**
+ * The wizard keeps an in-progress draft in `sessionStorage`, keyed by horario
+ * + date — which jsdom shares across every test in this file. Without this,
+ * one test's marks would be restored into the next one's roster and the
+ * "starts unmarked" guarantee would look broken when it is not.
+ */
+beforeEach(() => {
+  window.sessionStorage.clear();
+});
+
 const mockFetchTrainingSchedules = vi.fn().mockResolvedValue([]);
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchAttendanceRecords = vi.fn().mockResolvedValue([]);
@@ -631,5 +652,347 @@ describe("TrainerAttendancePage — attendance state selector affordances", () =
     // in one row within thumb reach.
     expect(group).toHaveClass("grid", "grid-cols-4", "w-full");
     expect(group).not.toHaveClass("grid-cols-2");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FASE 4 item 3 — the redesign, layered ON TOP of the guarantees above.
+// Prototype: `docs/ux/prototipos/20-tomar-lista.html`.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — named stepper", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue([ANA_ALUMNO_HORARIO]);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+    mockRegisterAttendance.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+  });
+
+  it("names every step instead of counting them", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    const stepper = await screen.findByRole("list", { name: "Pasos para tomar asistencia" });
+    expect(within(stepper).getByText("Horario")).toBeInTheDocument();
+    expect(within(stepper).getByText("Pasar lista")).toBeInTheDocument();
+    expect(within(stepper).getByText("Confirmar")).toBeInTheDocument();
+    // The old "Paso 1 de 3" progress bar is gone.
+    expect(screen.queryByText(/Paso 1 de 3/)).not.toBeInTheDocument();
+  });
+
+  it("carries the decision already made into step 1's name", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    // `openRoster` only fires the click; the roster fetch resolves a tick
+    // later, and the stepper only advances with it.
+    await screen.findByRole("radiogroup", { name: /Ana López/ });
+
+    const stepper = screen.getByRole("list", { name: "Pasos para tomar asistencia" });
+    expect(within(stepper).getByText("Horario · Lunes 18:00")).toBeInTheDocument();
+    // Step 2 is the current one.
+    expect(within(stepper).getByText("Pasar lista")).toHaveAttribute("aria-current", "step");
+  });
+});
+
+describe("TrainerAttendancePage — the fiche is the target", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue([ANA_ALUMNO_HORARIO]);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+    mockRegisterAttendance.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+  });
+
+  it("cycles the state when the row itself is tapped", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+
+    const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
+    const row = group.closest("[data-attendance]") as HTMLElement;
+    const fiche = within(row).getByRole("button", { name: /Ana López/ });
+
+    expect(row).toHaveAttribute("data-attendance", "unmarked");
+    for (const expected of ["present", "late", "justified", "absent", "present"]) {
+      fireEvent.click(fiche);
+      expect(row).toHaveAttribute("data-attendance", expected);
+    }
+  });
+
+  it("never cycles a student back to unmarked", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+
+    const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
+    const row = group.closest("[data-attendance]") as HTMLElement;
+    const fiche = within(row).getByRole("button", { name: /Ana López/ });
+
+    for (let i = 0; i < 9; i++) {
+      fireEvent.click(fiche);
+      expect(row).not.toHaveAttribute("data-attendance", "unmarked");
+    }
+    // And the wizard therefore stays unblocked.
+    expect(screen.getByRole("button", { name: /Siguiente/ })).toBeEnabled();
+  });
+
+  it("keeps the four explicit controls in sync with a tap — the tap is an accelerator", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+
+    const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
+    const fiche = within(group.closest("[data-attendance]") as HTMLElement).getByRole("button", {
+      name: /Ana López/,
+    });
+
+    fireEvent.click(fiche);
+    expect(within(group).getByRole("radio", { name: "Presente" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(within(group).getAllByRole("radio", { checked: true })).toHaveLength(1);
+
+    // …and the explicit control still wins when used directly.
+    fireEvent.click(within(group).getByRole("radio", { name: "Justificado" }));
+    expect(within(group).getByRole("radio", { name: "Justificado" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("names the tap target with the student and their current state", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+
+    await screen.findByRole("radiogroup", { name: /Ana López/ });
+    expect(
+      screen.getByRole("button", { name: "Ana López: Sin marcar. Cambiar estado" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(12));
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+    mockRegisterAttendance.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+  });
+
+  it("shows a live presentes marker over the FULL roster", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    const marker = screen.getByText("0", { selector: "[aria-live]" });
+    expect(marker).toHaveTextContent("0/12");
+
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    // 12, not 10: the marker spans every page, like the "Sin marcar" counter.
+    expect(marker).toHaveTextContent("12/12");
+  });
+
+  it("keeps the commit bar reachable without scrolling the card", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    const bar = screen.getByRole("button", { name: /Siguiente/ }).closest("div.sticky");
+    expect(bar).not.toBeNull();
+    expect(bar).toHaveClass("sticky", "bottom-0");
+  });
+
+  it("carries the running totals in the commit bar", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    expect(screen.getByText("12 Sin marcar")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    expect(screen.getByText("12 Presentes")).toBeInTheDocument();
+    expect(screen.queryByText(/Sin marcar/)).not.toBeInTheDocument();
+  });
+});
+
+describe("TrainerAttendancePage — draft persistence", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+  });
+
+  it("restores the marks after the wizard is torn down mid-session", async () => {
+    const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    const group = screen.getByRole("radiogroup", { name: /Student 01/ });
+    fireEvent.click(within(group).getByRole("radio", { name: "Tardanza" }));
+    expect(screen.getByText("2 Sin marcar")).toBeInTheDocument();
+
+    // A phone call: the component goes away entirely.
+    first.unmount();
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    const restored = screen.getByRole("radiogroup", { name: /Student 01/ });
+    expect(within(restored).getByRole("radio", { name: "Tardanza" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByText(/Recuperamos las marcas/)).toBeInTheDocument();
+  });
+
+  it("leaves every other student undecided — a draft only ever narrows", async () => {
+    const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(
+      within(screen.getByRole("radiogroup", { name: /Student 01/ })).getByRole("radio", {
+        name: "Presente",
+      }),
+    );
+    first.unmount();
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    // The other two are still unmarked, and the wizard is still blocked.
+    expect(screen.getByText("2 Sin marcar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Siguiente/ })).toBeDisabled();
+  });
+
+  it("never replays one horario's draft onto another", async () => {
+    const OTHER = { ...SCHEDULE, id: 13, horaInicio: "20:00", horaFin: "21:00" };
+    mockFetchTrainingSchedules.mockResolvedValue([SCHEDULE, OTHER]);
+
+    const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText("Student 01");
+    fireEvent.click(
+      within(screen.getByRole("radiogroup", { name: /Student 01/ })).getByRole("radio", {
+        name: "Presente",
+      }),
+    );
+    first.unmount();
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /20:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText("Student 01");
+
+    expect(screen.getByText("3 Sin marcar")).toBeInTheDocument();
+    expect(screen.queryByText(/Recuperamos las marcas/)).not.toBeInTheDocument();
+  });
+
+  it("drops the draft once the session is actually filed", async () => {
+    const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    await screen.findByText("Asistencia Registrada");
+    first.unmount();
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    expect(screen.getByText("3 Sin marcar")).toBeInTheDocument();
+  });
+
+  it("keeps the draft when some records failed, so a retry starts from the marks", async () => {
+    mockRegisterAttendance.mockResolvedValue({
+      createdCount: 2,
+      failed: [{ personaId: 102, message: "conflict" }],
+    });
+
+    const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    await screen.findByText("Asistencia Registrada");
+    first.unmount();
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    expect(screen.queryByText(/Sin marcar/)).not.toBeInTheDocument();
+  });
+});
+
+describe("TrainerAttendancePage — partial failures name the students", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+  });
+
+  async function fileSessionWithFailures(
+    failed: { personaId: number; message: string }[],
+  ): Promise<void> {
+    mockRegisterAttendance.mockReset().mockResolvedValue({
+      createdCount: 3 - failed.length,
+      failed,
+    });
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    await screen.findByText("Asistencia Registrada");
+  }
+
+  it("lists WHO could not be saved instead of only how many", async () => {
+    // Roster ids are 100.. — Student 02 is personaId 101.
+    await fileSessionWithFailures([
+      { personaId: 101, message: "conflict" },
+      { personaId: 102, message: "conflict" },
+    ]);
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("No se pudieron guardar 2 registros");
+    expect(within(alert).getByText("Student 02")).toBeInTheDocument();
+    expect(within(alert).getByText("Student 03")).toBeInTheDocument();
+    // Student 01 saved fine and must NOT be listed as failed.
+    expect(within(alert).queryByText("Student 01")).not.toBeInTheDocument();
+  });
+
+  it("uses the singular when exactly one record failed", async () => {
+    await fileSessionWithFailures([{ personaId: 100, message: "conflict" }]);
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("No se pudo guardar 1 registro");
+    expect(within(alert).getByText("Student 01")).toBeInTheDocument();
+  });
+
+  it("still names an id it cannot match rather than dropping it silently", async () => {
+    await fileSessionWithFailures([{ personaId: 999, message: "conflict" }]);
+
+    expect(within(screen.getByRole("alert")).getByText("Alumno #999")).toBeInTheDocument();
+  });
+
+  it("shows no failure block at all when everything saved", async () => {
+    await fileSessionWithFailures([]);
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

@@ -143,22 +143,23 @@ describe("getNavLinksForRole", () => {
     expect(links[7]).toEqual({ href: "/reports", label: "Reportes" });
   });
 
-  // Labels are Spanish and name the destination, and the trainer's level
-  // section uses the SAME word as the admin's ("Niveles") because it is the
-  // same concept. The old set said "Dashboard", "Asistencia" and "Nivel".
+  // Labels are Spanish and name the destination. The old set said
+  // "Dashboard", "Asistencia" and "Nivel".
   it("returns trainer links named after their destinations, in Spanish", () => {
     const links = getNavLinksForRole("trainer");
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(3);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
     expect(links[1]).toEqual({ href: "/trainer", label: "Mi día" });
     expect(links[2]).toEqual({ href: "/trainer/attendance", label: "Pasar lista" });
-    expect(links[3]).toEqual({ href: "/trainer/nivel", label: "Niveles" });
   });
 
-  it("names the level section identically for admin and trainer", () => {
-    const adminLevels = getNavLinksForRole("admin").find((l) => l.href === "/ranking");
-    const trainerLevels = getNavLinksForRole("trainer").find((l) => l.href === "/trainer/nivel");
-    expect(adminLevels?.label).toBe(trainerLevels?.label);
+  it("gives the trainer no Niveles section at all", () => {
+    // Settled product decision (`19-entrenador.html`): level assignment is an
+    // admin action at `/ranking`. `/trainer/nivel` was deleted with the rest
+    // of the trainer's level surfaces, so a nav row pointing there would 404.
+    const links = getNavLinksForRole("trainer");
+    expect(links.some((l) => l.href === "/trainer/nivel")).toBe(false);
+    expect(links.some((l) => l.label === "Niveles")).toBe(false);
   });
 
   it("uses no English labels in any role's navigation", () => {

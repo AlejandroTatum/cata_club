@@ -29,8 +29,13 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: vi.fn(),
 }));
 
+// The shell is stubbed so these tests stay about the FORM. Its two class
+// constants are re-exported as-is, since the page applies them to its inputs
+// and labels; see ResetPasswordPage.test.tsx for coverage of the real shell.
 vi.mock("@/components/auth/AuthShell", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  AUTH_INPUT_CLASSES: "",
+  AUTH_LABEL_CLASSES: "",
 }));
 
 const mockShowError = vi.fn();

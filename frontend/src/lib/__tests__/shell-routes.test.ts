@@ -49,6 +49,9 @@ describe("resolveShellKind", () => {
     expect(resolveShellKind("/login")).toBe("auth");
     expect(resolveShellKind("/register")).toBe("auth");
     expect(resolveShellKind("/forgot-password")).toBe("auth");
+    // All four, without exception: `/reset-password` used to fall through to
+    // "public" and got the top header stacked over its own composition.
+    expect(resolveShellKind("/reset-password")).toBe("auth");
   });
 
   it("treats /unauthorized as its own screen, not a top-nav page", () => {
@@ -57,7 +60,7 @@ describe("resolveShellKind", () => {
 
   it("leaves the landing and unknown routes on public chrome", () => {
     expect(resolveShellKind("/")).toBe("public");
-    expect(resolveShellKind("/reset-password")).toBe("public");
+    expect(resolveShellKind("/contacto")).toBe("public");
   });
 });
 

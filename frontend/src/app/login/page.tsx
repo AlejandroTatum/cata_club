@@ -1,15 +1,14 @@
 /**
  * Login Page — real backend authentication via the BFF (/api/auth/login).
  *
- * Layout follows `design/admin-login-mockup-v1.html`: a split screen with
- * a dark marketing panel (AuthShell) on the left and the form on the
- * right.
+ * Layout is `AuthShell`, transcribed from `docs/ux/prototipos/01-login.html`.
+ * The plan names that prototype the quality bar the whole redesign is measured
+ * against, so this screen owns none of its own composition: coal panel, card,
+ * and the security note below the card all come from the shared template.
  *
- * The mockup's "Acceso rápido (Demo)" shortcuts (including the fifth
- * "Natural (Pre-inscripción)" chip, which had no matching login
- * credential or UserRole in `src/types/domain.ts` to begin with) are
- * intentionally not implemented — real backend auth is wired up, so
- * pre-filled demo credentials have no purpose here.
+ * The old mockup's "Acceso rápido (Demo)" shortcuts are intentionally not
+ * implemented — real backend auth is wired up, so pre-filled demo credentials
+ * have no purpose here.
  */
 
 "use client";
@@ -22,8 +21,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getDefaultRoute } from "@/lib/auth-utils";
 import type { AuthErrorKind } from "@/services/auth";
-import AuthShell from "@/components/auth/AuthShell";
+import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
 import LoginSuccessOverlay from "@/components/auth/LoginSuccessOverlay";
+import { Button } from "@/components/ui";
 
 /** How long the welcome overlay stays on screen before redirecting. */
 const WELCOME_OVERLAY_MS = 1400;
@@ -125,32 +125,20 @@ export default function LoginPage(): React.ReactElement {
     <>
     {welcome && <LoginSuccessOverlay name={welcome.name} />}
     <AuthShell
-      eyebrow="Panel de gestión"
       title="Bienvenido de nuevo"
       subtitle="Inicie sesión para continuar"
-      headline={
-        <>
-          Cada punto
-          <br />
-          cuenta. <em className="not-italic text-cata-red-light">Llévalo</em>
-          <br />
-          bien anotado.
-        </>
-      }
-      description="Estudiantes, pagos, asistencia y grupos del club, todo en un solo lugar — sin planillas sueltas."
-      showBackToSite
+      note="La autenticación se verifica contra el servidor. Su sesión se mantiene mediante una cookie segura — el navegador nunca almacena su contraseña ni su token de acceso."
     >
-      {/* Form card */}
-      <form className="space-y-5" onSubmit={handleSubmit} noValidate>
+      <form className="flex flex-col gap-3.5" onSubmit={handleSubmit} noValidate>
         <div>
-          <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-cata-text">
+          <label htmlFor="email" className={AUTH_LABEL_CLASSES}>
             Correo electrónico
           </label>
           <div className="relative">
             <Mail
-              size={16}
+              size={15}
               strokeWidth={1.5}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-cata-text/65"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
               aria-hidden="true"
             />
             <input
@@ -164,21 +152,25 @@ export default function LoginPage(): React.ReactElement {
               aria-invalid={Boolean(fieldErrors.email)}
               aria-describedby={fieldErrors.email ? "email-error" : undefined}
               disabled={submitting}
-              className="input-field pl-10"
+              className={`${AUTH_INPUT_CLASSES} pl-9`}
             />
           </div>
-          {fieldErrors.email && <p id="email-error" role="alert" className="mt-1.5 text-xs text-cata-red">{fieldErrors.email}</p>}
+          {fieldErrors.email && (
+            <p id="email-error" role="alert" className="mt-1.5 text-xs font-semibold text-cata-red">
+              {fieldErrors.email}
+            </p>
+          )}
         </div>
 
         <div>
-          <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-cata-text">
+          <label htmlFor="password" className={AUTH_LABEL_CLASSES}>
             Contraseña
           </label>
           <div className="relative">
             <Lock
-              size={16}
+              size={15}
               strokeWidth={1.5}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-cata-text/65"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
               aria-hidden="true"
             />
             <input
@@ -192,12 +184,12 @@ export default function LoginPage(): React.ReactElement {
               aria-invalid={Boolean(fieldErrors.password)}
               aria-describedby={fieldErrors.password ? "password-error" : undefined}
               disabled={submitting}
-              className="input-field pl-10 pr-10"
+              className={`${AUTH_INPUT_CLASSES} pl-9 pr-10`}
             />
             <button
               type="button"
               onClick={(): void => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-cata-text/65 hover:text-cata-text"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3 transition-colors hover:text-ink"
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
             >
               {showPassword ? (
@@ -207,36 +199,33 @@ export default function LoginPage(): React.ReactElement {
               )}
             </button>
           </div>
-          {fieldErrors.password && <p id="password-error" role="alert" className="mt-1.5 text-xs text-cata-red">{fieldErrors.password}</p>}
+          {fieldErrors.password && (
+            <p id="password-error" role="alert" className="mt-1.5 text-xs font-semibold text-cata-red">
+              {fieldErrors.password}
+            </p>
+          )}
+          {/* `.rowline` under the password field — the recovery escape hatch
+              sits with the control it belongs to, not floating below the CTA. */}
+          <div className="mt-2 flex justify-end">
+            <Link
+              href="/forgot-password"
+              className="text-xs font-semibold text-ink-2 transition-colors hover:text-cata-red"
+            >
+              ¿Olvidó su contraseña?
+            </Link>
+          </div>
         </div>
 
-        <div className="flex justify-end">
-          <Link
-            href="/forgot-password"
-            className="text-xs font-medium text-cata-text/65 transition-colors hover:text-cata-red"
-          >
-            ¿Olvidó su contraseña?
-          </Link>
-        </div>
-
-        <button type="submit" disabled={submitting} className="btn-primary w-full shadow-soft">
+        <Button type="submit" variant="primary" disabled={submitting} className="w-full">
           {submitting ? "Iniciando sesión…" : "Iniciar Sesión"}
-        </button>
+        </Button>
       </form>
 
-      {/* Auth companion links */}
-      <p className="mt-6 text-center text-sm text-cata-text/65">
+      <p className="text-center text-xs text-ink-3">
         ¿No tiene una cuenta?{" "}
-        <Link href="/register" className="font-medium text-cata-red transition-colors hover:text-cata-red-light">
+        <Link href="/register" className="font-bold text-ink transition-colors hover:text-cata-red">
           Crear una
         </Link>
-      </p>
-
-      {/* Auth note */}
-      <p className="mt-6 text-center text-xs text-cata-text/30">
-        La autenticación se verifica contra el servidor. Su sesión se mantiene
-        mediante una cookie segura — el navegador nunca almacena su contraseña
-        ni su token de acceso.
       </p>
     </AuthShell>
     </>

@@ -1,13 +1,25 @@
 /**
  * Unit tests for Trainer Attendance utilities.
  *
- * Pure functions — no React dependencies, easy to test.
+ * Pure functions — no React dependencies. The draft-persistence block at the
+ * bottom needs `sessionStorage`, hence the jsdom environment.
+ *
+ * @vitest-environment jsdom
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   UNMARKED,
   nextAttendanceState,
+  cycleWizardAttendance,
+  resolveFailedStudentNames,
+  attendanceDraftKey,
+  toAttendanceDraft,
+  parseAttendanceDraft,
+  applyAttendanceDraft,
+  saveAttendanceDraft,
+  loadAttendanceDraft,
+  clearAttendanceDraft,
   countByState,
   countUnmarked,
   markUnmarkedAsPresent,
@@ -355,5 +367,210 @@ describe("resolveDisplayTrainerName", () => {
 
   it("falls back to a generic label for an admin when no schedule is selected yet", () => {
     expect(resolveDisplayTrainerName("admin", "Admin User", null)).toBe("Entrenador");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Row tapping (FASE 4 item 3): the whole 48px fiche cycles the state.
+// ---------------------------------------------------------------------------
+
+describe("cycleWizardAttendance", () => {
+  it("walks the prototype's order, starting at the common answer", () => {
+    expect(cycleWizardAttendance(UNMARKED)).toBe("present");
+    expect(cycleWizardAttendance("present")).toBe("late");
+    expect(cycleWizardAttendance("late")).toBe("justified");
+    expect(cycleWizardAttendance("justified")).toBe("absent");
+  });
+
+  it("loops back to present, never back to unmarked", () => {
+    // Tapping is an accelerator over the four explicit controls. If it could
+    // un-decide a student it would hand back the exact ambiguity `UNMARKED`
+    // exists to remove.
+    expect(cycleWizardAttendance("absent")).toBe("present");
+
+    let state: ReturnType<typeof cycleWizardAttendance> | typeof UNMARKED = UNMARKED;
+    for (let i = 0; i < 12; i++) {
+      state = cycleWizardAttendance(state);
+      expect(state).not.toBe(UNMARKED);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Partial-failure reporting: name the students, do not just count them.
+// ---------------------------------------------------------------------------
+
+describe("resolveFailedStudentNames", () => {
+  const roster: SessionStudent[] = [
+    { id: "9", name: "Ana López", attendance: "present" },
+    { id: "10", name: "Luis Lopez", attendance: "absent" },
+  ];
+
+  it("maps persona ids back to the names the trainer just worked through", () => {
+    expect(
+      resolveFailedStudentNames([{ personaId: 10 }, { personaId: 9 }], roster),
+    ).toEqual(["Luis Lopez", "Ana López"]);
+  });
+
+  it("falls back to the id rather than dropping an unknown student", () => {
+    // A partially named failure is still more actionable than a bare count.
+    expect(resolveFailedStudentNames([{ personaId: 404 }], roster)).toEqual(["Alumno #404"]);
+  });
+
+  it("returns an empty list when nothing failed", () => {
+    expect(resolveFailedStudentNames([], roster)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Draft persistence. Every test here is really one question: can a draft ever
+// weaken the "no student goes out on a state the trainer did not choose"
+// guarantee? The answer has to stay no.
+// ---------------------------------------------------------------------------
+
+describe("attendanceDraftKey", () => {
+  it("scopes a draft to its own horario and date", () => {
+    expect(attendanceDraftKey(12, "2026-07-20")).toBe("cata_attendance_draft:12:2026-07-20");
+    // Yesterday's draft can never be replayed onto today's session.
+    expect(attendanceDraftKey(12, "2026-07-20")).not.toBe(attendanceDraftKey(12, "2026-07-21"));
+    expect(attendanceDraftKey(12, "2026-07-20")).not.toBe(attendanceDraftKey(13, "2026-07-20"));
+  });
+});
+
+describe("toAttendanceDraft", () => {
+  it("stores the real states and omits undecided students entirely", () => {
+    expect(
+      toAttendanceDraft([
+        { id: "1", name: "A", attendance: "present" },
+        { id: "2", name: "B", attendance: UNMARKED },
+        { id: "3", name: "C", attendance: "justified" },
+      ]),
+    ).toEqual({ "1": "present", "3": "justified" });
+  });
+
+  it("never writes the sentinel", () => {
+    const draft = toAttendanceDraft([{ id: "1", name: "A", attendance: UNMARKED }]);
+    expect(Object.values(draft)).not.toContain(UNMARKED);
+    expect(draft).toEqual({});
+  });
+});
+
+describe("parseAttendanceDraft", () => {
+  it("round-trips a valid draft", () => {
+    expect(parseAttendanceDraft('{"1":"present","2":"absent"}')).toEqual({
+      "1": "present",
+      "2": "absent",
+    });
+  });
+
+  it("drops entries that are not one of the four real states", () => {
+    // Notably `unmarked` itself: a hand-edited draft must not be able to
+    // reintroduce the sentinel through storage.
+    expect(parseAttendanceDraft('{"1":"present","2":"unmarked","3":"banana"}')).toEqual({
+      "1": "present",
+    });
+  });
+
+  it("returns null for anything that is not a plain object", () => {
+    expect(parseAttendanceDraft(null)).toBeNull();
+    expect(parseAttendanceDraft("")).toBeNull();
+    expect(parseAttendanceDraft("not json")).toBeNull();
+    expect(parseAttendanceDraft("[1,2,3]")).toBeNull();
+    expect(parseAttendanceDraft("null")).toBeNull();
+    expect(parseAttendanceDraft('"present"')).toBeNull();
+  });
+});
+
+describe("applyAttendanceDraft", () => {
+  const roster: SessionStudent[] = [
+    { id: "1", name: "A", attendance: UNMARKED },
+    { id: "2", name: "B", attendance: UNMARKED },
+    { id: "3", name: "C", attendance: "present" },
+  ];
+
+  it("restores the marks the trainer had already made", () => {
+    const result = applyAttendanceDraft(roster, { "1": "late" });
+    expect(result[0].attendance).toBe("late");
+  });
+
+  it("leaves students the draft does not mention exactly as they were", () => {
+    const result = applyAttendanceDraft(roster, { "1": "late" });
+    expect(result[1].attendance).toBe(UNMARKED);
+    expect(result[2].attendance).toBe("present");
+  });
+
+  it("cannot introduce a student who is not on the roster", () => {
+    const result = applyAttendanceDraft(roster, { "999": "present" });
+    expect(result).toHaveLength(3);
+    expect(result.map((s) => s.id)).toEqual(["1", "2", "3"]);
+  });
+
+  it("returns the roster untouched for a null draft", () => {
+    expect(applyAttendanceDraft(roster, null)).toBe(roster);
+  });
+
+  it("never mutates the input roster", () => {
+    applyAttendanceDraft(roster, { "1": "absent" });
+    expect(roster[0].attendance).toBe(UNMARKED);
+  });
+
+  it("leaves no student unmarked-by-omission after a full-roster draft", () => {
+    const result = applyAttendanceDraft(roster, { "1": "present", "2": "absent", "3": "late" });
+    expect(countUnmarked(result)).toBe(0);
+  });
+});
+
+describe("saveAttendanceDraft / loadAttendanceDraft / clearAttendanceDraft", () => {
+  const KEY = "cata_attendance_draft:12:2026-07-20";
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("round-trips through sessionStorage", () => {
+    saveAttendanceDraft(KEY, [
+      { id: "1", name: "A", attendance: "present" },
+      { id: "2", name: "B", attendance: UNMARKED },
+    ]);
+
+    expect(loadAttendanceDraft(KEY)).toEqual({ "1": "present" });
+  });
+
+  it("returns null for a key that was never written", () => {
+    expect(loadAttendanceDraft("cata_attendance_draft:99:2026-01-01")).toBeNull();
+  });
+
+  it("forgets the draft once it is cleared", () => {
+    saveAttendanceDraft(KEY, [{ id: "1", name: "A", attendance: "present" }]);
+    clearAttendanceDraft(KEY);
+    expect(loadAttendanceDraft(KEY)).toBeNull();
+  });
+
+  it("survives a storage that throws instead of taking the roll call down", () => {
+    // Private browsing and quota errors both surface this way. Losing draft
+    // persistence must never take the roll call itself down.
+    const real = window.sessionStorage;
+    Object.defineProperty(window, "sessionStorage", {
+      configurable: true,
+      value: {
+        setItem: () => {
+          throw new Error("QuotaExceededError");
+        },
+        getItem: () => {
+          throw new Error("SecurityError");
+        },
+        removeItem: () => {
+          throw new Error("SecurityError");
+        },
+      },
+    });
+
+    expect(() =>
+      saveAttendanceDraft(KEY, [{ id: "1", name: "A", attendance: "present" }]),
+    ).not.toThrow();
+    expect(loadAttendanceDraft(KEY)).toBeNull();
+    expect(() => clearAttendanceDraft(KEY)).not.toThrow();
+
+    Object.defineProperty(window, "sessionStorage", { configurable: true, value: real });
   });
 });

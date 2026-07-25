@@ -118,20 +118,10 @@ export default function RegisterPage(): React.ReactElement {
 
   return (
     <AuthShell
-      eyebrow="Cata Club — Tenis de Mesa"
-      title="Crear su cuenta"
-      subtitle="Regístrese en el sistema administrativo"
-      headline={
-        <>
-          Súmate a la
-          <br />
-          mesa. <em className="not-italic text-cata-red-light">Empieza</em>
-          <br />
-          a jugar en serio.
-        </>
-      }
-      description="Crea tu cuenta para gestionar estudiantes, pagos y asistencia del club desde un solo lugar."
-      showBackToSite
+      title="Crear una cuenta"
+      subtitle="Regístrese para gestionar su cuenta del club"
+      cardWidth="wide"
+      note="La interfaz de registro es un placeholder de demostración. No se envía ni almacena ningún dato. La creación de cuentas se habilitará cuando el servicio de autenticación del backend esté conectado."
     >
       {demoSuccess ? (
         <div className="text-center">
@@ -511,17 +501,14 @@ export default function RegisterPage(): React.ReactElement {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-cata-text/65">
+          {/* The demo/placeholder disclaimer moved OUT of the card: it is a
+              note about the screen, not a field of the form — see the
+              `.authnote` slot on `AuthShell`. */}
+          <p className="text-center text-xs text-ink-3">
             ¿Ya tiene una cuenta?{" "}
-            <Link href="/login" className="font-medium text-cata-red transition-colors hover:text-cata-red-light">
+            <Link href="/login" className="font-bold text-ink transition-colors hover:text-cata-red">
               Iniciar sesión
             </Link>
-          </p>
-
-          <p className="mt-6 text-center text-xs text-cata-text/30">
-            La interfaz de registro es un placeholder de demostración. No se envía ni almacena
-            ningún dato. La creación de cuentas se habilitará cuando el servicio de autenticación
-            del backend esté conectado.
           </p>
         </>
       )}

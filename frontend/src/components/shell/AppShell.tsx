@@ -31,7 +31,16 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, X, Search, User, ChevronLeft, ChevronRight, MessageCircle } from "lucide-react";
+import {
+  Menu,
+  X,
+  Search,
+  User,
+  ChevronLeft,
+  ChevronRight,
+  MessageCircle,
+  MoreHorizontal,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNavLinksForRole, getRoleLabel, getUserInitials, type NavLinkDef } from "@/lib/auth-utils";
 import { normalizeText } from "@/app/members/members-utils";
@@ -64,6 +73,52 @@ const COUNT_BADGE_HREF = "/payments";
 
 /** Tailwind's `lg` breakpoint — where the sidebar stops being a mobile drawer. */
 const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
+
+/**
+ * Event any screen inside the shell can fire to open the help assistant, with
+ * an optional `detail.draft` pre-filling the composer.
+ *
+ * The trainer's "Avisar al club" needs to reach the club about a specific
+ * student, and there is NO backend endpoint for "notify the club" — the chat
+ * is the only real channel. A custom event keeps that a one-line call from the
+ * page instead of threading chat state through props or a context nobody else
+ * needs.
+ */
+export const OPEN_HELP_CHAT_EVENT = "cata:open-help-chat";
+
+export interface OpenHelpChatDetail {
+  draft?: string;
+}
+
+/** Ask the shell to open the help assistant, optionally with a message ready to send. */
+export function openHelpChat(draft?: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<OpenHelpChatDetail>(OPEN_HELP_CHAT_EVENT, { detail: { draft } }),
+  );
+}
+
+/**
+ * The bottom tab bar for admin on a phone (`docs/ux/prototipos/27-movil.html`).
+ *
+ * Four destinations within thumb reach; everything else lives behind "Más",
+ * which opens the SAME drawer the hamburger used to open — this is a layer
+ * over the existing shell, not a replacement for it, so the drawer's
+ * `aria-hidden`/`visibility` handling is untouched.
+ *
+ * The labels are deliberately shorter than the sidebar's ("Panel", not "Panel
+ * de Control"): a 4-up tab bar at 390px has ~90px per label.
+ */
+const MOBILE_TABS: { href: string; label: string }[] = [
+  { href: "/dashboard", label: "Panel" },
+  { href: "/members", label: "Miembros" },
+  { href: "/payments", label: "Pagos" },
+];
+
+/** `.phone .tabs2 a` — 10px label under a 19px icon, ≥44px of touch target. */
+const TAB_CLASSES =
+  "flex min-h-[44px] flex-1 flex-col items-center justify-center gap-[3px] rounded-lg " +
+  "text-[10px] font-semibold transition-colors";
 
 /**
  * Track whether the viewport is at/above `lg`.
@@ -184,6 +239,28 @@ export default function AppShell({
     [navLinks, pathname],
   );
   const pendingPayments = usePendingPaymentsCount(role === "admin");
+  const [chatDraft, setChatDraft] = useState<string | undefined>(undefined);
+
+  /**
+   * The tab bar is the admin's phone navigation. Other roles keep the
+   * hamburger: a trainer has two destinations, and a 4-up bar with two empty
+   * slots is worse than a menu.
+   */
+  const showMobileTabs = role === "admin";
+  const activeTab = MOBILE_TABS.find(
+    (tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`),
+  );
+
+  // Any screen in the shell can ask for the assistant — see `openHelpChat`.
+  useEffect((): (() => void) => {
+    function handleOpenChat(event: Event): void {
+      const detail = (event as CustomEvent<OpenHelpChatDetail>).detail;
+      setChatDraft(detail?.draft);
+      setChatOpen(true);
+    }
+    window.addEventListener(OPEN_HELP_CHAT_EVENT, handleOpenChat);
+    return (): void => window.removeEventListener(OPEN_HELP_CHAT_EVENT, handleOpenChat);
+  }, []);
 
   const closeUserMenu = useCallback((): void => setUserMenuOpen(false), []);
   useDismissablePopup({
@@ -487,15 +564,21 @@ export default function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* `.topbar` — utility strip only; navigation lives in the sidebar. */}
         <div className="flex h-14 flex-none items-center gap-2.5 border-b border-line bg-canvas px-4 sm:px-[22px]">
-          <button
-            type="button"
-            onClick={(): void => setSidebarOpen(true)}
-            className="inline-flex h-ctl items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-3 text-[12.5px] font-medium text-ink-2 hover:bg-canvas lg:hidden"
-            aria-label="Abrir menú principal"
-          >
-            <Menu size={17} strokeWidth={2} aria-hidden="true" />
-            <span>Menú</span>
-          </button>
+          {/* The hamburger is the phone navigation for every role EXCEPT
+              admin, whose destinations moved to the bottom tab bar below
+              (prototype `27-movil.html`: "una tab bar inferior que sustituye
+              al drawer con hamburguesa solo en pantalla chica"). */}
+          {!showMobileTabs && (
+            <button
+              type="button"
+              onClick={(): void => setSidebarOpen(true)}
+              className="inline-flex h-ctl items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-3 text-[12.5px] font-medium text-ink-2 hover:bg-canvas lg:hidden"
+              aria-label="Abrir menú principal"
+            >
+              <Menu size={17} strokeWidth={2} aria-hidden="true" />
+              <span>Menú</span>
+            </button>
+          )}
           <span className="flex-1" />
           <button
             type="button"
@@ -519,11 +602,77 @@ export default function AppShell({
           )}
         </div>
 
-        {/* `.canvas` — the page header row belongs to the shell, above `<main>`. */}
-        <div className="flex flex-1 flex-col gap-5 px-4 pb-8 pt-6 sm:px-[26px]">
+        {/* `.canvas` — the page header row belongs to the shell, above `<main>`.
+            The extra bottom padding clears the fixed tab bar; without it the
+            last row of every admin list sits under it. */}
+        <div
+          className={`flex flex-1 flex-col gap-5 px-4 pt-6 sm:px-[26px] ${
+            showMobileTabs ? "pb-[78px] lg:pb-8" : "pb-8"
+          }`}
+        >
           <PageHeader eyebrow={eyebrow} title={title} subtitle={subtitle} actions={actions} />
           <main className="min-w-0 flex-1">{children}</main>
         </div>
+
+        {/* `.phone .tabs2` — 62px, paper, hairline on top. Phone only. */}
+        {showMobileTabs && (
+          <nav
+            aria-label="Navegación principal (móvil)"
+            className="fixed inset-x-0 bottom-0 z-30 flex h-[62px] items-stretch gap-1 border-t border-line bg-paper px-2 pb-2.5 pt-1.5 lg:hidden"
+          >
+            {MOBILE_TABS.map((tab): React.ReactElement => {
+              const Icon = NAV_ICON_MAP[tab.href] ?? User;
+              const isActive = activeTab?.href === tab.href;
+              const badge = (tab.href === COUNT_BADGE_HREF ? pendingPayments : null) ?? 0;
+              const showBadge = badge > 0;
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  aria-current={isActive ? "page" : undefined}
+                  aria-label={showBadge ? `${tab.label} — ${badge} pendientes` : tab.label}
+                  className={`${TAB_CLASSES} ${isActive ? "text-ink" : "text-ink-3"}`}
+                >
+                  <span className="relative">
+                    <Icon
+                      size={19}
+                      strokeWidth={2}
+                      className={isActive ? "text-cata-red" : ""}
+                      aria-hidden="true"
+                    />
+                    {showBadge && (
+                      <span
+                        className="absolute -right-2 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cata-red px-1 text-[9px] font-bold text-white"
+                        aria-hidden="true"
+                      >
+                        {badge}
+                      </span>
+                    )}
+                  </span>
+                  {tab.label}
+                </Link>
+              );
+            })}
+            {/* "Más" opens the drawer that already exists — every other
+                destination stays reachable, and the drawer's focus/inert
+                handling is unchanged. */}
+            <button
+              type="button"
+              onClick={(): void => setSidebarOpen(true)}
+              aria-label="Más secciones"
+              aria-expanded={sidebarOpen}
+              className={`${TAB_CLASSES} ${activeTab ? "text-ink-3" : "text-ink"}`}
+            >
+              <MoreHorizontal
+                size={19}
+                strokeWidth={2}
+                className={activeTab ? "" : "text-cata-red"}
+                aria-hidden="true"
+              />
+              Más
+            </button>
+          </nav>
+        )}
       </div>
 
       {/* Command palette — "go to" navigation search, role-aware */}
@@ -618,7 +767,17 @@ export default function AppShell({
        * Help chat — opened from "Ayuda y soporte" above, never from a floating
        * action button, and never mounted on a public route.
        */}
-      {session && <ChatWidget open={chatOpen} onClose={(): void => setChatOpen(false)} />}
+      {session && (
+        <ChatWidget
+          open={chatOpen}
+          role={role}
+          initialDraft={chatDraft}
+          onClose={(): void => {
+            setChatOpen(false);
+            setChatDraft(undefined);
+          }}
+        />
+      )}
     </div>
   );
 }
