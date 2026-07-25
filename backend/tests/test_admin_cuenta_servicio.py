@@ -286,12 +286,10 @@ def test_tipo_cuenta_invalido_rechazado():
 
 
 def test_nombres_vacios_rechazados():
-    """Empty nombres is technically valid at Pydantic level (max_length only).
-    Business validation happens at the service/UI layer."""
-    # Pydantic's str Field with only max_length allows empty strings.
-    # This is acceptable — the frontend and service layer enforce non-empty.
-    dto = AdminCrearCuentaDTO(**_base_payload(nombres=""))
-    assert dto.nombres == ""
+    """Empty nombres should be rejected at Pydantic validation level."""
+    with pytest.raises(ValidationError) as exc_info:
+        AdminCrearCuentaDTO(**_base_payload(nombres=""))
+    assert "nombres" in str(exc_info.value).lower()
 
 
 # --- Sin permisos (requiere ADMINISTRADOR) ---------------------------------
