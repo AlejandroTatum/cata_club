@@ -626,6 +626,26 @@ export async function enrollStudent(data: EnrollmentRequest): Promise<Enrollment
   return { enrolled: true };
 }
 
+/** Institution for the school selector dropdown. */
+export interface Institucion {
+  id: number;
+  nombre: string;
+  tipoEscuela: string;
+}
+
+/** Fetch all institutions for the school selector (read-only, any auth). */
+export async function fetchInstituciones(): Promise<Institucion[]> {
+  const response: unknown = await request<unknown>(apiEndpoint("/personas/instituciones"));
+  if (!Array.isArray(response)) {
+    throw new ApiClientError("Respuesta inválida de instituciones.", 502);
+  }
+  return response.map((item: Record<string, unknown>) => ({
+    id: item.id as number,
+    nombre: item.nombre as string,
+    tipoEscuela: item.tipo_escuela as string,
+  }));
+}
+
 function isApiErrorBody(value: unknown): value is { message?: string; detail?: string } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const body = value as Record<string, unknown>;
@@ -675,6 +695,7 @@ export interface StudentProfileSummary {
   recentSessions: StudentSessionSummary[];
   membership: MembershipSummary | null;
   representante: { nombres: string; apellidos: string } | null;
+  representanteId: number | null;
 }
 
 export interface MembershipSummary {
@@ -1106,7 +1127,9 @@ export interface RepresentadoFichaMedicaPayload {
 /** Payload for the self-service "add a dependent" endpoint. Deliberately
  *  narrow — no admin-only fields (e.g. `representanteId`) are accepted here;
  *  the backend always derives `representante_id` from the caller's own
- *  token, never from the request body. */
+ *  token, never from the request body.
+ *  If `correo` + `contrasenia` are provided, a Usuario with rol ALUMNO is
+ *  also created for the minor (Option B: minors with own account). */
 export interface RepresentadoCreatePayload {
   nombres: string;
   apellidos: string;
@@ -1114,18 +1137,106 @@ export interface RepresentadoCreatePayload {
   fechaNacimiento: string;
   telefono: string;
   fichaMedica?: RepresentadoFichaMedicaPayload;
+  correo?: string;
+  contrasenia?: string;
+  institucionId?: number;
 }
 
 /**
  * Representante-only self-service: add a second/third dependent (child)
- * from the authenticated portal. Creates only a `Persona` + `FichaMedica` —
- * no `Usuario`, no role assignment. See `POST /personas/{persona_id}/representados`.
+ * from the authenticated portal. If `correo`/`contrasenia` are provided,
+ * also creates a `Usuario` + ALUMNO for the minor (Option B).
+ * See `POST /personas/{persona_id}/representados`.
  */
 export async function crearRepresentado(
   personaId: number,
   payload: RepresentadoCreatePayload,
 ): Promise<PersonaResponse> {
   return request<PersonaResponse>(apiEndpoint(`/personas/${personaId}/representados`), {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Aging Up / Independizar (Flow 4)
+// ---------------------------------------------------------------------------
+
+/** Independizar a persona de su representante legal (POST /personas/{id}/independizar). */
+export async function independizarPersona(personaId: number, contrasenia: string): Promise<PersonaResponse> {
+  return request<PersonaResponse>(apiEndpoint(`/personas/${personaId}/independizar`), {
+    method: "POST",
+    body: JSON.stringify({ contrasenia }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Admin Account Creation (Flow 1)
+// ---------------------------------------------------------------------------
+
+/** Medical record payload for admin account creation (optional). */
+export interface AdminFichaMedicaPayload {
+  tipoSangre?: string;
+  enfermedades?: string[];
+  alergias?: string;
+  contactoEmergencia?: string;
+  telefonoEmergencia?: string;
+}
+
+/** Payload for admin creating a full account (Persona + Usuario + Rol) in one request. */
+export interface AdminCrearCuentaPayload {
+  tipoCuenta: "JUGADOR" | "REPRESENTANTE" | "MENOR";
+  nombres: string;
+  apellidos: string;
+  cedula: string;
+  fechaNacimiento: string;
+  telefono: string;
+  telefonoContacto?: string;
+  correo: string;
+  contrasenia: string;
+  representanteId?: number;
+  institucionId?: number;
+  fichaMedica?: AdminFichaMedicaPayload;
+}
+
+/** Admin-only: create a full account (Persona + Usuario + Rol) in one step.
+ *  Returns tokens for auto-login. */
+export async function crearCuentaAdmin(data: AdminCrearCuentaPayload): Promise<{
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  persona_id: number;
+}> {
+  const payload: Record<string, unknown> = {
+    tipo_cuenta: data.tipoCuenta,
+    nombres: data.nombres,
+    apellidos: data.apellidos,
+    cedula: data.cedula,
+    fecha_nacimiento: data.fechaNacimiento,
+    telefono: data.telefono,
+    correo: data.correo,
+    contrasenia: data.contrasenia,
+  };
+  if (data.telefonoContacto) payload.telefono_contacto = data.telefonoContacto;
+  if (data.representanteId) payload.representante_id = data.representanteId;
+  if (data.institucionId) payload.institucion_id = data.institucionId;
+  if (data.fichaMedica) {
+    const fm = data.fichaMedica;
+    payload.ficha_medica = {
+      ...(fm.tipoSangre ? { tipo_sangre: fm.tipoSangre } : {}),
+      ...(fm.enfermedades ? { enfermedades: fm.enfermedades } : {}),
+      ...(fm.alergias ? { alergias: fm.alergias } : {}),
+      ...(fm.contactoEmergencia ? { contacto_emergencia: fm.contactoEmergencia } : {}),
+      ...(fm.telefonoEmergencia ? { telefono_emergencia: fm.telefonoEmergencia } : {}),
+    };
+  }
+
+  return request<{
+    access_token: string;
+    refresh_token: string;
+    token_type: string;
+    persona_id: number;
+  }>(apiEndpoint("/personas/admin/cuentas"), {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -72,7 +72,7 @@ describe("GET /api/members", () => {
 
     expect(response.status).toBe(200);
     expect(body.accounts).toHaveLength(1);
-    expect(body.accounts[0]).toMatchObject({ id: "3", role: "estudiante" });
+    expect(body.accounts[0]).toMatchObject({ id: "3", role: "representante" });
     expect(body.personasCapped).toBe(false);
   });
 
