@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Historial del entrenador — Prototipos Cata Club</title>
+<link rel="stylesheet" href="_sistema.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-ball" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 1 6.4 15.4l-2.8-2.8"/><path d="M12 3a9 9 0 0 0-6.4 15.4L14 10"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2h4a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4"/><path d="M9 2h6v4H9z"/><path d="m9 13 2 2 4-4"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3h.5a8.5 8.5 0 0 1 8 8Z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+</svg>
+
+<div class="wrap">
+  <p class="crumb"><a href="index.html">Prototipos</a> <span class="sep">/</span> <a href="19-entrenador.html">Entrenador</a> <span class="sep">/</span> <span class="here">Historial</span></p>
+  <div class="ptitle">
+    <h1>Historial de asistencias</h1><span class="route">/trainer/attendance/history</span>
+    <span class="grow"></span><span class="flag">agrupado por sesión</span>
+  </div>
+
+  <div class="note">
+    <h2><span class="mine">Decidido</span> Se agrupa por sesión, no por alumno, y desde acá se corrige</h2>
+    <p>
+      El entrenador no busca «qué hizo Ana el 14»; busca <b>«la lista del lunes pasado»</b>. Por eso se
+      agrupa por sesión, con el resumen de los cuatro estados en la propia fila, y cada sesión tiene su
+      «Corregir» que entra al mismo wizard de pasar lista en modo edición.
+    </p>
+    <p>
+      Es la salida del «Ver historial» del hero, que hasta ahora quedaba colgado. Se muestra
+      <b>quién registró</b> cada lista porque puede diferir del titular: las suplencias quedan
+      asentadas y el club necesita verlas.
+    </p>
+  </div>
+
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><span class="disc"><svg><use href="#i-ball"/></svg></span><div><b>Cata Club</b><span>Panel de gestión</span></div></div>
+      <nav>
+        <a class="nav-i" href="19-entrenador.html"><svg><use href="#i-grid"/></svg>Mi día</a>
+        <a class="nav-i on" href="21-entrenador-historial.html"><svg><use href="#i-clip"/></svg>Asistencia</a>
+      </nav>
+      <div class="foot-nav">
+        <a class="nav-i" href="28-chat.html"><svg><use href="#i-chat"/></svg>Ayuda y soporte</a>
+        <div class="user"><span class="av">CM</span><div><b>Carlos Mendoza</b><span>Entrenador</span></div></div>
+      </div>
+    </aside>
+    <div class="main">
+      <div class="topbar"><span class="date">Miércoles 23 de julio</span><span class="grow"></span></div>
+      <div class="canvas">
+        <a class="btn ghost" href="19-entrenador.html" style="align-self:flex-start"><svg><use href="#i-back"/></svg>Volver a Mi día</a>
+        <div><p class="eye">Área de entrenadores</p><h2 class="h-page">Historial de asistencias</h2></div>
+
+        <div class="pills">
+          <span class="pill on">Este mes</span>
+          <span class="pill">Últimas 2 semanas</span>
+          <span class="pill">Personalizado</span>
+          <span class="pill">Todos los horarios ▾</span>
+        </div>
+
+        <div class="card">
+          <div class="scrollx">
+            <table class="tbl">
+              <thead><tr><th>Sesión</th><th>Registró</th><th>Resultado</th><th class="rt"></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><span class="nm">Hoy, 23 jul</span><span class="sb">Lunes 15:00 — 16:00 · Nivel 9</span></td>
+                  <td>Carlos Mendoza</td>
+                  <td><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="badge ok">9</span><span class="badge warn">1</span><span class="badge">1</span><span class="badge bad">1</span></div></td>
+                  <td class="rt"><a class="btn sm" href="20-tomar-lista.html">Corregir</a></td>
+                </tr>
+                <tr>
+                  <td><span class="nm">Ayer, 22 jul</span><span class="sb">Martes 16:00 — 17:00 · Nivel 7</span></td>
+                  <td>Carlos Mendoza</td>
+                  <td><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="badge ok">8</span><span class="badge warn">0</span><span class="badge">2</span><span class="badge bad">1</span></div></td>
+                  <td class="rt"><a class="btn sm" href="20-tomar-lista.html">Corregir</a></td>
+                </tr>
+                <tr>
+                  <td><span class="nm">Viernes 18 jul</span><span class="sb">Viernes 15:00 — 16:00 · Nivel 9</span></td>
+                  <td>Ana Solórzano <span class="hint">(suplencia)</span></td>
+                  <td><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="badge ok">10</span><span class="badge warn">1</span><span class="badge">0</span><span class="badge bad">1</span></div></td>
+                  <td class="rt"><a class="btn sm" href="20-tomar-lista.html">Corregir</a></td>
+                </tr>
+                <tr>
+                  <td><span class="nm">Jueves 17 jul</span><span class="sb">Jueves 17:00 — 18:00 · Nivel 5</span></td>
+                  <td>Carlos Mendoza</td>
+                  <td><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="badge ok">7</span><span class="badge warn">2</span><span class="badge">1</span><span class="badge bad">0</span></div></td>
+                  <td class="rt"><a class="btn sm" href="20-tomar-lista.html">Corregir</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pager"><span class="grow">Página 1 de 6 · 24 sesiones este mes</span><button class="btn sm">← Anterior</button><button class="btn sm">Siguiente →</button></div>
+        </div>
+
+        <p class="hint">Quien registró puede diferir del entrenador titular del horario — las suplencias quedan asentadas.</p>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot"><span>Prototipo estático.</span></p>
+</div>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel — Prototipos Cata Club</title>
+<link rel="stylesheet" href="_sistema.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-ball" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 1 6.4 15.4l-2.8-2.8"/><path d="M12 3a9 9 0 0 0-6.4 15.4L14 10"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16"/><path d="M10 14.7V17c0 .6-.5 1-1 1.2C7.9 18.8 7 20.2 7 22M14 14.7V17c0 .6.5 1 1 1.2 1.1.6 2 2 2 3.8"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2h4a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4"/><path d="M9 2h6v4H9z"/><path d="m9 13 2 2 4-4"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3h.5a8.5 8.5 0 0 1 8 8Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+</svg>
+
+<div class="wrap">
+  <p class="crumb"><a href="index.html">Prototipos</a> <span class="sep">/</span> <span class="here">Panel</span></p>
+  <div class="ptitle">
+    <h1>Panel del administrador</h1>
+    <span class="route">/dashboard</span>
+    <span class="grow"></span>
+    <span class="flag">C1 · C2 resueltos</span>
+  </div>
+
+  <div class="note">
+    <h2><span class="mine">Decidido</span> El feed usa solo eventos que el backend ya puede fechar</h2>
+    <p>
+      Los cuatro tipos de evento corresponden a campos que <b>ya viajan en los DTO actuales</b>:
+      <code>Persona.fecha_registro</code>, <code>Pago.voucher_fecha_carga</code>,
+      <code>Pago.fecha_validacion</code> y <code>Asistencia.fecha_registro</code>. El BFF
+      <code>/api/dashboard</code> ya consulta esas tres fuentes, así que <b>no hace falta endpoint
+      nuevo</b>: se mezclan, se ordenan por fecha y se corta en los 6 más recientes.
+    </p>
+    <p>
+      Ese techo es deliberado: las tres fuentes llegan paginadas y sin orden por fecha, así que el feed
+      muestra «lo último dentro de lo que ya se trajo», no un histórico. Por eso «Ver todo» lleva a
+      Asistencias y Pagos. Al implementar hay que borrar el comentario de
+      <code>dashboard/page.tsx:10-14</code>, que declara este feed imposible. Se van las cuatro
+      «Acciones rápidas»: la sidebar ya navega a esas mismas secciones.
+    </p>
+  </div>
+
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><span class="disc"><svg><use href="#i-ball"/></svg></span><div><b>Cata Club</b><span>Panel de gestión</span></div></div>
+      <nav>
+        <a class="nav-i on" href="06-panel.html"><svg><use href="#i-grid"/></svg>Panel de Control</a>
+        <a class="nav-i" href="07-miembros.html"><svg><use href="#i-users"/></svg>Miembros</a>
+        <a class="nav-i" href="13-niveles.html"><svg><use href="#i-trophy"/></svg>Niveles</a>
+        <a class="nav-i" href="14-horarios.html"><svg><use href="#i-cal"/></svg>Horarios</a>
+        <a class="nav-i" href="09-pagos-cola.html"><svg><use href="#i-card"/></svg>Membresías y Pagos<span class="cnt">14</span></a>
+        <a class="nav-i" href="12-asistencias.html"><svg><use href="#i-clip"/></svg>Asistencias</a>
+        <a class="nav-i" href="18-reportes.html"><svg><use href="#i-file"/></svg>Reportes</a>
+      </nav>
+      <div class="foot-nav">
+        <a class="nav-i" href="28-chat.html"><svg><use href="#i-chat"/></svg>Ayuda y soporte</a>
+        <div class="user"><span class="av">AD</span><div><b>Admin Dev</b><span>Administrador</span></div></div>
+      </div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <span class="date">Miércoles 23 de julio</span><span class="grow"></span>
+        <span class="srch"><svg><use href="#i-search"/></svg>Buscar una sección… <kbd>Ctrl K</kbd></span>
+        <span class="icob"><svg><use href="#i-bell"/></svg><span class="dot">3</span></span>
+      </div>
+      <div class="canvas">
+        <h2 class="h-page">Hola, Admin</h2>
+
+        <div class="hero">
+          <span class="big">14</span>
+          <span class="txt"><b>Pagos esperan tu validación</b><span>3 llevan más de una semana esperando</span></span>
+          <a class="btn pri" href="09-pagos-cola.html">Revisar ahora <svg><use href="#i-arr"/></svg></a>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><span class="k">Miembros</span><span class="v">86</span><span class="x">en 44 cuentas</span></div>
+          <div class="stat"><span class="k">Membresías activas</span><span class="v">17<small>de 44</small></span><span class="track"><i style="width:39%"></i></span></div>
+          <div class="stat"><span class="k">Asistencia · 4 semanas</span><span class="v">44<small>%</small></span><span class="spark"><i style="height:46%"></i><i style="height:72%"></i><i style="height:58%"></i><i style="height:92%"></i></span></div>
+        </div>
+
+        <div class="card">
+          <div class="cardhead"><h3 class="sec-t grow">Actividad reciente</h3><a class="btn sm" href="12-asistencias.html">Ver todo</a></div>
+          <div class="feed">
+            <div class="it"><span class="av">LV</span><span class="tx"><b>Laura Vera</b> subió un comprobante de $25,00</span><span class="tm">hace 12 min</span></div>
+            <div class="it"><span class="av">CM</span><span class="tx"><b>Carlos Mendoza</b> registró la lista de Lunes 15:00</span><span class="tm">hace 1 h</span></div>
+            <div class="it"><span class="av">AD</span><span class="tx">Validaste el pago de <b>Kevin Sabando</b></span><span class="tm">hace 3 h</span></div>
+            <div class="it"><span class="av">AG</span><span class="tx"><b>Ana Garcia</b> completó su inscripción</span><span class="tm">ayer</span></div>
+          </div>
+        </div>
+
+        <div class="card pad">
+          <h3 class="sec-t" style="margin-bottom:16px">Distribución de asistencias — julio</h3>
+          <div class="donut">
+            <svg width="150" height="150" viewBox="0 0 42 42" aria-label="44% presente, 14% tardanza, 14% justificado, 28% ausente">
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#EFEFF2" stroke-width="5"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#157F3D" stroke-width="5" stroke-dasharray="44 56" stroke-dashoffset="25"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#B45309" stroke-width="5" stroke-dasharray="14 86" stroke-dashoffset="-19"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#9A9AA4" stroke-width="5" stroke-dasharray="14 86" stroke-dashoffset="-33"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#D92128" stroke-width="5" stroke-dasharray="28 72" stroke-dashoffset="-47"/>
+              <text x="21" y="20.4" text-anchor="middle" font-size="6.4" font-weight="800" fill="#17181C" font-family="Inter, sans-serif">335</text>
+              <text x="21" y="25" text-anchor="middle" font-size="2.6" fill="#74747F" font-family="Inter, sans-serif" letter-spacing=".18">REGISTROS</text>
+            </svg>
+            <div class="lg">
+              <div class="r"><span class="sw" style="background:#157F3D"></span><span class="l">Presente</span><span class="n">146</span><span class="p">44%</span></div>
+              <div class="r"><span class="sw" style="background:#B45309"></span><span class="l">Tardanza</span><span class="n">48</span><span class="p">14%</span></div>
+              <div class="r"><span class="sw" style="background:#9A9AA4"></span><span class="l">Justificado</span><span class="n">48</span><span class="p">14%</span></div>
+              <div class="r"><span class="sw" style="background:#D92128"></span><span class="l">Ausente</span><span class="n">93</span><span class="p">28%</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot"><span>Prototipo estático.</span><span>Versión móvil en <a href="27-movil.html" style="color:inherit">Móvil</a>.</span></p>
+</div>
+</body>
+</html>

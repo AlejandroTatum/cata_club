@@ -74,7 +74,9 @@ como servicio del footer (no existe en el repo; los horarios dicen Competitivo/S
    PERÍODO muestra `2026-07-01 – 2026-08-12` y SUBIDO muestra `23 de julio de 2026`), más
    `reports` mostrando `1990-01-01` en "Fecha Nac.". Único caso dependiente del entorno: los
    `input[type=date]` de `/reports` renderizan según el locale del navegador, no del documento.
-5. Revisar redirect `/products` → `/payments` (deprecado, decidir si se elimina).
+5. ~~Revisar redirect `/products` → `/payments` (deprecado, decidir si se elimina).~~ **RESUELTO:**
+   `rg` sobre `frontend/src` no encontró ni un `href`, `router.push` o `redirect` apuntando a
+   `/products`; la ruta se eliminó.
 
 ## FASE 3 — Pantallas admin
 

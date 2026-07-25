@@ -147,6 +147,26 @@ export function validateEnrollment(data: EnrollFormData): string[] {
   ];
 }
 
+/**
+ * Whether the wizard's demo quick-fill panel is allowed to render.
+ *
+ * The panel is a development affordance: it dumps fake student/representative
+ * data into the form. `/student/enroll` is a PUBLIC route (see
+ * `PUBLIC_EXCEPTIONS` in src/lib/middleware-utils.ts) and every landing-page
+ * enrollment CTA lands on it, so an ungated panel is shown to real prospective
+ * families.
+ *
+ * `process.env.NODE_ENV` is read here rather than captured at module scope so
+ * tests can stub it; in a real client bundle Next inlines it to the string
+ * literal `"production"`, so the check is a genuine build-time environment
+ * gate and not a runtime toggle a visitor can flip.
+ */
+export function isDemoQuickFillEnabled(
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): boolean {
+  return nodeEnv !== "production";
+}
+
 export function getEnrollmentErrorMessage(error: unknown): string {
   if (typeof error === "object" && error !== null && "status" in error) {
     const status = (error as Record<string, unknown>).status;

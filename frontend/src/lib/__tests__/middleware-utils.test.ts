@@ -39,7 +39,7 @@ describe("isProtectedPath", () => {
   });
 
   it("does not protect public/unauthenticated pages", () => {
-    const publicPaths = ["/", "/login", "/register", "/forgot-password", "/products"];
+    const publicPaths = ["/", "/login", "/register", "/forgot-password", "/profile"];
     for (const path of publicPaths) {
       expect(isProtectedPath(path)).toBe(false);
     }

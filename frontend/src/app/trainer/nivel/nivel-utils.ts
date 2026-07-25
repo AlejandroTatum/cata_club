@@ -11,6 +11,8 @@
  * has only one such table. There is no separate nivel-category taxonomy.
  */
 
+import type { AlumnoParaNivel } from "@/services/api";
+
 // ---------------------------------------------------------------------------
 // Period ("YYYY-MM") validation and derivation
 // ---------------------------------------------------------------------------
@@ -50,33 +52,33 @@ export interface NivelStudentRef {
 }
 
 /**
- * Build the nivel student list from the real member accounts (fetched via
- * fetchMembers(), same source as src/app/groups/page.tsx). Each student's
- * `grupoId` (their current nivel_ranking id) doubles as their nivel
- * category — there's no separate concept on the backend.
+ * Build the nivel student list from the roster returned by
+ * `fetchAlumnosParaNivel()` (`GET /ranking/alumnos`).
+ *
+ * Previously derived from `fetchMembers()`, which a trainer cannot call — its
+ * route depends on the ADMINISTRADOR-only `GET /personas/`, so
+ * `/trainer/nivel` answered 403. See `AlumnoParaNivel` in src/services/api.ts.
+ *
+ * `/api/members` grouped people into accounts and listed an account's
+ * children *instead of* its holder, which kept parents out of the student
+ * list. The flat roster needs that rule stated explicitly: anyone who is
+ * somebody else's `representanteId` is a parent, not a student.
  */
 export function buildNivelStudents(
-  memberAccounts: ReadonlyArray<{
-    estudiantes: ReadonlyArray<{
-      id: string;
-      nombres: string;
-      apellidos: string;
-      activo: boolean;
-      grupoId: string | null;
-    }>;
-  }>,
+  roster: ReadonlyArray<AlumnoParaNivel>,
 ): NivelStudentRef[] {
-  const refs: NivelStudentRef[] = [];
-  for (const account of memberAccounts) {
-    for (const estudiante of account.estudiantes) {
-      refs.push({
-        id: estudiante.id,
-        nombres: estudiante.nombres,
-        apellidos: estudiante.apellidos,
-        activo: estudiante.activo,
-        nivelRankingId: estudiante.grupoId !== null ? Number(estudiante.grupoId) : null,
-      });
-    }
-  }
-  return refs;
+  const representanteIds = new Set(
+    roster
+      .map((alumno) => alumno.representanteId)
+      .filter((id): id is number => id !== null),
+  );
+  return roster
+    .filter((alumno) => !representanteIds.has(alumno.personaId))
+    .map((alumno) => ({
+      id: String(alumno.personaId),
+      nombres: alumno.nombres,
+      apellidos: alumno.apellidos,
+      activo: alumno.activo,
+      nivelRankingId: alumno.nivelRankingId,
+    }));
 }

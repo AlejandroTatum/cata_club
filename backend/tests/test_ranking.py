@@ -172,3 +172,85 @@ def test_marcar_notificacion_ajena_como_leida_falla(client, db_session):
 
     resp = client.patch(f"/api/v1/ranking/notificaciones/{notif.id}/leer")
     assert resp.status_code == 403
+
+
+def _crear_persona_orm(db_session, cedula, representante_id=None):
+    """Crea una Persona directamente por ORM (sin pasar por `POST /personas/`,
+    que es admin-only) para los tests que se autentican como entrenador o que
+    necesitan armar el vinculo representante/representado."""
+    from datetime import date
+    from app.dominio.modelos import Persona
+    persona = Persona(
+        nombres="Deportista", apellidos=cedula, cedula=cedula,
+        fecha_nacimiento=date(2010, 5, 14), telefono="0991234567",
+        representante_id=representante_id,
+    )
+    db_session.add(persona)
+    db_session.commit()
+    db_session.refresh(persona)
+    return persona
+
+
+# --- Roster ligero para asignación de nivel ---------------------------------
+# El panel de Nivel del entrenador (`/trainer/nivel`) necesita la lista de
+# alumnos y su nivel actual. Antes la pedía a `GET /personas/` vía
+# `/api/members`, que es ADMINISTRADOR-only por exponer PII (cédula, teléfono,
+# fecha de nacimiento) -> el entrenador recibía un 403 real y la página no
+# cargaba nunca. Este endpoint es el roster mínimo equivalente.
+def test_listar_alumnos_incluye_a_los_que_no_tienen_nivel(client):
+    nivel = _crear_nivel(client, 1, "Elite")
+    con_nivel = _crear_persona(client, cedula="1720000001")
+    sin_nivel = _crear_persona(client, cedula="1720000002")
+    _asignar_nivel(client, con_nivel["id"], nivel["id"])
+
+    resp = client.get("/api/v1/ranking/alumnos")
+
+    assert resp.status_code == 200
+    por_id = {item["personaId"]: item for item in resp.json()}
+    assert por_id[con_nivel["id"]]["nivelRankingId"] == nivel["id"]
+    assert por_id[sin_nivel["id"]]["nivelRankingId"] is None
+
+
+def test_listar_alumnos_lo_puede_leer_un_entrenador(db_session, client_entrenador):
+    """El 403 original: `/trainer/nivel` pedia el roster a un endpoint
+    ADMINISTRADOR-only. La persona se crea por ORM porque `POST /personas/`
+    sigue siendo (correctamente) admin-only."""
+    _crear_persona_orm(db_session, cedula="1720000003")
+
+    resp = client_entrenador.get("/api/v1/ranking/alumnos")
+
+    assert resp.status_code == 200
+    assert [item["personaId"] for item in resp.json()] != []
+
+
+def test_listar_alumnos_rechaza_a_un_alumno(client_sin_permisos):
+    resp = client_sin_permisos.get("/api/v1/ranking/alumnos")
+
+    assert resp.status_code == 403
+
+
+def test_listar_alumnos_no_expone_pii(client):
+    _crear_persona(client, cedula="1720000004")
+
+    resp = client.get("/api/v1/ranking/alumnos")
+
+    campos = set(resp.json()[0].keys())
+    assert campos == {
+        "personaId", "nombres", "apellidos", "activo",
+        "representanteId", "nivelRankingId",
+    }
+
+
+def test_listar_alumnos_expone_el_representante_para_agrupar(db_session, client):
+    """El frontend agrupa representante/representados para no listar al padre
+    como si fuera alumno; necesita el vinculo en el roster."""
+    representante = _crear_persona_orm(db_session, cedula="1720000005")
+    hijo = _crear_persona_orm(
+        db_session, cedula="1720000006", representante_id=representante.id,
+    )
+
+    resp = client.get("/api/v1/ranking/alumnos")
+
+    por_id = {item["personaId"]: item for item in resp.json()}
+    assert por_id[representante.id]["representanteId"] is None
+    assert por_id[hijo.id]["representanteId"] == representante.id

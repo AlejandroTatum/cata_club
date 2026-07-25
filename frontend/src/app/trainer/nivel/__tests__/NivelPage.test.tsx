@@ -8,8 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 import NivelPage from "@/app/trainer/nivel/page";
-import type { NivelConOcupacion } from "@/services/api";
-import type { MemberAccount } from "@/app/members/members-utils";
+import type { AlumnoParaNivel, NivelConOcupacion } from "@/services/api";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 
 vi.mock("@/components/ProtectedRoute", () => ({
@@ -55,7 +54,8 @@ vi.mock("@/contexts/ToastContext", () => ({
   }),
 }));
 
-const mockFetchMembers = vi.fn();
+const mockFetchAlumnosParaNivel = vi.fn();
+const mockFetchNivelesConOcupacion = vi.fn();
 const mockAssignStudentToNivel = vi.fn();
 const mockMoveStudentToNivel = vi.fn();
 
@@ -69,7 +69,8 @@ vi.mock("@/services/api", () => {
     }
   }
   return {
-    fetchMembers: () => mockFetchMembers(),
+    fetchAlumnosParaNivel: () => mockFetchAlumnosParaNivel(),
+    fetchNivelesConOcupacion: () => mockFetchNivelesConOcupacion(),
     assignStudentToNivel: (personaId: number, nivelId: number) => mockAssignStudentToNivel(personaId, nivelId),
     moveStudentToNivel: (personaId: number, nivelId: number) => mockMoveStudentToNivel(personaId, nivelId),
     fetchNotificaciones: vi.fn().mockResolvedValue([]),
@@ -103,40 +104,19 @@ const NIVELES: NivelConOcupacion[] = [
   },
 ];
 
-const ACCOUNT: MemberAccount = {
-  id: "acc-1",
-  role: "representante",
-  nombres: "María",
-  apellidos: "González",
-  telefono: "0999999999",
-  estudiantes: [
-    {
-      id: "10",
-      nombres: "Sofía",
-      apellidos: "González",
-      grupoId: null,
-      activo: true,
-      membresia: null,
-      ultimoPago: null,
-    },
-    {
-      id: "11",
-      nombres: "Pedro",
-      apellidos: "Ramírez",
-      grupoId: "1",
-      activo: true,
-      membresia: null,
-      ultimoPago: null,
-    },
-  ],
-};
+const ROSTER: AlumnoParaNivel[] = [
+  { personaId: 10, nombres: "Sofía", apellidos: "González", activo: true, representanteId: null, nivelRankingId: null },
+  { personaId: 11, nombres: "Pedro", apellidos: "Ramírez", activo: true, representanteId: null, nivelRankingId: 1 },
+];
 
 describe("NivelPage", () => {
   beforeEach(() => {
-    mockFetchMembers.mockReset();
+    mockFetchAlumnosParaNivel.mockReset();
+    mockFetchNivelesConOcupacion.mockReset();
     mockAssignStudentToNivel.mockReset();
     mockMoveStudentToNivel.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT], niveles: NIVELES });
+    mockFetchAlumnosParaNivel.mockResolvedValue(ROSTER);
+    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
     mockShowError.mockClear();
     mockShowSuccess.mockClear();
@@ -144,6 +124,16 @@ describe("NivelPage", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("loads the roster from the trainer-readable endpoint, not the admin members aggregator", async () => {
+    // Regression: the panel used to call `fetchMembers()`, whose BFF route
+    // hard-depends on the ADMINISTRADOR-only `GET /personas/`. A trainer got
+    // a real 403 and the page never rendered a single student.
+    render(<NivelPage />);
+    await screen.findByText("Sofía González");
+
+    expect(mockFetchAlumnosParaNivel).toHaveBeenCalled();
   });
 
   it("no longer renders a 'Resultados Mensuales' tab or section", async () => {

@@ -12,6 +12,7 @@ from app.presentacion.schemas.ranking_schemas import (
     NivelRankingCreateDTO, NivelRankingResponseDTO, NivelRankingConOcupacionDTO,
     AsignarNivelInicialDTO, RankingResponseDTO, TablaRankingItemDTO,
     PerfilRankingAlumnoDTO, NotificacionResponseDTO, AsignacionRankingResponseDTO,
+    AlumnoParaNivelDTO,
 )
 
 router = APIRouter(prefix="/ranking", tags=["ranking"])
@@ -44,6 +45,20 @@ async def listar_niveles(db: Session = Depends(obtener_sesion)):
 async def listar_asignaciones(db: Session = Depends(obtener_sesion)):
     """Listado de todos los alumnos en el ranking (con su nivel y posición)."""
     return RankingServicio(db).listar_asignaciones()
+
+
+# Roster mínimo para la pantalla de asignación de nivel (admin `/ranking` y
+# entrenador `/trainer/nivel`). El frontend lo pedía a `GET /personas/`, que es
+# ADMINISTRADOR-only por exponer PII -> el entrenador recibía un 403 real y la
+# página nunca cargaba. `AlumnoParaNivelDTO` no expone PII (ver su docstring),
+# así que el permiso puede ser el mismo que ya tienen las dos mutaciones de
+# esta pantalla (`asignar-nivel-inicial` y `mover-de-nivel`).
+@router.get(
+    "/alumnos", response_model=List[AlumnoParaNivelDTO],
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN_O_ENTRENADOR))],
+)
+async def listar_alumnos_para_nivel(db: Session = Depends(obtener_sesion)):
+    return RankingServicio(db).listar_alumnos_para_nivel()
 
 
 @router.get(

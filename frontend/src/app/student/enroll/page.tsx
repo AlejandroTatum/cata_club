@@ -41,6 +41,7 @@ import {
   buildEnrollmentRequest,
   ENROLLMENT_TYPES,
   getEnrollmentErrorMessage,
+  isDemoQuickFillEnabled,
   validateEnrollStep,
   validateEnrollment,
   STEP_ORDER,
@@ -56,8 +57,9 @@ import {
 // ---------------------------------------------------------------------------
 
 export default function EnrollPage(): React.ReactElement {
-  const { refreshSession } = useAuth();
+  const { refreshSession, isAuthenticated } = useAuth();
   const { showError } = useToast();
+  const demoQuickFillEnabled = isDemoQuickFillEnabled();
   const [step, setStep] = useState<WizardStep>("type");
   const [formData, setFormData] = useState<EnrollFormData>(initialFormData);
   const [submitting, setSubmitting] = useState(false);
@@ -770,34 +772,39 @@ export default function EnrollPage(): React.ReactElement {
             </div>
           </div>
 
-          {/* Demo helper — quick-fill for testing convenience (not part of production flow) */}
-          <div className="mb-6 rounded-xl border border-dashed border-cata-border bg-cata-bg p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <AlertTriangle size={14} strokeWidth={1.5} className="text-amber-700" aria-hidden="true" />
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-cata-text/45">
-                Rellenar datos de prueba (solo desarrollo)
+          {/* Demo helper — quick-fill for testing convenience. The "(solo
+              desarrollo)" label used to be the ONLY thing stopping this from
+              reaching real visitors; `isDemoQuickFillEnabled` is the actual
+              guard. See its doc comment for why it reads NODE_ENV. */}
+          {demoQuickFillEnabled && (
+            <div className="mb-6 rounded-xl border border-dashed border-cata-border bg-cata-bg p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <AlertTriangle size={14} strokeWidth={1.5} className="text-amber-700" aria-hidden="true" />
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-cata-text/45">
+                  Rellenar datos de prueba (solo desarrollo)
+                </p>
+              </div>
+              <p className="mb-2 text-[10px] leading-relaxed text-cata-text/40">
+                Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno.
               </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fillDemoData("self")}
+                  className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-medium text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
+                >
+                  Jugador
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fillDemoData("child")}
+                  className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-medium text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
+                >
+                  Representante
+                </button>
+              </div>
             </div>
-            <p className="mb-2 text-[10px] leading-relaxed text-cata-text/40">
-              Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => fillDemoData("self")}
-                className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-medium text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
-              >
-                Jugador
-              </button>
-              <button
-                type="button"
-                onClick={() => fillDemoData("child")}
-                className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-medium text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
-              >
-                Representante
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* Form card */}
           <div className="card mx-auto max-w-2xl p-6 sm:p-8">
@@ -847,13 +854,17 @@ export default function EnrollPage(): React.ReactElement {
             </form>
           </div>
 
-          {/* Navigation link */}
+          {/* Navigation link — this wizard is public (see PUBLIC_EXCEPTIONS in
+              src/lib/middleware-utils.ts), so most visitors arrive from the
+              landing with no account. Sending them to `/student` would bounce
+              them straight to /login, which is the wall the landing funnel
+              exists to route around. */}
           <p className="mt-6 text-center text-sm text-cata-text/65">
             <Link
-              href="/student"
+              href={isAuthenticated ? "/student" : "/"}
               className="font-medium text-cata-red transition-colors hover:text-cata-red-light"
             >
-              &larr; Volver a Mi Cuenta
+              {isAuthenticated ? <>&larr; Volver a Mi Cuenta</> : <>&larr; Volver al inicio</>}
             </Link>
           </p>
         </div>

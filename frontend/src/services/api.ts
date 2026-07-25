@@ -421,6 +421,26 @@ export interface TablaRankingItem {
   estaEnRanking: boolean;
 }
 
+/**
+ * One row of the nivel-assignment roster — `GET /ranking/alumnos`.
+ *
+ * Deliberately PII-free (no cédula/teléfono/fecha de nacimiento) so the
+ * backend can serve it to ENTRENADOR as well as ADMINISTRADOR. The nivel
+ * screen used to derive this from `fetchMembers()`, whose route depends on
+ * the ADMINISTRADOR-only `GET /personas/` — that is why `/trainer/nivel`
+ * answered 403. Already camelCase, passed through unmodified.
+ */
+export interface AlumnoParaNivel {
+  personaId: number;
+  nombres: string;
+  apellidos: string;
+  activo: boolean;
+  /** Set when this person is somebody's dependent; `null` for account holders. */
+  representanteId: number | null;
+  /** Current nivel_ranking id, or `null` when not yet assigned. */
+  nivelRankingId: number | null;
+}
+
 /** One student's attendance mark, part of a `registerAttendance` batch. */
 export interface AttendanceStudentMark {
   personaId: number;
@@ -470,6 +490,11 @@ export async function fetchAttendanceRecords(params?: {
 /** List ranking levels (Grupo) with current occupancy. */
 export async function fetchNivelesConOcupacion(): Promise<NivelConOcupacion[]> {
   return request<NivelConOcupacion[]>(apiEndpoint("/ranking/niveles"));
+}
+
+/** Roster for the nivel-assignment screen — readable by admin AND trainer (see `AlumnoParaNivel`). */
+export async function fetchAlumnosParaNivel(): Promise<AlumnoParaNivel[]> {
+  return request<AlumnoParaNivel[]>(apiEndpoint("/ranking/alumnos"));
 }
 
 /** Persist attendance for a session (one real `POST /asistencias` per student, partial-failure-tolerant). */

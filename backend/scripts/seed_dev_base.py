@@ -367,7 +367,27 @@ def main() -> None:
             # al loguearse).
             existing_rep_user = db.query(Usuario).filter(Usuario.correo == rep["correo"]).first()
             if existing_rep_user:
-                print(f"[seed] Representante {rep['correo']} ya existe — saltando.")
+                # No basta con saltar: la asignación de roles se añadió al seed
+                # DESPUÉS de que las BD de desarrollo ya estuvieran sembradas,
+                # así que las cuentas creadas antes quedaron con `roles = []`
+                # de forma permanente (`/auth/me` devuelve una lista vacía, el
+                # frontend la mapea a "unsupported" y el login aterriza en
+                # /unauthorized). Rellenar los roles que falten hace que
+                # reejecutar el seed repare esas cuentas, sin duplicar los que
+                # ya estén.
+                faltantes = [
+                    rol for rol in (rol_representante, rol_alumno)
+                    if rol.tipo_rol not in {r.tipo_rol for r in existing_rep_user.roles}
+                ]
+                if faltantes:
+                    existing_rep_user.roles.extend(faltantes)
+                    nombres_faltantes = ", ".join(rol.tipo_rol.value for rol in faltantes)
+                    print(
+                        f"[seed] Representante {rep['correo']} ya existe — "
+                        f"roles faltantes asignados: {nombres_faltantes}."
+                    )
+                else:
+                    print(f"[seed] Representante {rep['correo']} ya existe — saltando.")
                 rep_persona = existing_rep_user.persona
             else:
                 rep_persona, _ = _obtener_o_crear(

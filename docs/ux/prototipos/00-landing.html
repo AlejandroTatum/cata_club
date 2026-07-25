@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing — Prototipos Cata Club</title>
+<link rel="stylesheet" href="_sistema.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-ball" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 1 6.4 15.4l-2.8-2.8"/><path d="M12 3a9 9 0 0 0-6.4 15.4L14 10"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
+  <symbol id="i-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+</svg>
+
+<div class="wrap">
+  <p class="crumb"><a href="index.html">Prototipos</a> <span class="sep">/</span> <span class="here">Landing</span></p>
+  <div class="ptitle">
+    <h1>Landing pública</h1>
+    <span class="route">/</span>
+    <span class="grow"></span>
+    <span class="flag">propuesta · no estaba en alcance</span>
+  </div>
+
+  <div class="note">
+    <h2><span class="mine">Ojo</span> El plan dice «la landing queda como está»</h2>
+    <p>
+      Este prototipo <b>no lo pide el plan de implementación</b>, que decidió explícitamente dejar la
+      landing fuera del rediseño. Lo incluyo porque pediste el set completo, pero tratalo como
+      propuesta, no como tarea aprobada.
+    </p>
+    <p>
+      Dicho eso, hay un argumento real para tocarla: la landing es la <b>fuente de la identidad</b> que
+      el resto del sistema tomó prestada — la frase «Formando campeones para la vida» que hoy vive en
+      el panel izquierdo del login sale de acá. Si el producto entero se re-tokeniza y la landing no,
+      la puerta de entrada queda hablando otro idioma visual que el interior. La estructura respeta las
+      siete secciones que ya existen (<code>app/landing/LandingPage.tsx</code>), sin agregar ni quitar
+      contenido: hero y datos del club, misión y visión, valores, lema y galería, horarios,
+      ubicación y contacto, pie.
+    </p>
+  </div>
+
+  <div class="app plain lp">
+    <nav class="lp-nav">
+      <span class="disc"><svg><use href="#i-ball"/></svg></span>
+      <b style="font-size:15px;letter-spacing:-.02em">Cata Club</b>
+      <span class="grow"></span>
+      <span class="links"><span>El club</span><span>Entrenamientos</span><span>Horarios</span><span>Contacto</span></span>
+      <a class="btn" href="01-login.html">Iniciar sesión</a>
+      <a class="btn pri" href="05-inscripcion.html">Inscribirme</a>
+    </nav>
+
+    <header class="lp-hero">
+      <div>
+        <h2>Formando <em>campeones</em> para la vida</h2>
+        <p>
+          Escuela de tenis de mesa en Portoviejo. Entrenamiento por niveles, seguimiento real de cada
+          alumno y un club que acompaña más allá de la mesa.
+        </p>
+        <div class="cta">
+          <a class="btn pri xl" href="05-inscripcion.html">Inscribirme al club <svg><use href="#i-arr"/></svg></a>
+          <a class="btn xl" href="#horarios" style="background:transparent;border-color:rgba(255,255,255,.22);color:#FFF">Ver horarios</a>
+        </div>
+      </div>
+      <div class="lp-facts">
+        <div><span class="n">67</span><span class="k">Estudiantes</span></div>
+        <div><span class="n">10</span><span class="k">Niveles</span></div>
+        <div><span class="n">26</span><span class="k">Horarios</span></div>
+      </div>
+    </header>
+
+    <section class="lp-sec">
+      <h3>Misión y visión</h3>
+      <div class="lp-grid">
+        <div class="card pad" style="display:flex;flex-direction:column;gap:8px">
+          <p class="eye">Misión</p>
+          <p class="muted" style="font-size:14.5px;color:var(--ink-2)">
+            Formar deportistas íntegros a través del tenis de mesa, con disciplina, respeto y
+            constancia como base de todo lo que enseñamos.
+          </p>
+        </div>
+        <div class="card pad" style="display:flex;flex-direction:column;gap:8px">
+          <p class="eye">Visión</p>
+          <p class="muted" style="font-size:14.5px;color:var(--ink-2)">
+            Ser el club de referencia de la provincia, reconocido tanto por sus resultados como por la
+            calidad humana de quienes salen de él.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-sec alt">
+      <h3>Nuestros valores</h3>
+      <p class="lead">Cuatro cosas que no se negocian, dentro ni fuera de la cancha.</p>
+      <div class="lp-grid">
+        <div class="card pad" style="display:flex;flex-direction:column;gap:6px"><b style="font-size:15px">Disciplina</b><p class="muted">Llegar a horario y sostener el esfuerzo cuando nadie mira.</p></div>
+        <div class="card pad" style="display:flex;flex-direction:column;gap:6px"><b style="font-size:15px">Respeto</b><p class="muted">Al rival, al árbitro, al compañero y a la propia derrota.</p></div>
+        <div class="card pad" style="display:flex;flex-direction:column;gap:6px"><b style="font-size:15px">Constancia</b><p class="muted">El nivel no se gana en un torneo; se gana en los martes de lluvia.</p></div>
+        <div class="card pad" style="display:flex;flex-direction:column;gap:6px"><b style="font-size:15px">Comunidad</b><p class="muted">Un club es la gente que lo sostiene, no la sala donde entrena.</p></div>
+      </div>
+    </section>
+
+    <section class="lp-motto">
+      <blockquote>La mesa <em>no miente</em></blockquote>
+      <p style="font-size:14px;color:rgba(255,255,255,.55);max-width:44ch;margin:0">
+        Lo que entrenás aparece. Lo que no, también.
+      </p>
+    </section>
+
+    <section class="lp-sec">
+      <h3>El club por dentro</h3>
+      <div class="lp-gallery"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <p class="hint">Las imágenes reales del club se mantienen — acá van como marcadores de posición.</p>
+    </section>
+
+    <section class="lp-sec alt" id="horarios">
+      <h3>Horarios de entrenamiento</h3>
+      <p class="lead">Veintiséis sesiones semanales repartidas en tres mesas. Consultá disponibilidad al inscribirte.</p>
+      <div class="card">
+        <div class="scrollx">
+          <table class="tbl">
+            <thead><tr><th>Día</th><th>Horarios</th><th>Entrenador</th></tr></thead>
+            <tbody>
+              <tr><td><span class="nm">Lunes</span></td><td>15:00 · 16:00 · 17:00</td><td>Carlos Mendoza</td></tr>
+              <tr><td><span class="nm">Martes</span></td><td>15:00 · 16:00 · 17:00</td><td>Carlos Mendoza</td></tr>
+              <tr><td><span class="nm">Miércoles</span></td><td>15:00 · 16:00 · 17:00</td><td>Carlos Mendoza</td></tr>
+              <tr><td><span class="nm">Jueves</span></td><td>15:00 · 16:00 · 17:00</td><td>Carlos Mendoza</td></tr>
+              <tr><td><span class="nm">Viernes</span></td><td>15:00 · 16:00</td><td>Carlos Mendoza</td></tr>
+              <tr><td><span class="nm">Sábado</span></td><td>09:00 — 11:00</td><td>Carlos Mendoza</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-sec">
+      <h3>Dónde estamos</h3>
+      <div class="lp-grid">
+        <div class="card pad" style="display:flex;gap:12px;align-items:flex-start">
+          <span class="icob" style="border:none;background:var(--neutral-bg)"><svg><use href="#i-pin"/></svg></span>
+          <div><b style="font-size:14.5px">Portoviejo, Manabí</b><p class="muted" style="margin-top:3px">Coliseo del club — consultá la dirección exacta por WhatsApp.</p></div>
+        </div>
+        <div class="card pad" style="display:flex;gap:12px;align-items:flex-start">
+          <span class="icob" style="border:none;background:var(--neutral-bg)"><svg><use href="#i-clock"/></svg></span>
+          <div><b style="font-size:14.5px">Lunes a sábado</b><p class="muted" style="margin-top:3px">Tardes de semana y mañanas de sábado.</p></div>
+        </div>
+      </div>
+      <a class="btn pri" href="05-inscripcion.html" style="align-self:flex-start">Quiero inscribirme <svg><use href="#i-arr"/></svg></a>
+    </section>
+
+    <footer class="lp-foot">
+      <span class="disc" style="width:30px;height:30px"><svg style="width:17px;height:17px"><use href="#i-ball"/></svg></span>
+      <span style="color:#FFF;font-weight:700">Cata Club</span>
+      <span class="grow"></span>
+      <span>© 2026 Cata Club — Tenis de Mesa</span>
+    </footer>
+  </div>
+
+  <p class="foot">
+    <span>Prototipo estático — sin datos reales ni llamadas al backend.</span>
+    <span>Siguiente: <a href="01-login.html" style="color:inherit">Login</a></span>
+  </p>
+</div>
+</body>
+</html>

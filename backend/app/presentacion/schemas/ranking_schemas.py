@@ -119,3 +119,25 @@ class AsignacionRankingResponseDTO(ResponseBase, BaseModel):
     nivel_ranking_nombre: Optional[str] = None
     nivel_ranking_numero: int
     esta_en_ranking: bool
+
+
+class AlumnoParaNivelDTO(ResponseBase, BaseModel):
+    """Roster mínimo para asignar niveles (`GET /ranking/alumnos`).
+
+    Existe porque el panel de Nivel del entrenador solo necesita "quién es y
+    en qué nivel está", pero la única lista completa de personas
+    (`GET /personas/`) es ADMINISTRADOR-only por exponer PII real (cédula,
+    teléfono, fecha de nacimiento). Este DTO deja fuera toda esa PII: nombre
+    y nivel es exactamente lo que el entrenador ya ve en el roster de
+    asistencia y en la tabla de un nivel.
+
+    `representante_id` no es PII: replica la agrupación
+    representante/representados que el frontend ya hacía sobre
+    `/api/members`, para no listar al padre como si fuera alumno.
+    """
+    persona_id: int
+    nombres: str
+    apellidos: str
+    activo: bool
+    representante_id: Optional[int] = None
+    nivel_ranking_id: Optional[int] = None

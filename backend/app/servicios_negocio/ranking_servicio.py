@@ -37,7 +37,7 @@ from app.infraestructura.repositorios.ranking_repositorio import (
 from app.presentacion.schemas.ranking_schemas import (
     NivelRankingCreateDTO, AsignarNivelInicialDTO,
     NivelRankingConOcupacionDTO, TablaRankingItemDTO, PerfilRankingAlumnoDTO,
-    AsignacionRankingResponseDTO,
+    AsignacionRankingResponseDTO, AlumnoParaNivelDTO,
 )
 
 
@@ -113,6 +113,39 @@ class RankingServicio:
                 )
             )
         return resultado
+
+    def listar_alumnos_para_nivel(self) -> list[AlumnoParaNivelDTO]:
+        """Roster mínimo que necesita la pantalla de asignación de nivel.
+
+        A diferencia de `listar_asignaciones`, incluye a las personas que
+        TODAVÍA no tienen fila de Ranking (`nivel_ranking_id = None`) --
+        que son justamente las que hay que asignar, y por tanto el motivo
+        por el que la pantalla existe.
+
+        Se expone aquí, y no relajando `GET /personas/`, porque ese endpoint
+        devuelve `PersonaResponseDTO` (cédula, teléfono, fecha de nacimiento)
+        y quedó restringido a ADMINISTRADOR deliberadamente. Ver
+        `AlumnoParaNivelDTO`.
+        """
+        repo_persona = PersonaRepositorio(self.db)
+        personas = repo_persona.listar(skip=0, limit=repo_persona.contar())
+        # Mismo criterio de "nivel actual" que `obtener_tabla_de_nivel`:
+        # solo cuenta la fila de ranking activa (`esta_en_ranking = True`).
+        nivel_por_persona = {
+            r.persona_id: r.nivel_ranking_id
+            for r in self.repo.listar_todos(solo_activos=True)
+        }
+        return [
+            AlumnoParaNivelDTO(
+                persona_id=p.id,
+                nombres=p.nombres,
+                apellidos=p.apellidos,
+                activo=p.usuario.activo if p.usuario else True,
+                representante_id=p.representante_id,
+                nivel_ranking_id=nivel_por_persona.get(p.id),
+            )
+            for p in personas
+        ]
 
     # --- E03-RF002: asignación de nivel inicial -----------------------------
     def asignar_nivel_inicial(self, datos: AsignarNivelInicialDTO) -> Ranking:

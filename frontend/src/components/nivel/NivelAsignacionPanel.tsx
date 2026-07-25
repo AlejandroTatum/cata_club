@@ -8,11 +8,18 @@
  *
  * The nivel a student is assigned to IS the same `nivel_ranking` record used
  * by Grupo/`NivelTecnico` (see src/app/groups/page.tsx) — the backend only
- * has one such table, fetched here via the same
- * fetchNivelesConOcupacion()/fetchMembers() calls groups.tsx uses. Mutating
- * actions call the real backend endpoints (assignStudentToNivel/
- * moveStudentToNivel, same functions groups.tsx uses), so after a successful
- * assignment the member list is reloaded to reflect the student's new nivel.
+ * has one such table. Mutating actions call the real backend endpoints
+ * (assignStudentToNivel/moveStudentToNivel, same functions groups.tsx uses),
+ * so after a successful assignment the roster is reloaded to reflect the
+ * student's new nivel.
+ *
+ * Data source: `fetchAlumnosParaNivel()` + `fetchNivelesConOcupacion()`, both
+ * readable by ADMINISTRADOR and ENTRENADOR. It used to be `fetchMembers()`,
+ * whose route starts from the ADMINISTRADOR-only `GET /personas/` (it exposes
+ * cédula/teléfono/fecha de nacimiento) — so the trainer's `/trainer/nivel`
+ * got a real 403 and never rendered a student. The roster carries only what
+ * this screen actually reads: name, active flag, representante link and
+ * current nivel.
  *
  * Real backend gap for the admin actor (do not work around — documented at
  * the source instead of guessed here): initial group assignment (`POST
@@ -29,10 +36,12 @@ import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
 import { Users, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, GraduationCap } from "lucide-react";
 import {
-  fetchMembers,
+  fetchAlumnosParaNivel,
+  fetchNivelesConOcupacion,
   assignStudentToNivel,
   moveStudentToNivel,
   ApiClientError,
+  type AlumnoParaNivel,
   type NivelConOcupacion,
 } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
@@ -85,58 +94,53 @@ export default function NivelAsignacionPanel({
   backHref,
   backLabel,
 }: NivelAsignacionPanelProps): React.ReactElement {
-  const [members, setMembers] = useState<Awaited<ReturnType<typeof fetchMembers>>["accounts"]>([]);
+  const [roster, setRoster] = useState<AlumnoParaNivel[]>([]);
   const [niveles, setNiveles] = useState<NivelConOcupacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const membersRef = useRef(members);
-  membersRef.current = members;
+  const rosterRef = useRef(roster);
+  rosterRef.current = roster;
+
+  const fetchPanelData = useCallback(async (): Promise<void> => {
+    const [rosterData, nivelesData] = await Promise.all([
+      fetchAlumnosParaNivel(),
+      fetchNivelesConOcupacion(),
+    ]);
+    setRoster(rosterData);
+    setNiveles(nivelesData);
+  }, []);
 
   const loadData = useCallback(async (): Promise<void> => {
     setLoading(true);
     setLoadError(null);
     try {
-      const { accounts: membersData, niveles: nivelesData } = await fetchMembers();
-      setMembers(membersData);
-      setNiveles(nivelesData);
+      await fetchPanelData();
     } catch {
       setLoadError("No se pudieron cargar los estudiantes. Intente nuevamente.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchPanelData]);
 
   const silentRefresh = useCallback(async (): Promise<void> => {
     try {
-      const { accounts: membersData, niveles: nivelesData } = await fetchMembers();
-      setMembers(membersData);
-      setNiveles(nivelesData);
+      await fetchPanelData();
     } catch {
       /* swallow — data is stale but functional */
     }
-  }, []);
+  }, [fetchPanelData]);
 
   const handleOptimisticAssign = useCallback(
     (studentId: string, newNivelId: number) => {
-      const currentMembers = membersRef.current;
-      let oldNivelId: number | null = null;
-      for (const account of currentMembers) {
-        for (const est of account.estudiantes) {
-          if (est.id === studentId && est.grupoId !== null) {
-            oldNivelId = Number(est.grupoId);
-            break;
-          }
-        }
-        if (oldNivelId !== null) break;
-      }
+      const previous = rosterRef.current.find((alumno) => String(alumno.personaId) === studentId);
+      const oldNivelId = previous?.nivelRankingId ?? null;
 
-      setMembers((prev) =>
-        prev.map((account) => ({
-          ...account,
-          estudiantes: account.estudiantes.map((est) =>
-            est.id === studentId ? { ...est, grupoId: String(newNivelId) } : est,
-          ),
-        })),
+      setRoster((prev) =>
+        prev.map((alumno) =>
+          String(alumno.personaId) === studentId
+            ? { ...alumno, nivelRankingId: newNivelId }
+            : alumno,
+        ),
       );
 
       setNiveles((prev) =>
@@ -166,7 +170,7 @@ export default function NivelAsignacionPanel({
     void loadData();
   }, [loadData]);
 
-  const students = buildNivelStudents(members);
+  const students = buildNivelStudents(roster);
 
   return (
     <ProtectedRoute allowedRoles={allowedRoles}>

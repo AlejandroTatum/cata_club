@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validar pago — Prototipos Cata Club</title>
+<link rel="stylesheet" href="_sistema.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+  <symbol id="i-zoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></symbol>
+  <symbol id="i-dl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></symbol>
+</svg>
+
+<div class="wrap">
+  <p class="crumb"><a href="index.html">Prototipos</a> <span class="sep">/</span> <a href="09-pagos-cola.html">Pagos</a> <span class="sep">/</span> <span class="here">Validar</span></p>
+  <div class="ptitle">
+    <h1>Validación de pago</h1><span class="route">/payments · detalle</span>
+    <span class="grow"></span><span class="flag">la superficie más pesada</span>
+  </div>
+
+  <div class="note">
+    <h2><span class="mine">Decidido</span> El comprobante manda; el checklist bloquea la aprobación</h2>
+    <p>
+      Dos columnas: <b>los datos a la izquierda, el comprobante a la derecha</b> y siempre visible.
+      Validar es comparar un papel contra unos números, y hacer scroll entre ambos era el problema.
+    </p>
+    <p>
+      <b>«Aprobar» arranca deshabilitado</b> hasta que los tres ítems estén marcados, y el botón dice
+      qué falta. Ataca directamente el principio 5 de la evaluación (prevención, 5/10): hoy se puede
+      aprobar un pago sin haber mirado el monto. El checklist ya existe en el código
+      (<code>payments/page.tsx:554</code>) pero es decorativo.
+    </p>
+  </div>
+
+  <div class="app plain">
+    <div class="surface">
+      <div class="rowline">
+        <a class="btn ghost" href="09-pagos-cola.html"><svg><use href="#i-back"/></svg>Volver a la cola</a>
+        <span class="grow"></span>
+        <span class="badge warn">Pendiente · 3 días esperando</span>
+      </div>
+      <div class="paysplit">
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <div class="card">
+            <div class="cardhead"><h3 class="sec-t grow">Detalle de la solicitud</h3></div>
+            <div class="drows">
+              <div class="drow"><span class="k">Estudiante</span><span class="v">Sofia Vera Zamora</span></div>
+              <div class="drow"><span class="k">Responsable de pago</span><span class="v">Laura Vera <span class="hint">(madre)</span></span></div>
+              <div class="drow"><span class="k">Período</span><span class="v">1 jul → 12 ago</span></div>
+              <div class="drow"><span class="k">Monto esperado</span><span class="v">$25,00</span></div>
+              <div class="drow"><span class="k">Método</span><span class="v">Transferencia</span></div>
+              <div class="drow"><span class="k">Subido el</span><span class="v">20/07/2026 · 18:42</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardhead"><h3 class="sec-t grow">Antes de aprobar</h3><span class="badge warn">2 de 3</span></div>
+            <div class="pad" style="padding-top:6px;padding-bottom:6px">
+              <div class="checks">
+                <div class="chk on"><span class="bx"><svg><use href="#i-check"/></svg></span>El comprobante es legible y no está cortado</div>
+                <div class="chk on"><span class="bx"><svg><use href="#i-check"/></svg></span>El monto del comprobante coincide con $25,00</div>
+                <div class="chk"><span class="bx"></span>La fecha de la transferencia cae dentro del período</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card pad" style="display:flex;flex-direction:column;gap:11px">
+            <h3 class="sec-t">Decisión</h3>
+            <div style="display:flex;gap:9px;flex-wrap:wrap">
+              <button class="btn pri" disabled>Aprobar pago</button>
+              <a class="btn" href="11-pago-rechazar.html">Rechazar…</a>
+            </div>
+            <p class="hint">Falta confirmar la fecha de la transferencia para poder aprobar.</p>
+          </div>
+        </div>
+
+        <div class="viewer">
+          <div class="vt"><span class="grow">comprobante-sofia-vera-jul.jpg</span><span>1 de 1</span></div>
+          <div class="vb">
+            <div class="receipt">
+              <div class="rl" style="width:60%"></div>
+              <div class="rl" style="width:85%"></div>
+              <div class="rb">$25,00</div>
+              <div class="rl" style="width:70%"></div>
+              <div class="rl" style="width:45%"></div>
+              <div class="rl" style="width:78%"></div>
+              <div class="rl" style="width:34%"></div>
+            </div>
+          </div>
+          <div class="vf">
+            <span class="vbtn"><svg style="width:13px;height:13px"><use href="#i-zoom"/></svg>Ampliar</span>
+            <span class="vbtn"><svg style="width:13px;height:13px"><use href="#i-dl"/></svg>Descargar</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot"><span>Prototipo estático.</span><span>El rechazo está en <a href="11-pago-rechazar.html" style="color:inherit">Rechazar pago</a>.</span></p>
+</div>
+</body>
+</html>
