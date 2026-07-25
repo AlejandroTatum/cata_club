@@ -65,6 +65,7 @@ export default function EnrollPage(): React.ReactElement {
   const [summaryReviewed, setSummaryReviewed] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
+  const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
   const queryAppliedRef = useRef(false);
 
   // For self-enrollment, skip the representative step entirely.
@@ -341,7 +342,27 @@ export default function EnrollPage(): React.ReactElement {
         {/* School selector — only for minors (child enrollment) */}
         {!isSelf && instituciones.length > 0 && (
           <div className="mt-4">
-            <label htmlFor="enroll-institucion" className="mb-1.5 block text-sm font-medium text-cata-text">
+            <label htmlFor="enroll-tipo-escuela" className="mb-1.5 block text-sm font-medium text-cata-text">
+              Tipo de Escuela
+            </label>
+            <select
+              id="enroll-tipo-escuela"
+              value={tipoEscuelaFilter}
+              onChange={(e) => {
+                setTipoEscuelaFilter(e.target.value);
+                updateField("institucionId", "");
+              }}
+              disabled={submitting}
+              className="input-field"
+            >
+              <option value="">Todos los tipos</option>
+              <option value="PARTICULAR">Particular</option>
+              <option value="FISCAL">Fiscal</option>
+              <option value="FISCOMISIONAL">Fiscomisional</option>
+              <option value="MUNICIPAL">Municipal</option>
+            </select>
+
+            <label htmlFor="enroll-institucion" className="mb-1.5 mt-3 block text-sm font-medium text-cata-text">
               Escuela / Institución
             </label>
             <p className="mb-2 text-xs text-cata-text/50">
@@ -355,11 +376,13 @@ export default function EnrollPage(): React.ReactElement {
               className="input-field"
             >
               <option value="">Sin institución asignada</option>
-              {instituciones.map((inst) => (
-                <option key={inst.id} value={String(inst.id)}>
-                  {inst.nombre} ({inst.tipoEscuela})
-                </option>
-              ))}
+              {instituciones
+                .filter((inst) => !tipoEscuelaFilter || inst.tipoEscuela === tipoEscuelaFilter)
+                .map((inst) => (
+                  <option key={inst.id} value={String(inst.id)}>
+                    {inst.nombre} ({inst.tipoEscuela})
+                  </option>
+                ))}
             </select>
           </div>
         )}
