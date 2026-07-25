@@ -11,8 +11,14 @@
  * checks pass, including --pairs all.
  */
 
-import { ATTENDANCE_LABELS, type AttendanceDayStats } from "@/app/attendance/attendance-utils";
+import {
+  ATTENDANCE_LABELS,
+  type AttendanceDayStats,
+  type AttendanceRecord,
+} from "@/app/attendance/attendance-utils";
 import type { EstadoAsistencia } from "@/types/domain";
+import type { PaymentValidationRequest } from "@/services/api";
+import { formatCurrency } from "@/lib/format-utils";
 
 export const ATTENDANCE_STATUS_CHART_COLORS: Record<EstadoAsistencia, string> = {
   present: "#008300",
@@ -97,4 +103,236 @@ export function buildDonutArcs(values: number[], circumference: number): DonutAr
     cumulativeOffset += rawLength;
     return arc;
   });
+}
+
+// ---------------------------------------------------------------------------
+// The "jornada" pulse (Fase 3 — prototype 06)
+// ---------------------------------------------------------------------------
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Read a timestamp for ordering, treating a date-only value as local NOON.
+ *
+ * Attendance records carry a date with no time (`Asistencia.fecha`), payments
+ * carry a full instant. Midnight would rank a whole day's sessions above every
+ * payment uploaded that same day, and end-of-day would rank them below; noon is
+ * the only anchor that does not systematically lie in one direction. Ordering
+ * is the ONLY thing this value is used for — it is never rendered.
+ */
+function toSortableTime(value: string): number | null {
+  if (!value) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]), 12).getTime();
+  }
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * How many pending payments have been waiting more than a week.
+ *
+ * This is the hero's second line, and the only reason the hero shows two
+ * numbers instead of one: "14 esperan" is a workload, "3 llevan más de una
+ * semana" is a reason to start now.
+ */
+export function countPaymentsWaitingOverAWeek(
+  requests: PaymentValidationRequest[],
+  now: Date = new Date(),
+): number {
+  const cutoff = now.getTime() - 7 * DAY_MS;
+  return requests.filter((r) => {
+    if (r.validationStatus !== "pendiente") return false;
+    const uploaded = toSortableTime(r.uploadedAt);
+    return uploaded !== null && uploaded < cutoff;
+  }).length;
+}
+
+/** One sparkbar: a 7-day window of attendance and its presence rate. */
+export interface AttendanceWeekBar {
+  /** "YYYY-MM-DD" of the first day in the window (inclusive). */
+  startIso: string;
+  total: number;
+  present: number;
+  /** Rounded 0-100 share of records marked present. 0 when the week is empty. */
+  ratePercent: number;
+}
+
+export interface FourWeekAttendance {
+  /** Oldest window first, so the bars read left to right as time passes. */
+  bars: AttendanceWeekBar[];
+  total: number;
+  present: number;
+  /** Presence rate across the whole window. 0 when there are no records. */
+  ratePercent: number;
+}
+
+function toIsoDate(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Bucket attendance records into the trailing N 7-day windows ending today.
+ *
+ * Windows, not calendar weeks: the stat says "4 semanas", and a calendar-week
+ * bucketing would make the newest bar a partial week that always reads as a
+ * collapse. Records outside the window are ignored; records with an unparseable
+ * date are dropped rather than assigned to an arbitrary bucket.
+ */
+export function buildFourWeekAttendance(
+  records: AttendanceRecord[],
+  today: Date = new Date(),
+  weeks = 4,
+): FourWeekAttendance {
+  const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const bars: AttendanceWeekBar[] = Array.from({ length: weeks }, (_, i) => {
+    const startOffsetDays = (weeks - 1 - i) * 7 + 6;
+    return {
+      startIso: toIsoDate(new Date(endOfToday - startOffsetDays * DAY_MS)),
+      total: 0,
+      present: 0,
+      ratePercent: 0,
+    };
+  });
+
+  for (const record of records) {
+    const time = toSortableTime(record.fecha);
+    if (time === null) continue;
+    const startOfRecordDay = new Date(time);
+    const daysAgo = Math.round(
+      (endOfToday -
+        new Date(
+          startOfRecordDay.getFullYear(),
+          startOfRecordDay.getMonth(),
+          startOfRecordDay.getDate(),
+        ).getTime()) /
+        DAY_MS,
+    );
+    if (daysAgo < 0 || daysAgo >= weeks * 7) continue;
+    const bar = bars[weeks - 1 - Math.floor(daysAgo / 7)];
+    bar.total += 1;
+    if (record.estado === "present") bar.present += 1;
+  }
+
+  let total = 0;
+  let present = 0;
+  for (const bar of bars) {
+    bar.ratePercent = bar.total > 0 ? Math.round((bar.present / bar.total) * 100) : 0;
+    total += bar.total;
+    present += bar.present;
+  }
+
+  return {
+    bars,
+    total,
+    present,
+    ratePercent: total > 0 ? Math.round((present / total) * 100) : 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// "Actividad reciente" (Fase 3 — prototype 06)
+// ---------------------------------------------------------------------------
+
+export type ActivityKind =
+  | "payment-uploaded"
+  | "payment-validated"
+  | "payment-rejected"
+  | "attendance-session";
+
+export interface ActivityEvent {
+  id: string;
+  kind: ActivityKind;
+  /** Two-letter avatar seed derived from `subject`. */
+  initials: string;
+  /** The actor or the person the event is about — rendered in bold. */
+  subject: string;
+  /** What happened, as a predicate that follows `subject`. */
+  detail: string;
+  /** The instant the event carries. Date-only for attendance sessions. */
+  at: string;
+}
+
+function initialsFor(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
+  if (words.length === 0) return "?";
+  return words.map((w) => w[0].toUpperCase()).join("");
+}
+
+/**
+ * Merge the timestamped facts the app ALREADY fetches into one recent-activity
+ * feed. No new endpoint is involved, and none is invented: every event maps to
+ * a field that already travels in a DTO the admin surfaces read —
+ * `PaymentValidationRequest.uploadedAt` / `.validatedAt` and
+ * `AttendanceRecord.fecha`.
+ *
+ * The ceiling is deliberate. Both sources arrive as whatever page the API
+ * returned, so this is "the latest inside what was already loaded", not a
+ * history — which is why the card's action sends the reader to the full lists.
+ *
+ * Attendance is grouped per session (date + horario + trainer) rather than per
+ * student: 12 rows saying the same trainer marked the same class is a log, not
+ * a feed.
+ */
+export function buildActivityFeed(
+  requests: PaymentValidationRequest[],
+  records: AttendanceRecord[],
+  limit = 6,
+): ActivityEvent[] {
+  const events: ActivityEvent[] = [];
+
+  for (const request of requests) {
+    if (toSortableTime(request.uploadedAt) !== null) {
+      const payer = request.responsablePagoName || request.representativeName || request.studentName;
+      events.push({
+        id: `pay-up-${request.id}`,
+        kind: "payment-uploaded",
+        initials: initialsFor(payer),
+        subject: payer,
+        detail: `subió un comprobante de ${formatCurrency(request.expectedAmount)}`,
+        at: request.uploadedAt,
+      });
+    }
+
+    const resolved = request.validationStatus === "validado" || request.validationStatus === "rechazado";
+    if (resolved && request.validatedAt && toSortableTime(request.validatedAt) !== null) {
+      const verb = request.validationStatus === "validado" ? "validado" : "rechazado";
+      events.push({
+        id: `pay-res-${request.id}`,
+        kind: request.validationStatus === "validado" ? "payment-validated" : "payment-rejected",
+        initials: initialsFor(request.studentName),
+        subject: request.studentName,
+        detail: request.validatedBy
+          ? `tiene su pago ${verb} por ${request.validatedBy}`
+          : `tiene su pago ${verb}`,
+        at: request.validatedAt,
+      });
+    }
+  }
+
+  const sessions = new Map<string, { record: AttendanceRecord; count: number }>();
+  for (const record of records) {
+    if (toSortableTime(record.fecha) === null) continue;
+    const key = `${record.fecha}|${record.horario}|${record.entrenador}`;
+    const existing = sessions.get(key);
+    if (existing) existing.count += 1;
+    else sessions.set(key, { record, count: 1 });
+  }
+  for (const [key, { record, count }] of sessions) {
+    events.push({
+      id: `att-${key}`,
+      kind: "attendance-session",
+      initials: initialsFor(record.entrenador),
+      subject: record.entrenador,
+      detail: `registró la lista de ${record.horario} · ${count} ${count === 1 ? "estudiante" : "estudiantes"}`,
+      at: record.fecha,
+    });
+  }
+
+  return events
+    .sort((a, b) => (toSortableTime(b.at) ?? 0) - (toSortableTime(a.at) ?? 0))
+    .slice(0, limit);
 }

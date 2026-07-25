@@ -157,21 +157,29 @@ function createAccounts(count: number): MemberAccount[] {
   }));
 }
 
+/**
+ * The account's table row (`sm` and up). Below `sm` the same account is
+ * rendered again as a card — the five-column table cannot fit on a phone, and
+ * the previous fix of hiding four of its five columns left a one-column list
+ * with a duplicated edit button crammed under the name. jsdom applies no real
+ * CSS, so both renderings are in the document here; this helper picks the row.
+ */
 async function findAccountRow(): Promise<HTMLElement> {
-  return (await screen.findByText("María González")).closest("tr") as HTMLElement;
+  const matches = await screen.findAllByText("María González");
+  const row = matches.map((el) => el.closest("tr")).find(Boolean);
+  return row as HTMLElement;
 }
 
-/**
- * Each row renders two "Editar" triggers — a desktop one and a
- * mobile-visible duplicate (the desktop trigger's whole column is CSS-hidden
- * below `sm`, so mobile needs its own reachable one). jsdom doesn't apply
- * real CSS, so both match `getByRole` here; the mobile one comes first in
- * DOM order (it lives in the always-rendered name column), which is also
- * what the component's focus-restoration logic naturally targets when a
- * test clicks this one.
- */
+/** The account's card rendering (below `sm`). */
+async function findAccountCard(): Promise<HTMLElement> {
+  const matches = await screen.findAllByText("María González");
+  const card = matches.map((el) => el.closest("li")).find(Boolean);
+  return card as HTMLElement;
+}
+
+/** Each rendering carries exactly one "Editar <name>" trigger. */
 function getEditButton(container: HTMLElement): HTMLElement {
-  return within(container).getAllByRole("button", { name: /^editar$/i })[0];
+  return within(container).getAllByRole("button", { name: /^editar/i })[0];
 }
 
 describe("MembersPage — Editar member modal", () => {
@@ -210,23 +218,48 @@ describe("MembersPage — Editar member modal", () => {
     return dialog;
   }
 
-  it("renders an Editar trigger per account row (desktop + a mobile-visible duplicate) instead of inline role/status controls", async () => {
+  it("gives each rendering exactly one Editar trigger, and no inline role/status controls", async () => {
     render(
       <ToastProvider>
         <MembersPage />
       </ToastProvider>,
     );
     const row = await findAccountRow();
+    const card = await findAccountCard();
 
-    // Two triggers exist by design — one in the desktop-only contact/status
-    // column, one next to the mobile status badge (that column is CSS-hidden
-    // below `sm`, so mobile needs its own reachable trigger). jsdom doesn't
-    // apply real CSS, so both are "in the document" here; only one is ever
-    // visually reachable at a given real viewport.
-    expect(within(row).getAllByRole("button", { name: /^editar$/i })).toHaveLength(2);
+    // One in the row, one in the phone card — not two stacked in the same
+    // cell, which is what the audit found.
+    expect(within(row).getAllByRole("button", { name: /^editar/i })).toHaveLength(1);
+    expect(within(card).getAllByRole("button", { name: /^editar/i })).toHaveLength(1);
     expect(within(row).queryByRole("button", { name: /^roles$/i })).not.toBeInTheDocument();
     expect(within(row).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows contact, student count and membership on the phone card instead of hiding them", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const card = await findAccountCard();
+
+    // The audit's finding: below `sm` these were all `hidden sm:table-cell`.
+    expect(within(card).getByText(ACCOUNT.telefono)).toBeInTheDocument();
+    expect(within(card).getByText(String(ACCOUNT.estudiantes.length))).toBeInTheDocument();
+    expect(within(card).getByText(/activo|sin membresía|vencida|pendiente/i)).toBeInTheDocument();
+  });
+
+  it("opens exactly one dialog, however many renderings of the account exist", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const card = await findAccountCard();
+    fireEvent.click(getEditButton(card));
+
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 
   it("never renders a row expand/collapse control — the table no longer expands", async () => {
@@ -617,8 +650,15 @@ describe("MembersPage — Editar member modal", () => {
       </ToastProvider>,
     );
 
-    const row1 = (await screen.findByText("Responsable 1 González")).closest("tr") as HTMLElement;
-    const row2 = screen.getByText("Responsable 2 González").closest("tr") as HTMLElement;
+    const rowOf = (name: string): HTMLElement =>
+      screen
+        .getAllByText(name)
+        .map((el) => el.closest("tr"))
+        .find(Boolean) as HTMLElement;
+
+    await screen.findAllByText("Responsable 1 González");
+    const row1 = rowOf("Responsable 1 González");
+    const row2 = rowOf("Responsable 2 González");
 
     fireEvent.click(getEditButton(row1));
     expect(screen.getByRole("dialog")).toHaveTextContent("Responsable 1");
@@ -767,14 +807,16 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     // The header's icon-only dismiss is "Cerrar ventana" so the two are
     // distinguishable in a screen reader's controls list.
     const footerClose = within(dialog).getByRole("button", { name: "Cerrar" });
-    expect(footerClose).toHaveClass("btn-secondary");
+    // Secondary, not the red primary: dismissing is not the CTA here.
+    expect(footerClose.className).toContain("bg-paper");
+    expect(footerClose.className).not.toContain("cata-red");
 
     fireEvent.click(footerClose);
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
-  it("tells the user in the header that every change is already saved", async () => {
+  it("declares each group's save contract instead of one blanket claim in the header", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -784,7 +826,59 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
 
-    expect(within(dialog).getByText(/los cambios se guardan al instante/i)).toBeInTheDocument();
+    // The old header said "Los cambios se guardan al instante" — true of roles
+    // and estado, false of the identity fields and the membership form.
+    expect(within(dialog).queryByText(/los cambios se guardan al instante/i)).not.toBeInTheDocument();
+
+    for (const title of ["Datos de la cuenta", "Estado de la cuenta", "Roles", "Estudiantes a cargo"]) {
+      const heading = within(dialog).getByRole("heading", { name: title });
+      const header = heading.parentElement as HTMLElement;
+      expect(within(header).getByText(/se guarda al instante|requiere guardar/i)).toBeInTheDocument();
+    }
+
+    const datos = within(dialog).getByRole("heading", { name: "Datos de la cuenta" })
+      .parentElement as HTMLElement;
+    expect(within(datos).getByText("Requiere guardar")).toBeInTheDocument();
+
+    const roles = within(dialog).getByRole("heading", { name: "Roles" }).parentElement as HTMLElement;
+    expect(within(roles).getByText("Se guarda al instante")).toBeInTheDocument();
+  });
+
+  it("gives the role switch a visible focus ring on the box that holds focus", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    // The audit: the real checkbox is `sr-only` and the visible switch is
+    // `aria-hidden`, so without a focus style on the wrapping label, keyboard
+    // focus landed somewhere invisible.
+    const checkbox = within(dialog).getByRole("checkbox", { name: /admin/i });
+    const label = checkbox.closest("label") as HTMLElement;
+    expect(label.className).toContain("focus-within:outline");
+    expect(label.className).toContain("focus-within:outline-ball");
+  });
+
+  it("marks a selected role with coal, never red", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ADMINISTRADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    const checkbox = await within(dialog).findByRole("checkbox", { name: /admin/i });
+    await waitFor(() => expect(checkbox).toBeChecked());
+    const label = checkbox.closest("label") as HTMLElement;
+    expect(label.className).toContain("border-coal");
+    expect(label.className).not.toContain("cata-red");
   });
 
   it("names the identity save button after the two fields it actually saves", async () => {
@@ -931,6 +1025,6 @@ describe("MembersPage — defers /api/members until the role resolves", () => {
     );
 
     await waitFor(() => expect(mockFetchMembers).toHaveBeenCalled());
-    expect(await screen.findByText("María González")).toBeInTheDocument();
+    expect((await screen.findAllByText("María González")).length).toBeGreaterThan(0);
   });
 });

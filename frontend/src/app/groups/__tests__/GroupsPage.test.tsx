@@ -166,6 +166,21 @@ const UNASSIGNED_ACCOUNT: MemberAccount = {
   ],
 };
 
+/**
+ * Wait until the schedules have loaded.
+ *
+ * The old sentinel was the "Horarios de Entrenamiento (N)" heading. The screen
+ * no longer has one — `AppShell` already renders the page's `<h1>`, and the
+ * approved prototype puts the weekday filter directly under it — so the
+ * sentinel is the disappearance of the loading block, which works for an empty
+ * list too.
+ */
+async function waitForHorarios(): Promise<void> {
+  await waitFor(() => {
+    expect(screen.queryByText("Cargando horarios…")).not.toBeInTheDocument();
+  });
+}
+
 async function findUnassignedRow(): Promise<HTMLElement> {
   const heading = await screen.findByText(/^estudiantes sin grupo/i);
   const section = heading.closest("div.card") as HTMLElement;
@@ -241,7 +256,7 @@ describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () 
 
   it("locks the displayed time range to COMPETITIVO's 18:00–20:00 and offers Sábado as a día checkbox", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
 
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "COMPETITIVO" } });
@@ -252,7 +267,7 @@ describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () 
 
   it("locks the displayed time range to FORMATIVO's 15:00–16:00 and excludes Sábado from día checkboxes", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
 
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "FORMATIVO" } });
@@ -263,7 +278,7 @@ describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () 
 
   it("has no editable hora_inicio/hora_fin time inputs left in the form (locked, not freeform)", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
 
     expect(screen.queryByLabelText(/hora inicio/i)).not.toBeInTheDocument();
@@ -271,49 +286,136 @@ describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () 
   });
 });
 
-describe("GroupsPage — grouped weekly schedule display (PR2a)", () => {
+describe("GroupsPage — weekday card grid (14-horarios.html)", () => {
+  const RECURRING_ROWS = [
+    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
+    { id: 102, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
+    { id: 103, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
+  ];
+
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
     mockFetchNivelesConOcupacion.mockReset();
+    mockFetchAlumnosPorHorario.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
     mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
+    mockFetchAlumnosPorHorario.mockResolvedValue([]);
   });
 
-  it("collapses 3 recurring rows (same categoria/horario/entrenador/nivel) into 1 card with 3 day badges", async () => {
-    mockFetchHorarios.mockResolvedValue([
-      { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
-      { id: 102, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
-      { id: 103, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
+  it("renders one card per weekday session, titled with its day and time range", async () => {
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(3);
+    expect(screen.getByText("Lunes 18:00 — 20:00")).toBeInTheDocument();
+    expect(screen.getByText("Miércoles 18:00 — 20:00")).toBeInTheDocument();
+    expect(screen.getByText("Viernes 18:00 — 20:00")).toBeInTheDocument();
+  });
+
+  it("carries no level information on the cards (settled product decision)", async () => {
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    for (const card of screen.getAllByTestId("horario-card")) {
+      expect(card.textContent).not.toMatch(/nivel/i);
+    }
+  });
+
+  it("names the trainer and the categoria, not a fabricated table/mesa", async () => {
+    mockFetchHorarios.mockResolvedValue([RECURRING_ROWS[0]]);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const card = screen.getAllByTestId("horario-card")[0];
+    await waitFor(() => {
+      expect(within(card).getByText(/entrenador uno/i)).toBeInTheDocument();
+    });
+    expect(within(card).getByText(/competitivo/i)).toBeInTheDocument();
+    expect(card.textContent).not.toMatch(/mesa/i);
+  });
+
+  it("shows the enrolled headcount per session as a flat count", async () => {
+    mockFetchHorarios.mockResolvedValue([RECURRING_ROWS[0]]);
+    mockFetchAlumnosPorHorario.mockResolvedValue([
+      { id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", edad: 10, horarioId: 101, horarioDia: "LUNES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
+      { id: 2, personaId: 11, personaNombreCompleto: "Bruno Díaz", edad: 11, horarioId: 101, horarioDia: "LUNES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
     ]);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
-    const cards = document.querySelectorAll(".card.p-5");
-    expect(cards).toHaveLength(1);
-
-    const card = cards[0] as HTMLElement;
-    expect(within(card).getByText("Lun")).toBeInTheDocument();
-    expect(within(card).getByText("Mié")).toBeInTheDocument();
-    expect(within(card).getByText("Vie")).toBeInTheDocument();
-    expect(within(card).getByText("18:00 – 20:00")).toBeInTheDocument();
+    expect(await screen.findByText("2 inscriptos")).toBeInTheDocument();
   });
 
-  it("keeps rows with a different entrenador_id in separate cards", async () => {
+  it("omits the headcount rather than claiming zero when the roster request fails", async () => {
+    mockFetchHorarios.mockResolvedValue([RECURRING_ROWS[0]]);
+    mockFetchAlumnosPorHorario.mockRejectedValue(new Error("network"));
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalled());
+    expect(screen.queryByText(/inscripto/i)).not.toBeInTheDocument();
+  });
+
+  it("filters the grid down to a single weekday, and back to the whole week", async () => {
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: /^miércoles/i }));
+    await waitFor(() => {
+      expect(screen.getAllByTestId("horario-card")).toHaveLength(1);
+    });
+    expect(screen.getByText("Miércoles 18:00 — 20:00")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
+    await waitFor(() => {
+      expect(screen.getAllByTestId("horario-card")).toHaveLength(3);
+    });
+  });
+
+  it("keeps rows with a different entrenador_id as separate cards on the same day", async () => {
     mockFetchHorarios.mockResolvedValue([
       { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: null },
       { id: 202, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2, nivelRankingId: null },
     ]);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
-    const cards = document.querySelectorAll(".card.p-5");
-    expect(cards).toHaveLength(2);
-    // both cards render exactly one "Lun" badge each (not merged into one card)
-    const lunBadges = screen.getAllByText("Lun");
-    expect(lunBadges).toHaveLength(2);
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(2);
+    await waitFor(() => {
+      expect(screen.getByText(/entrenador uno/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/entrenador dos/i)).toBeInTheDocument();
+  });
+
+  it("does not paginate — every session of the week is on screen at once", async () => {
+    mockFetchHorarios.mockResolvedValue(
+      Array.from({ length: 26 }, (_, i) => ({
+        id: 1000 + i,
+        diaSemana: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"][i % 6],
+        horaInicio: "15:00",
+        horaFin: "16:00",
+        categoria: "FORMATIVO",
+        entrenadorId: (i % 2) + 1,
+        nivelRankingId: null,
+      })),
+    );
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(26);
+    expect(screen.queryByRole("button", { name: /página siguiente/i })).not.toBeInTheDocument();
   });
 });
 
@@ -330,21 +432,21 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
   });
 
   function card(): HTMLElement {
-    return document.querySelector(".space-y-3 > .card.p-5") as HTMLElement;
+    return screen.getAllByTestId("horario-card")[0];
   }
 
   it("shows the categoria label instead of the nivel line", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
-    expect(within(card()).getByText("Competitivo")).toBeInTheDocument();
+    expect(within(card()).getByText(/competitivo/i)).toBeInTheDocument();
     expect(within(card()).queryByText(/sin nivel asignado/i)).not.toBeInTheDocument();
     expect(within(card()).queryByText(/nivel intermedio/i)).not.toBeInTheDocument();
   });
 
   it("renders 'Ver alumnos' as a labeled button that calls openAlumnosTab (opens the alumnos panel)", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const verAlumnosButton = within(card()).getByRole("button", { name: /ver alumnos/i });
     expect(verAlumnosButton).toHaveTextContent(/ver alumnos/i);
@@ -368,9 +470,9 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
 
   it("falls back to DEFAULT_CATEGORIA's label instead of crashing when categoria doesn't match any known key", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
-    expect(screen.getByText("Formativo")).toBeInTheDocument();
+    expect(screen.getAllByTestId("horario-card")[0]).toHaveTextContent(/formativo/i);
   });
 });
 
@@ -401,8 +503,8 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
 
   async function openEditAndSubmit(): Promise<void> {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
-    fireEvent.click(screen.getByRole("button", { name: /editar horario/i }));
+    await waitForHorarios();
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
     await screen.findByRole("heading", { name: "Editar Horario" });
   }
 
@@ -498,15 +600,15 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
     // Scoped to the horarios list container — excludes the "Nuevo Horario"
     // create-form wrapper, which reuses the same "card p-5" classes but is a
     // sibling before the list, not a group card.
-    return Array.from(document.querySelectorAll(".space-y-3 > .card.p-5")) as HTMLElement[];
+    return screen.getAllByTestId("horario-card");
   }
 
   it("renders the edit form inline under the card being edited, not at a fixed page position", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [cardA] = cards();
-    fireEvent.click(within(cardA).getByTitle("Editar horario"));
+    fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
 
     const heading = await screen.findByRole("heading", { name: "Editar Horario" });
     expect(cardA.contains(heading)).toBe(true);
@@ -514,14 +616,14 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
 
   it("expanding group B's edit form collapses group A's — only one group expanded at a time", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [cardA, cardB] = cards();
-    fireEvent.click(within(cardA).getByTitle("Editar horario"));
+    fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
     await screen.findByRole("heading", { name: "Editar Horario" });
     expect(within(cardA).getByRole("heading", { name: "Editar Horario" })).toBeInTheDocument();
 
-    fireEvent.click(within(cardB).getByTitle("Editar horario"));
+    fireEvent.click(within(cardB).getByRole("button", { name: /^editar /i }));
     await waitFor(() => {
       expect(within(cardB).getByRole("heading", { name: "Editar Horario" })).toBeInTheDocument();
     });
@@ -531,10 +633,10 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
 
   it("opening the alumnos panel on group B closes group A's edit form (single accordion across tabs)", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [cardA, cardB] = cards();
-    fireEvent.click(within(cardA).getByTitle("Editar horario"));
+    fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
     await screen.findByRole("heading", { name: "Editar Horario" });
 
     fireEvent.click(within(cardB).getByRole("button", { name: /ver alumnos/i }));
@@ -545,10 +647,10 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
 
   it("switching tabs on the same group replaces the editar panel with the alumnos panel inline", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [cardA] = cards();
-    fireEvent.click(within(cardA).getByTitle("Editar horario"));
+    fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
     await screen.findByRole("heading", { name: "Editar Horario" });
 
     fireEvent.click(within(cardA).getByRole("button", { name: /ver alumnos/i }));
@@ -559,7 +661,7 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
 
   it("the 'Nuevo Horario' create form is not nested inside any existing group card", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
     const heading = await screen.findByRole("heading", { name: "Nuevo Horario" });
@@ -633,12 +735,12 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   });
 
   function cards(): HTMLElement[] {
-    return Array.from(document.querySelectorAll(".space-y-3 > .card.p-5")) as HTMLElement[];
+    return screen.getAllByTestId("horario-card");
   }
 
   it("does not render a nivel-filtered roster block outside the accordion", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     expect(screen.queryByText("Alumnos asignados")).not.toBeInTheDocument();
     expect(screen.queryByText("Carla Ruiz")).not.toBeInTheDocument();
@@ -646,7 +748,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
   it("shows each student's age next to their name in the roster (Fix 1)", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
@@ -658,7 +760,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
   it("renders the deduplicated union of every día's roster, not just one día (bugfix)", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
@@ -676,7 +778,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
   it("no longer renders a día-pill selector — assignment acts on the whole grupo now", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
@@ -689,7 +791,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   it("assigning a student calls asignarAlumnoAHorario once per horario_id row of the group", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT], niveles: NIVELES });
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
@@ -714,7 +816,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
         : Promise.resolve({}),
     );
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
@@ -734,7 +836,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT], niveles: NIVELES });
     mockAsignarAlumnoAHorario.mockRejectedValue(new ApiClientError("Error de red al asignar el alumno.", 500));
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
@@ -754,7 +856,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
   it("desasignating a student calls desasignarAlumnoDeHorario once per horario_id row of the group", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
@@ -775,7 +877,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   it("shows a real error (not a false success) when every row fails with a non-404 error while desasignating", async () => {
     mockDesasignarAlumnoDeHorario.mockRejectedValue(new ApiClientError("Error de red al desasignar el alumno.", 500));
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
@@ -793,7 +895,15 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   });
 });
 
-describe("GroupsPage — trash icon deletes the whole group, not just the first día (bugfix)", () => {
+describe("GroupsPage — deleting removes the whole group, not just the first día (bugfix)", () => {
+  /** The delete action lives inside the edit panel (`15-horario-editar.html`),
+   *  not on the card, because it removes every weekday of the group. */
+  async function openDeleteFromEditPanel(): Promise<void> {
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
+    await screen.findByRole("heading", { name: "Editar Horario" });
+    fireEvent.click(screen.getByRole("button", { name: /^eliminar/i }));
+  }
+
   const GROUP_ROWS = [
     { id: 701, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5, nivelRankingId: 2 },
     { id: 702, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5, nivelRankingId: 2 },
@@ -830,9 +940,9 @@ describe("GroupsPage — trash icon deletes the whole group, not just the first 
     });
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
-    fireEvent.click(screen.getByTitle("Eliminar horario"));
+    await openDeleteFromEditPanel();
 
     await waitFor(() => {
       expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(701);
@@ -860,9 +970,9 @@ describe("GroupsPage — trash icon deletes the whole group, not just the first 
     });
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
 
-    fireEvent.click(screen.getByTitle("Eliminar horario"));
+    await openDeleteFromEditPanel();
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /confirmar/i }));
 
@@ -883,10 +993,10 @@ describe("GroupsPage — trash icon deletes the whole group, not just the first 
   it("canceling the confirmation makes no delete calls and does not resync data", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
     mockFetchHorarios.mockClear();
 
-    fireEvent.click(screen.getByTitle("Eliminar horario"));
+    await openDeleteFromEditPanel();
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /cancelar/i }));
 
@@ -933,8 +1043,8 @@ describe("GroupsPage — save resyncs local state after a mid-sequence failure (
     );
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
-    fireEvent.click(screen.getByRole("button", { name: /editar horario/i }));
+    await waitForHorarios();
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
     await screen.findByRole("heading", { name: "Editar Horario" });
 
     fireEvent.click(screen.getByLabelText("Viernes"));
@@ -953,7 +1063,7 @@ describe("GroupsPage — save resyncs local state after a mid-sequence failure (
     // Reopening the form must reflect the RESYNCED backend state (día
     // VIERNES already exists, id 705) — not the stale 2-día snapshot from
     // before the failed save, which would cause a retry to re-create it.
-    fireEvent.click(screen.getByRole("button", { name: /editar horario/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
     await screen.findByRole("heading", { name: "Editar Horario" });
     expect(screen.getByLabelText("Viernes")).toBeChecked();
   });
@@ -977,7 +1087,7 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
 
   it("populates the dropdown with real entrenador names, not raw ids", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
 
     const select = await screen.findByLabelText("Entrenador");
@@ -988,7 +1098,7 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
 
   it("creating a new horario sends the entrenador_id chosen from the dropdown, not an auto-filled value", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
 
     fireEvent.click(screen.getByLabelText("Lunes"));
@@ -1002,7 +1112,7 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
 
   it("blocks submit and shows a validation message when no entrenador is selected", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
 
     fireEvent.click(screen.getByLabelText("Lunes"));
@@ -1015,8 +1125,8 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
 
   it("editing an existing horario preselects the group's real entrenador by name, not a raw id input", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
-    fireEvent.click(screen.getByRole("button", { name: /editar horario/i }));
+    await waitForHorarios();
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
 
     const select = (await screen.findByLabelText("Entrenador")) as HTMLSelectElement;
     expect(select.value).toBe("7");
@@ -1049,7 +1159,7 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
     mockFetchEntrenadores.mockResolvedValue([]);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
 
     const select = (await screen.findByLabelText("Entrenador")) as HTMLSelectElement;
@@ -1069,7 +1179,7 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
     // the same Promise.all. A distinct, non-blocking notification about the
     // entrenadores fetch failure is acceptable; the page-wide loadError
     // banner (with its "Reintentar" retry-everything button) is not.
-    await screen.findByText(/horarios de entrenamiento/i);
+    await waitForHorarios();
     expect(screen.queryByText(/no se pudieron cargar los horarios\. intente nuevamente/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
     expect(await screen.findByText(/no se pudieron cargar los entrenadores/i)).toBeInTheDocument();

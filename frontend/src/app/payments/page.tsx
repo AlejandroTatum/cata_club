@@ -1,56 +1,69 @@
 /**
- * Memberships & Payments — Payment validation queue and detail panel (CU012).
+ * Membresías y Pagos — the validation queue (CU012), redesigned for Fase 3.
  *
- * Implements CU012 "Validar o rechazar comprobante de pago":
- *   1. Admin enters Gestión de Membresías y Pagos.
- *   2. System shows list of proofs pending validation.
- *   3. Admin selects a pending proof.
- *   4. System shows payment request detail, current membership status,
- *      and attached proof file.
- *   5. Admin verifies the payment corresponds to student, period, amount,
- *      and method.
- *   6. Admin approves or rejects with required reason.
+ * Sources of truth: `docs/ux/prototipos/09-pagos-cola.html` (queue),
+ * `10-pago-validar.html` (detail) and `11-pago-rechazar.html` (rejection).
+ *
+ * What changed, and why — every item below was a measured defect, not a taste
+ * call (see `docs/ux/plan-implementacion-rediseno.md`, Fase 3 item 2):
+ *
+ *   · The filter opened on "Todas". Nobody comes to this screen to browse a
+ *     history, so clearing the queue began with a click. It opens on
+ *     Pendientes.
+ *   · Rows were `<tr onClick>` with `cursor-pointer` and no tabIndex, role or
+ *     onKeyDown: a keyboard or screen-reader admin could not open a single
+ *     payment on the one screen whose entire purpose is clearing a queue. The
+ *     action is now a real `<button>` in its own column, named after the
+ *     student it acts on.
+ *   · Seven columns carried three with no decision weight. Five remain, with
+ *     the responsible payer demoted to a "Paga: …" subtitle.
+ *   · Selecting a request replaced the whole list, so the admin lost their
+ *     place with no way back. The detail header now states "Pendiente N de M"
+ *     and carries prev/next, and a decision auto-advances to the next pending
+ *     item.
+ *   · The "Lista de Verificación" was static prose the admin had to hold in
+ *     memory while looking at the proof in the other column — so a payment
+ *     could be approved without ever checking the amount. It is now real
+ *     checkboxes, and they gate the button.
+ *
+ * The stat-card row is gone: the filter pills already carry every one of those
+ * four counts, and the surface is allowed one message.
  */
 
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import BackLink from "@/components/BackLink";
 import {
   ShieldCheck,
-  Clock,
-  CheckCircle2,
   XCircle,
-  Filter,
-  User,
-  Calendar,
-  DollarSign,
   FileText,
-  CreditCard,
-  BadgeCheck,
-  AlertTriangle,
   Eye,
-  ThumbsUp,
-  ThumbsDown,
   ArrowLeft,
-  Paperclip,
-  Building2,
-  Hash,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import type {
   PaymentValidationRequest,
-  MembershipStatus,
   ValidationStatus,
 } from "@/services/api";
 import { fetchPaymentValidations, updatePaymentValidation } from "@/services/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import { useToast } from "@/contexts/ToastContext";
-import { paginatePaymentRequests, getTotalPages, PAYMENTS_PAGE_SIZE } from "@/app/payments/payments-utils";
+import {
+  paginatePaymentRequests,
+  getTotalPages,
+  PAYMENTS_PAGE_SIZE,
+  humanizePaymentPeriod,
+  getPendingRequests,
+  findQueueNeighbours,
+  getAutoAdvanceId,
+  buildApprovalChecklist,
+  composeRejectionReason,
+  REJECTION_REASONS,
+} from "@/app/payments/payments-utils";
 import {
   Badge,
   Button,
@@ -59,6 +72,14 @@ import {
   FilterPill,
   LoadingState,
   Pagination,
+  SearchInput,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableNameCell,
+  TableRow,
 } from "@/components/ui";
 import {
   VALIDATION_STATUS_LABELS,
@@ -69,11 +90,15 @@ import {
 
 type FilterKey = "all" | ValidationStatus;
 
-const filters: { key: FilterKey; label: string }[] = [
-  { key: "all", label: "Todas" },
+/**
+ * Pendientes first, and it is the default — the prototype's whole point is
+ * that the screen opens on the work of the day.
+ */
+const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "pendiente", label: "Pendientes" },
   { key: "validado", label: "Validados" },
   { key: "rechazado", label: "Rechazados" },
+  { key: "all", label: "Todas" },
 ];
 
 /** Feminine plural agreeing with "solicitudes", for the filtered empty state. */
@@ -83,18 +108,141 @@ const EMPTY_FILTER_NOUN: Record<ValidationStatus, string> = {
   rechazado: "rechazadas",
 };
 
+/**
+ * Who actually pays, for the "Paga: …" subtitle.
+ *
+ * The prototype writes "la misma estudiante" / "el mismo estudiante", which
+ * needs a gender the DTO does not carry. Neutral Spanish instead of a guess.
+ */
+function payerLabel(request: PaymentValidationRequest): string {
+  const payer = request.responsablePagoName || request.representativeName;
+  if (!payer || payer === request.studentName) return "Paga: la misma persona";
+  return `Paga: ${payer}`;
+}
+
+function actionLabel(request: PaymentValidationRequest): string {
+  return request.validationStatus === "pendiente"
+    ? `Revisar el pago de ${request.studentName}`
+    : `Ver el detalle del pago de ${request.studentName}`;
+}
+
+// ---------------------------------------------------------------------------
+// Detail sub-views
+// ---------------------------------------------------------------------------
+
+/** One row of the 56px detail list (`_sistema.css` `.drow`). */
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
+  return (
+    <div className="flex min-h-drow flex-wrap items-center justify-between gap-2 border-b border-line px-[18px] py-3 last:border-b-0">
+      <span className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">{label}</span>
+      <span className="text-[13.5px] font-semibold text-ink">{children}</span>
+    </div>
+  );
+}
+
+function ProofViewer({
+  request,
+  previewUnavailable,
+  onPreviewError,
+  onRetryPreview,
+}: {
+  request: PaymentValidationRequest;
+  previewUnavailable: boolean;
+  onPreviewError: () => void;
+  onRetryPreview: () => void;
+}): React.ReactElement {
+  return (
+    <div className="overflow-hidden rounded-card border border-line bg-paper lg:sticky lg:top-6">
+      <div className="flex items-center gap-2 border-b border-line bg-[#FAFAFB] px-4 py-3">
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">
+          {request.proofFileName}
+        </span>
+        <span className="shrink-0 text-[11.5px] text-ink-3">
+          {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
+        </span>
+      </div>
+
+      <div className="flex min-h-[280px] items-center justify-center bg-canvas p-4">
+        {request.proofPreviewUrl && !previewUnavailable ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={request.proofPreviewUrl}
+            alt="Vista previa del comprobante de pago"
+            onError={onPreviewError}
+            className="max-h-[420px] w-full object-contain"
+          />
+        ) : request.proofPreviewUrl ? (
+          <div role="status" className="space-y-3 text-center text-[13px] text-ink-2">
+            <p>Comprobante no disponible</p>
+            <a
+              href={request.proofPreviewUrl}
+              download
+              className="inline-flex font-semibold text-cata-red hover:underline"
+            >
+              Descargar comprobante
+            </a>
+            <button
+              type="button"
+              onClick={onRetryPreview}
+              className="mx-auto block text-[12.5px] font-semibold text-ink-2 hover:text-ink"
+            >
+              Reintentar vista previa
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3 text-center">
+            <FileText size={32} strokeWidth={1.5} className="mx-auto text-ink-3" aria-hidden="true" />
+            <p className="text-[12.5px] text-ink-3">
+              <Eye size={12} strokeWidth={1.5} className="mr-1 inline-block -mt-0.5" aria-hidden="true" />
+              Vista previa no disponible para este tipo de comprobante.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {request.proofPreviewUrl && (
+        <div className="flex items-center gap-2 border-t border-line px-4 py-3">
+          <a
+            href={request.proofPreviewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[12.5px] font-semibold text-ink-2 hover:text-ink"
+          >
+            Ampliar
+          </a>
+          <a
+            href={request.proofPreviewUrl}
+            download
+            className="text-[12.5px] font-semibold text-ink-2 hover:text-ink"
+          >
+            Descargar
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function PaymentsPage(): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [requests, setRequests] = useState<PaymentValidationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
-  const [selectedRequest, setSelectedRequest] = useState<PaymentValidationRequest | null>(null);
+  const [activeFilter, setActiveFilter] = useState<FilterKey>("pendiente");
+  const [query, setQuery] = useState("");
+  /** Selection is by id, never by object: the object is replaced on every
+   *  approve/reject, and holding the old one is how a detail view goes stale. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [rejectionReason, setRejectionReason] = useState("");
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [rejectionReasonKey, setRejectionReasonKey] = useState("");
+  const [rejectionNote, setRejectionNote] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
-  const [rejectionValidationError, setRejectionValidationError] = useState<string | null>(null);
   const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const [page, setPage] = useState(1);
@@ -103,8 +251,7 @@ export default function PaymentsPage(): React.ReactElement {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchPaymentValidations();
-      setRequests(data);
+      setRequests(await fetchPaymentValidations());
     } catch (err) {
       console.error("[payments] fetchPaymentValidations failed", err);
       setError("Error al cargar las solicitudes de validación de pago");
@@ -114,34 +261,51 @@ export default function PaymentsPage(): React.ReactElement {
   }, []);
 
   useEffect(() => {
-    loadRequests();
+    void loadRequests();
   }, [loadRequests]);
 
   /**
-   * One feedback channel: the toast.
-   *
-   * This screen used to fire an inline banner AND a toast for the same
-   * approval, so a single click produced two confirmations of one event —
-   * while members fired only a toast and trainer attendance fired only an
-   * inline block. The rule now, everywhere: an outcome the user just caused
-   * is a toast; only state that must persist on the page (a validation
-   * message attached to a field, a load that failed and can be retried) is
-   * rendered inline.
+   * One feedback channel: the toast. An outcome the user just caused is a
+   * toast; only state that must persist on the page (a field-level validation
+   * message, a load that failed and can be retried) is rendered inline.
    */
   useEffect(() => {
     if (actionError) showError(actionError);
   }, [actionError, showError]);
 
-  const filtered =
-    activeFilter === "all"
-      ? requests
-      : requests.filter((r) => r.validationStatus === activeFilter);
+  const selectedRequest = useMemo(
+    () => requests.find((r) => r.id === selectedId) ?? null,
+    [requests, selectedId],
+  );
 
-  // Reset to page 1 whenever the filter changes, so the paginator never
-  // gets stuck on a stale/out-of-range page.
+  /**
+   * Every per-request bit of local state resets when the request changes —
+   * including on auto-advance. A checklist inherited from the previous payment
+   * would be exactly the failure the checklist exists to prevent.
+   */
+  useEffect(() => {
+    setChecked({});
+    setShowRejectForm(false);
+    setRejectionReasonKey("");
+    setRejectionNote("");
+    setActionError(null);
+    setPreviewUnavailable(false);
+  }, [selectedId]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = useMemo(
+    () =>
+      requests
+        .filter((r) => activeFilter === "all" || r.validationStatus === activeFilter)
+        .filter((r) => !normalizedQuery || r.studentName.toLowerCase().includes(normalizedQuery)),
+    [requests, activeFilter, normalizedQuery],
+  );
+
+  // Reset to page 1 whenever the filter or the search changes, so the
+  // paginator never gets stuck on a stale/out-of-range page.
   useEffect(() => {
     setPage(1);
-  }, [activeFilter]);
+  }, [activeFilter, normalizedQuery]);
 
   const totalPages = useMemo(() => getTotalPages(filtered.length), [filtered]);
   const paginatedRequests = useMemo(
@@ -149,605 +313,485 @@ export default function PaymentsPage(): React.ReactElement {
     [filtered, page],
   );
 
-  const counts = {
-    total: requests.length,
-    pending: requests.filter((r) => r.validationStatus === "pendiente").length,
-    approved: requests.filter((r) => r.validationStatus === "validado").length,
-    rejected: requests.filter((r) => r.validationStatus === "rechazado").length,
-  };
-
-  /** The same numbers, keyed the way the filter pills need them. */
+  const pending = useMemo(() => getPendingRequests(requests), [requests]);
   const filterCounts: Record<FilterKey, number> = {
-    all: counts.total,
-    pendiente: counts.pending,
-    validado: counts.approved,
-    rechazado: counts.rejected,
+    all: requests.length,
+    pendiente: pending.length,
+    validado: requests.filter((r) => r.validationStatus === "validado").length,
+    rechazado: requests.filter((r) => r.validationStatus === "rechazado").length,
   };
 
-  function handleSelect(request: PaymentValidationRequest): void {
-    setSelectedRequest(request);
-    setShowRejectForm(false);
-    setRejectionReason("");
-    setRejectionValidationError(null);
-    setActionError(null);
-    setPreviewUnavailable(false);
-  }
+  const queue = findQueueNeighbours(pending, selectedId ?? "");
 
-  function handleBack(): void {
-    setSelectedRequest(null);
-    setShowRejectForm(false);
-    setRejectionReason("");
-    setRejectionValidationError(null);
-    setActionError(null);
+  const checklist = useMemo(
+    () => buildApprovalChecklist(formatCurrency(selectedRequest?.expectedAmount ?? 0)),
+    [selectedRequest?.expectedAmount],
+  );
+  const remainingChecks = checklist.filter((item) => !checked[item.key]).length;
+  const checklistComplete = remainingChecks === 0;
+
+  /** The pending queue as it stood before the in-flight decision resolves. */
+  const pendingBeforeDecision = useRef<PaymentValidationRequest[]>([]);
+
+  function applyDecision(updated: PaymentValidationRequest): void {
+    setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    setSelectedId(getAutoAdvanceId(pendingBeforeDecision.current, updated.id));
   }
 
   async function handleApprove(): Promise<void> {
-    if (!selectedRequest) return;
+    if (!selectedRequest || !checklistComplete) return;
+    pendingBeforeDecision.current = pending;
     setActionLoading("approve");
     setActionError(null);
     try {
-      const updated = await updatePaymentValidation(selectedRequest.id, {
-        action: "approved",
-      });
-      setRequests((prev) =>
-        prev.map((r) => (r.id === updated.id ? updated : r)),
-      );
-      setSelectedRequest(updated);
+      applyDecision(await updatePaymentValidation(selectedRequest.id, { action: "approved" }));
       showSuccess("Pago aprobado. La membresía ahora está activa.");
     } catch (err) {
       console.error("[payments] approve failed", err);
-      setActionError(
-        "Error al aprobar el pago",
-      );
+      setActionError("Error al aprobar el pago");
     } finally {
       setActionLoading(null);
     }
-  }
-
-  function handleRejectClick(): void {
-    setShowRejectForm(true);
-    setRejectionValidationError(null);
-    setActionError(null);
-  }
-
-  function handleRejectCancel(): void {
-    setShowRejectForm(false);
-    setRejectionReason("");
-    setRejectionValidationError(null);
   }
 
   async function handleRejectSubmit(): Promise<void> {
     if (!selectedRequest) return;
+    const rejectionReason = composeRejectionReason(rejectionReasonKey, rejectionNote);
+    if (!rejectionReason) return;
 
-    // Client-side validation: rejection reason must not be empty
-    if (!rejectionReason.trim()) {
-      setRejectionValidationError("El motivo de rechazo es obligatorio.");
-      return;
-    }
-
+    pendingBeforeDecision.current = pending;
     setActionLoading("reject");
     setActionError(null);
-    setRejectionValidationError(null);
     try {
-      const updated = await updatePaymentValidation(selectedRequest.id, {
-        action: "rejected",
-        rejectionReason: rejectionReason.trim(),
-      });
-      setRequests((prev) =>
-        prev.map((r) => (r.id === updated.id ? updated : r)),
+      applyDecision(
+        await updatePaymentValidation(selectedRequest.id, { action: "rejected", rejectionReason }),
       );
-      setSelectedRequest(updated);
-      setShowRejectForm(false);
-      showSuccess("Pago rechazado. El estado de la membresía se mantiene sin cambios.");
+      showSuccess("Pago rechazado. Se le avisó al responsable con el motivo elegido.");
     } catch (err) {
       console.error("[payments] reject failed", err);
-      setActionError(
-        "Error al rechazar el pago",
-      );
+      setActionError("Error al rechazar el pago");
     } finally {
       setActionLoading(null);
     }
   }
 
-  return (
-    <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell
-        eyebrow="Cola de validación"
-        title="Membresías y Pagos"
-      >
-        {!selectedRequest && <BackLink href="/dashboard" label="Volver al Panel" />}
+  // -------------------------------------------------------------------------
+  // Queue
+  // -------------------------------------------------------------------------
 
-        {/* Stats cards */}
-        <div className="mb-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="card-hover flex items-center gap-3 p-4 sm:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
-              <ShieldCheck size={20} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            </div>
-            <p className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-cata-text/65">
-              Total Solicitudes
-            </p>
-            <p className="shrink-0 text-2xl font-bold tracking-tight text-cata-text">{counts.total}</p>
-          </div>
-          <div className="card-hover flex items-center gap-3 p-4 sm:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50">
-              <Clock size={20} strokeWidth={1.5} className="text-amber-700" aria-hidden="true" />
-            </div>
-            <p className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-cata-text/65">
-              Pendientes
-            </p>
-            <p className="shrink-0 text-2xl font-bold tracking-tight text-cata-text">{counts.pending}</p>
-          </div>
-          <div className="card-hover flex items-center gap-3 p-4 sm:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cata-state-ok/10">
-              <CheckCircle2 size={20} strokeWidth={1.5} className="text-cata-state-ok" aria-hidden="true" />
-            </div>
-            <p className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-cata-text/65">
-              Aprobados
-            </p>
-            <p className="shrink-0 text-2xl font-bold tracking-tight text-cata-text">{counts.approved}</p>
-          </div>
-          <div className="card-hover flex items-center gap-3 p-4 sm:p-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50">
-              <XCircle size={20} strokeWidth={1.5} className="text-red-700" aria-hidden="true" />
-            </div>
-            <p className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-cata-text/65">
-              Rechazados
-            </p>
-            <p className="shrink-0 text-2xl font-bold tracking-tight text-cata-text">{counts.rejected}</p>
-          </div>
+  function renderQueue(): React.ReactElement {
+    return (
+      <>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {FILTERS.map((f) => (
+            <FilterPill
+              key={f.key}
+              label={f.label}
+              count={filterCounts[f.key]}
+              active={activeFilter === f.key}
+              onClick={() => setActiveFilter(f.key)}
+            />
+          ))}
         </div>
 
-        {/* Main content: split layout */}
-        {!selectedRequest ? (
-          <>
-            {/* Filters — must wrap: the heading plus four chips are wider
-                than a 390px viewport, and `flex` alone (nowrap) pushed the
-                whole page into horizontal scroll. */}
-            <div className="mb-6 flex flex-wrap items-center gap-2">
-              <Filter size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-              <h2 className="text-lg font-bold text-cata-text mr-2">Filtrar por Estado</h2>
-              {/* Counts were already computed for the stat cards above; the
-                  pills just never showed them, which is the only thing that
-                  made this filter row a different idiom from members'. */}
-              {filters.map((f) => (
-                <FilterPill
-                  key={f.key}
-                  label={f.label}
-                  count={filterCounts[f.key]}
-                  active={activeFilter === f.key}
-                  onClick={() => setActiveFilter(f.key)}
-                />
-              ))}
-            </div>
+        <SearchInput
+          className="mb-6 max-w-[320px]"
+          label="Buscar estudiante"
+          placeholder="Buscar estudiante"
+          value={query}
+          onChange={setQuery}
+        />
 
-            {/* Loading state */}
-            {loading && <LoadingState label="Cargando solicitudes…" />}
+        {loading && <LoadingState label="Cargando solicitudes…" />}
 
-            {/* Error state */}
-            {error && !loading && (
-              <ErrorState message={error} onRetry={() => loadRequests()} />
-            )}
+        {error && !loading && <ErrorState message={error} onRetry={() => void loadRequests()} />}
 
-            {/* Empty state */}
-            {!loading && !error && filtered.length === 0 && (
-              <div className="card">
-                <EmptyState
-                  icon={<ShieldCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
-                  title={
-                    activeFilter === "all"
-                      ? "Aún no hay solicitudes de validación de pago"
-                      : `No hay solicitudes ${EMPTY_FILTER_NOUN[activeFilter]}`
-                  }
-                  description={
-                    activeFilter === "all"
-                      ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
-                      : "Pruebe con otro estado para ver el resto de la cola."
-                  }
-                  action={
-                    activeFilter === "all" ? undefined : (
-                      <Button onClick={() => setActiveFilter("all")}>Ver todas</Button>
-                    )
-                  }
-                />
-              </div>
-            )}
-
-            {/* Request table */}
-            {!loading && !error && filtered.length > 0 && (
-              <div className="card overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-cata-border bg-cata-bg text-xs font-medium uppercase tracking-wider text-cata-text/65">
-                        <th className="px-4 py-3 font-medium">Estudiante</th>
-                        <th className="px-4 py-3 font-medium">Responsable de pago</th>
-                        <th className="px-4 py-3 font-medium">Período</th>
-                        <th className="px-4 py-3 font-medium text-right">Monto</th>
-                        <th className="px-4 py-3 font-medium">Método</th>
-                        <th className="px-4 py-3 font-medium">Subido</th>
-                        <th className="px-4 py-3 font-medium">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-cata-border">
-                      {paginatedRequests.map((req) => (
-                        <tr
-                          key={req.id}
-                          onClick={() => handleSelect(req)}
-                          className="cursor-pointer transition-colors hover:bg-cata-bg"
-                        >
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <User size={14} strokeWidth={1.5} className="shrink-0 text-cata-text/65" aria-hidden="true" />
-                              <span className="font-medium text-cata-text">{req.studentName}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-cata-text/65">
-                            {req.responsablePagoName || req.representativeName || (
-                              <span className="text-cata-text/30">&mdash;</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-cata-text/65">{req.membershipPeriod}</td>
-                          <td className="px-4 py-3 text-right font-medium text-cata-text">
-                            {formatCurrency(req.expectedAmount)}
-                          </td>
-                          <td className="px-4 py-3 text-cata-text/65">{req.paymentMethod}</td>
-                          <td className="px-4 py-3 text-xs text-cata-text/40">
-                            {formatDateTime(req.uploadedAt)}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
-                              {VALIDATION_STATUS_LABELS[req.validationStatus]}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {totalPages > 1 && (
-                  <Pagination
-                    className="mt-0 border-t border-cata-border px-4 py-3"
-                    page={page}
-                    totalPages={totalPages}
-                    onPageChange={setPage}
-                    totalItems={filtered.length}
-                    pageSize={PAYMENTS_PAGE_SIZE}
-                    itemNoun="solicitud"
-                    itemNounPlural="solicitudes"
-                  />
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          /* Detail Panel */
-          <div>
-            {/* Back button */}
-            <button
-              type="button"
-              onClick={handleBack}
-              className="btn-ghost mb-6 -ml-2 gap-1 text-xs text-cata-text/65"
-            >
-              <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-              Volver a la lista
-            </button>
-
-            <div className="grid gap-6 lg:grid-cols-5">
-              {/* Left: Payment details */}
-              <div className="lg:col-span-3 space-y-6">
-                {/* Membership status card */}
-                <div className="card p-6">
-                  <div className="mb-4 flex items-center gap-2">
-                    <BadgeCheck size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                    <h2 className="text-base font-semibold text-cata-text">Estado de la Membresía</h2>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Estado Actual</p>
-                      <Badge
-                        className="mt-1"
-                        tone={MEMBERSHIP_STATUS_TONES[selectedRequest.currentMembershipStatus]}
-                      >
-                        {MEMBERSHIP_STATUS_LABELS[selectedRequest.currentMembershipStatus]}
-                      </Badge>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Tipo de Membresía</p>
-                      <p className="mt-1 text-sm font-medium text-cata-text">{selectedRequest.membershipType}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Payment request detail */}
-                <div className="card p-6">
-                  <div className="mb-4 flex items-center gap-2">
-                    <DollarSign size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                    <h2 className="text-base font-semibold text-cata-text">Detalle de Solicitud de Pago</h2>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Estudiante</p>
-                      <div className="mt-1 flex items-center gap-1.5 text-sm text-cata-text">
-                        <User size={14} strokeWidth={1.5} className="shrink-0 text-cata-text/65" aria-hidden="true" />
-                        {selectedRequest.studentName}
-                      </div>
-                    </div>
-                    {(selectedRequest.responsablePagoName || selectedRequest.representativeName) && (
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Responsable de pago</p>
-                        <div className="mt-1 flex items-center gap-1.5 text-sm text-cata-text">
-                          <Building2 size={14} strokeWidth={1.5} className="shrink-0 text-cata-text/65" aria-hidden="true" />
-                          {selectedRequest.responsablePagoName || selectedRequest.representativeName}
-                        </div>
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Período</p>
-                      <div className="mt-1 flex items-center gap-1.5 text-sm text-cata-text">
-                        <Calendar size={14} strokeWidth={1.5} className="shrink-0 text-cata-text/65" aria-hidden="true" />
-                        {selectedRequest.membershipPeriod}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Monto Esperado</p>
-                      <div className="mt-1 flex items-center gap-1.5 text-lg font-bold text-cata-text">
-                        <DollarSign size={16} strokeWidth={2} className="shrink-0 text-cata-text/65" aria-hidden="true" />
-                        {formatCurrency(selectedRequest.expectedAmount)}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Método de Pago</p>
-                      <div className="mt-1 flex items-center gap-1.5 text-sm text-cata-text">
-                        <CreditCard size={14} strokeWidth={1.5} className="shrink-0 text-cata-text/65" aria-hidden="true" />
-                        {selectedRequest.paymentMethod}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wider text-cata-text/40">Subido el</p>
-                      <div className="mt-1 flex items-center gap-1.5 text-sm text-cata-text/65">
-                        <Clock size={14} strokeWidth={1.5} className="shrink-0" aria-hidden="true" />
-                        {formatDateTime(selectedRequest.uploadedAt)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Validation criteria */}
-                {selectedRequest.validationStatus === "pendiente" && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
-                    <div className="mb-2 flex items-center gap-2">
-                      <AlertTriangle size={14} strokeWidth={1.5} className="text-amber-700" aria-hidden="true" />
-                      <h3 className="text-sm font-semibold text-amber-700">Lista de Verificación</h3>
-                    </div>
-                    <ul className="space-y-1 text-sm text-amber-700">
-                      <li className="flex items-center gap-2">
-                        <div className="h-1 w-1 rounded-full bg-amber-700" />
-                        Verifique que el nombre del estudiante corresponda a un miembro registrado
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <div className="h-1 w-1 rounded-full bg-amber-700" />
-                        Confirme que el período corresponda al ciclo de membresía actual
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <div className="h-1 w-1 rounded-full bg-amber-700" />
-                        Compruebe que el monto coincida con la cuota de membresía esperada
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <div className="h-1 w-1 rounded-full bg-amber-700" />
-                        Verifique que el método de pago sea correcto
-                      </li>
-                    </ul>
-                  </div>
-                )}
-
-                {/* Rejection reason (displayed when already rejected) */}
-                {selectedRequest.validationStatus === "rechazado" && selectedRequest.rejectionReason && (
-                  <div className="card border-red-200 bg-red-50 p-5">
-                    <div className="mb-2 flex items-center gap-2">
-                      <XCircle size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                      <h3 className="text-sm font-semibold text-cata-red">Motivo de Rechazo</h3>
-                    </div>
-                    <p className="text-sm text-cata-red/80">{selectedRequest.rejectionReason}</p>
-                    {selectedRequest.validatedBy && selectedRequest.validatedAt && (
-                      <p className="mt-2 text-xs text-cata-text/65">
-                        Rechazado por {selectedRequest.validatedBy} el {formatDate(selectedRequest.validatedAt)}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Validation metadata */}
-                {(selectedRequest.validationStatus === "validado" || selectedRequest.validationStatus === "rechazado") && (
-                  <div className="text-xs text-cata-text/40">
-                    {selectedRequest.validatedBy && (
-                      <p>Validado por: {selectedRequest.validatedBy}</p>
-                    )}
-                    {selectedRequest.validatedAt && (
-                      <p>Fecha de validación: {formatDate(selectedRequest.validatedAt)}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Right: Proof file and actions */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Proof file block */}
-                <div className="card p-6">
-                  <div className="mb-4 flex items-center gap-2">
-                    <Paperclip size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                    <h2 className="text-base font-semibold text-cata-text">Comprobante de Pago</h2>
-                  </div>
-
-                  <div className="mb-4 rounded-xl border-2 border-dashed border-cata-border bg-cata-bg p-6 text-center">
-                    {selectedRequest.proofPreviewUrl && !previewUnavailable ? (
-                      <div className="relative mx-auto mb-3 h-48 w-full overflow-hidden rounded-lg bg-cata-border/40">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={selectedRequest.proofPreviewUrl}
-                           alt="Vista previa del comprobante de pago"
-                          onError={(): void => setPreviewUnavailable(true)}
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-                    ) : selectedRequest.proofPreviewUrl ? (
-                      <div role="status" className="space-y-3 text-sm text-cata-text/65">
-                        <p>Comprobante no disponible</p>
-                        <a href={selectedRequest.proofPreviewUrl} download className="inline-flex font-medium text-cata-red hover:text-cata-red-light">
-                          Descargar comprobante
-                        </a>
-                        <button type="button" onClick={(): void => setPreviewUnavailable(false)} className="block mx-auto text-xs font-medium text-cata-red hover:text-cata-red-light">
-                          Reintentar vista previa
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="mb-3 flex items-center justify-center">
-                          <div
-                            className={`flex h-16 w-16 items-center justify-center rounded-full ${
-                              selectedRequest.proofFileType === "pdf"
-                                ? "bg-cata-red/15"
-                                : "bg-cata-border/40"
-                            }`}
-                          >
-                            <FileText
-                              size={28}
-                              strokeWidth={1.5}
-                              className={selectedRequest.proofFileType === "pdf" ? "text-cata-red" : "text-cata-text/65"}
-                              aria-hidden="true"
-                            />
-                          </div>
-                        </div>
-                        <p className="mt-4 text-xs text-cata-text/40">
-                          <Eye size={12} strokeWidth={1.5} className="inline-block -mt-0.5 mr-1" aria-hidden="true" />
-                          Vista previa no disponible para este tipo de comprobante.
-                        </p>
-                      </>
-                    )}
-
-                    <div className="flex items-center justify-center gap-2">
-                      <Hash size={12} strokeWidth={1.5} className="text-cata-text/65" aria-hidden="true" />
-                      <span className="text-sm font-medium text-cata-text">
-                        {selectedRequest.proofFileName}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-cata-text/65">
-                      {selectedRequest.proofFileType === "pdf" ? "Documento PDF" : "Archivo de imagen"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Actions (only for pending requests) */}
-                {selectedRequest.validationStatus === "pendiente" && (
-                  <div className="card p-6">
-                    <div className="mb-4 flex items-center gap-2">
-                      <ShieldCheck size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                      <h2 className="text-base font-semibold text-cata-text">Acción de Validación</h2>
-                    </div>
-
-                    {!showRejectForm ? (
-                      <div className="space-y-3">
-                        <button
-                          type="button"
-                          onClick={() => setConfirmApproveOpen(true)}
-                          disabled={actionLoading !== null}
-                          className="btn-primary w-full bg-cata-state-ok shadow-soft hover:bg-cata-state-ok/90"
-                        >
-                          {actionLoading === "approve" ? (
-                            "Procesando…"
-                          ) : (
-                            <>
-                              <ThumbsUp size={15} strokeWidth={2} aria-hidden="true" />
-                              Aprobar Pago
-                            </>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleRejectClick}
-                          disabled={actionLoading !== null}
-                          className="btn-secondary w-full border-cata-red/30 text-cata-red hover:bg-cata-red/10 hover:border-cata-red/50"
-                        >
-                          <ThumbsDown size={15} strokeWidth={2} aria-hidden="true" />
-                          Rechazar Pago
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div>
-                          <label
-                            htmlFor="rejection-reason"
-                            className="mb-1.5 block text-sm font-medium text-cata-text"
-                          >
-                            Motivo de Rechazo <span className="text-cata-red">*</span>
-                          </label>
-                          <textarea
-                            id="rejection-reason"
-                            rows={3}
-                            value={rejectionReason}
-                            onChange={(e) => {
-                              setRejectionReason(e.target.value);
-                              setRejectionValidationError(null);
-                            }}
-                            placeholder="Explique por qué se rechaza el comprobante de pago…"
-                            className="input-field resize-y"
-                            disabled={actionLoading !== null}
-                          />
-                          {rejectionValidationError && (
-                            <p className="mt-1 text-xs text-cata-red">{rejectionValidationError}</p>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={handleRejectSubmit}
-                            disabled={actionLoading !== null}
-                            className="btn-primary flex-1 shadow-soft"
-                          >
-                            {actionLoading === "reject" ? (
-                              "Procesando…"
-                            ) : (
-                              "Confirmar Rechazo"
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleRejectCancel}
-                            disabled={actionLoading !== null}
-                            className="btn-secondary"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Already resolved — show validado/rechazado badge */}
-                {selectedRequest.validationStatus !== "pendiente" && (
-                  <div className="card p-6 text-center">
-                    <div className={`mb-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium ${
-                      selectedRequest.validationStatus === "validado"
-                        ? "bg-cata-state-ok/10 text-cata-state-ok"
-                        : "bg-red-50 text-red-700"
-                    }`}>
-                      {selectedRequest.validationStatus === "validado" ? (
-                        <CheckCircle2 size={16} strokeWidth={2} aria-hidden="true" />
-                      ) : (
-                        <XCircle size={16} strokeWidth={2} aria-hidden="true" />
-                      )}
-                      {selectedRequest.validationStatus === "validado" ? "Validado" : "Rechazado"}
-                    </div>
-                    <p className="text-xs text-cata-text/65">
-                      Esta solicitud ya ha sido procesada.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
+        {!loading && !error && filtered.length === 0 && (
+          <div className="rounded-card border border-line bg-paper">
+            <EmptyState
+              icon={<ShieldCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
+              title={
+                normalizedQuery
+                  ? "Ningún estudiante coincide con la búsqueda"
+                  : activeFilter === "all"
+                    ? "Aún no hay solicitudes de validación de pago"
+                    : `No hay solicitudes ${EMPTY_FILTER_NOUN[activeFilter]}`
+              }
+              description={
+                normalizedQuery
+                  ? "Revise el nombre o limpie la búsqueda para ver toda la cola."
+                  : activeFilter === "all"
+                    ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
+                    : "Pruebe con otro estado para ver el resto de la cola."
+              }
+              action={
+                activeFilter === "all" && !normalizedQuery ? undefined : (
+                  <Button
+                    onClick={() => {
+                      setActiveFilter("all");
+                      setQuery("");
+                    }}
+                  >
+                    Ver todas
+                  </Button>
+                )
+              }
+            />
           </div>
         )}
+
+        {!loading && !error && filtered.length > 0 && (
+          <div className="overflow-hidden rounded-card border border-line bg-paper">
+            {/* Desktop: the five columns that carry a decision. */}
+            <div data-testid="payments-table" className="hidden overflow-x-auto md:block">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Estudiante</TableHeaderCell>
+                    <TableHeaderCell>Período</TableHeaderCell>
+                    <TableHeaderCell align="right">Monto</TableHeaderCell>
+                    <TableHeaderCell>Método</TableHeaderCell>
+                    <TableHeaderCell>Estado</TableHeaderCell>
+                    <TableHeaderCell align="right">
+                      <span className="sr-only">Acción</span>
+                    </TableHeaderCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {paginatedRequests.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableNameCell name={req.studentName} sub={payerLabel(req)} />
+                      <TableCell>{humanizePaymentPeriod(req.membershipPeriod)}</TableCell>
+                      <TableCell align="right" className="font-semibold tabular-nums text-ink">
+                        {formatCurrency(req.expectedAmount)}
+                      </TableCell>
+                      <TableCell>{req.paymentMethod}</TableCell>
+                      <TableCell>
+                        <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
+                          {VALIDATION_STATUS_LABELS[req.validationStatus]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Button
+                          size="sm"
+                          variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
+                          aria-label={actionLabel(req)}
+                          onClick={() => setSelectedId(req.id)}
+                        >
+                          {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile: the same rows as cards, like members already does. */}
+            <ul data-testid="payments-cards" className="divide-y divide-line md:hidden">
+              {paginatedRequests.map((req) => (
+                <li key={req.id} className="flex flex-col gap-3 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-ink">{req.studentName}</p>
+                      <p className="truncate text-[11.5px] text-ink-3">{payerLabel(req)}</p>
+                    </div>
+                    <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
+                      {VALIDATION_STATUS_LABELS[req.validationStatus]}
+                    </Badge>
+                  </div>
+                  <p className="text-[12.5px] text-ink-2">
+                    {humanizePaymentPeriod(req.membershipPeriod)} · {req.paymentMethod}
+                  </p>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-base font-bold tabular-nums text-ink">
+                      {formatCurrency(req.expectedAmount)}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
+                      aria-label={actionLabel(req)}
+                      onClick={() => setSelectedId(req.id)}
+                    >
+                      {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            {totalPages > 1 && (
+              <Pagination
+                className="mt-0 border-t border-line px-4 py-3"
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                totalItems={filtered.length}
+                pageSize={PAYMENTS_PAGE_SIZE}
+                itemNoun="solicitud"
+                itemNounPlural="solicitudes"
+              />
+            )}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Detail
+  // -------------------------------------------------------------------------
+
+  function renderDetail(request: PaymentValidationRequest): React.ReactElement {
+    const payer = request.responsablePagoName || request.representativeName || request.studentName;
+    const isPending = request.validationStatus === "pendiente";
+
+    return (
+      <div>
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <Button variant="ghost" className="-ml-2" onClick={() => setSelectedId(null)}>
+            <ArrowLeft size={15} strokeWidth={2} aria-hidden="true" />
+            Volver a la cola
+          </Button>
+          <span className="flex-1" />
+          {queue.position > 0 && (
+            <>
+              <span className="text-[12.5px] font-semibold tabular-nums text-ink-3">
+                Pendiente {queue.position} de {queue.total}
+              </span>
+              <Button
+                size="sm"
+                aria-label="Pendiente anterior"
+                disabled={queue.previousId === null}
+                onClick={() => setSelectedId(queue.previousId)}
+              >
+                <ChevronLeft size={14} strokeWidth={2} aria-hidden="true" />
+                Anterior
+              </Button>
+              <Button
+                size="sm"
+                aria-label="Pendiente siguiente"
+                disabled={queue.nextId === null}
+                onClick={() => setSelectedId(queue.nextId)}
+              >
+                Siguiente
+                <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+              </Button>
+            </>
+          )}
+          <Badge tone={VALIDATION_STATUS_TONES[request.validationStatus]}>
+            {VALIDATION_STATUS_LABELS[request.validationStatus]}
+          </Badge>
+        </div>
+
+        {/* Data left, proof right and always visible: validating is comparing
+            a document against a set of numbers, and scrolling between the two
+            was the problem (prototype 10). */}
+        <div className="grid gap-5 lg:grid-cols-5">
+          <div className="flex flex-col gap-5 lg:col-span-3">
+            <section className="overflow-hidden rounded-card border border-line bg-paper">
+              <h2 className="border-b border-line px-[18px] py-4 text-[15px] font-bold text-ink">
+                Detalle de la solicitud
+              </h2>
+              <DetailRow label="Estudiante">{request.studentName}</DetailRow>
+              <DetailRow label="Responsable de pago">{payer}</DetailRow>
+              <DetailRow label="Período">{humanizePaymentPeriod(request.membershipPeriod)}</DetailRow>
+              <DetailRow label="Monto esperado">{formatCurrency(request.expectedAmount)}</DetailRow>
+              <DetailRow label="Método">{request.paymentMethod}</DetailRow>
+              <DetailRow label="Subido el">{formatDateTime(request.uploadedAt)}</DetailRow>
+              <DetailRow label="Membresía">
+                <Badge tone={MEMBERSHIP_STATUS_TONES[request.currentMembershipStatus]}>
+                  {MEMBERSHIP_STATUS_LABELS[request.currentMembershipStatus]}
+                </Badge>
+              </DetailRow>
+              <DetailRow label="Tipo">{request.membershipType}</DetailRow>
+            </section>
+
+            {isPending && (
+              <section
+                className="overflow-hidden rounded-card border border-line bg-paper"
+                aria-labelledby="antes-de-aprobar"
+              >
+                <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
+                  <h2 id="antes-de-aprobar" className="flex-1 text-[15px] font-bold text-ink">
+                    Antes de aprobar
+                  </h2>
+                  <Badge tone={checklistComplete ? "ok" : "warn"}>
+                    {checklist.length - remainingChecks} de {checklist.length}
+                  </Badge>
+                </div>
+                <div
+                  role="group"
+                  aria-labelledby="antes-de-aprobar"
+                  className="flex flex-col px-[18px] py-2"
+                >
+                  {checklist.map((item) => (
+                    <label
+                      key={item.key}
+                      className="flex cursor-pointer items-center gap-3 py-2.5 text-[13.5px] text-ink-2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(checked[item.key])}
+                        onChange={(e) =>
+                          setChecked((prev) => ({ ...prev, [item.key]: e.target.checked }))
+                        }
+                        className="h-[18px] w-[18px] flex-none accent-coal"
+                      />
+                      {item.label}
+                    </label>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {isPending && (
+              <section className="flex flex-col gap-3 rounded-card border border-line bg-paper p-[18px]">
+                <h2 className="text-[15px] font-bold text-ink">Decisión</h2>
+
+                {!showRejectForm ? (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="primary"
+                        disabled={!checklistComplete || actionLoading !== null}
+                        onClick={() => setConfirmApproveOpen(true)}
+                      >
+                        {actionLoading === "approve" ? "Procesando…" : "Aprobar pago"}
+                      </Button>
+                      <Button
+                        disabled={actionLoading !== null}
+                        onClick={() => setShowRejectForm(true)}
+                      >
+                        Rechazar pago…
+                      </Button>
+                    </div>
+                    {!checklistComplete && (
+                      <p className="text-[12.5px] text-ink-3">
+                        {remainingChecks === 1
+                          ? "Falta confirmar 1 punto de la lista para poder aprobar."
+                          : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {/* Rejection is destructive for the payer — it stops their
+                        enrolment — so the warning names them (prototype 11). */}
+                    <p className="rounded-ctl border border-line bg-canvas px-3 py-2.5 text-[12.5px] text-ink-2">
+                      {payer} va a recibir este motivo tal cual y va a tener que subir un comprobante
+                      nuevo. La membresía de {request.studentName} sigue sin activarse hasta entonces.
+                    </p>
+
+                    <fieldset className="flex flex-col gap-2">
+                      <legend className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+                        Motivo <span className="text-cata-red">*</span>
+                      </legend>
+                      {REJECTION_REASONS.map((reason) => (
+                        <label
+                          key={reason.key}
+                          className={`flex cursor-pointer gap-3 rounded-ctl border px-3.5 py-3 ${
+                            rejectionReasonKey === reason.key
+                              ? "border-coal bg-canvas"
+                              : "border-line-2 bg-paper"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="rejection-reason"
+                            value={reason.key}
+                            checked={rejectionReasonKey === reason.key}
+                            onChange={() => setRejectionReasonKey(reason.key)}
+                            className="mt-0.5 h-4 w-4 flex-none accent-coal"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-[13.5px] font-semibold text-ink">
+                              {reason.label}
+                            </span>
+                            {reason.description && (
+                              <span className="mt-0.5 block text-[12px] text-ink-3">
+                                {reason.description}
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </fieldset>
+
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+                        Nota para el responsable (opcional)
+                      </span>
+                      <textarea
+                        rows={3}
+                        value={rejectionNote}
+                        onChange={(e) => setRejectionNote(e.target.value)}
+                        placeholder="Ej.: El comprobante dice $20,00 y la mensualidad es de $25,00."
+                        className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
+                        disabled={actionLoading !== null}
+                      />
+                    </label>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="primary"
+                        disabled={!rejectionReasonKey || actionLoading !== null}
+                        onClick={() => void handleRejectSubmit()}
+                      >
+                        {actionLoading === "reject" ? "Procesando…" : "Rechazar y avisar"}
+                      </Button>
+                      <Button
+                        disabled={actionLoading !== null}
+                        onClick={() => {
+                          setShowRejectForm(false);
+                          setRejectionReasonKey("");
+                          setRejectionNote("");
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {request.validationStatus === "rechazado" && request.rejectionReason && (
+              <section className="rounded-card border border-state-bad/25 bg-state-bad-bg p-[18px]">
+                <div className="mb-2 flex items-center gap-2">
+                  <XCircle size={15} strokeWidth={2} className="text-state-bad" aria-hidden="true" />
+                  <h2 className="text-[13.5px] font-bold text-state-bad">Motivo del rechazo</h2>
+                </div>
+                <p className="text-[13px] text-ink-2">{request.rejectionReason}</p>
+              </section>
+            )}
+
+            {!isPending && (request.validatedBy || request.validatedAt) && (
+              <p className="text-[12px] text-ink-3">
+                {request.validationStatus === "validado" ? "Validado" : "Rechazado"}
+                {request.validatedBy ? ` por ${request.validatedBy}` : ""}
+                {request.validatedAt ? ` el ${formatDate(request.validatedAt)}` : ""}.
+              </p>
+            )}
+          </div>
+
+          <div className="lg:col-span-2">
+            <ProofViewer
+              request={request}
+              previewUnavailable={previewUnavailable}
+              onPreviewError={() => setPreviewUnavailable(true)}
+              onRetryPreview={() => setPreviewUnavailable(false)}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <AppShell eyebrow="Cola de validación" title="Membresías y Pagos">
+        {selectedRequest ? renderDetail(selectedRequest) : renderQueue()}
 
         <ConfirmDialog
           open={confirmApproveOpen}
@@ -756,7 +800,7 @@ export default function PaymentsPage(): React.ReactElement {
           message="¿Confirma que aprueba este pago? La membresía pasará a activa."
           onConfirm={() => {
             setConfirmApproveOpen(false);
-            handleApprove();
+            void handleApprove();
           }}
           onCancel={() => setConfirmApproveOpen(false)}
         />

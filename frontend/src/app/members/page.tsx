@@ -29,6 +29,15 @@ import {
   FilterPill,
   LoadingState,
   Pagination,
+  SearchInput,
+  StatCard,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableNameCell,
+  TableRow,
 } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -93,27 +102,47 @@ const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
 // gone: `Badge` already carries a `currentColor` dot, so the icon was a second
 // status marker for one status.
 
-// ---------------------------------------------------------------------------
-// Stat Card
-// ---------------------------------------------------------------------------
+/**
+ * How a group of controls inside the edit dialog persists itself.
+ *
+ * The audit's cognitive-load finding was about this dialog: it holds identity
+ * editing with its own save button, role switches that auto-save, an account
+ * state toggle that auto-saves, per-student membership creation with its own
+ * save, and the medical-record editor — five different save semantics, with
+ * nothing on screen saying which was which. The header's blanket "Los cambios
+ * se guardan al instante" was true of three of them and false of the other two.
+ *
+ * So every group now declares its own contract, in its own header.
+ */
+type SaveMode = "instant" | "manual";
 
-interface StatCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-}
+const SAVE_MODE_LABEL: Record<SaveMode, string> = {
+  instant: "Se guarda al instante",
+  manual: "Requiere guardar",
+};
 
-function StatCard({ icon, label, value }: StatCardProps): React.ReactElement {
+function ModalSection({
+  title,
+  icon,
+  saveMode,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  saveMode: SaveMode;
+  children: React.ReactNode;
+}): React.ReactElement {
   return (
-    <div className="card-hover flex items-center gap-3 p-4 sm:p-5">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cata-red/15">
-        {icon}
-      </div>
-      <p className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-cata-text/65">
-        {label}
-      </p>
-      <p className="shrink-0 text-2xl font-bold tracking-tight text-cata-text">{value}</p>
-    </div>
+    <section className="rounded-ctl border border-line bg-paper">
+      <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+        <h3 className="flex flex-1 items-center gap-1.5 text-[13px] font-bold text-ink">
+          {icon}
+          {title}
+        </h3>
+        <Badge tone="neutral">{SAVE_MODE_LABEL[saveMode]}</Badge>
+      </header>
+      <div className="p-4">{children}</div>
+    </section>
   );
 }
 
@@ -365,15 +394,22 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
 }
 
 // ---------------------------------------------------------------------------
-// Account row — all editing (roles, estado, per-student etiquetas/ficha
-// médica/membresía) happens in the edit modal; the row itself never expands.
+// Account list — a table row from `sm` up, a card below it. All editing
+// (roles, estado, per-student ficha médica/membresía) happens in the edit
+// dialog, which is rendered ONCE by the page rather than once per row: two
+// renderings of the same account both exist in the DOM (only one is visible),
+// so a dialog owned by the row would portal itself into the document twice.
 // ---------------------------------------------------------------------------
 
-interface AccountRowProps {
+interface AccountListItemProps {
+  account: MemberAccount;
+  onEdit: () => void;
+}
+
+interface MemberEditDialogProps {
   account: MemberAccount;
   grupos: Grupo[];
-  editModalOpen: boolean;
-  onToggleEditModal: () => void;
+  onClose: () => void;
   /** Refetch the member list — forwarded to each student's edit panel. */
   onMembershipCreated: () => void;
 }
@@ -394,13 +430,104 @@ const ROLE_ICONS: Record<BackendTipoRol, typeof ShieldCheck> = {
   ALUMNO: User,
 };
 
-function AccountRow({
+/** One account as a table row (`sm` and up). */
+function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactElement {
+  const statusBadge = getAccountStatusBadge(account);
+
+  return (
+    <TableRow>
+      <TableNameCell
+        name={`${account.nombres} ${account.apellidos}`}
+        sub={getPayerTypeLabel(account.role)}
+      />
+      <TableCell>
+        <span className="block">{account.telefono}</span>
+        {account.email ? (
+          <span className="mt-px block truncate text-[11.5px] text-ink-3">{account.email}</span>
+        ) : null}
+      </TableCell>
+      <TableCell align="right" className="tabular-nums">
+        {account.estudiantes.length}
+      </TableCell>
+      <TableCell>
+        <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+      </TableCell>
+      <TableCell align="right">
+        <Button
+          size="sm"
+          // Focus the trigger explicitly: the dialog restores focus to
+          // whatever was focused at mount, and a mouse click does not reliably
+          // move focus to a <button> on its own.
+          onClick={(event) => {
+            event.currentTarget.focus();
+            onEdit();
+          }}
+          aria-label={`Editar ${account.nombres} ${account.apellidos}`}
+        >
+          Editar
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/** The same account below `sm`, where a five-column table cannot fit. */
+function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElement {
+  const statusBadge = getAccountStatusBadge(account);
+
+  return (
+    <li className="flex flex-col gap-2 border-b border-line px-4 py-3.5 last:border-b-0">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink">
+            {account.nombres} {account.apellidos}
+          </p>
+          <p className="text-[11.5px] text-ink-3">{getPayerTypeLabel(account.role)}</p>
+        </div>
+        <Button
+          size="sm"
+          className="flex-none"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            onEdit();
+          }}
+          aria-label={`Editar ${account.nombres} ${account.apellidos}`}
+        >
+          Editar
+        </Button>
+      </div>
+      <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-ink-2">
+        <div className="flex items-center gap-1.5">
+          <dt className="sr-only">Teléfono</dt>
+          <Phone size={11} strokeWidth={1.5} aria-hidden="true" />
+          <dd>{account.telefono}</dd>
+        </div>
+        {account.email ? (
+          <div className="flex min-w-0 items-center gap-1.5">
+            <dt className="sr-only">Correo</dt>
+            <Mail size={11} strokeWidth={1.5} className="flex-none" aria-hidden="true" />
+            <dd className="truncate">{account.email}</dd>
+          </div>
+        ) : null}
+        <div className="flex items-center gap-1.5">
+          <dt className="sr-only">Estudiantes</dt>
+          <GraduationCap size={11} strokeWidth={1.5} aria-hidden="true" />
+          <dd className="tabular-nums">{account.estudiantes.length}</dd>
+        </div>
+      </dl>
+      <Badge tone={statusBadge.tone} className="self-start">
+        {statusBadge.label}
+      </Badge>
+    </li>
+  );
+}
+
+function MemberEditDialog({
   account,
   grupos,
-  editModalOpen,
-  onToggleEditModal,
+  onClose,
   onMembershipCreated,
-}: AccountRowProps): React.ReactElement {
+}: MemberEditDialogProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   // `roles`/`activo` start empty/true only as placeholders — they get
   // overwritten by `obtenerRolesDePersona` as soon as the edit modal opens
@@ -504,27 +631,22 @@ function AccountRow({
 
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  // Two "Editar" triggers exist per row — a desktop one (in the sm-only
-  // contact/status column) and a mobile one (next to the status badge in
-  // the always-visible name column), since the desktop column is entirely
-  // CSS-hidden below `sm` and mobile would otherwise have no way to open
-  // the modal at all. Neither needs its own ref: focus-restoration below
-  // captures whichever element was actually focused (i.e. whichever
-  // trigger the user actually clicked) right before the dialog opens.
 
   // Native <dialog> shown via showModal(): the browser traps Tab focus and
   // renders the ::backdrop for us, so no manual focus trap is needed (unlike
   // ConfirmDialog.tsx's older role="dialog" div convention). Escape is still
   // wired manually (rather than relying solely on the dialog's native
-  // "cancel" event) so open/closed stays driven by `editModalOpen` alone —
-  // the dialog is conditionally rendered, not toggled via its `open`
-  // attribute, so the JSX onCancel handler only preventDefaults the native
-  // auto-close to avoid it and this listener double-toggling React state.
-  // The backdrop-click listener is attached imperatively (not as a JSX
-  // onClick on the <dialog>) since the element itself is non-interactive.
+  // "cancel" event) so open/closed stays driven by the page's
+  // `editingAccountId` alone — the dialog is conditionally rendered, not
+  // toggled via its `open` attribute, so the JSX onCancel handler only
+  // preventDefaults the native auto-close to avoid it and this listener
+  // double-toggling React state. The backdrop-click listener is attached
+  // imperatively (not as a JSX onClick on the <dialog>) since the element
+  // itself is non-interactive. Focus restoration captures whichever trigger
+  // was focused when the dialog mounted — row or card.
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!editModalOpen || !dialog) return;
+    if (!dialog) return;
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
@@ -534,10 +656,10 @@ function AccountRow({
     closeButtonRef.current?.focus();
 
     function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") onToggleEditModal();
+      if (event.key === "Escape") onClose();
     }
     function handleBackdropClick(event: MouseEvent): void {
-      if (event.target === dialog) onToggleEditModal();
+      if (event.target === dialog) onClose();
     }
 
     document.addEventListener("keydown", handleKeyDown);
@@ -547,7 +669,7 @@ function AccountRow({
       dialog.removeEventListener("click", handleBackdropClick);
       previouslyFocused?.focus();
     };
-  }, [editModalOpen, onToggleEditModal]);
+  }, [onClose]);
 
   // Seed `roles`/`activo` from the persona's real current state every time
   // the modal opens — this is the actual bug fix. Before this fetch, both
@@ -561,7 +683,6 @@ function AccountRow({
   // state) keeps the failure visible in the same spots those sections
   // already render errors in.
   useEffect(() => {
-    if (!editModalOpen) return;
     let cancelled = false;
 
     setRolesLoading(true);
@@ -589,84 +710,11 @@ function AccountRow({
     return () => {
       cancelled = true;
     };
-  }, [editModalOpen, personaId]);
+  }, [personaId]);
 
   return (
     <>
-      <tr className="transition-colors hover:bg-cata-bg">
-        <td className="px-4 py-3.5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cata-red/15">
-              {account.role === "representante" ? (
-                <Building2 size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-              ) : (
-                <GraduationCap size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-              )}
-            </div>
-            <div>
-              <p className="font-medium text-cata-text">
-                {account.nombres} {account.apellidos}
-              </p>
-              <p className="text-xs text-cata-text/65">
-                {getPayerTypeLabel(account.role)}
-              </p>
-              <div className="mt-1 flex items-center gap-2 sm:hidden">
-                <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.currentTarget.focus();
-                    onToggleEditModal();
-                  }}
-                  className="inline-flex items-center gap-1 rounded-lg border border-cata-border p-1.5 text-cata-text/50 transition-colors hover:bg-cata-red/10 hover:text-cata-red"
-                  aria-label="Editar"
-                  title="Editar miembro"
-                >
-                  <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </td>
-        <td className="hidden px-4 py-3.5 text-xs text-cata-text/65 sm:table-cell">
-          {account.email && (
-            <div className="flex items-center gap-1.5">
-              <Mail size={11} strokeWidth={1.5} aria-hidden="true" />
-              {account.email}
-            </div>
-          )}
-          <div className="mt-0.5 flex items-center gap-1.5">
-            <Phone size={11} strokeWidth={1.5} aria-hidden="true" />
-            {account.telefono}
-          </div>
-        </td>
-        <td className="hidden px-4 py-3.5 text-center sm:table-cell">
-          <span className="text-sm font-medium text-cata-text">
-            {account.estudiantes.length}
-          </span>
-        </td>
-        <td className="hidden px-4 py-3.5 sm:table-cell">
-          <Badge tone={statusBadge.tone}>
-            {statusBadge.label}
-          </Badge>
-        </td>
-        <td className="hidden px-4 py-3.5 text-right sm:table-cell">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.currentTarget.focus();
-              onToggleEditModal();
-            }}
-            className="inline-flex items-center gap-1 rounded-lg border border-cata-border p-1.5 text-cata-text/50 transition-colors hover:bg-cata-red/10 hover:text-cata-red"
-            aria-label="Editar"
-            title="Editar miembro"
-          >
-            <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        </td>
-      </tr>
-      {editModalOpen &&
-        createPortal(
+      {createPortal(
           <dialog
             ref={dialogRef}
             aria-modal="true"
@@ -689,10 +737,13 @@ function AccountRow({
                   </h2>
                   <p className="text-sm text-cata-text/65">{account.telefono}</p>
                   <p className="mt-0.5 text-xs text-cata-text/50">{getPayerTypeLabel(account.role)}</p>
-                  {/* Sets the expectation up front: this modal has no
-                      commit step, so closing it never loses anything. */}
+                  {/* This used to read "Los cambios se guardan al instante",
+                      which was true of roles and estado and false of the
+                      identity fields and the membership form. Each group now
+                      states its own contract in its own header, so the header
+                      only says where to look. */}
                   <p className="mt-1 text-xs text-cata-text/65">
-                    Los cambios se guardan al instante.
+                    Cada bloque indica si se guarda solo o si necesita un botón.
                   </p>
                 </div>
               </div>
@@ -703,7 +754,7 @@ function AccountRow({
                 <button
                   ref={closeButtonRef}
                   type="button"
-                  onClick={onToggleEditModal}
+                  onClick={onClose}
                   // Distinct from the footer's "Cerrar": two identically
                   // named buttons in one dialog give screen-reader users no
                   // way to tell them apart in a controls list.
@@ -715,131 +766,133 @@ function AccountRow({
               </div>
             </div>
 
-            {/* Scrollable body */}
-            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* Información general */}
-                <section className="rounded-xl border border-cata-border bg-cata-bg/50 p-4">
-                  <h3 className="mb-3 text-sm font-bold text-cata-text">Información general</h3>
-                  <dl className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="shrink-0 text-cata-text/55" id={`nombres-label-${account.id}`}>Nombres</dt>
-                      <dd className="min-w-0 flex-1">
-                        <input
-                          type="text"
-                          value={nombresInput}
-                          onChange={(e) => setNombresInput(e.target.value)}
-                          aria-labelledby={`nombres-label-${account.id}`}
-                          className="input-field w-full py-1 text-right text-sm"
-                        />
-                      </dd>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="shrink-0 text-cata-text/55" id={`apellidos-label-${account.id}`}>Apellidos</dt>
-                      <dd className="min-w-0 flex-1">
-                        <input
-                          type="text"
-                          value={apellidosInput}
-                          onChange={(e) => setApellidosInput(e.target.value)}
-                          aria-labelledby={`apellidos-label-${account.id}`}
-                          className="input-field w-full py-1 text-right text-sm"
-                        />
-                      </dd>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="shrink-0 text-cata-text/55" id={`telefono-label-${account.id}`}>Teléfono</dt>
-                      <dd className="min-w-0 flex-1">
-                        <input
-                          type="text"
-                          value={telefonoInput}
-                          onChange={(e) => setTelefonoInput(e.target.value)}
-                          aria-labelledby={`telefono-label-${account.id}`}
-                          className="input-field w-full py-1 text-right text-sm"
-                        />
-                      </dd>
-                    </div>
-                    {/* Email deliberately read-only, no editable input: no
-                        admin endpoint mutates it (email lives on Usuario,
-                        not on the Persona that PATCH /personas/{id} edits). */}
-                    {account.email && (
-                      <div className="flex items-center justify-between gap-3">
-                        <dt className="text-cata-text/55">Correo</dt>
-                        <dd className="flex min-w-0 items-center gap-1.5 truncate font-medium text-cata-text">
-                          <Mail size={11} strokeWidth={1.5} aria-hidden="true" />
-                          <span className="truncate">{account.email}</span>
-                        </dd>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="text-cata-text/55">Estado</dt>
-                      <dd>
-                        <button
-                          type="button"
-                          onClick={() => void toggleEstado()}
-                          disabled={stateLoading || !rolesReady}
-                          className={`h-badge inline-flex cursor-pointer items-center gap-1.5 rounded-full px-[11px] text-[11.5px] font-bold disabled:opacity-50 ${
-                            activo
-                              ? "bg-state-ok-bg text-state-ok"
-                              : "bg-state-bad-bg text-state-bad"
-                          }`}
-                          aria-pressed={activo}
-                        >
-                          {stateLoading || rolesLoading ? (
-                            <Loader2 size={11} className="animate-spin" aria-hidden="true" />
-                          ) : activo ? (
-                            <ToggleRight size={12} aria-hidden="true" />
-                          ) : (
-                            <ToggleLeft size={12} aria-hidden="true" />
-                          )}
-                          {stateLoading ? "Actualizando…" : rolesLoading ? "Cargando…" : activo ? "Activa" : "Inactiva"}
-                        </button>
-                      </dd>
-                    </div>
-                  </dl>
-                  <div className="mt-3 flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveInfo()}
-                      disabled={infoSaving}
-                      className={buttonClasses("primary", "sm")}
-                    >
-                      {infoSaving ? (
-                        <Loader2 size={12} className="animate-spin" aria-hidden="true" />
-                      ) : (
-                        <Save size={12} strokeWidth={1.5} aria-hidden="true" />
-                      )}
-                      {/* Explicit scope: this button only PATCHes
-                          nombres/apellidos/teléfono. Roles, estado, ficha
-                          médica and membresía each save themselves. */}
-                      {infoSaving ? "Guardando…" : "Guardar nombre, apellido y teléfono"}
-                    </button>
-                    {infoSuccess && (
-                      <p className="flex items-center gap-1 text-xs text-cata-state-ok" role="status">
-                        <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />
-                        Guardado.
-                      </p>
-                    )}
+            {/* Scrollable body. Four groups, each declaring how it persists:
+                identity needs a button, roles and estado save themselves, and
+                each student's membership/ficha médica has its own save. */}
+            <div className="flex-1 space-y-3.5 overflow-y-auto bg-canvas px-5 py-4">
+              <ModalSection title="Datos de la cuenta" saveMode="manual">
+                <dl className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="shrink-0 text-ink-3" id={`nombres-label-${account.id}`}>Nombres</dt>
+                    <dd className="min-w-0 flex-1">
+                      <input
+                        type="text"
+                        value={nombresInput}
+                        onChange={(e) => setNombresInput(e.target.value)}
+                        aria-labelledby={`nombres-label-${account.id}`}
+                        className="input-field w-full py-1 text-right text-sm"
+                      />
+                    </dd>
                   </div>
-                  {infoError && (
-                    <p className="mt-2 text-xs text-cata-red" role="alert">
-                      {infoError}
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="shrink-0 text-ink-3" id={`apellidos-label-${account.id}`}>Apellidos</dt>
+                    <dd className="min-w-0 flex-1">
+                      <input
+                        type="text"
+                        value={apellidosInput}
+                        onChange={(e) => setApellidosInput(e.target.value)}
+                        aria-labelledby={`apellidos-label-${account.id}`}
+                        className="input-field w-full py-1 text-right text-sm"
+                      />
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="shrink-0 text-ink-3" id={`telefono-label-${account.id}`}>Teléfono</dt>
+                    <dd className="min-w-0 flex-1">
+                      <input
+                        type="text"
+                        value={telefonoInput}
+                        onChange={(e) => setTelefonoInput(e.target.value)}
+                        aria-labelledby={`telefono-label-${account.id}`}
+                        className="input-field w-full py-1 text-right text-sm"
+                      />
+                    </dd>
+                  </div>
+                  {/* Email deliberately read-only, no editable input: no
+                      admin endpoint mutates it (email lives on Usuario,
+                      not on the Persona that PATCH /personas/{id} edits). */}
+                  {account.email && (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-ink-3">Correo</dt>
+                      <dd className="flex min-w-0 items-center gap-1.5 truncate font-medium text-ink">
+                        <Mail size={11} strokeWidth={1.5} aria-hidden="true" />
+                        <span className="truncate">{account.email}</span>
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveInfo()}
+                    disabled={infoSaving}
+                    className={buttonClasses("primary", "sm")}
+                  >
+                    {infoSaving ? (
+                      <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Save size={12} strokeWidth={1.5} aria-hidden="true" />
+                    )}
+                    {/* Explicit scope: this button only PATCHes
+                        nombres/apellidos/teléfono. Roles, estado, ficha
+                        médica and membresía each save themselves. */}
+                    {infoSaving ? "Guardando…" : "Guardar nombre, apellido y teléfono"}
+                  </button>
+                  {infoSuccess && (
+                    <p className="flex items-center gap-1 text-xs text-state-ok" role="status">
+                      <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />
+                      Guardado.
                     </p>
                   )}
-                  {stateError && (
-                    <p className="mt-2 text-xs text-cata-red" role="alert">
-                      {stateError}
-                    </p>
-                  )}
-                </section>
+                </div>
+                {infoError && (
+                  <p className="mt-2 text-xs text-state-bad" role="alert">
+                    {infoError}
+                  </p>
+                )}
+              </ModalSection>
 
-                {/* Roles — settings-style switches, two columns, one icon each */}
-                <section className="rounded-xl border border-cata-border bg-cata-bg/50 p-4">
-                  <h3 className="mb-3 flex items-center gap-1.5 text-sm font-bold text-cata-text">
-                    <ShieldCheck size={14} strokeWidth={1.5} className="text-cata-text/50" aria-hidden="true" />
-                    Roles
-                  </h3>
+              <ModalSection title="Estado de la cuenta" saveMode="instant">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void toggleEstado()}
+                    disabled={stateLoading || !rolesReady}
+                    className={`h-badge inline-flex cursor-pointer items-center gap-1.5 rounded-full px-[11px] text-[11.5px] font-bold disabled:opacity-50 ${
+                      activo ? "bg-state-ok-bg text-state-ok" : "bg-state-bad-bg text-state-bad"
+                    }`}
+                    aria-pressed={activo}
+                  >
+                    {stateLoading || rolesLoading ? (
+                      <Loader2 size={11} className="animate-spin" aria-hidden="true" />
+                    ) : activo ? (
+                      <ToggleRight size={12} aria-hidden="true" />
+                    ) : (
+                      <ToggleLeft size={12} aria-hidden="true" />
+                    )}
+                    {stateLoading ? "Actualizando…" : rolesLoading ? "Cargando…" : activo ? "Activa" : "Inactiva"}
+                  </button>
+                  <p className="text-xs text-ink-3">
+                    Una cuenta inactiva no puede iniciar sesión.
+                  </p>
+                </div>
+                {stateError && (
+                  <p className="mt-2 text-xs text-state-bad" role="alert">
+                    {stateError}
+                  </p>
+                )}
+              </ModalSection>
+
+              <ModalSection
+                title="Roles"
+                saveMode="instant"
+                icon={
+                  <ShieldCheck size={14} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+                }
+              >
+                <>
                   {rolesLoading && (
-                    <p className="mb-2 flex items-center gap-1.5 text-xs text-cata-text/50" role="status">
+                    <p className="mb-2 flex items-center gap-1.5 text-xs text-ink-3" role="status">
                       <Loader2 size={12} className="animate-spin" aria-hidden="true" />
                       Cargando roles actuales…
                     </p>
@@ -850,12 +903,21 @@ function AccountRow({
                       const isLoading = roleLoading === role;
                       const RoleIcon = ROLE_ICONS[role];
                       return (
+                        // The audit found keyboard focus landing on nothing
+                        // here: the real checkbox was `sr-only`, the visible
+                        // switch was `aria-hidden`, and the wrapping <label>
+                        // carried no focus style — so tabbing through the
+                        // dialog moved an invisible cursor. `focus-within`
+                        // puts the ring on the box the user can actually see,
+                        // around the control that actually has focus.
                         <label
                           key={role}
                           className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors ${
+                            "focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ball "
+                          }${
                             selected
-                              ? "border-cata-red/30 bg-cata-red/5 text-cata-red"
-                              : "border-cata-border bg-white text-cata-text hover:bg-cata-bg"
+                              ? "border-coal bg-coal/[0.04] text-ink"
+                              : "border-line-2 bg-paper text-ink-2 hover:bg-canvas"
                           }`}
                         >
                           <RoleIcon size={14} strokeWidth={1.5} className="shrink-0" aria-hidden="true" />
@@ -870,15 +932,18 @@ function AccountRow({
                             disabled={roleLoading !== null || !rolesReady}
                             className="sr-only"
                           />
+                          {/* Selection is coal + the yellow ball knob, never
+                              red — red is the primary CTA and destructive
+                              actions only. */}
                           <span
                             aria-hidden="true"
                             className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                              selected ? "bg-cata-red" : "bg-cata-border"
+                              selected ? "bg-coal" : "bg-line-2"
                             }`}
                           >
                             <span
-                              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
-                                selected ? "translate-x-5" : "translate-x-1"
+                              className={`inline-block h-3.5 w-3.5 transform rounded-full shadow-sm transition-transform ${
+                                selected ? "translate-x-5 bg-ball" : "translate-x-1 bg-white"
                               }`}
                             />
                           </span>
@@ -887,16 +952,15 @@ function AccountRow({
                     })}
                   </div>
                   {roleError && (
-                    <p className="mt-2 text-xs text-cata-red" role="alert">
+                    <p className="mt-2 text-xs text-state-bad" role="alert">
                       {roleError}
                     </p>
                   )}
-                </section>
-              </div>
+                </>
+              </ModalSection>
 
               {account.estudiantes.length > 0 && (
-                <section>
-                  <h3 className="mb-3 text-sm font-bold text-cata-text">Estudiantes a cargo</h3>
+                <ModalSection title="Estudiantes a cargo" saveMode="manual">
                   <div className="space-y-3">
                     {account.estudiantes.map((estudiante) => (
                       <StudentEditPanel
@@ -907,22 +971,18 @@ function AccountRow({
                       />
                     ))}
                   </div>
-                </section>
+                </ModalSection>
               )}
             </div>
 
-            {/* Footer — everything above already saves per-action (roles,
-                estado, ficha médica, membresía each call their own endpoint
-                immediately, and nombres/apellidos/teléfono have their own
-                save button). There is nothing left for this footer to commit,
-                so it offers only a dismiss action: a "Guardar cambios"
-                primary here would promise a save it cannot perform, and a
-                "Cancelar" beside it would imply the already-persisted changes
-                could still be discarded. */}
-            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-cata-border px-5 py-3.5">
-              <button type="button" onClick={onToggleEditModal} className="btn-secondary text-sm">
-                Cerrar
-              </button>
+            {/* Footer — every group above persists itself, either instantly
+                or through its own labelled button, so there is nothing left
+                for this footer to commit: a "Guardar cambios" primary here
+                would promise a save it cannot perform, and a "Cancelar"
+                beside it would imply the already-persisted changes could
+                still be discarded. */}
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-5 py-3.5">
+              <Button onClick={onClose}>Cerrar</Button>
             </div>
           </dialog>,
           document.body,
@@ -1008,6 +1068,8 @@ export default function MembersPage(): React.ReactElement {
     [filteredAccounts, page],
   );
 
+  const editingAccount = accounts.find((account) => account.id === editingAccountId) ?? null;
+
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
@@ -1025,63 +1087,39 @@ export default function MembersPage(): React.ReactElement {
           />
         )}
 
-        {/* Stats grid */}
-        <div className="mb-6 flex items-center gap-2">
-          <ShieldCheck size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-          <h2 className="text-lg font-bold text-cata-text">Resumen</h2>
-        </div>
-        <div className="mb-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Stats row — `07-miembros.html`'s four tiles. Figures are ink; the
+            old version put a red icon disc beside every one of them, which
+            made four neutral counts read as four alerts. */}
+        <div className="mb-6 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Cuentas" value={stats.totalAccounts} hint="responsables de pago" />
+          <StatCard label="Estudiantes" value={stats.totalStudents} hint="perfiles registrados" />
           <StatCard
-            icon={<Users size={20} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-            label="Cuentas"
-            value={stats.totalAccounts}
-          />
-          <StatCard
-            icon={<UserCheck size={20} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-            label="Estudiantes"
-            value={stats.totalStudents}
-          />
-          <StatCard
-            icon={<ShieldCheck size={20} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
             label="Membresías activas"
             value={stats.activeMemberships}
+            hint={`de ${stats.totalAccounts} cuentas`}
           />
-          <StatCard
-            icon={<Clock size={20} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-            label="Pagos pendientes"
-            value={stats.pendingPayments}
-          />
+          <StatCard label="Pagos pendientes" value={stats.pendingPayments} hint="por validar" />
         </div>
 
         {/* Search + filter chips */}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative max-w-sm flex-1">
-            <Search
-              size={14}
-              strokeWidth={1.5}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-cata-text/65"
-              aria-hidden="true"
+        <div className="mb-3 max-w-xs">
+          <SearchInput
+            label="Buscar miembros"
+            placeholder="Buscar por nombre o correo…"
+            value={searchTerm}
+            onChange={setSearchTerm}
+          />
+        </div>
+        <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
+          {FILTER_CHIPS.map((chip) => (
+            <FilterPill
+              key={chip.flag}
+              label={chip.label}
+              count={countAccountsMatchingFlag(accounts, chip.flag)}
+              active={activeFlag === chip.flag}
+              onClick={() => setActiveFlag(chip.flag)}
             />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por nombre o correo…"
-              className="input-field pl-9"
-              aria-label="Buscar miembros"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
-            {FILTER_CHIPS.map((chip) => (
-              <FilterPill
-                key={chip.flag}
-                label={chip.label}
-                count={countAccountsMatchingFlag(accounts, chip.flag)}
-                active={activeFlag === chip.flag}
-                onClick={() => setActiveFlag(chip.flag)}
-              />
-            ))}
-          </div>
+          ))}
         </div>
 
         {/* Members table */}
@@ -1106,32 +1144,44 @@ export default function MembersPage(): React.ReactElement {
                 </p>
               )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-cata-border bg-cata-bg text-xs font-medium uppercase tracking-wider text-cata-text/65">
-                    <th className="px-4 py-3 font-medium">Responsable de pago</th>
-                    <th className="hidden px-4 py-3 font-medium sm:table-cell">Contacto</th>
-                    <th className="hidden px-4 py-3 text-center font-medium sm:table-cell">Estudiantes</th>
-                    <th className="hidden px-4 py-3 font-medium sm:table-cell">Estado de membresía</th>
-                    <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">
+            {/* Below `sm` the table used to hide Contacto/Estudiantes/Estado
+                /Editar behind `hidden sm:table-cell`, leaving a one-column
+                list with a second, duplicated edit button crammed under each
+                name. A phone gets a real card per account instead — same data,
+                one edit trigger, nothing hidden. */}
+            <ul className="sm:hidden">
+              {paginatedAccounts.map((account) => (
+                <AccountCard
+                  key={account.id}
+                  account={account}
+                  onEdit={() => toggleEditModal(account.id)}
+                />
+              ))}
+            </ul>
+
+            <div className="hidden overflow-x-auto sm:block">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Responsable de pago</TableHeaderCell>
+                    <TableHeaderCell>Contacto</TableHeaderCell>
+                    <TableHeaderCell align="right">Estudiantes</TableHeaderCell>
+                    <TableHeaderCell>Membresía</TableHeaderCell>
+                    <TableHeaderCell align="right">
                       <span className="sr-only">Editar</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-cata-border">
+                    </TableHeaderCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {paginatedAccounts.map((account) => (
                     <AccountRow
                       key={account.id}
                       account={account}
-                      grupos={grupos}
-                      editModalOpen={editingAccountId === account.id}
-                      onToggleEditModal={() => toggleEditModal(account.id)}
-                      onMembershipCreated={() => void loadMembers({ silent: true })}
+                      onEdit={() => toggleEditModal(account.id)}
                     />
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         ) : null}
@@ -1175,6 +1225,20 @@ export default function MembersPage(): React.ReactElement {
               }
             />
           </div>
+        )}
+
+        {/* One dialog for the whole page, keyed so switching accounts remounts
+            it with fresh state. Rendering it per row would portal two copies
+            into the document, since each account exists twice in the DOM (a
+            table row and a mobile card). */}
+        {editingAccount && (
+          <MemberEditDialog
+            key={editingAccount.id}
+            account={editingAccount}
+            grupos={grupos}
+            onClose={() => setEditingAccountId(null)}
+            onMembershipCreated={() => void loadMembers({ silent: true })}
+          />
         )}
       </AppShell>
     </ProtectedRoute>

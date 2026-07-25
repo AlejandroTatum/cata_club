@@ -19,6 +19,7 @@ import {
   getTotalPages,
   ATTENDANCE_PAGE_SIZE,
   groupSchedulesByDay,
+  formatHumanDate,
   type AttendanceRecord,
   type TrainingSchedule,
 } from "../attendance-utils";
@@ -392,5 +393,42 @@ describe("groupSchedulesByDay", () => {
 
   it("returns an empty array for no schedules", () => {
     expect(groupSchedulesByDay([])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatHumanDate — the "Hoy, 23 jul" grammar (Fase 3)
+// ---------------------------------------------------------------------------
+
+describe("formatHumanDate", () => {
+  const today = new Date(2026, 6, 23, 9, 30); // 23 jul 2026, local
+
+  it("names today and yesterday instead of making the reader compute them", () => {
+    expect(formatHumanDate("2026-07-23", today)).toBe("Hoy, 23 jul");
+    expect(formatHumanDate("2026-07-22", today)).toBe("Ayer, 22 jul");
+  });
+
+  it("drops the year while it is the current one", () => {
+    expect(formatHumanDate("2026-01-05", today)).toBe("5 ene");
+  });
+
+  it("keeps the year once it stops being the current one", () => {
+    expect(formatHumanDate("2025-12-20", today)).toBe("20 dic 2025");
+  });
+
+  it("reads a date-only value as a local calendar date, not UTC midnight", () => {
+    // `new Date("2026-07-23")` is UTC midnight → 22 jul 19:00 in UTC-5, which
+    // would render today's attendance as "Ayer".
+    expect(formatHumanDate("2026-07-23", today)).toBe("Hoy, 23 jul");
+  });
+
+  it("accepts a full ISO timestamp as well as a date-only value", () => {
+    expect(formatHumanDate(new Date(2026, 6, 23, 18, 42).toISOString(), today)).toBe("Hoy, 23 jul");
+  });
+
+  it("returns an empty string for unparseable or empty input", () => {
+    expect(formatHumanDate("", today)).toBe("");
+    expect(formatHumanDate("no es una fecha", today)).toBe("");
+    expect(formatHumanDate("2026-13-45", today)).toBe("");
   });
 });

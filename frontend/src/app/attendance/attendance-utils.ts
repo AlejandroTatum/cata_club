@@ -329,6 +329,79 @@ export function getTotalPages(
 }
 
 // ---------------------------------------------------------------------------
+// Human-readable dates (Fase 3 — "Hoy, 23 jul")
+// ---------------------------------------------------------------------------
+
+/**
+ * Month abbreviations in es-EC, lowercase and without a trailing dot — the
+ * vocabulary `_sistema.css`'s prototypes use ("1 jul → 12 ago", "Hoy, 23 jul").
+ *
+ * NOTE: `payments-utils.ts` carries the same table for the humanised payment
+ * period. Both should collapse into `src/lib/format-utils.ts` — that module is
+ * the declared single source of truth for date grammar — but it is frozen for
+ * this parallel redesign pass, so the duplication is deliberate and temporary.
+ */
+export const MONTH_ABBR = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+] as const;
+
+/**
+ * Parse either a date-only value ("YYYY-MM-DD") or a full ISO timestamp into a
+ * Date in LOCAL terms.
+ *
+ * Date-only strings are built from their components rather than handed to
+ * `new Date(str)`, which reads them as UTC midnight — that turns "today" into
+ * "yesterday" for every user in America/Guayaquil (UTC-5). Same reasoning as
+ * `format-utils.ts`'s own parser; see its docstring.
+ */
+function parseLocalDate(value: string): Date | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    const day = Number(match[3]);
+    const date = new Date(year, month, day);
+    if (date.getMonth() !== month || date.getDate() !== day) return null;
+    return date;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** Whole-day difference between two dates, ignoring the time of day. */
+function calendarDaysBetween(from: Date, to: Date): number {
+  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
+  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * Humanise a date for a list cell: "Hoy, 23 jul", "Ayer, 22 jul", "12 jul",
+ * and "12 jul 2025" once the year stops being the current one.
+ *
+ * This is a SECOND date grammar next to `formatDate`'s `dd/mm/yyyy`, and that
+ * is the approved decision, not an oversight: on the attendance log and the
+ * activity feed the question is "how recent is this?", which a numeric date
+ * makes the reader compute. Anywhere the question is "which exact day?" —
+ * periods, validation stamps, report ranges — `formatDate` still rules.
+ *
+ * Returns "" for unparseable input, like every other formatter in the product.
+ */
+export function formatHumanDate(dateStr: string, today: Date = new Date()): string {
+  const date = parseLocalDate(dateStr);
+  if (!date) return "";
+
+  const dayMonth = `${date.getDate()} ${MONTH_ABBR[date.getMonth()]}`;
+  const delta = calendarDaysBetween(date, today);
+  if (delta === 0) return `Hoy, ${dayMonth}`;
+  if (delta === 1) return `Ayer, ${dayMonth}`;
+  if (date.getFullYear() !== today.getFullYear()) return `${dayMonth} ${date.getFullYear()}`;
+  return dayMonth;
+}
+
+// ---------------------------------------------------------------------------
 // Schedule ↔ day grouping (PR3 — Horarios de Entrenamiento density)
 // ---------------------------------------------------------------------------
 

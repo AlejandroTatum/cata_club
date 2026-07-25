@@ -299,7 +299,11 @@ describe("getAccountStatusBadge", () => {
     });
   });
 
-  it("handles accounts with empty estudiantes", () => {
+  it('returns "Sin membresía" in the NEUTRAL tone — never red', () => {
+    // Design system rule, non-negotiable: red is reserved for the primary CTA
+    // and for errors/destructive actions. "Sin membresía" is a state the club
+    // is not alarmed by — a brand-new account has it by definition — so
+    // painting it the same colour as a failure was miscolouring, not emphasis.
     const emptyAccount: MemberAccount = {
       id: "rp-empty",
       role: "representante",
@@ -310,8 +314,8 @@ describe("getAccountStatusBadge", () => {
       estudiantes: [],
     };
     expect(getAccountStatusBadge(emptyAccount)).toEqual({
-      label: "Sin membresía activa",
-      tone: "bad",
+      label: "Sin membresía",
+      tone: "neutral",
     });
   });
 });

@@ -180,36 +180,87 @@ export function buildGroupCardsFromNiveles(niveles: NivelConOcupacion[]): GroupC
 }
 
 // ---------------------------------------------------------------------------
-// Pagination (client-side, mirrors members-utils.ts's paginateAccounts/getTotalPages)
+// Día slots — one card per weekday session (`docs/ux/prototipos/14-horarios.html`)
 // ---------------------------------------------------------------------------
 
-/** Horario groups per page for the Gestión de Horarios list. */
-export const HORARIO_GROUPS_PAGE_SIZE = 10;
-
 /**
- * Slice a (possibly already filtered) horario groups list to a single page.
+ * The grid used to render one card per `HorarioGroup` — a recurring weekly
+ * schedule collapsed into a single card carrying "Lun · Mié · Vie" badges.
+ * The approved prototype shows the opposite: one card per weekday session
+ * ("Lunes 15:00 — 16:00"), all of them visible at once, filterable by day.
+ * You cannot filter a merged card down to a single day without lying about
+ * what it represents, so the display unit is now the individual `Horario` row.
  *
- * `page` is 1-indexed. Returns an empty array when `page` is beyond the
- * available data — never throws or wraps around.
+ * The GROUP is still the editing unit: the edit form manages a group's whole
+ * día-set at once and enrollment is group-wide (a student belongs to every día
+ * of the grupo, never to one loose weekday). `groupKey` is the link back.
  */
-export function paginateHorarioGroups(
-  groups: HorarioGroup[],
-  page: number,
-  pageSize: number = HORARIO_GROUPS_PAGE_SIZE,
-): HorarioGroup[] {
-  const start = (page - 1) * pageSize;
-  return groups.slice(start, start + pageSize);
+export interface HorarioSlot {
+  id: number;
+  diaSemana: string;
+  horaInicio: string;
+  horaFin: string;
+  categoria: string;
+  entrenadorId: number;
+  /** `HorarioGroup.key` of the recurring schedule this session belongs to. */
+  groupKey: string;
 }
 
+/** Weekday display order. Sábado/Domingo last, as the club reads a week. */
+export const DIA_ORDER = [
+  "LUNES",
+  "MARTES",
+  "MIERCOLES",
+  "JUEVES",
+  "VIERNES",
+  "SABADO",
+  "DOMINGO",
+] as const;
+
+/** Sentinel for "no day filter applied". */
+export const DIA_FILTER_ALL = "TODOS";
+
 /**
- * Total number of pages for a given horario group count.
+ * Flatten día-groups back into one slot per weekday session, ordered by day
+ * and then by start time — reading order matches how a week is read.
  *
- * Always returns at least 1 (never 0 pages, even for an empty list) so
- * "Página 1 de 1" is a valid state to render.
+ * Takes the groups rather than the raw `Horario[]` so every slot can carry the
+ * `groupKey` its edit/roster actions need, without re-deriving the grouping.
  */
-export function getHorarioGroupsTotalPages(
-  totalGroups: number,
-  pageSize: number = HORARIO_GROUPS_PAGE_SIZE,
-): number {
-  return Math.max(1, Math.ceil(totalGroups / pageSize));
+export function buildHorarioSlots(groups: HorarioGroup[]): HorarioSlot[] {
+  const slots: HorarioSlot[] = [];
+  for (const group of groups) {
+    for (const row of group.rows) {
+      slots.push({
+        id: row.id,
+        diaSemana: row.diaSemana,
+        horaInicio: group.horaInicio,
+        horaFin: group.horaFin,
+        categoria: group.categoria,
+        entrenadorId: group.entrenadorId,
+        groupKey: group.key,
+      });
+    }
+  }
+  return slots.sort((a, b) => {
+    const dayDelta = DIA_ORDER.indexOf(a.diaSemana as (typeof DIA_ORDER)[number]) -
+      DIA_ORDER.indexOf(b.diaSemana as (typeof DIA_ORDER)[number]);
+    if (dayDelta !== 0) return dayDelta;
+    return a.horaInicio.localeCompare(b.horaInicio);
+  });
+}
+
+/** Slots for one weekday, or all of them for `DIA_FILTER_ALL`. */
+export function filterSlotsByDia(slots: HorarioSlot[], dia: string): HorarioSlot[] {
+  if (dia === DIA_FILTER_ALL) return slots;
+  return slots.filter((slot) => slot.diaSemana === dia);
+}
+
+/** How many sessions fall on each weekday — feeds the filter pills' counts. */
+export function countSlotsByDia(slots: HorarioSlot[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const slot of slots) {
+    counts[slot.diaSemana] = (counts[slot.diaSemana] ?? 0) + 1;
+  }
+  return counts;
 }

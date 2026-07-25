@@ -1,9 +1,13 @@
 /**
- * Component tests for the admin AttendancePage:
- *  - PR8a: the "Horarios de Entrenamiento" table (PR3) is replaced by a
- *    "Tomar asistencia" link to the (now admin-accessible) flow.
- *  - PR8b: records pagination is a visible, labeled control instead of
- *    tiny icon-only ghost buttons.
+ * Component tests for the admin AttendancePage.
+ *
+ * Kept from earlier phases: the "Horarios de Entrenamiento" table stays gone,
+ * "Tomar asistencia" stays reachable, and pagination stays a pair of visible,
+ * labeled controls rather than icon-only ghost buttons.
+ *
+ * Added in Fase 3: the range/horario/alumno filters actually reach the records
+ * endpoint — this screen used to call it with no arguments at all and pull the
+ * whole table on every visit.
  *
  * @vitest-environment jsdom
  */
@@ -69,37 +73,125 @@ function buildRecords(count: number): AttendanceRecord[] {
 
 const mockFetchTrainingSchedules = vi.fn();
 const mockFetchAttendanceRecords = vi.fn();
+const mockSearchStudents = vi.fn().mockResolvedValue([]);
 const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
-  fetchAttendanceRecords: () => mockFetchAttendanceRecords(),
+  fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
+  searchStudents: (query: string) => mockSearchStudents(query),
   fetchNotificaciones: () => mockFetchNotificaciones(),
   marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
 }));
 
-describe("AttendancePage — Horarios section removed, Tomar asistencia added (PR8)", () => {
-  beforeEach(() => {
-    mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
-    mockFetchAttendanceRecords.mockReset().mockResolvedValue(buildRecords(5));
-  });
+beforeEach(() => {
+  mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
+  mockFetchAttendanceRecords.mockReset().mockResolvedValue(buildRecords(5));
+});
 
-  it("removes the Horarios table and replaces it with a Tomar asistencia link", async () => {
+describe("AttendancePage — Horarios section removed, Tomar asistencia in the header", () => {
+  it("removes the Horarios table and keeps a Tomar asistencia entry point", async () => {
     render(<AttendancePage />);
 
-    await waitFor(() => expect(screen.getByText("Registros de Asistencia")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
     expect(screen.queryByText("Horarios de Entrenamiento")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Filtrar por día")).not.toBeInTheDocument();
 
-    const link = screen.getByRole("link", { name: /tomar asistencia/i });
-    expect(link).toHaveAttribute("href", "/trainer/attendance");
+    const links = screen.getAllByRole("link", { name: /tomar asistencia/i });
+    expect(links.length).toBeGreaterThan(0);
+    expect(links[0]).toHaveAttribute("href", "/trainer/attendance");
+  });
+
+  it("drops the redundant 'Volver al Panel' link the sidebar already provides", async () => {
+    render(<AttendancePage />);
+    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+
+    expect(screen.queryByRole("link", { name: /volver al panel/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("AttendancePage — filters reach the records endpoint", () => {
+  it("queries a bounded range on first load instead of the whole table", async () => {
+    render(<AttendancePage />);
+
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
+    const params = mockFetchAttendanceRecords.mock.calls[0][0];
+    expect(params).toMatchObject({
+      fechaInicio: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      fechaFin: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
+  });
+
+  it("passes the selected horario through as horarioId", async () => {
+    render(<AttendancePage />);
+    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("Filtrar por horario"), { target: { value: "1" } });
+
+    await waitFor(() => {
+      const lastCall = mockFetchAttendanceRecords.mock.calls.at(-1)?.[0];
+      expect(lastCall).toMatchObject({ horarioId: 1 });
+    });
+  });
+
+  it("narrows the range to a single day when 'Hoy' is chosen", async () => {
+    render(<AttendancePage />);
+    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /^hoy$/i }));
+
+    await waitFor(() => {
+      const lastCall = mockFetchAttendanceRecords.mock.calls.at(-1)?.[0];
+      expect(lastCall.fechaInicio).toBe(lastCall.fechaFin);
+    });
+  });
+
+  it("refuses to query an inverted custom range and says why", async () => {
+    render(<AttendancePage />);
+    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /rango personalizado/i }));
+    fireEvent.change(await screen.findByLabelText("Fecha de inicio"), {
+      target: { value: "2026-07-10" },
+    });
+    const callsBefore = mockFetchAttendanceRecords.mock.calls.length;
+    fireEvent.change(screen.getByLabelText("Fecha límite"), { target: { value: "2026-07-01" } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "La fecha límite no puede ser menor que la fecha de inicio.",
+    );
+    expect(mockFetchAttendanceRecords.mock.calls.length).toBe(callsBefore);
+  });
+});
+
+describe("AttendancePage — records table", () => {
+  it("humanises the record date instead of printing dd/mm/yyyy in the log", async () => {
+    const today = new Date();
+    const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    mockFetchAttendanceRecords.mockResolvedValue([{ ...buildRecords(1)[0], fecha: iso }]);
+
+    render(<AttendancePage />);
+
+    expect(await screen.findByText(/^Hoy, /)).toBeInTheDocument();
+  });
+
+  it("renders the attendance state as a badge", async () => {
+    render(<AttendancePage />);
+
+    expect((await screen.findAllByText("Presente")).length).toBe(5);
+  });
+
+  it("offers a way out when the filters match nothing", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    render(<AttendancePage />);
+
+    expect(await screen.findByText("No hay registros en este rango")).toBeInTheDocument();
   });
 });
 
 describe("AttendancePage — visible records pagination (PR8b)", () => {
   beforeEach(() => {
-    mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
     mockFetchAttendanceRecords.mockReset().mockResolvedValue(buildRecords(15));
   });
 

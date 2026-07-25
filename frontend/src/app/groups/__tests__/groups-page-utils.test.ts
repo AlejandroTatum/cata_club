@@ -18,9 +18,11 @@ import {
   nivelToGrupo,
   buildGroupCardsFromNiveles,
   countUniqueAlumnos,
-  HORARIO_GROUPS_PAGE_SIZE,
-  paginateHorarioGroups,
-  getHorarioGroupsTotalPages,
+  buildHorarioSlots,
+  filterSlotsByDia,
+  countSlotsByDia,
+  DIA_ORDER,
+  DIA_FILTER_ALL,
 } from "../groups-page-utils";
 import type { AlumnoHorario, NivelConOcupacion } from "@/services/api";
 import type { HorarioGroup } from "@/lib/groups-utils";
@@ -347,47 +349,97 @@ describe("buildGroupCardsFromNiveles", () => {
 });
 
 // ---------------------------------------------------------------------------
-// paginateHorarioGroups / getHorarioGroupsTotalPages (client-side pagination)
+// buildHorarioSlots / filterSlotsByDia / countSlotsByDia (día-card grid)
 // ---------------------------------------------------------------------------
 
-function buildHorarioGroups(count: number): HorarioGroup[] {
-  return Array.from({ length: count }, (_, i) => ({
-    key: `group-${i}`,
-    categoria: "SUB10",
+const SLOT_GROUPS: HorarioGroup[] = [
+  {
+    key: "competitivo-18",
+    categoria: "COMPETITIVO",
+    horaInicio: "18:00",
+    horaFin: "20:00",
+    entrenadorId: 1,
+    nivelRankingId: 2,
+    rows: [
+      { id: 101, diaSemana: "LUNES" },
+      { id: 102, diaSemana: "MIERCOLES" },
+      { id: 103, diaSemana: "SABADO" },
+    ],
+  },
+  {
+    key: "formativo-15",
+    categoria: "FORMATIVO",
     horaInicio: "15:00",
     horaFin: "16:00",
-    entrenadorId: 1,
+    entrenadorId: 2,
     nivelRankingId: null,
-    rows: [{ id: i, diaSemana: "LUNES" }],
-  }));
-}
+    rows: [{ id: 201, diaSemana: "LUNES" }],
+  },
+];
 
-describe("paginateHorarioGroups", () => {
-  it("uses a page size of 10", () => {
-    expect(HORARIO_GROUPS_PAGE_SIZE).toBe(10);
+describe("buildHorarioSlots", () => {
+  it("expands every día row of every group into its own slot", () => {
+    expect(buildHorarioSlots(SLOT_GROUPS)).toHaveLength(4);
   });
 
-  it("slices groups to the page size for page 1, and the remainder for a later page", () => {
-    const groups = buildHorarioGroups(25);
-    const page1 = paginateHorarioGroups(groups, 1);
-    expect(page1).toHaveLength(10);
-    expect(page1[0].key).toBe("group-0");
-    expect(page1[9].key).toBe("group-9");
-
-    const page3 = paginateHorarioGroups(groups, 3);
-    expect(page3).toHaveLength(5);
-    expect(page3[0].key).toBe("group-20");
+  it("orders by weekday first and start time second, so reading order is week order", () => {
+    const slots = buildHorarioSlots(SLOT_GROUPS);
+    expect(slots.map((slot) => [slot.diaSemana, slot.horaInicio])).toEqual([
+      ["LUNES", "15:00"],
+      ["LUNES", "18:00"],
+      ["MIERCOLES", "18:00"],
+      ["SABADO", "18:00"],
+    ]);
   });
 
-  it("returns an empty array for a page beyond the data", () => {
-    expect(paginateHorarioGroups(buildHorarioGroups(5), 5)).toEqual([]);
+  it("carries the owning group's key so a slot can still be edited as a group", () => {
+    const slots = buildHorarioSlots(SLOT_GROUPS);
+    expect(slots.find((slot) => slot.id === 201)?.groupKey).toBe("formativo-15");
+    expect(slots.find((slot) => slot.id === 103)?.groupKey).toBe("competitivo-18");
+  });
+
+  it("returns an empty list for no groups", () => {
+    expect(buildHorarioSlots([])).toEqual([]);
   });
 });
 
-describe("getHorarioGroupsTotalPages", () => {
-  it("rounds up to a whole page count, floored at 1 (never 0 pages)", () => {
-    expect(getHorarioGroupsTotalPages(25)).toBe(3);
-    expect(getHorarioGroupsTotalPages(10)).toBe(1);
-    expect(getHorarioGroupsTotalPages(0)).toBe(1);
+describe("filterSlotsByDia", () => {
+  it("returns everything for the 'todos' sentinel", () => {
+    const slots = buildHorarioSlots(SLOT_GROUPS);
+    expect(filterSlotsByDia(slots, DIA_FILTER_ALL)).toHaveLength(4);
+  });
+
+  it("keeps only the sessions of the chosen weekday", () => {
+    const slots = buildHorarioSlots(SLOT_GROUPS);
+    const lunes = filterSlotsByDia(slots, "LUNES");
+    expect(lunes.map((slot) => slot.id)).toEqual([201, 101]);
+  });
+
+  it("returns an empty list for a weekday with no sessions", () => {
+    expect(filterSlotsByDia(buildHorarioSlots(SLOT_GROUPS), "DOMINGO")).toEqual([]);
+  });
+});
+
+describe("countSlotsByDia", () => {
+  it("counts sessions per weekday and omits weekdays with none", () => {
+    expect(countSlotsByDia(buildHorarioSlots(SLOT_GROUPS))).toEqual({
+      LUNES: 2,
+      MIERCOLES: 1,
+      SABADO: 1,
+    });
+  });
+});
+
+describe("DIA_ORDER", () => {
+  it("runs Lunes → Domingo, the way the club reads a week", () => {
+    expect(DIA_ORDER).toEqual([
+      "LUNES",
+      "MARTES",
+      "MIERCOLES",
+      "JUEVES",
+      "VIERNES",
+      "SABADO",
+      "DOMINGO",
+    ]);
   });
 });

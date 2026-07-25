@@ -1,7 +1,13 @@
 /**
- * Component tests for RankingPage (admin) — literal copy of the trainer's
- * Nivel screen (see NivelPage.test.tsx), single "Asignar Nivel" table with
- * its search/nivel filter, reused for the admin actor.
+ * Component tests for RankingPage (admin) — "la escalera".
+ *
+ * The screen used to be a per-student table with a nivel `<select>` per row.
+ * It is now the ladder itself: one rung per nivel, ordered 1→10, with the
+ * roster as an avatar stack and a single "Asignar" action that opens an
+ * assignment panel scoped to that rung.
+ *
+ * These tests exist mostly to keep two settled product rules from silently
+ * regressing: no occupancy indicator of any kind, and no "Promover" action.
  *
  * @vitest-environment jsdom
  */
@@ -84,44 +90,59 @@ vi.mock("@/services/api", () => {
   };
 });
 
+/**
+ * Deliberately returned out of rank order, and deliberately carrying the
+ * occupancy fields the API really sends — the screen has to sort 1-first
+ * itself and has to keep those three numbers off the page.
+ */
 const NIVELES: NivelConOcupacion[] = [
+  {
+    id: 3,
+    numeroNivel: 3,
+    nombre: "Nivel Base",
+    capacidadMinima: 6,
+    capacidadMaxima: 10,
+    personasActuales: 2,
+    cuposDisponibles: 8,
+    necesitaRevision: true,
+    nivelCategoria: "avanzado",
+  },
   {
     id: 1,
     numeroNivel: 1,
-    nombre: "Nivel Iniciación",
-    capacidadMinima: 1,
+    nombre: "Nivel Cima",
+    capacidadMinima: 6,
     capacidadMaxima: 10,
-    personasActuales: 0,
-    cuposDisponibles: 10,
-    necesitaRevision: false,
-    nivelCategoria: "principiante",
+    personasActuales: 1,
+    cuposDisponibles: 9,
+    necesitaRevision: true,
+    nivelCategoria: "avanzado",
   },
   {
     id: 2,
     numeroNivel: 2,
-    nombre: "Nivel Intermedio",
-    capacidadMinima: 1,
+    nombre: "Nivel Medio",
+    capacidadMinima: 6,
     capacidadMaxima: 10,
     personasActuales: 0,
     cuposDisponibles: 10,
-    necesitaRevision: false,
-    nivelCategoria: "intermedio",
+    necesitaRevision: true,
+    nivelCategoria: "avanzado",
   },
 ];
 
 const ROSTER: AlumnoParaNivel[] = [
   { personaId: 10, nombres: "Sofía", apellidos: "González", activo: true, representanteId: null, nivelRankingId: null },
   { personaId: 11, nombres: "Pedro", apellidos: "Ramírez", activo: true, representanteId: null, nivelRankingId: 1 },
+  { personaId: 12, nombres: "Carla", apellidos: "Vera", activo: true, representanteId: null, nivelRankingId: 3 },
 ];
 
-describe("RankingPage — admin Niveles screen (copy of trainer's Nivel)", () => {
+describe("RankingPage — la escalera", () => {
   beforeEach(() => {
-    mockFetchAlumnosParaNivel.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
-    mockAssignStudentToNivel.mockReset();
-    mockMoveStudentToNivel.mockReset();
-    mockFetchAlumnosParaNivel.mockResolvedValue(ROSTER);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
+    mockFetchAlumnosParaNivel.mockReset().mockResolvedValue(ROSTER);
+    mockFetchNivelesConOcupacion.mockReset().mockResolvedValue(NIVELES);
+    mockAssignStudentToNivel.mockReset().mockResolvedValue(undefined);
+    mockMoveStudentToNivel.mockReset().mockResolvedValue(undefined);
     mockShowError.mockClear();
     mockShowSuccess.mockClear();
   });
@@ -130,179 +151,207 @@ describe("RankingPage — admin Niveles screen (copy of trainer's Nivel)", () =>
     vi.useRealTimers();
   });
 
-  it("renders every student by default with the total count", async () => {
+  it("renders one rung per nivel, ordered with 1 at the top", async () => {
     render(<RankingPage />);
-    await screen.findByText("Sofía González");
+    await screen.findByText("Nivel Cima");
 
-    expect(screen.getByText("Pedro Ramírez")).toBeInTheDocument();
-    expect(screen.getByText("Estudiantes (2)")).toBeInTheDocument();
+    const rungs = screen.getAllByRole("listitem");
+    expect(rungs).toHaveLength(3);
+    expect(rungs[0]).toHaveTextContent("Nivel Cima");
+    expect(rungs[1]).toHaveTextContent("Nivel Medio");
+    expect(rungs[2]).toHaveTextContent("Nivel Base");
   });
 
-  it("filters students by name (case-insensitive)", async () => {
+  it("labels each rung with its rank chip", async () => {
     render(<RankingPage />);
-    await screen.findByText("Sofía González");
+    await screen.findByText("Nivel Cima");
 
-    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "sofía" } });
+    const rungs = screen.getAllByRole("listitem");
+    expect(within(rungs[0]).getByTitle("Puesto 1 de la escalera")).toBeInTheDocument();
+    expect(within(rungs[1]).getByTitle("Puesto 2 de la escalera")).toBeInTheDocument();
+    expect(within(rungs[2]).getByTitle("Puesto 3 de la escalera")).toBeInTheDocument();
+  });
+
+  it("shows the roster of each rung as an avatar stack of initials", async () => {
+    render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    const rungs = screen.getAllByRole("listitem");
+    // Pedro Ramírez sits on nivel 1, Carla Vera on nivel 3.
+    expect(within(rungs[0]).getByTitle("Pedro Ramírez")).toHaveTextContent("PR");
+    expect(within(rungs[2]).getByTitle("Carla Vera")).toHaveTextContent("CV");
+    expect(within(rungs[0]).getByText("1 estudiante")).toBeInTheDocument();
+    expect(within(rungs[1]).getByText("0 estudiantes")).toBeInTheDocument();
+  });
+
+  it("shows exactly two stats — Estudiantes asignados and Niveles — and no judgement", async () => {
+    render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    expect(screen.getByText("Estudiantes asignados")).toBeInTheDocument();
+    expect(screen.getByText("de 3 estudiantes")).toBeInTheDocument();
+    // "Niveles" also names the sidebar nav entry, so scope to the stat's hint.
+    expect(screen.getByText("1 es la cima")).toBeInTheDocument();
+  });
+
+  it("renders no occupancy indicator anywhere — no fraction, no cupos, no 'Bajo mínimo'", async () => {
+    const { container } = render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/cupos?/i);
+    expect(text).not.toMatch(/bajo mínimo/i);
+    expect(text).not.toMatch(/capacidad/i);
+    expect(text).not.toMatch(/revisión/i);
+    // "N/M" occupancy fractions, e.g. "2/10".
+    expect(text).not.toMatch(/\b\d+\s*\/\s*\d+\b/);
+    expect(container.querySelector("progress")).toBeNull();
+    expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  });
+
+  it("offers 'Asignar' as the only rung action — never 'Promover'", async () => {
+    render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    expect(screen.getAllByRole("button", { name: /^asignar estudiantes a/i })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /promover/i })).not.toBeInTheDocument();
+  });
+
+  it("opens an assignment panel scoped to the rung that was clicked", async () => {
+    render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+
+    expect(await screen.findByText("Asignar estudiantes al nivel Nivel Medio")).toBeInTheDocument();
+    expect(screen.getByText("Sofía González")).toBeInTheDocument();
+  });
+
+  it("assigns an unassigned student to the rung's nivel via asignar-nivel-inicial", async () => {
+    render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Estudiantes (1)")).toBeInTheDocument();
+      expect(mockAssignStudentToNivel).toHaveBeenCalledWith(10, 2);
+    });
+    expect(mockMoveStudentToNivel).not.toHaveBeenCalled();
+    expect(mockShowSuccess).toHaveBeenCalled();
+  });
+
+  it("moves an already-assigned student via mover-de-nivel, under the same 'Asignar' label", async () => {
+    render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Asignar Pedro Ramírez al nivel Nivel Medio" }),
+    );
+
+    await waitFor(() => {
+      expect(mockMoveStudentToNivel).toHaveBeenCalledWith(11, 2);
+    });
+    expect(mockAssignStudentToNivel).not.toHaveBeenCalled();
+  });
+
+  it("marks a student already on the open rung as such instead of offering to re-assign them", async () => {
+    render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" }));
+
+    expect(await screen.findByText("Ya está aquí")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Asignar Pedro Ramírez al nivel Nivel Cima" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("filters the assignment panel by name", async () => {
+    render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.change(await screen.findByLabelText(/buscar estudiante para el nivel nivel medio/i), {
+      target: { value: "sofía" },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Pedro Ramírez")).not.toBeInTheDocument();
     });
     expect(screen.getByText("Sofía González")).toBeInTheDocument();
-    expect(screen.queryByText("Pedro Ramírez")).not.toBeInTheDocument();
   });
 
-  it("filters students by current nivel", async () => {
+  it("moves the student's avatar onto the target rung after a successful assignment", async () => {
     render(<RankingPage />);
-    await screen.findByText("Sofía González");
+    await screen.findByText("Nivel Cima");
 
-    fireEvent.change(screen.getByLabelText(/filtrar por nivel actual/i), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Estudiantes (1)")).toBeInTheDocument();
+      const rungs = screen.getAllByRole("listitem");
+      expect(within(rungs[1]).getByTitle("Sofía González")).toBeInTheDocument();
     });
-    expect(screen.getByText("Pedro Ramírez")).toBeInTheDocument();
-    expect(screen.queryByText("Sofía González")).not.toBeInTheDocument();
   });
 
-  it("paginates the student list at 10 per page, with prev/next controls", async () => {
-    const manyStudents: AlumnoParaNivel[] = Array.from({ length: 15 }, (_, i) => ({
-      personaId: 100 + i,
-      nombres: `Estudiante${i}`,
-      apellidos: "Test",
-      activo: true,
-      representanteId: null,
-      nivelRankingId: null,
-    }));
-    mockFetchAlumnosParaNivel.mockResolvedValue(manyStudents);
-
+  it("surfaces a real backend failure instead of a false success", async () => {
+    mockAssignStudentToNivel.mockRejectedValue(new Error("boom"));
     render(<RankingPage />);
-    await screen.findByText("Estudiantes (15)");
+    await screen.findByText("Nivel Cima");
 
-    expect(screen.getByText("Estudiante0 Test")).toBeInTheDocument();
-    expect(screen.queryByText("Estudiante10 Test")).not.toBeInTheDocument();
-    expect(screen.getByText(/Página 1 de 2/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: /Página siguiente/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Estudiante10 Test")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("Estudiante0 Test")).not.toBeInTheDocument();
-    expect(screen.getByText(/Página 2 de 2/)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Error al asignar el nivel.");
+    expect(mockShowSuccess).not.toHaveBeenCalled();
   });
 
-  it("shows an empty-filter state distinct from the no-students state", async () => {
+  it("clears the pending 'Asignado' reset timer on unmount", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { unmount } = render(<RankingPage />);
+    await screen.findByText("Nivel Cima");
+
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
+    );
+    await waitFor(() => expect(mockAssignStudentToNivel).toHaveBeenCalled());
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    unmount();
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("shows a retryable error state when the ladder cannot be loaded", async () => {
+    mockFetchNivelesConOcupacion.mockRejectedValue(new Error("network"));
     render(<RankingPage />);
-    await screen.findByText("Sofía González");
 
-    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "nadie-existe" } });
-
-    await waitFor(() => {
-      expect(screen.getByText("No se encontraron estudiantes")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("No hay estudiantes registrados")).not.toBeInTheDocument();
-  });
-
-  describe("assignment feedback", () => {
-    // `onAssigned` (loadData) briefly flips `loading` true/false around the
-    // refetch, which unmounts and remounts the `<table>`/`<tr>` — so every
-    // assertion below re-queries the row from `screen` instead of reusing a
-    // captured DOM node reference (it would go stale mid-flow).
-    function getSofiaRow(): HTMLElement {
-      const row = screen.getByLabelText("Nuevo nivel para Sofía González").closest("tr");
-      if (!row) throw new Error("Sofía row not found");
-      return row;
-    }
-
-    it("shows a success toast and reverts the 'Asignado' label to 'Asignar' after the timeout", async () => {
-      mockAssignStudentToNivel.mockResolvedValue(undefined);
-      render(<RankingPage />);
-      await screen.findByText("Sofía González");
-
-      fireEvent.change(screen.getByLabelText("Nuevo nivel para Sofía González"), { target: { value: "1" } });
-      fireEvent.click(within(getSofiaRow()).getByRole("button", { name: /Asignar/i }));
-
-      await waitFor(() => {
-        expect(within(getSofiaRow()).getByRole("button", { name: /Asignado/i })).toBeInTheDocument();
-      });
-      expect(mockShowSuccess).toHaveBeenCalledTimes(1);
-
-      await waitFor(
-        () => {
-          expect(within(getSofiaRow()).getByRole("button", { name: /^Asignar$/i })).toBeInTheDocument();
-        },
-        { timeout: 3000 },
-      );
-    });
-
-    it("fires assignStudentToNivel for an unassigned student and moveStudentToNivel for an already-assigned one", async () => {
-      mockAssignStudentToNivel.mockResolvedValue(undefined);
-      mockMoveStudentToNivel.mockResolvedValue(undefined);
-      render(<RankingPage />);
-      await screen.findByText("Sofía González");
-
-      fireEvent.change(screen.getByLabelText("Nuevo nivel para Sofía González"), { target: { value: "1" } });
-      fireEvent.click(within(getSofiaRow()).getByRole("button", { name: /Asignar/i }));
-
-      await waitFor(() => {
-        expect(mockAssignStudentToNivel).toHaveBeenCalledWith(10, 1);
-      });
-      expect(mockMoveStudentToNivel).not.toHaveBeenCalled();
-    });
-
-    it("clears the pending reset timer on unmount so no state update fires afterward", async () => {
-      mockAssignStudentToNivel.mockResolvedValue(undefined);
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      const { unmount } = render(<RankingPage />);
-      await screen.findByText("Sofía González");
-
-      fireEvent.change(screen.getByLabelText("Nuevo nivel para Sofía González"), { target: { value: "1" } });
-      fireEvent.click(within(getSofiaRow()).getByRole("button", { name: /Asignar/i }));
-
-      await waitFor(() => {
-        expect(within(getSofiaRow()).getByRole("button", { name: /Asignado/i })).toBeInTheDocument();
-      });
-
-      const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
-      unmount();
-      expect(clearTimeoutSpy).toHaveBeenCalled();
-      clearTimeoutSpy.mockRestore();
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(consoleErrorSpy).not.toHaveBeenCalled();
-      consoleErrorSpy.mockRestore();
-    });
+    expect(
+      await screen.findByText("No se pudieron cargar los niveles. Intente nuevamente."),
+    ).toBeInTheDocument();
   });
 });
 
-// ---------------------------------------------------------------------------
-// WCAG AA contrast (P1). The "Sin asignar" badge rendered `text-gray-400`
-// (#9CA3AF) on `bg-gray-100` (#F3F4F6) — 2.31:1, the worst measured pair in
-// the app, on a label that marks a real, actionable state. The numeric proof
-// lives in src/lib/__tests__/color-contrast.test.ts; this pins the call site.
-// ---------------------------------------------------------------------------
-
-describe("RankingPage — 'Sin asignar' badge contrast", () => {
+describe("RankingPage — empty ladder", () => {
   beforeEach(() => {
-    mockFetchAlumnosParaNivel.mockReset().mockResolvedValue(ROSTER);
-    mockFetchNivelesConOcupacion.mockReset().mockResolvedValue(NIVELES);
-    mockShowError.mockClear();
-    mockShowSuccess.mockClear();
+    mockFetchAlumnosParaNivel.mockReset().mockResolvedValue([]);
+    mockFetchNivelesConOcupacion.mockReset().mockResolvedValue([]);
   });
 
-  it("renders the unassigned badge with an AA-passing foreground, not gray-400", async () => {
+  it("explains the empty state instead of rendering an empty card", async () => {
     render(<RankingPage />);
-
-    await screen.findByText("Sofía González");
-    // "Sin asignar" also names an <option> in the nivel filter; the badge is
-    // the <span> in the student table cell.
-    const badge = screen
-      .getAllByText("Sin asignar")
-      .find((el) => el.tagName === "SPAN") as HTMLElement;
-    expect(badge).toBeDefined();
-    expect(badge).not.toHaveClass("text-gray-400");
-    expect(badge).toHaveClass("text-gray-700");
-    // The fill it must contrast against is unchanged.
-    expect(badge).toHaveClass("bg-gray-100");
+    expect(await screen.findByText("Todavía no hay niveles")).toBeInTheDocument();
   });
 });

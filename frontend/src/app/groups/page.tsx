@@ -40,18 +40,15 @@ import BackLink from "@/components/BackLink";
 import {
   Calendar,
   Plus,
-  Pencil,
   Trash2,
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  Clock,
-  Users,
   UserPlus,
   UserMinus,
 } from "lucide-react";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { buttonClasses, Button, EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
+import { Button, EmptyState, ErrorState, FilterPill, LoadingState } from "@/components/ui";
 import {
   fetchHorarios,
   crearHorario,
@@ -70,9 +67,11 @@ import { groupHorarios, diffGroupSave, type StudentRef, type HorarioGroup } from
 import { CATEGORIA_METADATA, CATEGORIA_OPTIONS, diasPermitidos, horarioDe, type Categoria } from "@/services/categorias";
 import {
   countUniqueAlumnos,
-  paginateHorarioGroups,
-  getHorarioGroupsTotalPages,
-  HORARIO_GROUPS_PAGE_SIZE,
+  buildHorarioSlots,
+  filterSlotsByDia,
+  countSlotsByDia,
+  DIA_ORDER,
+  DIA_FILTER_ALL,
 } from "./groups-page-utils";
 
 const DIA_LABELS: Record<string, string> = {
@@ -92,9 +91,14 @@ function formatTime(timeStr: string): string {
   return `${h}:${m}`;
 }
 
-/** Short (3-letter) día badge label, e.g. "Lun", "Mié", "Vie". */
+/** Short (3-letter) día label, e.g. "Lun", "Mié", "Vie". Used in confirmations. */
 function shortDiaLabel(dia: string): string {
   return (DIA_LABELS[dia] ?? dia).slice(0, 3);
+}
+
+/** Card title, e.g. "Lunes 15:00 — 16:00" (`14-horarios.html`). */
+function slotTitle(dia: string, horaInicio: string, horaFin: string): string {
+  return `${DIA_LABELS[dia] ?? dia} ${formatTime(horaInicio)} — ${formatTime(horaFin)}`;
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -116,12 +120,14 @@ interface PendingDayDeletion {
 }
 
 /**
- * Single accordion state — at most one group's panel is expanded at a time.
- * `key` is either a `HorarioGroup.key` or `NEW_GROUP_KEY` for the create-new
- * flow (which has no existing card to nest under). `tab` picks which inline
- * panel renders under that group's card — PR3a. `alumnos` tab content itself
- * (real per-día roster) is reworked in PR3b; PR3a only wires the accordion
- * mechanics around the existing panel content.
+ * Single accordion state — at most one card's panel is expanded at a time.
+ *
+ * `key` is the `Horario.id` of the expanded día card (as a string), or
+ * `NEW_GROUP_KEY` for the create-new flow, which has no existing card to nest
+ * under. It used to be a `HorarioGroup.key`; the grid now renders one card per
+ * weekday session, so the card — not the group — is what expands. Both panels
+ * still act on the whole GROUP the card belongs to: editing manages the
+ * group's día-set and enrollment is group-wide.
  */
 interface ExpandedGroupState {
   key: string;
@@ -194,7 +200,21 @@ export default function GroupsPage(): React.ReactElement {
   const [entrenadores, setEntrenadores] = useState<Entrenador[]>([]);
   const [entrenadoresLoading, setEntrenadoresLoading] = useState(true);
 
-  const [page, setPage] = useState(1);
+  /** Weekday pill currently selected — `DIA_FILTER_ALL` shows the whole week. */
+  const [diaFilter, setDiaFilter] = useState<string>(DIA_FILTER_ALL);
+
+  /**
+   * Enrolled headcount per `Horario.id`, for the "N inscriptos" line.
+   *
+   * BACKEND GAP: `GET /groups/horarios` returns no enrollment count, and there
+   * is no bulk roster endpoint — the only way to know how many students a
+   * session has is one `GET /groups/horarios/{id}/alumnos` per row. So the
+   * counts are fetched in parallel AFTER the schedules render, and a row that
+   * fails simply has no count line. Rendering "0 inscriptos" for a request
+   * that never answered would be a lie, and this figure is the one the club
+   * plans around.
+   */
+  const [inscriptosPorHorario, setInscriptosPorHorario] = useState<Record<number, number>>({});
 
   const showNotification = useCallback((type: "success" | "error", message: string): void => {
     setNotification({ type, message });
@@ -356,18 +376,53 @@ export default function GroupsPage(): React.ReactElement {
     void cargarEntrenadores();
   }, [loadData, cargarEntrenadores]);
 
+  /**
+   * Fill in the per-session headcounts once the schedules are known. Kept out
+   * of `loadData`'s `Promise.all` deliberately: this is N extra requests for a
+   * secondary line of text, and it must never delay or fail the grid itself.
+   */
+  useEffect(() => {
+    if (horarios.length === 0) return;
+    let cancelled = false;
+
+    void Promise.all(
+      horarios.map(async (horario) => {
+        try {
+          const alumnos = await fetchAlumnosPorHorario(horario.id);
+          return [horario.id, alumnos.length] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      const counts: Record<number, number> = {};
+      for (const result of results) {
+        if (result) counts[result[0]] = result[1];
+      }
+      setInscriptosPorHorario(counts);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [horarios]);
+
   const horarioGroups = useMemo(() => groupHorarios(horarios), [horarios]);
 
-  // Reset to page 1 whenever the underlying list changes, so the paginator
-  // never gets stuck on a stale/out-of-range page.
-  useEffect(() => {
-    setPage(1);
-  }, [horarioGroups.length]);
-
-  const totalPages = useMemo(() => getHorarioGroupsTotalPages(horarioGroups.length), [horarioGroups]);
-  const paginatedHorarioGroups = useMemo(
-    () => paginateHorarioGroups(horarioGroups, page),
-    [horarioGroups, page],
+  /**
+   * One card per weekday session, all of them on screen at once. The list
+   * used to be paginated ten día-GROUPS at a time; the approved prototype
+   * (`14-horarios.html`) shows the whole week's grid, because the question
+   * this screen answers ("what runs on Thursday?") is a scanning question and
+   * a pager is the wrong instrument for it.
+   */
+  const slots = useMemo(() => buildHorarioSlots(horarioGroups), [horarioGroups]);
+  const slotCountsByDia = useMemo(() => countSlotsByDia(slots), [slots]);
+  const visibleSlots = useMemo(() => filterSlotsByDia(slots, diaFilter), [slots, diaFilter]);
+  const groupsByKey = useMemo(
+    () => new Map(horarioGroups.map((group) => [group.key, group])),
+    [horarioGroups],
   );
 
   function openCreateForm(): void {
@@ -378,7 +433,7 @@ export default function GroupsPage(): React.ReactElement {
     setExpandedGroup({ key: NEW_GROUP_KEY, tab: "editar" });
   }
 
-  function openEditForm(group: HorarioGroup): void {
+  function openEditForm(slotId: number, group: HorarioGroup): void {
     setEditingGroup(group);
     setFormData({
       categoria: (group.categoria as Categoria) ?? DEFAULT_CATEGORIA,
@@ -387,14 +442,14 @@ export default function GroupsPage(): React.ReactElement {
     });
     setSelectedDias(new Set(group.rows.map((row) => row.diaSemana)));
     setFormError(null);
-    setExpandedGroup({ key: group.key, tab: "editar" });
+    setExpandedGroup({ key: String(slotId), tab: "editar" });
   }
 
-  /** Opens the "Alumnos" accordion tab for a group — loads the roster for
+  /** Opens the "Alumnos" accordion tab under a día card — loads the roster for
    * the WHOLE group (every día row), not a single día (a student belongs to
    * the whole recurring grupo, not one día). */
-  function openAlumnosTab(group: HorarioGroup): void {
-    setExpandedGroup({ key: group.key, tab: "alumnos" });
+  function openAlumnosTab(slotId: number, group: HorarioGroup): void {
+    setExpandedGroup({ key: String(slotId), tab: "alumnos" });
     void cargarAlumnosDelGrupo(group);
   }
 
@@ -691,6 +746,33 @@ export default function GroupsPage(): React.ReactElement {
             </Button>
           </div>
         </form>
+
+        {/* Danger zone, exactly where `15-horario-editar.html` puts it: inside
+            the edit form, not on the card. Deleting removes the whole
+            recurring schedule — every weekday of the group — so it must not
+            hang off a card that names one single day. */}
+        {editingGroup !== null && (
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+            <div className="min-w-[220px] flex-1">
+              <p className="text-[13px] font-semibold text-state-bad">Eliminar este horario</p>
+              <p className="text-[12px] text-ink-3">
+                Se eliminan todos sus días y los alumnos quedan sin horario asignado.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => void requestDeleteGroup(editingGroup)}
+              disabled={deletingId !== null}
+            >
+              {deletingId !== null ? (
+                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Trash2 size={12} strokeWidth={1.5} aria-hidden="true" />
+              )}
+              Eliminar…
+            </Button>
+          </div>
+        )}
       </>
     );
   }
@@ -786,8 +868,14 @@ export default function GroupsPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
-        eyebrow="Gestión Operativa"
+        eyebrow="Grupos de entrenamiento"
         title="Horarios"
+        actions={
+          <Button variant="dark" onClick={openCreateForm}>
+            <Plus size={14} strokeWidth={2} aria-hidden="true" />
+            Nuevo horario
+          </Button>
+        }
       >
         <BackLink href="/dashboard" label="Volver al Panel" />
 
@@ -813,17 +901,25 @@ export default function GroupsPage(): React.ReactElement {
           </div>
         )}
 
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calendar size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h2 className="text-lg font-bold text-cata-text">
-              Horarios de Entrenamiento ({horarios.length})
-            </h2>
-          </div>
-          <Button variant="primary" size="sm" onClick={openCreateForm}>
-            <Plus size={14} strokeWidth={2} aria-hidden="true" />
-            Nuevo Horario
-          </Button>
+        {/* Weekday filter — `14-horarios.html`'s `.pills` row. "Todos" carries
+            the total; each day carries its own session count, so an empty day
+            is visible as a zero rather than as a blank grid after clicking. */}
+        <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Filtrar por día">
+          <FilterPill
+            label="Todos"
+            count={slots.length}
+            active={diaFilter === DIA_FILTER_ALL}
+            onClick={() => setDiaFilter(DIA_FILTER_ALL)}
+          />
+          {DIA_ORDER.filter((dia) => (slotCountsByDia[dia] ?? 0) > 0).map((dia) => (
+            <FilterPill
+              key={dia}
+              label={DIA_LABELS[dia] ?? dia}
+              count={slotCountsByDia[dia] ?? 0}
+              active={diaFilter === dia}
+              onClick={() => setDiaFilter(dia)}
+            />
+          ))}
         </div>
 
         {expandedGroup?.key === NEW_GROUP_KEY && (
@@ -836,87 +932,79 @@ export default function GroupsPage(): React.ReactElement {
           <div className="card">
             <LoadingState label="Cargando horarios…" />
           </div>
-        ) : horarios.length > 0 ? (
-          <div className="space-y-3">
-            {paginatedHorarioGroups.map((group) => {
-              // Asignar-alumnos opens the tab on the first día in the group
-              // (per-día switching happens inside the tab via the día-pill
-              // selector — PR3b). The trash icon, unlike that, deletes the
-              // WHOLE group (every día row) via `requestDeleteGroup`.
+        ) : visibleSlots.length > 0 ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(258px,1fr))] gap-3.5">
+            {visibleSlots.map((slot) => {
+              const group = groupsByKey.get(slot.groupKey);
+              if (!group) return null;
+
+              // Deletion (inside the edit panel) removes the WHOLE group —
+              // every día row — so every card of that group busies out.
               const isDeleting = group.rows.some((row) => row.id === deletingId);
+              const slotKey = String(slot.id);
+              const isExpanded = expandedGroup?.key === slotKey;
+              const entrenador = entrenadores.find((e) => e.id === slot.entrenadorId);
+              const inscriptos = inscriptosPorHorario[slot.id];
+              const categoriaLabel = (
+                CATEGORIA_METADATA[slot.categoria as Categoria] ??
+                CATEGORIA_METADATA[DEFAULT_CATEGORIA]
+              ).label;
 
               return (
-                <div key={group.key} className="card p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-cata-red/10">
-                        <Calendar size={20} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-                      </div>
-                      <div>
-                        <div className="text-xs font-extrabold uppercase tracking-wide text-cata-red">
-                          {(CATEGORIA_METADATA[group.categoria as Categoria] ?? CATEGORIA_METADATA[DEFAULT_CATEGORIA]).label}
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {group.rows.map((row) => (
-                            <span
-                              key={row.id}
-                              className="inline-flex items-center rounded-full bg-cata-bg px-2 py-0.5 text-xs font-bold text-cata-text"
-                            >
-                              {shortDiaLabel(row.diaSemana)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-1 flex items-center gap-1.5 text-xs text-cata-text/60">
-                          <Clock size={11} strokeWidth={1.5} aria-hidden="true" />
-                          {formatTime(group.horaInicio)} – {formatTime(group.horaFin)}
-                        </div>
-                      </div>
-                    </div>
+                <div
+                  key={slot.id}
+                  data-testid="horario-card"
+                  // An expanded card carries a whole form; letting it span the
+                  // grid keeps that form readable instead of squeezing it into
+                  // a 258px column.
+                  className={`card flex flex-col gap-[9px] p-5 ${isExpanded ? "col-span-full" : ""}`}
+                >
+                  <b className="text-[15px] tracking-[-0.015em] text-ink">
+                    {slotTitle(slot.diaSemana, slot.horaInicio, slot.horaFin)}
+                  </b>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openAlumnosTab(group)}
-                        disabled={isDeleting}
-                        aria-label="Ver alumnos del horario"
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-cata-red/10 px-2.5 py-1.5 text-xs font-bold text-cata-red transition-colors hover:bg-cata-red/20 disabled:opacity-50"
-                      >
-                        <Users size={13} strokeWidth={1.5} aria-hidden="true" />
-                        Ver alumnos
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openEditForm(group)}
-                        disabled={isDeleting}
-                        className="rounded-lg border border-cata-border p-1.5 text-cata-text/50 transition-colors hover:bg-cata-red/10 hover:text-cata-red disabled:opacity-50"
-                        title="Editar horario"
-                      >
-                        <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void requestDeleteGroup(group)}
-                        disabled={isDeleting}
-                        className="rounded-lg border border-cata-border p-1.5 text-cata-text/50 transition-colors hover:bg-red-50 hover:text-cata-red disabled:opacity-50"
-                        title="Eliminar horario"
-                      >
-                        {isDeleting ? (
-                          <Loader2 size={13} className="animate-spin" aria-hidden="true" />
-                        ) : (
-                          <Trash2 size={13} strokeWidth={1.5} aria-hidden="true" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                  {/* Trainer and categoria. The prototype's second line reads
+                      "Entrenador: … · Mesa 2"; there is no table/court field
+                      on `Horario` (id, diaSemana, horaInicio, horaFin,
+                      categoria, entrenadorId, nivelRankingId), so the real
+                      categoria takes that slot rather than an invented mesa.
+                      Level is deliberately absent — settled product decision. */}
+                  <p className="text-[13px] text-ink-3">
+                    Entrenador: {entrenador?.nombreCompleto ?? "Sin asignar"} ·{" "}
+                    <span>{categoriaLabel}</span>
+                  </p>
 
-                  {expandedGroup?.key === group.key && expandedGroup.tab === "editar" && (
-                    <div className="mt-4 border-t border-cata-border pt-4">
-                      {renderHorarioForm()}
-                    </div>
+                  {inscriptos !== undefined && (
+                    <p className="text-[13px] font-semibold text-ink-2">
+                      {inscriptos} inscripto{inscriptos === 1 ? "" : "s"}
+                    </p>
                   )}
 
-                  {expandedGroup?.key === group.key && expandedGroup.tab === "alumnos" && (
-                    <div className="mt-4 border-t border-cata-border pt-4">
+                  <div className="mt-0.5 flex flex-wrap gap-[7px]">
+                    <Button
+                      size="sm"
+                      onClick={() => openAlumnosTab(slot.id, group)}
+                      disabled={isDeleting}
+                      aria-label={`Ver alumnos de ${slotTitle(slot.diaSemana, slot.horaInicio, slot.horaFin)}`}
+                    >
+                      Ver alumnos
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => openEditForm(slot.id, group)}
+                      disabled={isDeleting}
+                      aria-label={`Editar ${slotTitle(slot.diaSemana, slot.horaInicio, slot.horaFin)}`}
+                    >
+                      Editar
+                    </Button>
+                  </div>
+
+                  {isExpanded && expandedGroup.tab === "editar" && (
+                    <div className="mt-3 border-t border-line pt-4">{renderHorarioForm()}</div>
+                  )}
+
+                  {isExpanded && expandedGroup.tab === "alumnos" && (
+                    <div className="mt-3 border-t border-line pt-4">
                       {renderAlumnosPanel(group)}
                     </div>
                   )}
@@ -926,15 +1014,15 @@ export default function GroupsPage(): React.ReactElement {
           </div>
         ) : null}
 
-        {!loading && horarioGroups.length > 0 && totalPages > 1 && (
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            totalItems={horarioGroups.length}
-            pageSize={HORARIO_GROUPS_PAGE_SIZE}
-            itemNoun="horario"
-          />
+        {!loading && slots.length > 0 && visibleSlots.length === 0 && (
+          <div className="card">
+            <EmptyState
+              icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
+              title="No hay horarios ese día"
+              description="Ningún horario de entrenamiento cae en el día seleccionado."
+              action={<Button onClick={() => setDiaFilter(DIA_FILTER_ALL)}>Ver todos los días</Button>}
+            />
+          </div>
         )}
 
         {!loading && horarios.length === 0 && (

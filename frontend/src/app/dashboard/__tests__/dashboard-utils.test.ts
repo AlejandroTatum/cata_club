@@ -9,8 +9,12 @@ import {
   buildAttendanceStatusSegments,
   buildDonutArcs,
   ATTENDANCE_STATUS_CHART_COLORS,
+  countPaymentsWaitingOverAWeek,
+  buildFourWeekAttendance,
+  buildActivityFeed,
 } from "../dashboard-utils";
-import type { AttendanceDayStats } from "@/app/attendance/attendance-utils";
+import type { AttendanceDayStats, AttendanceRecord } from "@/app/attendance/attendance-utils";
+import type { PaymentValidationRequest } from "@/services/api";
 
 function buildStats(overrides: Partial<AttendanceDayStats> = {}): AttendanceDayStats {
   return {
@@ -100,5 +104,203 @@ describe("buildDonutArcs", () => {
     const arcs = buildDonutArcs([100, 0], CIRCUMFERENCE);
     const [zeroLength] = arcs[1].dashArray.split(" ").map(Number);
     expect(zeroLength).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// countPaymentsWaitingOverAWeek
+// ---------------------------------------------------------------------------
+
+const NOW = new Date(2026, 6, 23, 9, 0); // 23 jul 2026, local
+
+function buildRequest(overrides: Partial<PaymentValidationRequest> = {}): PaymentValidationRequest {
+  return {
+    id: "req-1",
+    studentName: "Sofia Vera Zamora",
+    responsablePagoName: "Laura Vera",
+    membershipPeriod: "01/07/2026 – 12/08/2026",
+    membershipType: "Mensual",
+    expectedAmount: 25,
+    paymentMethod: "Transferencia",
+    uploadedAt: new Date(2026, 6, 22, 18, 42).toISOString(),
+    currentMembershipStatus: "vencida",
+    proofFileName: "comprobante.png",
+    proofFileType: "image",
+    validationStatus: "pendiente",
+    ...overrides,
+  };
+}
+
+function buildRecord(overrides: Partial<AttendanceRecord> = {}): AttendanceRecord {
+  return {
+    id: "att-1",
+    fecha: "2026-07-23",
+    horario: "Lunes 15:00 — 16:00",
+    personaId: 1,
+    estudiante: "Sofia Vera Zamora",
+    estado: "present",
+    entrenador: "Carlos Mendoza",
+    ...overrides,
+  };
+}
+
+describe("countPaymentsWaitingOverAWeek", () => {
+  it("counts only pending requests older than seven days", () => {
+    const requests = [
+      buildRequest({ id: "a", uploadedAt: new Date(2026, 6, 10).toISOString() }),
+      buildRequest({ id: "b", uploadedAt: new Date(2026, 6, 22).toISOString() }),
+    ];
+    expect(countPaymentsWaitingOverAWeek(requests, NOW)).toBe(1);
+  });
+
+  it("ignores already-resolved requests no matter how old they are", () => {
+    const requests = [
+      buildRequest({ id: "a", uploadedAt: new Date(2026, 5, 1).toISOString(), validationStatus: "validado" }),
+      buildRequest({ id: "b", uploadedAt: new Date(2026, 5, 1).toISOString(), validationStatus: "rechazado" }),
+    ];
+    expect(countPaymentsWaitingOverAWeek(requests, NOW)).toBe(0);
+  });
+
+  it("ignores requests whose upload date cannot be read", () => {
+    expect(countPaymentsWaitingOverAWeek([buildRequest({ uploadedAt: "" })], NOW)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildFourWeekAttendance
+// ---------------------------------------------------------------------------
+
+describe("buildFourWeekAttendance", () => {
+  it("always returns four bars, oldest first, even with no records", () => {
+    const result = buildFourWeekAttendance([], NOW);
+    expect(result.bars).toHaveLength(4);
+    expect(result.bars.map((b) => b.startIso)).toEqual([
+      "2026-06-26",
+      "2026-07-03",
+      "2026-07-10",
+      "2026-07-17",
+    ]);
+    expect(result.ratePercent).toBe(0);
+  });
+
+  it("puts today's records in the newest bar and last month's outside the window", () => {
+    const result = buildFourWeekAttendance(
+      [
+        buildRecord({ id: "1", fecha: "2026-07-23" }),
+        buildRecord({ id: "2", fecha: "2026-05-01" }),
+      ],
+      NOW,
+    );
+    expect(result.bars[3].total).toBe(1);
+    expect(result.total).toBe(1);
+  });
+
+  it("computes the presence rate per bar and across the whole window", () => {
+    const result = buildFourWeekAttendance(
+      [
+        buildRecord({ id: "1", fecha: "2026-07-23", estado: "present" }),
+        buildRecord({ id: "2", fecha: "2026-07-23", estado: "absent" }),
+        buildRecord({ id: "3", fecha: "2026-07-01", estado: "present" }),
+        buildRecord({ id: "4", fecha: "2026-07-01", estado: "late" }),
+      ],
+      NOW,
+    );
+    expect(result.bars[3].ratePercent).toBe(50);
+    expect(result.ratePercent).toBe(50);
+    expect(result.total).toBe(4);
+  });
+
+  it("never produces NaN for a week with no records", () => {
+    const result = buildFourWeekAttendance([buildRecord({ fecha: "2026-07-23" })], NOW);
+    expect(result.bars[0].ratePercent).toBe(0);
+  });
+
+  it("does not count a future-dated record in the current window", () => {
+    const result = buildFourWeekAttendance([buildRecord({ fecha: "2026-08-01" })], NOW);
+    expect(result.total).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildActivityFeed
+// ---------------------------------------------------------------------------
+
+describe("buildActivityFeed", () => {
+  it("turns a payment upload into an event attributed to whoever pays", () => {
+    const feed = buildActivityFeed([buildRequest()], []);
+    expect(feed[0]).toMatchObject({
+      kind: "payment-uploaded",
+      subject: "Laura Vera",
+      initials: "LV",
+      detail: "subió un comprobante de $25,00",
+    });
+  });
+
+  it("adds a second event once the payment is resolved", () => {
+    const feed = buildActivityFeed(
+      [
+        buildRequest({
+          validationStatus: "validado",
+          validatedAt: new Date(2026, 6, 23, 8, 0).toISOString(),
+          validatedBy: "Admin Dev",
+        }),
+      ],
+      [],
+    );
+    expect(feed).toHaveLength(2);
+    expect(feed[0]).toMatchObject({
+      kind: "payment-validated",
+      subject: "Sofia Vera Zamora",
+      detail: "tiene su pago validado por Admin Dev",
+    });
+  });
+
+  it("collapses one session's records into a single event with the head count", () => {
+    const feed = buildActivityFeed(
+      [],
+      [
+        buildRecord({ id: "1", estudiante: "A" }),
+        buildRecord({ id: "2", estudiante: "B" }),
+        buildRecord({ id: "3", estudiante: "C" }),
+      ],
+    );
+    expect(feed).toHaveLength(1);
+    expect(feed[0]).toMatchObject({
+      kind: "attendance-session",
+      subject: "Carlos Mendoza",
+      detail: "registró la lista de Lunes 15:00 — 16:00 · 3 estudiantes",
+    });
+  });
+
+  it("keeps separate sessions separate", () => {
+    const feed = buildActivityFeed(
+      [],
+      [
+        buildRecord({ id: "1", fecha: "2026-07-23" }),
+        buildRecord({ id: "2", fecha: "2026-07-22" }),
+      ],
+    );
+    expect(feed).toHaveLength(2);
+  });
+
+  it("orders newest first and caps the feed", () => {
+    const feed = buildActivityFeed(
+      [
+        buildRequest({ id: "old", uploadedAt: new Date(2026, 6, 1).toISOString() }),
+        buildRequest({ id: "new", uploadedAt: new Date(2026, 6, 23, 20, 0).toISOString() }),
+      ],
+      [buildRecord()],
+      2,
+    );
+    expect(feed).toHaveLength(2);
+    expect(feed[0].id).toBe("pay-up-new");
+  });
+
+  it("drops events whose date cannot be read instead of ranking them arbitrarily", () => {
+    const feed = buildActivityFeed(
+      [buildRequest({ uploadedAt: "no es una fecha" })],
+      [buildRecord({ fecha: "" })],
+    );
+    expect(feed).toEqual([]);
   });
 });

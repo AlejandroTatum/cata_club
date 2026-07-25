@@ -1,7 +1,11 @@
 /**
- * Nivel assignment panel — shared between the trainer's `/trainer/nivel` and
- * the admin's `/ranking` screens (extracted to eliminate duplication; same
- * pattern as `SeleccionOficialPanel`).
+ * Nivel assignment panel — the trainer's `/trainer/nivel` screen.
+ *
+ * It used to be shared with the admin's `/ranking`. `/ranking` is now "la
+ * escalera" (`app/ranking/page.tsx`), a ladder of niveles rather than a table
+ * of students, so this panel has a single caller again. FASE 4 of the redesign
+ * plan removes the Niveles section from the trainer entirely, at which point
+ * this file goes with it.
  *
  * Assigns/moves each student's nivel (initial assignment via
  * `asignar-nivel-inicial`, re-assignment via `mover-de-nivel`).
@@ -35,7 +39,15 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
 import { Users, CheckCircle2, GraduationCap } from "lucide-react";
-import { EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
+import {
+  Badge,
+  EmptyState,
+  ErrorState,
+  LevelChip,
+  LoadingState,
+  Pagination,
+  isLevel,
+} from "@/components/ui";
 import {
   fetchAlumnosParaNivel,
   fetchNivelesConOcupacion,
@@ -53,31 +65,49 @@ import type { UserRole } from "@/types/domain";
 /** Tamaño de página para la lista de estudiantes (Nivel). */
 const NIVEL_PAGE_SIZE = 10;
 
-const NIVEL_COLOR_MAP: Record<string, string> = {
-  principiante: "border border-sky-200 bg-sky-100 text-sky-700",
-  intermedio: "border border-violet-200 bg-violet-100 text-violet-700",
-  avanzado: "border border-fuchsia-200 bg-fuchsia-100 text-fuchsia-700",
-};
-// `text-gray-400` on `bg-gray-100` measured 2.31:1 — far below WCAG AA's
-// 4.5:1, and this badge labels "Sin asignar", a real actionable state rather
-// than decoration. `text-gray-700` reaches 9.4:1 and matches the `-700`
-// foreground weight the nivel-category badges above already use.
-const DEFAULT_BADGE_CLASS = "border border-gray-200 bg-gray-100 text-gray-700";
-
-function nivelBadge(
-  niveles: NivelConOcupacion[],
-  nivelId: number | null,
-): { label: string; className: string } {
+/**
+ * The current-nivel cell.
+ *
+ * This used to paint a bespoke sky/violet/fuchsia ramp keyed on
+ * `nivelCategoria`. That field is not an independent taxonomy: the backend
+ * DERIVES it from the rank itself —
+ * `backend/app/presentacion/schemas/ranking_schemas.py:26-36`,
+ * `numero_nivel <= 3 → "avanzado"`, `<= 6 → "intermedio"`, else
+ * `"principiante"`. So the three colours were a lossy re-encoding of a number
+ * the payload already carries, in a hue scheme that contradicts the approved
+ * l1–l10 grey ramp (`_sistema.css:44-45`) and implied a judgement the club
+ * explicitly does not want to make.
+ *
+ * `numeroNivel` maps onto the ramp one-to-one, so the chip is now `LevelChip`.
+ * Ranks outside 1–10 (the ramp is defined for ten rungs) and the unassigned
+ * case fall back to the system's neutral `Badge` rather than to an invented
+ * colour.
+ */
+function NivelActual({
+  niveles,
+  nivelId,
+}: {
+  niveles: NivelConOcupacion[];
+  nivelId: number | null;
+}): React.ReactElement {
   if (nivelId === null) {
-    return { label: "Sin asignar", className: DEFAULT_BADGE_CLASS };
+    return <Badge tone="neutral">Sin asignar</Badge>;
   }
   const nivel = niveles.find((n) => n.id === nivelId);
   if (!nivel) {
-    return { label: `Nivel ${nivelId}`, className: DEFAULT_BADGE_CLASS };
+    return <Badge tone="neutral">{`Nivel ${nivelId}`}</Badge>;
   }
-  const label = nivel.nombre ?? String(nivel.numeroNivel);
-  const className = NIVEL_COLOR_MAP[nivel.nivelCategoria] ?? DEFAULT_BADGE_CLASS;
-  return { label, className };
+  if (!isLevel(nivel.numeroNivel)) {
+    return <Badge tone="neutral">{nivel.nombre ?? `Nivel ${nivel.numeroNivel}`}</Badge>;
+  }
+  return (
+    <span className="inline-flex items-center gap-2">
+      <LevelChip level={nivel.numeroNivel} label={nivel.nombre ?? `Nivel ${nivel.numeroNivel}`} />
+      <span className="text-[12.5px] font-semibold text-ink-2">
+        {nivel.nombre ?? `Nivel ${nivel.numeroNivel}`}
+      </span>
+    </span>
+  );
 }
 
 export interface NivelAsignacionPanelProps {
@@ -403,14 +433,7 @@ function AsignarNivelTab({ students, niveles, loading, onOptimisticAssign, onBac
                     </div>
                   </td>
                   <td className="px-4 py-3.5 text-center">
-                    {(() => {
-                      const badge = nivelBadge(niveles, student.nivelRankingId);
-                      return (
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                      );
-                    })()}
+                    <NivelActual niveles={niveles} nivelId={student.nivelRankingId} />
                   </td>
                   <td className="px-4 py-3.5">
                     <select
