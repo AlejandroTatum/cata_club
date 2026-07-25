@@ -119,3 +119,35 @@ describe("ToastContainer", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Todo bien");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Two audited defects in the toast chrome.
+// ---------------------------------------------------------------------------
+
+describe("ToastContainer — announcement and placement", () => {
+  it("does not nest a live region inside a live region", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("Trigger error"));
+
+    const toast = screen.getByRole("alert");
+    const container = toast.parentElement as HTMLElement;
+
+    // The toast itself is already a live region via `role="alert"`. An
+    // `aria-live` on the container made assistive tech announce it twice.
+    expect(container).not.toHaveAttribute("aria-live");
+    expect(toast).toHaveAttribute("role", "alert");
+  });
+
+  it("docks to the bottom on a phone so it cannot cover the shell topbar", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("Trigger error"));
+
+    const container = screen.getByRole("alert").parentElement as HTMLElement;
+
+    // `top-4 right-4 w-full max-w-sm` spanned a 360px phone edge to edge and
+    // sat on top of the topbar's "Menú" button and notification bell.
+    expect(container).toHaveClass("bottom-4");
+    expect(container).not.toHaveClass("top-4");
+    expect(container).toHaveClass("sm:top-4");
+  });
+});

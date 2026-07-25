@@ -15,7 +15,7 @@ export default function NivelPage(): React.ReactElement {
   return (
     <NivelAsignacionPanel
       eyebrow="Área de entrenadores"
-      title="Nivel"
+      title="Niveles"
       allowedRoles={["trainer"]}
       backHref="/trainer"
       backLabel="Volver a Entrenador"

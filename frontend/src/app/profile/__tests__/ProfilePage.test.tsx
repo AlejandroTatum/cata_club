@@ -610,7 +610,7 @@ describe("ProfilePage — unified layout structure", () => {
     );
 
     await screen.findAllByText("Ana Admin");
-    expect(screen.getByText("Mi cuenta")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Perfil" })).toBeInTheDocument();
     expect(
       screen.getByText("Gestiona tu información y consulta tu estado en el sistema."),
     ).toBeInTheDocument();

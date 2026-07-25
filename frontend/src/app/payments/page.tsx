@@ -236,7 +236,7 @@ export default function PaymentsPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
-        eyebrow="Validación de Pagos"
+        eyebrow="Cola de validación"
         title="Membresías y Pagos"
       >
         {!selectedRequest && <BackLink href="/dashboard" label="Volver al Panel" />}

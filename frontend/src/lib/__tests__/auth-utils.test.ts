@@ -134,22 +134,39 @@ describe("getNavLinksForRole", () => {
     const links = getNavLinksForRole("admin");
     expect(links).toHaveLength(8);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/dashboard", label: "Administración" });
+    expect(links[1]).toEqual({ href: "/dashboard", label: "Panel de Control" });
     expect(links[2]).toEqual({ href: "/members", label: "Miembros" });
     expect(links[3]).toEqual({ href: "/ranking", label: "Niveles" });
-    expect(links[4]).toEqual({ href: "/groups", label: "Gestión de Horarios" });
+    expect(links[4]).toEqual({ href: "/groups", label: "Horarios" });
     expect(links[5]).toEqual({ href: "/payments", label: "Membresías y Pagos" });
     expect(links[6]).toEqual({ href: "/attendance", label: "Asistencias" });
     expect(links[7]).toEqual({ href: "/reports", label: "Reportes" });
   });
 
-  it("returns trainer links including Dashboard, Asistencia and Nivel", () => {
+  // Labels are Spanish and name the destination, and the trainer's level
+  // section uses the SAME word as the admin's ("Niveles") because it is the
+  // same concept. The old set said "Dashboard", "Asistencia" and "Nivel".
+  it("returns trainer links named after their destinations, in Spanish", () => {
     const links = getNavLinksForRole("trainer");
     expect(links).toHaveLength(4);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/trainer", label: "Dashboard" });
-    expect(links[2]).toEqual({ href: "/trainer/attendance", label: "Asistencia" });
-    expect(links[3]).toEqual({ href: "/trainer/nivel", label: "Nivel" });
+    expect(links[1]).toEqual({ href: "/trainer", label: "Mi día" });
+    expect(links[2]).toEqual({ href: "/trainer/attendance", label: "Pasar lista" });
+    expect(links[3]).toEqual({ href: "/trainer/nivel", label: "Niveles" });
+  });
+
+  it("names the level section identically for admin and trainer", () => {
+    const adminLevels = getNavLinksForRole("admin").find((l) => l.href === "/ranking");
+    const trainerLevels = getNavLinksForRole("trainer").find((l) => l.href === "/trainer/nivel");
+    expect(adminLevels?.label).toBe(trainerLevels?.label);
+  });
+
+  it("uses no English labels in any role's navigation", () => {
+    for (const role of ["admin", "trainer", "representante", "estudiante"] as const) {
+      for (const link of getNavLinksForRole(role)) {
+        expect(link.label).not.toMatch(/dashboard/i);
+      }
+    }
   });
 
   it("returns only Inicio for unsupported (no role-specific nav)", () => {
@@ -157,18 +174,18 @@ describe("getNavLinksForRole", () => {
     expect(links).toEqual([{ href: "/", label: "Inicio" }]);
   });
 
-  it("returns representante link to Mi Cuenta", () => {
+  it("returns representante link to Mi cuenta", () => {
     const links = getNavLinksForRole("representante");
     expect(links).toHaveLength(2);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/student", label: "Mi Cuenta" });
+    expect(links[1]).toEqual({ href: "/student", label: "Mi cuenta" });
   });
 
-  it("returns estudiante link to Mi Cuenta", () => {
+  it("returns estudiante link to Mi cuenta", () => {
     const links = getNavLinksForRole("estudiante");
     expect(links).toHaveLength(2);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/student", label: "Mi Cuenta" });
+    expect(links[1]).toEqual({ href: "/student", label: "Mi cuenta" });
   });
 
   it("every recognized role gets Inicio as first link and at least one role-specific link", () => {

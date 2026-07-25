@@ -772,7 +772,7 @@ export default function GroupsPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         eyebrow="Gestión Operativa"
-        title="Gestión de Horarios"
+        title="Horarios"
       >
         <BackLink href="/dashboard" label="Volver al Panel" />
 

@@ -600,7 +600,7 @@ function StudentPortalContent(): React.ReactElement {
   }, [personaId, reloadToken]);
 
   return (
-    <AppShell eyebrow="Área de Estudiantes" title="Portal de Cuenta">
+    <AppShell eyebrow="Área de estudiantes" title="Mi cuenta">
       {state.status === "loading" && <LoadingCard />}
       {state.status === "error" && <ErrorCard message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />}
       {state.status === "ready" &&

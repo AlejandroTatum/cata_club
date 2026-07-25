@@ -137,7 +137,7 @@ export default function AttendancePage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
-        eyebrow="Asistencias"
+        eyebrow="Horarios y registros"
         title="Asistencias"
       >
         <BackLink href="/dashboard" label="Volver al Panel" />

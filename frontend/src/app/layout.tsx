@@ -7,7 +7,6 @@ import Header from "@/components/Header";
 import AuthProviderWrapper from "@/components/AuthProviderWrapper";
 import { ToastProvider } from "@/contexts/ToastContext";
 import ToastContainer from "@/components/ToastContainer";
-import ChatWidget from "@/components/chatbot/ChatWidget";
 import "./globals.css";
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Cata Club Admin";
@@ -41,7 +40,13 @@ export default function RootLayout({
             <main className="app-main mx-auto max-w-8xl px-4 py-10 sm:px-8 lg:px-12">
               {children}
             </main>
-            <ChatWidget />
+            {/*
+             * No ChatWidget here on purpose. It used to be mounted globally
+             * and carried its own floating action button, so the FAB sat over
+             * the login form, over the landing's WhatsApp block and over the
+             * trainer's attendance controls. It now lives inside `AppShell`,
+             * opened from the sidebar's "Ayuda y soporte" entry.
+             */}
           </AuthProviderWrapper>
         </ToastProvider>
       </body>

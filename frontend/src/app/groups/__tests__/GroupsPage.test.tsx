@@ -230,11 +230,13 @@ describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () 
     mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
   });
 
-  it("renders the 'Gestión de Horarios' title (renamed from 'Grupos y Horarios')", async () => {
+  // The screen's name matches its nav entry and the approved prototype
+  // (14-horarios.html: `<h2 class="h-page">Horarios</h2>`).
+  it("shows its own name as a visible page heading", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    expect(
-      await screen.findByRole("heading", { name: "Gestión de Horarios" }),
-    ).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", { level: 1, name: "Horarios" });
+    expect(heading).toBeInTheDocument();
+    expect(heading).not.toHaveClass("sr-only");
   });
 
   it("locks the displayed time range to COMPETITIVO's 18:00–20:00 and offers Sábado as a día checkbox", async () => {

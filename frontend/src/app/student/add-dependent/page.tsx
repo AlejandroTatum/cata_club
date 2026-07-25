@@ -21,6 +21,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -31,7 +32,6 @@ import { BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
 import {
   User,
-  UserPlus,
   Heart,
   CheckCircle,
   AlertTriangle,
@@ -368,27 +368,16 @@ function AddDependentContent(): React.ReactElement {
   // ---- Render ----
 
   return (
-    <div className="py-8">
+    // This wizard is reached from a button on `/student`, so it keeps
+    // `/student`'s chrome instead of falling back to the dark top nav. The
+    // page's own hero banner is gone: it repeated the eyebrow, title and
+    // subtitle that `AppShell`'s header row now renders once, above `<main>`.
+    <AppShell
+      eyebrow="Cuenta del representante"
+      title="Agregar dependiente"
+      subtitle="Complete los pasos para agregar un nuevo dependiente a su cuenta de representante."
+    >
       <BackLink href="/student" label="Volver" />
-
-      {/* Hero Banner */}
-      <div className="relative mb-10 overflow-hidden rounded-3xl border border-cata-border bg-cata-surface px-6 py-10 shadow-elevated sm:px-10 sm:py-12">
-        <div className="absolute inset-0 bg-logo-glow" />
-        <div className="relative z-10 flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-cata-red">
-              <UserPlus size={14} strokeWidth={2} aria-hidden="true" />
-              Agregar Dependiente
-            </div>
-            <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-cata-text sm:text-4xl">
-              Agregar Hijo/Dependiente
-            </h1>
-            <p className="mt-2 max-w-lg text-sm leading-relaxed text-cata-text/60">
-              Complete los pasos para agregar un nuevo dependiente a su cuenta de representante.
-            </p>
-          </div>
-        </div>
-      </div>
 
       {/* Progress bar */}
       <div className="mb-8">
@@ -464,7 +453,7 @@ function AddDependentContent(): React.ReactElement {
           />
         </form>
       </div>
-    </div>
+    </AppShell>
   );
 }
 

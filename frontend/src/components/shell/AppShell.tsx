@@ -1,45 +1,66 @@
 /**
- * AppShell — shared sidebar layout for the admin and trainer screens,
- * matching `design/admin-panel-mockup-v1.html` and its siblings (members,
- * groups, payments, attendance, trainer, trainer/attendance all share this
- * same shell in the mockups).
+ * AppShell — the single authenticated shell: coal sidebar + utility topbar +
+ * a real, visible page header.
  *
- * Replaces the top `Header` nav for these routes only — `Header` still
- * hides itself on them (see AUTH_SHELL_ROUTES-style handling there).
- * Navigation links come from the same `getNavLinksForRole` used by
- * `Header`, so role-based visibility stays centralized in one place.
+ * Transcribed from `docs/ux/prototipos/_sistema.css` (`.side` 236px, `.disc`
+ * 36px white logo disc, `.nav-i` 40px rows with the active red left bar and
+ * the yellow ball dot, `.cnt` count badge, `.topbar` 56px, `.canvas`) and
+ * from `docs/ux/prototipos/_nav-admin.html` (brand → nav → foot-nav with
+ * "Ayuda y soporte" above the user card).
  *
- * Also used by `/student` (see `src/app/student/page.tsx`) — the old
- * student exception that kept it off this shell is obsolete.
+ * Which routes get this shell is decided in ONE place — `lib/shell-routes.ts`
+ * — and `Header` hides itself for exactly those routes.
+ *
+ * The page title used to be `sr-only` here, so no authenticated screen showed
+ * its own name: below `lg` the sidebar is a closed drawer, which left a
+ * trainer on a phone with nothing but Menú/bell/search to locate themselves.
+ * It is now rendered through the `PageHeader` primitive, above `<main>`.
  */
 
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, X, Search, User, ChevronLeft, ChevronRight } from "lucide-react";
+import { Menu, X, Search, User, ChevronLeft, ChevronRight, MessageCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNavLinksForRole, getRoleLabel, getUserInitials, type NavLinkDef } from "@/lib/auth-utils";
 import { normalizeText } from "@/app/members/members-utils";
 import { useNotificaciones } from "@/lib/useNotificaciones";
+import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
+import { useDismissablePopup } from "@/lib/useDismissablePopup";
 import { NAV_ICON_MAP } from "@/components/Header";
 import NotificationBell from "@/components/NotificationBell";
 import UserMenuDropdown from "@/components/UserMenuDropdown";
+import ChatWidget from "@/components/chatbot/ChatWidget";
+import { PageHeader } from "@/components/ui";
 
 export interface AppShellProps {
   /** Small uppercase label above the page title (defaults to "Panel de gestión"). */
   eyebrow?: string;
-  /** Main page heading, shown in the topbar. */
+  /** Main page heading — rendered as the visible `<h1>` of the screen. */
   title: string;
   /** Optional supporting line below the title. */
   subtitle?: string;
-  /** Page content, rendered in the main content area below the topbar. */
+  /** Optional trailing controls for the page header row. */
+  actions?: React.ReactNode;
+  /** Page content, rendered in the main content area below the header. */
   children: React.ReactNode;
 }
 
 const SIDEBAR_COLLAPSED_KEY = "cata_sidebar_collapsed";
+
+/** The one nav entry that carries a count badge (prototype `_nav-admin.html`). */
+const COUNT_BADGE_HREF = "/payments";
 
 /** Tailwind's `lg` breakpoint — where the sidebar stops being a mobile drawer. */
 const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
@@ -93,10 +114,41 @@ function persistCollapsedPreference(value: boolean): void {
   }
 }
 
+/**
+ * The nav row the current URL belongs to — longest matching prefix wins, so
+ * `/trainer/attendance` highlights "Pasar lista" and not "Mi día".
+ */
+export function resolveActiveHref(navLinks: NavLinkDef[], pathname: string): string | null {
+  const matches = navLinks.filter(
+    (link) => pathname === link.href || pathname.startsWith(`${link.href}/`),
+  );
+  if (matches.length === 0) return null;
+  return matches.reduce((longest, link) => (link.href.length > longest.href.length ? link : longest))
+    .href;
+}
+
+/**
+ * The brand block's second line. Prototype `_nav-admin.html` uses a fixed
+ * per-area label ("Panel de gestión" for staff, "Mi cuenta" for the family
+ * portal) — it names the AREA, so it must not be confused with the page's own
+ * eyebrow.
+ */
+function getAreaLabel(role: string | null): string {
+  return role === "representante" || role === "estudiante" ? "Mi cuenta" : "Panel de gestión";
+}
+
+/** `.nav-i` — 40px row, 10px radius, 13.5px medium label. */
+const NAV_ITEM_CLASSES =
+  "relative flex h-ctl items-center gap-2.5 rounded-ctl px-3 text-[13.5px] font-medium transition-colors";
+const NAV_ITEM_IDLE_CLASSES = "text-white/[0.62] hover:bg-white/[0.07] hover:text-white";
+/** `.nav-i.on` — coal highlight, never a red fill: red is reserved for CTA and destructive. */
+const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.08] font-semibold text-white";
+
 export default function AppShell({
   eyebrow = "Panel de gestión",
   title,
   subtitle,
+  actions,
   children,
 }: AppShellProps): React.ReactElement {
   const pathname = usePathname();
@@ -115,19 +167,39 @@ export default function AppShell({
   const [activeIndex, setActiveIndex] = useState(0);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const paletteDialogRef = useRef<HTMLDivElement>(null);
+  const paletteListId = useId();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const userMenuPanelRef = useRef<HTMLDivElement>(null);
+  const userMenuId = useId();
+  const [chatOpen, setChatOpen] = useState(false);
 
   const role = session?.user.role ?? null;
   const navLinks = useMemo<NavLinkDef[]>(
     () => getNavLinksForRole(role).filter((link) => link.href !== "/"),
     [role],
   );
+  const activeHref = useMemo(
+    (): string | null => resolveActiveHref(navLinks, pathname),
+    [navLinks, pathname],
+  );
+  const pendingPayments = usePendingPaymentsCount(role === "admin");
+
+  const closeUserMenu = useCallback((): void => setUserMenuOpen(false), []);
+  useDismissablePopup({
+    open: userMenuOpen,
+    onClose: closeUserMenu,
+    panelRef: userMenuPanelRef,
+    triggerRef: userMenuTriggerRef,
+  });
 
   const paletteResults = useMemo<NavLinkDef[]>(() => {
     const term = normalizeText(query);
     if (!term) return navLinks;
     return navLinks.filter((link) => normalizeText(link.label).includes(term));
   }, [navLinks, query]);
+
+  const paletteOptionId = (index: number): string => `${paletteListId}-option-${index}`;
 
   // Ctrl+K / Cmd+K opens the "go to" command palette from anywhere in the shell.
   useEffect((): (() => void) => {
@@ -211,12 +283,12 @@ export default function AppShell({
   const drawerHidden = !isDesktopViewport && !sidebarOpen;
 
   return (
-    <div className="app-shell flex min-h-screen bg-cata-bg">
+    <div className="app-shell flex min-h-screen bg-canvas">
       {/*
        * Sidebar. When closed on a mobile viewport it is hidden outright, not
        * merely translated offscreen: a `-translate-x-full` drawer keeps every
        * descendant focusable, so Tab used to walk keyboard users into 11
-       * controls sitting at x=-256 with no visible focus ring.
+       * controls sitting offscreen with no visible focus ring.
        *
        * React 18.3 (see package.json) has no `inert` prop, so this uses the
        * `aria-hidden` + `visibility: hidden` fallback — `visibility: hidden`
@@ -226,23 +298,32 @@ export default function AppShell({
        */}
       <aside
         aria-hidden={drawerHidden || undefined}
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-cata-black text-white transition-[transform,visibility] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white transition-[transform,visibility] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           collapsed ? "lg:w-[76px]" : ""
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} ${
           drawerHidden ? "invisible" : ""
         }`}
       >
-        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-5">
-          <Link href="/" className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-lg">
-              <Image src="/brand/cata-club-logo.jpeg" alt="Cata Club" fill className="object-cover" sizes="36px" />
-            </div>
-            <div className={`min-w-0 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
-              <p className="truncate text-sm font-bold">Cata Club</p>
-              <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-white/45">
-                Panel de gestión
-              </p>
-            </div>
+        {/* `.side .brand` — logo on a white disc, club name, area label. */}
+        <div className="flex items-center gap-[11px] border-b border-white/[0.08] px-[18px] pb-4 pt-[18px]">
+          <Link href="/" className="flex min-w-0 flex-1 items-center gap-[11px]">
+            <span className="relative block h-9 w-9 shrink-0 overflow-hidden rounded-full bg-white">
+              <Image
+                src="/brand/cata-club-logo.jpeg"
+                alt="Cata Club"
+                fill
+                className="object-cover"
+                sizes="36px"
+              />
+            </span>
+            <span className={`min-w-0 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
+              <span className="block truncate text-[13.5px] font-bold tracking-[-0.01em]">
+                Cata Club
+              </span>
+              <span className="mt-px block truncate text-[9.5px] font-bold uppercase tracking-[0.12em] text-white/[0.42]">
+                {getAreaLabel(role)}
+              </span>
+            </span>
           </Link>
           <button
             type="button"
@@ -257,16 +338,16 @@ export default function AppShell({
         {/*
          * Collapse toggle — anchored directly to the sidebar edge instead of
          * living inside the header row above. When collapsed to 76px, the
-         * header row's padding (40px) plus the 36px logo already fills the
-         * available width, leaving no room for a button in that row — it
-         * used to get squeezed out entirely with no way to re-expand. This
-         * handle sits outside that row's flex layout, so it stays reachable
-         * in both collapsed and expanded states.
+         * header row's padding plus the 36px logo already fills the available
+         * width, leaving no room for a button in that row — it used to get
+         * squeezed out entirely with no way to re-expand. This handle sits
+         * outside that row's flex layout, so it stays reachable in both
+         * collapsed and expanded states.
          */}
         <button
           type="button"
           onClick={toggleCollapsed}
-          className="absolute -right-3 top-6 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-cata-black text-white/60 shadow-md transition-colors hover:bg-white/10 hover:text-white lg:flex"
+          className="absolute -right-3 top-6 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-coal text-white/60 shadow-md transition-colors hover:bg-white/10 hover:text-white lg:flex"
           aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
         >
           {collapsed ? (
@@ -276,10 +357,15 @@ export default function AppShell({
           )}
         </button>
 
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4" aria-label="Navegación principal">
+        <nav
+          className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-3"
+          aria-label="Navegación principal"
+        >
           {navLinks.map((link): React.ReactElement => {
-            const isActive = pathname === link.href;
+            const isActive = link.href === activeHref;
             const Icon = NAV_ICON_MAP[link.href] ?? User;
+            const badge = link.href === COUNT_BADGE_HREF ? pendingPayments : null;
+            const showBadge = badge !== null && badge > 0;
             return (
               <Link
                 key={link.href}
@@ -287,48 +373,105 @@ export default function AppShell({
                 onClick={(): void => setSidebarOpen(false)}
                 aria-current={isActive ? "page" : undefined}
                 title={link.label}
-                className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-                  isActive ? "bg-cata-red/20 text-white" : "text-white/65 hover:bg-white/[0.08] hover:text-white"
+                // The label span is hidden at `lg` while collapsed, and a
+                // native `title` tooltip is not reliably exposed to assistive
+                // technology — the accessible name has to survive on its own.
+                aria-label={showBadge ? `${link.label} — ${badge} pendientes` : link.label}
+                className={`${NAV_ITEM_CLASSES} ${
+                  isActive ? NAV_ITEM_ACTIVE_CLASSES : NAV_ITEM_IDLE_CLASSES
                 }`}
               >
-                <Icon size={17} strokeWidth={1.5} aria-hidden="true" />
-                <span className={collapsed ? "lg:hidden" : undefined}>{link.label}</span>
+                {isActive && (
+                  // `.nav-i.on::before` — 3px red bar pinned to the row's left edge.
+                  <span
+                    className="absolute inset-y-[9px] left-0 w-[3px] rounded-r-[3px] bg-cata-red"
+                    aria-hidden="true"
+                  />
+                )}
+                <Icon size={17} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+                <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>{link.label}</span>
+                {showBadge && (
+                  // `.nav-i .cnt` — count is already in the accessible name above.
+                  <span
+                    className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-cata-red px-1.5 text-[10.5px] font-bold text-white"
+                    aria-hidden="true"
+                  >
+                    {badge}
+                  </span>
+                )}
+                {isActive && !showBadge && (
+                  // `.nav-i.on::after` — the yellow ball marks the current row.
+                  <span
+                    className={`ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-ball ${
+                      collapsed ? "lg:hidden" : ""
+                    }`}
+                    aria-hidden="true"
+                  />
+                )}
               </Link>
             );
           })}
         </nav>
 
-        {session && (
-          <div className="border-t border-white/10 p-4">
+        {/* `.side .foot-nav` — support entry point, then the user card. */}
+        <div className="flex flex-col gap-2 border-t border-white/[0.08] p-2.5">
+          <button
+            type="button"
+            onClick={(): void => {
+              setChatOpen(true);
+              setSidebarOpen(false);
+            }}
+            title="Ayuda y soporte"
+            aria-label="Ayuda y soporte"
+            aria-expanded={chatOpen}
+            className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES} w-full text-left`}
+          >
+            <MessageCircle size={17} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+            <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda y soporte</span>
+          </button>
+
+          {session && (
             <div className="relative">
               <button
+                ref={userMenuTriggerRef}
                 type="button"
                 onClick={(): void => setUserMenuOpen((open) => !open)}
-                aria-haspopup="true"
+                // Not `aria-haspopup="true"` — that is an alias for "menu",
+                // and this popup implements none of the menu keyboard contract.
+                aria-haspopup="dialog"
+                aria-controls={userMenuId}
                 aria-expanded={userMenuOpen}
                 aria-label={`Menú de cuenta de ${session.user.name}`}
-                className={`flex w-full items-center gap-2.5 rounded-xl bg-white/[0.06] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.1] ${
+                className={`flex w-full items-center gap-2.5 rounded-ctl bg-white/[0.06] px-2.5 py-2 text-left transition-colors hover:bg-white/[0.1] ${
                   collapsed ? "lg:justify-center lg:px-0" : ""
                 }`}
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cata-red/25 text-xs font-bold">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cata-red/[0.28] text-[11px] font-bold">
                   {getUserInitials(session.user.name)}
-                </div>
-                <div className={`min-w-0 flex-1 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
-                  <p className="truncate text-sm font-semibold">{session.user.name}</p>
-                  <p className="truncate text-xs text-white/45">{getRoleLabel(session.user.role)}</p>
-                </div>
+                </span>
+                <span className={`min-w-0 flex-1 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
+                  <span className="block truncate text-[12.5px] font-semibold">
+                    {session.user.name}
+                  </span>
+                  <span className="block truncate text-[11px] text-white/45">
+                    {getRoleLabel(session.user.role)}
+                  </span>
+                </span>
               </button>
               {userMenuOpen && (
                 <UserMenuDropdown
+                  ref={userMenuPanelRef}
+                  id={userMenuId}
                   onLogout={logout}
-                  onNavigate={(): void => setUserMenuOpen(false)}
-                  className={`absolute bottom-full mb-1.5 ${collapsed ? "left-0 lg:w-56" : "left-0 w-full"}`}
+                  onNavigate={closeUserMenu}
+                  className={`absolute bottom-full mb-1.5 ${
+                    collapsed ? "left-0 lg:w-56" : "left-0 w-full"
+                  }`}
                 />
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </aside>
 
       {/* Mobile backdrop */}
@@ -340,29 +483,31 @@ export default function AppShell({
         />
       )}
 
-      {/* Main content */}
+      {/* `.main` */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/*
-         * Slim utility strip — navigation is handled entirely by the
-         * sidebar now, so no visible page title/subtitle here. `eyebrow`/
-         * `title`/`subtitle` are still accepted (every AppShell caller
-         * passes them) and rendered as an sr-only heading for page
-         * semantics/accessibility, just not shown visually. The mobile menu
-         * toggle stays — it's the only way to open the sidebar drawer on
-         * small screens where it's hidden by default.
-         */}
-        <div className="flex items-center justify-end gap-2 bg-cata-bg px-5 py-3 shadow-soft sm:px-8">
-          <p className="sr-only">{eyebrow}</p>
-          <h1 className="sr-only">{title}</h1>
-          {subtitle && <p className="sr-only">{subtitle}</p>}
+        {/* `.topbar` — utility strip only; navigation lives in the sidebar. */}
+        <div className="flex h-14 flex-none items-center gap-2.5 border-b border-line bg-canvas px-4 sm:px-[22px]">
           <button
             type="button"
             onClick={(): void => setSidebarOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-cata-border px-3 py-2.5 text-sm font-medium text-cata-text/65 hover:bg-cata-bg lg:hidden"
+            className="inline-flex h-ctl items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-3 text-[12.5px] font-medium text-ink-2 hover:bg-canvas lg:hidden"
             aria-label="Abrir menú principal"
           >
-            <Menu size={18} strokeWidth={1.5} aria-hidden="true" />
+            <Menu size={17} strokeWidth={2} aria-hidden="true" />
             <span>Menú</span>
+          </button>
+          <span className="flex-1" />
+          <button
+            type="button"
+            onClick={(): void => setPaletteOpen(true)}
+            aria-label="Buscar secciones"
+            className="flex h-ctl items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3 text-[12.5px] text-ink-3 transition-colors hover:border-ink-3"
+          >
+            <Search size={15} strokeWidth={2} aria-hidden="true" />
+            <span className="hidden sm:inline">Buscar una sección…</span>
+            <kbd className="ml-1 hidden rounded-[5px] border border-line-2 px-[5px] py-0.5 text-[10px] font-bold text-ink-3 sm:inline">
+              Ctrl K
+            </kbd>
           </button>
           {session && (
             <NotificationBell
@@ -372,21 +517,13 @@ export default function AppShell({
               variant="light"
             />
           )}
-          <button
-            type="button"
-            onClick={(): void => setPaletteOpen(true)}
-            aria-label="Buscar secciones"
-            className="flex items-center gap-2 rounded-xl border border-cata-border bg-cata-bg px-3.5 py-2.5 text-sm text-cata-text/50 transition-colors hover:border-cata-text/20"
-          >
-            <Search size={15} strokeWidth={1.5} aria-hidden="true" />
-            <span className="hidden sm:inline">Buscar una sección…</span>
-            <kbd className="ml-1 hidden rounded-md border border-cata-border bg-cata-surface px-1.5 py-0.5 text-[10px] font-semibold text-cata-text/45 sm:inline">
-              Ctrl K
-            </kbd>
-          </button>
         </div>
 
-        <main className="flex-1 px-5 py-8 sm:px-8">{children}</main>
+        {/* `.canvas` — the page header row belongs to the shell, above `<main>`. */}
+        <div className="flex flex-1 flex-col gap-5 px-4 pb-8 pt-6 sm:px-[26px]">
+          <PageHeader eyebrow={eyebrow} title={title} subtitle={subtitle} actions={actions} />
+          <main className="min-w-0 flex-1">{children}</main>
+        </div>
       </div>
 
       {/* Command palette — "go to" navigation search, role-aware */}
@@ -401,10 +538,10 @@ export default function AppShell({
             aria-modal="true"
             aria-label="Buscador de secciones"
             onClick={(e): void => e.stopPropagation()}
-            className="w-full max-w-md overflow-hidden rounded-2xl bg-cata-surface shadow-elevated"
+            className="w-full max-w-md overflow-hidden rounded-card bg-paper shadow-elevated"
           >
-            <div className="flex items-center gap-2.5 border-b border-cata-border px-4 py-3.5">
-              <Search size={16} strokeWidth={1.5} className="shrink-0 text-cata-text/45" aria-hidden="true" />
+            <div className="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
+              <Search size={16} strokeWidth={2} className="shrink-0 text-ink-3" aria-hidden="true" />
               <input
                 ref={paletteInputRef}
                 type="text"
@@ -416,34 +553,59 @@ export default function AppShell({
                 onKeyDown={handlePaletteKeyDown}
                 placeholder="Ir a una sección…"
                 aria-label="Ir a una sección"
-                className="flex-1 border-none bg-transparent text-sm text-cata-text outline-none placeholder:text-cata-text/35"
+                // Arrow keys move a purely visual highlight through the list.
+                // Without the combobox/listbox wiring below, that selection is
+                // invisible to a screen reader.
+                role="combobox"
+                aria-expanded
+                aria-autocomplete="list"
+                aria-controls={paletteListId}
+                aria-activedescendant={
+                  paletteResults.length > 0 ? paletteOptionId(activeIndex) : undefined
+                }
+                className="flex-1 border-none bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
               />
               <button
                 type="button"
                 onClick={(): void => setPaletteOpen(false)}
-                className="shrink-0 rounded-md border border-cata-border px-1.5 py-0.5 text-[10px] font-semibold text-cata-text/45"
+                className="shrink-0 rounded-md border border-line-2 px-1.5 py-0.5 text-[10px] font-bold text-ink-3"
               >
                 ESC
               </button>
             </div>
-            <div className="max-h-72 overflow-y-auto py-2">
+            <div
+              id={paletteListId}
+              role="listbox"
+              aria-label="Secciones"
+              className="max-h-72 overflow-y-auto py-2"
+            >
               {paletteResults.length === 0 && (
-                <p className="px-4 py-3 text-sm text-cata-text/45">No se encontraron secciones.</p>
+                <p className="px-4 py-3 text-sm text-ink-3">No se encontraron secciones.</p>
               )}
               {paletteResults.map((link, index): React.ReactElement => {
                 const Icon = NAV_ICON_MAP[link.href] ?? User;
+                const isHighlighted = index === activeIndex;
                 return (
                   <button
                     key={link.href}
+                    id={paletteOptionId(index)}
+                    role="option"
+                    aria-selected={isHighlighted}
                     type="button"
                     onClick={(): void => goTo(link.href)}
                     onMouseEnter={(): void => setActiveIndex(index)}
                     className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm ${
-                      index === activeIndex ? "bg-cata-red/10 text-cata-red" : "text-cata-text hover:bg-cata-bg"
+                      isHighlighted ? "bg-coal text-white" : "text-ink hover:bg-canvas"
                     }`}
                   >
-                    <Icon size={15} strokeWidth={1.5} aria-hidden="true" />
+                    <Icon size={15} strokeWidth={2} aria-hidden="true" />
                     {link.label}
+                    {isHighlighted && (
+                      <span
+                        className="ml-auto h-1.5 w-1.5 rounded-full bg-ball"
+                        aria-hidden="true"
+                      />
+                    )}
                   </button>
                 );
               })}
@@ -451,6 +613,12 @@ export default function AppShell({
           </div>
         </div>
       )}
+
+      {/*
+       * Help chat — opened from "Ayuda y soporte" above, never from a floating
+       * action button, and never mounted on a public route.
+       */}
+      {session && <ChatWidget open={chatOpen} onClose={(): void => setChatOpen(false)} />}
     </div>
   );
 }

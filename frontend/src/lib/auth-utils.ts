@@ -40,12 +40,15 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
   const links: NavLinkDef[] = [{ href: "/", label: "Inicio" }];
 
   switch (role) {
+    // Every label below is the destination's own page title, so the nav
+    // never promises a name the screen does not use. The admin set is
+    // transcribed from `docs/ux/prototipos/_nav-admin.html`.
     case "admin":
       links.push(
-        { href: "/dashboard", label: "Administración" },
+        { href: "/dashboard", label: "Panel de Control" },
         { href: "/members", label: "Miembros" },
         { href: "/ranking", label: "Niveles" },
-        { href: "/groups", label: "Gestión de Horarios" },
+        { href: "/groups", label: "Horarios" },
         { href: "/payments", label: "Membresías y Pagos" },
         { href: "/attendance", label: "Asistencias" },
         { href: "/reports", label: "Reportes" },
@@ -53,14 +56,18 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
       break;
     case "trainer":
       links.push(
-        { href: "/trainer", label: "Dashboard" },
-        { href: "/trainer/attendance", label: "Asistencia" },
-        { href: "/trainer/nivel", label: "Nivel" },
+        { href: "/trainer", label: "Mi día" },
+        // Named after the action, not "Asistencia": the admin section called
+        // "Asistencias" is the record list, this one is the act of taking it.
+        // One word apart, they used to read as the same destination.
+        { href: "/trainer/attendance", label: "Pasar lista" },
+        // Same concept as the admin's "/ranking" — therefore the same word.
+        { href: "/trainer/nivel", label: "Niveles" },
       );
       break;
     case "representante":
     case "estudiante":
-      links.push({ href: "/student", label: "Mi Cuenta" });
+      links.push({ href: "/student", label: "Mi cuenta" });
       break;
     case "unsupported":
       // No role-specific links — this account has no recognized backend

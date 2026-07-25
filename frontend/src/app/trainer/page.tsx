@@ -224,7 +224,7 @@ export default function TrainerPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["trainer"]}>
       <AppShell
         eyebrow="Área de entrenadores"
-        title="Panel del Entrenador"
+        title="Mi día"
       >
         {/* Quick Actions */}
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">

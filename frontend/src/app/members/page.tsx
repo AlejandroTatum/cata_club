@@ -1020,8 +1020,8 @@ export default function MembersPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
-        eyebrow="Gestión de Miembros"
-        title="Miembros del Club"
+        eyebrow="Comunidad del club"
+        title="Miembros"
       >
         <BackLink href="/dashboard" label="Volver al Panel" />
 

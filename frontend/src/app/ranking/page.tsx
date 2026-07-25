@@ -20,7 +20,7 @@ import NivelAsignacionPanel from "@/components/nivel/NivelAsignacionPanel";
 export default function RankingPage(): React.ReactElement {
   return (
     <NivelAsignacionPanel
-      eyebrow="Niveles"
+      eyebrow="Escalera de entrenamiento"
       title="Niveles"
       allowedRoles={["admin"]}
       backHref="/dashboard"

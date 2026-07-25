@@ -883,7 +883,7 @@ function ProfileContent(): React.ReactElement | null {
   }
 
   return (
-    <AppShell title="Mi cuenta" subtitle="Gestiona tu información y consulta tu estado en el sistema.">
+    <AppShell eyebrow="Tu cuenta" title="Perfil" subtitle="Gestiona tu información y consulta tu estado en el sistema.">
       {content}
     </AppShell>
   );

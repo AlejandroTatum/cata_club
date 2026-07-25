@@ -718,7 +718,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
-      <AppShell eyebrow="Área de entrenadores" title="Registrar Asistencia">
+      <AppShell eyebrow="Tomar asistencia" title="Pasar lista">
       {confirmed ? (
         <div className="flex min-h-[50vh] items-center justify-center py-8">
           <div className="w-full max-w-lg text-center">

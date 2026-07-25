@@ -1,9 +1,12 @@
 /**
- * Component tests for ChatWidget — covers the trigger toggling the panel and
- * the send-message flow. Network calls are mocked via `vi.spyOn(global,
+ * Component tests for ChatWidget — covers the controlled open/close contract
+ * and the send-message flow. Network calls are mocked via `vi.spyOn(global,
  * "fetch")` (ChatWidget calls `consultarChatbot` from src/services/api.ts,
  * which itself calls fetch against /api/chatbot — see that file's own
  * contract tests for the shared client's behavior).
+ *
+ * The widget no longer owns a floating action button: `AppShell` owns the
+ * open state and opens it from the sidebar's "Ayuda y soporte" entry.
  *
  * @vitest-environment jsdom
  */
@@ -35,31 +38,38 @@ afterEach(() => {
 });
 
 describe("ChatWidget", () => {
-  it("starts closed and opens the panel when the trigger is clicked", () => {
-    render(<ChatWidget />);
+  it("renders nothing while the host reports it closed", () => {
+    const { container } = render(<ChatWidget open={false} onClose={vi.fn()} />);
 
     expect(screen.queryByRole("dialog", { name: /chat de ayuda/i })).not.toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: /abrir chat de ayuda/i }));
+  it("shows the panel when the host opens it", () => {
+    render(<ChatWidget open onClose={vi.fn()} />);
 
     expect(screen.getByRole("dialog", { name: /chat de ayuda/i })).toBeInTheDocument();
   });
 
-  it("closes the panel when the close button is clicked", () => {
-    render(<ChatWidget />);
-    fireEvent.click(screen.getByRole("button", { name: /abrir chat de ayuda/i }));
-    expect(screen.getByRole("dialog", { name: /chat de ayuda/i })).toBeInTheDocument();
+  it("never renders a floating action button of its own", () => {
+    render(<ChatWidget open onClose={vi.fn()} />);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /cerrar chat de ayuda/i })[0]);
+    expect(screen.queryByRole("button", { name: /abrir chat de ayuda/i })).not.toBeInTheDocument();
+  });
 
-    expect(screen.queryByRole("dialog", { name: /chat de ayuda/i })).not.toBeInTheDocument();
+  it("asks the host to close when the close button is clicked", () => {
+    const onClose = vi.fn();
+    render(<ChatWidget open onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /cerrar chat de ayuda/i }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("sends a message and renders the assistant reply", async () => {
     vi.mocked(global.fetch).mockResolvedValue(okResponse({ reply: "Podés ver tus pagos en Mi Cuenta." }));
 
-    render(<ChatWidget />);
-    fireEvent.click(screen.getByRole("button", { name: /abrir chat de ayuda/i }));
+    render(<ChatWidget open onClose={vi.fn()} />);
 
     const input = screen.getByLabelText(/mensaje para el asistente/i);
     fireEvent.change(input, { target: { value: "¿Cómo veo mis pagos?" } });
@@ -81,8 +91,7 @@ describe("ChatWidget", () => {
   it("shows an inline error when the request fails", async () => {
     vi.mocked(global.fetch).mockResolvedValue(errorResponse(502));
 
-    render(<ChatWidget />);
-    fireEvent.click(screen.getByRole("button", { name: /abrir chat de ayuda/i }));
+    render(<ChatWidget open onClose={vi.fn()} />);
 
     fireEvent.change(screen.getByLabelText(/mensaje para el asistente/i), { target: { value: "hola" } });
     fireEvent.click(screen.getByRole("button", { name: /enviar mensaje/i }));

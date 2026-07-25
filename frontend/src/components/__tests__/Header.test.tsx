@@ -104,10 +104,10 @@ const mockGetNavLinksForRole = vi.mocked(getNavLinksForRole);
 
 describe("Header", (): void => {
   beforeEach((): void => {
-    // A neutral route that isn't landing, an auth-shell route, or an
-    // app-shell route (those three hide the header entirely — see the
-    // dedicated describe blocks below).
-    mockPathname.mockReturnValue("/unauthorized");
+    // A neutral route that isn't landing, an auth-shell route, an app-shell
+    // route, or a standalone screen (those all hide the header entirely — see
+    // the dedicated describe blocks below).
+    mockPathname.mockReturnValue("/reset-password");
     mockUseAuth.mockReset();
     // Default: not loading, not authenticated
     mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
@@ -125,7 +125,7 @@ describe("Header", (): void => {
   });
 
   it("shows the header on a non-landing route when landing hiding is requested", (): void => {
-    mockPathname.mockReturnValue("/unauthorized");
+    mockPathname.mockReturnValue("/reset-password");
 
     render(<Header hideOnLanding />);
 
@@ -157,6 +157,9 @@ describe("Header", (): void => {
     "/trainer/nivel",
     "/reports",
     "/student",
+    // Prefix-matched descendants: a flow must not change chrome halfway.
+    "/student/add-dependent",
+    "/trainer/attendance/history",
   ])("hides the header on the %s app-shell route", (route): void => {
     mockPathname.mockReturnValue(route);
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin"));
@@ -228,7 +231,7 @@ describe("Header", (): void => {
     ).toBeInTheDocument();
 
     // Authenticated-only elements are absent
-    expect(screen.queryByText("Administración")).not.toBeInTheDocument();
+    expect(screen.queryByText("Panel de Control")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Menú de cuenta/i })).not.toBeInTheDocument();
   });
 
@@ -244,11 +247,11 @@ describe("Header", (): void => {
     // Admin-specific links
     expect(screen.getByRole("link", { name: /Inicio/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Administración/i }),
+      screen.getByRole("link", { name: /Panel de Control/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Miembros/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Gestión de Horarios/i }),
+      screen.getByRole("link", { name: /^Horarios$/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Membresías/i }),
@@ -289,20 +292,20 @@ describe("Header", (): void => {
 
     render(<Header />);
 
-    // Trainer gets Inicio + Dashboard + Asistencia + Nivel
+    // Trainer gets Inicio + Mi día + Pasar lista + Niveles
     expect(screen.getByRole("link", { name: /Inicio/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Dashboard/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Asistencia" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mi día" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Niveles" })).toBeInTheDocument();
+
+    // The nav must not carry an English label — see auth-utils.
+    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
 
     // Other roles not visible
     expect(
-      screen.queryByText("Administración"),
+      screen.queryByText("Panel de Control"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Mi Cuenta")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mi cuenta")).not.toBeInTheDocument();
 
     // User info
     expect(screen.getByText("Carlos Entrenador")).toBeInTheDocument();
@@ -319,14 +322,14 @@ describe("Header", (): void => {
 
     expect(screen.getByRole("link", { name: /Inicio/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Mi Cuenta/i }),
+      screen.getByRole("link", { name: /Mi cuenta/i }),
     ).toBeInTheDocument();
 
     // Other roles not visible
     expect(
-      screen.queryByText("Administración"),
+      screen.queryByText("Panel de Control"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mi día")).not.toBeInTheDocument();
 
     expect(screen.getByText("Carlos Martinez")).toBeInTheDocument();
   });
@@ -340,10 +343,10 @@ describe("Header", (): void => {
   // `getNavLinksForRole` with a synthetic link list on a neutral route.
   it("marks the active link with aria-current=\"page\"", (): void => {
     mockGetNavLinksForRole.mockReturnValueOnce([
-      { href: "/unauthorized", label: "Inicio" },
+      { href: "/reset-password", label: "Inicio" },
       { href: "/somewhere-else", label: "Otro" },
     ]);
-    mockPathname.mockReturnValue("/unauthorized");
+    mockPathname.mockReturnValue("/reset-password");
     mockUseAuth.mockReturnValue(
       createAuthenticatedAuth("trainer", "Carlos Entrenador"),
     );
@@ -356,10 +359,10 @@ describe("Header", (): void => {
 
   it("does not apply aria-current to non-current route links", (): void => {
     mockGetNavLinksForRole.mockReturnValueOnce([
-      { href: "/unauthorized", label: "Inicio" },
+      { href: "/reset-password", label: "Inicio" },
       { href: "/somewhere-else", label: "Otro" },
     ]);
-    mockPathname.mockReturnValue("/unauthorized");
+    mockPathname.mockReturnValue("/reset-password");
     mockUseAuth.mockReturnValue(
       createAuthenticatedAuth("trainer", "Carlos Entrenador"),
     );

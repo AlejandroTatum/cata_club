@@ -360,8 +360,8 @@ function ReportsContent(): React.ReactElement {
 
   return (
     <AppShell
-      eyebrow="Reportes"
-      title="Reportes y Analítica"
+      eyebrow="Documentos del club"
+      title="Reportes"
     >
       <BackLink href="/dashboard" label="Volver al Panel" />
 
@@ -405,9 +405,9 @@ function ReportsContent(): React.ReactElement {
       {/* ---- Periodo tab ---- */}
       {tab === "periodo" && (
         <form onSubmit={handlePeriodoSubmit} className="card mb-6 p-6">
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-cata-text/45">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-cata-text/45">
             Nuevos miembros por período
-          </h3>
+          </h2>
           <div className="flex flex-wrap items-end gap-4">
             <div>
               <label htmlFor="fechaInicio" className="mb-1.5 block text-sm font-medium text-cata-text">
@@ -450,9 +450,9 @@ function ReportsContent(): React.ReactElement {
       {/* ---- Asistencia tab ---- */}
       {tab === "asistencia" && (
         <form onSubmit={handleAsistenciaSubmit} className="card mb-6 p-6">
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-cata-text/45">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-cata-text/45">
             Reporte de asistencia
-          </h3>
+          </h2>
           <div className="flex flex-wrap items-end gap-4">
             <div>
               <label htmlFor="attFechaInicio" className="mb-1.5 block text-sm font-medium text-cata-text">
@@ -514,9 +514,9 @@ function ReportsContent(): React.ReactElement {
       {/* ---- Pagos tab ---- */}
       {tab === "pagos" && (
         <form onSubmit={handlePagosSubmit} className="card mb-6 p-6">
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-cata-text/45">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-cata-text/45">
             Reporte de pagos
-          </h3>
+          </h2>
           <div className="flex flex-wrap items-end gap-4">
             <div>
               <label htmlFor="pagosFechaInicio" className="mb-1.5 block text-sm font-medium text-cata-text">
@@ -607,9 +607,9 @@ function ReportsContent(): React.ReactElement {
       {searched && !loading && tab === "asistencia" && (
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-cata-border px-6 py-4">
-            <h3 className="text-sm font-semibold text-cata-text">
+            <h2 className="text-sm font-semibold text-cata-text">
               {attendanceResults.length} registro{attendanceResults.length !== 1 ? "s" : ""} encontrado{attendanceResults.length !== 1 ? "s" : ""}
-            </h3>
+            </h2>
             {attendanceResults.length > 0 && (
               <button
                 type="button"
@@ -713,9 +713,9 @@ function ReportsContent(): React.ReactElement {
       {searched && !loading && tab === "pagos" && (
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-cata-border px-6 py-4">
-            <h3 className="text-sm font-semibold text-cata-text">
+            <h2 className="text-sm font-semibold text-cata-text">
               {pagosResults.length} pago{pagosResults.length !== 1 ? "s" : ""} encontrado{pagosResults.length !== 1 ? "s" : ""}
-            </h3>
+            </h2>
             {pagosResults.length > 0 && (
               <button
                 type="button"
@@ -865,9 +865,9 @@ function PersonaReportTable({
   return (
     <div className="card overflow-hidden">
       <div className="flex items-center justify-between border-b border-cata-border px-6 py-4">
-        <h3 className="text-sm font-semibold text-cata-text">
+        <h2 className="text-sm font-semibold text-cata-text">
           {filteredPersonaResults.length} persona{filteredPersonaResults.length !== 1 ? "s" : ""} encontrada{filteredPersonaResults.length !== 1 ? "s" : ""}
-        </h3>
+        </h2>
         {personaResults.length > 0 && (
           <button
             type="button"

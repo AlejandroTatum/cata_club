@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
-import AppShell from "@/components/shell/AppShell";
+import AppShell, { resolveActiveHref } from "@/components/shell/AppShell";
 
 interface MockLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children: React.ReactNode;
@@ -90,7 +90,7 @@ vi.mock("@/services/api", () => ({
 }));
 
 import { useAuth } from "@/contexts/AuthContext";
-import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
+import { createAuthenticatedAuth, createUnauthenticatedAuth } from "@/components/__tests__/test-utils";
 
 const mockUseAuth = vi.mocked(useAuth);
 
@@ -132,7 +132,7 @@ describe("AppShell", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
     expect(screen.getByRole("link", { name: /Miembros/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Gestión de Horarios/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Horarios" })).toBeInTheDocument();
     // "Inicio" is represented by the brand logo link, not a separate nav row.
     expect(screen.queryByRole("link", { name: /^Inicio$/i })).not.toBeInTheDocument();
   });
@@ -142,8 +142,8 @@ describe("AppShell", (): void => {
 
     render(<AppShell title="Panel">{null}</AppShell>);
 
-    expect(screen.getByRole("link", { name: /Dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Asistencia" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mi día" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Miembros/i })).not.toBeInTheDocument();
   });
 
@@ -248,8 +248,8 @@ describe("AppShell", (): void => {
 
     fireEvent.change(input, { target: { value: "pagos" } });
 
-    expect(screen.getByRole("button", { name: /Membresías y Pagos/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Grupos$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Membresías y Pagos/i })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^Horarios$/i })).not.toBeInTheDocument();
   });
 
   it("shows an empty-results message when nothing matches", (): void => {
@@ -267,7 +267,7 @@ describe("AppShell", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
     fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
-    fireEvent.click(screen.getByRole("button", { name: /Gestión de Horarios/i }));
+    fireEvent.click(screen.getByRole("option", { name: "Horarios" }));
 
     expect(mockPush).toHaveBeenCalledWith("/groups");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -292,9 +292,12 @@ describe("AppShell", (): void => {
     fireEvent.click(screen.getByRole("button", { name: /Colapsar menú/i }));
 
     expect(container.querySelector("aside")).toHaveClass("lg:w-[76px]");
-    const groupsLink = screen.getByRole("link", { name: /Gestión de Horarios/i });
-    expect(groupsLink).toHaveAttribute("title", "Gestión de Horarios");
-    expect(groupsLink.querySelector("span")).toHaveClass("lg:hidden");
+    const groupsLink = screen.getByRole("link", { name: "Horarios" });
+    expect(groupsLink).toHaveAttribute("title", "Horarios");
+    // The visible label is hidden at `lg`, so the accessible name must not
+    // depend on it — a native `title` tooltip is not a substitute.
+    expect(groupsLink).toHaveAttribute("aria-label", "Horarios");
+    expect(groupsLink.querySelector("span:not([aria-hidden])")).toHaveClass("lg:hidden");
     expect(screen.getByRole("button", { name: /Expandir menú/i })).toBeInTheDocument();
   });
 
@@ -472,5 +475,237 @@ describe("AppShell — closed mobile drawer leaves the tab order", (): void => {
     // Transitioning `visibility` alongside `transform` keeps the drawer
     // painted for the duration of the slide-out instead of blinking away.
     expect(aside).toHaveClass("transition-[transform,visibility]");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3a — the shell must show the screen its own name.
+//
+// `AppShell` used to render `eyebrow`/`title`/`subtitle` as `sr-only`. Every
+// caller passed a title and none of them rendered, so below `lg` — where the
+// sidebar is a closed drawer — a trainer on a phone had Menú, a bell and a
+// search box, and no way to know which screen they were on.
+// ---------------------------------------------------------------------------
+
+describe("AppShell — the page header row", (): void => {
+  beforeEach((): void => {
+    stubViewport(true);
+    mockPush.mockReset();
+    mockUseAuth.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+    vi.stubGlobal("localStorage", createMemoryStorage());
+  });
+
+  it("renders the page title as a VISIBLE h1, not a screen-reader-only one", (): void => {
+    render(
+      <AppShell eyebrow="Comunidad del club" title="Miembros" subtitle="Todo el club">
+        {null}
+      </AppShell>,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1, name: "Miembros" });
+    expect(heading).toBeInTheDocument();
+    expect(heading).not.toHaveClass("sr-only");
+    expect(screen.getByText("Comunidad del club")).not.toHaveClass("sr-only");
+    expect(screen.getByText("Todo el club")).not.toHaveClass("sr-only");
+  });
+
+  it("places the header row above <main>, so the heading precedes the content", (): void => {
+    const { container } = render(
+      <AppShell title="Miembros">
+        <p>contenido</p>
+      </AppShell>,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1, name: "Miembros" });
+    const main = container.querySelector("main") as HTMLElement;
+    expect(main.contains(heading)).toBe(false);
+    expect(heading.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders trailing header actions next to the title", (): void => {
+    render(
+      <AppShell title="Asistencias" actions={<button type="button">Tomar asistencia</button>}>
+        {null}
+      </AppShell>,
+    );
+
+    expect(screen.getByRole("button", { name: "Tomar asistencia" })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Active nav row: longest matching prefix wins, so a descendant route does not
+// light up its parent section as well.
+// ---------------------------------------------------------------------------
+
+describe("resolveActiveHref", (): void => {
+  const trainerLinks = [
+    { href: "/trainer", label: "Mi día" },
+    { href: "/trainer/attendance", label: "Pasar lista" },
+  ];
+
+  it("marks the exact route", (): void => {
+    expect(resolveActiveHref(trainerLinks, "/trainer")).toBe("/trainer");
+  });
+
+  it("prefers the most specific match over its parent section", (): void => {
+    expect(resolveActiveHref(trainerLinks, "/trainer/attendance")).toBe("/trainer/attendance");
+  });
+
+  it("keeps a descendant route inside its own section", (): void => {
+    expect(resolveActiveHref(trainerLinks, "/trainer/attendance/history")).toBe(
+      "/trainer/attendance",
+    );
+  });
+
+  it("returns null when nothing matches", (): void => {
+    expect(resolveActiveHref(trainerLinks, "/members")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Help chat: opened from the sidebar, never from a floating action button.
+// ---------------------------------------------------------------------------
+
+describe("AppShell — Ayuda y soporte", (): void => {
+  beforeEach((): void => {
+    // The sidebar is `aria-hidden` while the mobile drawer is closed, and an
+    // earlier block leaves `matchMedia` reporting mobile.
+    stubViewport(true);
+    mockUseAuth.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+    vi.stubGlobal("localStorage", createMemoryStorage());
+  });
+
+  it("offers a sidebar entry instead of a floating help button", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    expect(screen.getByRole("button", { name: "Ayuda y soporte" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /abrir chat de ayuda/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /chat de ayuda/i })).not.toBeInTheDocument();
+  });
+
+  it("opens the chat panel from that entry and closes it again", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ayuda y soporte" }));
+    expect(screen.getByRole("dialog", { name: /chat de ayuda/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /cerrar chat de ayuda/i }));
+    expect(screen.queryByRole("dialog", { name: /chat de ayuda/i })).not.toBeInTheDocument();
+  });
+
+  it("does not mount the chat at all without a session", (): void => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
+
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ayuda y soporte" }));
+    expect(screen.queryByRole("dialog", { name: /chat de ayuda/i })).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Popup dismissal — the user menu had no Escape, no outside click, and
+// declared `aria-haspopup="true"` (an alias for "menu") on a non-menu popup.
+// ---------------------------------------------------------------------------
+
+describe("AppShell — user menu dismissal", (): void => {
+  beforeEach((): void => {
+    stubViewport(true);
+    mockUseAuth.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+    vi.stubGlobal("localStorage", createMemoryStorage());
+  });
+
+  function openUserMenu(): HTMLElement {
+    const trigger = screen.getByRole("button", { name: /Menú de cuenta/i });
+    fireEvent.click(trigger);
+    return trigger;
+  }
+
+  it("describes the popup truthfully and wires it to the trigger", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+    const trigger = openUserMenu();
+
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
+    expect(trigger.getAttribute("aria-controls")).toBe(panel.id);
+  });
+
+  it("closes on Escape and returns focus to the trigger", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+    const trigger = openUserMenu();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Menú de cuenta" })).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("closes when the pointer goes down outside the panel", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+    openUserMenu();
+
+    fireEvent.mouseDown(document.body);
+
+    expect(screen.queryByRole("dialog", { name: "Menú de cuenta" })).not.toBeInTheDocument();
+  });
+
+  it("stays open when the click lands inside the panel", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+    openUserMenu();
+
+    fireEvent.mouseDown(screen.getByRole("link", { name: /Perfil/i }));
+
+    expect(screen.getByRole("dialog", { name: "Menú de cuenta" })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Command palette ARIA: arrow keys move a visual highlight, which used to be
+// invisible to assistive technology.
+// ---------------------------------------------------------------------------
+
+describe("AppShell — command palette selection is announced", (): void => {
+  beforeEach((): void => {
+    stubViewport(true);
+    mockPush.mockReset();
+    mockUseAuth.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+    vi.stubGlobal("localStorage", createMemoryStorage());
+  });
+
+  it("points aria-activedescendant at the highlighted option and moves it with the arrow keys", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
+
+    const input = screen.getByRole("combobox", { name: "Ir a una sección" });
+    const options = screen.getAllByRole("option");
+
+    expect(input).toHaveAttribute("aria-controls", screen.getByRole("listbox").id);
+    expect(input).toHaveAttribute("aria-activedescendant", options[0].id);
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    expect(options[1]).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+
+    expect(input).toHaveAttribute("aria-activedescendant", options[1].id);
+    expect(screen.getAllByRole("option")[1]).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("drops aria-activedescendant when nothing matches", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Ir a una sección" }), {
+      target: { value: "zzz-no-existe" },
+    });
+
+    expect(screen.getByRole("combobox", { name: "Ir a una sección" })).not.toHaveAttribute(
+      "aria-activedescendant",
+    );
   });
 });
