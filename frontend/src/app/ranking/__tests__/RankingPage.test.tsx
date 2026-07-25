@@ -302,3 +302,34 @@ describe("RankingPage — admin Niveles screen (copy of trainer's Nivel)", () =>
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// WCAG AA contrast (P1). The "Sin asignar" badge rendered `text-gray-400`
+// (#9CA3AF) on `bg-gray-100` (#F3F4F6) — 2.31:1, the worst measured pair in
+// the app, on a label that marks a real, actionable state. The numeric proof
+// lives in src/lib/__tests__/color-contrast.test.ts; this pins the call site.
+// ---------------------------------------------------------------------------
+
+describe("RankingPage — 'Sin asignar' badge contrast", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT], niveles: NIVELES });
+    mockShowError.mockClear();
+    mockShowSuccess.mockClear();
+  });
+
+  it("renders the unassigned badge with an AA-passing foreground, not gray-400", async () => {
+    render(<RankingPage />);
+
+    await screen.findByText("Sofía González");
+    // "Sin asignar" also names an <option> in the nivel filter; the badge is
+    // the <span> in the student table cell.
+    const badge = screen
+      .getAllByText("Sin asignar")
+      .find((el) => el.tagName === "SPAN") as HTMLElement;
+    expect(badge).toBeDefined();
+    expect(badge).not.toHaveClass("text-gray-400");
+    expect(badge).toHaveClass("text-gray-700");
+    // The fill it must contrast against is unchanged.
+    expect(badge).toHaveClass("bg-gray-100");
+  });
+});

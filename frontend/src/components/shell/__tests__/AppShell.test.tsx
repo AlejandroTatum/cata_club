@@ -384,3 +384,93 @@ describe("AppShell", (): void => {
     expect(bell).not.toHaveClass("text-white/65");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Closed mobile drawer keeps focusable controls in the tab order (P1).
+//
+// The open/closed toggle changed only `translate-x`, so a closed drawer sat
+// offscreen at x=-256 with `visibility: visible` and 11 focusable descendants
+// still reachable by Tab — keyboard focus simply vanished offscreen.
+//
+// React here is 18.3 (see package.json), which does not support the `inert`
+// prop, so this uses the `aria-hidden` + `visibility: hidden` fallback.
+// `visibility: hidden` is what removes the subtree from the tab order;
+// `aria-hidden` removes it from the accessibility tree.
+//
+// The hiding MUST be viewport-aware: at `lg` the same <aside> is permanently
+// visible (`lg:sticky lg:translate-x-0`) while `sidebarOpen` stays false, so
+// hiding purely on `!sidebarOpen` would black-hole desktop keyboard nav.
+// ---------------------------------------------------------------------------
+
+/** Stub `matchMedia` (absent in jsdom) to report a given viewport width class. */
+function stubViewport(isDesktop: boolean): void {
+  const listeners = new Set<() => void>();
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query: string) => ({
+      matches: isDesktop,
+      media: query,
+      onchange: null,
+      addEventListener: (_: string, cb: () => void): void => void listeners.add(cb),
+      removeEventListener: (_: string, cb: () => void): void => void listeners.delete(cb),
+      addListener: (cb: () => void): void => void listeners.add(cb),
+      removeListener: (cb: () => void): void => void listeners.delete(cb),
+      dispatchEvent: (): boolean => true,
+    })),
+  );
+}
+
+describe("AppShell — closed mobile drawer leaves the tab order", (): void => {
+  beforeEach((): void => {
+    vi.unstubAllGlobals();
+    Object.defineProperty(window, "localStorage", { value: createMemoryStorage(), writable: true });
+  });
+
+  it("hides the closed drawer from keyboard and screen readers on a mobile viewport", (): void => {
+    stubViewport(false);
+
+    const { container } = render(<AppShell title="Dashboard">{null}</AppShell>);
+    const aside = container.querySelector("aside") as HTMLElement;
+
+    expect(aside).toHaveClass("-translate-x-full");
+    // `invisible` is Tailwind's `visibility: hidden` — the part that actually
+    // pulls the 11 focusable descendants out of the tab order.
+    expect(aside).toHaveClass("invisible");
+    expect(aside).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("returns the drawer to the tab order as soon as it is opened", (): void => {
+    stubViewport(false);
+
+    const { container } = render(<AppShell title="Dashboard">{null}</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: /Abrir menú/i }));
+
+    const aside = container.querySelector("aside") as HTMLElement;
+    expect(aside).toHaveClass("translate-x-0");
+    expect(aside).not.toHaveClass("invisible");
+    expect(aside).not.toHaveAttribute("aria-hidden");
+  });
+
+  it("never hides the sidebar on a desktop viewport, where it is permanently visible", (): void => {
+    stubViewport(true);
+
+    const { container } = render(<AppShell title="Dashboard">{null}</AppShell>);
+    const aside = container.querySelector("aside") as HTMLElement;
+
+    // `sidebarOpen` is false here, but at `lg` the aside is on screen via
+    // `lg:translate-x-0` — hiding it would black-hole desktop keyboard nav.
+    expect(aside).not.toHaveClass("invisible");
+    expect(aside).not.toHaveAttribute("aria-hidden");
+  });
+
+  it("defers the visibility flip so the closing slide-out animation still renders", (): void => {
+    stubViewport(false);
+
+    const { container } = render(<AppShell title="Dashboard">{null}</AppShell>);
+    const aside = container.querySelector("aside") as HTMLElement;
+
+    // Transitioning `visibility` alongside `transform` keeps the drawer
+    // painted for the duration of the slide-out instead of blinking away.
+    expect(aside).toHaveClass("transition-[transform,visibility]");
+  });
+});

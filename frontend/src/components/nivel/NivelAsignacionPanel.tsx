@@ -48,7 +48,11 @@ const NIVEL_COLOR_MAP: Record<string, string> = {
   intermedio: "border border-violet-200 bg-violet-100 text-violet-700",
   avanzado: "border border-fuchsia-200 bg-fuchsia-100 text-fuchsia-700",
 };
-const DEFAULT_BADGE_CLASS = "border border-gray-200 bg-gray-100 text-gray-400";
+// `text-gray-400` on `bg-gray-100` measured 2.31:1 — far below WCAG AA's
+// 4.5:1, and this badge labels "Sin asignar", a real actionable state rather
+// than decoration. `text-gray-700` reaches 9.4:1 and matches the `-700`
+// foreground weight the nivel-category badges above already use.
+const DEFAULT_BADGE_CLASS = "border border-gray-200 bg-gray-100 text-gray-700";
 
 function nivelBadge(
   niveles: NivelConOcupacion[],

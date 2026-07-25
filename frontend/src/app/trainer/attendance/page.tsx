@@ -41,12 +41,17 @@ import {
   ChevronDown,
   AlertTriangle,
   ClipboardList,
+  HelpCircle,
   XCircle,
 } from "lucide-react";
 import {
   ATTENDANCE_LABELS,
   ATTENDANCE_STATES,
+  UNMARKED,
   countByState,
+  countUnmarked,
+  markUnmarkedAsPresent,
+  toAttendanceMarks,
   buildAttendanceSummary,
   buildRosterFromAlumnoHorarios,
   resolveEntrenadorId,
@@ -248,16 +253,30 @@ export default function TrainerAttendancePage(): React.ReactElement {
     );
   }
 
+  /**
+   * Bulk action for the common case (near-full attendance): everyone still
+   * undecided becomes "present". Explicit marks the trainer already made are
+   * preserved. Applies to the whole roster, not just the visible page.
+   */
+  function handleMarkRemainingPresent(): void {
+    setStudents((prev) => markUnmarkedAsPresent(prev));
+  }
+
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     if (!selectedScheduleId || entrenadorPersonaId === null) return;
+    // Never file a session while anyone is still undecided — the wizard
+    // already disables the button, this is the belt-and-braces guard.
+    if (countUnmarked(students) > 0) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
       const registration = await registerAttendance({
         horarioId: selectedScheduleId,
         entrenadorId: entrenadorPersonaId,
-        students: students.map((s) => ({ personaId: Number(s.id), estado: s.attendance })),
+        // `toAttendanceMarks` strips the frontend-only `unmarked` sentinel,
+        // which the backend contract does not accept.
+        students: toAttendanceMarks(students),
       });
       setResult(registration);
       setConfirmed(true);
@@ -295,6 +314,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
     () => paginateRecords(filteredStudents, studentPage, WIZARD_PAGE_SIZE),
     [filteredStudents, studentPage],
   );
+
+  // Deliberately computed over `students` (the FULL roster) rather than
+  // `filteredStudents`/`paginatedStudents`: the wizard paginates at 10 and
+  // the search box filters, so a page- or filter-scoped count would report
+  // "0 sin marcar" while off-screen students were still undecided — the exact
+  // silent-data-loss path this guard exists to close.
+  const unmarkedCount = useMemo(() => countUnmarked(students), [students]);
+  const unmarkedReasonId = "attendance-unmarked-reason";
 
   // ---- Step renderers ----
 
@@ -443,6 +470,16 @@ export default function TrainerAttendancePage(): React.ReactElement {
               <FileText size={11} strokeWidth={2} aria-hidden="true" />
               {justifiedCount} Justificados
             </span>
+            {/* Undecided students — the roster starts fully unmarked, and this
+                count spans every page, so students the trainer has not
+                scrolled to are visible here instead of silently going out as
+                absent. */}
+            {unmarkedCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-cata-text/35 bg-cata-bg px-2 py-0.5 font-medium text-cata-text/75">
+                <HelpCircle size={11} strokeWidth={2} aria-hidden="true" />
+                {unmarkedCount} Sin marcar
+              </span>
+            )}
           </div>
 
         </div>
@@ -455,6 +492,19 @@ export default function TrainerAttendancePage(): React.ReactElement {
           </div>
         ) : (
           <>
+            {/* Bulk action — the common case is near-full attendance, so
+                clearing the remaining rows in one tap has to be cheaper than
+                marking each student individually. */}
+            {unmarkedCount > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkRemainingPresent}
+                className="btn-secondary min-h-[44px] w-full text-sm"
+              >
+                <UserCheck size={14} strokeWidth={1.5} aria-hidden="true" />
+                Marcar restantes presentes
+              </button>
+            )}
             <div className="relative">
               <input
                 type="text"
@@ -475,44 +525,63 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 <div className="space-y-2">
                   {paginatedStudents.map((student) => {
                     const idx = students.findIndex((s) => s.id === student.id);
+                    const isUnmarked = student.attendance === UNMARKED;
+                    const nameId = `student-name-${student.id}`;
+                    const groupLabelId = `attendance-label-${student.id}`;
                     return (
                       <div
                         key={student.id}
-                        className="card-hover flex items-center justify-between gap-3 p-4"
+                        data-attendance={student.attendance}
+                        className={`card-hover flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${
+                          isUnmarked ? "border-dashed border-cata-text/35" : ""
+                        }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cata-red/15">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cata-red/15">
                             <UserCheck size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
                           </div>
-                          <span className="text-sm font-medium text-cata-text">
+                          <span id={nameId} className="text-sm font-medium text-cata-text">
                             {student.name}
                           </span>
                         </div>
 
-                        <fieldset>
-                          <legend className="sr-only">Estado de asistencia de {student.name}</legend>
-                          <div className="grid grid-cols-2 gap-1 sm:flex">
-                            {ATTENDANCE_STATES.map((state) => {
-                              const isActive = student.attendance === state;
-                              return (
-                                <button
-                                  key={state}
-                                  type="button"
-                                  onClick={() => handleDirectAttendanceSet(idx, state)}
-                                  aria-pressed={isActive}
-                                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all duration-150 ${
-                                    isActive
-                                      ? `border-current/20 ${getAttendanceBadgeTokens(state).badgeClass}`
-                                      : "border-transparent text-cata-text/45 hover:border-cata-border hover:text-cata-text/65"
-                                  }`}
-                                >
-                                  {ATTENDANCE_ICONS[state]}
-                                  <span>{ATTENDANCE_LABELS[state]}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </fieldset>
+                        {/*
+                         * A radiogroup, not a fieldset of `aria-pressed` toggles:
+                         * the four states are mutually exclusive, and toggle
+                         * buttons announce as four independent switches that
+                         * never convey that exclusivity. The group is labelled
+                         * by the rendered student name so the accessible name
+                         * can never drift from what is on screen.
+                         */}
+                        <div
+                          role="radiogroup"
+                          aria-labelledby={`${groupLabelId} ${nameId}`}
+                          className="grid w-full grid-cols-4 gap-1 sm:w-auto"
+                        >
+                          <span id={groupLabelId} className="sr-only">
+                            Estado de asistencia de
+                          </span>
+                          {ATTENDANCE_STATES.map((state) => {
+                            const isActive = student.attendance === state;
+                            return (
+                              <button
+                                key={state}
+                                type="button"
+                                role="radio"
+                                onClick={() => handleDirectAttendanceSet(idx, state)}
+                                aria-checked={isActive}
+                                className={`inline-flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 py-1.5 text-[11px] font-medium leading-tight transition-all duration-150 sm:flex-row sm:gap-1 sm:px-2.5 sm:text-xs ${
+                                  isActive
+                                    ? `border-current/20 ${getAttendanceBadgeTokens(state).badgeClass}`
+                                    : "border-transparent text-cata-text/45 hover:border-cata-border hover:text-cata-text/65"
+                                }`}
+                              >
+                                {ATTENDANCE_ICONS[state]}
+                                <span>{ATTENDANCE_LABELS[state]}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     );
                   })}
@@ -774,35 +843,58 @@ export default function TrainerAttendancePage(): React.ReactElement {
                         )}
                       </div>
 
-                      <div className="flex gap-3">
-                        {!isLast ? (
-                          <button
-                            type="button"
-                            onClick={handleNext}
-                            disabled={students.length === 0}
-                            className="btn-primary shadow-soft"
+                      <div className="flex flex-col items-end gap-2">
+                        {/* Visible, announced reason the advance button is
+                            disabled — a disabled control with no explanation
+                            reads as a broken wizard. */}
+                        {unmarkedCount > 0 && (
+                          <p
+                            id={unmarkedReasonId}
+                            role="status"
+                            className="text-xs font-medium text-cata-text/75"
                           >
-                            Siguiente
-                            <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                          </button>
-                        ) : null}
-
-                        {isLast && (
-                          <button
-                            type="submit"
-                            disabled={submitting || entrenadorPersonaId === null || students.length === 0}
-                            className="btn-primary shadow-soft"
-                          >
-                            {submitting ? (
-                              "Registrando..."
-                            ) : (
-                              <>
-                                <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
-                                Confirmar Asistencia
-                              </>
-                            )}
-                          </button>
+                            {unmarkedCount === 1
+                              ? "Falta 1 alumno por marcar"
+                              : `Faltan ${unmarkedCount} alumnos por marcar`}
+                          </p>
                         )}
+                        <div className="flex gap-3">
+                          {!isLast ? (
+                            <button
+                              type="button"
+                              onClick={handleNext}
+                              disabled={students.length === 0 || unmarkedCount > 0}
+                              aria-describedby={unmarkedCount > 0 ? unmarkedReasonId : undefined}
+                              className="btn-primary shadow-soft"
+                            >
+                              Siguiente
+                              <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
+                            </button>
+                          ) : null}
+
+                          {isLast && (
+                            <button
+                              type="submit"
+                              disabled={
+                                submitting ||
+                                entrenadorPersonaId === null ||
+                                students.length === 0 ||
+                                unmarkedCount > 0
+                              }
+                              aria-describedby={unmarkedCount > 0 ? unmarkedReasonId : undefined}
+                              className="btn-primary shadow-soft"
+                            >
+                              {submitting ? (
+                                "Registrando..."
+                              ) : (
+                                <>
+                                  <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
+                                  Confirmar Asistencia
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}

@@ -6,8 +6,12 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  UNMARKED,
   nextAttendanceState,
   countByState,
+  countUnmarked,
+  markUnmarkedAsPresent,
+  toAttendanceMarks,
   buildAttendanceSummary,
   buildRosterFromAlumnoHorarios,
   resolveEntrenadorId,
@@ -133,11 +137,16 @@ describe("buildRosterFromAlumnoHorarios", () => {
     },
   ];
 
-  it("maps each alumno-horario row to a SessionStudent defaulted to absent", () => {
+  // Regression (silent data loss): the roster used to default every student
+  // to "absent", so a trainer who tapped straight through the wizard filed
+  // the whole session as a no-show without ever seeing those students. The
+  // initial state must be the `unmarked` sentinel instead, which is never
+  // submitted and which the wizard refuses to advance past.
+  it("maps each alumno-horario row to a SessionStudent defaulted to unmarked", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
     expect(roster).toEqual([
-      { id: "3", name: "Sofia Alumna", attendance: "absent" },
-      { id: "7", name: "Mateo Rodríguez", attendance: "absent" },
+      { id: "3", name: "Sofia Alumna", attendance: UNMARKED },
+      { id: "7", name: "Mateo Rodríguez", attendance: UNMARKED },
     ]);
   });
 
@@ -169,11 +178,11 @@ describe("buildRosterFromAlumnoHorarios", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
     expect(roster).toEqual([
       { id: "3", name: "Sofia Alumna", attendance: "present" },
-      { id: "7", name: "Mateo Rodríguez", attendance: "absent" },
+      { id: "7", name: "Mateo Rodríguez", attendance: UNMARKED },
     ]);
   });
 
-  it("defaults to absent when no existing record matches a student's personaId", () => {
+  it("defaults to unmarked when no existing record matches a student's personaId", () => {
     const existingRecords: AttendanceRecord[] = [
       {
         id: "att-1",
@@ -186,12 +195,126 @@ describe("buildRosterFromAlumnoHorarios", () => {
       },
     ];
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
-    expect(roster.every((s) => s.attendance === "absent")).toBe(true);
+    expect(roster.every((s) => s.attendance === UNMARKED)).toBe(true);
   });
 
-  it("still defaults to absent when existingRecords is omitted (backward compatible)", () => {
+  it("still defaults to unmarked when existingRecords is omitted", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
-    expect(roster.every((s) => s.attendance === "absent")).toBe(true);
+    expect(roster.every((s) => s.attendance === UNMARKED)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `unmarked` sentinel — frontend-only initial state. The backend contract
+// (`AttendanceStudentMark.estado`) only accepts the four real
+// `EstadoAsistencia` values, so `unmarked` must never reach a payload.
+// ---------------------------------------------------------------------------
+
+describe("countUnmarked", () => {
+  it("counts every student still on the unmarked sentinel", () => {
+    const students: SessionStudent[] = [
+      { id: "a", name: "A", attendance: UNMARKED },
+      { id: "b", name: "B", attendance: "present" },
+      { id: "c", name: "C", attendance: UNMARKED },
+      { id: "d", name: "D", attendance: "absent" },
+    ];
+    expect(countUnmarked(students)).toBe(2);
+  });
+
+  it("returns 0 for a fully marked roster", () => {
+    const students: SessionStudent[] = [
+      { id: "a", name: "A", attendance: "present" },
+      { id: "b", name: "B", attendance: "absent" },
+    ];
+    expect(countUnmarked(students)).toBe(0);
+  });
+
+  it("returns 0 for an empty roster", () => {
+    expect(countUnmarked([])).toBe(0);
+  });
+
+  // A marked-absent student is a deliberate decision; an unmarked one is not.
+  // Conflating the two is exactly the bug this sentinel exists to prevent.
+  it("does not count a student explicitly marked absent", () => {
+    expect(countUnmarked([{ id: "a", name: "A", attendance: "absent" }])).toBe(0);
+  });
+});
+
+describe("markUnmarkedAsPresent", () => {
+  it("promotes only the unmarked students to present", () => {
+    const students: SessionStudent[] = [
+      { id: "a", name: "A", attendance: UNMARKED },
+      { id: "b", name: "B", attendance: "absent" },
+      { id: "c", name: "C", attendance: UNMARKED },
+      { id: "d", name: "D", attendance: "late" },
+    ];
+    expect(markUnmarkedAsPresent(students)).toEqual([
+      { id: "a", name: "A", attendance: "present" },
+      { id: "b", name: "B", attendance: "absent" },
+      { id: "c", name: "C", attendance: "present" },
+      { id: "d", name: "D", attendance: "late" },
+    ]);
+  });
+
+  it("leaves an already fully marked roster untouched", () => {
+    const students: SessionStudent[] = [
+      { id: "a", name: "A", attendance: "justified" },
+      { id: "b", name: "B", attendance: "absent" },
+    ];
+    expect(markUnmarkedAsPresent(students)).toEqual(students);
+  });
+
+  it("does not mutate the input array", () => {
+    const students: SessionStudent[] = [{ id: "a", name: "A", attendance: UNMARKED }];
+    markUnmarkedAsPresent(students);
+    expect(students[0].attendance).toBe(UNMARKED);
+  });
+});
+
+describe("toAttendanceMarks", () => {
+  it("maps marked students to the backend payload shape", () => {
+    const students: SessionStudent[] = [
+      { id: "3", name: "Sofia", attendance: "present" },
+      { id: "7", name: "Mateo", attendance: "justified" },
+    ];
+    expect(toAttendanceMarks(students)).toEqual([
+      { personaId: 3, estado: "present" },
+      { personaId: 7, estado: "justified" },
+    ]);
+  });
+
+  // Defense in depth: the wizard already blocks submission while any student
+  // is unmarked, but the sentinel must never survive into a POST body even if
+  // that gate is ever bypassed — the backend would reject the whole batch.
+  it("drops unmarked students instead of sending the sentinel to the backend", () => {
+    const students: SessionStudent[] = [
+      { id: "3", name: "Sofia", attendance: "present" },
+      { id: "7", name: "Mateo", attendance: UNMARKED },
+    ];
+    expect(toAttendanceMarks(students)).toEqual([{ personaId: 3, estado: "present" }]);
+  });
+
+  it("returns an empty payload for an empty roster", () => {
+    expect(toAttendanceMarks([])).toEqual([]);
+  });
+});
+
+describe("countByState / buildAttendanceSummary with unmarked students", () => {
+  const students: SessionStudent[] = [
+    { id: "a", name: "A", attendance: "present" },
+    { id: "b", name: "B", attendance: UNMARKED },
+    { id: "c", name: "C", attendance: UNMARKED },
+  ];
+
+  it("never counts an unmarked student as absent", () => {
+    expect(countByState(students, "absent")).toBe(0);
+    expect(countByState(students, "present")).toBe(1);
+  });
+
+  it("omits unmarked students from the human-readable summary counts", () => {
+    expect(buildAttendanceSummary(students)).toBe(
+      "1 presente • 0 ausente • 0 tardanza • 0 justificado",
+    );
   });
 });
 

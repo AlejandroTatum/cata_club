@@ -232,27 +232,27 @@ export default function TrainerPage(): React.ReactElement {
             href="/trainer/attendance"
             className="group flex items-center gap-4 rounded-2xl border border-cata-fuchsia/20 bg-cata-fuchsia/10 px-5 py-4 transition-all duration-200 hover:border-cata-fuchsia/30 hover:bg-cata-fuchsia/15 hover:shadow-soft"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cata-fuchsia/15 text-cata-fuchsia transition-colors group-hover:bg-cata-fuchsia/25">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cata-fuchsia/15 text-cata-fuchsia-ink transition-colors group-hover:bg-cata-fuchsia/25">
               <ClipboardList size={20} strokeWidth={1.5} aria-hidden="true" />
             </span>
             <span className="flex-1">
-              <span className="block text-sm font-bold text-cata-fuchsia">Registrar Asistencia</span>
-              <span className="block text-xs text-cata-fuchsia/60">Sesiones de hoy en unos pasos</span>
+              <span className="block text-sm font-bold text-cata-fuchsia-ink">Registrar Asistencia</span>
+              <span className="block text-xs text-cata-fuchsia-ink/90">Sesiones de hoy en unos pasos</span>
             </span>
-            <ArrowRight size={16} strokeWidth={1.5} className="text-cata-fuchsia/40 transition-transform group-hover:translate-x-0.5 group-hover:text-cata-fuchsia/70" aria-hidden="true" />
+            <ArrowRight size={16} strokeWidth={1.5} className="text-cata-fuchsia-ink/60 transition-transform group-hover:translate-x-0.5 group-hover:text-cata-fuchsia-ink" aria-hidden="true" />
           </Link>
           <Link
             href="/trainer/nivel"
             className="group flex items-center gap-4 rounded-2xl border border-cata-fuchsia/20 bg-cata-fuchsia/10 px-5 py-4 transition-all duration-200 hover:border-cata-fuchsia/30 hover:bg-cata-fuchsia/15 hover:shadow-soft"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cata-fuchsia/15 text-cata-fuchsia transition-colors group-hover:bg-cata-fuchsia/25">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cata-fuchsia/15 text-cata-fuchsia-ink transition-colors group-hover:bg-cata-fuchsia/25">
               <Trophy size={20} strokeWidth={1.5} aria-hidden="true" />
             </span>
             <span className="flex-1">
-              <span className="block text-sm font-bold text-cata-fuchsia">Gestionar Nivel</span>
-              <span className="block text-xs text-cata-fuchsia/60">Asignar nivel a estudiantes</span>
+              <span className="block text-sm font-bold text-cata-fuchsia-ink">Gestionar Nivel</span>
+              <span className="block text-xs text-cata-fuchsia-ink/90">Asignar nivel a estudiantes</span>
             </span>
-            <ArrowRight size={16} strokeWidth={1.5} className="text-cata-fuchsia/40 transition-transform group-hover:translate-x-0.5 group-hover:text-cata-fuchsia/70" aria-hidden="true" />
+            <ArrowRight size={16} strokeWidth={1.5} className="text-cata-fuchsia-ink/60 transition-transform group-hover:translate-x-0.5 group-hover:text-cata-fuchsia-ink" aria-hidden="true" />
           </Link>
         </div>
 

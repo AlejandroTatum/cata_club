@@ -184,9 +184,15 @@ export default function DashboardPage(): React.ReactElement {
                   <p className="flex shrink-0 items-center gap-1.5 text-2xl font-bold tracking-tight text-cata-text">
                     {stat.value}
                     {isAlert && (
-                      <span className="h-2 w-2 rounded-full bg-cata-red" aria-hidden="true">
+                      <>
+                        {/* The dot is a pure shape; the label is its sibling,
+                            not its child. Nesting the `sr-only` text inside
+                            an `aria-hidden` element hid it from assistive
+                            tech too, so the alert reached nobody who could
+                            not see the red dot. */}
+                        <span className="h-2 w-2 rounded-full bg-cata-red" aria-hidden="true" />
                         <span className="sr-only">Atención</span>
-                      </span>
+                      </>
                     )}
                   </p>
                 </div>

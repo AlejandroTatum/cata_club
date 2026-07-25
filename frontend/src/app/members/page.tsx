@@ -22,6 +22,7 @@ import ContextualHelp from "@/components/ContextualHelp";
 import BackLink from "@/components/BackLink";
 import PaginationControls from "@/components/PaginationControls";
 import { useToast } from "@/contexts/ToastContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Users,
   UserCheck,
@@ -141,6 +142,13 @@ function StatCard({ icon, label, value }: StatCardProps): React.ReactElement {
 interface StudentRowProps {
   student: MemberStudentSummary;
   grupos: Grupo[];
+  /**
+   * Called after a membership is successfully created so the page can refetch
+   * and show the new row. The panel used to tell the user "Recarga para
+   * verla." instead — the system should refresh its own data rather than
+   * delegate that to the user.
+   */
+  onMembershipCreated: () => void;
 }
 
 
@@ -154,7 +162,7 @@ function calculateAge(fechaNacimiento: string | undefined): number | null {
   return age;
 }
 
-function StudentEditPanel({ student, grupos }: StudentRowProps): React.ReactElement {
+function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [showMedical, setShowMedical] = useState(false);
   const [showCreateMembership, setShowCreateMembership] = useState(false);
@@ -212,6 +220,9 @@ function StudentEditPanel({ student, grupos }: StudentRowProps): React.ReactElem
       setMembershipSuccess(true);
       setShowCreateMembership(false);
       showSuccess("Membresía creada correctamente.");
+      // Refresh the list so the new membership appears in place, instead of
+      // asking the user to reload the page themselves.
+      onMembershipCreated();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error al crear la membresía.";
       setMembershipError(message);
@@ -298,7 +309,7 @@ function StudentEditPanel({ student, grupos }: StudentRowProps): React.ReactElem
         (membershipSuccess ? (
           <p className="mt-2 flex items-center gap-1 text-xs text-cata-state-ok">
             <CheckCircle2 size={11} strokeWidth={2} aria-hidden="true" />
-            Membresía creada. Recarga para verla.
+            Membresía creada.
           </p>
         ) : showCreateMembership ? (
           <div className="mt-2.5 space-y-2 rounded-lg bg-cata-bg/60 p-2.5">
@@ -376,6 +387,8 @@ interface AccountRowProps {
   grupos: Grupo[];
   editModalOpen: boolean;
   onToggleEditModal: () => void;
+  /** Refetch the member list — forwarded to each student's edit panel. */
+  onMembershipCreated: () => void;
 }
 
 const ALL_BACKEND_ROLES: BackendTipoRol[] = ["ADMINISTRADOR", "ENTRENADOR", "REPRESENTANTE", "ALUMNO"];
@@ -399,6 +412,7 @@ function AccountRow({
   grupos,
   editModalOpen,
   onToggleEditModal,
+  onMembershipCreated,
 }: AccountRowProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   // `roles`/`activo` start empty/true only as placeholders — they get
@@ -688,6 +702,11 @@ function AccountRow({
                   </h2>
                   <p className="text-sm text-cata-text/65">{account.telefono}</p>
                   <p className="mt-0.5 text-xs text-cata-text/50">{getPayerTypeLabel(account.role)}</p>
+                  {/* Sets the expectation up front: this modal has no
+                      commit step, so closing it never loses anything. */}
+                  <p className="mt-1 text-xs text-cata-text/65">
+                    Los cambios se guardan al instante.
+                  </p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -698,7 +717,10 @@ function AccountRow({
                   ref={closeButtonRef}
                   type="button"
                   onClick={onToggleEditModal}
-                  aria-label="Cerrar"
+                  // Distinct from the footer's "Cerrar": two identically
+                  // named buttons in one dialog give screen-reader users no
+                  // way to tell them apart in a controls list.
+                  aria-label="Cerrar ventana"
                   className="rounded-lg p-1.5 text-cata-text/50 transition-colors hover:bg-cata-bg hover:text-cata-text"
                 >
                   <X size={16} strokeWidth={1.5} aria-hidden="true" />
@@ -795,7 +817,10 @@ function AccountRow({
                       ) : (
                         <Save size={12} strokeWidth={1.5} aria-hidden="true" />
                       )}
-                      {infoSaving ? "Guardando..." : "Guardar datos"}
+                      {/* Explicit scope: this button only PATCHes
+                          nombres/apellidos/teléfono. Roles, estado, ficha
+                          médica and membresía each save themselves. */}
+                      {infoSaving ? "Guardando..." : "Guardar nombre, apellido y teléfono"}
                     </button>
                     {infoSuccess && (
                       <p className="flex items-center gap-1 text-xs text-cata-state-ok" role="status">
@@ -883,7 +908,12 @@ function AccountRow({
                   <h3 className="mb-3 text-sm font-bold text-cata-text">Estudiantes a cargo</h3>
                   <div className="space-y-3">
                     {account.estudiantes.map((estudiante) => (
-                      <StudentEditPanel key={estudiante.id} student={estudiante} grupos={grupos} />
+                      <StudentEditPanel
+                        key={estudiante.id}
+                        student={estudiante}
+                        grupos={grupos}
+                        onMembershipCreated={onMembershipCreated}
+                      />
                     ))}
                   </div>
                 </section>
@@ -891,15 +921,16 @@ function AccountRow({
             </div>
 
             {/* Footer — everything above already saves per-action (roles,
-                estado, etiquetas, ficha médica each call their own endpoint
-                immediately); these two just dismiss the modal, matching the
-                existing close behavior (X / Escape / backdrop). */}
+                estado, ficha médica, membresía each call their own endpoint
+                immediately, and nombres/apellidos/teléfono have their own
+                save button). There is nothing left for this footer to commit,
+                so it offers only a dismiss action: a "Guardar cambios"
+                primary here would promise a save it cannot perform, and a
+                "Cancelar" beside it would imply the already-persisted changes
+                could still be discarded. */}
             <div className="flex shrink-0 items-center justify-end gap-2 border-t border-cata-border px-5 py-3.5">
-              <button type="button" onClick={onToggleEditModal} className="btn-ghost text-sm">
-                Cancelar
-              </button>
-              <button type="button" onClick={onToggleEditModal} className="btn-primary text-sm">
-                Guardar cambios
+              <button type="button" onClick={onToggleEditModal} className="btn-secondary text-sm">
+                Cerrar
               </button>
             </div>
           </dialog>,
@@ -914,6 +945,7 @@ function AccountRow({
 // ---------------------------------------------------------------------------
 
 export default function MembersPage(): React.ReactElement {
+  const { session, isLoading } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFlag, setActiveFlag] = useState<MemberFilterFlag>("all");
   const [accounts, setAccounts] = useState<MemberAccount[]>([]);
@@ -928,8 +960,13 @@ export default function MembersPage(): React.ReactElement {
     setEditingAccountId((prev) => (prev === accountId ? null : accountId));
   }, []);
 
-  const loadMembers = useCallback(async (): Promise<void> => {
-    setLoading(true);
+  // `silent` refreshes the data WITHOUT flipping the page-level `loading` flag.
+  // That flag gates the whole account list (see the `loading ? ... : ...` split
+  // below), so raising it while the edit dialog is open unmounts the dialog and
+  // discards every unsaved field in it. A refresh triggered from inside the
+  // dialog — creating a membership — must never do that.
+  const loadMembers = useCallback(async ({ silent = false } = {}): Promise<void> => {
+    if (!silent) setLoading(true);
     setError(null);
     setPersonasCapped(false);
     try {
@@ -938,15 +975,29 @@ export default function MembersPage(): React.ReactElement {
       setGrupos(niveles.map(nivelToGrupo));
       setPersonasCapped(upstreamPersonasCapped);
     } catch {
-      setError("No se pudieron cargar los miembros. Intente nuevamente.");
+      // A failed silent refresh must not contradict the success the user just
+      // saw: the write itself succeeded, only the re-read did not.
+      setError(
+        silent
+          ? "La membresía se creó, pero no se pudo actualizar la lista. Recargue para verla."
+          : "No se pudieron cargar los miembros. Intente nuevamente.",
+      );
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
+  // Gate the fetch on the RESOLVED role. `ProtectedRoute` redirects a
+  // non-admin away, but its redirect runs in an effect — a bare mount effect
+  // here fired GET /api/members first and logged a 403 before the redirect
+  // landed. Waiting for `isLoading` to settle and for the role to actually be
+  // "admin" means the request is only ever made by someone allowed to make it.
+  const isAdmin = !isLoading && session?.user?.role === "admin";
+
   useEffect(() => {
+    if (!isAdmin) return;
     void loadMembers();
-  }, [loadMembers]);
+  }, [isAdmin, loadMembers]);
 
   // Reset to page 1 whenever the search term or filter chip changes, so the
   // paginator never gets stuck on a stale/out-of-range page.
@@ -1106,6 +1157,7 @@ export default function MembersPage(): React.ReactElement {
                       grupos={grupos}
                       editModalOpen={editingAccountId === account.id}
                       onToggleEditModal={() => toggleEditModal(account.id)}
+                      onMembershipCreated={() => void loadMembers({ silent: true })}
                     />
                   ))}
                 </tbody>

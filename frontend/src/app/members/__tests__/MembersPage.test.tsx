@@ -49,9 +49,19 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({
+  useAuth: vi.fn(),
+}));
+
+import { useAuth } from "@/contexts/AuthContext";
+const mockUseAuth = vi.mocked(useAuth);
+
+type AuthState = ReturnType<typeof useAuth>;
+
+/** Auth state for a fully hydrated session with the given role. */
+function resolvedAuth(role: string): AuthState {
+  return {
     session: {
-      user: { id: "u1", name: "Admin Test", email: "admin@cataclub.com", role: "admin", representanteId: null },
+      user: { id: "u1", name: "Admin Test", email: "admin@cataclub.com", role, representanteId: null },
       roles: ["ADMINISTRADOR"],
       loggedInAt: "2026-07-01T12:00:00Z",
     },
@@ -59,8 +69,27 @@ vi.mock("@/contexts/AuthContext", () => ({
     isLoading: false,
     login: vi.fn(),
     logout: vi.fn(),
-  }),
-}));
+    revalidate: vi.fn(),
+  } as unknown as AuthState;
+}
+
+/** Auth state while the session is still hydrating from the BFF. */
+function hydratingAuth(): AuthState {
+  return {
+    session: null,
+    isAuthenticated: false,
+    isLoading: true,
+    login: vi.fn(),
+    logout: vi.fn(),
+    revalidate: vi.fn(),
+  } as unknown as AuthState;
+}
+
+// Every existing suite assumes a resolved admin session; the role-gate suite
+// below overrides this per test.
+beforeEach(() => {
+  mockUseAuth.mockReturnValue(resolvedAuth("admin"));
+});
 
 const mockFetchMembers = vi.fn();
 const mockObtenerRolesDePersona = vi.fn();
@@ -314,7 +343,7 @@ describe("MembersPage — Editar member modal", () => {
 
     fireEvent.change(nombresInput, { target: { value: "María José" } });
     fireEvent.change(telefonoInput, { target: { value: "0988888888" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: /guardar datos/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /guardar nombre, apellido y teléfono/i }));
 
     await waitFor(() => {
       expect(mockActualizarPersona).toHaveBeenCalledWith(1, {
@@ -337,7 +366,7 @@ describe("MembersPage — Editar member modal", () => {
 
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /guardar datos/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /guardar nombre, apellido y teléfono/i }));
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("No se pudo actualizar");
   });
@@ -511,7 +540,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(getEditButton(row));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /^cerrar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -525,7 +554,7 @@ describe("MembersPage — Editar member modal", () => {
 
     const editButton = getEditButton(row);
     fireEvent.click(editButton);
-    fireEvent.click(screen.getByRole("button", { name: /^cerrar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
 
     expect(document.activeElement).toBe(editButton);
   });
@@ -546,7 +575,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /admin/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Error de red");
 
-    fireEvent.click(screen.getByRole("button", { name: /^cerrar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
     fireEvent.click(getEditButton(row));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -686,5 +715,222 @@ describe("MembersPage — honest aggregate coverage", () => {
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: /paginación/i })).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Modal footer honesty (P0).
+//
+// The footer's red primary read "Guardar cambios" but its handler was
+// `onToggleEditModal` — identical to the "Cancelar" button beside it. It saved
+// nothing. Everything in the modal already persists per action, and the
+// identity fields have their own save button, so the footer must not promise
+// a save it never performs.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — edit modal footer does not fake a save", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT], niveles: [] });
+    mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
+    mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
+    mockCrearMembresia.mockReset();
+    mockActualizarPersona.mockReset();
+  });
+
+  it("offers no 'Guardar cambios' button, because nothing in the footer saves", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).queryByRole("button", { name: /guardar cambios/i })).not.toBeInTheDocument();
+    // The paired "Cancelar" is gone too — with no save to cancel, offering
+    // "Cancelar" implies discardable changes that were already persisted.
+    expect(within(dialog).queryByRole("button", { name: /^cancelar$/i })).not.toBeInTheDocument();
+  });
+
+  it("closes the modal from a single secondary 'Cerrar' action in the footer", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    // Exactly one control is named plain "Cerrar" — the footer's secondary.
+    // The header's icon-only dismiss is "Cerrar ventana" so the two are
+    // distinguishable in a screen reader's controls list.
+    const footerClose = within(dialog).getByRole("button", { name: "Cerrar" });
+    expect(footerClose).toHaveClass("btn-secondary");
+
+    fireEvent.click(footerClose);
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("tells the user in the header that every change is already saved", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByText(/los cambios se guardan al instante/i)).toBeInTheDocument();
+  });
+
+  it("names the identity save button after the two fields it actually saves", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    // "Guardar datos" was ambiguous next to roles/estado/membresía controls
+    // that save themselves; this button only PATCHes nombres/apellidos/teléfono.
+    expect(
+      within(dialog).getByRole("button", { name: "Guardar nombre, apellido y teléfono" }),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Guardar datos" })).not.toBeInTheDocument();
+  });
+
+  it("reloads the member list after creating a membership instead of asking the user to reload", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([
+      { id: 5, categoria: "Mensual", precio: 25, modalidad: "mensual" },
+    ]);
+    mockCrearMembresia.mockResolvedValue({ id: 77 });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
+    const combobox = await within(dialog).findByRole("combobox");
+    fireEvent.change(combobox, { target: { value: "5" } });
+
+    const callsBefore = mockFetchMembers.mock.calls.length;
+    const form = combobox.parentElement as HTMLElement;
+    fireEvent.click(within(form).getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => expect(mockCrearMembresia).toHaveBeenCalled());
+    // The list refreshes itself — the row shows the new membership without a
+    // manual page reload.
+    await waitFor(() =>
+      expect(mockFetchMembers.mock.calls.length).toBeGreaterThan(callsBefore),
+    );
+    expect(screen.queryByText(/recarga para verla/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the edit dialog open while the post-creation refresh is in flight", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([
+      { id: 5, categoria: "Mensual", precio: 25, modalidad: "mensual" },
+    ]);
+    mockCrearMembresia.mockResolvedValue({ id: 77 });
+
+    // Hold the refresh open so the in-flight window is observable. The bug was
+    // that the refresh flipped the page-level `loading` flag, which gates the
+    // whole account list — unmounting the dialog the admin was working in and
+    // discarding every unsaved field in it.
+    let releaseRefresh: (() => void) | undefined;
+    const refreshed = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
+    const combobox = await within(dialog).findByRole("combobox");
+    fireEvent.change(combobox, { target: { value: "5" } });
+
+    mockFetchMembers.mockImplementationOnce(async () => {
+      await refreshed;
+      return { accounts: [ACCOUNT], niveles: [] };
+    });
+
+    const form = combobox.parentElement as HTMLElement;
+    fireEvent.click(within(form).getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => expect(mockCrearMembresia).toHaveBeenCalled());
+
+    // Mid-refresh: the dialog is still mounted and still holds its own state.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    releaseRefresh?.();
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Role-gated fetch (P2).
+//
+// `loadMembers` ran from a bare mount effect, so a non-admin (e.g. a student
+// landing on /members) fired GET /api/members and logged a 403 before
+// ProtectedRoute's redirect effect ran. ProtectedRoute is mocked to a
+// pass-through here so the fetch gate is what is under test, not the guard.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — defers /api/members until the role resolves", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT], niveles: [] });
+    mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
+  });
+
+  it("does not request members while the session is still hydrating", async () => {
+    mockUseAuth.mockReturnValue(hydratingAuth());
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => expect(mockFetchMembers).not.toHaveBeenCalled());
+  });
+
+  it("does not request members for a resolved non-admin role", async () => {
+    mockUseAuth.mockReturnValue(resolvedAuth("student"));
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => expect(mockFetchMembers).not.toHaveBeenCalled());
+  });
+
+  it("requests members once the admin role has resolved", async () => {
+    mockUseAuth.mockReturnValue(resolvedAuth("admin"));
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => expect(mockFetchMembers).toHaveBeenCalled());
+    expect(await screen.findByText("María González")).toBeInTheDocument();
   });
 });

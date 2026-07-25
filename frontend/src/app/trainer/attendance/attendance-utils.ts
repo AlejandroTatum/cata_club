@@ -10,17 +10,34 @@
  */
 
 import type { EstadoAsistencia, UserRole } from "@/types/domain";
-import type { AlumnoHorario } from "@/services/api";
+import type { AlumnoHorario, AttendanceStudentMark } from "@/services/api";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Frontend-only sentinel for "the trainer has not decided yet".
+ *
+ * The backend contract (`AttendanceStudentMark.estado`) only accepts the four
+ * real `EstadoAsistencia` values, so this value is NEVER submitted: the wizard
+ * blocks the advance/confirm buttons while any student still carries it, and
+ * `toAttendanceMarks` strips it as a second line of defense.
+ *
+ * It exists because defaulting the roster to "absent" is indistinguishable
+ * from a trainer deliberately marking everyone absent — which let a whole
+ * session be filed as a no-show by tapping straight through the wizard.
+ */
+export const UNMARKED = "unmarked";
+
+/** Attendance value a roster row can hold inside the wizard, before submission. */
+export type WizardAttendance = EstadoAsistencia | typeof UNMARKED;
+
 export interface SessionStudent {
   id: string;
   name: string;
-  attendance: EstadoAsistencia;
+  attendance: WizardAttendance;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,12 +87,49 @@ export function nextAttendanceState(
 
 /**
  * Count how many students have a given attendance state.
+ *
+ * `UNMARKED` students match none of the four real states, so they are never
+ * silently folded into the "absent" tally.
  */
 export function countByState(
   students: SessionStudent[],
   state: EstadoAsistencia,
 ): number {
   return students.filter((s) => s.attendance === state).length;
+}
+
+/**
+ * Count how many students the trainer has not decided on yet.
+ *
+ * Callers must pass the FULL roster, not the current page — the wizard
+ * paginates at 10 while the roster can be far larger, and an off-page
+ * unmarked student is precisely the one that used to be submitted as absent
+ * without ever being seen.
+ */
+export function countUnmarked(students: SessionStudent[]): number {
+  return students.filter((s) => s.attendance === UNMARKED).length;
+}
+
+/**
+ * Bulk action for the common case (near-full attendance): promote every
+ * still-unmarked student to "present", leaving explicit marks untouched.
+ * Returns a new array — never mutates the input.
+ */
+export function markUnmarkedAsPresent(students: SessionStudent[]): SessionStudent[] {
+  return students.map((s) =>
+    s.attendance === UNMARKED ? { ...s, attendance: "present" as EstadoAsistencia } : s,
+  );
+}
+
+/**
+ * Project the roster onto the backend payload shape, dropping any student
+ * still on the `UNMARKED` sentinel (the backend only accepts the four real
+ * `EstadoAsistencia` values and would reject the batch otherwise).
+ */
+export function toAttendanceMarks(students: SessionStudent[]): AttendanceStudentMark[] {
+  return students
+    .filter((s): s is SessionStudent & { attendance: EstadoAsistencia } => s.attendance !== UNMARKED)
+    .map((s) => ({ personaId: Number(s.id), estado: s.attendance }));
 }
 
 /**
@@ -93,8 +147,9 @@ export function buildAttendanceSummary(students: SessionStudent[]): string {
 
 /**
  * Build the roster to mark attendance for from a Horario's assigned alumnos
- * (`GET /groups/horarios/:id/alumnos`), defaulting every student to "absent"
- * — the trainer marks who was actually present from there.
+ * (`GET /groups/horarios/:id/alumnos`), defaulting every student to the
+ * `UNMARKED` sentinel — the trainer must make an explicit decision for each
+ * one before the wizard lets the session be submitted.
  *
  * `existingRecords` is optional — pass today's `AttendanceRecord[]` for this
  * same horario (see `fetchAttendanceRecords`) to pre-select each student's
@@ -112,7 +167,7 @@ export function buildRosterFromAlumnoHorarios(
   return items.map((item) => ({
     id: String(item.personaId),
     name: item.personaNombreCompleto,
-    attendance: estadoByPersonaId.get(item.personaId) ?? ("absent" as EstadoAsistencia),
+    attendance: estadoByPersonaId.get(item.personaId) ?? (UNMARKED as WizardAttendance),
   }));
 }
 

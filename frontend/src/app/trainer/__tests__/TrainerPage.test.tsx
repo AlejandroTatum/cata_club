@@ -176,3 +176,35 @@ describe("TrainerPage — Historial de Asistencias (integrado)", () => {
     expect(await screen.findByText("Alumno 1")).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// WCAG AA contrast (P1). The quick-action cards painted their title and
+// subtitle in the raw brand pink (`text-cata-fuchsia`, and `/60` for the
+// subtitle) on a `bg-cata-fuchsia/10` tint — 3.4:1 and 2.2:1 respectively,
+// both below AA's 4.5:1 for normal text. They now use the `fuchsia-ink`
+// token; the numeric proof lives in src/lib/__tests__/color-contrast.test.ts.
+// ---------------------------------------------------------------------------
+
+describe("TrainerPage — quick-action card contrast", () => {
+  beforeEach(() => {
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+  });
+
+  it.each([
+    ["Registrar Asistencia", "Sesiones de hoy en unos pasos"],
+    ["Gestionar Nivel", "Asignar nivel a estudiantes"],
+  ])("uses the AA-passing ink token for the '%s' card title and subtitle", (title, subtitle) => {
+    render(<TrainerPage />);
+
+    const titleEl = screen.getByText(title);
+    expect(titleEl).toHaveClass("text-cata-fuchsia-ink");
+    expect(titleEl).not.toHaveClass("text-cata-fuchsia");
+
+    // The subtitle was `text-cata-fuchsia/60`; 60% alpha of the brand pink is
+    // 2.15:1 on the card tint. 90% of the ink token clears AA.
+    const subtitleEl = screen.getByText(subtitle);
+    expect(subtitleEl).toHaveClass("text-cata-fuchsia-ink/90");
+    expect(subtitleEl).not.toHaveClass("text-cata-fuchsia/60");
+  });
+});

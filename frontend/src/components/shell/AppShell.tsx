@@ -41,6 +41,36 @@ export interface AppShellProps {
 
 const SIDEBAR_COLLAPSED_KEY = "cata_sidebar_collapsed";
 
+/** Tailwind's `lg` breakpoint — where the sidebar stops being a mobile drawer. */
+const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
+
+/**
+ * Track whether the viewport is at/above `lg`.
+ *
+ * Needed because the same `<aside>` is a dismissible drawer below `lg` and a
+ * permanently visible rail at/above it (`lg:sticky lg:translate-x-0`) — while
+ * `sidebarOpen` stays false in both cases. Hiding the drawer purely on
+ * `!sidebarOpen` would therefore remove the desktop navigation from the tab
+ * order entirely.
+ *
+ * Defaults to `true` (desktop) so a missing/late `matchMedia` can never hide
+ * a sidebar the user can see; the effect corrects it on mobile immediately.
+ */
+function useIsDesktopViewport(): boolean {
+  const [isDesktop, setIsDesktop] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const sync = (): void => setIsDesktop(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  return isDesktop;
+}
+
 // `localStorage` can be unavailable (SSR, private browsing, some test
 // environments without a full jsdom storage polyfill) — guard both reads and
 // writes so the collapse preference degrades to "not persisted" instead of
@@ -74,6 +104,7 @@ export default function AppShell({
   const { session, logout } = useAuth();
   const { notificaciones, loadError, markRead } = useNotificaciones(!!session);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isDesktopViewport = useIsDesktopViewport();
   // Desktop-only collapse state, independent from the mobile drawer
   // (`sidebarOpen` above). Initialized from localStorage so the preference
   // survives navigation/reload; scoped entirely via `lg:` classes so it has
@@ -175,13 +206,31 @@ export default function AppShell({
     }
   }
 
+  // Only the mobile drawer is ever hidden — at `lg` the aside is on screen
+  // regardless of `sidebarOpen`.
+  const drawerHidden = !isDesktopViewport && !sidebarOpen;
+
   return (
     <div className="app-shell flex min-h-screen bg-cata-bg">
-      {/* Sidebar */}
+      {/*
+       * Sidebar. When closed on a mobile viewport it is hidden outright, not
+       * merely translated offscreen: a `-translate-x-full` drawer keeps every
+       * descendant focusable, so Tab used to walk keyboard users into 11
+       * controls sitting at x=-256 with no visible focus ring.
+       *
+       * React 18.3 (see package.json) has no `inert` prop, so this uses the
+       * `aria-hidden` + `visibility: hidden` fallback — `visibility: hidden`
+       * is what removes the subtree from the tab order, `aria-hidden` removes
+       * it from the accessibility tree. `visibility` is transitioned together
+       * with `transform` so the closing slide-out still renders.
+       */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-cata-black text-white transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        aria-hidden={drawerHidden || undefined}
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-cata-black text-white transition-[transform,visibility] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           collapsed ? "lg:w-[76px]" : ""
-        } ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        } ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} ${
+          drawerHidden ? "invisible" : ""
+        }`}
       >
         <div className="flex items-center gap-3 border-b border-white/10 px-5 py-5">
           <Link href="/" className="flex min-w-0 flex-1 items-center gap-3">

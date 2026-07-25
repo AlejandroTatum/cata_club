@@ -284,8 +284,10 @@ export default function PaymentsPage(): React.ReactElement {
         {/* Main content: split layout */}
         {!selectedRequest ? (
           <>
-            {/* Filters */}
-            <div className="mb-6 flex items-center gap-2">
+            {/* Filters — must wrap: the heading plus four chips are wider
+                than a 390px viewport, and `flex` alone (nowrap) pushed the
+                whole page into horizontal scroll. */}
+            <div className="mb-6 flex flex-wrap items-center gap-2">
               <Filter size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
               <h2 className="text-lg font-bold text-cata-text mr-2">Filtrar por Estado</h2>
               {filters.map((f) => (

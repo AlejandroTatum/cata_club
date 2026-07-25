@@ -14,6 +14,13 @@ const config: Config = {
           "yellow-soft": "#FFEF9E",
           amber: "#F4B41A",
           fuchsia: "#E5397D",
+          // Text-weight companion to `fuchsia`. The brand pink is a 3.4:1
+          // foreground on the `fuchsia/10` card tint it sits on, so it fails
+          // WCAG AA (1.4.3) as body text — but it is a correct, passing choice
+          // on the near-black header (`hover:text-cata-fuchsia` in Header.tsx),
+          // so the shared token must NOT be darkened. Use this one whenever
+          // fuchsia is the color of TEXT on a light surface.
+          "fuchsia-ink": "#A81257",
           black: "#111111",
           navy: "#0F0F1A",
           "navy-light": "#2A2A3E",

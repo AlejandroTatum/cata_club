@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import PaymentsPage from "@/app/payments/page";
 import type { PaymentValidationRequest } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
@@ -183,5 +183,35 @@ describe("PaymentsPage — unrelated happy path", () => {
     await renderAndSelectPending();
 
     expect(screen.queryByRole("button", { name: /ayuda sobre/i })).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mobile horizontal overflow (P1).
+//
+// At a 390px viewport /payments measured scrollWidth 450 > innerWidth 390.
+// The culprit was this status-filter row: `flex items-center gap-2` computes
+// to `flex-wrap: nowrap`, so the heading plus four chips (430px of content)
+// refused to wrap inside a 335px container and pushed the page sideways. The
+// results table is NOT the cause — it already lives in an `overflow-x`
+// scroll container of its own.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — status filter row fits a 390px viewport", () => {
+  beforeEach(() => {
+    mockFetchPaymentValidations.mockReset().mockResolvedValue([PENDING_REQUEST]);
+    mockUpdatePaymentValidation.mockReset();
+  });
+
+  it("lets the status filter chips wrap instead of forcing the page to scroll sideways", async () => {
+    render(<ToastProvider><PaymentsPage /></ToastProvider>);
+
+    const heading = await screen.findByRole("heading", { name: "Filtrar por Estado" });
+    const filterRow = heading.parentElement as HTMLElement;
+
+    expect(filterRow).toHaveClass("flex", "flex-wrap");
+    // Every chip really is inside this row — otherwise wrapping the row would
+    // not be what keeps the page within the viewport.
+    expect(within(filterRow).getAllByRole("button").length).toBeGreaterThanOrEqual(4);
   });
 });
