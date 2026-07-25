@@ -15,6 +15,7 @@ export interface DashboardStats {
   activeMemberships: number;
   pendingPayments: number;
   todaySchedules: number;
+  personasSinMembresia: number;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {

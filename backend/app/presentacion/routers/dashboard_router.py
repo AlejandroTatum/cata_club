@@ -2,7 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
@@ -56,9 +56,17 @@ async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardSta
         or 0
     )
 
+    personas_sin_membresia = (
+        db.query(func.count(Persona.id))
+        .filter(~select(Membresia.id).where(Membresia.persona_id == Persona.id).correlate(Persona).exists())
+        .scalar()
+        or 0
+    )
+
     return DashboardStatsDTO(
         total_personas=total_personas,
         active_memberships=active_memberships,
         pending_payments=pending_payments,
         today_schedules=today_schedules,
+        personas_sin_membresia=personas_sin_membresia,
     )

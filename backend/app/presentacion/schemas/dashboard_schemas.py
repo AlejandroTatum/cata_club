@@ -8,3 +8,4 @@ class DashboardStatsDTO(ResponseBase, BaseModel):
     active_memberships: int = Field(..., examples=[30])
     pending_payments: int = Field(..., examples=[5])
     today_schedules: int = Field(..., examples=[8])
+    personas_sin_membresia: int = Field(..., examples=[12])
