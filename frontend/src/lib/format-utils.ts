@@ -1,5 +1,16 @@
 /**
- * Shared formatting utilities.
+ * Shared formatting utilities — the single source of truth for how a date
+ * and how an amount are rendered anywhere in the product.
+ *
+ * The UX audit (25 jul) scored Consistency 1/4 and named format multiplicity
+ * as the central finding: three date formats and two currency formats meant an
+ * admin cross-checking `/payments` against `/reports` was normalising values by
+ * hand. On an Operate surface format IS meaning, so there is exactly one date
+ * grammar (`dd/mm/yyyy`, per `docs/ux/plan-implementacion-rediseno.md:24`) and
+ * exactly one currency grammar (`$24,00`, es-EC).
+ *
+ * Do not hand-roll `toLocaleDateString`, `.toFixed(2)` or a `$${amount}`
+ * template at a call site. Import from here — that is the whole point.
  */
 
 /**
@@ -10,6 +21,9 @@
  * are interpreted as UTC midnight, which becomes the previous day at
  * 19:00 in America/Guayaquil (UTC-5). Anchoring at noon UTC preserves the
  * intended calendar date across local machines and CI runners.
+ *
+ * This behaviour is load-bearing: without it a payment dated today displays
+ * as yesterday for every user in Ecuador. Do not "simplify" it away.
  *
  * Returns `null` for invalid or empty inputs.
  */
@@ -29,63 +43,102 @@ function parseDateStringLocal(dateStr: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+/** Zero-pad to two digits. */
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
 /**
- * Format a numeric amount as USD currency per Ecuadorian locale.
+ * Abbreviated Spanish month names, lowercase and unaccented.
+ *
+ * The one place this vocabulary is declared. Two screens humanise dates in
+ * their own way — attendance renders "Hoy, 23 jul", payments renders
+ * "1 jul → 12 ago" — but they must not each carry their own month table, which
+ * is how a fourth date grammar gets introduced by a typo. The humanising
+ * functions stay where they are; the vocabulary lives here.
+ *
+ * Indexed 0-11 to match `Date.prototype.getMonth()`.
+ */
+export const MONTH_ABBR = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+] as const;
+
+/**
+ * Format a numeric amount as USD currency per Ecuadorian locale (`$24,00`).
  *
  * Normalizes ICU-version-dependent whitespace/literal parts by assembling
- * via `formatToParts`. Returns `"$0,00"` for non-finite or NaN inputs.
+ * via `formatToParts`. Returns `"$0,00"` for non-finite, NaN or absent inputs.
+ *
+ * Accepts a numeric string as well as a number: several API payloads deliver
+ * `monto` as a string, and the call sites that used to interpolate those
+ * directly are exactly where the second `$24.00` format came from.
  */
-export function formatCurrency(amount: number): string {
-  if (!Number.isFinite(amount)) return "$0,00";
+export function formatCurrency(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === "") return "$0,00";
+  const value = typeof amount === "number" ? amount : Number(amount);
+  if (!Number.isFinite(value)) return "$0,00";
 
   return new Intl.NumberFormat("es-EC", {
     style: "currency",
     currency: "USD",
   })
-    .formatToParts(amount)
+    .formatToParts(value)
     .filter((p) => p.type !== "literal")
     .map((p) => p.value)
     .join("");
 }
 
 /**
- * Format an ISO date string to a display date.
+ * Format a date string as `dd/mm/yyyy` — the canonical product date format.
  *
- * Returns an empty string for invalid or empty date inputs.
+ * Components are read in local time and padded by hand rather than delegated
+ * to `toLocaleDateString`, so the output is byte-identical across ICU versions
+ * and CI runners. Returns an empty string for invalid or empty input.
  */
 export function formatDate(dateStr: string): string {
-  if (!dateStr) return "";
   const date = parseDateStringLocal(dateStr);
   if (!date) return "";
-
-  return date.toLocaleDateString("es-EC", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}`;
 }
 
 /**
- * Format an ISO date string to a display date with time.
+ * Format a date string as `dd/mm/yy` — the dense-table-cell variant.
+ *
+ * Deliberately the SAME grammar as `formatDate`, only shorter: a table that
+ * switched to "24 jul" or "viernes, 24 jul" would reintroduce the second date
+ * vocabulary this module exists to remove. Use it only where the column is
+ * genuinely tight; prefer `formatDate` everywhere else.
+ */
+export function formatDateShort(dateStr: string): string {
+  const date = parseDateStringLocal(dateStr);
+  if (!date) return "";
+  const yy = pad2(date.getFullYear() % 100);
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${yy}`;
+}
+
+/**
+ * Format a date string as `dd/mm/yyyy · HH:mm` (24-hour).
  *
  * Returns an empty string for invalid or empty date inputs.
  */
 export function formatDateTime(dateStr: string): string {
-  if (!dateStr) return "";
   const date = parseDateStringLocal(dateStr);
   if (!date) return "";
+  const time = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  return `${formatDate(dateStr)} · ${time}`;
+}
 
-  const datePart = date.toLocaleDateString("es-EC", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
-  const timePart = date.toLocaleTimeString("es-EC", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-
-  return `${datePart} · ${timePart}`;
+/**
+ * Format a start/end pair as `dd/mm/yyyy – dd/mm/yyyy` (en dash, U+2013).
+ *
+ * Degrades to whichever side parses when the other is missing, and to an
+ * empty string when neither does — a half-rendered range is still readable,
+ * a stray dash is not.
+ */
+export function formatDateRange(startStr: string, endStr: string): string {
+  const start = formatDate(startStr);
+  const end = formatDate(endStr);
+  if (start && end) return `${start} – ${end}`;
+  return start || end;
 }

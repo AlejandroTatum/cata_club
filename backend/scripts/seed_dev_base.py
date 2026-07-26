@@ -10,8 +10,10 @@ Creates:
   - 26 weekly schedules     (5 categories; Competitivo also runs Saturday)
   - 11 ranking levels       (1A .. 10)
   - 2 membership types      (Mensual Infantil, Mensual Adultos)
-  - 2 representantes (padres/tutores) con 1 hijo cada uno
-  - 3 self-managed students (Ana, Luis, Maria — sin representante)
+  - 2 representantes (padres/tutores): Laura con 2 hijos, Carlos con 1
+  - 4 self-managed students (sin representante): Ana, Luis y Maria menores
+    de edad (caso "el portal bloquea el pago"), Pedro mayor de edad (caso
+    "el alumno paga por si mismo")
 
 Login credentials:
   Admin:      admin@cataclub.com       / admin12345
@@ -118,6 +120,14 @@ MEMBRESIAS_TIPO = [
 
 # ---------------------------------------------------------------------------
 # Self-managed students (no representante)
+#
+# `edad_anios` es explícito y por alumno (antes todos compartían un
+# `date(2010, 3, 10)` hardcodeado): la mayoría de edad decide a qué pantalla
+# llega el portal del alumno, así que la diferencia entre menor y adulto
+# tiene que verse en los datos y no quedar implícita en una constante.
+#   - Menores (< 18): el portal los manda al muro "avisa a tu representante"
+#     y nunca pueden registrar un pago.
+#   - Adultos (>= 18) sin representante: llegan al formulario de pago real.
 # ---------------------------------------------------------------------------
 ALUMNOS = [
     {
@@ -127,6 +137,7 @@ ALUMNOS = [
         "correo": "ana@cataclub.com",
         "contrasenia": "alumno123",
         "telefono": "0971111111",
+        "edad_anios": 16,
         "nivel_ranking_id": 2,
         "membresia_categoria": "Mensual Infantil",
     },
@@ -137,6 +148,7 @@ ALUMNOS = [
         "correo": "luis@cataclub.com",
         "contrasenia": "alumno123",
         "telefono": "0972222222",
+        "edad_anios": 16,
         "nivel_ranking_id": 1,
         "membresia_categoria": "Mensual Infantil",
     },
@@ -147,13 +159,36 @@ ALUMNOS = [
         "correo": "maria@cataclub.com",
         "contrasenia": "alumno123",
         "telefono": "0973333333",
+        "edad_anios": 16,
         "nivel_ranking_id": 6,
+        "membresia_categoria": "Mensual Adultos",
+    },
+    {
+        # Único alumno mayor de edad y auto-gestionado: es su propio
+        # responsable de pago, así que el portal le muestra el formulario de
+        # pago de verdad en vez del bloqueo por minoría de edad.
+        "nombres": "Pedro",
+        "apellidos": "Salgado",
+        "cedula": "0000000006",
+        "correo": "pedro@cataclub.com",
+        "contrasenia": "alumno123",
+        "telefono": "0974444444",
+        "edad_anios": 27,
+        "nivel_ranking_id": 5,
         "membresia_categoria": "Mensual Adultos",
     },
 ]
 
 # ---------------------------------------------------------------------------
-# Representantes (padres/tutores) with 1 child each
+# Representantes (padres/tutores) con una LISTA de hijos.
+#
+# Antes cada representante declaraba un único `"hijo"`, así que la familia
+# con varios dependientes no existía en ningún lado y el selector de perfil
+# del portal del representante — que solo aparece a partir de 2 perfiles —
+# no se podía probar. Laura tiene 2 hijos con edad, nivel y categoría de
+# membresía distintos (para que el selector muestre datos realmente
+# diferentes) y Carlos se queda con 1 para no perder el caso de un único
+# representado.
 # ---------------------------------------------------------------------------
 REPRESENTANTES = [
     {
@@ -164,16 +199,28 @@ REPRESENTANTES = [
             "correo": "laura@cataclub.com",
             "telefono": "0981000010",
         },
-        "hijo": {
-            "nombres": "Sofia",
-            "apellidos": "Vera",
-            "cedula": "0000000011",
-            "correo": "sofia@cataclub.com",
-            "telefono": "0981000011",
-            "edad_anios": 10,
-            "nivel_ranking_id": 4,
-            "membresia_categoria": "Mensual Infantil",
-        },
+        "hijos": [
+            {
+                "nombres": "Sofia",
+                "apellidos": "Vera",
+                "cedula": "0000000011",
+                "correo": "sofia@cataclub.com",
+                "telefono": "0981000011",
+                "edad_anios": 10,
+                "nivel_ranking_id": 4,
+                "membresia_categoria": "Mensual Infantil",
+            },
+            {
+                "nombres": "Martin",
+                "apellidos": "Vera",
+                "cedula": "0000000014",
+                "correo": "martin@cataclub.com",
+                "telefono": "0981000014",
+                "edad_anios": 16,
+                "nivel_ranking_id": 7,
+                "membresia_categoria": "Mensual Adultos",
+            },
+        ],
     },
     {
         "representante": {
@@ -183,16 +230,18 @@ REPRESENTANTES = [
             "correo": "carlos@cataclub.com",
             "telefono": "0981000012",
         },
-        "hijo": {
-            "nombres": "Diego",
-            "apellidos": "Mendoza",
-            "cedula": "0000000013",
-            "correo": "diego@cataclub.com",
-            "telefono": "0981000013",
-            "edad_anios": 12,
-            "nivel_ranking_id": 3,
-            "membresia_categoria": "Mensual Infantil",
-        },
+        "hijos": [
+            {
+                "nombres": "Diego",
+                "apellidos": "Mendoza",
+                "cedula": "0000000013",
+                "correo": "diego@cataclub.com",
+                "telefono": "0981000013",
+                "edad_anios": 12,
+                "nivel_ranking_id": 3,
+                "membresia_categoria": "Mensual Infantil",
+            },
+        ],
     },
 ]
 
@@ -367,7 +416,27 @@ def main() -> None:
             # al loguearse).
             existing_rep_user = db.query(Usuario).filter(Usuario.correo == rep["correo"]).first()
             if existing_rep_user:
-                print(f"[seed] Representante {rep['correo']} ya existe — saltando.")
+                # No basta con saltar: la asignación de roles se añadió al seed
+                # DESPUÉS de que las BD de desarrollo ya estuvieran sembradas,
+                # así que las cuentas creadas antes quedaron con `roles = []`
+                # de forma permanente (`/auth/me` devuelve una lista vacía, el
+                # frontend la mapea a "unsupported" y el login aterriza en
+                # /unauthorized). Rellenar los roles que falten hace que
+                # reejecutar el seed repare esas cuentas, sin duplicar los que
+                # ya estén.
+                faltantes = [
+                    rol for rol in (rol_representante, rol_alumno)
+                    if rol.tipo_rol not in {r.tipo_rol for r in existing_rep_user.roles}
+                ]
+                if faltantes:
+                    existing_rep_user.roles.extend(faltantes)
+                    nombres_faltantes = ", ".join(rol.tipo_rol.value for rol in faltantes)
+                    print(
+                        f"[seed] Representante {rep['correo']} ya existe — "
+                        f"roles faltantes asignados: {nombres_faltantes}."
+                    )
+                else:
+                    print(f"[seed] Representante {rep['correo']} ya existe — saltando.")
                 rep_persona = existing_rep_user.persona
             else:
                 rep_persona, _ = _obtener_o_crear(
@@ -389,12 +458,16 @@ def main() -> None:
                 db.add(rep_usuario)
                 representantes_creados += 1
 
-            # Hijo (ALUMNO role, linked to representante)
-            hijo = rep_data["hijo"]
-            existing_hijo_user = db.query(Usuario).filter(Usuario.correo == hijo["correo"]).first()
-            if existing_hijo_user:
-                print(f"[seed] Hijo {hijo['correo']} ya existe — saltando.")
-            else:
+            # Hijos (rol ALUMNO, enlazados al representante). Un representante
+            # puede tener varios: cada uno se comprueba por separado, así que
+            # añadir un hermano nuevo a la lista lo crea también en las BD que
+            # ya tenían sembrados a los demás.
+            for hijo in rep_data["hijos"]:
+                existing_hijo_user = db.query(Usuario).filter(Usuario.correo == hijo["correo"]).first()
+                if existing_hijo_user:
+                    print(f"[seed] Hijo {hijo['correo']} ya existe — saltando.")
+                    continue
+
                 hijo_persona, _ = _obtener_o_crear(
                     db, Persona, Persona.cedula == hijo["cedula"],
                     {
@@ -450,7 +523,7 @@ def main() -> None:
         print(f"[seed] Representantes creados: {representantes_creados}, Hijos creados: {hijos_creados}")
 
         # ==================================================================
-        # 7. Self-managed students (Ana, Luis, Maria)
+        # 7. Self-managed students (Ana, Luis, Maria menores; Pedro adulto)
         # ==================================================================
         for alu in ALUMNOS:
             existing_user = db.query(Usuario).filter(Usuario.correo == alu["correo"]).first()
@@ -464,7 +537,7 @@ def main() -> None:
                     "nombres": alu["nombres"],
                     "apellidos": alu["apellidos"],
                     "cedula": alu["cedula"],
-                    "fecha_nacimiento": date(2010, 3, 10),
+                    "fecha_nacimiento": _fecha_nacimiento_hace(alu["edad_anios"]),
                     "telefono": alu["telefono"],
                 },
             )
@@ -487,6 +560,14 @@ def main() -> None:
                     tipo_membresia_id=tm.id,
                 )
                 db.add(membresia)
+                # `flush()` obligatorio: el bloque 8 arma `alumno_horario` a
+                # partir de una CONSULTA de membresías. Sin volcarla, la
+                # sesión (autoflush desactivado) todavía no la ve y el alumno
+                # recién creado se queda sin horarios hasta la corrida
+                # SIGUIENTE del seed — el entrenador ve "este horario no
+                # tiene alumnos asignados" en la primera. El bloque de hijos
+                # ya hacía este flush; este no.
+                db.flush()
 
             ranking = Ranking(
                 persona_id=alu_persona.id,

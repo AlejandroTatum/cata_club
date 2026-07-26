@@ -4,9 +4,15 @@
   --landing-brand-red-strong: #a11d22;
   --landing-brand-yellow: #ffd600;
   --landing-brand-yellow-soft: #ffef9e;
+  /* Pale yellow reserved for SMALL text on the brand red: 4.55:1 vs #d92128,
+     where --landing-brand-yellow only reaches 3.54:1 (WCAG 1.4.3 AA). */
+  --landing-brand-yellow-pale: #fff5c2;
   --landing-brand-amber: #f4b41a;
   --landing-brand-black: #111111;
   --landing-brand-fuchsia: #e5397d;
+  /* Darker fuchsia for fuchsia-as-TEXT on white: 5.87:1, where
+     --landing-brand-fuchsia only reaches 4.03:1. */
+  --landing-brand-fuchsia-strong: #c2185b;
   --landing-bg-base: #f9fafb;
   --landing-surface-base: #ffffff;
   --landing-text-base: #1f2937;
@@ -26,12 +32,16 @@
   --landing-action-hover: var(--landing-brand-red-strong);
   --landing-highlight: var(--landing-brand-yellow);
   --landing-highlight-soft: var(--landing-brand-yellow-soft);
+  --landing-highlight-on-action: var(--landing-brand-yellow-pale);
+  --landing-link-hover: var(--landing-brand-fuchsia-strong);
   --landing-on-action: var(--landing-surface-base);
   --landing-on-highlight: var(--landing-brand-black);
   --landing-focus: var(--landing-brand-black);
   --landing-footer: var(--landing-brand-black);
   color: var(--landing-text);
-  overflow: hidden;
+  /* `clip` (not `hidden`) so the page never becomes a scroll container —
+     `overflow: hidden` here silently disabled `position: sticky` on the navbar. */
+  overflow-x: clip;
   background: var(--landing-background);
   font-family: var(--font-landing-barlow), system-ui, sans-serif;
 }
@@ -44,28 +54,36 @@
 .landing-button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 10px; border-radius: 10px; padding: 14px 28px; background: var(--landing-action); color: var(--landing-on-action); font-size: 14px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; box-shadow: 0 6px 16px color-mix(in srgb, var(--landing-brand-black) 24%, transparent); transition: transform 160ms ease, background-color 160ms ease, color 160ms ease; }
 .landing-button:hover { background: var(--landing-action-hover); transform: translateY(-2px); }
 .landing-button svg { width: 17px; height: 17px; }
+.landing-button-block { width: 100%; }
+/* Quiet, low-chroma treatment for secondary navigation actions so they never
+   compete with the page's primary conversion CTA. */
+.landing-button-quiet { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--landing-border); border-radius: 10px; padding: 14px 28px; background: transparent; color: var(--landing-text); font-size: 14px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; transition: border-color 160ms ease, color 160ms ease; }
+.landing-button-quiet:hover { border-color: var(--landing-action); color: var(--landing-action); }
+.landing-button-quiet svg { width: 17px; height: 17px; }
+.landing-skip-link { position: fixed; left: 16px; top: -100px; z-index: 100; display: inline-flex; min-height: 48px; align-items: center; border-radius: 10px; padding: 12px 20px; background: var(--landing-action); color: var(--landing-on-action); font-size: 14px; font-weight: 700; transition: top 160ms ease; }
+.landing-skip-link:focus-visible { top: 16px; }
 .landing-eyebrow { color: var(--landing-action); font-size: 14px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase; }
 .landing-halftone { position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(circle, color-mix(in srgb, var(--landing-surface) 14%, transparent) 1.6px, transparent 1.6px); background-size: 15px 15px; mask-image: radial-gradient(circle at 90% 5%, var(--landing-brand-black), transparent 43%); }
 .landing-stars { display: flex; gap: 10px; color: var(--landing-highlight); }
 .landing-stars svg { width: 17px; height: 17px; }
 
-.landing-navbar { height: 86px; display: flex; align-items: center; justify-content: space-between; padding: 0 5.55vw; border-bottom: 1px solid var(--landing-border); background: var(--landing-surface); }
+.landing-navbar { position: sticky; top: 0; z-index: 50; height: 86px; display: flex; align-items: center; justify-content: space-between; padding: 0 5.55vw; border-bottom: 1px solid var(--landing-border); background: var(--landing-surface); }
 .landing-logo { display: flex; align-items: center; gap: 14px; color: var(--landing-text-strong); font-size: 17px; letter-spacing: 1px; }
 .landing-logo img { width: auto; height: 54px; }
 .landing-logo small, .landing-footer-brand small { display: block; color: var(--landing-action); font-family: var(--font-landing-barlow); font-size: 10px; font-weight: 700; letter-spacing: 3.5px; }
 .landing-nav-links { display: flex; gap: 8px; }
 .landing-nav-links a { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 999px; padding: 10px 18px; color: var(--landing-text); font-size: 15px; font-weight: 600; touch-action: manipulation; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
-.landing-nav-links a:hover { border-color: var(--landing-brand-fuchsia); color: var(--landing-brand-fuchsia); }
+.landing-nav-links a:hover { border-color: var(--landing-link-hover); color: var(--landing-link-hover); }
 .landing-nav-links a.active { border-color: var(--landing-action); background: var(--landing-action); color: var(--landing-on-action); font-weight: 700; }
 .landing-nav-links a.active:hover { border-color: var(--landing-action-hover); background: var(--landing-action-hover); color: var(--landing-on-action); }
-.landing-nav-cta { min-height: 44px; padding: 12px 26px; font-size: 13px; }
+.landing-nav-cta { min-height: 44px; padding: 12px 22px; font-size: 13px; }
 
 .landing-hero { position: relative; display: flex; justify-content: center; align-items: center; gap: 40px; min-height: 578px; padding: 84px 5.55vw; overflow: hidden; background: var(--landing-action); }
 .landing-ribbon { position: absolute; width: 440px; height: 190px; pointer-events: none; border-radius: 50%; border-bottom: 28px solid var(--landing-highlight); box-shadow: 0 14px 0 color-mix(in srgb, var(--landing-surface) 42%, transparent), 0 34px 0 var(--landing-brand-red-strong); }
 .landing-ribbon-top { top: -100px; right: -80px; transform: rotate(27deg); }
 .landing-hero-copy { position: relative; z-index: 1; display: flex; flex: 0 1 620px; max-width: 620px; flex-direction: column; gap: 24px; }
 .landing-hero-brand { display: block; color: var(--landing-on-action); font-family: var(--font-landing-barlow); font-size: 15px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; }
-.landing-hero-brand b { color: var(--landing-highlight); font-weight: 800; }
+.landing-hero-brand b { color: var(--landing-highlight-on-action); font-weight: 800; }
 .landing-hero .landing-eyebrow { color: var(--landing-on-action); }
 .landing-hero h1 { max-width: 610px; color: var(--landing-on-action); font-size: clamp(38px, 3.35vw, 48px); line-height: 1.15; }
 .landing-hero h1 span { color: var(--landing-highlight); }
@@ -115,19 +133,19 @@
 .landing-paddle { position: relative; width: 62px; height: 62px; border-radius: 50%; background: var(--landing-highlight); }
 .landing-paddle::after { content: ""; position: absolute; top: 6px; right: -3px; width: 13px; height: 13px; border-radius: 50%; background: var(--landing-surface); }
 .landing-paddle i { position: absolute; right: -10px; bottom: -7px; width: 31px; height: 11px; border-radius: 10px; background: var(--landing-highlight); transform: rotate(45deg); }
-.landing-motto blockquote { max-width: 1000px; color: var(--landing-on-action); font-family: var(--font-landing-playfair), Georgia, serif; font-size: 34px; font-weight: 600; line-height: 1.4; text-align: center; }
-.landing-motto blockquote span { color: var(--landing-highlight); }
-.landing-motto p { color: var(--landing-on-action); font-size: 16px; }
+.landing-motto .landing-motto-lead { max-width: 1000px; color: var(--landing-on-action); font-family: var(--font-landing-playfair), Georgia, serif; font-size: 34px; font-weight: 600; line-height: 1.4; text-align: center; }
+.landing-motto .landing-button { background: var(--landing-highlight); color: var(--landing-on-highlight); }
+.landing-motto .landing-button:hover { background: var(--landing-brand-fuchsia); color: var(--landing-on-highlight); }
 
 .landing-gallery-row figure { flex: 1; min-width: 0; text-align: center; }
 .landing-gallery img { width: 100%; height: auto; aspect-ratio: 10 / 7; border-radius: 14px; object-fit: cover; box-shadow: 0 4px 18px color-mix(in srgb, var(--landing-brand-black) 14%, transparent); }
 .landing-gallery figcaption { margin-top: 10px; color: var(--landing-text); font-size: 15px; }
 .landing-schedule { background: var(--landing-surface); }
-.landing-schedule-row { gap: 12px; }
+.landing-schedule-row { flex-wrap: wrap; gap: 12px; }
 .landing-schedule-card { flex: 1; display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 32px 24px; border: 1px solid var(--landing-border); border-top: 5px solid var(--landing-action); border-radius: 16px; background: var(--landing-surface); text-align: center; box-shadow: 0 2px 14px color-mix(in srgb, var(--landing-brand-black) 6%, transparent); }
 .landing-schedule-card h3 { color: var(--landing-action); font-family: var(--font-landing-graduate); font-size: 16px; letter-spacing: 1px; text-transform: uppercase; }
 .landing-schedule-card span { color: var(--landing-text); font-size: 15px; font-weight: 600; }
-.landing-schedule-card strong { font-size: 30px; }
+.landing-schedule-card strong { font-size: clamp(21px, 2.2vw, 30px); white-space: nowrap; }
 .landing-schedule-card b { padding: 5px 10px; border-radius: 999px; background: var(--landing-highlight); color: var(--landing-on-highlight); font-size: 16px; }
 
 .landing-location { background: var(--landing-background); }
@@ -145,7 +163,13 @@
 .landing-contact p strong { color: var(--landing-text-strong); }
 .landing-contact p a { color: var(--landing-text); text-decoration: none; }
 .landing-contact p a:hover { text-decoration: underline; }
+.landing-contact-numbers { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.landing-contact-numbers a { white-space: nowrap; }
 .landing-contact .landing-button { margin-top: 4px; }
+/* The contact card sits on a light surface, so the hero's white-on-red outline
+   variant is invisible here — restate it in brand red. */
+.landing-contact .landing-button-outline { border-color: var(--landing-action); color: var(--landing-action); }
+.landing-contact .landing-button-outline:hover { border-color: var(--landing-action-hover); background: var(--landing-action-hover); color: var(--landing-on-action); }
 
 .landing-footer { position: relative; display: flex; flex-direction: column; gap: 34px; padding: 60px 8.33vw 44px; overflow: hidden; background: var(--landing-footer); }
 .landing-footer .landing-halftone { mask-image: radial-gradient(circle at 96% 100%,var(--landing-brand-black),transparent 42%); }
@@ -171,13 +195,17 @@
   .landing-section, .landing-stats, .landing-footer { padding-inline: 48px; }
   .landing-value-row { flex-wrap: wrap; }
   .landing-value { flex-basis: calc(50% - 10px); }
+  /* 3-up instead of five cramped columns between 769px and 1024px. */
+  .landing-schedule-card { flex: 1 1 calc(33.333% - 8px); }
   .landing-contact { width: 360px; }
 }
 
 @media (max-width: 768px) {
   .landing-navbar { height: auto; min-height: 76px; flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
   .landing-nav-links { order: 3; width: 100%; flex-wrap: wrap; gap: 4px; }
-  .landing-nav-links a { min-height: 40px; flex: 1 1 auto; padding: 8px 10px; font-size: 12px; }
+  /* Keep the 44px pointer target promised by the base rule — this override
+     used to shrink it to 40px on the narrowest, most touch-driven viewport. */
+  .landing-nav-links a { min-height: 44px; flex: 1 1 auto; padding: 8px 10px; font-size: 12px; }
   .landing-logo img { height: 46px; }
   .landing-logo { font-size: 14px; }
   .landing-nav-cta { padding-inline: 18px; }
@@ -190,8 +218,9 @@
   .landing-card-row, .landing-gallery-row, .landing-schedule-row, .landing-location-row { flex-direction: column; }
   .landing-value-row { flex-direction: column; }
   .landing-value { flex-basis: auto; }
+  .landing-schedule-card { flex: none; }
   .landing-motto { padding-inline: 28px; }
-  .landing-motto blockquote { font-size: 28px; }
+  .landing-motto .landing-motto-lead { font-size: 28px; }
   .landing-gallery img { height: auto; aspect-ratio: 10 / 7; }
   .landing-map { width: 100%; flex: none; }
   .landing-contact { width: 100%; }

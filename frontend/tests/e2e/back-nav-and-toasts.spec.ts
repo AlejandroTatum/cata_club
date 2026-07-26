@@ -5,15 +5,19 @@
  * admin-smoke.spec.ts — /api/auth/* intercepted at the network level, no
  * seeded backend), then covers two concerns added across 9 pages:
  *
- * 1. The shared BackLink (src/components/BackLink.tsx) renders a real
- *    next/link `<a href>` to a fixed parent route — never router.back() —
- *    on /members, /payments, and /ranking (NivelAsignacionPanel, shared
- *    with /trainer/nivel).
+ * 1. Getting back out of a screen is always a real next/link `<a href>` to a
+ *    fixed parent route — never router.back(). On /members and /ranking that
+ *    is still the shared BackLink (src/components/BackLink.tsx). /payments
+ *    dropped its in-page BackLink in the redesign — a top-level destination
+ *    is reached from the sidebar and left the same way — so there the same
+ *    guarantee is checked on the sidebar's own "Panel de Control" link.
  * 2. useToast() (src/contexts/ToastContext.tsx) surfaces a visible toast
  *    after a mutating action — covered here via /payments' reject flow
  *    (error path, since it needs no extra setup beyond one mocked request).
  */
 import { test, expect, type Page, type Route } from "@playwright/test";
+
+import { E2E_BASE_URL } from "./e2e-target";
 
 const MOCK_SESSION = {
   user: {
@@ -114,7 +118,7 @@ test.describe("Back navigation + toasts", () => {
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 
-  test("ranking (admin): BackLink -> /dashboard via the shared NivelAsignacionPanel", async ({ page }) => {
+  test("ranking (admin): BackLink -> /dashboard", async ({ page }) => {
     await loginAsAdmin(page);
     await page.route("**/api/members", (route) =>
       fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
@@ -141,11 +145,15 @@ test.describe("Back navigation + toasts", () => {
     currentMembershipStatus: "pendiente",
     proofFileName: "voucher.png",
     proofFileType: "image",
-    proofPreviewUrl: "https://placehold.co/600x400.png",
+    // A 1×1 transparent PNG rather than a placehold.co URL: the proof preview
+    // is a plain <img>, and the only external request the suite made was this
+    // one. Inline, the preview resolves the same way on every machine.
+    proofPreviewUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
     validationStatus: "pendiente",
   };
 
-  test("payments: BackLink -> /dashboard, and a failed reject shows an error toast", async ({ page }) => {
+  test("payments: the way back to /dashboard is a real link, and a failed reject shows an error toast", async ({ page }) => {
     await loginAsAdmin(page);
     await page.route("**/api/payments", (route) => {
       if (route.request().method() === "GET") return fulfillJson(route, [PAYMENT_ROW]);
@@ -160,26 +168,49 @@ test.describe("Back navigation + toasts", () => {
     });
 
     await page.goto("/payments");
-    const back = page.getByRole("link", { name: /volver al panel/i });
-    await expect(back).toBeVisible();
-    await expect(back).toHaveAttribute("href", "/dashboard");
+
+    /*
+     * /payments no longer renders a BackLink: the redesign made it a top-level
+     * destination, and those are entered and left through the sidebar rather
+     * than through an in-page "Volver al Panel" that duplicated it. The user
+     * outcome the old assertion protected — an admin on /payments can always
+     * get back to the dashboard, by a REAL link to a fixed route and not by
+     * router.back() — is unchanged, so it is asserted on the control that now
+     * carries it. A history-based control would have no href to assert.
+     */
+    const home = page
+      .getByRole("navigation", { name: "Navegación principal" })
+      .getByRole("link", { name: "Panel de Control", exact: true });
+    await expect(home).toBeVisible();
+    await expect(home).toHaveAttribute("href", "/dashboard");
 
     // Trigger the reject flow with the mutating request mocked to fail.
-    await page.getByText("Sofía González").first().click();
-    await page.getByRole("button", { name: /rechazar/i }).first().click();
-    await page.getByRole("textbox").last().fill("Comprobante ilegible");
-    await page.getByRole("button", { name: /rechazar solicitud|confirmar rechazo|rechazar/i }).last().click();
+    // Open the queued payment through its own action, whose accessible name
+    // names the payment it opens — the row's text is not a control.
+    const openRequest = page.getByRole("button", {
+      name: "Revisar el pago de Sofía González",
+    });
+    await openRequest.click();
+    await page.getByRole("button", { name: "Rechazar pago…" }).click();
+    // A reason is mandatory (composeRejectionReason returns "" without one and
+    // the submit stays disabled), so the flow has to pick one — this is the
+    // rejection the payload would carry.
+    await page.getByRole("radio", { name: "El comprobante no se lee" }).check();
+    await page
+      .getByRole("textbox", { name: /nota para el responsable/i })
+      .fill("El comprobante está borroso.");
+    await page.getByRole("button", { name: "Rechazar y avisar" }).click();
 
     await expect(
       page.getByRole("alert").filter({ hasText: /error al rechazar el pago/i }).first(),
     ).toBeVisible({ timeout: 10_000 });
 
-    // BackLink is intentionally hidden while a request's detail view is
-    // open (`{!selectedRequest && <BackLink .../>}` in payments/page.tsx)
-    // — return to the list first, then confirm it's back and functional.
-    await page.getByRole("button", { name: /volver a la lista/i }).click();
-    await expect(back).toBeVisible();
-    await back.click();
+    // The detail view carries its own way back to the queue, and a failed
+    // rejection must leave the payment where it was rather than swallow it.
+    await page.getByRole("button", { name: /volver a la cola/i }).click();
+    await expect(openRequest).toBeVisible();
+
+    await home.click();
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 
@@ -189,7 +220,7 @@ test.describe("Back navigation + toasts", () => {
     // again here since that path is already covered by the admin login
     // above and by admin-smoke.spec.ts.
     await page.context().addCookies([
-      { name: "access_token", value: MOCK_ACCESS_TOKEN, url: baseURL ?? "http://localhost:3000" },
+      { name: "access_token", value: MOCK_ACCESS_TOKEN, url: baseURL ?? E2E_BASE_URL },
     ]);
     await page.route("**/api/**", (route) => {
       if (route.request().method() === "GET") return fulfillJson(route, []);

@@ -8,6 +8,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Button, { type ButtonVariant } from "./ui/Button";
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -22,10 +23,19 @@ export interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
-// Variant -> class map, existing cata-* tokens only (no tailwind.config.ts edit).
-const CONFIRM_BUTTON_CLASSES: Record<ConfirmDialogProps["variant"], string> = {
-  "state-ok": "btn-primary bg-cata-state-ok hover:bg-cata-state-ok/90",
-  danger: "btn-secondary border-cata-red/30 text-cata-red hover:bg-cata-red/10",
+/**
+ * Variant → `Button` variant.
+ *
+ * `danger` used to map to `btn-secondary`, which made a destructive confirm
+ * visually QUIETER than its own Cancel button — the button that deletes
+ * something forever looked less consequential than the one that changes
+ * nothing. Red is exactly what the design system reserves for destructive
+ * actions, so `danger` is the primary (red) button and Cancel is the muted
+ * one. Emphasis now matches consequence.
+ */
+const CONFIRM_BUTTON_VARIANT: Record<ConfirmDialogProps["variant"], ButtonVariant> = {
+  "state-ok": "dark",
+  danger: "primary",
 };
 
 const HEADING_ACCENT_CLASSES: Record<ConfirmDialogProps["variant"], string> = {
@@ -110,22 +120,16 @@ export default function ConfirmDialog({
           {message}
         </p>
         <div className="mt-6 flex justify-end gap-2">
-          <button
-            ref={cancelButtonRef}
-            type="button"
-            onClick={onCancel}
-            className="btn-secondary"
-          >
+          <Button ref={cancelButtonRef} onClick={onCancel}>
             {cancelLabel}
-          </button>
-          <button
+          </Button>
+          <Button
             ref={confirmButtonRef}
-            type="button"
+            variant={CONFIRM_BUTTON_VARIANT[variant]}
             onClick={onConfirm}
-            className={CONFIRM_BUTTON_CLASSES[variant]}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

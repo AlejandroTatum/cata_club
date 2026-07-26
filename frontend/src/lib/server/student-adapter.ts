@@ -106,6 +106,12 @@ export interface BackendMembresiaPropia {
   personaId: number;
   montoAplicado?: string;
   tipoMembresiaId?: number;
+  /**
+   * Present on `MembresiaResponseDTO` (membresia_pago_schemas.py:33), which is
+   * what `/membresias/mias` returns. It used to be dropped here, which is why
+   * the student card had no "socio desde" date to show.
+   */
+  fechaActivacion?: string;
 }
 
 /** Enriched membership view for a single persona — built server-side. */
@@ -117,6 +123,7 @@ export interface MembershipView {
   categoria: string | null;
   modalidad: string | null;
   franjaHoraria: string | null;
+  fechaActivacion: string | null;
 }
 
 export function buildMembershipView(
@@ -132,6 +139,7 @@ export function buildMembershipView(
     categoria: tipo?.categoria ?? null,
     modalidad: tipo?.modalidad ?? null,
     franjaHoraria: tipo?.franjaHoraria ?? null,
+    fechaActivacion: mem.fechaActivacion ?? null,
   };
 }
 
@@ -155,7 +163,18 @@ export interface StudentPortalView {
 // Builders (pure)
 // ---------------------------------------------------------------------------
 
-const RECENT_SESSIONS_LIMIT = 5;
+/**
+ * Raised from 5 once /student/attendance existed to show a real history.
+ *
+ * This is a pure frontend slice, not a backend constraint: GET
+ * /asistencias/persona/{id} returns the full unpaginated history
+ * (AsistenciaRepositorio.listar_por_persona takes no limit/offset). At 5 the
+ * portal was hiding records students already had — several have 13. The cap
+ * stays because the payload is unbounded and this feeds a portal, not a report;
+ * `PORTAL_SESSION_WINDOW` in the attendance screen must match it, since the
+ * screen states the window in its footnote.
+ */
+const RECENT_SESSIONS_LIMIT = 30;
 
 /** Most recent attendance records first, capped — real activity used as an honest substitute for "upcoming sessions" (see attendance-adapter.ts's doc comment: Horario has no link to which persona/nivel it serves, so a real future schedule can't be derived per-student). */
 export function buildRecentSessions(

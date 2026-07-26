@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recuperar contraseña — Prototipos Cata Club</title>
+<link rel="stylesheet" href="_sistema.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-ball" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 1 6.4 15.4l-2.8-2.8"/><path d="M12 3a9 9 0 0 0-6.4 15.4L14 10"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></symbol>
+</svg>
+
+<div class="wrap">
+  <p class="crumb"><a href="index.html">Prototipos</a> <span class="sep">/</span> <span class="here">Recuperar contraseña</span></p>
+  <div class="ptitle">
+    <h1>Recuperar contraseña</h1>
+    <span class="route">/forgot-password</span>
+    <span class="grow"></span>
+    <span class="flag">estado enviado</span>
+  </div>
+
+  <div class="note">
+    <h2><span class="mine">Decidido</span> La confirmación reemplaza al formulario y dice qué esperar</h2>
+    <p>
+      Una vez enviado, el formulario <b>desaparece</b>: dejarlo visible invita a reenviar tres veces y
+      a dudar de si funcionó. En su lugar queda la confirmación con el correo exacto al que se mandó
+      —para detectar un tipeo sin volver atrás— y <b>cuánto dura el enlace</b>.
+    </p>
+    <p>
+      «Reenviar» queda disponible pero secundario, y el aviso de la carpeta de spam va abajo, en texto
+      chico: es el motivo real por el que la gente cree que el correo no llegó.
+    </p>
+  </div>
+
+  <div class="app plain">
+    <div class="auth">
+      <div class="left">
+        <a class="back" href="01-login.html">← Volver al login</a>
+        <span class="disc"><svg><use href="#i-ball"/></svg></span>
+        <p class="quote">«Formando <em>campeones</em> para la vida»</p>
+        <p class="lead">Cada entrenamiento es una oportunidad para superarte.</p>
+        <span class="div"></span>
+        <span class="n">67</span>
+        <span class="k">Estudiantes inscritos</span>
+        <span class="copy">© 2026 Cata Club — Tenis de Mesa</span>
+      </div>
+      <div class="right">
+        <div class="authcard">
+          <span class="icob" style="width:46px;height:46px;border:none;background:var(--ok-bg);color:var(--ok);align-self:flex-start;border-radius:50%">
+            <svg style="width:21px;height:21px"><use href="#i-mail"/></svg>
+          </span>
+          <div>
+            <h3>Revisá tu correo</h3>
+            <p class="muted" style="margin-top:6px">
+              Mandamos un enlace para restablecer tu contraseña a
+              <b style="color:var(--ink)">laura@cataclub.com</b>.
+            </p>
+          </div>
+          <div class="banner warn" style="font-size:12.5px">
+            El enlace vence en <b>30 minutos</b>. Si se te pasa, pedí uno nuevo desde acá.
+          </div>
+          <a class="btn wide" href="04-restablecer-contrasenia.html">Reenviar el enlace</a>
+          <p class="hint" style="text-align:center">
+            <a href="01-login.html" style="color:var(--ink);font-weight:700">Volver al inicio de sesión</a>
+          </p>
+        </div>
+        <p class="authnote">
+          ¿No lo ves? Revisá la carpeta de correo no deseado — a veces llega ahí la primera vez.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot"><span>Prototipo estático.</span><span>Siguiente paso del flujo: <a href="04-restablecer-contrasenia.html" style="color:inherit">Restablecer</a>.</span></p>
+</div>
+</body>
+</html>

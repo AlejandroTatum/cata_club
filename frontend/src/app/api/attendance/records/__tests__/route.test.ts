@@ -205,4 +205,36 @@ describe("POST /api/attendance/records", () => {
     expect(response.status).toBe(502);
     expect(body.createdCount).toBe(0);
   });
+
+  it("defaults an omitted fecha_entrenamiento to the CLUB's day, not the server's", async () => {
+    // The regression this guards: the default used to be
+    // `new Date().toISOString().slice(0, 10)`. This route runs server-side on a
+    // host that is almost certainly UTC, where 19:00 in Ecuador is already
+    // tomorrow — so every evening session (COMPETITIVO runs 18:00–20:00) filed
+    // without an explicit date was stored under the wrong date.
+    //
+    // Pinned to 01:30 UTC, which is 20:30 the PREVIOUS day at the club: the two
+    // calendars disagree, so a server-clock default cannot pass this.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-24T01:30:00Z"));
+    try {
+      vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(asistencia, 201));
+
+      const access = makeJwt(3600);
+      await POST(
+        postRequest(
+          { horarioId: 1, entrenadorId: 2, students: [{ personaId: 3, estado: "present" }] },
+          `${ACCESS_TOKEN_COOKIE}=${access}`,
+        ),
+      );
+
+      const [, init] = vi.mocked(global.fetch).mock.calls[0];
+      const sent = JSON.parse(String((init as RequestInit).body));
+      expect(sent.fecha_entrenamiento).toBe("2026-07-23");
+      // Belt and braces: name the value the old implementation would have sent.
+      expect(sent.fecha_entrenamiento).not.toBe("2026-07-24");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

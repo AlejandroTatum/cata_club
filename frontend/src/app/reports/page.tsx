@@ -1,26 +1,66 @@
 /**
- * Reports Page — admin-only analytics and filtered views.
+ * Reportes — pick a report, set a range, see it, download it.
  *
- * Two report types (each backed by a real backend endpoint):
- * 1. Por Período — new members registered within a date range
- * 2. Asistencia — attendance records filtered by date range / horario
+ * The audit counted SEVEN controls between arriving here and seeing a single
+ * result: three tab pills, then a per-tab form with its own date pair, its own
+ * extra filter and its own "Buscar" button — and until you pressed Buscar the
+ * whole canvas below was empty. Three date pairs also meant the range you had
+ * just typed was thrown away the moment you switched report.
  *
- * Follows the dashboard/members page design patterns.
+ * `docs/ux/prototipos/18-reportes.html` collapses that: three preset cards at
+ * even height (selection = coal + the yellow ball dot, never red), ONE
+ * dd/mm/yyyy range shared by every preset, a "Generar PDF" button, and a
+ * preview area that fills the canvas. The preview loads from picking the
+ * report — "la vista previa se genera al elegir el reporte, antes de
+ * descargar" — so there is no "Buscar" button left to press.
+ *
+ * Deviation from the prototype, on purpose: its first preset is "Etiquetas de
+ * estudiantes". No such report exists — the backend exposes exactly three PDF
+ * endpoints (`/personas/reportes/nuevos-por-periodo/pdf`,
+ * `/asistencias/reportes/pdf`, `/payments/reportes/pdf`) and there is no
+ * label/etiqueta generator anywhere in `backend/`. Inventing a fourth preset
+ * that 404s would be worse than shipping the three that are real, so the
+ * presets are Período, Asistencia and Pagos.
+ *
+ * Also removed: the período preview's local "Buscar / Edad mín / Edad máx"
+ * filter strip. It filtered the table but NOT the PDF, which is why the screen
+ * had to carry a paragraph explaining that the download would ignore what you
+ * had just typed. Three controls whose only documented behaviour was "these do
+ * not affect the thing you came here to produce" are three controls too many.
+ *
+ * ## PDF and CSV
+ *
+ * PDF is real and server-rendered: all three presets map to an endpoint that
+ * exists (see the deviation note above), so the button downloads a document
+ * the backend produced.
+ *
+ * CSV has NO backend. Grepping `backend/` for "csv" finds `.env.example` and
+ * `configuracion.py` and nothing else — there is no route to call. The control
+ * therefore builds the file in the browser, which is honest here and only
+ * here: the page already holds the COMPLETE result set for the range (the
+ * table's pagination is a client-side slice), so the CSV carries exactly the
+ * rows the preview counts and the PDF renders. Faking a request, or shipping a
+ * button that silently did nothing, were the two alternatives; a real file
+ * built from data already in hand beats both. Server-side CSV is tracked as
+ * backend work in issue #150, which is what removes the three limits this
+ * approach really does have: column definitions that can drift from the PDF's,
+ * no streaming, and an export the backend never sees.
+ *
+ * The `<h2>` level of the section headings was normalised in an earlier phase
+ * and is preserved: `AppShell` owns the page `<h1>`.
  */
 
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Users,
-  Calendar,
-  Search,
   AlertCircle,
   CheckCircle,
   Download,
+  FileText,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
+  Table2,
+  Users,
   Wallet,
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -35,11 +75,10 @@ import {
   exportAsistenciaReportePdf,
   exportPagosReportePdf,
   type PaymentValidationRequest,
-  type ValidationStatus,
 } from "@/services/api";
 import {
-  ATTENDANCE_LABELS,
-  ATTENDANCE_BADGE_TOKENS,
+  getAttendanceBadgeTone,
+  getAttendanceLabel,
   formatDay,
   type AttendanceRecord,
   type TrainingSchedule,
@@ -51,33 +90,60 @@ import {
   getAsistenciaReportTotalPages,
   paginatePagosResults,
   getPagosReportTotalPages,
+  csvFilename,
+  downloadCsv,
+  toCsv,
+  PERSONA_REPORT_PAGE_SIZE,
+  ASISTENCIA_REPORT_PAGE_SIZE,
+  PAGOS_REPORT_PAGE_SIZE,
 } from "@/app/reports/reports-utils";
-import { formatCurrency, formatDate } from "@/lib/format-utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
+import { Badge, Button, EmptyState, LoadingState, Pagination, cn } from "@/components/ui";
+import {
+  PAGOS_ESTADO_OPTIONS,
+  VALIDATION_STATUS_LABELS,
+  VALIDATION_STATUS_TONES,
+} from "@/lib/status-badges";
 import type { PersonaReporte } from "@/types/domain";
 
-type ReportTab = "periodo" | "asistencia" | "pagos";
+type ReportPreset = "periodo" | "asistencia" | "pagos";
 
-/** Filter dropdown options — labels reused verbatim from `payments/page.tsx`'s
- *  filter tabs, values match `EstadoPago` (empty = no filter). */
-const PAGOS_ESTADO_OPTIONS: { value: string; label: string }[] = [
-  { value: "", label: "Todas" },
-  { value: "PENDIENTE_VALIDACION", label: "Pendientes" },
-  { value: "APROBADO", label: "Validados" },
-  { value: "RECHAZADO", label: "Rechazados" },
+interface PresetDef {
+  key: ReportPreset;
+  title: string;
+  description: string;
+  /** Singular noun for the preview's scope badge. */
+  noun: string;
+}
+
+const PRESETS: PresetDef[] = [
+  {
+    key: "periodo",
+    title: "Reporte de período",
+    description: "Personas registradas entre dos fechas.",
+    noun: "persona",
+  },
+  {
+    key: "asistencia",
+    title: "Reporte de asistencia",
+    description: "Presencias por estudiante, horario y fecha.",
+    noun: "registro",
+  },
+  {
+    key: "pagos",
+    title: "Reporte de pagos",
+    description: "Pagos y membresías entre dos fechas.",
+    noun: "pago",
+  },
 ];
 
-/** Badge color scheme copied from `payments/page.tsx`'s `validationStatusStyles`. */
-const PAGOS_VALIDATION_STATUS_STYLES: Record<ValidationStatus, string> = {
-  pendiente: "badge-warning",
-  validado: "badge-success",
-  rechazado: "badge-error",
-};
+/** Settling time before the preview re-queries after a filter edit. */
+const PREVIEW_DEBOUNCE_MS = 250;
 
-const PAGOS_VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
-  pendiente: "Pendiente",
-  validado: "Validado",
-  rechazado: "Rechazado",
-};
+/** Plural of a preset noun — all three are regular. */
+function pluralize(noun: string, count: number): string {
+  return count === 1 ? noun : `${noun}s`;
+}
 
 export default function ReportsPage(): React.ReactElement {
   return (
@@ -88,268 +154,140 @@ export default function ReportsPage(): React.ReactElement {
 }
 
 function ReportsContent(): React.ReactElement {
-  const [tab, setTab] = useState<ReportTab>("periodo");
+  const [preset, setPreset] = useState<ReportPreset>("periodo");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
 
-  // Persona report results
-  const [personaResults, setPersonaResults] = useState<PersonaReporte[]>([]);
-
-  // Attendance report results
-  const [attendanceResults, setAttendanceResults] = useState<AttendanceRecord[]>([]);
-  const [horarios, setHorarios] = useState<TrainingSchedule[]>([]);
-
-  // Pagos report results
-  const [pagosResults, setPagosResults] = useState<PaymentValidationRequest[]>([]);
-
-  // Periodo filters
+  /**
+   * ONE range for every preset. The screen used to keep three independent
+   * pairs, so switching report silently discarded the dates you had just set.
+   */
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
 
-  // Attendance filters
-  const [attFechaInicio, setAttFechaInicio] = useState("");
-  const [attFechaFin, setAttFechaFin] = useState("");
-  const [attHorarioId, setAttHorarioId] = useState("");
-
-  // Pagos filters
-  const [pagosFechaInicio, setPagosFechaInicio] = useState("");
-  const [pagosFechaFin, setPagosFechaFin] = useState("");
+  /** The single preset-specific filter: horario for asistencia, estado for pagos. */
+  const [horarioId, setHorarioId] = useState("");
   const [pagosEstado, setPagosEstado] = useState("");
 
-  // Local persona filters (applied client-side over results)
-  const [searchTerm, setSearchTerm] = useState("");
-  const [edadMin, setEdadMin] = useState("");
-  const [edadMax, setEdadMax] = useState("");
+  const [personaResults, setPersonaResults] = useState<PersonaReporte[]>([]);
+  const [attendanceResults, setAttendanceResults] = useState<AttendanceRecord[]>([]);
+  const [pagosResults, setPagosResults] = useState<PaymentValidationRequest[]>([]);
+  const [horarios, setHorarios] = useState<TrainingSchedule[]>([]);
 
-  const [personaPage, setPersonaPage] = useState(1);
-  const [asistenciaPage, setAsistenciaPage] = useState(1);
-  const [pagosPage, setPagosPage] = useState(1);
+  const [page, setPage] = useState(1);
 
-  function switchTab(next: ReportTab): void {
-    setTab(next);
-    setPersonaResults([]);
-    setAttendanceResults([]);
-    setPagosResults([]);
-    setError(null);
-    setSearched(false);
-    setSearchTerm("");
-    setEdadMin("");
-    setEdadMax("");
-    setPersonaPage(1);
-    setAsistenciaPage(1);
-    setPagosPage(1);
-  }
+  const activePreset = PRESETS.find((p) => p.key === preset) as PresetDef;
 
-  /** Calculate age in years from a birth date string. */
-  function calcAge(fechaNacimiento: string): number {
-    const birth = new Date(fechaNacimiento);
-    const now = new Date();
-    let age = now.getFullYear() - birth.getFullYear();
-    const monthDiff = now.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
-      age--;
-    }
-    return age;
-  }
+  /**
+   * The range is only "usable" once it is coherent. `periodo` needs both ends
+   * (the endpoint takes no open range); the other two treat an empty range as
+   * "everything", which is what their endpoints do.
+   */
+  const rangeInverted = fechaInicio !== "" && fechaFin !== "" && fechaInicio > fechaFin;
+  const periodoRangeIncomplete =
+    preset === "periodo" && (fechaInicio === "" || fechaFin === "" || fechaInicio >= fechaFin);
+  const canQuery = !rangeInverted && !periodoRangeIncomplete;
 
-  /** Persona results after applying local search + age filters. */
-  const filteredPersonaResults = useMemo(() => {
-    let results = personaResults;
-    if (searchTerm.trim()) {
-      const term = searchTerm.trim().toLowerCase();
-      results = results.filter(
-        (p) =>
-          p.nombres.toLowerCase().includes(term) ||
-          p.apellidos.toLowerCase().includes(term) ||
-          p.cedula.includes(term),
-      );
-    }
-    if (edadMin !== "") {
-      const min = Number(edadMin);
-      results = results.filter((p) => calcAge(p.fechaNacimiento) >= min);
-    }
-    if (edadMax !== "") {
-      const max = Number(edadMax);
-      results = results.filter((p) => calcAge(p.fechaNacimiento) <= max);
-    }
-    return results;
-  }, [personaResults, searchTerm, edadMin, edadMax]);
-
-  // Reset to page 1 whenever the underlying filtered list changes, so the
-  // paginator never gets stuck on a stale/out-of-range page.
-  useEffect(() => {
-    setPersonaPage(1);
-  }, [filteredPersonaResults.length]);
-
-  useEffect(() => {
-    setAsistenciaPage(1);
-  }, [attendanceResults.length]);
-
-  useEffect(() => {
-    setPagosPage(1);
-  }, [pagosResults.length]);
-
-  const personaTotalPages = useMemo(
-    () => getPersonaReportTotalPages(filteredPersonaResults.length),
-    [filteredPersonaResults],
-  );
-  const paginatedPersonaResults = useMemo(
-    () => paginatePersonaResults(filteredPersonaResults, personaPage),
-    [filteredPersonaResults, personaPage],
-  );
-
-  const asistenciaTotalPages = useMemo(
-    () => getAsistenciaReportTotalPages(attendanceResults.length),
-    [attendanceResults],
-  );
-  const paginatedAttendanceResults = useMemo(
-    () => paginateAsistenciaResults(attendanceResults, asistenciaPage),
-    [attendanceResults, asistenciaPage],
-  );
-
-  const pagosTotalPages = useMemo(
-    () => getPagosReportTotalPages(pagosResults.length),
-    [pagosResults],
-  );
-  const paginatedPagosResults = useMemo(
-    () => paginatePagosResults(pagosResults, pagosPage),
-    [pagosResults, pagosPage],
-  );
-
-  // Fetch horarios for the attendance filter dropdown (once, on mount)
+  // Horarios feed the asistencia filter's dropdown (once, on mount).
   useEffect(() => {
     void fetchTrainingSchedules()
       .then(setHorarios)
       .catch(() => {});
   }, []);
 
-  async function handlePeriodoSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault();
-    if (!fechaInicio || !fechaFin) {
-      setError("Seleccione ambas fechas.");
-      return;
-    }
-    if (fechaInicio >= fechaFin) {
-      setError("La fecha de inicio debe ser anterior a la fecha de fin.");
-      return;
-    }
-
+  const runPreview = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
-    setSearched(true);
-
     try {
-      const data = await fetchNuevosPorPeriodo(fechaInicio, fechaFin);
-      setPersonaResults(data);
+      if (preset === "periodo") {
+        setPersonaResults(await fetchNuevosPorPeriodo(fechaInicio, fechaFin));
+      } else if (preset === "asistencia") {
+        const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number } = {};
+        if (fechaInicio) params.fechaInicio = fechaInicio;
+        if (fechaFin) params.fechaFin = fechaFin;
+        if (horarioId) params.horarioId = Number(horarioId);
+        setAttendanceResults(await fetchAttendanceRecords(params));
+      } else {
+        const params: { fechaInicio?: string; fechaFin?: string; estadoPago?: string } = {};
+        if (fechaInicio) params.fechaInicio = fechaInicio;
+        if (fechaFin) params.fechaFin = fechaFin;
+        if (pagosEstado) params.estadoPago = pagosEstado;
+        setPagosResults(await fetchPagosReporte(params));
+      }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Error al cargar reportes.";
+      const message = err instanceof Error ? err.message : "No se pudo generar la vista previa.";
       setError(message);
       setPersonaResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleAsistenciaSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault();
-
-    if (attFechaInicio && attFechaFin && attFechaInicio > attFechaFin) {
-      setError("La fecha de inicio debe ser anterior a la fecha de fin.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setSearched(true);
-
-    try {
-      const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number } = {};
-      if (attFechaInicio) params.fechaInicio = attFechaInicio;
-      if (attFechaFin) params.fechaFin = attFechaFin;
-      if (attHorarioId) params.horarioId = Number(attHorarioId);
-      const data = await fetchAttendanceRecords(params);
-      setAttendanceResults(data);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Error al cargar reportes de asistencia.";
-      setError(message);
       setAttendanceResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  /** Export the currently-displayed persona report (periodo tab) as a PDF. */
-  async function handleExportPersonasPdf(): Promise<void> {
-    setExportingPdf(true);
-    setError(null);
-    try {
-      await exportNuevosPorPeriodoPdf(fechaInicio, fechaFin);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "No se pudo generar el PDF del reporte.";
-      setError(message);
-    } finally {
-      setExportingPdf(false);
-    }
-  }
-
-  /** Export the currently-displayed attendance report as a PDF. */
-  async function handleExportAsistenciaPdf(): Promise<void> {
-    setExportingPdf(true);
-    setError(null);
-    try {
-      const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number } = {};
-      if (attFechaInicio) params.fechaInicio = attFechaInicio;
-      if (attFechaFin) params.fechaFin = attFechaFin;
-      if (attHorarioId) params.horarioId = Number(attHorarioId);
-      await exportAsistenciaReportePdf(params);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "No se pudo generar el PDF del reporte.";
-      setError(message);
-    } finally {
-      setExportingPdf(false);
-    }
-  }
-
-  async function handlePagosSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault();
-
-    if (pagosFechaInicio && pagosFechaFin && pagosFechaInicio > pagosFechaFin) {
-      setError("La fecha de inicio debe ser anterior a la fecha de fin.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setSearched(true);
-
-    try {
-      const params: { fechaInicio?: string; fechaFin?: string; estadoPago?: string } = {};
-      if (pagosFechaInicio) params.fechaInicio = pagosFechaInicio;
-      if (pagosFechaFin) params.fechaFin = pagosFechaFin;
-      if (pagosEstado) params.estadoPago = pagosEstado;
-      const data = await fetchPagosReporte(params);
-      setPagosResults(data);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Error al cargar reporte de pagos.";
-      setError(message);
       setPagosResults([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, [preset, fechaInicio, fechaFin, horarioId, pagosEstado]);
 
-  /** Export the currently-displayed payments report as a PDF. */
-  async function handleExportPagosPdf(): Promise<void> {
+  /**
+   * The preview generates itself from the current selection. That is the whole
+   * point of the redesign — the old screen made you press "Buscar" to find out
+   * whether the filters you had chosen produced anything at all.
+   *
+   * Debounced because a range is edited one field at a time: typing "desde"
+   * before "hasta" leaves a half-set, still-technically-valid range in state
+   * for a moment, and firing on it would both waste a request and briefly
+   * render results for a range the user never asked for.
+   */
+  useEffect(() => {
+    if (!canQuery) return;
+    const timer = setTimeout(() => {
+      void runPreview();
+    }, PREVIEW_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [canQuery, runPreview]);
+
+  // Reset to page 1 whenever what is being previewed changes.
+  useEffect(() => {
+    setPage(1);
+  }, [preset, personaResults.length, attendanceResults.length, pagosResults.length]);
+
+  const resultCount =
+    preset === "periodo"
+      ? personaResults.length
+      : preset === "asistencia"
+        ? attendanceResults.length
+        : pagosResults.length;
+
+  const totalPages = useMemo(() => {
+    if (preset === "periodo") return getPersonaReportTotalPages(personaResults.length);
+    if (preset === "asistencia") return getAsistenciaReportTotalPages(attendanceResults.length);
+    return getPagosReportTotalPages(pagosResults.length);
+  }, [preset, personaResults.length, attendanceResults.length, pagosResults.length]);
+
+  const pageSize =
+    preset === "periodo"
+      ? PERSONA_REPORT_PAGE_SIZE
+      : preset === "asistencia"
+        ? ASISTENCIA_REPORT_PAGE_SIZE
+        : PAGOS_REPORT_PAGE_SIZE;
+
+  async function handleGeneratePdf(): Promise<void> {
     setExportingPdf(true);
     setError(null);
     try {
-      const params: { fechaInicio?: string; fechaFin?: string; estadoPago?: string } = {};
-      if (pagosFechaInicio) params.fechaInicio = pagosFechaInicio;
-      if (pagosFechaFin) params.fechaFin = pagosFechaFin;
-      if (pagosEstado) params.estadoPago = pagosEstado;
-      await exportPagosReportePdf(params);
+      if (preset === "periodo") {
+        await exportNuevosPorPeriodoPdf(fechaInicio, fechaFin);
+      } else if (preset === "asistencia") {
+        const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number } = {};
+        if (fechaInicio) params.fechaInicio = fechaInicio;
+        if (fechaFin) params.fechaFin = fechaFin;
+        if (horarioId) params.horarioId = Number(horarioId);
+        await exportAsistenciaReportePdf(params);
+      } else {
+        const params: { fechaInicio?: string; fechaFin?: string; estadoPago?: string } = {};
+        if (fechaInicio) params.fechaInicio = fechaInicio;
+        if (fechaFin) params.fechaFin = fechaFin;
+        if (pagosEstado) params.estadoPago = pagosEstado;
+        await exportPagosReportePdf(params);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "No se pudo generar el PDF del reporte.";
       setError(message);
@@ -358,675 +296,454 @@ function ReportsContent(): React.ReactElement {
     }
   }
 
+  /**
+   * The CSV of everything currently previewed. Columns mirror the preview's
+   * own table exactly, so what you downloaded is what you were looking at —
+   * and it covers the whole result set, not the visible page, because
+   * `*Results` already hold every row for the range (see `reports-utils`).
+   */
+  function handleDownloadCsv(): void {
+    setError(null);
+    try {
+      if (preset === "periodo") {
+        downloadCsv(
+          csvFilename("periodo"),
+          toCsv(
+            ["Nombres", "Apellidos", "Cédula", "Fecha de nacimiento", "Edad", "Teléfono"],
+            personaResults.map((persona) => [
+              persona.nombres,
+              persona.apellidos,
+              persona.cedula,
+              formatDate(persona.fechaNacimiento),
+              calcAge(persona.fechaNacimiento),
+              persona.telefono,
+            ]),
+          ),
+        );
+      } else if (preset === "asistencia") {
+        downloadCsv(
+          csvFilename("asistencia"),
+          toCsv(
+            ["Fecha", "Horario", "Estudiante", "Estado", "Entrenador"],
+            attendanceResults.map((record) => [
+              formatDate(record.fecha),
+              record.horario,
+              record.estudiante,
+              getAttendanceLabel(record.estado),
+              record.entrenador,
+            ]),
+          ),
+        );
+      } else {
+        downloadCsv(
+          csvFilename("pagos"),
+          toCsv(
+            [
+              "Estudiante",
+              "Responsable de pago",
+              "Período",
+              "Monto",
+              "Método",
+              "Subido",
+              "Estado",
+            ],
+            pagosResults.map((pago) => [
+              pago.studentName,
+              pago.responsablePagoName ?? "",
+              pago.membershipPeriod,
+              formatCurrency(pago.expectedAmount),
+              pago.paymentMethod,
+              formatDateTime(pago.uploadedAt),
+              VALIDATION_STATUS_LABELS[pago.validationStatus],
+            ]),
+          ),
+        );
+      }
+    } catch {
+      setError("No se pudo generar el CSV del reporte.");
+    }
+  }
+
   return (
-    <AppShell
-      eyebrow="Reportes"
-      title="Reportes y Analítica"
-    >
+    <AppShell eyebrow="Documentos del club" title="Reportes">
       <BackLink href="/dashboard" label="Volver al Panel" />
 
-      {/* Tab selector */}
-      <div className="mb-6 flex gap-1 rounded-xl bg-cata-bg p-1">
-        <button
-          onClick={() => switchTab("periodo")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-            tab === "periodo"
-              ? "bg-white text-cata-text shadow-soft"
-              : "text-cata-text/65 hover:text-cata-text"
-          }`}
-        >
-          <Calendar size={15} strokeWidth={1.5} />
-          Por Período
-        </button>
-        <button
-          onClick={() => switchTab("asistencia")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-            tab === "asistencia"
-              ? "bg-white text-cata-text shadow-soft"
-              : "text-cata-text/65 hover:text-cata-text"
-          }`}
-        >
-          <CheckCircle size={15} strokeWidth={1.5} />
-          Asistencia
-        </button>
-        <button
-          onClick={() => switchTab("pagos")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-            tab === "pagos"
-              ? "bg-white text-cata-text shadow-soft"
-              : "text-cata-text/65 hover:text-cata-text"
-          }`}
-        >
-          <Wallet size={15} strokeWidth={1.5} />
-          Pagos
-        </button>
+      {/* Preset cards. Even height via `items-stretch` + `h-full`, selection
+          marked with coal + the yellow ball dot — red is reserved for the
+          primary CTA and for destructive/error states. */}
+      <div
+        role="radiogroup"
+        aria-label="Tipo de reporte"
+        className="mb-3.5 grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] items-stretch gap-3.5"
+      >
+        {PRESETS.map((item) => {
+          const selected = preset === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setPreset(item.key)}
+              className={cn(
+                "flex h-full flex-col items-start gap-[7px] rounded-card border bg-paper p-[17px_18px] text-left",
+                selected ? "border-coal ring-1 ring-coal" : "border-line-2 hover:bg-canvas",
+              )}
+            >
+              <b className="text-[14.5px] text-ink">{item.title}</b>
+              <p className="text-[13px] text-ink-3">{item.description}</p>
+              {selected ? (
+                <span className="h-badge mt-1 inline-flex items-center gap-1.5 rounded-full bg-coal px-[11px] text-[11.5px] font-bold text-white">
+                  <span
+                    data-testid="preset-ball-dot"
+                    aria-hidden="true"
+                    className="h-1.5 w-1.5 flex-none rounded-full bg-ball"
+                  />
+                  Seleccionado
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ---- Periodo tab ---- */}
-      {tab === "periodo" && (
-        <form onSubmit={handlePeriodoSubmit} className="card mb-6 p-6">
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-cata-text/45">
-            Nuevos miembros por período
-          </h3>
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label htmlFor="fechaInicio" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Fecha inicio
-              </label>
-              <input
-                type="date"
-                id="fechaInicio"
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                required
-                className="input-field"
-              />
-            </div>
-            <div>
-              <label htmlFor="fechaFin" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Fecha fin
-              </label>
-              <input
-                type="date"
-                id="fechaFin"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
-                required
-                className="input-field"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary flex items-center gap-2"
+      {/* Range + the single preset-specific filter + Generar PDF. */}
+      <div className="card mb-3.5 flex flex-wrap items-end gap-3.5 p-[17px_18px]">
+        <div className="flex min-w-[150px] flex-col gap-1.5">
+          <label htmlFor="fechaInicio" className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+            Desde
+          </label>
+          <input
+            type="date"
+            id="fechaInicio"
+            value={fechaInicio}
+            onChange={(e) => setFechaInicio(e.target.value)}
+            className="input-field h-ctl"
+          />
+        </div>
+        <div className="flex min-w-[150px] flex-col gap-1.5">
+          <label htmlFor="fechaFin" className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+            Hasta
+          </label>
+          <input
+            type="date"
+            id="fechaFin"
+            value={fechaFin}
+            onChange={(e) => setFechaFin(e.target.value)}
+            className="input-field h-ctl"
+          />
+        </div>
+
+        {preset === "asistencia" && (
+          <div className="flex min-w-[150px] flex-col gap-1.5">
+            <label htmlFor="horarioId" className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+              Horario
+            </label>
+            <select
+              id="horarioId"
+              value={horarioId}
+              onChange={(e) => setHorarioId(e.target.value)}
+              className="input-field h-ctl"
             >
-              <Search size={15} strokeWidth={1.5} />
-              {loading ? "Buscando..." : "Buscar"}
-            </button>
+              <option value="">Todos</option>
+              {horarios.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {formatDay(h.diaSemana)} {h.horaInicio}–{h.horaFin}
+                </option>
+              ))}
+            </select>
           </div>
-        </form>
+        )}
+
+        {preset === "pagos" && (
+          <div className="flex min-w-[150px] flex-col gap-1.5">
+            <label htmlFor="pagosEstado" className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+              Estado
+            </label>
+            <select
+              id="pagosEstado"
+              value={pagosEstado}
+              onChange={(e) => setPagosEstado(e.target.value)}
+              className="input-field h-ctl"
+            >
+              {PAGOS_ESTADO_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <span className="flex-1" />
+
+        {/*
+         * Two named actions rather than one button behind a format menu: the
+         * PDF is the club's document (server-rendered, the one to hand in) and
+         * the CSV is the same rows as data (built here in the browser). They
+         * are different artefacts, so they say so. Red stays on the PDF alone
+         * — it is the primary CTA of the screen and the only red control.
+         */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            variant="primary"
+            onClick={() => void handleGeneratePdf()}
+            disabled={exportingPdf || !canQuery || resultCount === 0}
+          >
+            {exportingPdf ? (
+              <Loader2 size={14} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Download size={14} strokeWidth={1.5} aria-hidden="true" />
+            )}
+            {exportingPdf ? "Generando…" : "Generar PDF"}
+          </Button>
+
+          <Button onClick={handleDownloadCsv} disabled={!canQuery || resultCount === 0}>
+            <Table2 size={14} strokeWidth={1.5} aria-hidden="true" />
+            Descargar CSV
+          </Button>
+        </div>
+      </div>
+
+      {rangeInverted && (
+        <div className="alert-error mb-3.5" role="alert">
+          <AlertCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span>La fecha de inicio debe ser anterior a la fecha de fin.</span>
+        </div>
       )}
 
-      {/* ---- Asistencia tab ---- */}
-      {tab === "asistencia" && (
-        <form onSubmit={handleAsistenciaSubmit} className="card mb-6 p-6">
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-cata-text/45">
-            Reporte de asistencia
-          </h3>
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label htmlFor="attFechaInicio" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Fecha inicio
-              </label>
-              <input
-                type="date"
-                id="attFechaInicio"
-                value={attFechaInicio}
-                onChange={(e) => setAttFechaInicio(e.target.value)}
-                className="input-field"
-              />
-            </div>
-            <div>
-              <label htmlFor="attFechaFin" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Fecha fin
-              </label>
-              <input
-                type="date"
-                id="attFechaFin"
-                value={attFechaFin}
-                onChange={(e) => setAttFechaFin(e.target.value)}
-                className="input-field"
-              />
-            </div>
-            <div>
-              <label htmlFor="attHorarioId" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Horario
-              </label>
-              <select
-                id="attHorarioId"
-                value={attHorarioId}
-                onChange={(e) => setAttHorarioId(e.target.value)}
-                className="input-field"
-              >
-                <option value="">Todos</option>
-                {horarios.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {formatDay(h.diaSemana)} {h.horaInicio}–{h.horaFin}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Search size={15} strokeWidth={1.5} />
-              {loading ? "Buscando..." : "Buscar"}
-            </button>
-          </div>
-          <p className="mt-3 text-xs text-cata-text/45">
-            Puede dejar los campos vacíos para ver todos los registros
-          </p>
-        </form>
-      )}
-
-      {/* ---- Pagos tab ---- */}
-      {tab === "pagos" && (
-        <form onSubmit={handlePagosSubmit} className="card mb-6 p-6">
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-cata-text/45">
-            Reporte de pagos
-          </h3>
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label htmlFor="pagosFechaInicio" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Fecha inicio
-              </label>
-              <input
-                type="date"
-                id="pagosFechaInicio"
-                value={pagosFechaInicio}
-                onChange={(e) => setPagosFechaInicio(e.target.value)}
-                className="input-field"
-              />
-            </div>
-            <div>
-              <label htmlFor="pagosFechaFin" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Fecha fin
-              </label>
-              <input
-                type="date"
-                id="pagosFechaFin"
-                value={pagosFechaFin}
-                onChange={(e) => setPagosFechaFin(e.target.value)}
-                className="input-field"
-              />
-            </div>
-            <div>
-              <label htmlFor="pagosEstado" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Estado
-              </label>
-              <select
-                id="pagosEstado"
-                value={pagosEstado}
-                onChange={(e) => setPagosEstado(e.target.value)}
-                className="input-field"
-              >
-                {PAGOS_ESTADO_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Search size={15} strokeWidth={1.5} />
-              {loading ? "Buscando..." : "Buscar"}
-            </button>
-          </div>
-          <p className="mt-3 text-xs text-cata-text/45">
-            Puede dejar los campos vacíos para ver todos los registros
-          </p>
-        </form>
-      )}
-
-      {/* Error */}
       {error && (
-        <div className="alert-error mb-6" role="alert">
+        <div className="alert-error mb-3.5" role="alert">
           <AlertCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* ---- Persona results table (periodo) ---- */}
-      {searched && !loading && tab === "periodo" && (
-        <PersonaReportTable
-          personaResults={personaResults}
-          filteredPersonaResults={filteredPersonaResults}
-          paginatedPersonaResults={paginatedPersonaResults}
-          page={personaPage}
-          totalPages={personaTotalPages}
-          onPageChange={setPersonaPage}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          edadMin={edadMin}
-          setEdadMin={setEdadMin}
-          edadMax={edadMax}
-          setEdadMax={setEdadMax}
-          exportingPdf={exportingPdf}
-          onExportPdf={() => void handleExportPersonasPdf()}
-          calcAge={calcAge}
-        />
-      )}
-
-      {/* ---- Attendance results table ---- */}
-      {searched && !loading && tab === "asistencia" && (
-        <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-cata-border px-6 py-4">
-            <h3 className="text-sm font-semibold text-cata-text">
-              {attendanceResults.length} registro{attendanceResults.length !== 1 ? "s" : ""} encontrado{attendanceResults.length !== 1 ? "s" : ""}
-            </h3>
-            {attendanceResults.length > 0 && (
-              <button
-                type="button"
-                onClick={() => void handleExportAsistenciaPdf()}
-                disabled={exportingPdf}
-                className="btn-secondary flex items-center gap-2 text-xs"
-              >
-                {exportingPdf ? (
-                  <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />
-                ) : (
-                  <Download size={14} strokeWidth={1.5} />
-                )}
-                {exportingPdf ? "Generando..." : "Exportar PDF"}
-              </button>
-            )}
-          </div>
-
-          {attendanceResults.length > 0 && asistenciaTotalPages > 1 && (
-            <p className="border-b border-cata-border bg-cata-bg/30 px-6 py-2 text-xs text-cata-text/55">
-              El PDF incluye los {attendanceResults.length} registros encontrados, no solo esta página.
-            </p>
-          )}
-
-          {attendanceResults.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <CheckCircle size={32} className="mx-auto mb-3 text-cata-text/25" strokeWidth={1.5} />
-              <p className="text-sm text-cata-text/55">
-                No se encontraron registros de asistencia con los filtros seleccionados.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-cata-border bg-cata-bg/50">
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Fecha</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Horario</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Estudiante</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Estado</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Entrenador</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-cata-border">
-                  {paginatedAttendanceResults.map((record) => {
-                    const tokens = ATTENDANCE_BADGE_TOKENS[record.estado] ?? {
-                      badgeClass: "bg-cata-border/40 text-cata-text/65",
-                      iconClass: "text-cata-text/65",
-                    };
-                    return (
-                      <tr key={record.id} className="transition-colors hover:bg-cata-bg/30">
-                        <td className="px-6 py-3 text-cata-text/65">{record.fecha}</td>
-                        <td className="px-6 py-3 text-cata-text/65">{record.horario}</td>
-                        <td className="px-6 py-3">
-                          <span className="font-medium text-cata-text">{record.estudiante}</span>
-                        </td>
-                        <td className="px-6 py-3">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tokens.badgeClass}`}>
-                            {ATTENDANCE_LABELS[record.estado] ?? record.estado}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3 text-cata-text/65">{record.entrenador}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {attendanceResults.length > 0 && asistenciaTotalPages > 1 && (
-            <div className="flex flex-col items-center justify-between gap-3 border-t border-cata-border px-6 py-4 sm:flex-row">
-              <p className="text-sm font-semibold text-cata-text">
-                Página {asistenciaPage} de {asistenciaTotalPages}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAsistenciaPage((p) => Math.max(1, p - 1))}
-                  disabled={asistenciaPage <= 1}
-                  className="btn-secondary px-4 py-2 text-xs"
-                >
-                  <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-                  Anterior
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAsistenciaPage((p) => Math.min(asistenciaTotalPages, p + 1))}
-                  disabled={asistenciaPage >= asistenciaTotalPages}
-                  className="btn-secondary px-4 py-2 text-xs"
-                >
-                  Siguiente
-                  <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
+      {/* Preview — the canvas that used to sit empty until you pressed Buscar. */}
+      <section className="card overflow-hidden">
+        <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-[15px]">
+          <h2 className="flex-1 text-[13px] font-bold text-ink">
+            Vista previa — {activePreset.title}
+          </h2>
+          {canQuery && !loading && (
+            <Badge tone="neutral">
+              {resultCount} {pluralize(activePreset.noun, resultCount)}
+              {totalPages > 1 ? ` · ${totalPages} páginas` : ""}
+            </Badge>
           )}
         </div>
-      )}
 
-      {/* ---- Pagos results table ---- */}
-      {searched && !loading && tab === "pagos" && (
-        <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-cata-border px-6 py-4">
-            <h3 className="text-sm font-semibold text-cata-text">
-              {pagosResults.length} pago{pagosResults.length !== 1 ? "s" : ""} encontrado{pagosResults.length !== 1 ? "s" : ""}
-            </h3>
-            {pagosResults.length > 0 && (
-              <button
-                type="button"
-                onClick={() => void handleExportPagosPdf()}
-                disabled={exportingPdf}
-                className="btn-secondary flex items-center gap-2 text-xs"
-              >
-                {exportingPdf ? (
-                  <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />
-                ) : (
-                  <Download size={14} strokeWidth={1.5} />
-                )}
-                {exportingPdf ? "Generando..." : "Exportar PDF"}
-              </button>
-            )}
-          </div>
+        {!canQuery ? (
+          <EmptyState
+            icon={<FileText size={21} strokeWidth={1.5} aria-hidden="true" />}
+            title="Elija un rango de fechas"
+            description={
+              preset === "periodo"
+                ? "El reporte de período necesita una fecha de inicio y una de fin (dd/mm/aaaa) para generarse."
+                : "Corrija el rango de fechas para ver la vista previa."
+            }
+          />
+        ) : loading ? (
+          <LoadingState label="Generando la vista previa…" />
+        ) : preset === "periodo" ? (
+          <PersonaPreview results={paginatePersonaResults(personaResults, page)} total={personaResults.length} />
+        ) : preset === "asistencia" ? (
+          <AsistenciaPreview
+            results={paginateAsistenciaResults(attendanceResults, page)}
+            total={attendanceResults.length}
+          />
+        ) : (
+          <PagosPreview results={paginatePagosResults(pagosResults, page)} total={pagosResults.length} />
+        )}
 
-          {pagosResults.length > 0 && pagosTotalPages > 1 && (
-            <p className="border-b border-cata-border bg-cata-bg/30 px-6 py-2 text-xs text-cata-text/55">
-              El PDF incluye los {pagosResults.length} registros encontrados, no solo esta página.
-            </p>
-          )}
+        {canQuery && !loading && resultCount > 0 && totalPages > 1 && (
+          <Pagination
+            className="mt-0 border-t border-line px-5 py-4"
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            totalItems={resultCount}
+            pageSize={pageSize}
+            itemNoun={activePreset.noun}
+          />
+        )}
 
-          {pagosResults.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <Wallet size={32} className="mx-auto mb-3 text-cata-text/25" strokeWidth={1.5} />
-              <p className="text-sm text-cata-text/55">
-                No se encontraron pagos con los filtros seleccionados.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-cata-border bg-cata-bg/50">
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Estudiante</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Responsable de Pago</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Período</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Monto</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Método</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Subido</th>
-                    <th className="px-6 py-3 font-medium text-cata-text/65">Estado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-cata-border">
-                  {paginatedPagosResults.map((pago) => (
-                    <tr key={pago.id} className="transition-colors hover:bg-cata-bg/30">
-                      <td className="px-6 py-3">
-                        <span className="font-medium text-cata-text">{pago.studentName}</span>
-                      </td>
-                      <td className="px-6 py-3 text-cata-text/65">
-                        {pago.responsablePagoName ?? "-"}
-                      </td>
-                      <td className="px-6 py-3 text-cata-text/65">{pago.membershipPeriod}</td>
-                      <td className="px-6 py-3 text-cata-text/65">{formatCurrency(pago.expectedAmount)}</td>
-                      <td className="px-6 py-3 text-cata-text/65">{pago.paymentMethod}</td>
-                      <td className="px-6 py-3 text-cata-text/65">{formatDate(pago.uploadedAt)}</td>
-                      <td className="px-6 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${PAGOS_VALIDATION_STATUS_STYLES[pago.validationStatus]}`}
-                        >
-                          {PAGOS_VALIDATION_STATUS_LABELS[pago.validationStatus]}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {pagosResults.length > 0 && pagosTotalPages > 1 && (
-            <div className="flex flex-col items-center justify-between gap-3 border-t border-cata-border px-6 py-4 sm:flex-row">
-              <p className="text-sm font-semibold text-cata-text">
-                Página {pagosPage} de {pagosTotalPages}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPagosPage((p) => Math.max(1, p - 1))}
-                  disabled={pagosPage <= 1}
-                  className="btn-secondary px-4 py-2 text-xs"
-                >
-                  <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-                  Anterior
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPagosPage((p) => Math.min(pagosTotalPages, p + 1))}
-                  disabled={pagosPage >= pagosTotalPages}
-                  className="btn-secondary px-4 py-2 text-xs"
-                >
-                  Siguiente
-                  <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="border-t border-line px-5 py-3.5">
+          <p className="text-[12px] text-ink-3">
+            La vista previa se genera al elegir el reporte, antes de descargar. Tanto el PDF como el
+            CSV incluyen los {resultCount} {pluralize(activePreset.noun, resultCount)} del rango
+            seleccionado, no solo esta página. El PDF lo genera el servidor; el CSV se arma en su
+            navegador con esos mismos datos.
+          </p>
         </div>
-      )}
+      </section>
     </AppShell>
   );
 }
 
-/**
- * "Por Período" results panel: header + export button, local filters
- * (search/age range), and the results table itself.
- *
- * Extracted from `ReportsContent` to keep that component's cognitive
- * complexity within the project's threshold — this panel bundles several
- * independent conditionals (export button, filters, empty state, row map)
- * that don't need to live inline in the parent.
- */
-function PersonaReportTable({
-  personaResults,
-  filteredPersonaResults,
-  paginatedPersonaResults,
-  page,
-  totalPages,
-  onPageChange,
-  searchTerm,
-  setSearchTerm,
-  edadMin,
-  setEdadMin,
-  edadMax,
-  setEdadMax,
-  exportingPdf,
-  onExportPdf,
-  calcAge,
+/** Age in whole years at today's date. */
+function calcAge(fechaNacimiento: string): number {
+  const birth = new Date(fechaNacimiento);
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const monthDiff = now.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+const TH = "h-thead whitespace-nowrap border-b border-line bg-[#FAFAFB] px-5 text-left text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3";
+const TD = "border-b border-line px-5 py-3 text-[13.5px] text-ink-2";
+
+function PersonaPreview({
+  results,
+  total,
 }: {
-  personaResults: PersonaReporte[];
-  filteredPersonaResults: PersonaReporte[];
-  paginatedPersonaResults: PersonaReporte[];
-  page: number;
-  totalPages: number;
-  onPageChange: (updater: (page: number) => number) => void;
-  searchTerm: string;
-  setSearchTerm: (value: string) => void;
-  edadMin: string;
-  setEdadMin: (value: string) => void;
-  edadMax: string;
-  setEdadMax: (value: string) => void;
-  exportingPdf: boolean;
-  onExportPdf: () => void;
-  calcAge: (fechaNacimiento: string) => number;
+  results: PersonaReporte[];
+  total: number;
 }): React.ReactElement {
+  if (total === 0) {
+    return (
+      <EmptyState
+        icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+        title="No se encontraron personas"
+        description="Ninguna persona se registró en este rango. Pruebe con un rango de fechas más amplio."
+      />
+    );
+  }
   return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-cata-border px-6 py-4">
-        <h3 className="text-sm font-semibold text-cata-text">
-          {filteredPersonaResults.length} persona{filteredPersonaResults.length !== 1 ? "s" : ""} encontrada{filteredPersonaResults.length !== 1 ? "s" : ""}
-        </h3>
-        {personaResults.length > 0 && (
-          <button
-            type="button"
-            onClick={onExportPdf}
-            disabled={exportingPdf}
-            className="btn-secondary flex items-center gap-2 text-xs"
-          >
-            {exportingPdf ? (
-              <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />
-            ) : (
-              <Download size={14} strokeWidth={1.5} />
-            )}
-            {exportingPdf ? "Generando..." : "Exportar PDF"}
-          </button>
-        )}
-      </div>
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-left">
+        <thead>
+          <tr>
+            <th scope="col" className={TH}>Nombre</th>
+            <th scope="col" className={TH}>Cédula</th>
+            <th scope="col" className={TH}>Fecha Nac.</th>
+            <th scope="col" className={TH}>Edad</th>
+            <th scope="col" className={TH}>Teléfono</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((persona) => (
+            <tr key={persona.id}>
+              <td className={TD}>
+                <span className="font-semibold text-ink">
+                  {persona.nombres} {persona.apellidos}
+                </span>
+              </td>
+              <td className={TD}>{persona.cedula}</td>
+              <td className={`${TD} tabular-nums`}>{formatDate(persona.fechaNacimiento)}</td>
+              <td className={TD}>{calcAge(persona.fechaNacimiento)} años</td>
+              <td className={TD}>{persona.telefono}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-      {personaResults.length > 0 && (totalPages > 1 || searchTerm || edadMin || edadMax) && (
-        <p className="border-b border-cata-border bg-cata-bg/30 px-6 py-2 text-xs text-cata-text/55">
-          El PDF incluye los {personaResults.length} resultados del rango de fechas seleccionado — no se limita a esta página ni aplica la búsqueda o el filtro de edad.
-        </p>
-      )}
+function AsistenciaPreview({
+  results,
+  total,
+}: {
+  results: AttendanceRecord[];
+  total: number;
+}): React.ReactElement {
+  if (total === 0) {
+    return (
+      <EmptyState
+        icon={<CheckCircle size={21} strokeWidth={1.5} aria-hidden="true" />}
+        title="No se encontraron registros de asistencia"
+        description="Ningún registro coincide con los filtros. Amplíe el rango de fechas o quite el filtro de horario."
+      />
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-left">
+        <thead>
+          <tr>
+            <th scope="col" className={TH}>Fecha</th>
+            <th scope="col" className={TH}>Horario</th>
+            <th scope="col" className={TH}>Estudiante</th>
+            <th scope="col" className={TH}>Estado</th>
+            <th scope="col" className={TH}>Entrenador</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((record) => (
+            <tr key={record.id}>
+              <td className={`${TD} tabular-nums`}>{formatDate(record.fecha)}</td>
+              <td className={TD}>{record.horario}</td>
+              <td className={TD}>
+                <span className="font-semibold text-ink">{record.estudiante}</span>
+              </td>
+              <td className={TD}>
+                <Badge tone={getAttendanceBadgeTone(record.estado)}>
+                  {getAttendanceLabel(record.estado)}
+                </Badge>
+              </td>
+              <td className={TD}>{record.entrenador}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-      {/* Local filters */}
-      {personaResults.length > 0 && (
-        <div className="flex flex-wrap items-end gap-4 border-b border-cata-border bg-cata-bg/30 px-6 py-3">
-          <div>
-            <label htmlFor="localSearch" className="mb-1 block text-xs font-medium text-cata-text/65">
-              Buscar
-            </label>
-            <div className="relative">
-              <Search size={14} strokeWidth={1.5} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-cata-text/40" />
-              <input
-                id="localSearch"
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Nombre, apellido o cédula..."
-                className="input-field py-1.5 pl-8 text-xs"
-              />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="edadMin" className="mb-1 block text-xs font-medium text-cata-text/65">
-              Edad mín
-            </label>
-            <input
-              id="edadMin"
-              type="number"
-              min={0}
-              max={120}
-              value={edadMin}
-              onChange={(e) => setEdadMin(e.target.value)}
-              placeholder="0"
-              className="input-field py-1.5 text-xs"
-            />
-          </div>
-          <div>
-            <label htmlFor="edadMax" className="mb-1 block text-xs font-medium text-cata-text/65">
-              Edad máx
-            </label>
-            <input
-              id="edadMax"
-              type="number"
-              min={0}
-              max={120}
-              value={edadMax}
-              onChange={(e) => setEdadMax(e.target.value)}
-              placeholder="120"
-              className="input-field py-1.5 text-xs"
-            />
-          </div>
-          {(searchTerm || edadMin || edadMax) && (
-            <button
-              type="button"
-              onClick={() => { setSearchTerm(""); setEdadMin(""); setEdadMax(""); }}
-              className="text-xs text-cata-red hover:underline"
-            >
-              Limpiar filtros
-            </button>
-          )}
-        </div>
-      )}
-
-      {filteredPersonaResults.length === 0 ? (
-        <div className="px-6 py-12 text-center">
-          <Users size={32} className="mx-auto mb-3 text-cata-text/25" strokeWidth={1.5} />
-          <p className="text-sm text-cata-text/55">
-            {personaResults.length > 0
-              ? "No se encontraron personas con los filtros locales aplicados."
-              : "No se encontraron personas con los filtros seleccionados."}
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-cata-border bg-cata-bg/50">
-                <th className="px-6 py-3 font-medium text-cata-text/65">Nombre</th>
-                <th className="px-6 py-3 font-medium text-cata-text/65">Cédula</th>
-                <th className="px-6 py-3 font-medium text-cata-text/65">Fecha Nac.</th>
-                <th className="px-6 py-3 font-medium text-cata-text/65">Edad</th>
-                <th className="px-6 py-3 font-medium text-cata-text/65">Teléfono</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-cata-border">
-              {paginatedPersonaResults.map((persona) => (
-                <tr key={persona.id} className="transition-colors hover:bg-cata-bg/30">
-                  <td className="px-6 py-3">
-                    <span className="font-medium text-cata-text">
-                      {persona.nombres} {persona.apellidos}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3 text-cata-text/65">
-                    {persona.cedula}
-                  </td>
-                  <td className="px-6 py-3 text-cata-text/65">
-                    {persona.fechaNacimiento}
-                  </td>
-                  <td className="px-6 py-3 text-cata-text/65">
-                    {calcAge(persona.fechaNacimiento)} años
-                  </td>
-                  <td className="px-6 py-3 text-cata-text/65">
-                    {persona.telefono}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {filteredPersonaResults.length > 0 && totalPages > 1 && (
-        <div className="flex flex-col items-center justify-between gap-3 border-t border-cata-border px-6 py-4 sm:flex-row">
-          <p className="text-sm font-semibold text-cata-text">
-            Página {page} de {totalPages}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onPageChange((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="btn-secondary px-4 py-2 text-xs"
-            >
-              <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
-              Anterior
-            </button>
-            <button
-              type="button"
-              onClick={() => onPageChange((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="btn-secondary px-4 py-2 text-xs"
-            >
-              Siguiente
-              <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      )}
+function PagosPreview({
+  results,
+  total,
+}: {
+  results: PaymentValidationRequest[];
+  total: number;
+}): React.ReactElement {
+  if (total === 0) {
+    return (
+      <EmptyState
+        icon={<Wallet size={21} strokeWidth={1.5} aria-hidden="true" />}
+        title="No se encontraron pagos"
+        description="Ningún pago coincide con los filtros. Amplíe el rango de fechas o elija otro estado."
+      />
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-left">
+        <thead>
+          <tr>
+            <th scope="col" className={TH}>Estudiante</th>
+            <th scope="col" className={TH}>Responsable de Pago</th>
+            <th scope="col" className={TH}>Período</th>
+            <th scope="col" className={TH}>Monto</th>
+            <th scope="col" className={TH}>Método</th>
+            <th scope="col" className={TH}>Subido</th>
+            <th scope="col" className={TH}>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((pago) => (
+            <tr key={pago.id}>
+              <td className={TD}>
+                <span className="font-semibold text-ink">{pago.studentName}</span>
+              </td>
+              <td className={TD}>{pago.responsablePagoName ?? "-"}</td>
+              <td className={TD}>{pago.membershipPeriod}</td>
+              <td className={`${TD} tabular-nums`}>{formatCurrency(pago.expectedAmount)}</td>
+              <td className={TD}>{pago.paymentMethod}</td>
+              <td className={`${TD} tabular-nums`}>{formatDateTime(pago.uploadedAt)}</td>
+              <td className={TD}>
+                <Badge tone={VALIDATION_STATUS_TONES[pago.validationStatus]}>
+                  {VALIDATION_STATUS_LABELS[pago.validationStatus]}
+                </Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

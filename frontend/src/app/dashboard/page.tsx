@@ -1,110 +1,73 @@
 /**
- * Panel de Control — Admin overview (Fase 7, final phase).
+ * Panel de Control — the admin's "jornada", redesigned for Fase 3.
  *
- * Connected to the real backend: `GET /api/dashboard` composes counts from
- * `/personas`, `/membresias/pagos*` and `/asistencias/horarios` — the same
- * FastAPI resources Fases 2-4 already proxy — since there is no backend
- * aggregation endpoint (see src/app/api/dashboard/route.ts).
+ * Source of truth: `docs/ux/prototipos/06-panel.html`.
  *
- * The former "Actividad Reciente" section (mock data: "Sofía Martínez —
- * pago validado", etc.) has been removed rather than left with fabricated
- * content — there is no audit-log/activity-feed endpoint in the backend to
- * back it with real data, and no per-persona timestamped event history
- * exists to derive one from. If that need resurfaces, it requires a new
- * backend endpoint, not a frontend workaround.
+ * The audit's verdict on the previous version was that the page was a table of
+ * contents for the sidebar next to it: four "Acciones Rápidas" cards, of which
+ * four duplicated sidebar links, above three stat cards that answered nothing
+ * in particular. So:
+ *
+ *   · A coal hero carrying ONE number — how many payments are waiting — and
+ *     the button that acts on it. Its sub-line appears only when it has
+ *     something to say. Nothing else lives in the hero.
+ *   · A pulse of three stats: Miembros, Membresías activas and Asistencia over
+ *     the last four weeks. All three share one internal grammar.
+ *   · "Actividad reciente", derived from data the admin surfaces already
+ *     fetch — see `buildActivityFeed` for why this needs no new endpoint and
+ *     what its ceiling is. The comment that used to live here declaring the
+ *     feed impossible is gone with it.
+ *   · The 4-state donut. Its `<table>` legend, per-arc `<title>` and
+ *     bidirectional hover/focus were one of the audit's three named strengths
+ *     and are untouched — only its flow and its text colors changed.
+ *   · `quickActions` is deleted.
+ *
+ * The feed and the donut share one row below the pulse. The page was otherwise
+ * a stack of equal-weight full-width white cards with no path for the eye.
  */
 
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { LucideIcon } from "lucide-react";
-import {
-  Users,
-  ShieldCheck,
-  Calendar,
-  ArrowRight,
-  Clock,
-  Activity,
-  AlertTriangle,
-  UserPlus,
-  UserMinus,
-  PieChart,
-} from "lucide-react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { fetchDashboardStats, fetchAttendanceRecords, type DashboardStats } from "@/services/api";
-import { buildAttendanceStats, type AttendanceDayStats } from "@/app/attendance/attendance-utils";
+import { ArrowRight } from "lucide-react";
+import { buttonClasses, ErrorState, LoadingState, StatCard } from "@/components/ui";
+import {
+  fetchDashboardStats,
+  fetchAttendanceRecords,
+  fetchPaymentValidations,
+  type DashboardStats,
+  type PaymentValidationRequest,
+} from "@/services/api";
+import {
+  buildAttendanceStats,
+  formatHumanDate,
+  type AttendanceDayStats,
+  type AttendanceRecord,
+} from "@/app/attendance/attendance-utils";
+import {
+  buildActivityFeed,
+  buildFourWeekAttendance,
+  countPaymentsWaitingOverAWeek,
+} from "./dashboard-utils";
 import AttendanceStatusChart from "./AttendanceStatusChart";
 
-const quickActions = [
-  {
-    icon: ShieldCheck,
-    label: "Validar Pagos",
-    href: "/payments",
-    description: "Revisar y aprobar o rechazar comprobantes de pago de membresías",
-  },
-  {
-    icon: Users,
-    label: "Gestionar Miembros",
-    href: "/members",
-    description: "Estudiantes, representantes y perfiles de membresía",
-  },
-  {
-    icon: UserPlus,
-    label: "Niveles",
-    href: "/ranking",
-    description: "Niveles de entrenamiento y asignación de estudiantes",
-  },
-  {
-    icon: Calendar,
-    label: "Asistencias",
-    href: "/attendance",
-    description: "Horarios de entrenamiento y registros de asistencia",
-  },
-];
-
-interface StatCardData {
-  icon: LucideIcon;
-  label: string;
-  value: number;
-  trend: "up" | "alert";
-}
-
-function buildStatCards(stats: DashboardStats): StatCardData[] {
-  return [
-    {
-      icon: Users,
-      label: "Miembros Registrados",
-      value: stats.totalPersonas,
-      trend: "up",
-    },
-    {
-      icon: Clock,
-      label: "Pagos Pendientes de Validar",
-      value: stats.pendingPayments,
-      trend: stats.pendingPayments > 0 ? "alert" : "up",
-    },
-    {
-      icon: Calendar,
-      label: "Horarios de Hoy",
-      value: stats.todaySchedules,
-      trend: "up",
-    },
-    {
-      icon: UserMinus,
-      label: "Personas sin Membresía",
-      value: stats.personasSinMembresia,
-      trend: stats.personasSinMembresia > 0 ? "alert" : "up",
-    },
-  ];
-}
+/**
+ * How many activity rows the card shows before deferring to the full lists.
+ *
+ * Five, not six: the feed now shares its row with the donut, and a card that
+ * outgrows its neighbour is back to dominating the page.
+ */
+const ACTIVITY_LIMIT = 5;
 
 export default function DashboardPage(): React.ReactElement {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [attendanceStats, setAttendanceStats] = useState<AttendanceDayStats | null>(null);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [payments, setPayments] = useState<PaymentValidationRequest[]>([]);
 
   const loadStats = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -118,135 +81,197 @@ export default function DashboardPage(): React.ReactElement {
     }
   }, []);
 
-  // Best-effort: unrelated to the main stat cards' error/retry above — if
-  // this fails, the "Distribución de Asistencias" section just doesn't render.
-  const loadAttendance = useCallback(async (): Promise<void> => {
-    try {
-      setAttendanceStats(buildAttendanceStats(await fetchAttendanceRecords()));
-    } catch {
-      setAttendanceStats(null);
-    }
+  /**
+   * Best-effort, and deliberately separate from the stats error/retry above:
+   * these two feed the pulse's attendance bars and the activity card. If
+   * either fails, its section simply does not render — a dashboard that
+   * refuses to load because a secondary list timed out is worse than a
+   * dashboard missing one card.
+   */
+  const loadDetail = useCallback(async (): Promise<void> => {
+    const [recordsResult, paymentsResult] = await Promise.allSettled([
+      fetchAttendanceRecords(),
+      fetchPaymentValidations(),
+    ]);
+    setRecords(recordsResult.status === "fulfilled" ? recordsResult.value : []);
+    setPayments(paymentsResult.status === "fulfilled" ? paymentsResult.value : []);
   }, []);
 
   useEffect(() => {
     void loadStats();
-    void loadAttendance();
-  }, [loadStats, loadAttendance]);
+    void loadDetail();
+  }, [loadStats, loadDetail]);
 
-  const statCards = stats ? buildStatCards(stats) : [];
+  const attendanceStats: AttendanceDayStats = buildAttendanceStats(records);
+  const fourWeeks = buildFourWeekAttendance(records);
+  const activity = buildActivityFeed(payments, records, ACTIVITY_LIMIT);
+
+  const pendingPayments = stats?.pendingPayments ?? 0;
+  const overAWeek = countPaymentsWaitingOverAWeek(payments);
+  const activeMemberships = stats?.activeMemberships ?? 0;
+  const totalPersonas = stats?.totalPersonas ?? 0;
+  const personasSinMembresia = stats?.personasSinMembresia ?? 0;
+  const membershipPercent =
+    totalPersonas > 0 ? Math.round((activeMemberships / totalPersonas) * 100) : 0;
+
+  /**
+   * The hero's second line, or nothing at all.
+   *
+   * It used to fall back to "Ninguno lleva más de una semana esperando" — a
+   * negative spending the most valuable space on the screen to report that
+   * there is nothing to report. The line now appears only when it carries a
+   * reason to act now, or when the queue being empty is itself the news.
+   */
+  const heroNote =
+    overAWeek > 0
+      ? `${overAWeek} ${overAWeek === 1 ? "lleva" : "llevan"} más de una semana esperando`
+      : pendingPayments === 0
+        ? "La cola está al día"
+        : null;
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell
-        eyebrow="Panel Administrativo"
-        title="Panel de Control"
-      >
+      <AppShell eyebrow="Panel administrativo" title="Panel de Control">
         {error && (
-          <div
-            className="mb-6 flex items-center gap-2 rounded-xl border border-cata-red/30 bg-cata-red/10 px-4 py-3 text-sm text-cata-red"
-            role="alert"
-          >
-            <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
-            {error}
-            <button type="button" onClick={() => void loadStats()} className="btn-ghost ml-auto text-xs">
-              Reintentar
-            </button>
-          </div>
+          <ErrorState
+            className="mb-6"
+            title="No se pudieron cargar las estadísticas"
+            message={error}
+            onRetry={() => void loadStats()}
+          />
         )}
 
-        {/* Stats grid */}
         {loading && !stats ? (
-          <div className="mb-12 flex items-center justify-center gap-2 py-16">
-            <Clock size={16} strokeWidth={1.5} className="animate-spin text-cata-text/65" aria-hidden="true" />
-            <p className="text-sm text-cata-text/50">Cargando estadísticas...</p>
-          </div>
+          <LoadingState className="mb-8" label="Cargando estadísticas…" />
         ) : (
-          <div className="mb-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {statCards.map((stat) => {
-              const isAlert = stat.trend === "alert";
-              return (
-                <div
-                  key={stat.label}
-                  className={
-                    isAlert
-                      ? "card flex items-center gap-3 border-2 border-cata-red/40 bg-cata-yellow/10 p-4 shadow-elevated sm:p-5"
-                      : "card flex items-center gap-3 p-4 sm:p-5"
-                  }
-                >
-                  <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                      isAlert ? "bg-cata-yellow/25" : "bg-cata-red/15"
-                    }`}
+          <>
+            {/* Hero — one number, one action. Nothing else belongs here. */}
+            <section className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-4 rounded-card bg-coal px-6 py-6">
+              <span className="text-[56px] font-extrabold leading-none tracking-[-0.05em] tabular-nums text-white">
+                {pendingPayments}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-bold text-white">
+                  {pendingPayments === 1
+                    ? "Pago espera tu validación"
+                    : "Pagos esperan tu validación"}
+                </span>
+                {heroNote && (
+                  <span
+                    data-testid="hero-note"
+                    className="mt-1 flex items-center gap-2 text-[13px] text-white/60"
                   >
-                    <stat.icon
-                      size={20}
-                      strokeWidth={isAlert ? 2 : 1.5}
-                      className="text-cata-red"
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <p className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-cata-text/65">
-                    {stat.label}
-                  </p>
-                  <p className="flex shrink-0 items-center gap-1.5 text-2xl font-bold tracking-tight text-cata-text">
-                    {stat.value}
-                    {isAlert && (
-                      <span className="h-2 w-2 rounded-full bg-cata-red" aria-hidden="true">
-                        <span className="sr-only">Atención</span>
-                      </span>
-                    )}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+                    <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
+                    {heroNote}
+                  </span>
+                )}
+              </span>
+              <Link href="/payments" className={buttonClasses("primary")}>
+                {pendingPayments > 0 ? "Revisar ahora" : "Ver pagos"}
+                <ArrowRight size={15} strokeWidth={2} aria-hidden="true" />
+              </Link>
+            </section>
+
+            {/*
+              Pulse — one internal grammar across all four tiles: uppercase
+              label, ink figure with its unit, one caption line.
+
+              The tiles used to close on three different things — a caption, a
+              progress track, four sparkbars — which read as three unrelated
+              widgets rather than one pulse. Miembros has no ratio the API
+              supplies, so no meter could be made uniform; the captions carry
+              the numbers the widgets only gestured at, which is what the
+              sparkbars' own aria-label already conceded they could not.
+            */}
+            <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard label="Miembros" value={totalPersonas} hint="personas registradas" />
+              {/*
+                  "de N personas", not a bare "de N": this counts membresía
+                  rows in estado ACTIVA against EVERY registered persona —
+                  administradores and entrenadores included, none of whom ever
+                  holds a membership. `/members` counts a different population
+                  (students inside the account tree), and the two tiles were
+                  both labelled "Membresías activas" while answering different
+                  questions. Each now names its own denominator.
+              */}
+              <StatCard
+                label="Membresías activas"
+                value={activeMemberships}
+                unit={`de ${totalPersonas}`}
+                hint={`${membershipPercent}% de las personas registradas`}
+              />
+              <StatCard
+                label="Sin membresía"
+                value={personasSinMembresia}
+                hint={`personas por regularizar de ${totalPersonas}`}
+              />
+              <StatCard
+                label="Asistencia · 4 semanas"
+                value={fourWeeks.ratePercent}
+                unit="%"
+                hint={`${fourWeeks.present} de ${fourWeeks.total} presentes`}
+              />
+            </div>
+          </>
         )}
 
-        {/* Quick Actions — full width now that Actividad Reciente (mock-only) has been removed */}
-        <div className="mb-6 flex items-center gap-2">
-          <Activity size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-          <h2 className="text-lg font-bold text-cata-text">Acciones Rápidas</h2>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {quickActions.map((action) => (
-            <Link key={action.href} href={action.href} className="h-full">
-              <div className="card-hover group flex h-full items-start gap-4 p-4 sm:p-5">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cata-red/15">
-                  <action.icon
-                    size={20}
-                    strokeWidth={1.5}
-                    className="text-cata-red"
-                    aria-hidden="true"
-                  />
-                </div>
-                <div className="flex-1">
-                  <p className="font-bold text-cata-text">{action.label}</p>
-                  <p className="mt-0.5 text-sm text-cata-text/65">
-                    {action.description}
-                  </p>
-                </div>
-                <ArrowRight
-                  size={18}
-                  strokeWidth={1.5}
-                  className="mt-1 shrink-0 text-cata-text/30 transition-transform group-hover:translate-x-0.5"
-                  aria-hidden="true"
-                />
+        {/*
+          Below the pulse the page used to be a stack of equal-weight full-width
+          white cards — hero, stats, feed, donut — with no grouping and no path
+          for the eye. Neither the feed nor the donut needs the full width, so
+          they share one row: the feed takes the flexible column, the donut a
+          fixed narrower one. Each still stands alone when the other has no data.
+        */}
+        <div
+          data-testid="dashboard-lower"
+          className={`grid items-start gap-4 ${
+            // Only split the row when there are in fact two cards to split it
+            // between: a lone card holds the full width rather than sitting
+            // beside an empty 340px track.
+            activity.length > 0 && attendanceStats.totalStudents > 0
+              ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]"
+              : ""
+          }`}
+        >
+          {activity.length > 0 && (
+            <section
+              data-testid="activity-feed"
+              className="overflow-hidden rounded-card border border-line bg-paper"
+            >
+              <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
+                <h2 className="flex-1 text-[15px] font-bold text-ink">Actividad reciente</h2>
+                <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
+                  Ver todo
+                </Link>
               </div>
-            </Link>
-          ))}
-        </div>
+              <ul className="divide-y divide-line">
+                {activity.map((event) => (
+                  <li key={event.id} className="flex items-center gap-3 px-[18px] py-3">
+                    <span
+                      aria-hidden="true"
+                      className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-canvas text-[11.5px] font-bold text-ink-2"
+                    >
+                      {event.initials}
+                    </span>
+                    <span className="min-w-0 flex-1 text-[13.5px] text-ink-2">
+                      <b className="font-semibold text-ink">{event.subject}</b> {event.detail}
+                    </span>
+                    <span className="flex-none text-[11.5px] text-ink-3">
+                      {formatHumanDate(event.at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-        {attendanceStats && attendanceStats.totalStudents > 0 && (
-          <div className="mt-8">
-            <div className="mb-6 flex items-center gap-2">
-              <PieChart size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-              <h2 className="text-lg font-bold text-cata-text">Distribución de Asistencias</h2>
-            </div>
-            <div className="card p-5 sm:p-6">
+          {attendanceStats.totalStudents > 0 && (
+            <section className="rounded-card border border-line bg-paper p-[18px]">
+              <h2 className="mb-4 text-[15px] font-bold text-ink">Distribución de asistencias</h2>
               <AttendanceStatusChart stats={attendanceStats} />
-            </div>
-          </div>
-        )}
+            </section>
+          )}
+        </div>
       </AppShell>
     </ProtectedRoute>
   );

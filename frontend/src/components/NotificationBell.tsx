@@ -9,10 +9,11 @@
 
 "use client";
 
-import { useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { Bell, CheckCheck } from "lucide-react";
 import type { Notificacion, TipoNotificacion } from "@/types/domain";
 import { formatDateTime } from "@/lib/format-utils";
+import { useDismissablePopup } from "@/lib/useDismissablePopup";
 
 const TIPO_LABELS: Record<TipoNotificacion, string> = {
   MIEMBRESIA_VENCIMIENTO_PROXIMO: "Membresía próxima a vencer",
@@ -47,15 +48,25 @@ export default function NotificationBell({
   variant = "dark",
 }: NotificationBellProps): React.ReactElement {
   const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const unreadCount = notificaciones.filter((n) => !n.leida).length;
+
+  const close = useCallback((): void => setOpen(false), []);
+  useDismissablePopup({ open, onClose: close, panelRef, triggerRef });
 
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={TRIGGER_VARIANT_CLASSES[variant]}
-        aria-haspopup="true"
+        // The panel is a plain labelled container, not a menu — `aria-haspopup="true"`
+        // is an alias for "menu" and promised keyboard behavior this popup does not have.
+        aria-haspopup="dialog"
+        aria-controls={panelId}
         aria-expanded={open}
         aria-label={unreadCount > 0 ? `Notificaciones — ${unreadCount} sin leer` : "Notificaciones"}
       >
@@ -71,7 +82,13 @@ export default function NotificationBell({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-cata-border bg-cata-surface p-2 shadow-elevated">
+        <div
+          ref={panelRef}
+          id={panelId}
+          role="dialog"
+          aria-label="Notificaciones"
+          className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-cata-border bg-cata-surface p-2 shadow-elevated"
+        >
           <div className="flex items-center justify-between px-2 py-1.5">
             <p className="text-xs font-bold uppercase tracking-wider text-cata-text/45">Notificaciones</p>
             {unreadCount > 0 && (

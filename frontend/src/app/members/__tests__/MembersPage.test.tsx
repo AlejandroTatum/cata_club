@@ -49,9 +49,19 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({
+  useAuth: vi.fn(),
+}));
+
+import { useAuth } from "@/contexts/AuthContext";
+const mockUseAuth = vi.mocked(useAuth);
+
+type AuthState = ReturnType<typeof useAuth>;
+
+/** Auth state for a fully hydrated session with the given role. */
+function resolvedAuth(role: string): AuthState {
+  return {
     session: {
-      user: { id: "u1", name: "Admin Test", email: "admin@cataclub.com", role: "admin", representanteId: null },
+      user: { id: "u1", name: "Admin Test", email: "admin@cataclub.com", role, representanteId: null },
       roles: ["ADMINISTRADOR"],
       loggedInAt: "2026-07-01T12:00:00Z",
     },
@@ -59,8 +69,27 @@ vi.mock("@/contexts/AuthContext", () => ({
     isLoading: false,
     login: vi.fn(),
     logout: vi.fn(),
-  }),
-}));
+    revalidate: vi.fn(),
+  } as unknown as AuthState;
+}
+
+/** Auth state while the session is still hydrating from the BFF. */
+function hydratingAuth(): AuthState {
+  return {
+    session: null,
+    isAuthenticated: false,
+    isLoading: true,
+    login: vi.fn(),
+    logout: vi.fn(),
+    revalidate: vi.fn(),
+  } as unknown as AuthState;
+}
+
+// Every existing suite assumes a resolved admin session; the role-gate suite
+// below overrides this per test.
+beforeEach(() => {
+  mockUseAuth.mockReturnValue(resolvedAuth("admin"));
+});
 
 vi.mock("@/contexts/ToastContext", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -141,21 +170,29 @@ function createAccounts(count: number): MemberAccount[] {
   }));
 }
 
+/**
+ * The account's table row (`sm` and up). Below `sm` the same account is
+ * rendered again as a card — the five-column table cannot fit on a phone, and
+ * the previous fix of hiding four of its five columns left a one-column list
+ * with a duplicated edit button crammed under the name. jsdom applies no real
+ * CSS, so both renderings are in the document here; this helper picks the row.
+ */
 async function findAccountRow(): Promise<HTMLElement> {
-  return (await screen.findByText("María González")).closest("tr") as HTMLElement;
+  const matches = await screen.findAllByText("María González");
+  const row = matches.map((el) => el.closest("tr")).find(Boolean);
+  return row as HTMLElement;
 }
 
-/**
- * Each row renders two "Editar" triggers — a desktop one and a
- * mobile-visible duplicate (the desktop trigger's whole column is CSS-hidden
- * below `sm`, so mobile needs its own reachable one). jsdom doesn't apply
- * real CSS, so both match `getByRole` here; the mobile one comes first in
- * DOM order (it lives in the always-rendered name column), which is also
- * what the component's focus-restoration logic naturally targets when a
- * test clicks this one.
- */
+/** The account's card rendering (below `sm`). */
+async function findAccountCard(): Promise<HTMLElement> {
+  const matches = await screen.findAllByText("María González");
+  const card = matches.map((el) => el.closest("li")).find(Boolean);
+  return card as HTMLElement;
+}
+
+/** Each rendering carries exactly one "Editar <name>" trigger. */
 function getEditButton(container: HTMLElement): HTMLElement {
-  return within(container).getAllByRole("button", { name: /^editar$/i })[0];
+  return within(container).getAllByRole("button", { name: /^editar/i })[0];
 }
 
 describe("MembersPage — Editar member modal", () => {
@@ -194,23 +231,48 @@ describe("MembersPage — Editar member modal", () => {
     return dialog;
   }
 
-  it("renders an Editar trigger per account row (desktop + a mobile-visible duplicate) instead of inline role/status controls", async () => {
+  it("gives each rendering exactly one Editar trigger, and no inline role/status controls", async () => {
     render(
       <ToastProvider>
         <MembersPage />
       </ToastProvider>,
     );
     const row = await findAccountRow();
+    const card = await findAccountCard();
 
-    // Two triggers exist by design — one in the desktop-only contact/status
-    // column, one next to the mobile status badge (that column is CSS-hidden
-    // below `sm`, so mobile needs its own reachable trigger). jsdom doesn't
-    // apply real CSS, so both are "in the document" here; only one is ever
-    // visually reachable at a given real viewport.
-    expect(within(row).getAllByRole("button", { name: /^editar$/i })).toHaveLength(2);
+    // One in the row, one in the phone card — not two stacked in the same
+    // cell, which is what the audit found.
+    expect(within(row).getAllByRole("button", { name: /^editar/i })).toHaveLength(1);
+    expect(within(card).getAllByRole("button", { name: /^editar/i })).toHaveLength(1);
     expect(within(row).queryByRole("button", { name: /^roles$/i })).not.toBeInTheDocument();
     expect(within(row).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows contact, student count and membership on the phone card instead of hiding them", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const card = await findAccountCard();
+
+    // The audit's finding: below `sm` these were all `hidden sm:table-cell`.
+    expect(within(card).getByText(ACCOUNT.telefono)).toBeInTheDocument();
+    expect(within(card).getByText(String(ACCOUNT.estudiantes.length))).toBeInTheDocument();
+    expect(within(card).getByText(/activo|sin membresía|vencida|pendiente/i)).toBeInTheDocument();
+  });
+
+  it("opens exactly one dialog, however many renderings of the account exist", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const card = await findAccountCard();
+    fireEvent.click(getEditButton(card));
+
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 
   it("never renders a row expand/collapse control — the table no longer expands", async () => {
@@ -327,7 +389,7 @@ describe("MembersPage — Editar member modal", () => {
 
     fireEvent.change(nombresInput, { target: { value: "María José" } });
     fireEvent.change(telefonoInput, { target: { value: "0988888888" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: /guardar datos/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /guardar nombre, apellido y teléfono/i }));
 
     await waitFor(() => {
       expect(mockActualizarPersona).toHaveBeenCalledWith(1, {
@@ -350,7 +412,7 @@ describe("MembersPage — Editar member modal", () => {
 
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /guardar datos/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /guardar nombre, apellido y teléfono/i }));
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("No se pudo actualizar");
   });
@@ -524,7 +586,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(getEditButton(row));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /^cerrar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -538,7 +600,7 @@ describe("MembersPage — Editar member modal", () => {
 
     const editButton = getEditButton(row);
     fireEvent.click(editButton);
-    fireEvent.click(screen.getByRole("button", { name: /^cerrar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
 
     expect(document.activeElement).toBe(editButton);
   });
@@ -559,7 +621,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /admin/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Error de red");
 
-    fireEvent.click(screen.getByRole("button", { name: /^cerrar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
     fireEvent.click(getEditButton(row));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -601,8 +663,15 @@ describe("MembersPage — Editar member modal", () => {
       </ToastProvider>,
     );
 
-    const row1 = (await screen.findByText("Responsable 1 González")).closest("tr") as HTMLElement;
-    const row2 = screen.getByText("Responsable 2 González").closest("tr") as HTMLElement;
+    const rowOf = (name: string): HTMLElement =>
+      screen
+        .getAllByText(name)
+        .map((el) => el.closest("tr"))
+        .find(Boolean) as HTMLElement;
+
+    await screen.findAllByText("Responsable 1 González");
+    const row1 = rowOf("Responsable 1 González");
+    const row2 = rowOf("Responsable 2 González");
 
     fireEvent.click(getEditButton(row1));
     expect(screen.getByRole("dialog")).toHaveTextContent("Responsable 1");
@@ -812,5 +881,285 @@ describe("MembersPage — honest aggregate coverage", () => {
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: /paginación/i })).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Modal footer honesty (P0).
+//
+// The footer's red primary read "Guardar cambios" but its handler was
+// `onToggleEditModal` — identical to the "Cancelar" button beside it. It saved
+// nothing. Everything in the modal already persists per action, and the
+// identity fields have their own save button, so the footer must not promise
+// a save it never performs.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — edit modal footer does not fake a save", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT], niveles: [] });
+    mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
+    mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
+    mockCrearMembresia.mockReset();
+    mockActualizarPersona.mockReset();
+  });
+
+  it("offers no 'Guardar cambios' button, because nothing in the footer saves", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).queryByRole("button", { name: /guardar cambios/i })).not.toBeInTheDocument();
+    // The paired "Cancelar" is gone too — with no save to cancel, offering
+    // "Cancelar" implies discardable changes that were already persisted.
+    expect(within(dialog).queryByRole("button", { name: /^cancelar$/i })).not.toBeInTheDocument();
+  });
+
+  it("closes the modal from a single secondary 'Cerrar' action in the footer", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    // Exactly one control is named plain "Cerrar" — the footer's secondary.
+    // The header's icon-only dismiss is "Cerrar ventana" so the two are
+    // distinguishable in a screen reader's controls list.
+    const footerClose = within(dialog).getByRole("button", { name: "Cerrar" });
+    // Secondary, not the red primary: dismissing is not the CTA here.
+    expect(footerClose.className).toContain("bg-paper");
+    expect(footerClose.className).not.toContain("cata-red");
+
+    fireEvent.click(footerClose);
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("declares each group's save contract instead of one blanket claim in the header", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    // The old header said "Los cambios se guardan al instante" — true of roles
+    // and estado, false of the identity fields and the membership form.
+    expect(within(dialog).queryByText(/los cambios se guardan al instante/i)).not.toBeInTheDocument();
+
+    for (const title of ["Datos de la cuenta", "Estado de la cuenta", "Roles", "Estudiantes a cargo"]) {
+      const heading = within(dialog).getByRole("heading", { name: title });
+      const header = heading.parentElement as HTMLElement;
+      expect(within(header).getByText(/se guarda al instante|requiere guardar/i)).toBeInTheDocument();
+    }
+
+    const datos = within(dialog).getByRole("heading", { name: "Datos de la cuenta" })
+      .parentElement as HTMLElement;
+    expect(within(datos).getByText("Requiere guardar")).toBeInTheDocument();
+
+    const roles = within(dialog).getByRole("heading", { name: "Roles" }).parentElement as HTMLElement;
+    expect(within(roles).getByText("Se guarda al instante")).toBeInTheDocument();
+  });
+
+  it("gives the role switch a visible focus ring on the box that holds focus", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    // The audit: the real checkbox is `sr-only` and the visible switch is
+    // `aria-hidden`, so without a focus style on the wrapping label, keyboard
+    // focus landed somewhere invisible.
+    const checkbox = within(dialog).getByRole("checkbox", { name: /admin/i });
+    const label = checkbox.closest("label") as HTMLElement;
+    expect(label.className).toContain("focus-within:outline");
+    expect(label.className).toContain("focus-within:outline-ball");
+
+    // A bare ball outline is 1.41:1 on the chip fill — the same failure the
+    // globals.css rule was written to correct, and this label sits outside
+    // that rule's reach. The coal band is what carries the 3:1: it wraps the
+    // ball, so the outline hugs the chip at offset 0 instead of floating 2px
+    // off it. See color-contrast.test.ts for the measurements.
+    expect(label.className).toContain("focus-within:shadow-[0_0_0_4px_#131316]");
+    expect(label.className).toContain("focus-within:outline-offset-0");
+    expect(label.className).not.toContain("focus-within:outline-offset-2");
+  });
+
+  it("marks a selected role with coal, never red", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ADMINISTRADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    const checkbox = await within(dialog).findByRole("checkbox", { name: /admin/i });
+    await waitFor(() => expect(checkbox).toBeChecked());
+    const label = checkbox.closest("label") as HTMLElement;
+    expect(label.className).toContain("border-coal");
+    expect(label.className).not.toContain("cata-red");
+  });
+
+  it("names the identity save button after the two fields it actually saves", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    // "Guardar datos" was ambiguous next to roles/estado/membresía controls
+    // that save themselves; this button only PATCHes nombres/apellidos/teléfono.
+    expect(
+      within(dialog).getByRole("button", { name: "Guardar nombre, apellido y teléfono" }),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Guardar datos" })).not.toBeInTheDocument();
+  });
+
+  it("reloads the member list after creating a membership instead of asking the user to reload", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([
+      { id: 5, categoria: "Mensual", precio: 25, modalidad: "mensual" },
+    ]);
+    mockCrearMembresia.mockResolvedValue({ id: 77 });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
+    const combobox = await within(dialog).findByRole("combobox");
+    fireEvent.change(combobox, { target: { value: "5" } });
+
+    const callsBefore = mockFetchMembers.mock.calls.length;
+    const form = combobox.parentElement as HTMLElement;
+    fireEvent.click(within(form).getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => expect(mockCrearMembresia).toHaveBeenCalled());
+    // The list refreshes itself — the row shows the new membership without a
+    // manual page reload.
+    await waitFor(() =>
+      expect(mockFetchMembers.mock.calls.length).toBeGreaterThan(callsBefore),
+    );
+    expect(screen.queryByText(/recarga para verla/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the edit dialog open while the post-creation refresh is in flight", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([
+      { id: 5, categoria: "Mensual", precio: 25, modalidad: "mensual" },
+    ]);
+    mockCrearMembresia.mockResolvedValue({ id: 77 });
+
+    // Hold the refresh open so the in-flight window is observable. The bug was
+    // that the refresh flipped the page-level `loading` flag, which gates the
+    // whole account list — unmounting the dialog the admin was working in and
+    // discarding every unsaved field in it.
+    let releaseRefresh: (() => void) | undefined;
+    const refreshed = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
+    const combobox = await within(dialog).findByRole("combobox");
+    fireEvent.change(combobox, { target: { value: "5" } });
+
+    mockFetchMembers.mockImplementationOnce(async () => {
+      await refreshed;
+      return { accounts: [ACCOUNT], niveles: [] };
+    });
+
+    const form = combobox.parentElement as HTMLElement;
+    fireEvent.click(within(form).getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => expect(mockCrearMembresia).toHaveBeenCalled());
+
+    // Mid-refresh: the dialog is still mounted and still holds its own state.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    releaseRefresh?.();
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Role-gated fetch (P2).
+//
+// `loadMembers` ran from a bare mount effect, so a non-admin (e.g. a student
+// landing on /members) fired GET /api/members and logged a 403 before
+// ProtectedRoute's redirect effect ran. ProtectedRoute is mocked to a
+// pass-through here so the fetch gate is what is under test, not the guard.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — defers /api/members until the role resolves", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT], niveles: [] });
+    mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
+  });
+
+  it("does not request members while the session is still hydrating", async () => {
+    mockUseAuth.mockReturnValue(hydratingAuth());
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => expect(mockFetchMembers).not.toHaveBeenCalled());
+  });
+
+  it("does not request members for a resolved non-admin role", async () => {
+    mockUseAuth.mockReturnValue(resolvedAuth("student"));
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => expect(mockFetchMembers).not.toHaveBeenCalled());
+  });
+
+  it("requests members once the admin role has resolved", async () => {
+    mockUseAuth.mockReturnValue(resolvedAuth("admin"));
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => expect(mockFetchMembers).toHaveBeenCalled());
+    expect((await screen.findAllByText("María González")).length).toBeGreaterThan(0);
   });
 });

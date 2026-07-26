@@ -585,6 +585,14 @@ export interface MembersResponse {
   accounts: MemberAccount[];
   niveles: NivelConOcupacion[];
   personasCapped: boolean;
+  /**
+   * `true` when at least one membership could not be resolved upstream, so
+   * `estudiante.membresia` is `null` for reasons that are NOT "this student has
+   * no membership". Counting those as zero is what let `/members` claim
+   * "Membresías activas · 0" while `/dashboard` and the student portals showed
+   * active memberships — see the note in src/app/api/members/route.ts.
+   */
+  membresiasDegraded?: boolean;
 }
 
 /** List every account (responsible payer + managed students) and ranking niveles with occupancy, aggregated server-side — see src/lib/server/members-adapter.ts. */
@@ -606,14 +614,21 @@ export interface AlumnoConNivel {
  * for the nivel-asignation panel because `/personas/` is admin-only.
  */
 export async function fetchAlumnosConNivel(): Promise<AlumnoConNivel[]> {
-  const items = await request<{ persona_id: number; nombres: string; apellidos: string; nivel_ranking_id: number | null }[]>(
+  // camelCase, NOT snake_case: `AlumnoConNivelDTO` extends `ResponseBase`,
+  // which sets `alias_generator=_to_camel` (backend schemas/base.py:45), and
+  // the BFF passes the body through untouched. Reading `persona_id` /
+  // `nivel_ranking_id` yielded `undefined` for every field, which is worse than
+  // a crash: `undefined !== null` counted every student as assigned while
+  // `undefined === nivel.id` matched no level, so /ranking reported "68 de 68
+  // asignados" over eleven levels that all read "Sin estudiantes".
+  const items = await request<{ personaId: number; nombres: string; apellidos: string; nivelRankingId: number | null }[]>(
     apiEndpoint("/ranking/alumnos-con-nivel"),
   );
   return items.map((it) => ({
-    personaId: it.persona_id,
+    personaId: it.personaId,
     nombres: it.nombres,
     apellidos: it.apellidos,
-    nivelRankingId: it.nivel_ranking_id,
+    nivelRankingId: it.nivelRankingId ?? null,
   }));
 }
 
@@ -658,7 +673,16 @@ export interface Institucion {
   tipoEscuela: string;
 }
 
-/** Fetch all institutions for the school selector (read-only, any auth). */
+/**
+ * Fetch all institutions for the school selector (read-only, any auth).
+ *
+ * `tipoEscuela`, NOT `tipo_escuela`: `InstitucionResponseDTO` extends
+ * `ResponseBase` (backend/app/presentacion/schemas/persona_schemas.py:17), so
+ * it serialises camelCase like every other response — see
+ * `fetchAlumnosConNivel` for the same bug and what it cost. Reading the
+ * snake_case key made every option render "Nombre (undefined)" and left the
+ * "tipo de escuela" filter unable to match anything.
+ */
 export async function fetchInstituciones(): Promise<Institucion[]> {
   const response: unknown = await request<unknown>(apiEndpoint("/personas/instituciones"));
   if (!Array.isArray(response)) {
@@ -667,7 +691,7 @@ export async function fetchInstituciones(): Promise<Institucion[]> {
   return response.map((item: Record<string, unknown>) => ({
     id: item.id as number,
     nombre: item.nombre as string,
-    tipoEscuela: item.tipo_escuela as string,
+    tipoEscuela: item.tipoEscuela as string,
   }));
 }
 
@@ -731,6 +755,9 @@ export interface MembershipSummary {
   categoria: string | null;
   modalidad: string | null;
   franjaHoraria: string | null;
+  /** Activation date, i.e. "socio desde". Null when the backend omits it. */
+  fechaActivacion: string | null;
+  /** End of the paid period — drives the "Vigente hasta"/"Venció" state. */
   fechaFin: string | null;
 }
 
@@ -776,13 +803,24 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
 // Ranking Data Fetching (GET endpoints — replace mock data)
 // ---------------------------------------------------------------------------
 
+/**
+ * `AsignacionRankingResponseDTO` extends `ResponseBase`
+ * (backend/app/presentacion/schemas/ranking_schemas.py:113), so the wire shape
+ * is camelCase — this interface was declared snake_case, which would have made
+ * every field `undefined` at runtime. Nothing renders it today, so the bug was
+ * latent rather than visible; it is corrected here so the next caller does not
+ * inherit it.
+ *
+ * NOTE: `GET /ranking/asignaciones` currently answers 500 on the live backend.
+ * Verify it before building anything on this.
+ */
 export interface AsignacionRanking {
-  persona_id: number;
-  persona_nombre_completo: string;
-  nivel_ranking_id: number;
-  nivel_ranking_nombre: string | null;
-  nivel_ranking_numero: number;
-  esta_en_ranking: boolean;
+  personaId: number;
+  personaNombreCompleto: string;
+  nivelRankingId: number;
+  nivelRankingNombre: string | null;
+  nivelRankingNumero: number;
+  estaEnRanking: boolean;
 }
 
 export async function fetchAsignacionesRanking(): Promise<AsignacionRanking[]> {

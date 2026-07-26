@@ -63,7 +63,7 @@ describe("ProtectedRoute", () => {
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
-    expect(screen.getByText("Cargando sesión...")).toBeInTheDocument();
+    expect(screen.getByText("Cargando sesión…")).toBeInTheDocument();
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrenador — Prototipos Cata Club</title>
+<link rel="stylesheet" href="_sistema.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-ball" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 1 6.4 15.4l-2.8-2.8"/><path d="M12 3a9 9 0 0 0-6.4 15.4L14 10"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2h4a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4"/><path d="M9 2h6v4H9z"/><path d="m9 13 2 2 4-4"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3h.5a8.5 8.5 0 0 1 8 8Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+</svg>
+
+<div class="wrap">
+  <p class="crumb"><a href="index.html">Prototipos</a> <span class="sep">/</span> <span class="here">Entrenador</span></p>
+  <div class="ptitle">
+    <h1>Entrenador — mi día</h1><span class="route">/trainer</span>
+    <span class="grow"></span><span class="flag">C3 resuelto</span>
+  </div>
+
+  <div class="note">
+    <h2><span class="mine">Decidido</span> El hero solo afirma lo que el backend puede sostener</h2>
+    <p>
+      El prototipo original decía «12 estudiantes esperan en la <b>Mesa 2</b>». Lo cambié:
+      <code>HorarioResponseDTO</code> <b>no expone cancha, mesa ni cupo</b> — eso existía solo en el
+      mock viejo del frontend, y está documentado en <code>attendance-adapter.ts</code>. Ahora dice
+      «12 estudiantes inscritos», que sale de contar <code>AlumnoHorario</code>. Si el club quiere la
+      mesa en pantalla, es un campo nuevo en el backend, no un texto de diseño.
+    </p>
+    <p>
+      La navegación queda en <b>dos ítems</b>: Mi día y Asistencia. Niveles se elimina y con esa ruta
+      se va el 403. El historial deja el centro de la pantalla y pasa a enlace: el entrenador tiene una
+      sola decisión por delante y es pasar lista.
+    </p>
+  </div>
+
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><span class="disc"><svg><use href="#i-ball"/></svg></span><div><b>Cata Club</b><span>Panel de gestión</span></div></div>
+      <nav>
+        <a class="nav-i on" href="19-entrenador.html"><svg><use href="#i-grid"/></svg>Mi día</a>
+        <a class="nav-i" href="20-tomar-lista.html"><svg><use href="#i-clip"/></svg>Asistencia</a>
+      </nav>
+      <div class="foot-nav">
+        <a class="nav-i" href="28-chat.html"><svg><use href="#i-chat"/></svg>Ayuda y soporte</a>
+        <div class="user"><span class="av">CM</span><div><b>Carlos Mendoza</b><span>Entrenador</span></div></div>
+      </div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <span class="date">Miércoles 23 de julio</span><span class="grow"></span>
+        <span class="srch"><svg><use href="#i-search"/></svg>Buscar una sección… <kbd>Ctrl K</kbd></span>
+        <span class="icob"><svg><use href="#i-bell"/></svg></span>
+      </div>
+      <div class="canvas">
+        <h2 class="h-page">Hola, Carlos</h2>
+
+        <div class="hero">
+          <span class="big">15:00</span>
+          <span class="txt">
+            <b>Lunes 15:00 — 16:00 · Nivel 9</b>
+            <span>En 25 minutos · 12 estudiantes inscritos</span>
+          </span>
+          <a class="btn pri xl" href="20-tomar-lista.html">Pasar lista <svg><use href="#i-arr"/></svg></a>
+        </div>
+
+        <p class="muted">Después: <b style="color:var(--ink)">16:00</b> Nivel 7 · <b style="color:var(--ink)">17:00</b> Nivel 5</p>
+
+        <div class="card pad rowline" style="flex-wrap:wrap">
+          <div class="grow" style="min-width:230px">
+            <p class="sec-t">Hoy ya registraste 47 asistencias</p>
+            <p class="muted" style="margin-top:3px">68% presentes en las tres sesiones de la mañana</p>
+          </div>
+          <a class="btn" href="21-entrenador-historial.html">Ver historial</a>
+        </div>
+
+        <div class="card">
+          <div class="cardhead"><h3 class="sec-t grow">Última lista — Lunes 15:00</h3><a class="btn sm" href="20-tomar-lista.html">Corregir</a></div>
+          <div class="pad" style="display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <span class="badge ok">9 presentes</span>
+              <span class="badge warn">1 tardanza</span>
+              <span class="badge">1 justificado</span>
+              <span class="badge bad">1 ausente</span>
+            </div>
+            <div class="rowline" style="border-top:1px solid var(--line);padding-top:15px;flex-wrap:wrap">
+              <p class="grow" style="margin:0;font-size:13.5px;color:var(--ink-2);min-width:230px">
+                <b style="color:var(--ink)">Luis Lopez</b> suma <b style="color:var(--ink)">3 ausencias</b> este mes
+              </p>
+              <button class="btn dark sm">Avisar al club</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot"><span>Prototipo estático.</span><span>Su proceso: <a href="20-tomar-lista.html" style="color:inherit">Tomar lista</a>.</span></p>
+</div>
+</body>
+</html>

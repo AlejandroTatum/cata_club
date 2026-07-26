@@ -1,24 +1,52 @@
 /**
- * Component tests for NivelPage — single "Asignar Nivel" section (the
- * "Resultados Mensuales" tab was removed) plus its search/nivel filter.
+ * Component tests for `/trainer/nivel`.
+ *
+ * The point of this file is ONE requirement — *"la pantalla de nivel tiene que
+ * ser la misma en entrenador que la de admin."* The trainer used to get an
+ * upstream table (`NivelAsignacionPanel`) while the admin got the ladder; the
+ * route now renders the very same `NivelLadderScreen` `/ranking` renders, so
+ * these tests assert sameness rather than re-testing the ladder's own
+ * behaviour (that lives in `src/app/ranking/__tests__/RankingPage.test.tsx`).
+ *
+ * What is checked here: the trainer sees the ladder and not the table, with
+ * the trainer's own back link and the shared title; a trainer can actually
+ * work the screen (both endpoints); the route admits trainers and nobody else;
+ * and the two routes render the same content.
  *
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import NivelPage from "@/app/trainer/nivel/page";
-import type { NivelConOcupacion } from "@/services/api";
+import RankingPage from "@/app/ranking/page";
+import type { AlumnoConNivel, NivelConOcupacion } from "@/services/api";
+import type { UserRole } from "@/types/domain";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 
+/**
+ * `ProtectedRoute` is stubbed to render its children AND record the roles it
+ * was handed — the route's role gate is a prop, so recording it is how a
+ * component test can assert that an estudiante or representante is turned
+ * away without mounting the real redirect machinery.
+ */
+const recordedAllowedRoles: UserRole[][] = [];
 vi.mock("@/components/ProtectedRoute", () => ({
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  default: ({
+    children,
+    allowedRoles,
+  }: {
+    children: React.ReactNode;
+    allowedRoles: UserRole[];
+  }) => {
+    recordedAllowedRoles.push(allowedRoles);
+    return <>{children}</>;
+  },
 }));
 
-// NivelPage now wraps its content in `<AppShell>` — pull in the same mocks
-// TrainerAttendancePage.test.tsx uses for that shell's own dependencies.
+const mockPathname = vi.fn(() => "/trainer/nivel");
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/trainer/nivel",
+  usePathname: () => mockPathname(),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
@@ -83,7 +111,18 @@ const NIVELES: NivelConOcupacion[] = [
   {
     id: 1,
     numeroNivel: 1,
-    nombre: "Nivel Iniciación",
+    nombre: "Nivel Cima",
+    capacidadMinima: 1,
+    capacidadMaxima: 10,
+    personasActuales: 1,
+    cuposDisponibles: 9,
+    necesitaRevision: false,
+    nivelCategoria: "principiante",
+  },
+  {
+    id: 2,
+    numeroNivel: 2,
+    nombre: "Nivel Medio",
     capacidadMinima: 1,
     capacidadMaxima: 10,
     personasActuales: 0,
@@ -91,241 +130,131 @@ const NIVELES: NivelConOcupacion[] = [
     necesitaRevision: false,
     nivelCategoria: "principiante",
   },
-  {
-    id: 2,
-    numeroNivel: 2,
-    nombre: "Nivel Intermedio",
-    capacidadMinima: 1,
-    capacidadMaxima: 10,
-    personasActuales: 0,
-    cuposDisponibles: 10,
-    necesitaRevision: false,
-    nivelCategoria: "intermedio",
-  },
 ];
 
-describe("NivelPage", () => {
+const ROSTER: AlumnoConNivel[] = [
+  { personaId: 10, nombres: "Sofía", apellidos: "González", nivelRankingId: null },
+  { personaId: 11, nombres: "Pedro", apellidos: "Ramírez", nivelRankingId: 1 },
+];
+
+/** Waits for the ladder to have rendered. */
+async function waitForLadder(): Promise<void> {
+  await screen.findByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" });
+}
+
+describe("NivelPage — the trainer gets the admin's screen", () => {
   beforeEach(() => {
-    mockFetchAlumnosConNivel.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
-    mockAssignStudentToNivel.mockReset();
-    mockMoveStudentToNivel.mockReset();
-    mockFetchAlumnosConNivel.mockResolvedValue([
-      { personaId: 10, nombres: "Sofía", apellidos: "González", nivelRankingId: null },
-      { personaId: 11, nombres: "Pedro", apellidos: "Ramírez", nivelRankingId: 1 },
-    ]);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
+    recordedAllowedRoles.length = 0;
+    mockPathname.mockReturnValue("/trainer/nivel");
+    mockFetchAlumnosConNivel.mockReset().mockResolvedValue(ROSTER);
+    mockFetchNivelesConOcupacion.mockReset().mockResolvedValue(NIVELES);
+    mockAssignStudentToNivel.mockReset().mockResolvedValue(undefined);
+    mockMoveStudentToNivel.mockReset().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
     mockShowError.mockClear();
     mockShowSuccess.mockClear();
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
+  it("renders the ladder, one rung per nivel with 1 at the top", async () => {
+    render(<NivelPage />);
+    await waitForLadder();
+
+    const ladder = document.querySelector("ol");
+    expect(ladder).not.toBeNull();
+    const rungs = within(ladder as HTMLElement).getAllByRole("listitem");
+    expect(rungs).toHaveLength(2);
+    expect(rungs[0]).toHaveTextContent("Nivel Cima");
+    expect(rungs[1]).toHaveTextContent("Nivel Medio");
+    expect(within(rungs[0]).getByText("1 estudiante")).toBeInTheDocument();
   });
 
-  it("no longer renders a 'Resultados Mensuales' tab or section", async () => {
-    render(<NivelPage />);
-    await screen.findByText("Sofía González");
+  it("no longer renders the upstream table it replaced", async () => {
+    const { container } = render(<NivelPage />);
+    await waitForLadder();
 
-    expect(screen.queryByText(/resultados mensuales/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    // The table's own furniture: a `<table>`, the "Nivel actual" column and
+    // the level `<select>` filter whose "Sin asignar" entry is now the panel's
+    // left column.
+    expect(container.querySelector("table")).toBeNull();
+    expect(screen.queryByText("Nivel actual")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/filtrar por nivel actual/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: /paginación/i })).not.toBeInTheDocument();
   });
 
-  it("renders every student by default with the total count", async () => {
+  it("carries the trainer's own back link and the screen's shared title", async () => {
     render(<NivelPage />);
-    await screen.findByText("Sofía González");
+    await waitForLadder();
 
-    expect(screen.getByText("Pedro Ramírez")).toBeInTheDocument();
-    expect(screen.getByText("Estudiantes (2)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /volver a entrenador/i })).toHaveAttribute(
+      "href",
+      "/trainer",
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Niveles" })).toBeInTheDocument();
   });
 
-  it("filters students by name (case-insensitive)", async () => {
+  it("admits trainers and nobody else", async () => {
     render(<NivelPage />);
-    await screen.findByText("Sofía González");
+    await waitForLadder();
 
-    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "sofía" } });
+    expect(recordedAllowedRoles[0]).toEqual(["trainer"]);
+    expect(recordedAllowedRoles[0]).not.toContain("estudiante");
+    expect(recordedAllowedRoles[0]).not.toContain("representante");
+  });
+
+  it("lets a trainer place an unassigned student — the trainer holds that permission", async () => {
+    render(<NivelPage />);
+    await waitForLadder();
+
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Estudiantes (1)")).toBeInTheDocument();
+      expect(mockAssignStudentToNivel).toHaveBeenCalledWith(10, 2);
     });
-    expect(screen.getByText("Sofía González")).toBeInTheDocument();
-    expect(screen.queryByText("Pedro Ramírez")).not.toBeInTheDocument();
+    expect(mockShowSuccess).toHaveBeenCalled();
   });
 
-  it("filters students by current nivel", async () => {
+  it("lets a trainer move a student already on a rung, from that rung's roster", async () => {
     render(<NivelPage />);
-    await screen.findByText("Sofía González");
+    await waitForLadder();
 
-    fireEvent.change(screen.getByLabelText(/filtrar por nivel actual/i), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" }));
+    fireEvent.change(await screen.findByLabelText("Nuevo nivel para Pedro Ramírez"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mover a Pedro Ramírez desde el nivel Nivel Cima" }),
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Estudiantes (1)")).toBeInTheDocument();
+      expect(mockMoveStudentToNivel).toHaveBeenCalledWith(11, 2);
     });
-    expect(screen.getByText("Pedro Ramírez")).toBeInTheDocument();
-    expect(screen.queryByText("Sofía González")).not.toBeInTheDocument();
+    expect(mockAssignStudentToNivel).not.toHaveBeenCalled();
   });
 
-  it("combines the name and nivel filters", async () => {
-    render(<NivelPage />);
-    await screen.findByText("Sofía González");
+  it("renders the same content the admin's /ranking renders", async () => {
+    // The requirement in one assertion. Everything inside the ladder card —
+    // rungs, names, headcounts, actions — has to be identical; only the route
+    // chrome (back link, allowed role) is allowed to differ.
+    const trainer = render(<NivelPage />);
+    await waitForLadder();
+    const escaleraEntrenador = trainer.container.querySelector("ol")?.textContent;
+    const estadisticasEntrenador = screen.getByText("Estudiantes asignados").closest("div")
+      ?.parentElement?.textContent;
+    trainer.unmount();
 
-    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "sofía" } });
-    fireEvent.change(screen.getByLabelText(/filtrar por nivel actual/i), { target: { value: "1" } });
+    mockPathname.mockReturnValue("/ranking");
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Ana Admin"));
+    const admin = render(<RankingPage />);
+    await waitForLadder();
+    const escaleraAdmin = admin.container.querySelector("ol")?.textContent;
+    const estadisticasAdmin = screen.getByText("Estudiantes asignados").closest("div")
+      ?.parentElement?.textContent;
 
-    await waitFor(() => {
-      expect(screen.getByText("No se encontraron estudiantes con ese criterio.")).toBeInTheDocument();
-    });
-  });
-
-  it("shows an empty-filter state distinct from the no-students state", async () => {
-    render(<NivelPage />);
-    await screen.findByText("Sofía González");
-
-    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "nadie-existe" } });
-
-    await waitFor(() => {
-      expect(screen.getByText("No se encontraron estudiantes con ese criterio.")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("No hay estudiantes registrados.")).not.toBeInTheDocument();
-  });
-
-  describe("assignment feedback", () => {
-    // `onAssigned` (loadData) briefly flips `loading` true/false around the
-    // refetch, which unmounts and remounts the `<table>`/`<tr>` — so every
-    // assertion below re-queries the row from `screen` instead of reusing a
-    // captured DOM node reference (it would go stale mid-flow).
-    function getSofiaRow(): HTMLElement {
-      const row = screen.getByLabelText("Nuevo nivel para Sofía González").closest("tr");
-      if (!row) throw new Error("Sofía row not found");
-      return row;
-    }
-
-    function getPedroRow(): HTMLElement {
-      const row = screen.getByLabelText("Nuevo nivel para Pedro Ramírez").closest("tr");
-      if (!row) throw new Error("Pedro row not found");
-      return row;
-    }
-
-    it("shows a success toast and reverts the 'Asignado' label to 'Asignar' after the timeout", async () => {
-      mockAssignStudentToNivel.mockResolvedValue(undefined);
-      render(<NivelPage />);
-      await screen.findByText("Sofía González");
-
-      fireEvent.change(screen.getByLabelText("Nuevo nivel para Sofía González"), { target: { value: "1" } });
-      fireEvent.click(within(getSofiaRow()).getByRole("button", { name: /Asignar/i }));
-
-      await waitFor(() => {
-        expect(within(getSofiaRow()).getByRole("button", { name: /Asignado/i })).toBeInTheDocument();
-      });
-      expect(mockShowSuccess).toHaveBeenCalledTimes(1);
-
-      // The reset `setTimeout` was scheduled under real timers (above), so it
-      // must be observed via real timers too — `waitFor`'s default 1000ms
-      // timeout is extended to comfortably clear the 2s reset delay.
-      await waitFor(
-        () => {
-          expect(within(getSofiaRow()).getByRole("button", { name: /^Asignar$/i })).toBeInTheDocument();
-        },
-        { timeout: 3000 },
-      );
-    });
-
-    it("clears the pending reset timer on unmount so no state update fires afterward", async () => {
-      mockAssignStudentToNivel.mockResolvedValue(undefined);
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      const { unmount } = render(<NivelPage />);
-      await screen.findByText("Sofía González");
-
-      fireEvent.change(screen.getByLabelText("Nuevo nivel para Sofía González"), { target: { value: "1" } });
-      fireEvent.click(within(getSofiaRow()).getByRole("button", { name: /Asignar/i }));
-
-      await waitFor(() => {
-        expect(within(getSofiaRow()).getByRole("button", { name: /Asignado/i })).toBeInTheDocument();
-      });
-
-      const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
-      unmount();
-      expect(clearTimeoutSpy).toHaveBeenCalled();
-      clearTimeoutSpy.mockRestore();
-
-      // Give the (now-cleared) reset timer's original 2s window a chance to
-      // pass; if it weren't cleared, React would warn about a state update
-      // on an unmounted component.
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(consoleErrorSpy).not.toHaveBeenCalled();
-      consoleErrorSpy.mockRestore();
-    });
-
-    it("keeps each student's 'Asignado' state and reset timer independent when two assignments overlap (race regression)", async () => {
-      // Deferred promises so we control exactly when each assignment call
-      // resolves, reproducing "two students assigned nearly simultaneously"
-      // deterministically: both handleAssign calls start before either
-      // resolves, then resolve 500ms apart (both well inside each other's
-      // 2s reset window).
-      let resolveAssign: (() => void) | undefined;
-      let resolveMove: (() => void) | undefined;
-      mockAssignStudentToNivel.mockImplementation(
-        () => new Promise<void>((resolve) => { resolveAssign = resolve; }),
-      );
-      mockMoveStudentToNivel.mockImplementation(
-        () => new Promise<void>((resolve) => { resolveMove = resolve; }),
-      );
-
-      render(<NivelPage />);
-      await screen.findByText("Sofía González");
-
-      // Fake timers only from here on — the initial data-fetch render above
-      // already settled under real timers, avoiding the same pitfall noted
-      // for the previous test (a real timer already in flight cannot be
-      // retroactively intercepted by fake timers enabled afterward).
-      vi.useFakeTimers();
-
-      // Start both assignments (Sofía → assignStudentToNivel, unassigned;
-      // Pedro → moveStudentToNivel, already has a nivel) before either
-      // resolves.
-      fireEvent.change(screen.getByLabelText("Nuevo nivel para Sofía González"), { target: { value: "1" } });
-      fireEvent.click(within(getSofiaRow()).getByRole("button", { name: /Asignar/i }));
-
-      fireEvent.change(screen.getByLabelText("Nuevo nivel para Pedro Ramírez"), { target: { value: "2" } });
-      fireEvent.click(within(getPedroRow()).getByRole("button", { name: /Asignar/i }));
-
-      // Sofía's assignment resolves first.
-      await act(async () => {
-        resolveAssign?.();
-        await vi.advanceTimersByTimeAsync(0);
-      });
-      expect(within(getSofiaRow()).getByRole("button", { name: /Asignado/i })).toBeInTheDocument();
-
-      // 500ms later (still inside Sofía's 2s window), Pedro's resolves too.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(500);
-        resolveMove?.();
-        await vi.advanceTimersByTimeAsync(0);
-      });
-
-      // Both rows must show "Asignado" simultaneously — a single shared
-      // `successId` string would have already overwritten Sofía's state
-      // with Pedro's here.
-      expect(within(getSofiaRow()).getByRole("button", { name: /Asignado/i })).toBeInTheDocument();
-      expect(within(getPedroRow()).getByRole("button", { name: /Asignado/i })).toBeInTheDocument();
-
-      // Advance to Sofía's own 2s expiry (1500ms further: 500 elapsed + 1500 = 2000ms since her success).
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(1500);
-      });
-      expect(within(getSofiaRow()).getByRole("button", { name: /^Asignar$/i })).toBeInTheDocument();
-      // Pedro's own window (from his resolve, 1500ms ago) has NOT elapsed yet —
-      // a shared/orphaned timer ref would have wrongly cleared his state here too.
-      expect(within(getPedroRow()).getByRole("button", { name: /Asignado/i })).toBeInTheDocument();
-
-      // Remaining 500ms until Pedro's own timer expires.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(500);
-      });
-      expect(within(getPedroRow()).getByRole("button", { name: /^Asignar$/i })).toBeInTheDocument();
-
-      vi.useRealTimers();
-    });
+    expect(escaleraEntrenador).toBe(escaleraAdmin);
+    expect(estadisticasEntrenador).toBe(estadisticasAdmin);
+    expect(recordedAllowedRoles).toEqual([["trainer"], ["admin"]]);
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 import { searchStudents } from "@/services/api";
 import type { PersonaBusqueda } from "@/types/domain";
 
@@ -23,7 +23,7 @@ interface StudentSearchProps {
 
 export default function StudentSearch({
   onSelect,
-  placeholder = "Buscar alumno por nombre...",
+  placeholder = "Buscar alumno por nombre…",
   disabled = false,
   resetSignal,
 }: StudentSearchProps): React.ReactElement {
@@ -126,8 +126,10 @@ export default function StudentSearch({
             className="absolute right-3 top-1/2 -translate-y-1/2 text-cata-text/40 hover:text-cata-text"
             aria-label="Limpiar búsqueda"
           >
+            {/* `Loader2`, not a hand-rolled bordered circle: one spinner in
+                the product, the same one `LoadingState` renders. */}
             {loading ? (
-              <span className="block h-4 w-4 animate-spin rounded-full border-2 border-cata-text/20 border-t-cata-red" />
+              <Loader2 size={14} strokeWidth={2} className="animate-spin" aria-hidden="true" />
             ) : (
               <X size={14} strokeWidth={2} />
             )}

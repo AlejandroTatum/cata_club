@@ -45,9 +45,20 @@ describe("buildRecentSessions", () => {
     expect(result.map((s) => s.fecha)).toEqual(["2026-07-15", "2026-07-08", "2026-07-01"]);
   });
 
-  it("caps at 5 sessions", () => {
-    const many = Array.from({ length: 8 }, (_, i) => asistencia({ id: i, fechaEntrenamiento: `2026-07-0${i + 1}` }));
-    expect(buildRecentSessions(many, horariosById)).toHaveLength(5);
+  it("caps the portal window at 30 sessions", () => {
+    // Raised from 5 once /student/attendance existed to show a real history:
+    // the backend returns the full unpaginated record, and at 5 the portal was
+    // hiding sessions students already had. The cap remains because the payload
+    // is unbounded and this feeds a portal, not a report.
+    const many = Array.from({ length: 40 }, (_, i) =>
+      asistencia({ id: i, fechaEntrenamiento: `2026-07-${String((i % 28) + 1).padStart(2, "0")}` }),
+    );
+    expect(buildRecentSessions(many, horariosById)).toHaveLength(30);
+  });
+
+  it("returns everything when the record is shorter than the window", () => {
+    const few = Array.from({ length: 8 }, (_, i) => asistencia({ id: i, fechaEntrenamiento: `2026-07-0${i + 1}` }));
+    expect(buildRecentSessions(few, horariosById)).toHaveLength(8);
   });
 
   it("maps estado and resolves the horario label", () => {

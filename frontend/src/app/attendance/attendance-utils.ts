@@ -8,24 +8,29 @@
  * No React dependencies — pure functions for testability.
  */
 
-import type { DiaSemana, NivelTecnico, EstadoAsistencia, Grupo } from "@/types/domain";
+import type { DiaSemana, NivelTecnico, EstadoAsistencia } from "@/types/domain";
+import type { BadgeTone } from "@/components/ui/Badge";
+import { MONTH_ABBR } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** A training schedule slot, displayed in the admin overview. */
+/**
+ * A training schedule slot, displayed in the admin overview.
+ *
+ * The `nivel` field this interface used to carry was marked `@deprecated`
+ * ("technical level belongs to Grupo, not ScheduleSlot") and its only reader
+ * was `getScheduleLevelLabel`, itself uncalled. Both are gone: a deprecated
+ * field nobody reads is not backward compatibility, it is a second answer to
+ * "what level is this?" sitting in the type where someone will eventually
+ * believe it. Level comes from `Grupo.nivel`.
+ */
 export interface ScheduleSlot {
   id: string;
   diaSemana: DiaSemana;
   horaInicio: string;
   horaFin: string;
-  /**
-   * @deprecated — Technical level belongs to Grupo, not ScheduleSlot.
-   * Kept for backward compatibility with mock data; do NOT use for domain
-   * decisions. Derive display level from the linked Grupo.nivel instead.
-   */
-  nivel: NivelTecnico;
   cancha: string;
   cupoMaximo: number;
   activo: boolean;
@@ -141,9 +146,57 @@ const FALLBACK_BADGE_TOKENS: AttendanceBadgeTokens = {
  *
  * Returns a neutral fallback for unknown/unexpected estado values — never
  * throws, avoids rendering an unstyled badge for bad runtime data.
+ *
+ * Still the source of truth for the ICON colour (see `AttendanceStateIcon` in
+ * the admin attendance page). The BADGE now renders through the `Badge`
+ * primitive via `getAttendanceBadgeTone` below; `badgeClass` remains for the
+ * one caller that tints a toggle surface rather than a pill.
  */
 export function getAttendanceBadgeTokens(estado: string): AttendanceBadgeTokens {
   return ATTENDANCE_BADGE_TOKENS[estado as EstadoAsistencia] ?? FALLBACK_BADGE_TOKENS;
+}
+
+/**
+ * `Badge` tone for each attendance state.
+ *
+ * The audit singled out `ATTENDANCE_BADGE_TOKENS` as the one concept in the
+ * app with real cross-screen integrity: a single shared map, with
+ * `trainer/page.tsx` carrying an explicit comment refusing to re-declare it.
+ * That integrity is the thing worth keeping, so the migration onto the `Badge`
+ * primitive happens HERE, in the same module, as one more map over the same
+ * four keys — not as four `tone=` literals sprinkled across five screens where
+ * they could drift apart again.
+ *
+ * The tones mirror `Badge`'s own doc comment: presente → ok, tardanza → warn,
+ * justificado → neutral, ausente → bad. `justified` moves from blue to neutral
+ * because the design system has no blue state pair; a justified absence is
+ * informational, which is exactly what neutral means.
+ */
+export const ATTENDANCE_BADGE_TONES: Record<EstadoAsistencia, BadgeTone> = {
+  present: "ok",
+  absent: "bad",
+  late: "warn",
+  justified: "neutral",
+};
+
+/**
+ * Get the `Badge` tone for an attendance estado.
+ *
+ * Mirrors `getAttendanceBadgeTokens`' defensive contract: an unknown runtime
+ * value renders neutral rather than throwing or rendering an unstyled pill.
+ */
+export function getAttendanceBadgeTone(estado: string): BadgeTone {
+  return ATTENDANCE_BADGE_TONES[estado as EstadoAsistencia] ?? "neutral";
+}
+
+/**
+ * Label for an attendance estado, tolerant of unknown runtime values.
+ *
+ * Pairs with `getAttendanceBadgeTone` so a badge never renders an empty pill
+ * for data the backend added after this build shipped.
+ */
+export function getAttendanceLabel(estado: string): string {
+  return ATTENDANCE_LABELS[estado as EstadoAsistencia] ?? "Desconocido";
 }
 
 // Mock data has moved to src/mocks/attendance.ts.
@@ -228,47 +281,46 @@ export function formatNivel(nivel: NivelTecnico): string {
   return NIVEL_LABELS[nivel] ?? `Nivel desconocido: ${nivel}`;
 }
 
-/**
- * Count active schedules from a list.
- */
-export function countActiveSchedules(schedules: ScheduleSlot[]): number {
-  return schedules.filter((s) => s.activo).length;
+/** Which schedules the picker shows, and why — see `selectVisibleSchedules`. */
+export interface VisibleSchedules {
+  schedules: TrainingSchedule[];
+  /** The list is narrowed to today. Drives the "mostrando solo hoy" hint. */
+  narrowedToToday: boolean;
+  /**
+   * Today has no sessions, so the full week is shown instead. Distinct from
+   * "nothing loaded at all" — the UI must not blame the day filter for an
+   * empty backend response.
+   */
+  emptyToday: boolean;
 }
 
-const JS_DAY_INDEX_TO_DIA_SEMANA: DiaSemana[] = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"];
-
 /**
- * Map JS `Date.getDay()` (0 = Sunday .. 6 = Saturday) to the backend-aligned
- * `DiaSemana` short code — used by the trainer dashboard to find today's
- * real schedules. Falls back to "lun" for an out-of-range index (never
- * throws, same defensive pattern as `formatDay`/`formatNivel`).
- */
-export function jsDayIndexToDiaSemana(dayIndex: number): DiaSemana {
-  return JS_DAY_INDEX_TO_DIA_SEMANA[dayIndex] ?? "lun";
-}
-
-// ---------------------------------------------------------------------------
-// Schedule ↔ Group reconciliation helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Build a map of scheduleId → linked group names.
+ * Narrow the schedule picker to today by default, with the full week one tap
+ * away.
  *
- * Used by the admin Asistencias page to show which groups link
- * to each schedule slot.
+ * The default exists to save the common case a scan through the whole week;
+ * it is deliberately NOT a hard filter. A trainer filing a session they
+ * missed yesterday still needs every other day reachable, so `showAllDays`
+ * always wins.
+ *
+ * When today has no sessions the narrowing is dropped rather than honoured:
+ * an empty picker on a rest day reads as a broken screen, not as a filter.
  */
-export function buildScheduleGroupMap(
-  grupos: Grupo[],
-): Record<string, string[]> {
-  const map: Record<string, string[]> = {};
-  for (const grupo of grupos) {
-    if (!grupo.horariosIds) continue;
-    for (const horarioId of grupo.horariosIds) {
-      if (!map[horarioId]) map[horarioId] = [];
-      map[horarioId].push(grupo.nombre);
-    }
+export function selectVisibleSchedules(
+  schedules: TrainingSchedule[],
+  today: DiaSemana,
+  showAllDays: boolean,
+): VisibleSchedules {
+  if (showAllDays || schedules.length === 0) {
+    return { schedules, narrowedToToday: false, emptyToday: false };
   }
-  return map;
+
+  const todaySchedules = schedules.filter((schedule) => schedule.diaSemana === today);
+  if (todaySchedules.length === 0) {
+    return { schedules, narrowedToToday: false, emptyToday: true };
+  }
+
+  return { schedules: todaySchedules, narrowedToToday: true, emptyToday: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +360,72 @@ export function getTotalPages(
 }
 
 // ---------------------------------------------------------------------------
+// Human-readable dates (Fase 3 — "Hoy, 23 jul")
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-exported so existing importers of this module keep working; the table
+ * itself lives in `lib/format-utils.ts`, the single source of truth for date
+ * grammar. This module owns the "Hoy, 23 jul" phrasing, not the vocabulary.
+ */
+export { MONTH_ABBR };
+
+/**
+ * Parse either a date-only value ("YYYY-MM-DD") or a full ISO timestamp into a
+ * Date in LOCAL terms.
+ *
+ * Date-only strings are built from their components rather than handed to
+ * `new Date(str)`, which reads them as UTC midnight — that turns "today" into
+ * "yesterday" for every user in America/Guayaquil (UTC-5). Same reasoning as
+ * `format-utils.ts`'s own parser; see its docstring.
+ */
+function parseLocalDate(value: string): Date | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    const day = Number(match[3]);
+    const date = new Date(year, month, day);
+    if (date.getMonth() !== month || date.getDate() !== day) return null;
+    return date;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** Whole-day difference between two dates, ignoring the time of day. */
+function calendarDaysBetween(from: Date, to: Date): number {
+  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
+  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * Humanise a date for a list cell: "Hoy, 23 jul", "Ayer, 22 jul", "12 jul",
+ * and "12 jul 2025" once the year stops being the current one.
+ *
+ * This is a SECOND date grammar next to `formatDate`'s `dd/mm/yyyy`, and that
+ * is the approved decision, not an oversight: on the attendance log and the
+ * activity feed the question is "how recent is this?", which a numeric date
+ * makes the reader compute. Anywhere the question is "which exact day?" —
+ * periods, validation stamps, report ranges — `formatDate` still rules.
+ *
+ * Returns "" for unparseable input, like every other formatter in the product.
+ */
+export function formatHumanDate(dateStr: string, today: Date = new Date()): string {
+  const date = parseLocalDate(dateStr);
+  if (!date) return "";
+
+  const dayMonth = `${date.getDate()} ${MONTH_ABBR[date.getMonth()]}`;
+  const delta = calendarDaysBetween(date, today);
+  if (delta === 0) return `Hoy, ${dayMonth}`;
+  if (delta === 1) return `Ayer, ${dayMonth}`;
+  if (date.getFullYear() !== today.getFullYear()) return `${dayMonth} ${date.getFullYear()}`;
+  return dayMonth;
+}
+
+// ---------------------------------------------------------------------------
 // Schedule ↔ day grouping (PR3 — Horarios de Entrenamiento density)
 // ---------------------------------------------------------------------------
 
@@ -340,30 +458,4 @@ export function groupSchedulesByDay(
       schedules: daySchedules ?? [],
     }))
     .sort((a, b) => dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day));
-}
-
-/**
- * Derive the display level label for a schedule slot.
- *
- * Prefers the linked group's technical level (Grupo.nivel) over the
- * deprecated ScheduleSlot.nivel. Falls back to formatNivel(slot.nivel)
- * only when no group links to this schedule.
- *
- * Tie-breaking: when multiple groups share a schedule WITH MISMATCHED
- * levels, the first group found wins. This is a known limitation —
- * groups sharing a schedule should have the same level in practice.
- * See tests for the documented behavior.
- */
-export function getScheduleLevelLabel(
-  slot: ScheduleSlot,
-  grupos: Grupo[],
-): string {
-  const linkedGrupos = grupos.filter(
-    (g) => g.horariosIds?.includes(slot.id),
-  );
-  if (linkedGrupos.length > 0) {
-    const level = linkedGrupos[0].nivel;
-    return NIVEL_LABELS[level] ?? formatNivel(level);
-  }
-  return formatNivel(slot.nivel);
 }

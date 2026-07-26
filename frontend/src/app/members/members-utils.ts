@@ -113,10 +113,18 @@ export const MEMBERSHIP_STATUS_LABELS: Record<EstadoMembresia, string> = {
   suspendida: "Suspendida",
 };
 
-export const MEMBERSHIP_STATUS_BADGE: Record<EstadoMembresia, string> = {
-  activa: "badge-success",
-  vencida: "badge-error",
-  suspendida: "badge-error",
+/**
+ * `Badge` tone per membership state.
+ *
+ * Was a map of `.badge-*` class names — one of the four badge vocabularies the
+ * audit found. Callers now pass the tone to the `Badge` primitive instead of
+ * splicing a class string into a `<span>`, so every status pill in the product
+ * has one shape and one colour source.
+ */
+export const MEMBERSHIP_STATUS_TONE: Record<EstadoMembresia, BadgeTone> = {
+  activa: "ok",
+  vencida: "bad",
+  suspendida: "bad",
 };
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
@@ -125,10 +133,10 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   rechazado: "Rechazado",
 };
 
-export const PAYMENT_STATUS_BADGE: Record<PaymentStatus, string> = {
-  aprobado: "badge-success",
-  pendiente_validacion: "badge-warning",
-  rechazado: "badge-error",
+export const PAYMENT_STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
+  aprobado: "ok",
+  pendiente_validacion: "warn",
+  rechazado: "bad",
 };
 
 export const PAYER_TYPE_LABELS: Record<PayerType, string> = {
@@ -177,7 +185,10 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+import type { BadgeTone } from "@/components/ui/Badge";
+
 export { formatCurrency, formatDate } from "@/lib/format-utils";
+import { formatDateRange } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -233,30 +244,23 @@ export function buildMemberStats(accounts: MemberAccount[]): MemberStats {
 }
 
 /**
- * Build a human-readable summary string for a student's membership period.
+ * Build a summary string for a student's membership period.
  *
- * Returns an empty string when either date is invalid or empty.
+ * Delegates to the shared `formatDateRange`: this used to render "1 jul — 12
+ * ago 2026", a month-name grammar that appeared nowhere else and that an admin
+ * had to mentally convert before comparing it to the dd/mm/yyyy dates on
+ * `/payments`. Both ends now carry the year, so a period spanning a year
+ * boundary is unambiguous.
+ *
+ * Requires BOTH ends — a membership with one open end is not a period, so it
+ * returns an empty string rather than a half-rendered range.
  */
 export function formatMembershipPeriod(
   fechaInicio: string,
   fechaFin: string,
 ): string {
-  const start = parseDateStringLocal(fechaInicio);
-  const end = parseDateStringLocal(fechaFin);
-  if (!start || !end) return "";
-
-  const startStr = start.toLocaleDateString("es-EC", {
-    timeZone: "America/Guayaquil",
-    month: "short",
-    day: "numeric",
-  });
-  const endStr = end.toLocaleDateString("es-EC", {
-    timeZone: "America/Guayaquil",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return `${startStr} — ${endStr}`;
+  if (!parseDateStringLocal(fechaInicio) || !parseDateStringLocal(fechaFin)) return "";
+  return formatDateRange(fechaInicio, fechaFin);
 }
 
 /**
@@ -361,19 +365,19 @@ export function countActiveStudents(account: MemberAccount): number {
 /**
  * Get the account status badge label and variant for the members table.
  *
- * Returns:
- *  - "Activo" + "badge-success" when at least one student has an active membership.
- *  - "Requiere atención" + "badge-warning" when no active memberships but any
- *    student has a pending-validaton payment.
- *  - "Requiere atención" + "badge-error" otherwise.
+ * Returns a label plus the `Badge` tone that carries it:
+ *  - "Activo" / ok — at least one student has an active membership.
+ *  - "Pago pendiente de validación" / warn — no active memberships but a
+ *    payment is awaiting review.
+ *  - the specific failure / bad — otherwise.
  */
 export function getAccountStatusBadge(account: MemberAccount): {
   label: string;
-  className: string;
+  tone: BadgeTone;
 } {
   const activeCount = countActiveStudents(account);
   if (activeCount > 0) {
-    return { label: "Activo", className: "badge-success" };
+    return { label: "Activo", tone: "ok" };
   }
   // Un pago pendiente de validación es la situación más accionable: mostrar
   // eso primero aunque la membresía esté vencida/suspendida.
@@ -382,15 +386,20 @@ export function getAccountStatusBadge(account: MemberAccount): {
       (a) => a.ultimoPago?.estado === "pendiente_validacion",
     )
   ) {
-    return { label: "Pago pendiente de validación", className: "badge-warning" };
+    return { label: "Pago pendiente de validación", tone: "warn" };
   }
   if (account.estudiantes.some((a) => a.membresia?.estado === "vencida")) {
-    return { label: "Membresía vencida", className: "badge-error" };
+    return { label: "Membresía vencida", tone: "bad" };
   }
   if (account.estudiantes.some((a) => a.membresia?.estado === "suspendida")) {
-    return { label: "Cuenta suspendida", className: "badge-error" };
+    return { label: "Cuenta suspendida", tone: "bad" };
   }
-  return { label: "Sin membresía activa", className: "badge-error" };
+  // Neutral, never `bad`. Red is reserved for the primary CTA and for
+  // errors/destructive states (`docs/ux/plan-implementacion-rediseno.md`,
+  // "Concepto y reglas duras" §3 and §5). "Sin membresía" is the state every
+  // freshly registered account is in; a red badge told 29 of 44 accounts they
+  // were broken when nothing had gone wrong.
+  return { label: "Sin membresía", tone: "neutral" };
 }
 
 // ---------------------------------------------------------------------------

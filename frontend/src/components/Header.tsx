@@ -12,29 +12,30 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { LucideProps } from "lucide-react";
 import {
-  LayoutDashboard,
-  ShieldCheck,
+  LayoutGrid,
+  CreditCard,
+  ClipboardCheck,
   LogIn,
   LogOut,
   Menu,
   X,
   House,
-  GraduationCap,
   User,
   Users,
   Calendar,
   Trophy,
   FileText,
-  CreditCard,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNavLinksForRole, type NavLinkDef } from "@/lib/auth-utils";
+import { hidesTopHeader } from "@/lib/shell-routes";
+import { useDismissablePopup } from "@/lib/useDismissablePopup";
 import { useNotificaciones } from "@/lib/useNotificaciones";
 import NotificationBell from "@/components/NotificationBell";
 import UserMenuDropdown from "@/components/UserMenuDropdown";
@@ -51,23 +52,32 @@ interface NavLink {
  * Map canonical href → lucide icon component.
  * Single source of truth for icon assignment — maps what getNavLinksForRole
  * returns to the UI layer.
+ *
+ * The set is the one named in the plan (Fase 1, item 4): layout-grid, users,
+ * trophy, calendar, credit-card, clipboard-check, file-text. It replaces a map
+ * where `Users` stood for BOTH "/members" and "/groups" and `Calendar` for
+ * BOTH "/attendance" and "/trainer/attendance" — an icon language that could
+ * not tell the club's own sections apart. Every icon within a single role's
+ * nav is now distinct; the reuse that remains ("/dashboard" and "/trainer"
+ * both `LayoutGrid`) is across roles that never see each other's nav, and it
+ * is deliberate: both are that role's home.
  */
 export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   Omit<LucideProps, "ref"> & React.RefAttributes<SVGSVGElement>
 >> = {
   "/": House,
   "/login": LogIn,
-  "/dashboard": LayoutDashboard,
+  "/dashboard": LayoutGrid,
   "/members": Users,
   "/ranking": Trophy,
-  "/groups": Users,
-  "/payments": ShieldCheck,
-  "/attendance": Calendar,
-  "/trainer": GraduationCap,
-  "/trainer/attendance": Calendar,
+  "/groups": Calendar,
+  "/payments": CreditCard,
+  "/attendance": ClipboardCheck,
+  "/trainer": LayoutGrid,
+  "/trainer/attendance": ClipboardCheck,
   "/trainer/nivel": Trophy,
   "/reports": FileText,
-  "/student": GraduationCap,
+  "/student": User,
   "/student/payments": CreditCard,
 };
 
@@ -205,52 +215,34 @@ interface HeaderProps {
   hideOnLanding?: boolean;
 }
 
-/**
- * Public auth screens (login, register, forgot-password) render their own
- * full-bleed split-screen shell (see `AuthShell`) with a dark brand panel
- * that already carries identity + a "volver al sitio" link — the app
- * header would duplicate that and break the full-height layout.
- */
-const AUTH_SHELL_ROUTES = new Set(["/login", "/forgot-password"]);
-
-/**
- * Routes that render their own sidebar shell (see `AppShell`), which
- * already carries identity, navigation, and a logout control — the top
- * header would duplicate that. Each of these pages wraps its content in
- * `<AppShell>`, whose own sidebar replaces this top nav.
- */
-const APP_SHELL_ROUTES = new Set([
-  "/dashboard",
-  "/members",
-  "/ranking",
-  "/groups",
-  "/payments",
-  "/attendance",
-  "/trainer",
-  "/trainer/attendance",
-  "/trainer/nivel",
-  "/reports",
-  "/student",
-  "/student/payments",
-  "/student/enroll",
-  "/student/add-dependent",
-  "/profile",
-  "/admin/crear-cuenta",
-]);
-
 export default function Header({ hideOnLanding = false }: HeaderProps): React.ReactElement | null {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const userMenuPanelRef = useRef<HTMLDivElement>(null);
+  const userMenuId = useId();
   const { isAuthenticated, session, logout, isLoading } = useAuth();
   const links = useNavLinks();
   const { notificaciones, loadError, markRead } = useNotificaciones(isAuthenticated && !!session);
+
+  const closeUserMenu = useCallback((): void => setUserMenuOpen(false), []);
+  useDismissablePopup({
+    open: userMenuOpen,
+    onClose: closeUserMenu,
+    panelRef: userMenuPanelRef,
+    triggerRef: userMenuTriggerRef,
+  });
 
   if (hideOnLanding && pathname === "/") {
     return null;
   }
 
-  if (AUTH_SHELL_ROUTES.has(pathname) || APP_SHELL_ROUTES.has(pathname)) {
+  // Which routes own their chrome lives in `lib/shell-routes.ts` and is
+  // PREFIX-based. It used to be an exact-match Set right here, so chrome
+  // flipped mid-flow: `/student` had the sidebar while `/student/add-dependent`,
+  // reached by a button on `/student`, fell back to this dark top nav.
+  if (hidesTopHeader(pathname)) {
     return null;
   }
 
@@ -277,8 +269,21 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
     <header className="sticky top-0 z-50 border-b border-white/10 bg-cata-dark/95 backdrop-blur-md">
       <nav className="mx-auto flex max-w-8xl items-center justify-between px-4 py-3 sm:px-8 lg:px-12">
         {/* Brand — real logo as identity anchor */}
+        {/*
+         * The wordmark beside the logo is `hidden` below `sm`, i.e. removed
+         * from the accessibility tree — so on a phone this link had NO
+         * accessible name at all: a 32px image with `alt=""` inside an anchor,
+         * announced as "link" and nothing else. `aria-label` names the link on
+         * every viewport, which lets the image stay decorative (it repeats the
+         * wordmark on desktop and would otherwise double it).
+         *
+         * The label is the wordmark verbatim, not "Ir al inicio": the header
+         * already carries a separate "Inicio" nav row, and a second link
+         * announcing the same words is two identical destinations by name.
+         */}
         <Link
           href="/"
+          aria-label="Cata Club"
           className="flex items-center gap-3 text-lg font-semibold tracking-tight text-white"
         >
           <div className="relative h-8 w-8 overflow-hidden rounded-lg">
@@ -321,9 +326,13 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
             <li className="relative ml-2 flex items-center gap-2 border-l border-white/10 pl-3">
               <NotificationBell notificaciones={notificaciones} loadError={loadError} onMarkRead={markRead} />
               <button
+                ref={userMenuTriggerRef}
                 type="button"
                 onClick={(): void => setUserMenuOpen((open) => !open)}
-                aria-haspopup="true"
+                // `aria-haspopup="true"` is an alias for "menu"; this popup is
+                // a labelled panel, not a menu.
+                aria-haspopup="dialog"
+                aria-controls={userMenuId}
                 aria-expanded={userMenuOpen}
                 aria-label={`Menú de cuenta de ${session.user.name}`}
                 className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white"
@@ -333,8 +342,10 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
               </button>
               {userMenuOpen && (
                 <UserMenuDropdown
+                  ref={userMenuPanelRef}
+                  id={userMenuId}
                   onLogout={logout}
-                  onNavigate={(): void => setUserMenuOpen(false)}
+                  onNavigate={closeUserMenu}
                   className="absolute right-0 top-full mt-1.5 w-40"
                 />
               )}

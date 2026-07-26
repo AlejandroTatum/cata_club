@@ -30,6 +30,7 @@ import {
   type BackendHorario,
 } from "@/lib/server/attendance-adapter";
 import type { EstadoAsistencia } from "@/types/domain";
+import { clubIsoDate } from "@/lib/club-date";
 
 const VALID_ESTADOS = new Set<string>(Object.keys(ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND));
 
@@ -87,8 +88,16 @@ interface RegisterAttendanceBody {
   students: RegisterAttendanceStudent[];
 }
 
+/**
+ * The default `fecha_entrenamiento` when the client omits it.
+ *
+ * MUST be the club's date, not the server's: this route runs on a host that
+ * is almost certainly UTC, where 19:00 in Ecuador is already tomorrow. Every
+ * evening session filed without an explicit date was landing on the wrong
+ * day.
+ */
 function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return clubIsoDate();
 }
 
 function isPositiveInteger(value: unknown): value is number {

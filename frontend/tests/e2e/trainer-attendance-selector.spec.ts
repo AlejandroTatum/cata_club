@@ -1,7 +1,10 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import { E2E_BASE_URL } from "./e2e-target";
+
 const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+/** Resolved in ONE place — see `e2e-target.ts` for why it is not port 3000. */
+const BASE_URL = E2E_BASE_URL;
 const MOCK_SESSION = {
   user: {
     id: "2",
@@ -13,6 +16,17 @@ const MOCK_SESSION = {
   roles: ["ENTRENADOR"],
   loggedInAt: "2026-07-21T00:00:00.000Z",
 };
+
+/**
+ * The one mocked slot, as the selector labels it: an em dash between the two
+ * times, then the trainer's name ("18:00 — 19:00 Carla Entrenadora").
+ *
+ * Anchored on the times rather than on the whole label so the assertion is
+ * about the SLOT the trainer is picking — the same thing `18:00 a 19:00` used
+ * to identify before the label was reworded — and does not break when the
+ * trailing trainer name changes.
+ */
+const SCHEDULE_SLOT = /18:00\s*—\s*19:00/;
 
 async function fulfillJson(route: Route, body: unknown): Promise<void> {
   await route.fulfill({
@@ -62,17 +76,30 @@ test("trainer directly selects every attendance state at 390px", async ({ page }
 
   await page.goto("/trainer/attendance");
   await page.getByRole("button", { name: /lunes/i }).click();
-  await page.getByRole("button", { name: /18:00 a 19:00/ }).click();
+  await page.getByRole("button", { name: SCHEDULE_SLOT }).click();
   await page.getByRole("button", { name: "Continuar" }).click();
 
-  const stateGroup = page.getByRole("group", { name: "Estado de asistencia de Ana López" });
+  /*
+   * The four states are now a `radiogroup` of `role="radio"` controls, not a
+   * `group` of `aria-pressed` toggles: they are mutually exclusive, and four
+   * independent toggle buttons never conveyed that. The behaviour this test
+   * guards is unchanged and is asserted just as strictly — every state is
+   * reachable in one tap and reports itself as the selected one — through the
+   * roles and the selection attribute the controls actually expose now.
+   *
+   * The group's accessible name still comes from the RENDERED student name
+   * (`aria-labelledby` pointing at the sr-only prefix plus the name element),
+   * so this also keeps pinning that the group cannot drift from what is on
+   * screen.
+   */
+  const stateGroup = page.getByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
   await expect(stateGroup).toBeVisible();
 
   for (const name of ["Presente", "Ausente", "Tardanza", "Justificado"]) {
-    const stateControl = stateGroup.getByRole("button", { name, exact: true });
+    const stateControl = stateGroup.getByRole("radio", { name, exact: true });
     await expect(stateControl).toBeVisible();
     await stateControl.click();
-    await expect(stateControl).toHaveAttribute("aria-pressed", "true");
+    await expect(stateControl).toHaveAttribute("aria-checked", "true");
   }
 });
 
@@ -89,7 +116,7 @@ test("trainer discovers mobile navigation and Justificado guidance at 390px", as
   await page.getByRole("button", { name: "Cerrar menú" }).click();
 
   await page.getByRole("button", { name: /lunes/i }).click();
-  await page.getByRole("button", { name: /18:00 a 19:00/ }).click();
+  await page.getByRole("button", { name: SCHEDULE_SLOT }).click();
   await page.getByRole("button", { name: "Continuar" }).click();
 
   await expect(page.getByText("Ana López", { exact: true })).toBeVisible();

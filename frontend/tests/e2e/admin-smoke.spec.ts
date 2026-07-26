@@ -105,15 +105,25 @@ test.describe("Admin smoke", () => {
     await expect(page.getByRole("heading", { name: /panel de control/i })).toBeVisible();
 
     // ── Step 4: Navigate to members page via nav link ──
-    // Use exact name to match the header "Miembros" link, not the dashboard
+    // Use exact name to match the sidebar "Miembros" link, not the dashboard
     // quick action "Gestionar Miembros" which has a different accessible name.
     await page.getByRole("link", { name: "Miembros", exact: true }).click();
     await expect(page).toHaveURL(/\/members/);
-    await expect(page.getByRole("heading", { name: /miembros del club/i })).toBeVisible();
+    // Every authenticated screen now states its own name through the shell's
+    // PageHeader (AppShell -> PageHeader renders the real, visible <h1>), so
+    // the page's title is "Miembros" and not the old in-content "Miembros del
+    // Club". Pinned by level AND exact name: the point of the assertion is
+    // that the screen announces itself as the page's top-level heading, which
+    // a substring match against some section heading would not prove.
+    await expect(
+      page.getByRole("heading", { name: "Miembros", exact: true, level: 1 }),
+    ).toBeVisible();
 
     // ── Step 5: Navigate to attendance page ──
     await page.getByRole("link", { name: "Asistencias", exact: true }).click();
     await expect(page).toHaveURL(/\/attendance/);
-    await expect(page.getByRole("heading", { name: /asistencias/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Asistencias", exact: true, level: 1 }),
+    ).toBeVisible();
   });
 });

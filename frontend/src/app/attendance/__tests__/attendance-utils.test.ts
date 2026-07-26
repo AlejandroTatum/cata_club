@@ -13,20 +13,18 @@ import {
   buildAttendanceStats,
   formatDay,
   formatNivel,
-  countActiveSchedules,
-  buildScheduleGroupMap,
-  getScheduleLevelLabel,
   getAttendanceBadgeTokens,
   getAttendanceRatePercent,
   paginateRecords,
   getTotalPages,
   ATTENDANCE_PAGE_SIZE,
   groupSchedulesByDay,
+  formatHumanDate,
+  selectVisibleSchedules,
   type AttendanceRecord,
   type TrainingSchedule,
 } from "../attendance-utils";
-import type { EstadoAsistencia, Grupo, NivelTecnico } from "@/types/domain";
-import type { ScheduleSlot } from "../attendance-utils";
+import type { EstadoAsistencia } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
 // buildAttendanceStats
@@ -179,26 +177,6 @@ describe("formatNivel", () => {
 });
 
 // ---------------------------------------------------------------------------
-// countActiveSchedules
-// ---------------------------------------------------------------------------
-
-describe("countActiveSchedules", () => {
-  it("counts active schedules from mock data", () => {
-    // 7 are active, 1 is inactive (hor-005)
-    expect(countActiveSchedules(MOCK_SCHEDULES)).toBe(7);
-  });
-
-  it("returns 0 for empty list", () => {
-    expect(countActiveSchedules([])).toBe(0);
-  });
-
-  it("returns 0 when all are inactive", () => {
-    const allInactive = MOCK_SCHEDULES.map((s) => ({ ...s, activo: false }));
-    expect(countActiveSchedules(allInactive)).toBe(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Mock data integrity
 // ---------------------------------------------------------------------------
 
@@ -238,141 +216,6 @@ describe("MOCK_ATTENDANCE_RECORDS", () => {
   it("includes records from different trainers (not trainer-owned)", () => {
     const trainers = new Set(MOCK_ATTENDANCE_RECORDS.map((r) => r.entrenador));
     expect(trainers.size).toBeGreaterThan(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildScheduleGroupMap
-// ---------------------------------------------------------------------------
-
-describe("buildScheduleGroupMap", () => {
-  const testGrupos: Grupo[] = [
-    {
-      id: "g-001",
-      nombre: "Principiantes",
-      nivel: "principiante" as NivelTecnico,
-      estudiantesIds: [],
-      horariosIds: ["hor-a", "hor-b"],
-      activo: true,
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-    },
-    {
-      id: "g-002",
-      nombre: "Intermedios",
-      nivel: "intermedio" as NivelTecnico,
-      estudiantesIds: [],
-      horariosIds: ["hor-b", "hor-c"],
-      activo: true,
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-    },
-    {
-      id: "g-003",
-      nombre: "Sin Horarios",
-      nivel: "principiante" as NivelTecnico,
-      estudiantesIds: [],
-      activo: true,
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-    },
-  ];
-
-  it("maps scheduleId to group names", () => {
-    const map = buildScheduleGroupMap(testGrupos);
-    expect(map["hor-a"]).toEqual(["Principiantes"]);
-    expect(map["hor-b"]).toEqual(["Principiantes", "Intermedios"]);
-    expect(map["hor-c"]).toEqual(["Intermedios"]);
-  });
-
-  it("excludes groups without horariosIds", () => {
-    const map = buildScheduleGroupMap(testGrupos);
-    expect(map["hor-a"]).toHaveLength(1);
-    // Should not crash for the group with no horariosIds
-  });
-
-  it("returns empty object for empty grupos array", () => {
-    expect(buildScheduleGroupMap([])).toEqual({});
-  });
-
-  it("returns empty object when grupos have undefined horariosIds", () => {
-    const noSchedules = testGrupos.map((g) => ({
-      ...g,
-      horariosIds: undefined,
-    }));
-    const map = buildScheduleGroupMap(noSchedules);
-    expect(map).toEqual({});
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getScheduleLevelLabel
-// ---------------------------------------------------------------------------
-
-describe("getScheduleLevelLabel", () => {
-  const testGrupos: Grupo[] = [
-    {
-      id: "g-001",
-      nombre: "Principiantes",
-      nivel: "principiante" as NivelTecnico,
-      estudiantesIds: [],
-      horariosIds: ["sched-p1", "sched-shared"],
-      activo: true,
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-    },
-    {
-      id: "g-002",
-      nombre: "Intermedios",
-      nivel: "intermedio" as NivelTecnico,
-      estudiantesIds: [],
-      horariosIds: ["sched-shared"],
-      activo: true,
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-    },
-  ];
-
-  const testSlots: ScheduleSlot[] = [
-    { id: "sched-p1", diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30", nivel: "principiante" as NivelTecnico, cancha: "C1", cupoMaximo: 12, activo: true },
-    { id: "sched-shared", diaSemana: "mie", horaInicio: "16:00", horaFin: "17:30", nivel: "intermedio" as NivelTecnico, cancha: "C2", cupoMaximo: 10, activo: true },
-    { id: "sched-unlinked", diaSemana: "vie", horaInicio: "15:00", horaFin: "16:30", nivel: "avanzado" as NivelTecnico, cancha: "C3", cupoMaximo: 8, activo: true },
-  ];
-
-  it("derives level label from the first linked group", () => {
-    // sched-p1 is linked to g-001 (principiante)
-    expect(getScheduleLevelLabel(testSlots[0], testGrupos)).toBe("Principiante");
-  });
-
-  it("falls back to slot.nivel when no group links to the schedule", () => {
-    // sched-unlinked has no groups linked, uses slot.nivel (avanzado)
-    expect(getScheduleLevelLabel(testSlots[2], testGrupos)).toBe("Avanzado");
-  });
-
-  it("returns fallback string for unknown slot nivel", () => {
-    const badSlot: ScheduleSlot = { id: "bad", diaSemana: "lun", horaInicio: "00:00", horaFin: "01:00", nivel: "unknown" as NivelTecnico, cancha: "X", cupoMaximo: 5, activo: true };
-    // No group links, falls back to formatNivel which handles unknown
-    const result = getScheduleLevelLabel(badSlot, testGrupos);
-    expect(result).toContain("Nivel desconocido");
-  });
-
-  describe("tie-breaking — multiple groups sharing a schedule", () => {
-    it("when groups share a schedule with the SAME level, returns that level", () => {
-      const sameLevelGrupos: Grupo[] = [
-        { ...testGrupos[0], horariosIds: ["shared"] },
-        { ...testGrupos[0], id: "g-copy", nombre: "Copy", horariosIds: ["shared"] },
-      ];
-      const slot: ScheduleSlot = { id: "shared", diaSemana: "lun", horaInicio: "10:00", horaFin: "11:00", nivel: "principiante" as NivelTecnico, cancha: "C1", cupoMaximo: 10, activo: true };
-      expect(getScheduleLevelLabel(slot, sameLevelGrupos)).toBe("Principiante");
-    });
-
-    it("when groups share a schedule WITH MISMATCHED levels, uses the FIRST group's level (safe fallback)", () => {
-      // g-001 is principiante, g-002 is intermedio, both link to sched-shared.
-      // The first match (g-001) wins — the caller should ensure groups sharing
-      // a schedule have consistent levels.
-      const slot = testSlots[1]; // sched-shared
-      expect(getScheduleLevelLabel(slot, testGrupos)).toBe("Principiante");
-    });
   });
 });
 
@@ -551,5 +394,93 @@ describe("groupSchedulesByDay", () => {
 
   it("returns an empty array for no schedules", () => {
     expect(groupSchedulesByDay([])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatHumanDate — the "Hoy, 23 jul" grammar (Fase 3)
+// ---------------------------------------------------------------------------
+
+describe("formatHumanDate", () => {
+  const today = new Date(2026, 6, 23, 9, 30); // 23 jul 2026, local
+
+  it("names today and yesterday instead of making the reader compute them", () => {
+    expect(formatHumanDate("2026-07-23", today)).toBe("Hoy, 23 jul");
+    expect(formatHumanDate("2026-07-22", today)).toBe("Ayer, 22 jul");
+  });
+
+  it("drops the year while it is the current one", () => {
+    expect(formatHumanDate("2026-01-05", today)).toBe("5 ene");
+  });
+
+  it("keeps the year once it stops being the current one", () => {
+    expect(formatHumanDate("2025-12-20", today)).toBe("20 dic 2025");
+  });
+
+  it("reads a date-only value as a local calendar date, not UTC midnight", () => {
+    // `new Date("2026-07-23")` is UTC midnight → 22 jul 19:00 in UTC-5, which
+    // would render today's attendance as "Ayer".
+    expect(formatHumanDate("2026-07-23", today)).toBe("Hoy, 23 jul");
+  });
+
+  it("accepts a full ISO timestamp as well as a date-only value", () => {
+    expect(formatHumanDate(new Date(2026, 6, 23, 18, 42).toISOString(), today)).toBe("Hoy, 23 jul");
+  });
+
+  it("returns an empty string for unparseable or empty input", () => {
+    expect(formatHumanDate("", today)).toBe("");
+    expect(formatHumanDate("no es una fecha", today)).toBe("");
+    expect(formatHumanDate("2026-13-45", today)).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// selectVisibleSchedules — today by default, the full week on request
+// ---------------------------------------------------------------------------
+
+describe("selectVisibleSchedules", () => {
+  const week = [
+    buildSchedule(1, "lun"),
+    buildSchedule(2, "mie"),
+    buildSchedule(3, "mie"),
+    buildSchedule(4, "vie"),
+  ];
+
+  it("narrows to today by default", () => {
+    const result = selectVisibleSchedules(week, "mie", false);
+    expect(result.schedules.map((s) => s.id)).toEqual([2, 3]);
+    expect(result.narrowedToToday).toBe(true);
+    expect(result.emptyToday).toBe(false);
+  });
+
+  it("shows the whole week once the user asks for it", () => {
+    const result = selectVisibleSchedules(week, "mie", true);
+    expect(result.schedules).toHaveLength(4);
+    expect(result.narrowedToToday).toBe(false);
+    expect(result.emptyToday).toBe(false);
+  });
+
+  it("falls back to the full week when today has nothing scheduled", () => {
+    // Narrowing to an empty list would show a trainer a blank picker on a
+    // rest day and leave them to guess that a filter caused it.
+    const result = selectVisibleSchedules(week, "mar", false);
+    expect(result.schedules).toHaveLength(4);
+    expect(result.narrowedToToday).toBe(false);
+    expect(result.emptyToday).toBe(true);
+  });
+
+  it("does not claim an empty today when there are no schedules at all", () => {
+    // Nothing loaded is a different message from "nothing today" — the UI
+    // must not blame the day filter for an empty backend response.
+    const result = selectVisibleSchedules([], "mar", false);
+    expect(result.schedules).toEqual([]);
+    expect(result.emptyToday).toBe(false);
+    expect(result.narrowedToToday).toBe(false);
+  });
+
+  it("never mutates the input list", () => {
+    const input = [...week];
+    selectVisibleSchedules(input, "mie", false);
+    expect(input.map((s) => s.id)).toEqual([1, 2, 3, 4]);
   });
 });

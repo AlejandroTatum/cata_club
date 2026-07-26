@@ -30,6 +30,19 @@ export const ADD_DEPENDENT_STEP_LABELS: Record<AddDependentStep, string> = {
   summary: "Resumen y Confirmación",
 };
 
+/**
+ * One-word names for the stepper pills — the same named-stepper contract the
+ * public wizard uses (`STEP_SHORT_LABELS` in enroll-utils.ts). This flow has
+ * four steps, not five, because it creates no representante: the caller
+ * already is one. The `Usuario` it may create is optional.
+ */
+export const ADD_DEPENDENT_SHORT_LABELS: Record<AddDependentStep, string> = {
+  child: "Estudiante",
+  credentials: "Cuenta",
+  health: "Salud",
+  summary: "Confirmar",
+};
+
 /** Shape of the add-dependent wizard form data. */
 export interface AddDependentFormData {
   nombres: string;
@@ -111,54 +124,171 @@ export function validateAddDependentForm(data: AddDependentFormData): string[] {
   return [...validateChildData(data), ...validateCredentialsData(data), ...validateHealthData(data)];
 }
 
-function validateChildData(data: AddDependentFormData): string[] {
-  const errors: string[] = [];
-  if (!data.nombres.trim()) errors.push("Los nombres son obligatorios.");
-  else if (data.nombres.trim().length < 3) errors.push("Los nombres deben tener al menos 3 caracteres.");
-  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.nombres.trim())) errors.push("Los nombres solo pueden contener letras y espacios.");
-  if (!data.apellidos.trim()) errors.push("Los apellidos son obligatorios.");
-  else if (data.apellidos.trim().length < 3) errors.push("Los apellidos deben tener al menos 3 caracteres.");
-  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.apellidos.trim())) errors.push("Los apellidos solo pueden contener letras y espacios.");
-  if (!data.fechaNacimiento) errors.push("La fecha de nacimiento es obligatoria.");
-  else if (!isValidDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento ingresada no es válida.");
-  else if (isFutureDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento no puede ser en el futuro.");
-  if (!data.cedula.trim()) errors.push("La cédula de identidad es obligatoria.");
-  else if (!/^\d{10}$/.test(data.cedula.trim())) errors.push("La cédula debe tener 10 dígitos.");
-  if (!data.telefono.trim()) errors.push("El teléfono es obligatorio.");
-  else if (!/^\d{7,10}$/.test(data.telefono.trim())) errors.push("El teléfono debe tener entre 7 y 10 dígitos.");
+// ---------------------------------------------------------------------------
+// Per-field validation — same contract as the public wizard: the message goes
+// BESIDE the field, and "Siguiente" stays shut until the step is clean.
+// ---------------------------------------------------------------------------
+
+/** A form field this wizard can point an error at. */
+export type AddDependentField = keyof AddDependentFormData;
+
+/** Field → its first unmet rule. A field with no entry is currently valid. */
+export type AddDependentFieldErrors = Partial<Record<AddDependentField, string>>;
+
+function digitsOf(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+/** Letters (incl. accents) and spaces — a person's name, not an identifier. */
+const NAME_PATTERN = /^[A-Za-z\u00C0-\u024F\s]+$/;
+
+function nameRule(value: string, subject: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return `${subject} son obligatorios.`;
+  if (trimmed.length < 3) return `${subject} deben tener al menos 3 caracteres.`;
+  return NAME_PATTERN.test(trimmed) ? null : `${subject} solo pueden contener letras y espacios.`;
+}
+
+/** Ecuadorian numbers run 7 (landline) to 10 (mobile) digits. */
+function phoneRule(value: string, subject: string): string | null {
+  if (!value.trim()) return `${subject} es obligatorio.`;
+  const digits = digitsOf(value);
+  return digits.length >= 7 && digits.length <= 10
+    ? null
+    : `${subject} debe tener entre 7 y 10 dígitos.`;
+}
+
+const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) => string | null>> = {
+  nombres: (d) => nameRule(d.nombres, "Los nombres"),
+  apellidos: (d) => nameRule(d.apellidos, "Los apellidos"),
+  fechaNacimiento: (d) => {
+    if (!d.fechaNacimiento) return "La fecha de nacimiento es obligatoria.";
+    if (!isValidDate(d.fechaNacimiento)) return "La fecha de nacimiento ingresada no es válida.";
+    if (isFutureDate(d.fechaNacimiento)) return "La fecha de nacimiento no puede ser en el futuro.";
+    return null;
+  },
+  cedula: (d) => {
+    if (!d.cedula.trim()) return "La cédula de identidad es obligatoria.";
+    return /^\d{10}$/.test(d.cedula.trim()) ? null : "La cédula debe tener 10 dígitos.";
+  },
+  telefono: (d) => phoneRule(d.telefono, "El teléfono"),
+  tipoSangre: (d) => (isTipoSangre(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
+  contactoEmergencia: (d) => {
+    const trimmed = d.contactoEmergencia.trim();
+    if (!trimmed) return "El nombre de contacto de emergencia es obligatorio.";
+    return trimmed.length >= 3
+      ? null
+      : "El nombre del contacto de emergencia debe tener al menos 3 caracteres.";
+  },
+  telefonoEmergencia: (d) => phoneRule(d.telefonoEmergencia, "El teléfono de emergencia"),
+};
+
+const CHILD_FIELDS: AddDependentField[] = [
+  "nombres",
+  "apellidos",
+  "fechaNacimiento",
+  "cedula",
+  "telefono",
+];
+
+const HEALTH_FIELDS: AddDependentField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
+
+/** The fields a given step actually renders. */
+export function fieldsForAddDependentStep(step: AddDependentStep): AddDependentField[] {
+  switch (step) {
+    case "child":
+      return CHILD_FIELDS;
+    case "credentials":
+      // Both fields are optional, so neither is ever "missing". The
+      // both-or-neither rule is applied by `validateAddDependentFields`.
+      return [];
+    case "health":
+      return HEALTH_FIELDS;
+    case "summary":
+      return [];
+  }
+}
+
+/** Every unmet rule on the current step, keyed by the field that owns it. */
+export function validateAddDependentFields(
+  step: AddDependentStep,
+  data: AddDependentFormData,
+): AddDependentFieldErrors {
+  const errors: AddDependentFieldErrors = {};
+  for (const field of fieldsForAddDependentStep(step)) {
+    const message = FIELD_RULES[field]?.(data) ?? null;
+    if (message !== null) errors[field] = message;
+  }
+  // An optional account is all-or-nothing: half-filled credentials block the
+  // step, and the message has to land on the field that is actually wrong.
+  if (step === "credentials") {
+    const hasCorreo = data.correo.trim().length > 0;
+    const hasContrasenia = data.contrasenia.length > 0;
+    if (hasCorreo || hasContrasenia) {
+      if (!hasCorreo) errors.correo = "El correo electrónico es obligatorio si se desea crear una cuenta.";
+      else if (!isEmail(data.correo)) errors.correo = "El correo electrónico no es válido.";
+      if (!hasContrasenia) errors.contrasenia = "La contraseña es obligatoria si se desea crear una cuenta.";
+      else if (data.contrasenia.length < 8) errors.contrasenia = "La contraseña debe tener al menos 8 caracteres.";
+    }
+  }
   return errors;
+}
+
+/** Whether the step's "Siguiente" may be enabled. */
+export function isAddDependentStepComplete(
+  step: AddDependentStep,
+  data: AddDependentFormData,
+): boolean {
+  return Object.keys(validateAddDependentFields(step, data)).length === 0;
+}
+
+const FIELD_LABELS: Partial<Record<AddDependentField, string>> = {
+  nombres: "Nombres",
+  apellidos: "Apellidos",
+  fechaNacimiento: "Fecha de nacimiento",
+  cedula: "Cédula de identidad",
+  telefono: "Teléfono",
+  correo: "Correo electrónico",
+  contrasenia: "Contraseña",
+  tipoSangre: "Tipo de sangre",
+  contactoEmergencia: "Nombre del contacto de emergencia",
+  telefonoEmergencia: "Teléfono de emergencia",
+};
+
+/** Why "Siguiente" is disabled, in one sentence naming the fields. `null` when nothing is missing. */
+export function describeAddDependentBlocker(errors: AddDependentFieldErrors): string | null {
+  const labels = (Object.keys(errors) as AddDependentField[])
+    .map((field) => FIELD_LABELS[field])
+    .filter((label): label is string => Boolean(label));
+  if (labels.length === 0) return null;
+  if (labels.length === 1) return `Para continuar, revise: ${labels[0]}.`;
+  const last = labels[labels.length - 1];
+  return `Para continuar, revise: ${labels.slice(0, -1).join(", ")} y ${last}.`;
 }
 
 /**
  * Validate credentials: optional, but if either `correo` or `contrasenia`
  * is provided, BOTH must be present and valid.
+ *
+ * Composed from `validateAddDependentFields` so the flat list and the
+ * beside-the-field message can never drift apart.
  */
 function validateCredentialsData(data: AddDependentFormData): string[] {
-  const errors: string[] = [];
-  const hasCorreo = data.correo.trim().length > 0;
-  const hasContrasenia = data.contrasenia.length > 0;
+  return Object.values(validateAddDependentFields("credentials", data));
+}
 
-  if (hasCorreo || hasContrasenia) {
-    if (!hasCorreo) errors.push("El correo electrónico es obligatorio si se desea crear una cuenta.");
-    else if (!isEmail(data.correo)) errors.push("El correo electrónico no es válido.");
-    if (!hasContrasenia) errors.push("La contraseña es obligatoria si se desea crear una cuenta.");
-    else if (data.contrasenia.length < 8) errors.push("La contraseña debe tener al menos 8 caracteres.");
-  }
-  return errors;
+function collect(fields: AddDependentField[], data: AddDependentFormData): string[] {
+  return fields
+    .map((field) => FIELD_RULES[field]?.(data) ?? null)
+    .filter((message): message is string => message !== null);
+}
+
+function validateChildData(data: AddDependentFormData): string[] {
+  return collect(CHILD_FIELDS, data);
 }
 
 function validateHealthData(data: AddDependentFormData): string[] {
-  const errors: string[] = [];
-  if (!isTipoSangre(data.tipoSangre)) errors.push("El tipo de sangre es obligatorio.");
-  if (!data.contactoEmergencia.trim())
-    errors.push("El nombre de contacto de emergencia es obligatorio.");
-  else if (data.contactoEmergencia.trim().length < 3)
-    errors.push("El nombre del contacto de emergencia debe tener al menos 3 caracteres.");
-  if (!data.telefonoEmergencia.trim())
-    errors.push("El teléfono de emergencia es obligatorio.");
-  else if (!/^\d{7,10}$/.test(data.telefonoEmergencia.trim()))
-    errors.push("El teléfono de emergencia debe tener entre 7 y 10 dígitos.");
-  return errors;
+  return collect(HEALTH_FIELDS, data);
 }
 
 function isTipoSangre(value: string): value is TipoSangre {

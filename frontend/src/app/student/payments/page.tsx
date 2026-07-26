@@ -1,10 +1,50 @@
+/**
+ * /student/payments — the family-facing payment screen.
+ *
+ * One of the two things a student or a parent actually opens this portal to do
+ * ("hay que hacer pago y ver asistencias"). It arrived from upstream visually
+ * unmigrated — raw `cata-*` classes, ISO dates printed straight from the API,
+ * `$35.00` amounts, a red "selected" filter chip and Argentine voseo in its
+ * copy ("Adjuntá", "tenés", "Consultá") — and this pass puts it on the same
+ * system as the rest of the product:
+ *
+ * - `Badge`, `FilterPill`, `Button`, `EmptyState`, `ErrorState`,
+ *   `LoadingState`, and the `card` / `h-ctl` / `h-drow` / `rounded-card`
+ *   tokens, instead of eight bespoke pill and card shapes.
+ * - `formatCurrency` / `formatDate` / `formatDateRange` from
+ *   `src/lib/format-utils.ts` — this screen was the second currency grammar
+ *   and the third date grammar in the product.
+ * - Neutral Ecuadorian Spanish, usted. The student portal is not tuteo and it
+ *   is certainly not voseo.
+ * - Selection is coal plus the yellow ball dot (`FilterPill`), never red. Red
+ *   is the primary CTA and destructive intent only, so a red "Aprobados" chip
+ *   read as an alarm about approved payments.
+ *
+ * ## Two facts this screen deliberately does NOT show
+ *
+ * - **"Vigente hasta" from the membership.** `MembershipSummary.fechaFin` is
+ *   declared on the client type but `MembershipView` in
+ *   src/lib/server/student-adapter.ts never populates it — the field is
+ *   `undefined` for every real payload, and the old status bar's "Vigente
+ *   hasta: {fechaFin}" therefore rendered nothing at all while its `isExpired`
+ *   branch silently never fired. The real, computable coverage date is the
+ *   furthest `fechaFin` among APPROVED payments (`resolveCoverageEnd`), which
+ *   is what the card shows and what the renewal form starts from.
+ * - **An amount due.** There is no debt concept in the backend: a Membresia
+ *   carries a `montoAplicado` (the plan's price), not a balance. The card
+ *   reports the monthly price it can prove and lets the reader enter what they
+ *   are paying.
+ */
+
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import {
   fetchStudentPortal,
   fetchPagosDePersona,
@@ -18,31 +58,39 @@ import type {
   MembershipSummary,
   RegistrarPagoInput,
 } from "@/services/api";
-import { isRepresentative, isMinor } from "../student-utils";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  FilterPill,
+  LoadingState,
+  buttonClasses,
+} from "@/components/ui";
+import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
+import { calendarIsoDate, clubToday } from "@/lib/club-date";
+import {
+  describeMembershipState,
+  describePaymentSituation,
+  firstNameOf,
+  isMinor,
+  resolveCoverageEnd,
+} from "../student-utils";
+import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
 import {
   filterPagosByStatus,
   sortPagosByDate,
   formatPagoMonto,
   getEmptyStateMessage,
+  describePagoEstado,
+  countPagosByStatus,
+  wholeMonthsFor,
+  addMonthsIso,
   TIPO_PAGO_LABEL,
-  type PagoStatusFilter,
   PAGO_FILTER_LABELS,
+  type PagoStatusFilter,
 } from "./payments-utils";
-import {
-  CreditCard,
-  AlertTriangle,
-  ChevronDown,
-  RefreshCw,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Upload,
-  Paperclip,
-  Loader2,
-  Plus,
-  ShieldCheck,
-  ArrowRight,
-} from "lucide-react";
+import { CreditCard, Loader2, Paperclip, Plus, Upload, X } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -58,263 +106,423 @@ type PagosLoadState =
   | { status: "error"; message: string }
   | { status: "ready"; pagos: PagoPersona[] };
 
-// ---------------------------------------------------------------------------
-// Small presentational pieces
-// ---------------------------------------------------------------------------
+const FILTERS: PagoStatusFilter[] = ["TODOS", "PENDIENTE_VALIDACION", "APROBADO", "RECHAZADO"];
 
-function LoadingCard(): React.ReactElement {
-  return (
-    <div className="card flex min-h-[40vh] items-center justify-center p-6 text-center">
-      <p className="text-sm text-cata-text/50">Cargando pagos...</p>
-    </div>
-  );
-}
+/** Shared empty list, so "not loaded yet" is a stable reference for the memos below. */
+const NO_PAGOS: PagoPersona[] = [];
 
-function ErrorCard({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}): React.ReactElement {
-  return (
-    <div className="card p-6 text-center">
-      <AlertTriangle
-        size={28}
-        strokeWidth={1.5}
-        className="mx-auto mb-3 text-cata-red"
-        aria-hidden="true"
-      />
-      <p className="mb-4 text-sm text-cata-text/65">{message}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="btn-secondary mx-auto inline-flex items-center gap-2"
-      >
-        <RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />
-        Reintentar
-      </button>
-    </div>
-  );
+/** `_sistema.css` `.fld` — the one input shape, 40px like every other control. */
+const FIELD_CLASSES =
+  "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3.5 text-[13px] text-ink " +
+  "placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIELD_LABEL_CLASSES = "text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3";
+
+/** Parse an ISO date at local noon — the same anchoring `format-utils` uses, for the same reason. */
+function fromIsoDate(iso: string): Date {
+  return new Date(`${iso}T12:00:00`);
 }
 
 // ---------------------------------------------------------------------------
-// Membership status bar (sticky)
+// Membership status — everything the club can actually prove about coverage
 // ---------------------------------------------------------------------------
 
-function MembershipStatusBar({
+function MembershipCard({
   membership,
+  coverageEnd,
+  /**
+   * Whose membership this is, when the reader is not that person.
+   *
+   * A guardian with exactly ONE dependent never saw the switcher (it hides
+   * below two profiles), so this whole screen — titled "Mis pagos", with a
+   * card reading "Su membresía" and a form that debits a specific persona —
+   * never once named the student it was about. Laura Vera, who has no
+   * membership of her own, was registering a payment for Sofía on a page that
+   * said "su".
+   */
+  studentName,
+  children,
 }: {
   membership: MembershipSummary | null;
-}): React.ReactElement | null {
-  if (!membership) return null;
+  coverageEnd: string | null;
+  studentName: string | null;
+  children?: React.ReactNode;
+}): React.ReactElement {
+  const state = describeMembershipState(membership?.estado);
 
-  const hoyIso = new Date().toISOString().slice(0, 10);
-  const isExpired =
-    membership.estado === "VENCIDA" ||
-    (membership.fechaFin !== null && membership.fechaFin < hoyIso);
-  const isActive = membership.estado === "ACTIVA" && !isExpired;
+  const facts: { label: string; value: string }[] = [];
+  if (membership?.categoria) facts.push({ label: "Plan", value: membership.categoria });
+  if (membership?.montoAplicado) {
+    facts.push({ label: "Valor mensual", value: formatCurrency(membership.montoAplicado) });
+  }
+  if (membership?.franjaHoraria) facts.push({ label: "Franja", value: membership.franjaHoraria });
 
   return (
-    <div className="mb-6 flex items-center gap-3 rounded-xl border border-cata-border bg-cata-surface px-4 py-3">
-      <div
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-          isActive ? "bg-emerald-100" : isExpired ? "bg-red-100" : "bg-amber-100"
-        }`}
-      >
-        <ShieldCheck
-          size={16}
-          strokeWidth={1.5}
-          className={
-            isActive
-              ? "text-emerald-600"
-              : isExpired
-                ? "text-cata-red"
-                : "text-amber-600"
-          }
-          aria-hidden="true"
-        />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-cata-text">
-          Membresía:{" "}
-          <span className={isActive ? "text-emerald-600" : isExpired ? "text-cata-red" : "text-amber-600"}>
-            {isExpired ? "Vencida" : isActive ? "Activa" : membership.estado}
-          </span>
-        </p>
-        {membership.fechaFin && (
-          <p className="text-xs text-cata-text/55">
-            {isExpired ? "Venció" : "Vigente hasta"}: {membership.fechaFin}
+    <section
+      data-testid="membership-status"
+      className="card overflow-hidden"
+      aria-labelledby="membership-status-title"
+    >
+      {/* The badge carries the `estado`; the heading carries the fact the
+          reader came for. The badge used to say the same thing as the heading
+          in coarser words ("Al día"), which is a second, weaker judgement of
+          data that already speaks for itself. */}
+      <div className="px-5 py-[18px]">
+        <div className="mb-2 flex flex-wrap items-center gap-2.5">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+            {studentName ? `Membresía de ${studentName}` : "Su membresía"}
           </p>
-        )}
+          <Badge tone={state.tone}>{state.label}</Badge>
+        </div>
+        <h2 id="membership-status-title" className="text-[17px] font-bold tracking-tight text-ink">
+          {coverageEnd ? (
+            <>
+              Pagado hasta el <span className="tabular-nums">{formatDate(coverageEnd)}</span>
+            </>
+          ) : (
+            "Todavía no hay ningún pago aprobado"
+          )}
+        </h2>
+        <p className="mt-1.5 text-[13px] text-ink-3">
+          {coverageEnd
+            ? "Es la fecha del pago aprobado que llega más lejos en su historial."
+            : "En cuanto el club apruebe un pago, aquí aparecerá hasta qué fecha queda cubierto."}
+        </p>
       </div>
-      {membership.categoria && (
-        <span className="hidden shrink-0 rounded-full bg-cata-bg px-2.5 py-0.5 text-xs font-medium text-cata-text/65 sm:inline-block">
-          {membership.categoria}
-        </span>
+
+      {facts.length > 0 && (
+        <dl className="flex flex-wrap gap-x-8 gap-y-3 border-t border-line bg-sunken px-5 py-3.5">
+          {facts.map((fact) => (
+            <div key={fact.label}>
+              <dt className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong">
+                {fact.label}
+              </dt>
+              <dd className="mt-0.5 text-[13.5px] font-bold tabular-nums text-ink">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
-    </div>
+
+      {children && <div className="border-t border-line px-5 py-4">{children}</div>}
+    </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Filter chips
+// "Cómo se registra un pago" — the procedure, stated where the reader is
+//
+// The complaint this answers is literal: "hasta ahora ni yo sé cómo probar ese
+// flujo porque nunca se muestra". The upload has always existed — it is the
+// file input the form reveals for a TRANSFERENCIA — but nothing on the screen
+// said the form existed, what it would ask for, or that the comprobante is
+// what the club validates. A reader who could pay saw one button; a reader who
+// could NOT pay (a minor on their own account) saw a sentence that ended the
+// conversation.
+//
+// So the rail says the procedure out loud, in the order the form asks for it,
+// and for a reader who cannot self-register it says what to do instead. Every
+// step describes something on THIS screen or something the club demonstrably
+// does — an ADMINISTRADOR can register a payment for a persona
+// (`membresia_pago_servicio.registrar_pago` authorizes owner, representative
+// or admin, and `/members` is where the club does it).
 // ---------------------------------------------------------------------------
 
-function FilterChips({
-  active,
-  onChange,
-  counts,
+function HowToPay({
+  /** `null` when the reader is the student — "usted" instead of a name. */
+  studentName,
+  /** The minor-on-their-own-account case: the rail carries the alternative, not the steps. */
+  blocked,
+  /** True once the club has a `Membresia` to renew; without one the form cannot be reached at all. */
+  hasMembership,
+  monthlyPrice,
 }: {
-  active: PagoStatusFilter;
-  onChange: (f: PagoStatusFilter) => void;
-  counts: Record<PagoStatusFilter, number>;
+  studentName: string | null;
+  blocked: boolean;
+  hasMembership: boolean;
+  monthlyPrice: string | null;
 }): React.ReactElement {
-  const filters: PagoStatusFilter[] = ["TODOS", "PENDIENTE_VALIDACION", "APROBADO", "RECHAZADO"];
-  return (
-    <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Filtrar por estado">
-      {filters.map((f) => (
-        <button
-          key={f}
-          type="button"
-          role="tab"
-          aria-selected={active === f}
-          onClick={() => onChange(f)}
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-            active === f
-              ? "bg-cata-red text-white"
-              : "border border-cata-border bg-cata-surface text-cata-text/65 hover:border-cata-red/30 hover:text-cata-red"
-          }`}
-        >
-          {PAGO_FILTER_LABELS[f]}
-          <span
-            className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-              active === f ? "bg-white/20" : "bg-cata-bg"
-            }`}
-          >
-            {counts[f]}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
+  const subject = studentName ? `de ${studentName}` : "suyo";
 
-// ---------------------------------------------------------------------------
-// Pago status badge
-// ---------------------------------------------------------------------------
-
-function PagoEstadoBadge({
-  estado,
-}: {
-  estado: PagoPersona["estadoPago"];
-}): React.ReactElement {
-  if (estado === "APROBADO") {
+  if (blocked) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-        <CheckCircle2 size={10} strokeWidth={2} aria-hidden="true" /> Aprobado
-      </span>
+      <section className="card overflow-hidden" aria-labelledby="how-to-pay-title">
+        <div className="px-5 py-[18px]">
+          <h2 id="how-to-pay-title" className="text-[15px] font-bold tracking-tight text-ink">
+            Cómo se paga esta membresía
+          </h2>
+          {/* The card on the left already names WHO registers the payment,
+              from `describePaymentSituation`. Repeating that sentence here
+              printed it twice on one screen; this rail answers the next
+              question instead — what the reader actually does. */}
+          <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+            Su cuenta no registra pagos, pero el pago sí se puede hacer. Estos son los pasos:
+          </p>
+        </div>
+        <ol className="flex flex-col border-t border-line">
+          <HowToPayStep index={1}>
+            Acérquese a administración del club con el valor del plan
+            {monthlyPrice ? ` (${formatCurrency(monthlyPrice)} al mes)` : ""}. También puede pagar
+            por transferencia y entregar el comprobante allí.
+          </HowToPayStep>
+          <HowToPayStep index={2}>
+            El club registra el pago a su nombre y elige el período que cubre.
+          </HowToPayStep>
+          <HowToPayStep index={3}>
+            El pago aparece en el historial de esta misma pantalla, con el período cubierto y su
+            estado.
+          </HowToPayStep>
+        </ol>
+      </section>
     );
   }
-  if (estado === "RECHAZADO") {
+
+  if (!hasMembership) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-cata-red">
-        <XCircle size={10} strokeWidth={2} aria-hidden="true" /> Rechazado
-      </span>
+      <section className="card overflow-hidden" aria-labelledby="how-to-pay-title">
+        <div className="px-5 py-[18px]">
+          <h2 id="how-to-pay-title" className="text-[15px] font-bold tracking-tight text-ink">
+            Cómo se registra un pago
+          </h2>
+          <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+            El club crea la membresía al registrar el primer pago, así que ese primero se hace en
+            administración. Desde el segundo, la renovación se registra aquí: monto, forma de pago
+            y —si es transferencia— el comprobante.
+          </p>
+        </div>
+      </section>
     );
   }
+
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-900/20 px-2 py-0.5 text-xs font-medium text-amber-400">
-      <Clock size={10} strokeWidth={2} aria-hidden="true" /> Pendiente
-    </span>
+    <section className="card overflow-hidden" aria-labelledby="how-to-pay-title">
+      <div className="px-5 py-[18px]">
+        <h2 id="how-to-pay-title" className="text-[15px] font-bold tracking-tight text-ink">
+          Cómo se registra un pago
+        </h2>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+          Son tres pasos y terminan en el club, no en usted: lo último lo hace quien valida.
+        </p>
+      </div>
+      <ol className="flex flex-col border-t border-line">
+        <HowToPayStep index={1}>
+          Abra <b className="font-semibold text-ink">Registrar un pago</b> y escriba el monto{" "}
+          {subject === "suyo" ? "" : `${subject} `}y la forma de pago.
+          {monthlyPrice ? (
+            <>
+              {" "}
+              Cada {formatCurrency(monthlyPrice)} cubre un mes: el formulario muestra el período
+              exacto antes de que confirme.
+            </>
+          ) : null}
+        </HowToPayStep>
+        <HowToPayStep index={2}>
+          Si paga por <b className="font-semibold text-ink">transferencia</b>, adjunte el
+          comprobante — PDF, JPG o PNG, hasta 5 MB. Sin comprobante el club no tiene qué validar, y
+          el formulario no deja continuar.
+        </HowToPayStep>
+        <HowToPayStep index={3}>
+          El pago queda <b className="font-semibold text-ink">en revisión</b> en el historial hasta
+          que el club lo apruebe o lo rechace. Si lo rechaza, el motivo aparece en la misma fila.
+        </HowToPayStep>
+      </ol>
+    </section>
+  );
+}
+
+/**
+ * One step of the procedure.
+ *
+ * Numbered because the order is the information — this is the only numbered
+ * sequence in the product, and it is one because doing step 2 before step 1 is
+ * not possible.
+ */
+function HowToPayStep({
+  index,
+  children,
+}: {
+  index: number;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <li className="flex gap-3 border-b border-line px-5 py-3.5 last:border-b-0">
+      <span
+        aria-hidden="true"
+        className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-coal text-[11.5px] font-bold tabular-nums text-white"
+      >
+        {index}
+      </span>
+      <p className="text-[13px] leading-relaxed text-ink-2">{children}</p>
+    </li>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Renew payment form (inline, improved with proportional date calculation)
+// Registering a payment
+//
+// ## Why this commits behind a confirm step and not behind an undo
+//
+// The usability review asked for a 5-second "Deshacer" after consequential
+// actions. Registering a payment is the consequential action in the family
+// portal, and it is the one place where a "Deshacer" button could not be
+// honest: the backend exposes no way to delete or cancel a `Pago`. The whole
+// surface is `POST /membresias/pagos` (create), `POST /pagos/{id}/voucher`
+// (attach the proof) and `PATCH /pagos/{id}/validar`, and that last one is
+// gated on `GestorPermisos(ROL_ADMIN)` — there is no DELETE anywhere in
+// `membresias_pagos_router.py`, `membresia_pago_servicio.py` or
+// `pago_repositorio.py`. A toast offering "Deshacer" would have had nothing to
+// call, and a button that quietly does nothing is worse than no button.
+//
+// So the control the reader gets is placed BEFORE the commit rather than
+// after it: one checkpoint naming the child, the amount, the method and the
+// period that is about to be charged — and, once it is registered, a plain
+// statement of the real recovery, which is that the club validates every
+// payment and a wrong one is resolved by the club rejecting it.
 // ---------------------------------------------------------------------------
 
 function RenewPaymentForm({
   membership,
   personaId,
-  onRenewed,
-  hasPendingPago = false,
+  coverageEnd,
+  hasPendingPago,
+  /**
+   * Open the form without a click, for a reader who arrived from the home
+   * screen's "Registrar un pago" band (`/student/payments?registrar=1`).
+   *
+   * The caller only flips this to `true` once the payment history has loaded:
+   * `handleOpen` seeds `fechaInicio` from `coverageEnd` so a family paying
+   * early does not lose the days they already paid for, and `coverageEnd` is
+   * `null` until the history arrives.
+   */
+  autoOpen,
+  studentName,
+  onRegistered,
 }: {
   membership: MembershipSummary;
   personaId: string;
-  onRenewed: () => void;
-  hasPendingPago?: boolean;
+  coverageEnd: string | null;
+  hasPendingPago: boolean;
+  autoOpen: boolean;
+  studentName: string | null;
+  onRegistered: () => void;
 }): React.ReactElement {
   const [showForm, setShowForm] = useState(false);
+  /** The checkpoint between "I filled this in" and "the club has my money". */
+  const [confirming, setConfirming] = useState(false);
   const [monto, setMonto] = useState<string>(membership.montoAplicado ?? "");
   const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
   const [fechaInicio, setFechaInicio] = useState<string>("");
-  const [fechaFin, setFechaFin] = useState<string>("");
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
+  const { showSuccess } = useToast();
 
-  const monthlyPrice = parseFloat(String(membership.montoAplicado ?? "").replace(/[^0-9.]/g, "")) || 0;
+  const monthlyPrice = Number(membership.montoAplicado ?? "") || 0;
+  const amount = Number(monto) || 0;
+  const months = wholeMonthsFor(amount, monthlyPrice);
 
-  function calcFechaFin(baseDate: Date, amount: number): string {
-    if (monthlyPrice <= 0 || amount <= 0) return "";
-    const months = amount / monthlyPrice;
-    const fin = new Date(baseDate);
-    fin.setMonth(fin.getMonth() + months);
-    return fin.toISOString().slice(0, 10);
-  }
+  /**
+   * Coverage resumes where the paid period ends, not today — otherwise a family
+   * paying early loses the days they already paid for. `coverageEnd` is the
+   * furthest approved `fechaFin`; `membership.fechaFin`, which the old form
+   * read, never reaches this client.
+   */
+  const fechaFin = useMemo(
+    () => (fechaInicio && months !== null ? addMonthsIso(fechaInicio, months) : ""),
+    [fechaInicio, months],
+  );
 
-  function resolveFechaInicio(): Date {
-    const hoy = new Date();
-    const prevFin = membership.fechaFin ? new Date(membership.fechaFin + "T12:00:00") : null;
-    return prevFin && prevFin.getTime() > hoy.getTime() ? prevFin : hoy;
-  }
-
-  function handleOpen(): void {
+  const openForm = useCallback((): void => {
     setShowForm(true);
+    setConfirming(false);
     setError(null);
     setVoucherFile(null);
-    const base = resolveFechaInicio();
-    setFechaInicio(base.toISOString().slice(0, 10));
-    const amount = parseFloat(String(monto).replace(/[^0-9.]/g, "")) || 0;
-    setFechaFin(amount > 0 ? calcFechaFin(base, amount) : "");
+    // Both sides must be CALENDAR dates before they are compared: mixing an
+    // instant with a noon-anchored date made the comparison depend on the
+    // hour of day.
+    const today = clubToday();
+    const paidThrough = coverageEnd ? fromIsoDate(coverageEnd) : null;
+    setFechaInicio(
+      calendarIsoDate(paidThrough && paidThrough.getTime() > today.getTime() ? paidThrough : today),
+    );
+  }, [coverageEnd]);
+
+  // Once, on arrival. Guarded by a ref rather than by `showForm` so that a
+  // reader who deliberately cancels the form is not handed it straight back
+  // when the payment history refetches.
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!autoOpen || autoOpened.current || hasPendingPago) return;
+    autoOpened.current = true;
+    openForm();
+  }, [autoOpen, hasPendingPago, openForm]);
+
+  // The checkpoint's own primary button takes focus when it appears: the
+  // control that was focused a moment ago has just unmounted.
+  useEffect(() => {
+    if (confirming) confirmButtonRef.current?.focus();
+  }, [confirming]);
+
+  function handleCancel(): void {
+    setShowForm(false);
+    setConfirming(false);
+    setVoucherFile(null);
+    setError(null);
   }
 
-  function handleMontoChange(value: string): void {
-    setMonto(value);
-    if (!fechaInicio) return;
-    const amount = parseFloat(value.replace(/[^0-9.]/g, "")) || 0;
-    setFechaFin(amount > 0 ? calcFechaFin(new Date(fechaInicio + "T12:00:00"), amount) : "");
+  /** The first thing wrong with the form as it stands, or `null`. */
+  function findProblem(): string | null {
+    if (amount <= 0) return "Ingrese un monto mayor a 0.";
+    if (monthlyPrice > 0 && months === null) {
+      return `El monto debe ser un múltiplo del valor mensual (${formatCurrency(monthlyPrice)}): pague uno o más meses completos.`;
+    }
+    if (!fechaInicio || !fechaFin) return "No se pudo calcular el período que cubre este pago.";
+    if (tipoPago === "TRANSFERENCIA" && !voucherFile) {
+      return "Adjunte el comprobante de la transferencia para que el club pueda validarla.";
+    }
+    return null;
+  }
+
+  /**
+   * "Registrar pago" no longer registers anything. It validates and opens the
+   * checkpoint — the reader still has to say yes to a sentence that names the
+   * child, the amount and the period, because nothing after this point can be
+   * taken back from the portal.
+   */
+  function handleRequestConfirm(): void {
+    const problem = findProblem();
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setError(null);
+    setConfirming(true);
+  }
+
+  function handleBackToForm(): void {
+    setConfirming(false);
+    // The button that opened the checkpoint is the one that gets focus back —
+    // otherwise dismissing it drops the keyboard reader on `document.body`.
+    window.requestAnimationFrame(() => submitButtonRef.current?.focus());
   }
 
   async function handleSubmit(): Promise<void> {
-    const montoNum = Number(monto);
-    if (!montoNum || montoNum <= 0) {
-      setError("El monto debe ser mayor a 0.");
+    // Re-checked rather than trusted: the fields stay live behind the
+    // checkpoint, so the summary always describes what will actually be sent.
+    const problem = findProblem();
+    if (problem) {
+      setError(problem);
+      setConfirming(false);
       return;
     }
-    if (monthlyPrice > 0 && montoNum % monthlyPrice !== 0) {
-      setError(`El monto debe ser múltiplo de $${monthlyPrice}.`);
-      return;
-    }
-    if (!fechaInicio || !fechaFin) {
-      setError("Las fechas son obligatorias.");
-      return;
-    }
-    if (fechaInicio >= fechaFin) {
-      setError("La fecha de inicio debe ser anterior a la fecha de fin.");
-      return;
-    }
-    if (tipoPago === "TRANSFERENCIA" && !voucherFile) {
-      setError("El comprobante de transferencia es obligatorio.");
-      return;
-    }
+
     setLoading(true);
     setError(null);
     try {
       const nuevoPago = await registrarPago({
-        monto: montoNum,
+        monto: amount,
         tipoPago,
         fechaInicio,
         fechaFin,
@@ -327,8 +535,20 @@ function RenewPaymentForm({
       }
 
       setShowForm(false);
+      setConfirming(false);
       setVoucherFile(null);
-      onRenewed();
+      // What happened, and what to do if it was wrong. There is no "Deshacer"
+      // to offer (see the block comment above this component), so the toast
+      // says plainly where the recovery actually lives.
+      showSuccess(
+        studentName
+          ? `Pago de ${studentName} registrado y en revisión`
+          : "Pago registrado y en revisión",
+        {
+          description: `${formatCurrency(amount)} por el período ${formatDateRange(fechaInicio, fechaFin)}. El club lo valida; si algo está mal lo rechaza indicando el motivo y usted registra el pago correcto.`,
+        },
+      );
+      onRegistered();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo registrar el pago.");
     } finally {
@@ -338,57 +558,53 @@ function RenewPaymentForm({
 
   if (hasPendingPago) {
     return (
-      <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
-        Ya tenés un pago pendiente de validación. Esperá a que sea aprobado para registrar uno nuevo.
+      <p className="text-[13px] text-ink-2">
+        {studentName
+          ? `Ya hay un pago de ${studentName} esperando validación. Espere a que el club lo apruebe para registrar otro.`
+          : "Ya tiene un pago esperando validación. Espere a que el club lo apruebe para registrar otro."}
       </p>
     );
   }
 
   if (!showForm) {
     return (
-      <button
-        type="button"
-        onClick={handleOpen}
-        className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-cata-red px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-cata-red/85"
-      >
-        <Plus size={14} strokeWidth={1.5} aria-hidden="true" />
-        Registrar pago
-      </button>
+      <Button variant="primary" onClick={openForm}>
+        <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
+        {studentName ? `Registrar un pago de ${studentName}` : "Registrar un pago"}
+      </Button>
     );
   }
 
-  const durationLabel = (() => {
-    const amount = parseFloat(String(monto).replace(/[^0-9.]/g, "")) || 0;
-    if (monthlyPrice <= 0 || amount <= 0) return null;
-    const months = amount / monthlyPrice;
-    return months === 1 ? "1 mes de vigencia" : `${months} meses de vigencia`;
-  })();
-
   return (
-    <div className="space-y-2.5 rounded-lg bg-cata-bg/60 p-3">
-      <div className="grid grid-cols-2 gap-2">
-        <label className="text-xs font-medium text-cata-text/65">
-          Monto
+    <div className="flex flex-col gap-4">
+      {studentName && (
+        <p className="text-[13px] text-ink-2">
+          Este pago se registra a nombre de <b className="font-semibold text-ink">{studentName}</b>.
+        </p>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5">
+          <span className={FIELD_LABEL_CLASSES}>Monto</span>
           <input
             type="number"
             step={monthlyPrice > 0 ? monthlyPrice : "0.01"}
             min="0"
             value={monto}
-            onChange={(e) => handleMontoChange(e.target.value)}
-            className="mt-0.5 w-full rounded-lg border border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text"
-            placeholder="0.00"
+            onChange={(e) => setMonto(e.target.value)}
+            className={FIELD_CLASSES}
+            placeholder="0,00"
           />
         </label>
-        <label className="text-xs font-medium text-cata-text/65">
-          Método
+        <label className="flex flex-col gap-1.5">
+          <span className={FIELD_LABEL_CLASSES}>Forma de pago</span>
           <select
             value={tipoPago}
             onChange={(e) => {
-              const val = e.target.value as "EFECTIVO" | "TRANSFERENCIA";
-              setTipoPago(val);
-              if (val !== "TRANSFERENCIA") setVoucherFile(null);
+              const value = e.target.value as "EFECTIVO" | "TRANSFERENCIA";
+              setTipoPago(value);
+              if (value !== "TRANSFERENCIA") setVoucherFile(null);
             }}
-            className="mt-0.5 w-full rounded-lg border border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text"
+            className={FIELD_CLASSES}
           >
             <option value="TRANSFERENCIA">Transferencia</option>
             <option value="EFECTIVO">Efectivo</option>
@@ -396,88 +612,142 @@ function RenewPaymentForm({
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 rounded-lg border border-cata-border/50 bg-cata-surface/50 px-2.5 py-2">
-        <div className="text-xs">
-          <span className="text-cata-text/45">Inicio: </span>
-          <span className="font-medium text-cata-text">{fechaInicio || "—"}</span>
-        </div>
-        <div className="text-xs">
-          <span className="text-cata-text/45">Fin: </span>
-          <span className="font-medium text-cata-text">{fechaFin || "—"}</span>
-        </div>
-      </div>
-      {durationLabel && (
-        <p className="text-[10px] text-cata-text/45">
-          {durationLabel}
-          {monthlyPrice > 0 && ` (precio mensual: $${monthlyPrice})`}
+      {/* The consequence of the amount, stated before the reader commits to it. */}
+      <div className="rounded-ctl bg-sunken px-3.5 py-3">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong">
+          Período que cubre
         </p>
-      )}
+        <p className="mt-1 text-[13.5px] font-bold tabular-nums text-ink">
+          {fechaInicio && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
+        </p>
+        {months !== null && (
+          <p className="mt-0.5 text-[12.5px] text-ink-3-strong">
+            {months === 1 ? "1 mes" : `${months} meses`} a {formatCurrency(monthlyPrice)} por mes.
+          </p>
+        )}
+        {months === null && monthlyPrice > 0 && amount > 0 && (
+          <p className="mt-0.5 text-[12.5px] text-state-bad">
+            El monto debe ser un múltiplo de {formatCurrency(monthlyPrice)}.
+          </p>
+        )}
+      </div>
 
       {tipoPago === "TRANSFERENCIA" && (
-        <label className="block text-xs font-medium text-cata-text/65">
-          Comprobante de pago
-          <div className="mt-0.5 flex items-center gap-2">
+        <div className="flex flex-col gap-1.5">
+          <span className={FIELD_LABEL_CLASSES}>Comprobante</span>
+          <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/png,application/pdf"
               onChange={(e) => setVoucherFile(e.target.files?.[0] ?? null)}
               className="hidden"
+              data-testid="renew-voucher-input"
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text/65 transition-colors hover:border-cata-red/30 hover:text-cata-text"
-            >
-              <Upload size={12} strokeWidth={1.5} aria-hidden="true" />
-              {voucherFile ? voucherFile.name : "Seleccionar archivo"}
-            </button>
+            <Button onClick={() => fileInputRef.current?.click()}>
+              <Upload size={16} strokeWidth={1.5} aria-hidden="true" />
+              {voucherFile ? "Cambiar archivo" : "Seleccionar archivo"}
+            </Button>
             {voucherFile && (
-              <button
-                type="button"
-                onClick={() => setVoucherFile(null)}
-                className="text-[10px] text-cata-text/45 hover:text-cata-red"
-              >
-                Quitar
-              </button>
+              <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px] text-ink-2">
+                <Paperclip size={14} strokeWidth={1.5} aria-hidden="true" />
+                <span className="truncate">{voucherFile.name}</span>
+                {/* The only way back from attaching the wrong file, and it
+                    shipped as a bare 14px glyph in an unpadded button — a
+                    14x14 target against the 24x24 of WCAG 2.2 SC 2.5.8.
+                    `h-6 w-6` with the glyph centred is hit area only; the ✕
+                    itself is still 14px. */}
+                <button
+                  type="button"
+                  onClick={() => setVoucherFile(null)}
+                  aria-label="Quitar el comprobante seleccionado"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-3 hover:text-state-bad"
+                >
+                  <X size={14} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </span>
             )}
           </div>
-          <span className="mt-0.5 block text-[10px] text-cata-text/40">PDF, JPG o PNG — máx. 5 MB</span>
-        </label>
+          <span className="text-[12.5px] text-ink-3-strong">PDF, JPG o PNG — máximo 5 MB.</span>
+        </div>
       )}
 
-      {error && <p className="text-xs text-cata-red">{error}</p>}
-      <div className="flex gap-1.5">
-        <button
-          type="button"
-          onClick={() => void handleSubmit()}
-          disabled={loading || !monto || !fechaInicio || !fechaFin}
-          className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
-        >
-          {loading ? (
-            <Loader2 size={12} className="animate-spin" />
-          ) : (
-            <CreditCard size={12} strokeWidth={1.5} />
-          )}
-          Registrar pago
-        </button>
-        <button
-          type="button"
-          onClick={() => { setShowForm(false); setVoucherFile(null); }}
-          className="rounded-lg border border-cata-border px-2.5 py-1.5 text-xs text-cata-text/65 transition-colors hover:bg-cata-surface"
-        >
-          Cancelar
-        </button>
-      </div>
+      {error && (
+        <p role="alert" className="text-[13px] font-semibold text-state-bad">
+          {error}
+        </p>
+      )}
+
+      {confirming ? (
+        /* The checkpoint sits where the submit button was, so it lands under
+           the eye that just clicked, with every field it describes still on
+           screen and still editable above it. A modal would have dimmed
+           exactly the numbers the reader is being asked to check. */
+        <div data-testid="renew-confirm" className="rounded-ctl border border-line-2 bg-sunken px-4 py-4">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong">
+            Confirme antes de registrar
+          </p>
+          <p id="renew-confirm-summary" className="mt-1.5 max-w-[68ch] text-[13.5px] leading-relaxed text-ink">
+            Va a registrar <b className="font-bold tabular-nums">{formatCurrency(amount)}</b>{" "}
+            {studentName ? (
+              <>
+                a nombre de <b className="font-bold">{studentName}</b>
+              </>
+            ) : (
+              "a su nombre"
+            )}
+            , {tipoPago === "TRANSFERENCIA" ? "por transferencia" : "en efectivo"}, para el período{" "}
+            <b className="font-bold tabular-nums">{formatDateRange(fechaInicio, fechaFin)}</b>.
+          </p>
+          <p className="mt-2 max-w-[68ch] text-[12.5px] leading-relaxed text-ink-3-strong">
+            Una vez registrado no puede eliminarlo desde el portal. El club revisa cada pago: si
+            algo está mal lo rechaza indicando el motivo y usted registra el correcto.
+          </p>
+          <div className="mt-3.5 flex flex-wrap gap-2">
+            <Button
+              ref={confirmButtonRef}
+              variant="primary"
+              onClick={() => void handleSubmit()}
+              disabled={loading}
+              aria-describedby="renew-confirm-summary"
+            >
+              {loading ? (
+                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <CreditCard size={16} strokeWidth={1.5} aria-hidden="true" />
+              )}
+              {loading ? "Registrando…" : "Confirmar y registrar"}
+            </Button>
+            <Button variant="ghost" onClick={handleBackToForm} disabled={loading}>
+              Volver a corregir
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            ref={submitButtonRef}
+            variant="primary"
+            onClick={handleRequestConfirm}
+            disabled={!monto || !fechaInicio || !fechaFin}
+          >
+            <CreditCard size={16} strokeWidth={1.5} aria-hidden="true" />
+            Registrar pago
+          </Button>
+          <Button variant="ghost" onClick={handleCancel}>
+            Cancelar
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Payment timeline card
+// One payment in the history
 // ---------------------------------------------------------------------------
 
-function PagoCard({
+function PagoRow({
   pago,
   onUploadFile,
   uploadingId,
@@ -486,82 +756,60 @@ function PagoCard({
   onUploadFile: (pagoId: number) => void;
   uploadingId: number | null;
 }): React.ReactElement {
-  const fechaPago = new Date(pago.fechaRegistro).toLocaleDateString("es-EC", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const estado = describePagoEstado(pago.estadoPago);
+  const canUpload = !pago.voucherUrl && pago.estadoPago !== "APROBADO";
 
   return (
-    <div className="relative flex gap-4">
-      {/* Timeline dot */}
-      <div className="flex flex-col items-center">
-        <div
-          className={`mt-1 h-3 w-3 shrink-0 rounded-full ${
-            pago.estadoPago === "APROBADO"
-              ? "bg-emerald-500"
-              : pago.estadoPago === "RECHAZADO"
-                ? "bg-cata-red"
-                : "bg-amber-400"
-          }`}
-        />
-        <div className="mt-1 w-px flex-1 bg-cata-border" />
+    <li className="flex min-h-drow flex-wrap items-start gap-x-4 gap-y-2 border-b border-line px-5 py-3.5 last:border-b-0">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-[15px] font-bold tabular-nums text-ink">
+            {formatPagoMonto(pago.monto)}
+          </span>
+          <Badge tone={estado.tone}>{estado.label}</Badge>
+        </div>
+        <p className="mt-1 text-[12.5px] text-ink-3-strong">
+          {TIPO_PAGO_LABEL[pago.tipoPago]} · Registrado el{" "}
+          <span className="tabular-nums">{formatDate(pago.fechaRegistro)}</span> · Cubre{" "}
+          <span className="tabular-nums">{formatDateRange(pago.fechaInicio, pago.fechaFin)}</span>
+        </p>
+
+        {pago.voucherUrl && (
+          <a
+            href={pago.voucherUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1.5 inline-flex min-h-[24px] items-center gap-1.5 rounded text-[12.5px] font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+          >
+            <Paperclip size={13} strokeWidth={1.5} aria-hidden="true" />
+            Ver el comprobante
+          </a>
+        )}
+
+        {/* The rejection reason is the one thing on this screen that asks the
+            reader to act, so it is stated in full rather than truncated into
+            the meta line. */}
+        {pago.estadoPago === "RECHAZADO" && pago.motivoRechazo && (
+          <div className="mt-2 rounded-ctl bg-state-bad-bg px-3.5 py-2.5">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-state-bad">
+              Motivo del rechazo
+            </p>
+            <p className="mt-0.5 text-[13px] text-ink-2">{pago.motivoRechazo}</p>
+          </div>
+        )}
       </div>
 
-      {/* Card content */}
-      <div className="mb-4 min-w-0 flex-1 rounded-xl border border-cata-border bg-cata-surface p-4 transition-colors hover:border-cata-red/20">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-cata-text">
-                {formatPagoMonto(pago.monto)}
-              </p>
-              <PagoEstadoBadge estado={pago.estadoPago} />
-            </div>
-            <p className="mt-1 text-xs text-cata-text/55">
-              {fechaPago} · {TIPO_PAGO_LABEL[pago.tipoPago]} · Período:{" "}
-              {pago.fechaInicio} – {pago.fechaFin}
-            </p>
-            {pago.voucherUrl && (
-              <a
-                href={pago.voucherUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1.5 inline-flex items-center gap-1 text-xs text-cata-red hover:underline"
-              >
-                <Paperclip size={10} strokeWidth={1.5} />
-                Ver comprobante
-              </a>
-            )}
-            {pago.estadoPago === "RECHAZADO" && pago.motivoRechazo && (
-              <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-                <p className="text-xs font-semibold text-cata-red">
-                  Motivo de rechazo
-                </p>
-                <p className="text-xs text-cata-red/80">{pago.motivoRechazo}</p>
-              </div>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {!pago.voucherUrl && pago.estadoPago !== "APROBADO" && (
-              <button
-                type="button"
-                onClick={() => onUploadFile(pago.id)}
-                disabled={uploadingId === pago.id}
-                className="inline-flex items-center gap-1 rounded-lg border border-cata-border px-2.5 py-1.5 text-xs font-medium text-cata-text transition-colors hover:border-cata-red/30 hover:text-cata-red disabled:opacity-50"
-              >
-                {uploadingId === pago.id ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : (
-                  <Upload size={12} strokeWidth={1.5} />
-                )}
-                {uploadingId === pago.id ? "Subiendo..." : "Subir comprobante"}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+      {canUpload && (
+        <Button size="sm" onClick={() => onUploadFile(pago.id)} disabled={uploadingId === pago.id}>
+          {uploadingId === pago.id ? (
+            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Upload size={14} strokeWidth={1.5} aria-hidden="true" />
+          )}
+          {uploadingId === pago.id ? "Subiendo…" : "Subir comprobante"}
+        </Button>
+      )}
+    </li>
   );
 }
 
@@ -572,46 +820,48 @@ function PagoCard({
 function PaymentsContent({
   data,
   hasAlumnoRole,
-  onRenewed,
+  accountPersonaId,
+  /** True when the reader arrived from the home band's "Registrar un pago". */
+  wantsRegisterForm,
+  onRegistered,
 }: {
   data: StudentPortalSummary;
   hasAlumnoRole: boolean;
-  onRenewed: () => void;
+  /** The persona behind the SESSION — not the profile being viewed. */
+  accountPersonaId: string;
+  wantsRegisterForm: boolean;
+  onRegistered: () => void;
 }): React.ReactElement {
-  const managedProfiles: StudentProfileSummary[] =
-    hasAlumnoRole && data.self
-      ? [data.self, ...data.representados]
-      : data.representados;
-
-  const [selectedId, setSelectedId] = useState<string>(
-    managedProfiles[0]?.personaId ?? "",
+  const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
+    data,
+    hasAlumnoRole,
+    accountPersonaId,
   );
+
   const [reloadToken, setReloadToken] = useState(0);
   const [filter, setFilter] = useState<PagoStatusFilter>("TODOS");
   const [pagosState, setPagosState] = useState<PagosLoadState>({ status: "loading" });
   const [uploadingId, setUploadingId] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingUploadPagoId, setPendingUploadPagoId] = useState<number | null>(null);
 
-  const selectedProfile =
-    managedProfiles.find((p) => p.personaId === selectedId) ?? managedProfiles[0] ?? null;
-
-  const representative = isRepresentative(data.representados.length);
-  const selectedIsMinor = isMinor(selectedProfile?.fechaNacimiento);
-
-  const hasPendingPago =
-    pagosState.status === "ready" &&
-    pagosState.pagos.some((p) => p.estadoPago === "PENDIENTE_VALIDACION");
-
-  useEffect(() => {
-    if (!managedProfiles.some((p) => p.personaId === selectedId)) {
-      setSelectedId(managedProfiles[0]?.personaId ?? "");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [managedProfiles.map((p) => p.personaId).join(",")]);
-
-  // Fetch payments when selected profile changes
   const selectedPersonaId = selectedProfile?.personaId ?? null;
+
+  /**
+   * A minor cannot register a payment on their OWN account — but their
+   * representative can, from theirs, and the backend agrees: `registrarPago`
+   * authorizes "the owner, their representative, or an ADMINISTRADOR" at the
+   * service layer.
+   *
+   * The gate used to read `isMinor(selectedProfile)` alone, which locked a
+   * guardian out of paying for their own child — the single most common thing
+   * a representante account exists to do — and told them to ask the minor's
+   * representative, i.e. themselves.
+   */
+  const viewingOwnProfile = selectedPersonaId !== null && selectedPersonaId === accountPersonaId;
+  const blockedAsMinor = viewingOwnProfile && isMinor(selectedProfile?.fechaNacimiento);
+
   useEffect(() => {
     if (!selectedPersonaId) return;
     let cancelled = false;
@@ -625,9 +875,7 @@ function PaymentsContent({
         setPagosState({
           status: "error",
           message:
-            error instanceof Error
-              ? error.message
-              : "No se pudo cargar el historial de pagos.",
+            error instanceof Error ? error.message : "No se pudo cargar el historial de pagos.",
         });
       });
     return () => {
@@ -635,23 +883,69 @@ function PaymentsContent({
     };
   }, [selectedPersonaId, reloadToken]);
 
+  // Memoised so the empty-list branch does not hand a fresh array to the three
+  // derivations below on every render.
+  const pagos = useMemo(
+    () => (pagosState.status === "ready" ? pagosState.pagos : NO_PAGOS),
+    [pagosState],
+  );
+  const coverageEnd = useMemo(() => resolveCoverageEnd(pagos), [pagos]);
+  const counts = useMemo(() => countPagosByStatus(pagos), [pagos]);
+  const filteredPagos = useMemo(
+    () => sortPagosByDate(filterPagosByStatus(pagos, filter)),
+    [pagos, filter],
+  );
+  const hasPendingPago = pagos.some((pago) => pago.estadoPago === "PENDIENTE_VALIDACION");
+
+  /**
+   * The dependent's given name, or `null` when the reader IS the student.
+   *
+   * Everything on this screen that used to say "su" says this instead when it
+   * is somebody else's money and somebody else's coverage.
+   */
+  const studentName = viewingOwnProfile ? null : firstNameOf(selectedProfile?.nombres ?? "");
+
+  /**
+   * The same reading the home screen's band shows, from the same function.
+   *
+   * This screen only borrows two things from it — the sentence a blocked minor
+   * gets, and nothing else — because the `MembershipCard` right below already
+   * carries the coverage date and the price in the shape this screen owns.
+   * What matters is that the two screens can no longer disagree about who a
+   * minor should turn to.
+   */
+  const situation = describePaymentSituation({
+    studentName: studentName ?? firstNameOf(selectedProfile?.nombres ?? ""),
+    viewingOwnProfile,
+    blockedAsMinor,
+    representanteName: selectedProfile?.representante
+      ? `${selectedProfile.representante.nombres} ${selectedProfile.representante.apellidos}`.trim()
+      : null,
+    hasMembership: selectedProfile?.membership != null,
+    planName: selectedProfile?.membership?.categoria ?? null,
+    monthlyPrice: selectedProfile?.membership?.montoAplicado ?? null,
+    coverageEnd,
+    pendingCount: pagos.filter((pago) => pago.estadoPago === "PENDIENTE_VALIDACION").length,
+  });
+
   function handleSelectFile(pagoId: number): void {
+    setUploadError(null);
     setPendingUploadPagoId(pagoId);
     fileInputRef.current?.click();
   }
 
-  async function handleFileChange(
-    e: React.ChangeEvent<HTMLInputElement>,
-  ): Promise<void> {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = e.target.files?.[0];
     if (!file || !pendingUploadPagoId) return;
     setUploadingId(pendingUploadPagoId);
+    setUploadError(null);
     try {
       await subirVoucherPago(pendingUploadPagoId, file);
       setReloadToken((n) => n + 1);
     } catch (err) {
-      // eslint-disable-next-line no-alert
-      alert(err instanceof Error ? err.message : "No se pudo subir el comprobante.");
+      // Inline, not `alert()`: a browser dialog cannot be styled, cannot be
+      // read by the surrounding context, and blocks the page it interrupts.
+      setUploadError(err instanceof Error ? err.message : "No se pudo subir el comprobante.");
     } finally {
       setUploadingId(null);
       setPendingUploadPagoId(null);
@@ -659,158 +953,193 @@ function PaymentsContent({
     }
   }
 
-  function handleRenewed(): void {
+  function handleRegistered(): void {
     setReloadToken((n) => n + 1);
-    onRenewed();
+    onRegistered();
   }
 
-  const filteredPagos =
-    pagosState.status === "ready"
-      ? sortPagosByDate(filterPagosByStatus(pagosState.pagos, filter))
-      : [];
-
-  const counts: Record<PagoStatusFilter, number> =
-    pagosState.status === "ready"
-      ? {
-          TODOS: pagosState.pagos.length,
-          PENDIENTE_VALIDACION: pagosState.pagos.filter(
-            (p) => p.estadoPago === "PENDIENTE_VALIDACION",
-          ).length,
-          APROBADO: pagosState.pagos.filter((p) => p.estadoPago === "APROBADO")
-            .length,
-          RECHAZADO: pagosState.pagos.filter((p) => p.estadoPago === "RECHAZADO")
-            .length,
-        }
-      : { TODOS: 0, PENDIENTE_VALIDACION: 0, APROBADO: 0, RECHAZADO: 0 };
+  if (selectedProfile === null) {
+    return (
+      <div className="w-full">
+        <div className="card">
+          <EmptyState
+            icon={<CreditCard size={21} strokeWidth={1.5} aria-hidden="true" />}
+            title="No se encontraron estudiantes asociados a esta cuenta"
+            description="Inscríbase como jugador o agregue un hijo o dependiente para registrar pagos."
+            action={
+              <Link href="/student" className={buttonClasses("secondary", "sm")}>
+                Ir a mi cuenta
+              </Link>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <>
-      {/* Profile selector */}
-      {representative && managedProfiles.length > 1 && (
-        <div className="mb-5">
-          <label
-            htmlFor="student-select-payments"
-            className="text-xs font-medium text-cata-text/45"
+    // Full content width, like `/student` and like every admin screen. The
+    // 760px cap left the right half of the column empty at 1440; the width now
+    // buys a rail that says HOW a payment is made, which is the thing this
+    // screen was missing rather than a thing it was too narrow for.
+    <div className="w-full space-y-5">
+      <ManagedStudentPicker
+        id="student-select-payments"
+        profiles={managedProfiles}
+        value={selectedId}
+        onChange={(id) => {
+          setSelectedId(id);
+          setFilter("TODOS");
+        }}
+      />
+
+      {/* Three grid items, placed explicitly, so DOM order and reading order
+          agree at BOTH widths. Stacked on a phone the reader gets the
+          membership, then HOW a payment is made, then the history — the
+          instructions can't sit below the history there, which is the position
+          a plain rail would have put them in. Above `lg` the rail spans both
+          rows on the right and the history returns under the card. */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+        <div className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-1">
+          <MembershipCard
+            membership={selectedProfile.membership}
+            coverageEnd={coverageEnd}
+            studentName={studentName}
           >
-            Seleccionar estudiante
-          </label>
-          <div className="relative mt-1 inline-block">
-            <select
-              id="student-select-payments"
-              value={selectedId}
-              onChange={(e) => {
-                setSelectedId(e.target.value);
-                setFilter("TODOS");
-              }}
-              className="appearance-none rounded-xl border border-cata-border bg-cata-surface px-4 py-2 pr-10 text-sm font-medium text-cata-text shadow-sm transition-colors hover:border-cata-red/30 focus:border-cata-red/40 focus:outline-none focus:ring-2 focus:ring-cata-red/10"
-            >
-              {managedProfiles.map((profile) => (
-                <option key={profile.personaId} value={profile.personaId}>
-                  {profile.nombres} {profile.apellidos}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              size={14}
-              strokeWidth={1.5}
-              className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-cata-text/65"
-              aria-hidden="true"
-            />
-          </div>
-        </div>
-      )}
-
-      {selectedProfile === null ? (
-        <div className="card p-6 text-center">
-          <p className="text-sm text-cata-text/50">
-            No se encontraron estudiantes asociados a esta cuenta.
-          </p>
-        </div>
-      ) : (
-        <>
-          <MembershipStatusBar membership={selectedProfile.membership} />
-
-          {/* Renewal form when membership is inactive or expired — hidden for minors */}
-          {!selectedIsMinor && selectedProfile.membership &&
-            (selectedProfile.membership.estado === "INACTIVA" ||
-              selectedProfile.membership.estado === "VENCIDA") && (
-              <div className="mb-6">
-                <RenewPaymentForm
-                  membership={selectedProfile.membership}
-                  personaId={selectedProfile.personaId}
-                  onRenewed={handleRenewed}
-                  hasPendingPago={hasPendingPago}
-                />
-              </div>
+            {blockedAsMinor ? (
+              <p className="text-[13px] text-ink-2">
+                {/* The old copy sent EVERY minor to "su representante" — including
+                    the ones whose `representanteId` is null, who were being pointed
+                    at a person the backend does not have. `describePaymentSituation`
+                    resolves that from the payload. */}
+                {situation.detail}
+              </p>
+            ) : selectedProfile.membership ? (
+              <RenewPaymentForm
+                membership={selectedProfile.membership}
+                personaId={selectedProfile.personaId}
+                coverageEnd={coverageEnd}
+                hasPendingPago={hasPendingPago}
+                autoOpen={wantsRegisterForm && pagosState.status === "ready"}
+                studentName={studentName}
+                onRegistered={handleRegistered}
+              />
+            ) : (
+              <p className="text-[13px] text-ink-2">
+                El club crea la membresía al registrar el primer pago. Acérquese a administración
+                para activarla y después podrá renovarla desde aquí.
+              </p>
             )}
+          </MembershipCard>
+        </div>
 
-          {selectedIsMinor && (
-            <p className="mb-6 text-xs text-cata-text/55">
-              Los menores de edad no pueden registrar pagos. Consultá con tu representante.
-            </p>
-          )}
+        {/* `row-span-2`, not just `col-start-2`: without it the rail is the
+            tallest item in row 1 and its height becomes the row's, which left
+            a 170px hole between the membership card and the filters below it. */}
+        <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          <HowToPay
+            studentName={studentName}
+            blocked={blockedAsMinor}
+            hasMembership={selectedProfile.membership != null}
+            monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
+          />
+        </div>
 
-          {/* Filter chips */}
-          <FilterChips active={filter} onChange={setFilter} counts={counts} />
+        <div className="flex min-w-0 flex-col gap-5 lg:col-start-1 lg:row-start-2">
+          {/* Selection is coal plus the ball dot — `FilterPill` owns that rule. */}
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar pagos por estado">
+            {FILTERS.map((option) => (
+              <FilterPill
+                key={option}
+                label={PAGO_FILTER_LABELS[option]}
+                count={counts[option]}
+                active={filter === option}
+                onClick={() => setFilter(option)}
+              />
+            ))}
+          </div>
 
-          {/* Hidden file input */}
           <input
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/png,application/pdf"
             className="hidden"
+            data-testid="pago-voucher-input"
             onChange={(e) => {
               void handleFileChange(e);
             }}
           />
 
-          {/* Payment list */}
-          {pagosState.status === "loading" && <LoadingCard />}
-          {pagosState.status === "error" && (
-            <ErrorCard
-              message={pagosState.message}
-              onRetry={() => setReloadToken((n) => n + 1)}
-            />
+          {uploadError && (
+            <p role="alert" className="text-[13px] font-semibold text-state-bad">
+              {uploadError}
+            </p>
           )}
-          {pagosState.status === "ready" &&
-            (filteredPagos.length === 0 ? (
-              <div className="card p-8 text-center">
-                <CreditCard
-                  size={32}
-                  strokeWidth={1.5}
-                  className="mx-auto mb-3 text-cata-text/20"
-                  aria-hidden="true"
-                />
-                <p className="text-sm text-cata-text/50">
-                  {getEmptyStateMessage(filter)}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-0">
-                {filteredPagos.map((pago) => (
-                  <PagoCard
-                    key={pago.id}
-                    pago={pago}
-                    onUploadFile={handleSelectFile}
-                    uploadingId={uploadingId}
-                  />
-                ))}
-              </div>
-            ))}
 
-          {/* Link back to dashboard */}
-          <div className="mt-8">
-            <Link
-              href="/student"
-              className="inline-flex items-center gap-2 text-sm text-cata-text/55 transition-colors hover:text-cata-red"
-            >
-              <ArrowRight size={14} strokeWidth={1.5} className="rotate-180" />
-              Volver a Mi Cuenta
-            </Link>
-          </div>
-        </>
-      )}
-    </>
+          {pagosState.status === "loading" && (
+            <div className="card">
+              <LoadingState label="Cargando sus pagos…" />
+            </div>
+          )}
+          {pagosState.status === "error" && (
+            <ErrorState message={pagosState.message} onRetry={() => setReloadToken((n) => n + 1)} />
+          )}
+          {pagosState.status === "ready" && (
+            <section className="card overflow-hidden" aria-labelledby="pagos-title">
+              <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+                <h2 id="pagos-title" className="flex-1 text-[13px] font-bold text-ink">
+                  Historial de pagos
+                </h2>
+                {filteredPagos.length > 0 && (
+                  <span className="text-[12.5px] font-semibold tabular-nums text-ink-3">
+                    {filteredPagos.length}
+                  </span>
+                )}
+              </div>
+              {filteredPagos.length === 0 ? (
+                <EmptyState
+                  icon={<CreditCard size={21} strokeWidth={1.5} aria-hidden="true" />}
+                  title={getEmptyStateMessage(filter)}
+                  description={
+                    filter !== "TODOS"
+                      ? "Pruebe con otro estado para ver el resto de su historial."
+                      : blockedAsMinor
+                        ? // "Cuando registre un pago" is an instruction this
+                          // reader cannot follow — the club registers it.
+                          "Cuando el club registre un pago suyo aparecerá aquí, con el período que cubre."
+                        : "Cuando registre un pago aparecerá aquí, junto con el resultado de su validación."
+                  }
+                  action={
+                    filter === "TODOS" ? undefined : (
+                      <Button size="sm" onClick={() => setFilter("TODOS")}>
+                        Ver todos los pagos
+                      </Button>
+                    )
+                  }
+                />
+              ) : (
+                <ul className="flex flex-col">
+                  {filteredPagos.map((pago) => (
+                    <PagoRow
+                      key={pago.id}
+                      pago={pago}
+                      onUploadFile={handleSelectFile}
+                      uploadingId={uploadingId}
+                    />
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+        </div>
+      </div>
+
+      {/* No "← Volver a mi cuenta" here. The sidebar's "Mi cuenta" row is one
+          click away and is highlighted the whole time — the admin screens
+          dropped their own back links for exactly this reason (see the header
+          comment on `src/app/attendance/page.tsx`), and the family area was
+          the last place still carrying one. */}
+    </div>
   );
 }
 
@@ -822,6 +1151,9 @@ function PaymentsPageContent(): React.ReactElement {
   const { session } = useAuth();
   const personaId = session?.user.id ?? "";
   const hasAlumnoRole = session?.user.role === "estudiante";
+  // `?registrar=1` is the home band's CTA saying "this reader came here to
+  // pay" — the form opens itself instead of asking for a third click.
+  const wantsRegisterForm = useSearchParams().get("registrar") === "1";
 
   const [state, setState] = useState<PortalLoadState>({ status: "loading" });
   const [reloadToken, setReloadToken] = useState(0);
@@ -838,10 +1170,7 @@ function PaymentsPageContent(): React.ReactElement {
         if (cancelled) return;
         setState({
           status: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "No se pudo cargar la información.",
+          message: error instanceof Error ? error.message : "No se pudo cargar la información.",
         });
       });
     return () => {
@@ -849,20 +1178,53 @@ function PaymentsPageContent(): React.ReactElement {
     };
   }, [personaId, reloadToken]);
 
+  /**
+   * True when this ACCOUNT cannot register a payment anywhere on the screen:
+   * its own profile is a minor and it manages nobody else. The row-level gate
+   * still lives in `PaymentsContent` (it depends on which profile is
+   * selected); this is only the page's own promise to its reader.
+   */
+  const accountCannotRegister =
+    state.status === "ready" &&
+    state.data.representados.length === 0 &&
+    isMinor(state.data.self?.fechaNacimiento);
+
   return (
-    <AppShell eyebrow="Área de Estudiantes" title="Mis pagos">
-      {state.status === "loading" && <LoadingCard />}
+    <AppShell
+      eyebrow="Área de estudiantes"
+      // "Pagos", not "Mis pagos": the codebase's own rule is that a nav label
+      // IS the destination's page title (see `getNavLinksForRole`), and the
+      // sidebar row has always said "Pagos". "Mis" was also a lie to the
+      // reader this screen most often serves — a representante paying for a
+      // dependent, who has no membership of her own.
+      title="Pagos"
+      // A minor with no dependants of their own cannot register anything from
+      // here — the gate below is deliberate and stays. Telling them to
+      // "registre un pago" in the page's own subtitle was an instruction the
+      // screen then refused to let them follow.
+      subtitle={
+        accountCannotRegister
+          ? "Consulte su membresía, vea cómo se paga y siga el historial de sus pagos."
+          : hasAlumnoRole
+            ? "Registre un pago, siga su validación y consulte lo que ya pagó."
+            : "Registre el pago de un dependiente, siga su validación y consulte lo que ya pagó."
+      }
+    >
+      {state.status === "loading" && (
+        <div className="card">
+          <LoadingState label="Cargando sus pagos…" />
+        </div>
+      )}
       {state.status === "error" && (
-        <ErrorCard
-          message={state.message}
-          onRetry={() => setReloadToken((n) => n + 1)}
-        />
+        <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
       {state.status === "ready" && (
         <PaymentsContent
           data={state.data}
           hasAlumnoRole={hasAlumnoRole}
-          onRenewed={() => setReloadToken((n) => n + 1)}
+          accountPersonaId={personaId}
+          wantsRegisterForm={wantsRegisterForm}
+          onRegistered={() => setReloadToken((n) => n + 1)}
         />
       )}
     </AppShell>
@@ -872,7 +1234,11 @@ function PaymentsPageContent(): React.ReactElement {
 export default function StudentPaymentsPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["representante", "estudiante", "unsupported"]}>
-      <PaymentsPageContent />
+      {/* `useSearchParams` needs a boundary to fall back to during prerender
+          — the same wrapper `/reset-password` uses for the same reason. */}
+      <Suspense>
+        <PaymentsPageContent />
+      </Suspense>
     </ProtectedRoute>
   );
 }

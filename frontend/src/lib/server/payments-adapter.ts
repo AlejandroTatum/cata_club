@@ -16,6 +16,7 @@ import type { NextRequest } from "next/server";
 import type { PaymentValidationRequest, ProofFileType, ValidationStatus } from "@/services/api";
 import { MEMBERSHIP_STATUS_BY_ESTADO, type BackendEstadoMembresia } from "@/lib/membership-status";
 import { backendFetchAuthed } from "@/lib/server/backend-client";
+import { formatDateRange } from "@/lib/format-utils";
 
 export type BackendEstadoPago = "APROBADO" | "PENDIENTE_VALIDACION" | "RECHAZADO";
 export type BackendTipoPago = "EFECTIVO" | "TRANSFERENCIA";
@@ -72,6 +73,13 @@ export interface BackendMembresia {
   id: number;
   estado: BackendEstadoMembresia;
   tipoMembresiaId: number;
+  /**
+   * The amount the membership was activated for, as a decimal string. Only
+   * read when a membership has no payment behind it (see `/api/members`) —
+   * every other surface takes the figure from the Pago, which is the record
+   * the admin actually validated.
+   */
+  montoAplicado?: string | null;
 }
 
 export interface BackendTipoMembresia {
@@ -131,7 +139,12 @@ export function buildPaymentValidationRequest(
     id: String(pago.id),
     studentName,
     responsablePagoName,
-    membershipPeriod: `${pago.fechaInicio} – ${pago.fechaFin}`,
+    // Formatted here rather than at the two render sites (`/payments` and
+    // `/reports` both display this field) so the raw ISO pair cannot leak into
+    // either. Safe to do server-side: `fechaInicio`/`fechaFin` are date-only
+    // strings, which `formatDateRange` anchors at noon UTC — the rendered
+    // calendar day is the same whether Node runs in UTC or America/Guayaquil.
+    membershipPeriod: formatDateRange(pago.fechaInicio, pago.fechaFin),
     membershipType: tipoMembresia ? `${tipoMembresia.categoria} (${tipoMembresia.franjaHoraria})` : "Sin tipo",
     expectedAmount: Number(pago.monto),
     paymentMethod: PAYMENT_METHOD_BY_TIPO_PAGO[pago.tipoPago],

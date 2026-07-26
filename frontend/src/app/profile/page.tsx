@@ -1,43 +1,55 @@
 /**
- * /profile — unified "Mi cuenta" account screen (issue #36, redesign).
+ * /profile — the account screen, transcribed from
+ * `docs/ux/prototipos/25-perfil.html`.
  *
- * ONE shared page layout (header, hero card, 3-column grid, bottom banner)
- * whose CONTENT swaps by role — not two separate top-level views. All data
- * still comes from the same sources as before:
+ * Four blocks at the prototype's 820px measure, not a grid of cramped boxes:
+ *
+ *   1. `.idcard` — a 72px coal/ball avatar, the name and the correo on the
+ *      left; a rail of account facts on the right (rol, membresía, nivel,
+ *      miembro desde — whichever of them this account actually has). Per the
+ *      prototype's own decision note, "Estado de cuenta" does not earn a
+ *      section: it is one binary fact, so it folds in beside the role.
+ *   2. "Datos personales" — a list of 56px `.drow`s, ONE datum per row, an
+ *      uppercase 150px label on the left and the value in bold on the right.
+ *   3. "Seguridad" — the same row pattern, carrying actions instead of values.
+ *   4. "Estudiantes a mi cargo" — kept, because for a representante it is the
+ *      reason to open this page at all.
+ *
+ * ## Why the content starts high
+ *
+ * The page used to open with a "Volver al Panel" link, then a line carrying
+ * nothing but "Editar datos", and only then the identity card — which landed
+ * at y=317 of a 900px viewport, i.e. ~35% down, with the first two thirds of
+ * the screen spent on chrome. Both rows are gone: the action moved into
+ * `PageHeader`'s own row (`.rowline` in the prototype) via `AppShell`'s
+ * `actions` slot, and the back link went with it because `25-perfil.html`
+ * draws none — the shell's sidebar is the way back.
+ *
+ * Data sources are unchanged:
  *
  * - ADMINISTRADOR/ENTRENADOR ("tesorero" falls through to this same branch
- *   too — it's a dead backend role no real account can carry anymore, see
- *   prior design decision) fetch their own identity via `fetchMiPerfil()`
- *   (`GET /api/auth/me`). Nombres, apellidos, roles, and correo are
- *   read-only; teléfono is edited inline (`actualizarMiPerfil()`, `PATCH
- *   /api/auth/me`) from the "Información personal" column. Correo is
- *   intentionally NOT editable here — it's the JWT `sub` claim, and
- *   self-service editing was removed by design (see auth_servicio.py).
- *   "Cambiar contraseña" (in "Estado de cuenta") reuses the existing
- *   unauthenticated recovery-email flow against the user's own known correo.
+ *   too — it's a dead backend role no real account can carry anymore) fetch
+ *   `fetchMiPerfil()` (`GET /api/auth/me`). Nombres, apellidos, roles and
+ *   correo are read-only; teléfono is edited inline (`actualizarMiPerfil()`,
+ *   `PATCH /api/auth/me`). Correo is intentionally NOT editable — it is the
+ *   JWT `sub` claim, and self-service editing was removed by design (see
+ *   auth_servicio.py).
  *
- * - ALUMNO / representante-linked accounts fetch `fetchStudentPortal()` —
- *   the same data `/student` uses. The hero card summarizes the caller's
- *   own (`self`) ranking + membership; any managed dependents
- *   (`representados`) get their own read-only summary cards below the grid
- *   (ranking + membership, with the honest "no disponible" fallback for
- *   membership since the backend never scopes a dependent's membership to
- *   the caller — only the caller's own `/membresias/mias` row is real).
- *   `fetchStudentPortal` carries no photo field, so this branch ALSO makes
- *   a supplementary `fetchMiPerfil()` call purely to read `fotoUrl` for the
- *   hero avatar — failures there are swallowed silently (cosmetic only,
- *   never blocks the rest of the student portal).
+ * - ALUMNO / representante-linked accounts fetch `fetchStudentPortal()` — the
+ *   same data `/student` uses — for the membership badge and the dependants
+ *   list, PLUS `fetchMiPerfil()` for the identity fields the portal payload
+ *   does not carry (teléfono, fecha de creación, foto).
  *
- * Profile photo upload (`POST /api/auth/me/foto`) is self-service and
- * role-agnostic on the backend, so BOTH branches can upload/replace their
- * own hero avatar — not staff-only.
+ * Two fields the prototype draws are NOT rendered, because nothing in the API
+ * can produce them (see the report accompanying this change):
  *
- * History: issue #35 was a same-for-all-roles "under construction"
- * placeholder. Issue #36 first pass redirected estudiante/representante to
- * `/student`; a follow-up replaced that redirect with a read-only summary
- * view; a later pass unified the staff and student views into one shared
- * page structure; this pass extends photo upload (originally staff-only)
- * to the student/representante branch too.
+ * - "Cédula": neither `PerfilPropio` (`UsuarioMeResponseDTO`) nor
+ *   `StudentProfileSummary` carries it. Only the admin-facing
+ *   `/personas/{id}` does, and that is not readable by the account itself.
+ * - "Cerrar otras sesiones": there is no session-invalidation endpoint.
+ *   `auth_router.py` exposes login/registro/me/refresh/logout/recuperar/
+ *   restablecer and nothing that revokes another device's token, so the row
+ *   would be a button that cannot do what it says.
  */
 
 "use client";
@@ -46,7 +58,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import BackLink from "@/components/BackLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import {
@@ -59,31 +70,20 @@ import {
 } from "@/services/api";
 import type { StudentPortalSummary, StudentProfileSummary, MembershipSummary } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
-import { describeRanking } from "@/app/student/student-utils";
-import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_BADGE } from "@/app/members/members-utils";
+// `formatLevelName`, not `describeRanking`: this page prints the level beside
+// a name and inside a labelled rail, where `describeRanking`'s
+// "Sin nivel asignado" / "No disponible" sentences would read as values. The
+// level here is either a real level or the slot is dropped.
+import { personInitials, formatLevelName } from "@/app/student/student-utils";
+import { Badge, Button, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
+import type { BadgeTone } from "@/components/ui/Badge";
+import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
 // Reused as-is (not duplicated) for consistency — this is the same
 // backend-estado -> frontend-estado mapping `members-adapter.ts` reuses;
 // it's a pure value object with no server-only APIs, safe in a client bundle.
 import { MEMBERSHIP_STATUS_BY_ESTADO } from "@/lib/membership-status";
-import { getRoleLabel } from "@/lib/auth-utils";
-import {
-  User,
-  Loader2,
-  Pencil,
-  Save,
-  X,
-  KeyRound,
-  CheckCircle2,
-  Mail,
-  Phone,
-  Shield,
-  Calendar,
-  Trophy,
-  ShieldCheck,
-  ArrowRight,
-  AlertTriangle,
-  Camera,
-} from "lucide-react";
+import { backendRoleForUserRole, getBackendRoleLabel, getRoleLabel } from "@/lib/auth-utils";
+import { Loader2, Save, X, Camera, ArrowRight } from "lucide-react";
 import { formatDate } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
@@ -99,14 +99,10 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function firstNameOf(fullName: string): string {
-  return fullName.trim().split(/\s+/)[0] || fullName;
-}
-
-function describeMembership(membership: MembershipSummary | null): { label: string; badgeClass: string } | null {
+function describeMembership(membership: MembershipSummary | null): { label: string; tone: BadgeTone } | null {
   if (!membership) return null;
   const estado = MEMBERSHIP_STATUS_BY_ESTADO[membership.estado as keyof typeof MEMBERSHIP_STATUS_BY_ESTADO];
-  return { label: MEMBERSHIP_STATUS_LABELS[estado], badgeClass: MEMBERSHIP_STATUS_BADGE[estado] };
+  return { label: MEMBERSHIP_STATUS_LABELS[estado], tone: MEMBERSHIP_STATUS_TONE[estado] };
 }
 
 const NO_MEMBERSHIP_FALLBACK = "No disponible — consulte con administración";
@@ -128,95 +124,118 @@ type StudentLoadState =
   | { status: "ready"; data: StudentPortalSummary };
 
 // ---------------------------------------------------------------------------
-// Loading / error blocks — shared shape for both branches
+// The 56px detail row (`.drow`, _sistema.css:247-250) — the single row shape
+// this page is built from. One datum, an uppercase label on the left, the
+// value in bold on the right, the note (if any) inline beside the value.
 // ---------------------------------------------------------------------------
 
-function LoadingBlock({ text }: { text: string }): React.ReactElement {
-  return (
-    <div className="flex min-h-[50vh] items-center justify-center">
-      <p className="text-sm text-cata-text/65">{text}</p>
-    </div>
-  );
-}
-
-function ErrorBlock({
-  message,
-  onRetry,
-  showIcon,
+function DetailRow({
+  label,
+  children,
+  note,
+  action,
 }: {
-  message: string;
-  onRetry: () => void;
-  showIcon?: boolean;
+  label?: string;
+  children: React.ReactNode;
+  note?: string;
+  action?: React.ReactNode;
 }): React.ReactElement {
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3">
-      {showIcon && <AlertTriangle size={28} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-      <p role="alert" className="text-sm text-cata-red">
-        {message}
-      </p>
-      <button type="button" onClick={onRetry} className="btn-ghost text-xs">
-        Reintentar
-      </button>
+    // `flex-wrap` plus a real minimum on the value column: at 375px a 150px
+    // label, a sentence and a 40px button do not fit on one line, and without
+    // a wrap the value collapsed to one word per line while the button was
+    // clipped by the card's own edge. The action now drops to a second line
+    // and stays right-aligned; above `sm` nothing about the row changes.
+    <div className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-5 py-2.5 last:border-b-0">
+      {label && (
+        <span className="w-[110px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3 sm:w-[150px]">
+          {label}
+        </span>
+      )}
+      <span className="flex min-w-[9rem] flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-semibold text-ink">
+        {children}
+        {note && <span className="text-xs font-normal text-ink-3">{note}</span>}
+      </span>
+      {action && <span className="ml-auto flex-none">{action}</span>}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Representado summary card — read-only, same data source as /student
-// (fetchStudentPortal), used below the main grid for a representante's
-// managed dependents. Kept as its own small component (pre-existing pattern
-// from the previous iteration of this page), just no longer used for the
-// caller's own (self) profile — that's now integrated into the hero card.
-// ---------------------------------------------------------------------------
-
-interface StudentSummaryCardProps {
-  profile: StudentProfileSummary;
-}
-
-function StudentSummaryCard({ profile }: StudentSummaryCardProps): React.ReactElement {
-  const ranking = describeRanking(profile.ranking);
-  const membership = describeMembership(profile.membership);
-  const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
-
+/**
+ * The shell every state of this page shares. Keeping the eyebrow/title/
+ * subtitle in ONE place stops loading, error and the loaded layout from
+ * drifting apart now that the loaded layout owns its own `AppShell` (it has
+ * to, because the header's action depends on the layout's edit state).
+ *
+ * The voice is usted: the tú of the auth screens is marketing copy and stops
+ * at the door.
+ */
+function ProfileShell({
+  actions,
+  children,
+}: {
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}): React.ReactElement {
   return (
-    <div className="card p-5 sm:p-6">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cata-red/10">
-          <User size={20} className="text-cata-red" strokeWidth={1.5} aria-hidden="true" />
-        </div>
-        <h3 className="text-base font-bold tracking-tight text-cata-text">{fullName}</h3>
-      </div>
+    <AppShell
+      eyebrow="Su cuenta"
+      title="Perfil"
+      subtitle="Gestione su información y consulte su estado en el club."
+      actions={actions}
+    >
+      {children}
+    </AppShell>
+  );
+}
 
-      <dl className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <dt className="flex items-center gap-1.5 text-xs font-medium text-cata-text/65">
-            <Trophy size={13} strokeWidth={1.5} aria-hidden="true" />
-            Ranking
-          </dt>
-          <dd className="text-sm font-medium text-cata-text">{ranking.label}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="flex items-center gap-1.5 text-xs font-medium text-cata-text/65">
-            <ShieldCheck size={13} strokeWidth={1.5} aria-hidden="true" />
-            Membresía
-          </dt>
-          <dd>
-            {membership ? (
-              <span className={`badge ${membership.badgeClass}`}>{membership.label}</span>
-            ) : (
-              <span className="text-sm text-cata-text/65">{NO_MEMBERSHIP_FALLBACK}</span>
-            )}
-          </dd>
-        </div>
-      </dl>
+/**
+ * One fact on the identity card's right-hand rail: a 10.5px uppercase label
+ * over the value, same label treatment as `.drow .k`.
+ *
+ * The rail exists because the card used to be an avatar, a name, a correo and
+ * a large white void to their right. Every item here is a value the page has
+ * already fetched — a slot with no source is not rendered at all.
+ */
+function IdentityFact({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">{label}</p>
+      <div className="flex items-center text-sm font-semibold text-ink">{children}</div>
     </div>
   );
 }
 
+function CardSection({
+  title,
+  action,
+  testId,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  testId?: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <section data-testid={testId} className="card overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+        <h2 className="flex-1 text-[13px] font-bold text-ink">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Unified layout — header + hero + 3-column grid + banner. Content within
-// each shared section branches by `kind` ("staff" vs "student"); the page
-// structure itself is a single tree, not two separate top-level views.
+// The page body — one tree, whose content branches by `kind`.
 // ---------------------------------------------------------------------------
 
 type ProfileLayoutProps =
@@ -231,44 +250,45 @@ type ProfileLayoutProps =
       kind: "student";
       role: UserRole;
       data: StudentPortalSummary;
+      perfil: PerfilPropio | null;
       sessionEmail: string;
       sessionName: string;
-      fotoUrl?: string | null;
-      onFotoUpdated: (fotoUrl: string | null | undefined) => void;
+      onPerfilUpdated: (perfil: PerfilPropio) => void;
     };
 
 function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
-  // ---- Staff-only inline edit / change-password state. Always declared
-  // (hooks can't be conditional) — simply unused on the student branch. ----
+  const { logout } = useAuth();
+
+  // ---- Staff-only inline edit state. Always declared (hooks can't be
+  // conditional) — simply unused on the student branch. ----
   const [editing, setEditing] = useState(false);
   const [telefono, setTelefono] = useState(props.kind === "staff" ? props.perfil.telefono : "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [requestingPassword, setRequestingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  // ---- Profile photo upload — the caller's own hero avatar, for BOTH
-  // branches. `POST /auth/me/foto` is self-service and role-agnostic; only
-  // the SOURCE of the current `fotoUrl` differs (the staff branch's fetched
-  // `PerfilPropio`, vs the student branch's separately-fetched `fotoUrl`
-  // prop, since `fetchStudentPortal` itself carries no photo field). ----
+  // ---- Profile photo upload — the caller's own avatar, for BOTH branches.
+  // `POST /auth/me/foto` is self-service and role-agnostic. ----
   const fotoInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [fotoError, setFotoError] = useState<string | null>(null);
-  const [fotoSuccess, setFotoSuccess] = useState(false);
 
-  const currentFotoUrl = props.kind === "staff" ? props.perfil.fotoUrl : props.fotoUrl;
+  // `perfil` is on BOTH members of the union — `PerfilPropio` on staff,
+  // `PerfilPropio | null` on student — so it reads directly. This used to be a
+  // ternary whose two branches were the identical expression, written to
+  // satisfy narrowing that was never needed.
+  const perfil: PerfilPropio | null = props.perfil;
+  const currentFotoUrl = perfil?.fotoUrl;
 
   async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const archivo = e.target.files?.[0];
     e.target.value = ""; // reset so re-selecting the same file re-triggers onChange
     if (!archivo) return;
 
-    setFotoSuccess(false);
     if (!TIPOS_FOTO_PERFIL_PERMITIDOS.has(archivo.type)) {
       setFotoError("Formato no válido. Solo se permiten imágenes JPG o PNG.");
       return;
@@ -285,9 +305,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       if (props.kind === "staff") {
         props.onSaved(updated);
       } else {
-        props.onFotoUpdated(updated.fotoUrl);
+        props.onPerfilUpdated(updated);
       }
-      setFotoSuccess(true);
       showSuccess("Foto de perfil actualizada correctamente.");
     } catch (error: unknown) {
       const message = toErrorMessage(error, "No se pudo actualizar la foto de perfil.");
@@ -302,7 +321,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     if (props.kind !== "staff") return;
     setTelefono(props.perfil.telefono);
     setSaveError(null);
-    setSaveSuccess(false);
     setEditing(true);
   }
 
@@ -315,22 +333,20 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 
   async function handleSave(): Promise<void> {
     if (props.kind !== "staff") return;
-    const perfil = props.perfil;
+    const current = props.perfil;
     setSaving(true);
     setSaveError(null);
-    setSaveSuccess(false);
     try {
-      // Correo is intentionally never sent here — it's the JWT `sub` claim
-      // and self-service editing was removed by design (see auth_servicio.py).
+      // Correo is never sent here — it's the JWT `sub` claim, and self-service
+      // editing was removed by design (see auth_servicio.py).
       const updated = await actualizarMiPerfil({ telefono: telefono.trim() });
       props.onSaved(updated);
       setEditing(false);
-      setSaveSuccess(true);
       showSuccess("Perfil actualizado correctamente.");
     } catch (error: unknown) {
       // Revert — a rejected edit must never be left displayed as if it were
       // persisted (no silent data loss, per spec).
-      setTelefono(perfil.telefono);
+      setTelefono(current.telefono);
       setEditing(false);
       const message = toErrorMessage(error, "No se pudo guardar los cambios.");
       setSaveError(message);
@@ -340,13 +356,16 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     }
   }
 
+  const correoDisplay = props.kind === "staff" ? props.perfil.correo : props.sessionEmail;
+
   async function handleChangePassword(): Promise<void> {
-    if (props.kind !== "staff") return;
     setRequestingPassword(true);
     setPasswordError(null);
     setPasswordMessage(null);
     try {
-      const result = await solicitarRecuperacion(props.accountEmail);
+      const result = await solicitarRecuperacion(
+        props.kind === "staff" ? props.accountEmail : correoDisplay,
+      );
       setPasswordMessage(result.mensaje);
       showSuccess(result.mensaje);
     } catch (error: unknown) {
@@ -368,400 +387,339 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         ? `${self.nombres} ${self.apellidos}`.trim()
         : props.sessionName;
 
-  const correoDisplay = props.kind === "staff" ? props.perfil.correo : props.sessionEmail;
   const roleLabel = getRoleLabel(props.role);
-  const firstName = firstNameOf(fullName);
-
-  const ranking = self ? describeRanking(self.ranking) : null;
-  // Only the self profile has a real membership status here — a `self:
-  // null` account (a representante with no own alumno profile) has no
-  // personal status to report, so the hero deliberately shows nothing for
-  // it instead of a misleading "no disponible" claim.
+  /**
+   * Every role the backend has on this account. `PerfilPropio` is fetched on
+   * both branches (`GET /auth/me`), so a multi-role representante/alumno is
+   * covered too; it is only `null` while the student branch's own profile call
+   * is still in flight, and then the session's single role is all there is.
+   */
+  const assignedRoles = props.perfil?.roles ?? [];
+  const sessionBackendRole = backendRoleForUserRole(props.role);
   const membership = props.kind === "student" && self ? describeMembership(self.membership) : null;
+  const initials = personInitials(
+    fullName.split(/\s+/)[0] ?? "",
+    fullName.split(/\s+/).slice(1).join(" "),
+  );
+
+  const telefonoDisplay =
+    props.kind === "staff" ? props.perfil.telefono : (props.perfil?.telefono ?? "");
+  const fechaCreacion = props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
+
+  const nivel =
+    props.kind === "student" && self && self.ranking.status === "available" && self.ranking.estaEnRanking
+      ? formatLevelName(self.ranking.nivelNombre)
+      : null;
+
+  // The page action lives in `PageHeader`'s own row (`.rowline` in
+  // `25-perfil.html`), passed up through `AppShell`. It used to sit on a line
+  // of its own below a "Volver al Panel" link, and those two rows together
+  // pushed the identity card to ~35% of the viewport before anything was read.
+  const headerAction =
+    props.kind === "student" ? (
+      <Link href="/student" className={buttonClasses("secondary")}>
+        Ver portal completo
+        <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+      </Link>
+    ) : editing ? (
+      <>
+        <Button variant="ghost" onClick={cancelEditing} disabled={saving}>
+          <X size={14} strokeWidth={1.5} aria-hidden="true" />
+          Cancelar
+        </Button>
+        <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
+          {saving ? (
+            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Save size={14} strokeWidth={1.5} aria-hidden="true" />
+          )}
+          {saving ? "Guardando…" : "Guardar"}
+        </Button>
+      </>
+    ) : (
+      <Button onClick={startEditing}>Editar datos</Button>
+    );
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
-      {props.kind === "student" && (
-        <div className="flex justify-end">
-          <Link href="/student" className="btn-secondary inline-flex items-center gap-2 text-sm">
-            Ver portal completo
-            <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
-          </Link>
-        </div>
-      )}
-
-      {props.kind === "staff" && (
-        <BackLink
-          href={props.role === "admin" ? "/dashboard" : "/trainer"}
-          label="Volver al Panel"
-        />
-      )}
-
-      {/* Hero card */}
-      <div data-testid="profile-hero" className="card relative overflow-hidden p-6 sm:p-8">
-        <div className="pointer-events-none absolute -right-8 -top-8 opacity-[0.06]" aria-hidden="true">
-          <ShieldCheck size={180} strokeWidth={1} className="text-cata-red" />
-        </div>
-
-        <div className="relative grid gap-6 sm:grid-cols-2 sm:items-center lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          {/* Left: avatar + name + correo + status badge */}
-          <div className="flex items-center gap-4">
-            <div className="relative shrink-0">
-              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-cata-red/10">
-                {currentFotoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset
-                  <img
-                    src={currentFotoUrl}
-                    alt="Foto de perfil"
-                    className="h-16 w-16 rounded-full object-cover"
-                  />
-                ) : (
-                  <User size={28} className="text-cata-red" strokeWidth={1.5} aria-hidden="true" />
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => fotoInputRef.current?.click()}
-                disabled={uploadingFoto}
-                aria-label="Cambiar foto de perfil"
-                className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-cata-red text-white shadow-sm disabled:opacity-50"
-              >
-                {uploadingFoto ? (
-                  <Loader2 size={12} className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <Camera size={12} strokeWidth={2} aria-hidden="true" />
-                )}
-              </button>
-              <input
-                ref={fotoInputRef}
-                type="file"
-                accept="image/jpeg,image/png"
-                onChange={(e) => void handleFotoChange(e)}
-                className="hidden"
-                data-testid="foto-perfil-input"
+    <ProfileShell actions={headerAction}>
+      {/* Full content width, like `/dashboard` and like the rest of the family
+          area. The prototype's 820px `.canvas` left ~317px of the content
+          column empty at 1440 while every admin screen filled it. The identity
+          card spans the width it already wanted; below it the page splits into
+          the data the reader came to check and the two account controls, which
+          are a rail and never needed 820px of their own. */}
+      <div className="w-full space-y-5">
+      {/* 1 — `.idcard`: the identity on the left, the account facts it can
+          prove on the right. */}
+      <section
+        data-testid="profile-hero"
+        className="card flex flex-col gap-5 px-6 py-[22px] sm:flex-row sm:items-center sm:gap-6"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-[18px]">
+        <div className="relative flex-none">
+          <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-coal text-2xl font-extrabold text-ball">
+            {currentFotoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset
+              <img
+                src={currentFotoUrl}
+                alt="Foto de perfil"
+                className="h-[72px] w-[72px] rounded-full object-cover"
               />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight text-cata-text">{fullName}</h2>
-              <p className="text-sm text-cata-text/65">{correoDisplay}</p>
-              <div className="mt-1.5">
-                {props.kind === "staff" ? (
-                  <span className="badge badge-neutral">
-                    <Shield size={11} strokeWidth={1.5} aria-hidden="true" />
-                    {roleLabel}
-                  </span>
-                ) : self ? (
-                  membership ? (
-                    <span className={`badge ${membership.badgeClass}`}>{membership.label}</span>
-                  ) : (
-                    <span className="text-xs text-cata-text/65">{NO_MEMBERSHIP_FALLBACK}</span>
-                  )
-                ) : null}
-              </div>
-              {fotoError && (
-                <p role="alert" className="mt-1 text-xs text-cata-red">
-                  {fotoError}
-                </p>
-              )}
-              {fotoSuccess && (
-                <p role="status" className="mt-1 text-xs text-cata-state-ok">
-                  Foto actualizada.
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Center: two stacked info blocks */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:border-l lg:border-cata-border lg:pl-6">
-            {props.kind === "staff" ? (
-              <>
-                <div>
-                  <dt className="flex items-center gap-1.5 text-xs font-medium text-cata-text/65">
-                    <Shield size={13} strokeWidth={1.5} aria-hidden="true" />
-                    Rol
-                  </dt>
-                  <dd className="mt-1 text-sm font-semibold text-cata-text">{roleLabel}</dd>
-                </div>
-                <div>
-                  <dt className="flex items-center gap-1.5 text-xs font-medium text-cata-text/65">
-                    <Calendar size={13} strokeWidth={1.5} aria-hidden="true" />
-                    Miembro desde
-                  </dt>
-                  <dd className="mt-1 text-sm font-semibold text-cata-text">{formatDate(props.perfil.fechaCreacion)}</dd>
-                </div>
-              </>
             ) : (
-              <>
-                <div>
-                  <dt className="flex items-center gap-1.5 text-xs font-medium text-cata-text/65">
-                    <Trophy size={13} strokeWidth={1.5} aria-hidden="true" />
-                    Ranking / Nivel
-                  </dt>
-                  <dd className="mt-1 text-sm font-semibold text-cata-text">
-                    {ranking ? ranking.label : self ? "No disponible" : "No aplica"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="flex items-center gap-1.5 text-xs font-medium text-cata-text/65">
-                    <ShieldCheck size={13} strokeWidth={1.5} aria-hidden="true" />
-                    Suscripción / Membresía
-                  </dt>
-                  <dd className="mt-1 text-sm font-semibold text-cata-text">
-                    {membership ? membership.label : self ? "No disponible" : "No aplica"}
-                  </dd>
-                </div>
-              </>
+              <span aria-hidden="true">{initials}</span>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => fotoInputRef.current?.click()}
+            disabled={uploadingFoto}
+            aria-label="Cambiar foto de perfil"
+            className="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-paper bg-coal text-white disabled:opacity-45"
+          >
+            {uploadingFoto ? (
+              <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Camera size={12} strokeWidth={2} aria-hidden="true" />
+            )}
+          </button>
+          <input
+            ref={fotoInputRef}
+            type="file"
+            accept="image/jpeg,image/png"
+            onChange={(e) => void handleFotoChange(e)}
+            className="hidden"
+            data-testid="foto-perfil-input"
+          />
         </div>
-      </div>
-
-      {/* Two-column grid — Accesos rápidos (formerly a third column) was
-          dropped: redundant with AppShell's own sidebar nav, already visible
-          on this page. */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Column 1 — Información personal */}
-        <div data-testid="profile-column-info" className="card p-5 sm:p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <User size={16} className="text-cata-text/65" strokeWidth={1.5} aria-hidden="true" />
-            <h3 className="text-sm font-bold tracking-tight text-cata-text">Información personal</h3>
-          </div>
-
-          <dl className="space-y-4">
-            <div>
-              <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium text-cata-text/65">
-                <User size={13} strokeWidth={1.5} aria-hidden="true" />
-                Nombre completo
-              </dt>
-              <dd className="text-sm text-cata-text">{fullName}</dd>
-            </div>
-
-            <div>
-              {/* Correo is never editable here — it's the JWT `sub` claim,
-                  and self-service editing was intentionally removed. */}
-              <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium text-cata-text/65">
-                <Mail size={13} strokeWidth={1.5} aria-hidden="true" />
-                Correo electrónico
-              </dt>
-              <dd className="text-sm text-cata-text">{correoDisplay}</dd>
-            </div>
-
-            {props.kind === "staff" && (
-              <div>
-                <dt>
-                  <label
-                    htmlFor="perfil-telefono"
-                    className="mb-1 flex items-center gap-1.5 text-xs font-medium text-cata-text/65"
-                  >
-                    <Phone size={13} strokeWidth={1.5} aria-hidden="true" />
-                    Teléfono
-                  </label>
-                </dt>
-                {editing ? (
-                  <input
-                    id="perfil-telefono"
-                    type="tel"
-                    value={telefono}
-                    onChange={(e) => setTelefono(e.target.value)}
-                    disabled={saving}
-                    className="input-field w-full"
-                  />
-                ) : (
-                  <dd className="text-sm text-cata-text">{props.perfil.telefono}</dd>
-                )}
-              </div>
-            )}
-
-            {props.kind === "staff" && (
-              <div>
-                <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium text-cata-text/65">
-                  <Calendar size={13} strokeWidth={1.5} aria-hidden="true" />
-                  Fecha de registro
-                </dt>
-                <dd className="text-sm text-cata-text">{formatDate(props.perfil.fechaCreacion)}</dd>
-              </div>
-            )}
-          </dl>
-
-          {saveError && (
-            <p role="alert" className="mt-3 text-sm text-cata-red">
-              {saveError}
+        <div className="min-w-0">
+          <p className="text-xl font-bold tracking-[-0.02em] text-ink">{fullName}</p>
+          <p className="mt-0.5 text-[13px] text-ink-3">{correoDisplay}</p>
+          {fotoError && (
+            <p role="alert" className="mt-2 text-xs text-cata-red">
+              {fotoError}
             </p>
           )}
-          {saveSuccess && (
-            <p role="status" className="mt-3 flex items-center gap-1 text-sm text-cata-state-ok">
-              <CheckCircle2 size={14} strokeWidth={2} aria-hidden="true" />
-              Datos guardados correctamente.
-            </p>
-          )}
+        </div>
+        </div>
 
-          <div className="mt-5 border-t border-cata-border pt-4">
-            {props.kind === "staff" ? (
-              editing ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => void handleSave()}
-                    disabled={saving}
-                    className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {saving ? (
-                      <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Save size={14} strokeWidth={1.5} aria-hidden="true" />
+        {/* The rail. Rol and Membresía keep their badge treatment — they are
+            states, not free text — while Nivel and Miembro desde read as
+            values. Nothing here is derived or estimated: `nivel` is dropped
+            outright when the ranking call came back unavailable, and
+            "Miembro desde" only appears once `fetchMiPerfil()` has resolved.
+
+            Two facts the prototype draws are still absent, for want of a
+            source: "Cuenta activa" (no `activo` flag on `UsuarioMeResponseDTO`)
+            and "Cédula" (admin-only, via `/personas/{id}`). */}
+        <div className="flex flex-wrap gap-x-8 gap-y-4 border-t border-line pt-5 sm:flex-none sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+          {/*
+              EVERY assigned role, not just the session's. `mapBackendRoleToUserRole`
+              collapses an account's backend roles to the single
+              highest-privilege one, so a person who is administrator AND
+              trainer AND representante AND alumno used to read "Rol ·
+              Administrador" here — and the other three appeared nowhere in the
+              product. The session's own role keeps the solid badge; the rest
+              are neutral, so "which one am I using right now" survives.
+          */}
+          <IdentityFact label={assignedRoles.length > 1 ? "Roles asignados" : "Rol"}>
+            {/* Capped, and wrapping. The rail is `flex-none`, so four badges
+                laid out in one line grew it far enough to break "Admin Dev"
+                across two lines — the same squeeze the membership fallback
+                below was already capped for. */}
+            <div className="flex max-w-[15rem] flex-wrap items-center gap-1.5">
+              {assignedRoles.length === 0 ? (
+                <Badge>{roleLabel}</Badge>
+              ) : (
+                assignedRoles.map((rol) => (
+                  <Badge key={rol} tone={rol === sessionBackendRole ? "ok" : "neutral"}>
+                    {getBackendRoleLabel(rol)}
+                    {rol === sessionBackendRole && assignedRoles.length > 1 && (
+                      <span className="sr-only"> — rol activo en esta sesión</span>
                     )}
-                    {saving ? "Guardando..." : "Guardar"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={cancelEditing}
-                    disabled={saving}
-                    className="btn-ghost inline-flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <X size={14} strokeWidth={1.5} aria-hidden="true" />
-                    Cancelar
-                  </button>
-                </div>
+                  </Badge>
+                ))
+              )}
+            </div>
+          </IdentityFact>
+          {props.kind === "student" && self && (
+            <IdentityFact label="Membresía">
+              {membership ? (
+                <Badge tone={membership.tone}>{membership.label}</Badge>
               ) : (
-                <button
-                  type="button"
-                  onClick={startEditing}
-                  className="btn-secondary w-full items-center gap-2"
-                >
-                  <Pencil size={14} strokeWidth={1.5} aria-hidden="true" />
-                  Editar información
-                </button>
-              )
-            ) : (
-              <p className="text-xs text-cata-text/50">Esta información no se puede editar desde aquí.</p>
-            )}
-          </div>
-        </div>
-
-        {/* Column 2 — Estado de cuenta / Contexto */}
-        <div data-testid="profile-column-status" className="card p-5 sm:p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <ShieldCheck size={16} className="text-cata-text/65" strokeWidth={1.5} aria-hidden="true" />
-            <h3 className="text-sm font-bold tracking-tight text-cata-text">Estado de cuenta</h3>
-          </div>
-
-          <div className="rounded-xl bg-cata-state-ok/10 p-4">
-            {props.kind === "staff" ? (
-              <>
-                <p className="text-xs font-medium text-cata-text/65">Roles asignados</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {props.perfil.roles.map((rol) => (
-                    <span key={rol} className="badge badge-neutral">
-                      {rol}
-                    </span>
-                  ))}
-                </div>
-              </>
-            ) : self ? (
-              membership ? (
-                <>
-                  <p className="text-xs font-medium text-cata-text/65">Estado de la membresía</p>
-                  <span className={`badge mt-2 ${membership.badgeClass}`}>{membership.label}</span>
-                </>
-              ) : (
-                <p className="text-sm text-cata-text/65">{NO_MEMBERSHIP_FALLBACK}</p>
-              )
-            ) : (
-              // No `self` profile at all (a representante managing only
-              // dependents, no own alumno role) — distinct copy from the
-              // membership-lookup fallback above, since there is nothing to
-              // "consult with administration" about here, just no personal
-              // account to summarize.
-              <p className="text-sm text-cata-text/65">
-                Esta cuenta no tiene un perfil propio — administra a sus estudiantes desde aquí.
-              </p>
-            )}
-          </div>
-
-          <p className="mt-3 text-xs text-cata-text/50">
-            {props.kind === "staff"
-              ? "Permisos asignados a tu cuenta en el sistema."
-              : self
-                ? membership
-                  ? "No hay una fecha de renovación disponible en este resumen."
-                  : "Consulte con administración para más detalles sobre su membresía."
-                : "Vea el resumen de cada estudiante a continuación."}
-          </p>
-
-          <div className="mt-5 border-t border-cata-border pt-4">
-            {props.kind === "student" ? (
-              <Link href="/student" className="btn-secondary w-full items-center justify-center">
-                Ver detalles
-              </Link>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void handleChangePassword()}
-                  disabled={requestingPassword}
-                  className="btn-secondary w-full items-center gap-2 disabled:opacity-50"
-                >
-                  <KeyRound size={14} strokeWidth={1.5} aria-hidden="true" />
-                  {requestingPassword ? "Enviando..." : "Cambiar contraseña"}
-                </button>
-                {passwordMessage && (
-                  <p role="status" className="mt-2 text-sm text-cata-state-ok">
-                    {passwordMessage}
-                  </p>
-                )}
-                {passwordError && (
-                  <p role="alert" className="mt-2 text-sm text-cata-red">
-                    {passwordError}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Representados — read-only summary cards for managed dependents. */}
-      {props.kind === "student" && representados.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold tracking-tight text-cata-text">Estudiantes a mi cargo</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {representados.map((profile) => (
-              // The backend only ever scopes /membresias/mias to the JWT
-              // owner's own persona — never a represented dependent's, so
-              // this always passes [] to force the honest "no disponible"
-              // fallback rather than falsely reporting "sin membresía".
-              <StudentSummaryCard key={profile.personaId} profile={profile} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Bottom banner */}
-      <div className="card flex items-center justify-between gap-4 p-4 sm:p-5">
-        <div className="flex items-center gap-3">
-          {props.kind === "staff" ? (
-            <ShieldCheck size={22} className="shrink-0 text-cata-red" strokeWidth={1.5} aria-hidden="true" />
-          ) : (
-            <Trophy size={22} className="shrink-0 text-cata-red" strokeWidth={1.5} aria-hidden="true" />
+                // Capped measure: at its natural width this 45-character
+                // sentence is the widest thing in the rail, and the rail is
+                // `flex-none`, so it was squeezing the account holder's own
+                // name onto two lines beside it.
+                <span className="max-w-[22ch] text-xs font-normal text-ink-3">
+                  {NO_MEMBERSHIP_FALLBACK}
+                </span>
+              )}
+            </IdentityFact>
           )}
-          <p className="text-sm text-cata-text">
-            {props.kind === "staff"
-              ? `Gracias por tu trabajo administrando Cata Club, ${firstName}.`
-              : `Gracias por ser parte de Cata Club, ${firstName}. ¡Sigue entrenando!`}
-          </p>
+          {nivel && <IdentityFact label="Nivel">{nivel}</IdentityFact>}
+          {fechaCreacion && (
+            <IdentityFact label="Miembro desde">{formatDate(fechaCreacion)}</IdentityFact>
+          )}
         </div>
-        {props.kind === "staff" ? (
-          <Shield size={18} className="shrink-0 text-cata-text/20" strokeWidth={1.5} aria-hidden="true" />
-        ) : (
-          <ShieldCheck size={18} className="shrink-0 text-cata-text/20" strokeWidth={1.5} aria-hidden="true" />
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+      <div className="flex min-w-0 flex-col gap-5">
+      {/* 2 — Datos personales, one datum per 56px row. */}
+      <CardSection title="Datos personales" testId="profile-column-info">
+        <DetailRow label="Nombres">{fullName}</DetailRow>
+        <DetailRow label="Correo" note="Lo gestiona el club, no se edita aquí">
+          {correoDisplay}
+        </DetailRow>
+        <DetailRow label="Teléfono">
+          {props.kind === "staff" && editing ? (
+            <input
+              id="perfil-telefono"
+              type="tel"
+              inputMode="tel"
+              aria-label="Teléfono"
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              disabled={saving}
+              className="input-field max-w-xs"
+            />
+          ) : (
+            telefonoDisplay || "—"
+          )}
+        </DetailRow>
+        {/* "Miembro desde" is NOT a row: it is account metadata, it lives on
+            the identity card's rail, and repeating it here would be the same
+            datum printed twice on one screen. */}
+        {/* A note ABOUT the card, not a datum in it — so it sits on `sunken`
+            below the rows instead of occupying a 56px `.drow` with an empty
+            label column, which is what it did before. */}
+        {props.kind === "student" && (
+          <p className="border-t border-line bg-sunken px-5 py-3 text-[12.5px] text-ink-3-strong">
+            Esta información no se puede editar desde aquí. Escriba al club para corregirla.
+          </p>
         )}
+        {saveError && (
+          <p role="alert" className="border-t border-line px-5 py-3 text-sm text-cata-red">
+            {saveError}
+          </p>
+        )}
+      </CardSection>
+
+      {/* 4 — Estudiantes a mi cargo. For a representante this is the reason to
+          open the page, so it stays — and it belongs beside the reader's own
+          data, not below the two account controls. */}
+      {props.kind === "student" && representados.length > 0 && (
+        <CardSection
+          title="Estudiantes a mi cargo"
+          action={
+            <Link href="/student/add-dependent" className={buttonClasses("secondary", "sm")}>
+              + Agregar
+            </Link>
+          }
+        >
+          {representados.map((dependant) => (
+            <DependantRow key={dependant.personaId} profile={dependant} />
+          ))}
+        </CardSection>
+      )}
       </div>
-    </div>
+
+      <div className="flex flex-col gap-3">
+      {/* 3 — Seguridad: the same 56px row shape as "Datos personales", label
+          on the left and the action on the right. The two rows used to put
+          "Contraseña" in the VALUE column with no label at all, which broke
+          the page's own grammar three rows after establishing it — and left
+          the reader guessing what the button beside a bare noun would do.
+
+          Two rows, not three: `auth_router.py` exposes login/registro/me/
+          refresh/logout/recuperar/restablecer and nothing that revokes another
+          device's token, so a "cerrar otras sesiones" row would be a button
+          that cannot do what it says. */}
+      <CardSection title="Seguridad" testId="profile-column-status">
+        <DetailRow
+          label="Contraseña"
+          action={
+            <Button size="sm" onClick={() => void handleChangePassword()} disabled={requestingPassword}>
+              {requestingPassword ? "Enviando…" : "Cambiar contraseña"}
+            </Button>
+          }
+        >
+          <span className="text-[13px] font-normal text-ink-2">
+            Le enviamos un enlace de cambio a su correo
+          </span>
+        </DetailRow>
+        <DetailRow
+          label="Sesión"
+          action={
+            <Button size="sm" onClick={() => void logout()}>
+              Salir
+            </Button>
+          }
+        >
+          <span className="text-[13px] font-normal text-ink-2">
+            Cerrar sesión en este equipo
+          </span>
+        </DetailRow>
+      </CardSection>
+
+      {passwordMessage && (
+        <p role="status" className="text-sm text-state-ok">
+          {passwordMessage}
+        </p>
+      )}
+      {passwordError && (
+        <p role="alert" className="text-sm text-cata-red">
+          {passwordError}
+        </p>
+      )}
+      </div>
+      </div>
+      </div>
+    </ProfileShell>
+  );
+}
+
+/**
+ * One dependant row.
+ *
+ * The membership badge is rendered ONLY when the payload actually carried a
+ * `membership` for that dependant, and the "no disponible" note is kept for
+ * when it did not. Both halves are load-bearing:
+ *
+ * - The note used to be unconditional, on the premise that `/membresias/mias`
+ *   is only ever scoped to the caller's own persona. That is not what the
+ *   route does: `src/app/api/student/route.ts` calls
+ *   `/membresias/mias?persona_id={id}` once per profile, and a real
+ *   representante session comes back with the dependant's membership filled
+ *   in. Printing "no disponible" over data the page is holding is a false
+ *   statement, and it was the same false statement on every row.
+ * - The note stays for the null case because null is genuinely ambiguous:
+ *   `fetchMemberships` returns `[]` both when the dependant has no membership
+ *   and when the lookup was refused, and those two must not be collapsed into
+ *   "sin membresía".
+ */
+function DependantRow({ profile }: { profile: StudentProfileSummary }): React.ReactElement {
+  const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
+  const membership = describeMembership(profile.membership);
+  const nivel =
+    profile.ranking.status === "available" && profile.ranking.estaEnRanking
+      ? formatLevelName(profile.ranking.nivelNombre)
+      : null;
+
+  return (
+    <DetailRow note={membership ? undefined : NO_MEMBERSHIP_FALLBACK}>
+      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-state-neutral-bg text-[10px] font-bold text-state-neutral">
+        {personInitials(profile.nombres, profile.apellidos)}
+      </span>
+      {fullName}
+      {membership && <Badge tone={membership.tone}>{membership.label}</Badge>}
+      {nivel && <span className="text-xs font-normal text-ink-3">{nivel}</span>}
+    </DetailRow>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Content — data fetching + role branch into the unified layout
+// Content — data fetching + role branch into the shared layout
 // ---------------------------------------------------------------------------
 
 function ProfileContent(): React.ReactElement | null {
@@ -818,18 +776,18 @@ function ProfileContent(): React.ReactElement | null {
     };
   }, [isStudentRole, personaId, studentReload]);
 
-  // `fetchStudentPortal` carries no photo field — fetched separately, purely
-  // supplementary to the hero avatar. Failure here must never block or error
-  // the rest of the student portal (ranking/membership), so it's silently
-  // ignored (the avatar just falls back to the generic icon).
-  const [studentFotoUrl, setStudentFotoUrl] = useState<string | null | undefined>(undefined);
+  // `fetchStudentPortal` carries neither teléfono, fecha de creación nor
+  // foto — fetched separately, and supplementary: a failure here must never
+  // block or error the rest of the student portal, so it is silently ignored
+  // (those rows simply show "—").
+  const [studentPerfil, setStudentPerfil] = useState<PerfilPropio | null>(null);
 
   useEffect(() => {
     if (!isStudentRole) return;
     let cancelled = false;
     fetchMiPerfil()
       .then((perfil) => {
-        if (!cancelled) setStudentFotoUrl(perfil.fotoUrl);
+        if (!cancelled) setStudentPerfil(perfil);
       })
       .catch(() => {
         // Supplementary only — see comment above.
@@ -841,37 +799,25 @@ function ProfileContent(): React.ReactElement | null {
 
   if (role === null) return null;
 
-  let content: React.ReactNode;
+  // `ProfileLayout` renders its OWN `AppShell` — the page action has to reach
+  // `PageHeader`'s row, and the edit state that decides which action it is
+  // lives inside the layout. Loading and error get the plain shell.
   if (isStudentRole) {
-    if (studentState.status === "loading") {
-      content = <LoadingBlock text="Cargando su cuenta..." />;
-    } else if (studentState.status === "error") {
-      content = (
-        <ErrorBlock
-          message={studentState.message}
-          onRetry={() => setStudentReload((n) => n + 1)}
-          showIcon
-        />
-      );
-    } else {
-      content = (
+    if (studentState.status === "ready") {
+      return (
         <ProfileLayout
           kind="student"
           role={role}
           data={studentState.data}
+          perfil={studentPerfil}
           sessionEmail={session?.user.email ?? ""}
           sessionName={session?.user.name ?? ""}
-          fotoUrl={studentFotoUrl}
-          onFotoUpdated={setStudentFotoUrl}
+          onPerfilUpdated={setStudentPerfil}
         />
       );
     }
-  } else if (staffState.status === "loading") {
-    content = <LoadingBlock text="Cargando perfil..." />;
-  } else if (staffState.status === "error") {
-    content = <ErrorBlock message={staffState.message} onRetry={() => setStaffReload((n) => n + 1)} />;
-  } else {
-    content = (
+  } else if (staffState.status === "ready") {
+    return (
       <ProfileLayout
         kind="staff"
         role={role}
@@ -882,10 +828,24 @@ function ProfileContent(): React.ReactElement | null {
     );
   }
 
+  const pending = isStudentRole ? studentState : staffState;
+
   return (
-    <AppShell title="Mi cuenta" subtitle="Gestiona tu información y consulta tu estado en el sistema.">
-      {content}
-    </AppShell>
+    <ProfileShell>
+      {pending.status === "loading" ? (
+        <LoadingState
+          className="min-h-[50vh] justify-center"
+          label={isStudentRole ? "Cargando su cuenta…" : "Cargando perfil…"}
+        />
+      ) : (
+        <ErrorState
+          message={pending.status === "error" ? pending.message : ""}
+          onRetry={() =>
+            isStudentRole ? setStudentReload((n) => n + 1) : setStaffReload((n) => n + 1)
+          }
+        />
+      )}
+    </ProfileShell>
   );
 }
 

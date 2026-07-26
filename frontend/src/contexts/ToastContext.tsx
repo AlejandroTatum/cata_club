@@ -9,10 +9,27 @@
  *    consumed by the presentational `ToastContainer` (added separately) to
  *    render the stack and wire its manual close button.
  *
- * Every toast auto-dismisses after `TOAST_DURATION_MS` unless a per-call
- * `duration` override is given. Timers are tracked per-toast in a ref map,
- * cleared on manual close (`removeToast`) and swept on provider unmount so
- * no `setState` fires after unmount.
+ * ## A toast carries two lines, not one
+ *
+ * The product owner's note on the login confirmation — *"quisiera un toast
+ * para todo pero más claro que le haga saber al usuario"* — is a legibility
+ * requirement, not a placement one. One sentence has to do two jobs at once
+ * (say what happened AND say what it means) and usually does neither, so
+ * every toast may carry an optional `description` under its `message`:
+ * `message` names the outcome, `description` names the consequence or the
+ * next step. Callers that only have one clause keep passing one string.
+ *
+ * ## Dwell time is measured, not fixed
+ *
+ * A fixed 4.5s is generous for "Nivel asignado" and too short for a two-line
+ * explanation of a failed payment. `toastDurationFor` scales with the text it
+ * has to let someone read — floored at `TOAST_DURATION_MS` so nothing ever
+ * flashes past, capped at `TOAST_MAX_DURATION_MS` so nothing camps on screen.
+ * A short one-line toast still resolves to exactly the old 4500ms.
+ *
+ * Timers are tracked per-toast in a ref map, cleared on manual close
+ * (`removeToast`) and swept on provider unmount so no `setState` fires after
+ * unmount.
  */
 
 "use client";
@@ -36,22 +53,31 @@ export type ToastVariant = "error" | "success" | "info" | "warning";
 export interface ToastItem {
   id: string;
   variant: ToastVariant;
+  /** The outcome, in one short clause. Rendered as the toast's title. */
   message: string;
+  /** The consequence or the next step. Rendered under the title. */
+  description?: string;
 }
 
-export interface ShowToastOptions {
+/** The optional second argument every `show*` shortcut accepts. */
+export interface ToastDetail {
+  /** Supporting line under the message. Omit when one clause says it all. */
+  description?: string;
+  /** Overrides the measured dwell time for this toast only. */
+  duration?: number;
+}
+
+export interface ShowToastOptions extends ToastDetail {
   variant: ToastVariant;
   message: string;
-  /** Overrides `TOAST_DURATION_MS` for this toast only. */
-  duration?: number;
 }
 
 export interface ToastContextValue {
   showToast: (options: ShowToastOptions) => void;
-  showError: (message: string, duration?: number) => void;
-  showSuccess: (message: string, duration?: number) => void;
-  showInfo: (message: string, duration?: number) => void;
-  showWarning: (message: string, duration?: number) => void;
+  showError: (message: string, detail?: ToastDetail) => void;
+  showSuccess: (message: string, detail?: ToastDetail) => void;
+  showInfo: (message: string, detail?: ToastDetail) => void;
+  showWarning: (message: string, detail?: ToastDetail) => void;
 }
 
 export interface ToastStateValue {
@@ -60,11 +86,35 @@ export interface ToastStateValue {
 }
 
 // ---------------------------------------------------------------------------
-// Constants
+// Dwell time
 // ---------------------------------------------------------------------------
 
-/** Shared default auto-dismiss duration, identical for both variants. */
+/**
+ * The floor. Nothing dismisses faster than this, however short it is — below
+ * ~4s a confirmation is gone before a user who was looking at the button they
+ * just pressed has moved their eyes to it.
+ */
 export const TOAST_DURATION_MS = 4500;
+
+/** The ceiling. Past this a toast stops being transient and starts nagging. */
+export const TOAST_MAX_DURATION_MS = 10000;
+
+/** Time to notice the toast at all, before any of it has been read. */
+const NOTICE_MS = 1500;
+
+/** ~55ms per character ≈ 200 wpm, the usual figure for interrupted reading. */
+const MS_PER_CHARACTER = 55;
+
+/**
+ * How long a toast carrying this text should stay up. Clamped at both ends,
+ * so a one-line confirmation resolves to exactly `TOAST_DURATION_MS` and only
+ * genuinely long copy earns more time.
+ */
+export function toastDurationFor(message: string, description?: string): number {
+  const characters = message.length + (description ? description.length : 0);
+  const readingTime = NOTICE_MS + characters * MS_PER_CHARACTER;
+  return Math.min(TOAST_MAX_DURATION_MS, Math.max(TOAST_DURATION_MS, readingTime));
+}
 
 // ---------------------------------------------------------------------------
 // Contexts
@@ -92,40 +142,43 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const showToast = useCallback(
-    ({ variant, message, duration = TOAST_DURATION_MS }: ShowToastOptions) => {
+    ({ variant, message, description, duration }: ShowToastOptions) => {
       const id = `toast-${++counterRef.current}`;
-      setToasts((prev) => [{ id, variant, message }, ...prev]);
+      setToasts((prev) => [{ id, variant, message, description }, ...prev]);
 
-      const timer = setTimeout(() => removeToast(id), duration);
+      const timer = setTimeout(
+        () => removeToast(id),
+        duration ?? toastDurationFor(message, description),
+      );
       timersRef.current.set(id, timer);
     },
     [removeToast],
   );
 
   const showError = useCallback(
-    (message: string, duration?: number) => {
-      showToast({ variant: "error", message, duration });
+    (message: string, detail?: ToastDetail) => {
+      showToast({ variant: "error", message, ...detail });
     },
     [showToast],
   );
 
   const showSuccess = useCallback(
-    (message: string, duration?: number) => {
-      showToast({ variant: "success", message, duration });
+    (message: string, detail?: ToastDetail) => {
+      showToast({ variant: "success", message, ...detail });
     },
     [showToast],
   );
 
   const showInfo = useCallback(
-    (message: string, duration?: number) => {
-      showToast({ variant: "info", message, duration });
+    (message: string, detail?: ToastDetail) => {
+      showToast({ variant: "info", message, ...detail });
     },
     [showToast],
   );
 
   const showWarning = useCallback(
-    (message: string, duration?: number) => {
-      showToast({ variant: "warning", message, duration });
+    (message: string, detail?: ToastDetail) => {
+      showToast({ variant: "warning", message, ...detail });
     },
     [showToast],
   );

@@ -73,10 +73,10 @@ const MOCK_STUDENTS: StudentRef[] = [
 ];
 
 const MOCK_SCHEDULES: ScheduleSlot[] = [
-  { id: "hor-001", diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30", nivel: "principiante", cancha: "Cancha 1", cupoMaximo: 12, activo: true },
-  { id: "hor-002", diaSemana: "mie", horaInicio: "16:45", horaFin: "18:15", nivel: "intermedio", cancha: "Cancha 2", cupoMaximo: 10, activo: true },
-  { id: "hor-003", diaSemana: "vie", horaInicio: "15:00", horaFin: "16:30", nivel: "principiante", cancha: "Cancha 1", cupoMaximo: 12, activo: false },
-  { id: "hor-004", diaSemana: "vie", horaInicio: "15:00", horaFin: "16:30", nivel: "principiante", cancha: "Cancha 1", cupoMaximo: 12, activo: true },
+  { id: "hor-001", diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30", cancha: "Cancha 1", cupoMaximo: 12, activo: true },
+  { id: "hor-002", diaSemana: "mie", horaInicio: "16:45", horaFin: "18:15", cancha: "Cancha 2", cupoMaximo: 10, activo: true },
+  { id: "hor-003", diaSemana: "vie", horaInicio: "15:00", horaFin: "16:30", cancha: "Cancha 1", cupoMaximo: 12, activo: false },
+  { id: "hor-004", diaSemana: "vie", horaInicio: "15:00", horaFin: "16:30", cancha: "Cancha 1", cupoMaximo: 12, activo: true },
 ];
 
 // ---------------------------------------------------------------------------
@@ -349,7 +349,6 @@ describe("getGroupCapacity", () => {
         diaSemana: "sab",
         horaInicio: "09:00",
         horaFin: "10:00",
-        nivel: "principiante",
         cancha: "Cancha 1",
         cupoMaximo: 3,
         activo: false,
@@ -383,7 +382,6 @@ describe("getGroupCapacity", () => {
         diaSemana: "sab",
         horaInicio: "10:00",
         horaFin: "11:00",
-        nivel: "principiante",
         cancha: "Cancha 2",
         cupoMaximo: 8,
         activo: true,

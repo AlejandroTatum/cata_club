@@ -40,19 +40,10 @@ export default function LandingMotion(): null {
           scrollTrigger: { trigger: ".landing-hero", start: "top top", end: "bottom top", scrub: 0.5 },
         });
 
-        document.querySelectorAll<HTMLElement>("[data-counter]").forEach((counter): void => {
-          const value = Number(counter.dataset.counter);
-          if (!Number.isFinite(value)) return;
-          const state = { value: 0 };
-          gsap.to(state, {
-            value,
-            duration: 0.8,
-            ease: "power3.out",
-            snap: { value: 1 },
-            onUpdate: (): void => { counter.textContent = `${counter.dataset.prefix ?? ""}${state.value}`; },
-            scrollTrigger: { trigger: counter, start: "top 88%", once: true },
-          });
-        });
+        // No count-up on the trust band. It seeded itself at 0 and overwrote
+        // `textContent`, so any trigger that failed to fire left the real figure
+        // replaced by 0 — the reveals carry `immediateRender: false` for exactly
+        // that reason, and a two-digit odometer was not worth the same guard.
       });
 
       return (): void => context.revert();

@@ -172,3 +172,22 @@ def test_marcar_notificacion_ajena_como_leida_falla(client, db_session):
 
     resp = client.patch(f"/api/v1/ranking/notificaciones/{notif.id}/leer")
     assert resp.status_code == 403
+
+
+# --- Roster ligero para asignación de nivel ---------------------------------
+# El panel de Nivel del entrenador (`/trainer/nivel`) necesita la lista de
+# alumnos y su nivel actual. Antes la pedía a `GET /personas/` vía
+# `/api/members`, que es ADMINISTRADOR-only por exponer PII (cédula, teléfono,
+# fecha de nacimiento) -> el entrenador recibía un 403 real y la página no
+# cargaba nunca. `GET /ranking/alumnos-con-nivel` es el roster mínimo
+# equivalente, legible por ENTRENADOR.
+def test_listar_alumnos_con_nivel_lo_puede_leer_un_entrenador(client_entrenador):
+    resp = client_entrenador.get("/api/v1/ranking/alumnos-con-nivel")
+
+    assert resp.status_code == 200
+
+
+def test_listar_alumnos_con_nivel_rechaza_a_un_alumno(client_sin_permisos):
+    resp = client_sin_permisos.get("/api/v1/ranking/alumnos-con-nivel")
+
+    assert resp.status_code == 403

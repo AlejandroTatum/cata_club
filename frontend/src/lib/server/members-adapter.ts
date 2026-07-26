@@ -83,10 +83,20 @@ function buildMemberStudentSummary(
   persona: BackendPersonaFull,
   pago: BackendPagoListItem | undefined,
   membresiaById: Map<number, BackendMembresia>,
+  membresiaByPersona: Map<number, BackendMembresia>,
   tipoById: Map<number, BackendTipoMembresia>,
   nivelId: number | undefined,
 ): MemberStudentSummary {
-  const membresia = pago ? membresiaById.get(pago.membresiaId) : undefined;
+  /*
+   * A membership does not require a payment to exist. Three personas in the
+   * current data hold an ACTIVA membresía with zero Pago rows — Ana García is
+   * one — and resolving membership ONLY through the latest payment made this
+   * screen show them as having none, while their own student portal said
+   * "Membresía activa". So the payment chain is the primary source (it also
+   * supplies the paid period), and `membresiaByPersona` is the fallback.
+   */
+  const membresia =
+    (pago ? membresiaById.get(pago.membresiaId) : undefined) ?? membresiaByPersona.get(persona.id);
   const tipo = membresia ? tipoById.get(membresia.tipoMembresiaId) : undefined;
 
   return {
@@ -97,17 +107,19 @@ function buildMemberStudentSummary(
     grupoId: nivelId !== undefined ? String(nivelId) : null,
     fechaNacimiento: persona.fechaNacimiento,
     activo: true, // gap #3 above — no readable account-active flag exists via any GET endpoint
-    membresia:
-      membresia && pago
-        ? {
-            id: membresia.id,
-            tipo: buildMembershipTypeLabel(tipo),
-            estado: MEMBERSHIP_STATUS_BY_ESTADO[membresia.estado] as EstadoMembresia,
-            fechaInicio: pago.fechaInicio,
-            fechaFin: pago.fechaFin,
-            monto: Number(pago.monto),
-          }
-        : null,
+    membresia: membresia
+      ? {
+          id: membresia.id,
+          tipo: buildMembershipTypeLabel(tipo),
+          estado: MEMBERSHIP_STATUS_BY_ESTADO[membresia.estado] as EstadoMembresia,
+          // No pago, no paid period: empty strings, which
+          // `formatMembershipPeriod` already renders as nothing rather than as
+          // an invented range.
+          fechaInicio: pago?.fechaInicio ?? "",
+          fechaFin: pago?.fechaFin ?? "",
+          monto: Number(pago?.monto ?? membresia.montoAplicado ?? 0),
+        }
+      : null,
     ultimoPago: pago
       ? {
           estado: PAYMENT_STATUS_BY_ESTADO_PAGO[pago.estadoPago],
@@ -127,6 +139,7 @@ function buildMemberStudentSummary(
  * @param personas — every Persona (`GET /personas/`).
  * @param latestPagoByPersona — each persona's most recent Pago, keyed by `personaId`.
  * @param membresiaById — `Membresia` lookups keyed by `membresiaId`.
+ * @param membresiaByPersona — fallback `Membresia` for personas with no Pago, keyed by `personaId`.
  * @param tipoById — `TipoMembresia` catalog keyed by `tipoMembresiaId`.
  * @param nivelIdByPersona — current `NivelRanking` (Grupo) id, keyed by `personaId`.
  */
@@ -134,6 +147,7 @@ export function buildMemberAccounts(
   personas: BackendPersonaFull[],
   latestPagoByPersona: Map<number, BackendPagoListItem>,
   membresiaById: Map<number, BackendMembresia>,
+  membresiaByPersona: Map<number, BackendMembresia>,
   tipoById: Map<number, BackendTipoMembresia>,
   nivelIdByPersona: Map<number, number>,
 ): MemberAccount[] {
@@ -168,6 +182,7 @@ export function buildMemberAccounts(
           persona,
           latestPagoByPersona.get(persona.id),
           membresiaById,
+          membresiaByPersona,
           tipoById,
           nivelIdByPersona.get(persona.id),
         ),

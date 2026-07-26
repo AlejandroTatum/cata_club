@@ -1,26 +1,21 @@
 /**
- * Niveles — Admin page for managing student nivel assignment.
+ * Niveles — the admin's route onto the ladder.
  *
- * Thin wrapper over the shared `NivelAsignacionPanel` (see
- * src/components/nivel/NivelAsignacionPanel.tsx for the actual logic) — same
- * panel the trainer actor uses at `/trainer/nivel`, just a different
- * eyebrow/title/allowedRoles.
- *
- * Real backend gap for this actor (do not work around — documented at the
- * source instead of guessed here): initial group assignment (`POST
- * /ranking/asignar-nivel-inicial`) is backend-restricted to ENTRENADOR — an
- * ADMINISTRADOR gets a real 403. Moving an already-assigned student (`PATCH
- * /ranking/mover-de-nivel`) works fine for admins.
+ * The screen itself is `NivelLadderScreen` (see
+ * src/components/nivel/NivelLadderScreen.tsx), shared verbatim with the
+ * trainer's `/trainer/nivel`: *"la pantalla de nivel tiene que ser la misma en
+ * entrenador que la de admin."* Only the back link and the role this route
+ * admits differ.
  */
 
 "use client";
 
-import NivelAsignacionPanel from "@/components/nivel/NivelAsignacionPanel";
+import NivelLadderScreen from "@/components/nivel/NivelLadderScreen";
 
 export default function RankingPage(): React.ReactElement {
   return (
-    <NivelAsignacionPanel
-      eyebrow="Niveles"
+    <NivelLadderScreen
+      eyebrow="Escalera de entrenamiento"
       title="Niveles"
       allowedRoles={["admin"]}
       backHref="/dashboard"

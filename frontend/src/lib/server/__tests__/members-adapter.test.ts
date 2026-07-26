@@ -59,6 +59,7 @@ describe("buildMemberAccounts", () => {
       [admin, parent, child],
       new Map([[3, pago]]),
       new Map([[100, membresia]]),
+      new Map(),
       new Map([[5, tipo]]),
       new Map([[3, 7]]),
     );
@@ -71,7 +72,7 @@ describe("buildMemberAccounts", () => {
   });
 
   it("treats a root persona with no representados as a representante account (all root personas are adults)", () => {
-    const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map());
+    const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map(), new Map());
 
     const account = accounts.find((a) => a.id === "1");
     expect(account?.role).toBe("representante");
@@ -84,6 +85,7 @@ describe("buildMemberAccounts", () => {
       [parent, child],
       new Map([[3, pago]]),
       new Map([[100, membresia]]),
+      new Map(),
       new Map([[5, tipo]]),
       new Map(),
     );
@@ -100,8 +102,35 @@ describe("buildMemberAccounts", () => {
     expect(student?.ultimoPago?.estado).toBe("aprobado");
   });
 
-  it("leaves membresia/ultimoPago null when a student has no payment on record", () => {
-    const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map());
+  it("shows a membership that has no payment behind it, with no invented period", () => {
+    // Three personas in the real data hold an ACTIVA membresía and zero Pago
+    // rows (Ana García among them). Reading membership ONLY through the latest
+    // payment reported them as membership-less while their own student portal
+    // said "Membresía activa".
+    const accounts = buildMemberAccounts(
+      [admin],
+      new Map(),
+      new Map(),
+      new Map([[1, { ...membresia, id: 3, montoAplicado: "25.00" }]]),
+      new Map([[5, tipo]]),
+      new Map(),
+    );
+
+    const student = accounts[0].estudiantes[0];
+    expect(student.membresia).toEqual({
+      id: 3,
+      tipo: "Mensual Adultos (18:00-20:00)",
+      estado: "activa",
+      fechaInicio: "",
+      fechaFin: "",
+      monto: 25,
+    });
+    // No payment means no payment row — the membership does not fabricate one.
+    expect(student.ultimoPago).toBeNull();
+  });
+
+  it("leaves membresia/ultimoPago null when a student has neither payment nor membership", () => {
+    const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map(), new Map());
     const student = accounts[0].estudiantes[0];
     expect(student.membresia).toBeNull();
     expect(student.ultimoPago).toBeNull();
@@ -110,7 +139,7 @@ describe("buildMemberAccounts", () => {
   });
 
   it("returns no email field (Persona has none) and no accounts for non-root personas outside their group", () => {
-    const accounts = buildMemberAccounts([parent, child], new Map(), new Map(), new Map(), new Map());
+    const accounts = buildMemberAccounts([parent, child], new Map(), new Map(), new Map(), new Map(), new Map());
     expect(accounts).toHaveLength(1);
     expect(accounts[0].email).toBeUndefined();
   });

@@ -176,13 +176,58 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     expect(within(main).getAllByText("Ana Admin").length).toBe(2);
     expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(2);
     expect(screen.getByText("099111222")).toBeInTheDocument();
-    expect(screen.getByText("ADMINISTRADOR")).toBeInTheDocument();
+    // The role reads as Spanish prose on the identity card, not as the raw
+    // backend enum ("ADMINISTRADOR") the old status column printed.
+    expect(within(main).getByText("Administrador")).toBeInTheDocument();
+    expect(within(main).queryByText("ADMINISTRADOR")).not.toBeInTheDocument();
+    // "Miembro desde" is now a single 56px row, not duplicated between a hero
+    // block and a "Fecha de registro" row saying the same thing.
     expect(screen.getByText(/miembro desde/i)).toBeInTheDocument();
-    expect(screen.getByText(/fecha de registro/i)).toBeInTheDocument();
-    // Formatted fechaCreacion also appears twice (hero "Miembro desde" +
-    // column 1 "Fecha de registro").
-    expect(screen.getAllByText("10 de marzo de 2024").length).toBe(2);
+    expect(screen.queryByText(/fecha de registro/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("10/03/2024").length).toBe(1);
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("shows EVERY assigned role, not just the one the session resolved to", async () => {
+    // `mapBackendRoleToUserRole` collapses these four to "admin". If the rail
+    // renders only that, the other three exist nowhere in the product.
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce({
+      ...PERFIL_ADMIN,
+      roles: ["ADMINISTRADOR", "ENTRENADOR", "ALUMNO", "REPRESENTANTE"],
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    await screen.findAllByText("Ana Admin");
+    const main = within(screen.getByRole("main"));
+    expect(main.getByText("Roles asignados")).toBeInTheDocument();
+    for (const label of ["Administrador", "Entrenador", "Alumno", "Representante"]) {
+      expect(main.getByText(new RegExp(`^${label}`))).toBeInTheDocument();
+    }
+    // Which one is in use right now is still legible without colour alone.
+    expect(main.getByText(/rol activo en esta sesión/i)).toBeInTheDocument();
+  });
+
+  it("keeps the singular label for a single-role account", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    await screen.findAllByText("Ana Admin");
+    const main = within(screen.getByRole("main"));
+    expect(main.getByText("Rol")).toBeInTheDocument();
+    expect(main.queryByText("Roles asignados")).not.toBeInTheDocument();
+    expect(main.queryByText(/rol activo en esta sesión/i)).not.toBeInTheDocument();
   });
 
   it("renders the same staff fields for an ENTRENADOR session (triangulation)", async () => {
@@ -205,10 +250,10 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
 
     expect((await screen.findAllByText("Carla Entrenadora")).length).toBe(2);
     expect(screen.getAllByText("carla.entrenadora@cataclub.com").length).toBe(2);
-    expect(screen.getByText("ENTRENADOR")).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByText("Entrenador")).toBeInTheDocument();
     // Different fechaCreacion than the admin fixture — proves the date is
     // computed from `perfil.fechaCreacion`, not hardcoded.
-    expect(screen.getAllByText("2 de noviembre de 2025").length).toBe(2);
+    expect(screen.getAllByText("02/11/2025").length).toBe(1);
   });
 
   it("does not render nombres/apellidos/roles as editable inputs", async () => {
@@ -229,7 +274,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
 });
 
 describe("ProfilePage — student/representante summary view", () => {
-  it("renders the estudiante's own profile in the hero card with ranking and membership status", async () => {
+  it("renders the estudiante's own name and membership state on the identity card", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: {
@@ -258,15 +303,19 @@ describe("ProfilePage — student/representante summary view", () => {
     // Full name appears twice by design (hero card + "Información personal"
     // column, same as the staff branch).
     expect((await screen.findAllByText("Sofía Alumna")).length).toBe(2);
-    expect(screen.getByText("Nivel 3")).toBeInTheDocument();
-    // "Activa" appears three times by design: the hero's left status badge,
-    // the hero's "Suscripción / Membresía" info block, and the "Estado de
-    // cuenta" column's highlighted box.
-    expect(screen.getAllByText("Activa").length).toBe(3);
+    // Membership state is ONE badge in the identity card's rail — the
+    // prototype's own decision: a binary fact does not earn a section.
+    const hero = screen.getByTestId("profile-hero");
+    expect(screen.getAllByText("Activa").length).toBe(1);
+    expect(within(hero).getByText("Membresía")).toBeInTheDocument();
+    // The level the portal already returns fills the rail's third slot. It is
+    // read from `ranking.nivelNombre`, so it is real or it is absent.
+    expect(within(hero).getByText("Nivel")).toBeInTheDocument();
+    expect(within(hero).getByText("Nivel 3")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it("shows the honest 'no disponible' fallback (hero + status column) when self has no matching membership row", async () => {
+  it("shows the honest 'no disponible' note when self has no matching membership row", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: {
@@ -289,10 +338,15 @@ describe("ProfilePage — student/representante summary view", () => {
     );
 
     expect((await screen.findAllByText("Sofía Alumna")).length).toBe(2);
-    expect(screen.getAllByText("No disponible — consulte con administración").length).toBe(2);
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText("Membresía")).toBeInTheDocument();
+    expect(within(hero).getByText("No disponible — consulte con administración")).toBeInTheDocument();
+    // The ranking call failed, so no level is claimed — the slot is dropped,
+    // never filled with a guess.
+    expect(within(hero).queryByText("Nivel")).not.toBeInTheDocument();
   });
 
-  it("renders one summary card per representado for a representante session, always showing the honest 'no disponible' fallback for their membership (the backend never scopes /membresias/mias to a dependent, only to the caller) (triangulation)", async () => {
+  it("renders one row per representado for a representante session, always showing the honest 'no disponible' note for their membership (the backend never scopes /membresias/mias to a dependent, only to the caller) (triangulation)", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("representante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: null,
@@ -332,10 +386,10 @@ describe("ProfilePage — student/representante summary view", () => {
     // cards contribute the fallback text.
     expect(screen.getAllByText("No disponible — consulte con administración")).toHaveLength(2);
     expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
-    // Hero center blocks (Ranking / Membresía) use "No aplica" for a
-    // self:null account — distinct from "No disponible", which would
-    // wrongly imply the account itself has an unreported status.
-    expect(screen.getAllByText("No aplica")).toHaveLength(2);
+    // A `self: null` account has no personal membership to report, so the
+    // identity card claims nothing about one — it does not say "no disponible"
+    // either, which would wrongly imply an unreported status.
+    expect(screen.queryByText(/^Membresía:/)).not.toBeInTheDocument();
   });
 
   it("shows the real membership status for self alongside representados who correctly get the 'no disponible' fallback (owner-scoping regression test)", async () => {
@@ -372,10 +426,9 @@ describe("ProfilePage — student/representante summary view", () => {
 
     expect((await screen.findAllByText("Rosa Representante")).length).toBe(2);
     expect(screen.getByText("Juan Hijo")).toBeInTheDocument();
-    // "Activa" for self appears three times (hero badge, hero info block,
-    // status column); the fallback appears once (Juan's representado card
-    // only).
-    expect(screen.getAllByText("Activa").length).toBe(3);
+    // "Activa" for self is one badge on the identity card; the fallback note
+    // appears once, on Juan's row.
+    expect(screen.getAllByText("Activa").length).toBe(1);
     expect(screen.getByText("No disponible — consulte con administración")).toBeInTheDocument();
   });
 
@@ -474,12 +527,12 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     );
     await screen.findAllByText("Ana Admin");
 
-    fireEvent.click(screen.getByRole("button", { name: /editar información/i }));
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
 
     const telefonoInput = screen.getByLabelText(/teléfono/i);
     fireEvent.change(telefonoInput, { target: { value: "099999000" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /guardar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^guardar/i }));
 
     await waitFor(() => {
       expect(mockActualizarMiPerfil).toHaveBeenCalledWith({ telefono: "099999000" });
@@ -498,7 +551,7 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     );
     await screen.findAllByText("Ana Admin");
 
-    fireEvent.click(screen.getByRole("button", { name: /editar información/i }));
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
 
     expect(screen.queryByLabelText(/correo electrónico/i)).not.toBeInTheDocument();
     expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(2);
@@ -516,10 +569,10 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     );
     await screen.findAllByText("Ana Admin");
 
-    fireEvent.click(screen.getByRole("button", { name: /editar información/i }));
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
     const telefonoInput = screen.getByLabelText(/teléfono/i);
     fireEvent.change(telefonoInput, { target: { value: "099999000" } });
-    fireEvent.click(screen.getByRole("button", { name: /guardar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^guardar/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo guardar los cambios.");
     expect(screen.getByText("099111222")).toBeInTheDocument();
@@ -549,7 +602,7 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     );
 
     await screen.findAllByText("Sofía Alumna");
-    expect(screen.queryByRole("button", { name: /editar información/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /editar datos/i })).not.toBeInTheDocument();
     const infoColumn = screen.getByTestId("profile-column-info");
     expect(within(infoColumn).getByText(/esta información no se puede editar/i)).toBeInTheDocument();
   });
@@ -610,9 +663,10 @@ describe("ProfilePage — unified layout structure", () => {
     );
 
     await screen.findAllByText("Ana Admin");
-    expect(screen.getByText("Mi cuenta")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Perfil" })).toBeInTheDocument();
     expect(
-      screen.getByText("Gestiona tu información y consulta tu estado en el sistema."),
+      // Usted, not tú: the marketing voice stops at the auth screens.
+      screen.getByText("Gestione su información y consulte su estado en el club."),
     ).toBeInTheDocument();
     expect(screen.getByTestId("profile-hero")).toBeInTheDocument();
     expect(screen.getByTestId("profile-column-info")).toBeInTheDocument();
@@ -878,5 +932,102 @@ describe("ProfilePage — profile photo upload (student/representante branch, ow
     fireEvent.change(input, { target: { files: [archivo] } });
 
     expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo actualizar la foto de perfil.");
+  });
+});
+
+describe("ProfilePage — the redesigned account layout", () => {
+  async function renderAdmin(): Promise<void> {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await screen.findAllByText("Ana Admin");
+  }
+
+  it("puts the page action in the page header row, not floating above the content", async () => {
+    await renderAdmin();
+
+    const button = screen.getByRole("button", { name: /editar datos/i });
+    // It belongs to the SAME header row as the page title — it used to sit on
+    // a line of its own between the header and the identity card, which is
+    // what pushed the first real content ~40% down the viewport.
+    const header = button.closest("header");
+    expect(header).not.toBeNull();
+    expect(within(header as HTMLElement).getByRole("heading", { name: "Perfil" })).toBeInTheDocument();
+    expect(screen.getByTestId("profile-column-info").contains(button)).toBe(false);
+  });
+
+  it("does not repeat a back link the shell's own sidebar already provides", async () => {
+    await renderAdmin();
+
+    // `docs/ux/prototipos/25-perfil.html` draws no back link: the sidebar is
+    // the way back, and the extra row only cost vertical space above the fold.
+    expect(screen.queryByRole("link", { name: /volver al panel/i })).not.toBeInTheDocument();
+  });
+
+  it("gives the identity card the account facts it can prove, on its right", async () => {
+    await renderAdmin();
+
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText("Ana Admin")).toBeInTheDocument();
+    expect(within(hero).getByText("ana.admin@cataclub.com")).toBeInTheDocument();
+    // The meta rail — every value real and already fetched.
+    expect(within(hero).getByText("Rol")).toBeInTheDocument();
+    expect(within(hero).getByText("Administrador")).toBeInTheDocument();
+    expect(within(hero).getByText("Miembro desde")).toBeInTheDocument();
+    expect(within(hero).getByText("10/03/2024")).toBeInTheDocument();
+    // Contact data still belongs to the 56px rows, not to the card.
+    expect(within(hero).queryByText("099111222")).not.toBeInTheDocument();
+  });
+
+  it("lays personal data out as one datum per row, never as a data grid", async () => {
+    await renderAdmin();
+
+    const info = screen.getByTestId("profile-column-info");
+    for (const label of ["Nombres", "Correo", "Teléfono"]) {
+      expect(within(info).getByText(label)).toBeInTheDocument();
+    }
+    // "Miembro desde" is account metadata, not personal data: it moved to the
+    // identity card's rail and must NOT also be repeated as a row.
+    expect(within(info).queryByText("Miembro desde")).not.toBeInTheDocument();
+    // The correo note sits inline on the right of its own row.
+    expect(within(info).getByText(/lo gestiona el club/i)).toBeInTheDocument();
+  });
+
+  it("never shows a cédula row — no endpoint the account itself can call returns one", async () => {
+    await renderAdmin();
+
+    expect(screen.queryByText(/cédula/i)).not.toBeInTheDocument();
+  });
+
+  it("offers the security actions as rows, and no action it cannot perform", async () => {
+    await renderAdmin();
+
+    const security = screen.getByTestId("profile-column-status");
+    expect(within(security).getByText("Contraseña")).toBeInTheDocument();
+    expect(within(security).getByRole("button", { name: /cambiar contraseña/i })).toBeInTheDocument();
+    expect(within(security).getByText(/cerrar sesión en este equipo/i)).toBeInTheDocument();
+    expect(within(security).getByRole("button", { name: /^salir$/i })).toBeInTheDocument();
+    // There is no session-invalidation endpoint, so no row claims to close one.
+    expect(within(security).queryByText(/otras sesiones/i)).not.toBeInTheDocument();
+  });
+
+  it("closes the session from the security row", async () => {
+    const auth = sessionForRole("admin");
+    mockUseAuth.mockReturnValue(auth);
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await screen.findAllByText("Ana Admin");
+
+    fireEvent.click(screen.getByRole("button", { name: /^salir$/i }));
+
+    expect(auth.logout).toHaveBeenCalled();
   });
 });

@@ -54,7 +54,7 @@ export default function ProtectedRoute({
   if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
-        <p className="text-sm text-white/65">Cargando sesión...</p>
+        <p className="text-sm text-white/65">Cargando sesión…</p>
       </div>
     );
   }

@@ -20,9 +20,12 @@
     box-sizing: border-box;
   }
 
+  /* `canvas` and `ink` — the same two values the shell paints. The body used
+     to be #F9FAFB while the shell painted #F5F5F7 over it, so the app ran on
+     two page greys that differed by 1.5 L* and neither of them was a token. */
   body {
-    background-color: #F9FAFB;
-    color: #1F2937;
+    background-color: #E8E8EE;
+    color: #17181C;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -39,33 +42,61 @@
 }
 
 @layer components {
+  /*
+   * ELEVATION IS A SYSTEM RULE, NOT A PER-SCREEN DECISION.
+   *
+   * A card in this product is written as `rounded-card bg-paper` plus a
+   * `border-line` hairline — roughly 60 of them across the screens, none of
+   * which carried a shadow. On the old near-white canvas that did not matter
+   * because nothing separated anyway; on the reworked surface ladder the
+   * shadow is half of what makes the card an object, and asking 20 page files
+   * to remember `shadow-card` guarantees that half of them will not.
+   *
+   * So the shared layer grants it: any element that opts into the card
+   * radius AND the paper surface gets the card shadow. This lives in
+   * `@layer components`, so a screen that genuinely needs something else
+   * (`shadow-elevated` on a modal, `shadow-none` on an inset panel) still
+   * wins from the utilities layer.
+   */
+  .rounded-card.bg-paper,
+  .card,
+  .card-hover {
+    @apply shadow-card;
+  }
+
   .card {
     background-color: #FFFFFF;
-    border: 1px solid #E5E7EB;
-    border-radius: 1rem;
-    @apply shadow-card;
+    border: 1px solid #DEDEE6;
+    border-radius: 14px;
   }
 
   .card-hover {
     background-color: #FFFFFF;
-    border: 1px solid #E5E7EB;
-    border-radius: 1rem;
+    border: 1px solid #DEDEE6;
+    border-radius: 14px;
     transition: all 0.2s ease;
-    @apply shadow-card;
   }
 
   .card-hover:hover {
     @apply shadow-elevated;
   }
 
+  /* The focus ring these three controls used to declare (`focus:ring-2
+     focus:ring-cata-red/30`, `/15`, `focus:border-cata-red/40`) is gone: a
+     translucent red composites to 1.27–1.96:1 on paper, i.e. it was decoration
+     rather than an indicator. The system ring at the bottom of this file now
+     dresses every focusable element, including these. */
   .btn-primary {
     background-color: #D92128;
     color: #FFFFFF;
     border-radius: 0.75rem;
     transition: all 0.2s ease;
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium hover:bg-cata-red-light focus:outline-none focus:ring-2 focus:ring-cata-red/30 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /* Single source of truth for the hover state. The `@apply` above used to
+     also carry `hover:bg-cata-red-light` (#E55157) — the same color this rule
+     sets, but declared twice for one class. Only this rule remains. */
   .btn-primary:hover {
     background-color: #E55157;
     transform: translateY(-1px);
@@ -73,65 +104,65 @@
   }
 
   .btn-secondary {
-    background-color: transparent;
-    color: #1F2937;
-    border: 1px solid #E5E7EB;
+    background-color: #FFFFFF;
+    color: #17181C;
+    /* `line-2`, the control border — a button outlined in the divider
+       hairline reads as a table cell, not as something you can press. */
+    border: 1px solid #CFCFDA;
     border-radius: 0.75rem;
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-cata-bg focus:outline-none focus:ring-2 focus:ring-cata-border disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-cata-bg disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /*
+   * `text-ink-2` / `hover:text-ink`, not `text-cata-text/65`. A ghost button
+   * has no surface of its own, so it wears whatever is behind it — and behind
+   * it is usually the page field, where 65% of #1F2937 measures 4.34:1 on the
+   * deepened canvas (it was 4.58:1 on the old near-white one, which is how it
+   * shipped). Solid ink at 7.16:1 on canvas and 8.74:1 on paper does not
+   * depend on the surface at all. Matches the `ghost` variant of the `Button`
+   * primitive, which is where new code should go.
+   */
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-cata-text/65 transition-colors duration-200 hover:bg-cata-bg hover:text-cata-text focus:outline-none disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-ink-2 transition-colors duration-200 hover:bg-coal/[0.06] hover:text-ink disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /*
+   * Height and radius come from the design-system tokens (h-ctl 40px,
+   * rounded-ctl 10px) so inputs match every other control. This rendered at
+   * 42px with a 12px radius: py-2.5 (20px) plus a 20px line-height plus 2px of
+   * border, which put every form field 2px off-system.
+   * `min-h-ctl` rather than `h-ctl` so a field that wraps can still grow.
+   */
   .input-field {
     background-color: #FFFFFF;
-    border: 1px solid #E5E7EB;
-    border-radius: 0.75rem;
-    color: #1F2937;
-    @apply w-full px-4 py-2.5 text-sm transition-all duration-200 placeholder:text-cata-text/35 focus:border-cata-red/40 focus:outline-none focus:ring-2 focus:ring-cata-red/15 disabled:cursor-not-allowed disabled:opacity-50;
+    /* `line-2` — same reason as `.btn-secondary`: a field needs an edge. */
+    border: 1px solid #CFCFDA;
+    color: #17181C;
+    @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-all duration-200 placeholder:text-cata-text/35 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .input-field::placeholder {
     color: rgba(31,41,55,0.35);
   }
 
+  /* The border still darkens to the CTA red on focus — that is the field
+     reacting, and at 5.00:1 on paper it is a real state change. The 3px
+     `rgba(217,33,40,0.2)` halo it used to carry is gone: it composited to
+     1.64:1, and the system ring below is what marks focus now. */
   .input-field:focus {
     border-color: #D92128;
-    box-shadow: 0 0 0 3px rgba(217,33,40,0.2);
   }
 
-  .badge {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
-  }
+  /* The `.badge` / `.badge-success` / `.badge-warning` / `.badge-error` /
+     `.badge-neutral` family used to live here. It was one of FOUR badge
+     vocabularies in the app, and it accepted two spellings of itself
+     (`badge badge-success` and a bare `badge-success`) that rendered
+     identically — so even the single class had two dialects.
 
-  .badge-success {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
-    background-color: rgba(21,128,61,0.12);
-    color: #15803D;
-    border: 1px solid rgba(21,128,61,0.3);
-  }
-
-  .badge-warning {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
-    background-color: rgba(146,64,14,0.12);
-    color: #92400E;
-    border: 1px solid rgba(146,64,14,0.3);
-  }
-
-  .badge-error {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
-    background-color: rgba(185,28,28,0.1);
-    color: #B91C1C;
-    border: 1px solid rgba(185,28,28,0.3);
-  }
-
-  .badge-neutral {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium tracking-wide;
-    background-color: rgba(55,65,81,0.08);
-    color: #374151;
-    border: 1px solid rgba(55,65,81,0.15);
-  }
+     It has no consumers left: every status pill now renders through the
+     `Badge` primitive in `components/ui`, whose tones come from the
+     `state-*` tokens. The classes are deleted rather than deprecated,
+     because a deprecated CSS class is an invitation. */
 
   .alert-error {
     @apply flex items-center gap-2 rounded-lg border px-3 py-2 text-xs;
@@ -173,11 +204,6 @@
 
 /* Subtle background texture — premium spa/Swiss aesthetic */
 @layer utilities {
-  .bg-subtle-dot {
-    background-image: radial-gradient(circle, rgba(217, 33, 40, 0.03) 1px, transparent 1px);
-    background-size: 24px 24px;
-  }
-
   .bg-logo-glow {
     background: radial-gradient(ellipse 50% 60% at 50% 40%, rgba(217, 33, 40, 0.04) 0%, transparent 70%);
   }
@@ -196,4 +222,84 @@
   .animate-toast-in {
     animation: toast-in 0.2s ease-out;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * THE FOCUS INDICATOR IS A SYSTEM RULE, NOT A PER-COMPONENT DECISION.
+ *
+ * ## What was wrong
+ *
+ * The product had two focus vocabularies and both failed measurement:
+ *
+ *   · `focus-visible:outline-ball` (#FFD600), in 12 component files. It was
+ *     transcribed from `_sistema.css:80`, where it is correct — on the coal
+ *     rail the ball measures 13.13:1. On the light surfaces those components
+ *     actually sit on it is 1.41:1 on `paper`, 1.29:1 on `sunken` and 1.16:1
+ *     on `canvas`, against the 3:1 a non-text indicator has to clear (WCAG
+ *     1.4.11).
+ *   · The `:focus` rings in this file, built from translucent red:
+ *     `ring-cata-red/15` → 1.27:1, `/30` → 1.64:1, `border-cata-red/40` →
+ *     1.96:1. There was no `:focus-visible` anywhere in this stylesheet.
+ *
+ * A single flat colour cannot pass on both the coal rail and the three light
+ * surfaces — that is the whole reason the assistant grew its own local ring
+ * (`components/chatbot/chat-focus-ring.ts`). This promotes that idea to the
+ * shared layer instead of leaving it in one component.
+ *
+ * ## The ring
+ *
+ * Two concentric bands, so one of them always contrasts with whatever is
+ * underneath:
+ *
+ *   · a 2px `ball` band hugging the control (the `box-shadow` spread), then
+ *   · a 2px `coal` band around it (the `outline`, at the matching 2px offset,
+ *     which the shadow fills exactly — the two bands touch, no gap).
+ *
+ * `box-shadow` for the inner band because an `outline` cannot be two colours,
+ * and a shadow follows the control's own `border-radius` for free.
+ *
+ * Measured, every adjacency:
+ *
+ *   coal band vs `paper`  #FFFFFF ......... 18.54:1
+ *   coal band vs `sunken` #F4F4F7 ......... 16.89:1
+ *   coal band vs `canvas` #E8E8EE ......... 15.20:1
+ *   coal band vs the CTA red #D92128 ...... 3.71:1
+ *   ball band vs the coal band ............ 13.13:1
+ *   ball band vs the coal rail #131316 .... 13.13:1
+ *
+ * On the light surfaces the coal band carries the contrast and the ball reads
+ * as the brand's own mark inside it; on the coal sidebar the coal band merges
+ * into the rail and the ball band — the value `_sistema.css` specified — is
+ * the indicator, at the 13.13:1 it was designed for. Neither case relies on a
+ * colour that measures under 3:1 against its neighbour.
+ *
+ * ## Why the selector is shaped like this
+ *
+ * It has to outrank Tailwind's own `focus-visible:*` utilities (specificity
+ * 0,2,0), because the 12 `outline-ball` call sites cannot all be edited from
+ * here and would otherwise repaint the ring yellow. `:is(…)` + `:not(…)` +
+ * `:focus-visible` lands at 0,3,0, which wins without `!important`.
+ *
+ * Two deliberate exemptions:
+ *
+ *   · `[class*="focus-visible:shadow-"]` — a control that declares its own
+ *     two-tone focus shadow (the assistant's floating launcher, which must
+ *     restate its drop shadow while focused) keeps it.
+ *   · `.landing-page *` — the landing is a separate visual world with its own
+ *     indicator (`landing.css:52-53`) and its own surfaces.
+ * ------------------------------------------------------------------------- */
+:is(
+    a[href],
+    area[href],
+    button,
+    input:not([type="hidden"]),
+    select,
+    textarea,
+    summary,
+    [contenteditable="true"],
+    [tabindex]:not([tabindex="-1"])
+  ):not([class*="focus-visible:shadow-"], .landing-page *):focus-visible {
+  outline: 2px solid #131316;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #FFD600;
 }

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import localFont from "next/font/local";
 import LandingPage from "./landing/LandingPage";
 import "./landing/landing.css";
@@ -16,6 +17,33 @@ const barlow = localFont({
 
 const graduate = localFont({ src: "../../public/fonts/graduate-400.woff2", variable: "--font-landing-graduate", display: "swap" });
 const playfair = localFont({ src: "../../public/fonts/playfair-display-600.woff2", variable: "--font-landing-playfair", display: "swap" });
+
+/**
+ * The club's public landing — the link families actually share. `title.absolute`
+ * is required: without it the root layout's `%s | Cata Club Admin` template
+ * would brand the preview card as an internal admin panel.
+ */
+export const metadata: Metadata = {
+  title: { absolute: "Cata Club — Tenis de Mesa en Loja" },
+  description:
+    "Club formativo de tenis de mesa en Loja, Ecuador. Entrenamientos para niños, jóvenes y adultos de lunes a sábado, junto al Coliseo Ciudad de Loja. Inscríbete o escríbenos por WhatsApp.",
+  openGraph: {
+    type: "website",
+    locale: "es_EC",
+    siteName: "Cata Club",
+    title: "Cata Club — Tenis de Mesa en Loja",
+    description:
+      "Formando campeones para la vida desde 2013. Entrenamientos formativos, infantiles, juveniles, competitivos y para adultos en Loja, Ecuador.",
+    images: [
+      {
+        url: "/landing/hero-photo.jpeg",
+        width: 1200,
+        height: 984,
+        alt: "Entrenadores, deportistas y familias de Cata Club celebrando juntos",
+      },
+    ],
+  },
+};
 
 export default function HomePage(): React.ReactElement {
   return <div className={`${barlow.variable} ${graduate.variable} ${playfair.variable}`}><LandingPage /></div>;

@@ -47,6 +47,12 @@ async def listar_asignaciones(db: Session = Depends(obtener_sesion)):
     return RankingServicio(db).listar_asignaciones()
 
 
+# Roster mínimo para la pantalla de asignación de nivel (admin `/ranking` y
+# entrenador `/trainer/nivel`). El frontend lo pedía a `GET /personas/`, que es
+# ADMINISTRADOR-only por exponer PII -> el entrenador recibía un 403 real y la
+# página nunca cargaba. `AlumnoConNivelDTO` no expone PII, así que el permiso
+# puede ser el mismo que ya tienen las dos mutaciones de esta pantalla
+# (`asignar-nivel-inicial` y `mover-de-nivel`).
 @router.get(
     "/alumnos-con-nivel", response_model=List[AlumnoConNivelDTO],
     dependencies=[Depends(GestorPermisos(ROL_ADMIN_O_ENTRENADOR))],

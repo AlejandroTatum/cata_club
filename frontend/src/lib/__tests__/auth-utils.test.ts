@@ -134,22 +134,53 @@ describe("getNavLinksForRole", () => {
     const links = getNavLinksForRole("admin");
     expect(links).toHaveLength(8);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/dashboard", label: "Administración" });
+    expect(links[1]).toEqual({ href: "/dashboard", label: "Panel de Control" });
     expect(links[2]).toEqual({ href: "/members", label: "Miembros" });
     expect(links[3]).toEqual({ href: "/ranking", label: "Niveles" });
-    expect(links[4]).toEqual({ href: "/groups", label: "Gestión de Horarios" });
+    expect(links[4]).toEqual({ href: "/groups", label: "Horarios" });
     expect(links[5]).toEqual({ href: "/payments", label: "Membresías y Pagos" });
     expect(links[6]).toEqual({ href: "/attendance", label: "Asistencias" });
     expect(links[7]).toEqual({ href: "/reports", label: "Reportes" });
   });
 
-  it("returns trainer links including Dashboard, Asistencia and Nivel", () => {
+  // Labels are Spanish and name the destination. The old set said
+  // "Dashboard", "Asistencia" and "Nivel".
+  it("returns trainer links named after their destinations, in Spanish", () => {
     const links = getNavLinksForRole("trainer");
     expect(links).toHaveLength(4);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/trainer", label: "Dashboard" });
-    expect(links[2]).toEqual({ href: "/trainer/attendance", label: "Asistencia" });
-    expect(links[3]).toEqual({ href: "/trainer/nivel", label: "Nivel" });
+    expect(links[1]).toEqual({ href: "/trainer", label: "Mi día" });
+    expect(links[2]).toEqual({ href: "/trainer/attendance", label: "Pasar lista" });
+    expect(links[3]).toEqual({ href: "/trainer/nivel", label: "Niveles" });
+  });
+
+  it("gives the trainer's ladder the same nav label the admin's has", () => {
+    // `/trainer/nivel` and `/ranking` render the SAME screen under the SAME
+    // title, so the sidebar must not call it two different things depending on
+    // who is signed in.
+    const adminLabel = getNavLinksForRole("admin").find((l) => l.href === "/ranking")?.label;
+    const trainerLabel = getNavLinksForRole("trainer").find(
+      (l) => l.href === "/trainer/nivel",
+    )?.label;
+    expect(trainerLabel).toBe(adminLabel);
+    expect(trainerLabel).toBe("Niveles");
+  });
+
+  it("keeps the trainer's level-assignment section reachable", () => {
+    // Trainers do assign levels: the backend grants ENTRENADOR both
+    // `asignar-nivel-inicial` and `mover-de-nivel`, and `/trainer/nivel` is a
+    // live screen. The 403 that once justified hiding it came from the roster
+    // endpoint, which now has a trainer-readable replacement.
+    const links = getNavLinksForRole("trainer");
+    expect(links.some((l) => l.href === "/trainer/nivel")).toBe(true);
+  });
+
+  it("uses no English labels in any role's navigation", () => {
+    for (const role of ["admin", "trainer", "representante", "estudiante"] as const) {
+      for (const link of getNavLinksForRole(role)) {
+        expect(link.label).not.toMatch(/dashboard/i);
+      }
+    }
   });
 
   it("returns only Inicio for unsupported (no role-specific nav)", () => {
@@ -157,20 +188,24 @@ describe("getNavLinksForRole", () => {
     expect(links).toEqual([{ href: "/", label: "Inicio" }]);
   });
 
-  it("returns representante links to Mi Cuenta and Pagos", () => {
+  it("returns representante links to Mi cuenta, Pagos and Asistencias", () => {
     const links = getNavLinksForRole("representante");
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(4);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/student", label: "Mi Cuenta" });
+    expect(links[1]).toEqual({ href: "/student", label: "Mi cuenta" });
     expect(links[2]).toEqual({ href: "/student/payments", label: "Pagos" });
+    expect(links[3]).toEqual({ href: "/student/attendance", label: "Asistencias" });
   });
 
-  it("returns estudiante links to Mi Cuenta and Pagos", () => {
+  it("returns estudiante links to Mi cuenta, Pagos and Asistencias", () => {
     const links = getNavLinksForRole("estudiante");
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(4);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/student", label: "Mi Cuenta" });
+    expect(links[1]).toEqual({ href: "/student", label: "Mi cuenta" });
     expect(links[2]).toEqual({ href: "/student/payments", label: "Pagos" });
+    // Paying and checking attendance are the two things a student opens the
+    // portal to do, so both are reachable from the nav, not only from a panel.
+    expect(links[3]).toEqual({ href: "/student/attendance", label: "Asistencias" });
   });
 
   it("every recognized role gets Inicio as first link and at least one role-specific link", () => {

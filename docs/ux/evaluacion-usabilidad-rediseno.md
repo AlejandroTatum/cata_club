@@ -67,5 +67,67 @@ Repetir este cuestionario con el grupo evaluador después de integrar el redise�
 | Corte | Fecha | Total | Promedio |
 |---|---|---|---|
 | Prototipo v3.4 | 2026-07-23 | 73/100 | 7,3 |
-| Post-integración | — | — | — |
+| Post-integración | 2026-07-25 | **77/100** | **7,7** |
 | Post-backlog | — | — | — |
+
+## Corte post-integración — 2026-07-25
+
+Evaluada la **implementación** corriendo, no el prototipo. Tres evaluadores
+independientes y aislados: uno sobre admin/entrenador, uno sobre
+estudiante/representante y público, y uno solo de medición determinista que los
+otros dos no vieron.
+
+| Superficie | Total | Promedio |
+|---|---:|---:|
+| Admin + entrenador | 76/100 | 7,6 |
+| Estudiante + público | 77/100 | 7,7 |
+
+**No alcanza la meta de ≥ 8,5.** Los dos evaluadores llegaron por separado al
+mismo diagnóstico, lo cual le da peso: los principios que el backlog atacó
+subieron de verdad, y el que el documento original difirió explícitamente a la
+implementación **no se movió nada**.
+
+| Principio | Prototipo | Ahora | |
+|---|---:|---:|---|
+| P5 Prevención de errores | 5 | **8** | Aprobar deshabilitado tras checklist real; motivo de rechazo obligatorio; wizard y reportes con botones bloqueados y el motivo dicho |
+| P9 Recuperación de errores | 5 | **7–8** | Patrón de reintento verificado contra una caída real del servidor; el 403 de `/trainer/nivel` resuelto |
+| P3 Control y libertad | 6 | **6** | Sin cambios: los tres ítems del backlog siguen sin hacer |
+| P7 Flexibilidad | 7 | **7** | Ningún ítem del backlog entregado |
+| P2 Mundo real | 9 | **8** | Regresión: vocabulario de base de datos filtrado a la UI y placeholders de seed visibles |
+
+### Lo que bloquea la meta
+
+1. **La selección de dependiente se pierde al navegar.** Laura elige a Martín en
+   Mi cuenta, entra a Pagos y la pantalla vuelve a Sofía — plan, monto e
+   historial de la otra hija. Es el único defecto con consecuencia de dinero.
+2. **El botón Atrás del navegador destruye la lista de asistencia en curso**, sin
+   aviso y sin borrador. Los tres pasos del wizard no son entradas de historial.
+3. **No existe deshacer en ninguna parte.** "Corregir" en el historial es un
+   viaje aparte, no un undo.
+4. **El checklist de aprobación no se adapta al método de pago.** En un pago en
+   efectivo exige afirmar que el comprobante es legible y que su monto coincide
+   — sobre un comprobante que no existe. Una salvaguarda que hay que falsear
+   enseña a tildar sin mirar.
+5. **Sin acciones por lote en la cola de pagos.** Trece pagos idénticos son trece
+   decisiones con checklist.
+
+### Defectos medidos (evaluador determinista)
+
+- Cero overflow horizontal y cero errores de consola en todas las páginas
+  medidas, a 1440 y a 390. Jerarquía de encabezados correcta en todas.
+- Cuatro fallos de contraste reales, el peor 2,31:1 (panel de datos de prueba en
+  `/student/enroll`) y 3,78:1 en la nota de seguridad del login.
+- **Los indicadores de foco fallan WCAG 2.4.11 en superficie clara**:
+  `outline-ball` mide 1,42:1 sobre blanco contra los 3:1 requeridos. Corregido
+  solo en el asistente; el resto del sistema mantiene el defecto.
+- `AppShell` no tiene enlace de salto al contenido; el landing sí.
+- Logos del landing, de enroll y del carnet con `alt` vacío.
+- Objetivos táctiles: el token `h-ctl` es 40 px, bajo los 44 recomendados, de
+  forma sistemática en todo el shell.
+
+### No se pudo evaluar
+
+Todo lo posterior a un envío — toasts de éxito, estados "Guardando…", pantallas
+de confirmación — porque la evaluación se hizo sin mutar la base. Los flujos por
+teclado quedaron incompletos: los tres evaluadores compartían un solo navegador
+y las sesiones se pisaban entre sí.

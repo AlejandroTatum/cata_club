@@ -135,47 +135,30 @@ describe("formatCurrency", () => {
 
 describe("formatDate", () => {
   it("renders a date deterministically in Ecuador timezone", () => {
-    // "2026-07-01T12:00:00Z" is 07:00 in Guayaquil — same calendar day
-    const result = formatDate("2026-07-01T12:00:00.000Z");
-    expect(result).toContain("2026");
-    // es-EC locale: month short is "jul" for July
-    expect(result).toMatch(/jul/i);
-    expect(result).toMatch(/\d+/);
+    // "2026-07-01T12:00:00Z" is 07:00 in Guayaquil — same calendar day.
+    expect(formatDate("2026-07-01T12:00:00.000Z")).toBe("01/07/2026");
   });
 
   it("handles different months", () => {
-    const jan = formatDate("2026-01-15T12:00:00.000Z");
-    expect(jan).toContain("2026");
-    expect(jan).toMatch(/ene/i);
-
-    const dec = formatDate("2026-12-25T12:00:00.000Z");
-    expect(dec).toContain("2026");
-    expect(dec).toMatch(/dic/i);
+    expect(formatDate("2026-01-15T12:00:00.000Z")).toBe("15/01/2026");
+    expect(formatDate("2026-12-25T12:00:00.000Z")).toBe("25/12/2026");
   });
 
   it("renders a date-only string as the correct calendar day — no UTC offset shift", () => {
     // "2014-03-15" parsed as UTC midnight → 14 Mar in Guayaquil (UTC-5).
     // Our fix interprets it as local calendar date → 15 Mar.
-    const result = formatDate("2014-03-15");
-    expect(result).toContain("15");
-    expect(result).toMatch(/mar/i);
-    expect(result).toContain("2014");
+    expect(formatDate("2014-03-15")).toBe("15/03/2014");
   });
 
   it("renders end-of-month date-only strings correctly", () => {
-    expect(formatDate("2026-01-31")).toContain("31");
-    expect(formatDate("2026-12-31")).toContain("31");
-    expect(formatDate("2026-02-28")).toContain("28");
+    expect(formatDate("2026-01-31")).toBe("31/01/2026");
+    expect(formatDate("2026-12-31")).toBe("31/12/2026");
+    expect(formatDate("2026-02-28")).toBe("28/02/2026");
   });
 
   it("renders first-of-month date-only strings correctly", () => {
-    const januaryFirst = formatDate("2026-01-01");
-    expect(januaryFirst).toContain("1");
-    expect(januaryFirst).toMatch(/ene/i);
-
-    const juneFirst = formatDate("2026-06-01");
-    expect(juneFirst).toContain("1");
-    expect(juneFirst).toMatch(/jun/i);
+    expect(formatDate("2026-01-01")).toBe("01/01/2026");
+    expect(formatDate("2026-06-01")).toBe("01/06/2026");
   });
 
   it("accepts valid leap-day date-only strings", () => {
@@ -198,16 +181,16 @@ describe("formatDate", () => {
 // ---------------------------------------------------------------------------
 
 describe("formatMembershipPeriod", () => {
-  it("formats a monthly period using the separator", () => {
-    const result = formatMembershipPeriod("2026-07-01", "2026-07-31");
-    expect(result).toContain("—");
-    expect(result.length).toBeGreaterThan(5);
+  it("formats a monthly period in the product's one date grammar", () => {
+    expect(formatMembershipPeriod("2026-07-01", "2026-07-31")).toBe("01/07/2026 – 31/07/2026");
   });
 
-  it("formats a cross-month period using the separator", () => {
-    const result = formatMembershipPeriod("2026-07-01", "2026-09-30");
-    expect(result).toContain("—");
-    expect(result.length).toBeGreaterThan(5);
+  it("formats a cross-month period the same way", () => {
+    expect(formatMembershipPeriod("2026-07-01", "2026-09-30")).toBe("01/07/2026 – 30/09/2026");
+  });
+
+  it("carries the year on both ends so a period across a year boundary is unambiguous", () => {
+    expect(formatMembershipPeriod("2026-12-01", "2027-01-31")).toBe("01/12/2026 – 31/01/2027");
   });
 
   it("returns empty string for invalid dates", () => {
@@ -289,34 +272,38 @@ describe("countActiveStudents", () => {
 // ---------------------------------------------------------------------------
 
 describe("getAccountStatusBadge", () => {
-  it('returns "Activo" + "badge-success" when account has active students', () => {
+  it('returns "Activo" + the ok tone when account has active students', () => {
     const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-001")!;
     expect(getAccountStatusBadge(account)).toEqual({
       label: "Activo",
-      className: "badge-success",
+      tone: "ok",
     });
   });
 
-  it('returns "Pago pendiente de validación" + "badge-warning" when no active memberships but pending validation', () => {
+  it('returns "Pago pendiente de validación" + the warn tone when no active memberships but pending validation', () => {
     // rp-005 (Carlos Ramirez): both students have vencida memberships,
     // but Santiago (stu-007) has pendiente_validacion payment
     const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-005")!;
     expect(getAccountStatusBadge(account)).toEqual({
       label: "Pago pendiente de validación",
-      className: "badge-warning",
+      tone: "warn",
     });
   });
 
-  it('returns "Membresía vencida" + "badge-error" when no active and no pending validation but expired', () => {
+  it('returns "Membresía vencida" + the bad tone when no active and no pending validation but expired', () => {
     // rp-003 (Diego Flores): Camila has vencida membership, no payments at all
     const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-003")!;
     expect(getAccountStatusBadge(account)).toEqual({
       label: "Membresía vencida",
-      className: "badge-error",
+      tone: "bad",
     });
   });
 
-  it("handles accounts with empty estudiantes", () => {
+  it('returns "Sin membresía" in the NEUTRAL tone — never red', () => {
+    // Design system rule, non-negotiable: red is reserved for the primary CTA
+    // and for errors/destructive actions. "Sin membresía" is a state the club
+    // is not alarmed by — a brand-new account has it by definition — so
+    // painting it the same colour as a failure was miscolouring, not emphasis.
     const emptyAccount: MemberAccount = {
       id: "rp-empty",
       role: "representante",
@@ -327,8 +314,8 @@ describe("getAccountStatusBadge", () => {
       estudiantes: [],
     };
     expect(getAccountStatusBadge(emptyAccount)).toEqual({
-      label: "Sin membresía activa",
-      className: "badge-error",
+      label: "Sin membresía",
+      tone: "neutral",
     });
   });
 });

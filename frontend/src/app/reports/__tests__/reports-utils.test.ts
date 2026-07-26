@@ -19,6 +19,9 @@ import {
   PAGOS_REPORT_PAGE_SIZE,
   paginatePagosResults,
   getPagosReportTotalPages,
+  csvField,
+  csvFilename,
+  toCsv,
 } from "../reports-utils";
 
 function buildPersonas(count: number): PersonaReporte[] {
@@ -141,5 +144,62 @@ describe("paginatePagosResults / getPagosReportTotalPages", () => {
     expect(getPagosReportTotalPages(23)).toBe(3);
     expect(getPagosReportTotalPages(10)).toBe(1);
     expect(getPagosReportTotalPages(0)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CSV export
+// ---------------------------------------------------------------------------
+
+describe("csvField", () => {
+  it("leaves an ordinary value untouched", () => {
+    expect(csvField("Ana Vera")).toBe("Ana Vera");
+    expect(csvField(42)).toBe("42");
+  });
+
+  it("renders null and undefined as an empty field, never as the word", () => {
+    expect(csvField(null)).toBe("");
+    expect(csvField(undefined)).toBe("");
+  });
+
+  it("quotes and doubles embedded quotes, commas and newlines", () => {
+    expect(csvField('Ana "La Zurda" Vera')).toBe('"Ana ""La Zurda"" Vera"');
+    expect(csvField("Vera, Ana")).toBe('"Vera, Ana"');
+    expect(csvField("línea 1\nlínea 2")).toBe('"línea 1\nlínea 2"');
+  });
+
+  it("neutralises a value a spreadsheet would evaluate as a formula", () => {
+    // The CSV-injection foothold: without the leading quote Excel runs these.
+    expect(csvField("=1+1")).toBe("'=1+1");
+    expect(csvField("+34600000000")).toBe("'+34600000000");
+    expect(csvField("-5")).toBe("'-5");
+    expect(csvField("@SUM(A1:A9)")).toBe("'@SUM(A1:A9)");
+  });
+});
+
+describe("toCsv", () => {
+  it("writes the header first, then one CRLF-terminated line per row", () => {
+    const csv = toCsv(["Nombre", "Edad"], [
+      ["Ana", 12],
+      ["Luis", 9],
+    ]);
+
+    expect(csv.endsWith("\r\n")).toBe(true);
+    // Strip the BOM before comparing the text itself.
+    expect(csv.slice(1)).toBe("Nombre,Edad\r\nAna,12\r\nLuis,9\r\n");
+  });
+
+  it("starts with a UTF-8 BOM so Excel reads the accents", () => {
+    expect(toCsv(["Cédula"], [["Ordóñez"]]).charCodeAt(0)).toBe(0xfeff);
+  });
+
+  it("still produces a header when there are no rows", () => {
+    expect(toCsv(["Nombre"], []).slice(1)).toBe("Nombre\r\n");
+  });
+});
+
+describe("csvFilename", () => {
+  it("mirrors the backend's PDF naming, zero-padded", () => {
+    expect(csvFilename("periodo", new Date(2026, 6, 5))).toBe("reporte-periodo_2026-07-05.csv");
   });
 });

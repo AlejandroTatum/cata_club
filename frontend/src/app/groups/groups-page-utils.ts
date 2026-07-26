@@ -6,7 +6,12 @@
  */
 
 import type { Grupo } from "@/types/domain";
-import type { StudentRef, GroupCardData, HorarioGroup } from "@/lib/groups-utils";
+import type {
+  StudentRef,
+  GroupCardData,
+  HorarioGroup,
+  HorarioGroupRow,
+} from "@/lib/groups-utils";
 import { getLevelLabel } from "@/lib/groups-utils";
 import type { AlumnoHorario, NivelConOcupacion } from "@/services/api";
 
@@ -180,36 +185,213 @@ export function buildGroupCardsFromNiveles(niveles: NivelConOcupacion[]): GroupC
 }
 
 // ---------------------------------------------------------------------------
-// Pagination (client-side, mirrors members-utils.ts's paginateAccounts/getTotalPages)
+// Categoría cards — one card per training group, not per categoría × weekday
 // ---------------------------------------------------------------------------
 
-/** Horario groups per page for the Gestión de Horarios list. */
-export const HORARIO_GROUPS_PAGE_SIZE = 10;
+/** Weekday display order. Sábado/Domingo last, as the club reads a week. */
+export const DIA_ORDER = [
+  "LUNES",
+  "MARTES",
+  "MIERCOLES",
+  "JUEVES",
+  "VIERNES",
+  "SABADO",
+  "DOMINGO",
+] as const;
 
-/**
- * Slice a (possibly already filtered) horario groups list to a single page.
- *
- * `page` is 1-indexed. Returns an empty array when `page` is beyond the
- * available data — never throws or wraps around.
- */
-export function paginateHorarioGroups(
-  groups: HorarioGroup[],
-  page: number,
-  pageSize: number = HORARIO_GROUPS_PAGE_SIZE,
-): HorarioGroup[] {
-  const start = (page - 1) * pageSize;
-  return groups.slice(start, start + pageSize);
+/** Full weekday names, for every user-facing day label on this screen. */
+export const DIA_LABELS: Record<string, string> = {
+  LUNES: "Lunes",
+  MARTES: "Martes",
+  MIERCOLES: "Miércoles",
+  JUEVES: "Jueves",
+  VIERNES: "Viernes",
+  SABADO: "Sábado",
+  DOMINGO: "Domingo",
+};
+
+/** The Monday–Friday block the club's five business categorías are built on. */
+const WEEKDAYS: readonly string[] = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"];
+
+function diaIndex(dia: string): number {
+  const index = DIA_ORDER.indexOf(dia as (typeof DIA_ORDER)[number]);
+  return index === -1 ? DIA_ORDER.length : index;
 }
 
 /**
- * Total number of pages for a given horario group count.
+ * One training group as the club talks about it: a categoría that meets at a
+ * fixed time on a set of weekdays.
  *
- * Always returns at least 1 (never 0 pages, even for an empty list) so
- * "Página 1 de 1" is a valid state to render.
+ * The backend stores one `HorarioEntrenamiento` row per categoría × weekday and
+ * derives `hora_inicio`/`hora_fin` from `CATEGORIA_METADATA`, so a five-weekday
+ * categoría is five rows describing ONE group with ONE roster. Rendering a card
+ * per row produced twenty-six near-identical cards for five real groups; the
+ * card is the categoría now, and the rows it is made of stay reachable through
+ * `groups` (editing) and `rows` (roster/enrollment).
  */
-export function getHorarioGroupsTotalPages(
-  totalGroups: number,
-  pageSize: number = HORARIO_GROUPS_PAGE_SIZE,
+export interface CategoriaCard {
+  /** Raw backend `categoria` value — the card's identity and React key. */
+  categoria: string;
+  horaInicio: string;
+  horaFin: string;
+  /** Every weekday the categoría runs on, in week order, deduplicated. */
+  dias: string[];
+  /** Distinct entrenadores across the categoría's rows, in first-seen order. */
+  entrenadorIds: number[];
+  /**
+   * The editable units. `groupHorarios` splits a categoría whenever its rows
+   * disagree on entrenador or nivel, so more than one here means the weekdays
+   * are NOT uniformly staffed — something the card has to show, not smooth over.
+   */
+  groups: HorarioGroup[];
+  /** Every underlying `HorarioEntrenamiento` row of the categoría, in week order. */
+  rows: HorarioGroupRow[];
+}
+
+/**
+ * Collapse día-groups into one card per categoría, ordered by start time —
+ * which is also how the club's afternoon runs (Formativo 15:00 → Adultos 20:00).
+ */
+export function buildCategoriaCards(groups: HorarioGroup[]): CategoriaCard[] {
+  const byCategoria = new Map<string, CategoriaCard>();
+
+  for (const group of groups) {
+    let card = byCategoria.get(group.categoria);
+    if (!card) {
+      card = {
+        categoria: group.categoria,
+        horaInicio: group.horaInicio,
+        horaFin: group.horaFin,
+        dias: [],
+        entrenadorIds: [],
+        groups: [],
+        rows: [],
+      };
+      byCategoria.set(group.categoria, card);
+    }
+    card.groups.push(group);
+    card.rows.push(...group.rows);
+    if (!card.entrenadorIds.includes(group.entrenadorId)) {
+      card.entrenadorIds.push(group.entrenadorId);
+    }
+  }
+
+  const cards = Array.from(byCategoria.values());
+  for (const card of cards) {
+    card.rows.sort((a, b) => diaIndex(a.diaSemana) - diaIndex(b.diaSemana));
+    card.dias = Array.from(new Set(card.rows.map((row) => row.diaSemana)));
+  }
+
+  return cards.sort(
+    (a, b) => a.horaInicio.localeCompare(b.horaInicio) || a.categoria.localeCompare(b.categoria),
+  );
+}
+
+/**
+ * Say what a day set actually is, derived from the rows rather than assumed.
+ *
+ * "Lunes a viernes" is the club's normal case, but the live data holds a
+ * Saturday `COMPETITIVO` row, and a categoría whose rows drift away from the
+ * week must read as the exception it is instead of being rounded to the norm.
+ */
+export function formatDiaSet(dias: string[]): string {
+  const present = new Set(dias);
+  const ordered = DIA_ORDER.filter((dia) => present.has(dia));
+
+  if (ordered.length === 0) return "Sin días asignados";
+
+  if (WEEKDAYS.every((dia) => present.has(dia))) {
+    const extras = ordered
+      .filter((dia) => !WEEKDAYS.includes(dia))
+      .map((dia) => DIA_LABELS[dia].toLowerCase());
+    if (extras.length === 0) return "Lunes a viernes";
+    return `Lunes a viernes + ${joinWithY(extras)}`;
+  }
+
+  const labels = ordered.map((dia, index) =>
+    index === 0 ? DIA_LABELS[dia] : DIA_LABELS[dia].toLowerCase(),
+  );
+  return joinWithY(labels);
+}
+
+/** "a, b y c" — the Spanish list separator, no Oxford comma. */
+function joinWithY(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  return `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`;
+}
+
+/**
+ * The weekday track a categoría is read against, in week order.
+ *
+ * The row shows the whole week a group MAY meet (`CATEGORIA_METADATA.dias` —
+ * Lunes a viernes for four of the five categorías, plus Sábado for
+ * Competitivo) and marks the días it actually runs, so "Competitivo also
+ * trains on Saturday" and "these rows skip Martes" are both readable at a
+ * glance instead of only in prose.
+ *
+ * It is a union, not just the allowed set: a categoría whose rows drift
+ * outside their allowed días (or one with no metadata at all, like an
+ * unrecognized `categoria` value) must still show every día it really uses
+ * rather than dropping it off the end of the track.
+ */
+export function buildDiaTrack(
+  permitidos: readonly string[],
+  dias: readonly string[],
+): string[] {
+  const present = new Set([...permitidos, ...dias]);
+  return DIA_ORDER.filter((dia) => present.has(dia));
+}
+
+/**
+ * Roster person-ids per `Horario.id`. A row absent from the map is a request
+ * that never answered — not an empty roster.
+ */
+export type PersonasPorHorario = Record<number, readonly number[]>;
+
+/**
+ * How many distinct students the categoría has, counting a student once no
+ * matter how many of its weekdays they are enrolled in.
+ *
+ * `null` when any of the categoría's rows has no roster yet: this figure is the
+ * one the club plans around, so an undercount is worse than no number at all.
+ */
+export function countInscriptos(
+  rows: readonly HorarioGroupRow[],
+  personas: PersonasPorHorario,
+): number | null {
+  const distinct = new Set<number>();
+  for (const row of rows) {
+    const roster = personas[row.id];
+    if (roster === undefined) return null;
+    for (const personaId of roster) distinct.add(personaId);
+  }
+  return distinct.size;
+}
+
+/**
+ * How many of the categoría's students are missing from at least one of its
+ * weekdays — the club's own data has one such case (a Formativo student
+ * enrolled on Monday only), and a single headcount would hide it.
+ *
+ * 0 while any roster is still missing: an incomplete picture must not report
+ * an anomaly it cannot yet see.
+ */
+export function countInscriptosParciales(
+  rows: readonly HorarioGroupRow[],
+  personas: PersonasPorHorario,
 ): number {
-  return Math.max(1, Math.ceil(totalGroups / pageSize));
+  const rosters: ReadonlySet<number>[] = [];
+  for (const row of rows) {
+    const roster = personas[row.id];
+    if (roster === undefined) return 0;
+    rosters.push(new Set(roster));
+  }
+  if (rosters.length === 0) return 0;
+
+  const distinct = new Set<number>(rosters.flatMap((roster) => Array.from(roster)));
+  let parciales = 0;
+  for (const personaId of distinct) {
+    if (!rosters.every((roster) => roster.has(personaId))) parciales++;
+  }
+  return parciales;
 }

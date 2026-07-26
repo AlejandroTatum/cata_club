@@ -52,8 +52,16 @@ export interface NivelStudentRef {
 /**
  * Build the nivel student list from the lightweight alumnos-con-nivel
  * endpoint (`fetchAlumnosConNivel`), accessible to both admin and trainer.
- * The `actctivo` flag is unknown for this source and therefore defaults to
- * `true` (the panel only needs to assign/move a nivel, not filter by estado).
+ *
+ * This is the single roster source for both nivel screens: the trainer panel
+ * (`/trainer/nivel`) and the admin ladder (`/ranking`). It replaced
+ * `fetchMembers()`, whose route depends on the ADMINISTRADOR-only
+ * `GET /personas/` — a trainer opening `/trainer/nivel` got a real 403.
+ *
+ * The backend already restricts the roster to people holding the ALUMNO role,
+ * so a parent who merely enrolled a child never appears here. The `activo`
+ * flag is not part of this payload and defaults to `true`: the nivel screens
+ * assign and move levels, they do not filter by estado.
  */
 export function buildNivelStudentsFromAlumnos(
   alumnos: ReadonlyArray<{
@@ -70,38 +78,4 @@ export function buildNivelStudentsFromAlumnos(
     activo: true,
     nivelRankingId: a.nivelRankingId,
   }));
-}
-
-/**
- * Build the nivel student list from the real member accounts (fetched via
- * fetchMembers(), same source as src/app/groups/page.tsx). Each student's
- * `grupoId` (their current nivel_ranking id) doubles as their nivel
- * category — there's no separate concept on the backend.
- *
- * @deprecated Prefer buildNivelStudentsFromAlumnos (trainer-accessible).
- */
-export function buildNivelStudents(
-  memberAccounts: ReadonlyArray<{
-    estudiantes: ReadonlyArray<{
-      id: string;
-      nombres: string;
-      apellidos: string;
-      activo: boolean;
-      grupoId: string | null;
-    }>;
-  }>,
-): NivelStudentRef[] {
-  const refs: NivelStudentRef[] = [];
-  for (const account of memberAccounts) {
-    for (const estudiante of account.estudiantes) {
-      refs.push({
-        id: estudiante.id,
-        nombres: estudiante.nombres,
-        apellidos: estudiante.apellidos,
-        activo: estudiante.activo,
-        nivelRankingId: estudiante.grupoId !== null ? Number(estudiante.grupoId) : null,
-      });
-    }
-  }
-  return refs;
 }

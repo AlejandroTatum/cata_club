@@ -21,6 +21,9 @@ import type { NivelConOcupacion, TablaRankingItem } from "@/services/api";
 
 const PERSONAS_PAGE_LIMIT = 200;
 
+/** How many `GET /membresias/{id}` calls may be in flight at once. */
+const MEMBRESIA_FETCH_CONCURRENCY = 8;
+
 interface PaginatedPersonas {
   items: BackendPersonaFull[];
   total: number;
@@ -61,16 +64,75 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  /*
+   * Memberships are resolved ONE BY ONE, not through `GET /membresias/`.
+   *
+   * The list endpoint answers 500 — `MembresiaServicio.listar_membresias`
+   * calls `MembresiaRepositorio.listar()`, which that repository does not
+   * define (backend/app/infraestructura/repositorios/membresia_repositorio.py).
+   * This route used to turn that 500 into `[]` with an `ok &&` guard, so every
+   * student came back with `membresia: null` and `/members` rendered a
+   * confident "Membresías activas · 0" next to a dashboard reading 22 — plus
+   * an empty membership column in the whole table. A swallowed upstream error
+   * must never render as a real zero.
+   *
+   * `GET /membresias/{id}` works, and the ids needed are only those on the
+   * latest payment per persona (~60), not the whole table. They go out in
+   * bounded batches rather than one `Promise.all` over all of them: the
+   * dashboard route's own history (see its header) is that an unbounded fan-out
+   * exhausted the backend connection pool.
+   */
   const uniqueMembresiaIds = [...new Set([...latestPagoByPersona.values()].map((pago) => pago.membresiaId))];
-  const membresiasResult = await backendFetchAuthed(request, `/membresias/?limit=200`);
-  const allMembresias: BackendMembresia[] =
-    membresiasResult.ok && membresiasResult.response.ok
-      ? ((await membresiasResult.response.json()) as { items: BackendMembresia[] }).items
-      : [];
   const membresiaById = new Map<number, BackendMembresia>();
-  for (const m of allMembresias) {
-    if (uniqueMembresiaIds.includes(m.id)) {
-      membresiaById.set(m.id, m);
+  let membresiasDegraded = false;
+
+  for (let i = 0; i < uniqueMembresiaIds.length; i += MEMBRESIA_FETCH_CONCURRENCY) {
+    const batch = uniqueMembresiaIds.slice(i, i + MEMBRESIA_FETCH_CONCURRENCY);
+    const settled = await Promise.all(
+      batch.map(async (id) => {
+        const result = await backendFetchAuthed(request, `/membresias/${id}`);
+        if (!result.ok || !result.response.ok) return null;
+        return (await result.response.json()) as BackendMembresia;
+      }),
+    );
+    for (const membresia of settled) {
+      if (membresia === null) membresiasDegraded = true;
+      else membresiaById.set(membresia.id, membresia);
+    }
+  }
+
+  /*
+   * A membership can exist with no payment behind it — three personas in the
+   * current data hold an ACTIVA membresía and zero Pago rows, so the payment
+   * chain above cannot see them at all and this screen showed them as
+   * membership-less while their own student portal said otherwise. Only the
+   * personas the chain missed are looked up, so this costs nothing for anyone
+   * who has ever paid.
+   */
+  const personasSinPago = personasBody.items
+    .map((persona) => persona.id)
+    .filter((id) => !latestPagoByPersona.has(id));
+  const membresiaByPersona = new Map<number, BackendMembresia>();
+
+  for (let i = 0; i < personasSinPago.length; i += MEMBRESIA_FETCH_CONCURRENCY) {
+    const batch = personasSinPago.slice(i, i + MEMBRESIA_FETCH_CONCURRENCY);
+    const settled = await Promise.all(
+      batch.map(async (personaId) => {
+        const result = await backendFetchAuthed(request, `/membresias/persona/${personaId}`);
+        if (!result.ok || !result.response.ok) return null;
+        const body: unknown = await result.response.json();
+        // A body that is not a list is a broken contract, not "no membership":
+        // treat it as degraded so the page shows "—" rather than a false zero.
+        if (!Array.isArray(body)) return null;
+        const items = body as BackendMembresia[];
+        // An ACTIVA membership is the one worth showing; otherwise the first
+        // row, so a VENCIDA still reads as a lapsed member rather than as none.
+        return { personaId, membresia: items.find((m) => m.estado === "ACTIVA") ?? items[0] ?? null };
+      }),
+    );
+    for (const entry of settled) {
+      if (entry === null) membresiasDegraded = true;
+      else if (entry.membresia) membresiaByPersona.set(entry.personaId, entry.membresia);
     }
   }
 
@@ -85,10 +147,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
   const nivelIdByPersona = new Map(tablaEntries.flat());
 
-  const accounts = buildMemberAccounts(personasBody.items, latestPagoByPersona, membresiaById, tipoById, nivelIdByPersona);
+  const accounts = buildMemberAccounts(
+    personasBody.items,
+    latestPagoByPersona,
+    membresiaById,
+    membresiaByPersona,
+    tipoById,
+    nivelIdByPersona,
+  );
 
   const personasCapped = personasBody.total >= PERSONAS_PAGE_LIMIT;
-  const response = NextResponse.json({ accounts, niveles, personasCapped });
+  const response = NextResponse.json({ accounts, niveles, personasCapped, membresiasDegraded });
   if (personasResult.refreshedAccessToken) {
     setAuthCookies(response, { accessToken: personasResult.refreshedAccessToken });
   }

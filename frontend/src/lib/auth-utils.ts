@@ -6,7 +6,7 @@
  * browser APIs.
  */
 
-import type { UserRole } from "@/types/domain";
+import type { BackendTipoRol, UserRole } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
 // Pure navigation link data (no icon components — use at UI layer)
@@ -40,12 +40,15 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
   const links: NavLinkDef[] = [{ href: "/", label: "Inicio" }];
 
   switch (role) {
+    // Every label below is the destination's own page title, so the nav
+    // never promises a name the screen does not use. The admin set is
+    // transcribed from `docs/ux/prototipos/_nav-admin.html`.
     case "admin":
       links.push(
-        { href: "/dashboard", label: "Administración" },
+        { href: "/dashboard", label: "Panel de Control" },
         { href: "/members", label: "Miembros" },
         { href: "/ranking", label: "Niveles" },
-        { href: "/groups", label: "Gestión de Horarios" },
+        { href: "/groups", label: "Horarios" },
         { href: "/payments", label: "Membresías y Pagos" },
         { href: "/attendance", label: "Asistencias" },
         { href: "/reports", label: "Reportes" },
@@ -53,16 +56,33 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
       break;
     case "trainer":
       links.push(
-        { href: "/trainer", label: "Dashboard" },
-        { href: "/trainer/attendance", label: "Asistencia" },
-        { href: "/trainer/nivel", label: "Nivel" },
+        { href: "/trainer", label: "Mi día" },
+        // Named after the action, not "Asistencia": the admin section called
+        // "Asistencias" is the record list, this one is the act of taking it.
+        // One word apart, they used to read as the same destination.
+        { href: "/trainer/attendance", label: "Pasar lista" },
+        // The prototype `docs/ux/prototipos/19-entrenador.html` dropped this
+        // row on the premise that trainers do not assign levels. They do:
+        // `/trainer/nivel` is a live screen and the backend grants ENTRENADOR
+        // both `asignar-nivel-inicial` and `mover-de-nivel`. The 403 that
+        // prompted the removal came from the roster endpoint, and is fixed —
+        // the screen now reads `GET /ranking/alumnos-con-nivel`.
+        //
+        // "Niveles", not "Nivel": `/trainer/nivel` renders the very same
+        // `NivelLadderScreen` the admin's `/ranking` renders, under the same
+        // title. One screen, one name, whoever is reading the sidebar.
+        { href: "/trainer/nivel", label: "Niveles" },
       );
       break;
     case "representante":
     case "estudiante":
       links.push(
-        { href: "/student", label: "Mi Cuenta" },
+        { href: "/student", label: "Mi cuenta" },
         { href: "/student/payments", label: "Pagos" },
+        // The two things a student actually opens the portal to do. Without
+        // this entry /student/attendance is reachable only from a panel on the
+        // home screen.
+        { href: "/student/attendance", label: "Asistencias" },
       );
       break;
     case "unsupported":
@@ -133,6 +153,49 @@ export function getRoleLabel(role: UserRole): string {
       return "Estudiante";
     case "unsupported":
       return "Rol no soportado";
+  }
+}
+
+/**
+ * Human-readable label for a BACKEND role name, as it arrives on
+ * `PerfilPropio.roles` / `RolesResponse.roles`.
+ *
+ * Distinct from `getRoleLabel`, which names the ONE `UserRole` the session
+ * resolved to. An account can hold several backend roles at once, and
+ * `mapBackendRoleToUserRole` collapses them to the highest-privilege one — so
+ * anywhere the full set must stay visible (see `/profile`'s identity rail),
+ * this is the label to use.
+ */
+export function getBackendRoleLabel(rol: BackendTipoRol): string {
+  switch (rol) {
+    case "ADMINISTRADOR":
+      return "Administrador";
+    case "ENTRENADOR":
+      return "Entrenador";
+    case "REPRESENTANTE":
+      return "Representante";
+    case "ALUMNO":
+      return "Alumno";
+  }
+}
+
+/**
+ * The backend role a given `UserRole` was derived from — the inverse of
+ * `mapBackendRoleToUserRole` (src/lib/server/auth.ts). `null` for
+ * `"unsupported"`, which by definition maps from no known role.
+ */
+export function backendRoleForUserRole(role: UserRole): BackendTipoRol | null {
+  switch (role) {
+    case "admin":
+      return "ADMINISTRADOR";
+    case "trainer":
+      return "ENTRENADOR";
+    case "representante":
+      return "REPRESENTANTE";
+    case "estudiante":
+      return "ALUMNO";
+    case "unsupported":
+      return null;
   }
 }
 

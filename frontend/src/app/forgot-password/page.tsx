@@ -18,8 +18,9 @@
 
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
-import { KeyRound, ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
-import AuthShell from "@/components/auth/AuthShell";
+import { ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
+import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
+import { Button } from "@/components/ui";
 import { solicitarRecuperacion, ApiClientError } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 
@@ -54,78 +55,67 @@ export default function ForgotPasswordPage(): React.ReactElement {
 
   return (
     <AuthShell
-      eyebrow="Cata Club Admin"
-      title="Recuperar contraseña"
-      subtitle={submitted ? undefined : "Ingrese su correo para recibir un enlace de recuperación"}
-      headline={
-        <>
-          Perdiste el punto,
-          <br />
-          no <em className="not-italic text-cata-red-light">el partido</em>.
-        </>
+      title={submitted ? "Revise su correo" : "Recuperar contraseña"}
+      subtitle={
+        submitted
+          ? undefined
+          : "Ingrese su correo para recibir un enlace de recuperación"
       }
-      description="Recuperá el acceso a tu cuenta en un par de pasos. La gestión del club no se detiene."
+      note="Los enlaces de recuperación duran 30 minutos. Si vence, puede pedir uno nuevo desde esta misma pantalla."
     >
       {submitted ? (
-        /* Confirmation card — deliberately identical regardless of whether
-         * the email is registered (mirrors the backend's own contract). */
-        <div className="card p-8 text-center sm:p-9">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-cata-state-ok/10">
-            <CheckCircle2 size={28} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
-          </div>
-          <h2 className="mb-2 text-lg font-semibold text-cata-text">
-            Revise su correo
-          </h2>
-          <p className="text-sm leading-relaxed text-cata-text/65">
-            Si <strong>{correo.trim()}</strong> está registrado, recibirá un enlace para
-            restablecer su contraseña en unos minutos.
+        /* Confirmation — deliberately identical regardless of whether the
+         * email is registered (mirrors the backend's anti-enumeration
+         * contract). No nested card: the shell already IS the card. */
+        <div className="flex flex-col items-center gap-2.5 py-2 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
+            <CheckCircle2 size={24} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
+          </span>
+          <p className="text-[13px] leading-relaxed text-ink-2">
+            Si <strong className="font-semibold text-ink">{correo.trim()}</strong> está
+            registrado, recibirá un enlace para restablecer su contraseña en unos minutos.
           </p>
         </div>
       ) : (
-        <div className="card p-8 sm:p-9">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-cata-red/10">
-            <KeyRound size={28} className="text-cata-red" strokeWidth={1.5} aria-hidden="true" />
-          </div>
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="correo" className="mb-1.5 block text-sm font-medium text-cata-text">
-                Correo electrónico
-              </label>
-              <div className="relative">
-                <Mail
-                  size={16}
-                  strokeWidth={1.5}
-                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-cata-text/65"
-                  aria-hidden="true"
-                />
-                <input
-                  type="email"
-                  id="correo"
-                  name="correo"
-                  value={correo}
-                  onChange={(e) => setCorreo(e.target.value)}
-                  placeholder="correo@ejemplo.com"
-                  required
-                  disabled={submitting}
-                  className="input-field pl-10"
-                />
-              </div>
+        <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
+          <div>
+            <label htmlFor="correo" className={AUTH_LABEL_CLASSES}>
+              Correo electrónico
+            </label>
+            <div className="relative">
+              <Mail
+                size={15}
+                strokeWidth={1.5}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
+                aria-hidden="true"
+              />
+              <input
+                type="email"
+                id="correo"
+                name="correo"
+                value={correo}
+                onChange={(e) => setCorreo(e.target.value)}
+                placeholder="correo@ejemplo.com"
+                required
+                disabled={submitting}
+                className={`${AUTH_INPUT_CLASSES} pl-9`}
+              />
             </div>
+          </div>
 
-            <button type="submit" disabled={submitting} className="btn-primary w-full shadow-soft">
-              {submitting ? "Enviando..." : "Enviar enlace de recuperación"}
-            </button>
-          </form>
-        </div>
+          <Button type="submit" variant="primary" disabled={submitting} className="w-full">
+            {submitting ? "Enviando…" : "Enviar enlace de recuperación"}
+          </Button>
+        </form>
       )}
 
-      {/* Auth companion link — back to login */}
-      <p className="mt-6 text-center text-sm text-cata-text/65">
+      {/* `.fcard .aux` — 12.5px line with the action in red/600. */}
+      <p className="text-center text-[12.5px] text-ink-3">
         <Link
           href="/login"
-          className="inline-flex items-center gap-1.5 font-medium text-cata-red transition-colors hover:text-cata-red-light"
+          className="inline-flex items-center gap-1.5 font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
         >
-          <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+          <ArrowLeft size={13} strokeWidth={2} aria-hidden="true" />
           Volver a Iniciar Sesión
         </Link>
       </p>
