@@ -39,9 +39,21 @@ export default defineConfig({
      different one. */
   webServer: E2E_SERVER_IS_MANAGED
     ? {
+        /* `next build` writes neither `public/` nor `.next/static` into the
+           standalone output — that copy is the caller's job. CI already does it
+           in its own "Prepare standalone" step; without the same copy here the
+           local run served a build with no static assets at all, so every
+           `next/image` request answered "isn't a valid image ... received null"
+           and specs failed for reasons that had nothing to do with the code.
+           Written to be safe to re-run: copying the CONTENTS of each directory
+           never nests a second copy inside the previous one. */
         command: process.env.CI
           ? "node .next/standalone/server.js"
-          : "pnpm build && node .next/standalone/server.js",
+          : "pnpm build"
+            + " && mkdir -p .next/standalone/public .next/standalone/.next/static"
+            + " && cp -r public/. .next/standalone/public/"
+            + " && cp -r .next/static/. .next/standalone/.next/static/"
+            + " && node .next/standalone/server.js",
         url: E2E_BASE_URL,
         env: { PORT: String(E2E_PORT), HOSTNAME: "127.0.0.1" },
         /* Never adopt a process this run did not start. Reuse is exactly how

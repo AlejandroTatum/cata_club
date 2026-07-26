@@ -34,12 +34,15 @@ export const metadata: Metadata = {
     title: "Cata Club — Tenis de Mesa en Loja",
     description:
       "Formando campeones para la vida desde 2013. Entrenamientos formativos, infantiles, juveniles, competitivos y para adultos en Loja, Ecuador.",
+    /* Tracks the hero: the share card and the first thing a visitor sees on
+       arrival should be the same photograph. Width and height must match the
+       real file, or the preview card renders at the wrong ratio. */
     images: [
       {
-        url: "/landing/hero-photo.jpeg",
-        width: 1200,
-        height: 984,
-        alt: "Entrenadores, deportistas y familias de Cata Club celebrando juntos",
+        url: "/landing/hero-action.jpeg",
+        width: 1440,
+        height: 1200,
+        alt: "Deportista de Cata Club ejecutando un saque durante un torneo",
       },
     ],
   },

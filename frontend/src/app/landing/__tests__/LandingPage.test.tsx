@@ -3,6 +3,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
+import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
 import LandingPage from "@/app/landing/LandingPage";
 
 vi.mock("next/image", (): { __esModule: boolean; default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }) => React.ReactElement } => ({
@@ -149,8 +150,34 @@ describe("LandingPage", (): void => {
   it("promotes the championship specifics into the visible gallery caption", (): void => {
     render(<LandingPage />);
 
-    expect(screen.getByAltText("Cata Club athletes at the South American U11-U13 Table Tennis Championship in Asunción, Paraguay")).toBeInTheDocument();
-    expect(screen.getByText(/Sudamericano Sub-11 y Sub-13/i)).toHaveTextContent("Asunción, Paraguay");
+    expect(screen.getByText(/Sudamericano Sub-11 y Sub-13/i)).toHaveTextContent("Asunción");
+  });
+
+  it("renders every configured photo as a carousel slide", (): void => {
+    render(<LandingPage />);
+
+    const slides = Array.from(document.querySelectorAll(".landing-slide"));
+    expect(slides).toHaveLength(GALLERY_PHOTOS.length);
+    GALLERY_PHOTOS.forEach((photo, index): void => {
+      expect(slides[index].querySelector("img")).toHaveAttribute("src", photo.src);
+      expect(slides[index].querySelector("img")).toHaveAttribute("alt", photo.alt);
+      expect(slides[index].querySelector("figcaption")).toHaveTextContent(photo.caption);
+    });
+  });
+
+  /**
+   * The carousel is a progressive enhancement. The markup ships as a plain
+   * scrollable strip so it stays usable before the motion layer loads, when JS
+   * fails outright, and when the visitor prefers reduced motion — the script
+   * only takes the track over once it is ready to drive it.
+   */
+  it("ships the carousel as a scrollable strip that works without the motion layer", (): void => {
+    render(<LandingPage />);
+
+    const track = document.querySelector(".landing-carousel");
+    expect(track).not.toBeNull();
+    expect(track).toHaveAttribute("data-carousel");
+    expect(track?.className).not.toContain("is-enhanced");
   });
 
   it("exposes the active landing destination to assistive technology", (): void => {
@@ -178,15 +205,56 @@ describe("LandingPage", (): void => {
 
     const prioritized = Array.from(document.querySelectorAll("img[data-priority='true']"));
     expect(prioritized).toHaveLength(1);
-    expect(prioritized[0]).toHaveAttribute("src", "/landing/hero-photo.jpeg");
+    expect(prioritized[0]).toHaveAttribute("src", "/landing/hero-action.jpeg");
   });
 
-  it("gives every value card its own icon", (): void => {
+  /**
+   * Fourteen carousel photos below the fold must not compete with the hero for
+   * bandwidth, or the LCP image lands behind images nobody has scrolled to.
+   */
+  it("defers every carousel photo so it cannot delay the hero", (): void => {
     render(<LandingPage />);
 
-    const valueIcons = Array.from(document.querySelectorAll(".landing-value .landing-card-title svg"));
-    expect(valueIcons).toHaveLength(4);
-    expect(new Set(valueIcons.map((icon): string => icon.getAttribute("class") ?? "")).size).toBe(4);
+    const slideImages = Array.from(document.querySelectorAll(".landing-slide img"));
+    expect(slideImages.length).toBeGreaterThan(0);
+    slideImages.forEach((image): void => {
+      expect(image).toHaveAttribute("loading", "lazy");
+    });
+  });
+
+  /**
+   * The icon chips are gone on purpose. A 40x40 tinted square holding a generic
+   * glyph is the visual signature of a bought template, and it was repeated six
+   * times. Rank is now carried by an index, scale, and a single rule.
+   */
+  it("ranks the editorial blocks by index and typography rather than icon chips", (): void => {
+    render(<LandingPage />);
+
+    const blocks = Array.from(document.querySelectorAll(".landing-editorial-item"));
+    expect(blocks).toHaveLength(2);
+    expect(document.querySelectorAll(".landing-editorial-item svg")).toHaveLength(0);
+    expect(blocks.map((block): string | null => block.querySelector(".landing-index")?.textContent ?? null))
+      .toEqual(["01", "02"]);
+  });
+
+  it("numbers every value instead of giving it an icon", (): void => {
+    render(<LandingPage />);
+
+    const values = Array.from(document.querySelectorAll(".landing-value"));
+    expect(values).toHaveLength(4);
+    expect(document.querySelectorAll(".landing-value svg")).toHaveLength(0);
+    expect(values.map((value): string | null => value.querySelector(".landing-index")?.textContent ?? null))
+      .toEqual(["01", "02", "03", "04"]);
+  });
+
+  it("keeps each value's heading and description together in its own article", (): void => {
+    render(<LandingPage />);
+
+    const values = Array.from(document.querySelectorAll(".landing-value"));
+    values.forEach((value): void => {
+      expect(value.querySelector("h3")?.textContent).toBeTruthy();
+      expect(value.querySelector("p")?.textContent).toBeTruthy();
+    });
   });
 
   it("gives every footer service link its own destination", (): void => {

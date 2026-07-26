@@ -16,6 +16,9 @@
   --landing-bg-base: #f9fafb;
   --landing-surface-base: #ffffff;
   --landing-text-base: #1f2937;
+  /* Quiet text (index markers, labels). 4.83:1 on --landing-bg-base, where the
+     border grey these markers first used reached only 1.3:1. */
+  --landing-text-muted-base: #6b7280;
   --landing-border-base: #e5e7eb;
   --landing-state-ok: #15803d;
   --landing-third-party-whatsapp: #25d366;
@@ -27,6 +30,7 @@
   --landing-surface: var(--landing-surface-base);
   --landing-text: var(--landing-text-base);
   --landing-text-strong: var(--landing-brand-black);
+  --landing-text-muted: var(--landing-text-muted-base);
   --landing-border: var(--landing-border-base);
   --landing-action: var(--landing-brand-red);
   --landing-action-hover: var(--landing-brand-red-strong);
@@ -37,6 +41,9 @@
   --landing-on-action: var(--landing-surface-base);
   --landing-on-highlight: var(--landing-brand-black);
   --landing-focus: var(--landing-brand-black);
+  /* The section gutter, as a variable so the full-bleed carousel can cancel
+     exactly the padding its section applies at every breakpoint. */
+  --landing-gutter: 8.33vw;
   --landing-footer: var(--landing-brand-black);
   color: var(--landing-text);
   /* `clip` (not `hidden`) so the page never becomes a scroll container —
@@ -108,25 +115,40 @@
 
 .landing-section { position: relative; display: flex; flex-direction: column; align-items: center; gap: 44px; padding: 76px 8.33vw; overflow: hidden; }
 .landing-section > * { position: relative; z-index: 1; }
-.landing-section-header { display: flex; flex-direction: column; align-items: center; gap: 14px; }
-.landing-section-header .landing-eyebrow { font-size: 12.5px; }
-.landing-section-header h2 { font-family: var(--font-landing-graduate); font-size: 34px; text-align: center; text-transform: uppercase; }
-.landing-separator { display: flex; align-items: center; gap: 12px; }
-.landing-separator::before, .landing-separator::after { content: ""; width: 70px; height: 1.5px; background: var(--landing-action); opacity: .55; }
-.landing-separator i { width: 9px; height: 9px; background: var(--landing-action); transform: rotate(45deg); }
-.landing-card-row, .landing-value-row, .landing-gallery-row, .landing-schedule-row, .landing-location-row { display: flex; width: 100%; gap: 24px; }
-.landing-card { flex: 1; padding: 28px; border: 1px solid var(--landing-border); border-radius: 16px; background: var(--landing-surface); box-shadow: 0 2px 14px color-mix(in srgb, var(--landing-brand-black) 6%, transparent); }
-.landing-card-title { display: flex; align-items: center; gap: 14px; }
-.landing-card-title > span { display: flex; width: 40px; height: 40px; flex: none; align-items: center; justify-content: center; border-radius: 10px; background: var(--landing-highlight-soft); color: var(--landing-text-strong); }
-.landing-card-title svg { width: 22px; }
-.landing-card h3, .landing-contact h3 { font-family: var(--font-landing-graduate); font-size: 20px; text-transform: uppercase; }
-.landing-card hr { margin: 14px 0; border: 0; border-top: 1px solid var(--landing-border); }
-.landing-card p { color: var(--landing-text); font-size: 17px; line-height: 1.65; }
+/* Left-aligned and asymmetric. The centred eyebrow/rule/diamond stack it
+   replaces is the arrangement every bought template ships with. */
+.landing-section-header { display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 16px; }
+.landing-section-header .landing-eyebrow { display: flex; align-items: center; gap: 14px; font-size: 12.5px; }
+.landing-section-header .landing-eyebrow::before { content: ""; width: 34px; height: 2px; background: currentColor; }
+.landing-section-header h2 { max-width: 15ch; font-family: var(--font-landing-graduate); font-size: clamp(30px, 4.2vw, 48px); line-height: 1.08; text-transform: uppercase; }
+.landing-value-row, .landing-schedule-row, .landing-location-row { display: flex; width: 100%; gap: 24px; }
+
+/* Editorial blocks. Rank comes from an index, a scale jump and one rule —
+   no tinted icon chip, and no <hr> pretending to be structure. */
+.landing-editorial { display: grid; width: 100%; grid-template-columns: 1fr 1fr; }
+.landing-editorial-item { padding-right: 44px; }
+.landing-editorial-item + .landing-editorial-item { padding-right: 0; padding-left: 44px; border-left: 1px solid var(--landing-border); }
+.landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-graduate); font-size: 15px; letter-spacing: 3px; }
+.landing-index-label { color: var(--landing-text-muted); font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+.landing-index-label::before { content: "—"; margin: 0 8px; }
+.landing-editorial-item h3 { margin-top: 10px; color: var(--landing-text-strong); font-family: var(--font-landing-graduate); font-size: clamp(22px, 2.4vw, 32px); line-height: 1.1; text-transform: uppercase; }
+/* Sized here, animated from 0 by the motion layer, so it is already drawn
+   when that layer never runs or the visitor prefers reduced motion. */
+.landing-rule { display: block; width: 64px; height: 3px; margin: 20px 0 22px; background: var(--landing-action); }
+.landing-editorial-item p { max-width: 46ch; color: var(--landing-text); font-size: 17.5px; line-height: 1.72; }
+.landing-editorial-item p + p { margin-top: 16px; }
+.landing-lead { color: var(--landing-text-strong); font-family: var(--font-landing-playfair), Georgia, serif; font-size: 21px !important; font-weight: 600; line-height: 1.5 !important; }
+.landing-contact h3 { font-family: var(--font-landing-graduate); font-size: 20px; text-transform: uppercase; }
+
 .landing-values { background: var(--landing-background); }
-.landing-value-row { gap: 20px; }
-.landing-value { padding: 26px; }
-.landing-value h3 { font-size: 15px; }
-.landing-value p { color: var(--landing-text); font-size: 16px; line-height: 1.6; }
+.landing-value-row { gap: 0; }
+.landing-value { position: relative; flex: 1; min-width: 0; padding: 34px 28px 0 0; }
+.landing-value + .landing-value { padding-right: 0; padding-left: 28px; border-left: 1px solid var(--landing-border); }
+.landing-value-rule { position: absolute; top: 0; left: 0; display: block; width: 100%; height: 2px; background: var(--landing-action); }
+.landing-value .landing-index { display: block; font-size: 34px; letter-spacing: 0; line-height: 1; transition: color 300ms ease; }
+.landing-value:hover .landing-index { color: var(--landing-action); }
+.landing-value h3 { margin: 16px 0 10px; color: var(--landing-text-strong); font-family: var(--font-landing-graduate); font-size: 17px; letter-spacing: 1px; text-transform: uppercase; }
+.landing-value p { color: var(--landing-text); font-size: 16px; line-height: 1.65; }
 
 .landing-motto { gap: 22px; padding: 84px 14vw; background: var(--landing-action); }
 .landing-motto .landing-halftone { mask-image: radial-gradient(circle at 4% 96%,var(--landing-brand-black),transparent 42%); }
@@ -137,9 +159,35 @@
 .landing-motto .landing-button { background: var(--landing-highlight); color: var(--landing-on-highlight); }
 .landing-motto .landing-button:hover { background: var(--landing-brand-fuchsia); color: var(--landing-on-highlight); }
 
-.landing-gallery-row figure { flex: 1; min-width: 0; text-align: center; }
-.landing-gallery img { width: 100%; height: auto; aspect-ratio: 10 / 7; border-radius: 14px; object-fit: cover; box-shadow: 0 4px 18px color-mix(in srgb, var(--landing-brand-black) 14%, transparent); }
-.landing-gallery figcaption { margin-top: 10px; color: var(--landing-text); font-size: 15px; }
+/* Full-bleed by cancelling the section gutter, never by `100vw`: inside this
+   centring flex column `100vw` resolves against the wrong box, and it also
+   counts the scrollbar, which pushes the track off-centre and adds overflow. */
+.landing-carousel-wrap { position: relative; align-self: stretch; margin-inline: calc(-1 * var(--landing-gutter)); }
+/* Base state is a plain scrollable strip, usable before the motion layer
+   loads and when it never does. `is-enhanced` hands it to the GSAP loop. */
+.landing-carousel { display: flex; gap: 22px; padding: 8px var(--landing-gutter); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.landing-carousel::-webkit-scrollbar { display: none; }
+.landing-carousel.is-enhanced { padding-inline: 0; overflow: hidden; cursor: grab; scroll-snap-type: none; touch-action: pan-y; }
+.landing-carousel.is-dragging { cursor: grabbing; }
+/* `figure` carries a UA margin of `1em 40px`. Left in place it adds 80px of
+   layout width per slide, so the loop measures a track wider than the visible
+   one and the spacing drifts out by that much on every frame. */
+/* Uniform height, natural width. Forcing every frame into one portrait box
+   would crop the wide group shots down to a third of the people in them, and
+   would make HEIGHT the binding dimension under `object-fit: cover` — the one
+   dimension `sizes` cannot describe, which is how a landscape photo ends up
+   scaled 2.2x past the resolution the browser actually downloaded.
+   Keep in step with SLIDE_HEIGHT_DESKTOP / SLIDE_HEIGHT_MOBILE. */
+.landing-carousel { --landing-slide-height: 468px; }
+.landing-slide { position: relative; height: var(--landing-slide-height); flex: none; margin: 0; overflow: hidden; border-radius: 16px; background: var(--landing-brand-black); scroll-snap-align: center; }
+.landing-slide img { display: block; width: auto; height: 100%; object-fit: cover; transition: transform 800ms cubic-bezier(.16,1,.3,1); }
+.landing-slide:hover img { transform: scale(1.05); }
+.landing-slide::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, color-mix(in srgb, var(--landing-brand-black) 72%, transparent) 0%, transparent 42%); }
+.landing-slide figcaption { position: absolute; z-index: 2; right: 18px; bottom: 18px; left: 18px; color: var(--landing-on-action); font-size: 14px; font-weight: 600; line-height: 1.4; }
+/* Tells the eye the strip continues past the viewport edge. */
+.landing-carousel-wrap::before, .landing-carousel-wrap::after { content: ""; position: absolute; z-index: 3; top: 0; bottom: 0; width: var(--landing-gutter); pointer-events: none; }
+.landing-carousel-wrap::before { left: 0; background: linear-gradient(90deg, var(--landing-background), transparent); }
+.landing-carousel-wrap::after { right: 0; background: linear-gradient(270deg, var(--landing-background), transparent); }
 .landing-schedule { background: var(--landing-surface); }
 .landing-schedule-row { flex-wrap: wrap; gap: 12px; }
 .landing-schedule-card { flex: 1; display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 32px 24px; border: 1px solid var(--landing-border); border-top: 5px solid var(--landing-action); border-radius: 16px; background: var(--landing-surface); text-align: center; box-shadow: 0 2px 14px color-mix(in srgb, var(--landing-brand-black) 6%, transparent); }
@@ -192,9 +240,13 @@
   .landing-nav-links { gap: 18px; }
   .landing-hero { gap: 40px; padding-inline: 48px; }
   .landing-hero-animation { flex-basis: 524px; height: 449px; }
+  .landing-page { --landing-gutter: 48px; }
   .landing-section, .landing-stats, .landing-footer { padding-inline: 48px; }
-  .landing-value-row { flex-wrap: wrap; }
-  .landing-value { flex-basis: calc(50% - 10px); }
+  /* Two up. The vertical dividers go with the single row that justified them —
+     wrapped, they would strand a rule at the start of the second row. Each
+     value's own top rule already separates it. */
+  .landing-value-row { display: grid; gap: 28px; grid-template-columns: 1fr 1fr; }
+  .landing-value, .landing-value + .landing-value { padding: 34px 0 0; border-left: 0; }
   /* 3-up instead of five cramped columns between 769px and 1024px. */
   .landing-schedule-card { flex: 1 1 calc(33.333% - 8px); }
   .landing-contact { width: 360px; }
@@ -214,14 +266,19 @@
   .landing-hero-animation { width: 100%; height: min(76vw, 410px); flex: none; }
   .landing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 36px 12px; padding: 42px 20px; }
   .landing-stat strong { font-size: 38px; }
+  .landing-page { --landing-gutter: 24px; }
+  .landing-carousel { --landing-slide-height: 340px; }
   .landing-section, .landing-footer { padding: 64px 24px; }
-  .landing-card-row, .landing-gallery-row, .landing-schedule-row, .landing-location-row { flex-direction: column; }
-  .landing-value-row { flex-direction: column; }
-  .landing-value { flex-basis: auto; }
+  .landing-schedule-row, .landing-location-row { flex-direction: column; }
+  .landing-value-row { grid-template-columns: 1fr; }
+  /* Stacked, the divider has to move to the top edge or it draws a rule down
+     the side of a single column. */
+  .landing-editorial { grid-template-columns: 1fr; }
+  .landing-editorial-item { padding-right: 0; }
+  .landing-editorial-item + .landing-editorial-item { margin-top: 34px; padding-top: 34px; padding-left: 0; border-top: 1px solid var(--landing-border); border-left: 0; }
   .landing-schedule-card { flex: none; }
   .landing-motto { padding-inline: 28px; }
   .landing-motto .landing-motto-lead { font-size: 28px; }
-  .landing-gallery img { height: auto; aspect-ratio: 10 / 7; }
   .landing-map { width: 100%; flex: none; }
   .landing-contact { width: 100%; }
   .landing-footer-top { flex-direction: column; gap: 36px; }

@@ -3,37 +3,30 @@ import Link from "next/link";
 import {
   ArrowRight,
   CalendarDays,
-  Eye,
   Facebook,
-  Flame,
-  Handshake,
   Instagram,
   MapPin,
   MessageCircle,
   Navigation,
   Phone,
   Star,
-  Target,
-  Timer,
-  Users,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import LandingMap from "./LandingMap";
 import LandingMotion from "./LandingMotion";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { buildLandingStats, landingConfig, toWhatsAppLink, type LandingSchedule } from "./landing-config";
+import { GALLERY_PHOTOS, slideSizes } from "./landing-gallery";
 
 interface SectionHeaderProps {
   eyebrow: string;
   title: string;
-  dark?: boolean;
 }
 
 interface ScheduleCardProps extends LandingSchedule {}
 
 interface ValueCardProps {
+  index: string;
   title: string;
-  icon: LucideIcon;
   children: React.ReactNode;
 }
 
@@ -47,30 +40,6 @@ interface ValueCardProps {
  */
 const ENROLL_HREF = "/student/enroll";
 
-interface GalleryItem {
-  src: string;
-  alt: string;
-  caption: string;
-}
-
-const GALLERY_ITEMS: GalleryItem[] = [
-  {
-    src: "/landing/gallery-young-athletes.jpeg",
-    alt: "Young Cata Club athlete returning a serve during a match",
-    caption: "Nuestras futuras promesas",
-  },
-  {
-    src: "/landing/gallery-competition.jpeg",
-    alt: "Cata Club athletes at the South American U11-U13 Table Tennis Championship in Asunción, Paraguay",
-    caption: "Sudamericano Sub-11 y Sub-13 · Asunción, Paraguay",
-  },
-  {
-    src: "/landing/gallery-achievement.jpeg",
-    alt: "Cata Club athletes celebrating a podium achievement",
-    caption: "Los frutos del esfuerzo",
-  },
-];
-
 function Stars(): React.ReactElement {
   return (
     <span className="landing-stars" aria-hidden="true">
@@ -79,12 +48,16 @@ function Stars(): React.ReactElement {
   );
 }
 
-function SectionHeader({ eyebrow, title, dark = false }: SectionHeaderProps): React.ReactElement {
+/**
+ * Left-aligned on purpose. A centred eyebrow above a centred rule above a
+ * centred diamond is the arrangement every template ships with; an offset
+ * baseline gives the eye a single edge to track down the page.
+ */
+function SectionHeader({ eyebrow, title }: SectionHeaderProps): React.ReactElement {
   return (
-    <header className={`landing-section-header${dark ? " on-dark" : ""}`}>
+    <header className="landing-section-header" data-reveal>
       <span className="landing-eyebrow">{eyebrow}</span>
       <h2>{title}</h2>
-      <span className="landing-separator" aria-hidden="true"><i /></span>
     </header>
   );
 }
@@ -118,7 +91,7 @@ function Hero(): React.ReactElement {
       <span className="landing-ribbon landing-ribbon-top" aria-hidden="true" />
       <div className="landing-hero-copy">
         <span className="landing-hero-brand"><b>Tenis de Mesa</b> · Cata Club</span>
-        <h1 className="landing-display">FORMANDO <span>CAMPEONES</span> PARA LA VIDA</h1>
+        <h1 className="landing-display" data-split>FORMANDO <span>CAMPEONES</span> PARA LA VIDA</h1>
         <p>Únete a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
         <div className="landing-hero-actions">
           <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
@@ -126,15 +99,30 @@ function Hero(): React.ReactElement {
         </div>
         <div className="landing-hero-note"><Stars /><span>Club deportivo formativo · Fundado en 2013</span></div>
       </div>
-      <div className="landing-hero-animation" data-hero-parallax>
+      <div className="landing-hero-animation" data-media-reveal>
         <div className="landing-hero-screen">
+          {/*
+           * The only true action photograph in the set: a rally in progress
+           * beats another posed group shot as the first thing anyone sees.
+           *
+           * The asset is pre-cropped to the 6:5 of this box. `sizes` only ever
+           * describes WIDTH, so against a box taller than the image `object-fit:
+           * cover` makes HEIGHT the binding dimension and scales the picture up
+           * to cover it — detail the browser was never asked to download.
+           * Matching the ratio leaves cover with nothing to crop.
+           *
+           * `quality` overrides Next's default 75, which visibly mushed a
+           * photograph this busy.
+           */}
           <Image
             className="landing-hero-photo"
-            src="/landing/hero-photo.jpeg"
-            alt="Entrenadores, deportistas y familias de Cata Club celebrando juntos"
+            src="/landing/hero-action.jpeg"
+            alt="Deportista de Cata Club ejecutando un saque durante un torneo"
             fill
             priority
-            sizes="(max-width: 768px) 90vw, 620px"
+            quality={90}
+            sizes="(max-width: 768px) 86vw, (max-width: 1024px) 496px, 592px"
+            data-hero-parallax
           />
         </div>
       </div>
@@ -160,27 +148,36 @@ function MissionVision(): React.ReactElement {
   return (
     <section className="landing-section" id="nosotros" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Quiénes somos" title="Misión y Visión" />
-      <div className="landing-card-row">
-        <article className="landing-card" data-reveal>
-          <div className="landing-card-title"><span><Target aria-hidden="true" /></span><h3>Nuestra Misión</h3></div>
-          <hr />
-          <p>Promover el tenis de mesa mediante formación deportiva de calidad, fomentando el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
+      <div className="landing-editorial">
+        <article className="landing-editorial-item" data-reveal>
+          <span className="landing-index" aria-hidden="true">01</span>
+          <span className="landing-index-label" aria-hidden="true">Propósito</span>
+          <h3>Nuestra Misión</h3>
+          {/* Drawn in by the motion layer; the only movement in the block, so
+              it reads as emphasis rather than decoration. */}
+          <span className="landing-rule" aria-hidden="true" data-rule />
+          <p className="landing-lead">Promover el tenis de mesa mediante formación deportiva de calidad.</p>
+          <p>Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
         </article>
-        <article className="landing-card" data-reveal>
-          <div className="landing-card-title"><span><Eye aria-hidden="true" /></span><h3>Nuestra Visión</h3></div>
-          <hr />
-          <p>Ser un club líder y referente provincial y nacional, preparando deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
+        <article className="landing-editorial-item" data-reveal>
+          <span className="landing-index" aria-hidden="true">02</span>
+          <span className="landing-index-label" aria-hidden="true">Horizonte</span>
+          <h3>Nuestra Visión</h3>
+          <span className="landing-rule" aria-hidden="true" data-rule />
+          <p className="landing-lead">Ser un club líder y referente provincial y nacional.</p>
+          <p>Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
         </article>
       </div>
     </section>
   );
 }
 
-function ValueCard({ title, icon: Icon, children }: ValueCardProps): React.ReactElement {
+function ValueCard({ index, title, children }: ValueCardProps): React.ReactElement {
   return (
-    <article className="landing-card landing-value" data-reveal>
-      <div className="landing-card-title"><span><Icon aria-hidden="true" /></span><h3>{title}</h3></div>
-      <hr />
+    <article className="landing-value" data-reveal data-value>
+      <span className="landing-value-rule" aria-hidden="true" data-rule />
+      <span className="landing-index" aria-hidden="true">{index}</span>
+      <h3>{title}</h3>
       <p>{children}</p>
     </article>
   );
@@ -191,10 +188,10 @@ function Values(): React.ReactElement {
     <section className="landing-section landing-values" id="valores" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Lo que nos mueve" title="Nuestros Valores" />
       <div className="landing-value-row">
-        <ValueCard title="Respeto" icon={Handshake}>Honramos a rivales, compañeros y entrenadores en cada encuentro.</ValueCard>
-        <ValueCard title="Disciplina" icon={Timer}>El progreso nace de la constancia y el entrenamiento diario.</ValueCard>
-        <ValueCard title="Esfuerzo" icon={Flame}>Cada punto se gana con entrega y dedicación total.</ValueCard>
-        <ValueCard title="Compañerismo" icon={Users}>Crecemos como una familia, celebrando juntos cada logro.</ValueCard>
+        <ValueCard index="01" title="Respeto">Honramos a rivales, compañeros y entrenadores en cada encuentro.</ValueCard>
+        <ValueCard index="02" title="Disciplina">El progreso nace de la constancia y el entrenamiento diario.</ValueCard>
+        <ValueCard index="03" title="Esfuerzo">Cada punto se gana con entrega y dedicación total.</ValueCard>
+        <ValueCard index="04" title="Compañerismo">Crecemos como una familia, celebrando juntos cada logro.</ValueCard>
       </div>
     </section>
   );
@@ -212,17 +209,34 @@ function Motto(): React.ReactElement {
   );
 }
 
+/**
+ * Ships as a plain overflow-scrolling strip. The motion layer upgrades it to a
+ * seamless drag-and-inertia loop by adding `is-enhanced`, so the gallery is
+ * fully usable before that script runs, if it never runs, and when the visitor
+ * prefers reduced motion.
+ */
 function Gallery(): React.ReactElement {
   return (
     <section className="landing-section landing-gallery" id="galeria" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Nuestra academia" title="Galería" />
-      <div className="landing-gallery-row">
-        {GALLERY_ITEMS.map((item): React.ReactElement => (
-          <figure key={item.src} data-reveal>
-            <Image src={item.src} alt={item.alt} width={400} height={280} sizes="(max-width: 768px) 100vw, 33vw" />
-            <figcaption>{item.caption}</figcaption>
-          </figure>
-        ))}
+      <div className="landing-carousel-wrap">
+        <div className="landing-carousel" data-carousel role="group" aria-label="Galería de fotos del club">
+          {GALLERY_PHOTOS.map((photo): React.ReactElement => (
+            <figure className="landing-slide" key={photo.src}>
+              <Image
+                src={photo.src}
+                alt={photo.alt}
+                width={photo.width}
+                height={photo.height}
+                loading="lazy"
+                quality={85}
+                sizes={slideSizes(photo)}
+                draggable={false}
+              />
+              <figcaption>{photo.caption}</figcaption>
+            </figure>
+          ))}
+        </div>
       </div>
     </section>
   );

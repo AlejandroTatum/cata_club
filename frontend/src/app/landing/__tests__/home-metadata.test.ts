@@ -28,4 +28,20 @@ describe("home page metadata", (): void => {
     const assetPath = path.join(process.cwd(), "public", image.url);
     expect(existsSync(assetPath)).toBe(true);
   });
+
+  /**
+   * A card whose declared size disagrees with the file is laid out by the
+   * scraper at the wrong ratio, so the preview crops or letterboxes. Nothing
+   * about that is visible from this repo — only a decode catches it.
+   */
+  it("declares the openGraph image at the size the file actually is", async (): Promise<void> => {
+    const { metadata } = await import("@/app/page");
+    const [image] = metadata.openGraph?.images as { url: string; width: number; height: number }[];
+
+    const sharp = (await import("sharp")).default;
+    const { width, height } = await sharp(path.join(process.cwd(), "public", image.url)).metadata();
+
+    expect(width).toBe(image.width);
+    expect(height).toBe(image.height);
+  });
 });
