@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # Sin filtro de rama base a proposito: con `branches: [main]` los PRs
+  # apilados (los que apuntan a la rama padre en vez de a main) no
+  # disparaban CI y quedaban sin validar hasta que el padre mergeaba.
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -26,17 +28,73 @@ jobs:
           python-version: "3.13"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        # Pineada al SHA del commit en vez del tag movil: un tag puede
+        # reapuntarse a otro codigo sin que el workflow cambie.
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
 
       - name: Install dependencies
-        run: uv sync --frozen
+        # --no-build: instala solo wheels, sin ejecutar setup scripts de
+        # sdists. Verificado que los 72 paquetes del lock resuelven a wheels.
+        run: uv sync --frozen --no-build
 
       - name: Run tests
         env:
           AMBIENTE: test
           # Ponemos una clave larga simulada para que el validador de Pydantic pase sin problemas
           JWT_SECRET_KEY: "clave_super_secreta_y_segura_de_mas_de_32_caracteres_para_los_tests"
-        run: uv run pytest tests/ -v --cov=app --cov-report=term-missing
+        run: uv run --frozen --no-build pytest tests/ -v --cov=app --cov-report=term-missing
+
+  migraciones-desde-cero:
+    name: Migraciones desde DB vacia (empty -> head)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    # Job dedicado con un servicio Postgres real: `tests/conftest.py` es
+    # SQLite-backed (in-memory), así que el job `backend` NUNCA ejecuta
+    # migraciones Alembic contra Postgres. Esto ya dejó pasar un bug real:
+    # `c4d5e6f7a8b9` referenciaba una constraint con el nombre viejo que no
+    # existe contra una DB creada desde cero (ver el comentario en ese
+    # archivo de migración). Este job es la única prueba de que las 16
+    # migraciones aplican en orden, de punta a punta, sobre Postgres real.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: usuario
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: cataclub_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U usuario -d cataclub_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        # Pineada al SHA del commit en vez del tag movil: un tag puede
+        # reapuntarse a otro codigo sin que el workflow cambie.
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+
+      - name: Install dependencies
+        # --no-build: instala solo wheels, sin ejecutar setup scripts de
+        # sdists. Verificado que los 72 paquetes del lock resuelven a wheels.
+        run: uv sync --frozen --no-build
+
+      - name: Run alembic upgrade head against an empty database
+        env:
+          AMBIENTE: test
+          DATABASE_URL: postgresql+psycopg://usuario:password@localhost:5432/cataclub_ci
+          JWT_SECRET_KEY: "clave_super_secreta_y_segura_de_mas_de_32_caracteres_para_los_tests"
+        run: uv run --frozen --no-build alembic upgrade head
 
   frontend:
     name: Frontend (Node)

@@ -91,6 +91,15 @@ class Settings(BaseSettings):
     # --- Chatbot de FAQ (gateway OpenCode Zen, OpenAI-compatible) ---
     opencode_api_key: str = ""
 
+    # --- Reset de la base de datos de desarrollo (backend/scripts/reset_dev_db.py) ---
+    # Hosts que el script de reset tiene permitido destruir (DROP SCHEMA).
+    # Allow-list INCONDICIONAL: ni siquiera `--forzado` puede saltarla (ver
+    # `validar_reset_permitido`). "db" es el hostname real del servicio
+    # Postgres en docker-compose.yml. CSV, mismo patrón que `cors_origenes_raw`.
+    reset_hosts_permitidos_raw: str = Field(
+        default="localhost,127.0.0.1,db", alias="RESET_HOSTS_PERMITIDOS"
+    )
+
     @property
     def broker_url_efectivo(self) -> str:
         return self.celery_broker_url or self.redis_url
@@ -119,6 +128,12 @@ class Settings(BaseSettings):
                 pass
         # CSV: partir por coma.
         return [p.strip() for p in raw.split(",") if p.strip()]
+
+    @property
+    def reset_hosts_permitidos(self) -> list[str]:
+        """Lista de hosts permitidos para `scripts/reset_dev_db.py`, parseada
+        desde CSV (ver `reset_hosts_permitidos_raw`)."""
+        return [h.strip() for h in self.reset_hosts_permitidos_raw.split(",") if h.strip()]
 
     model_config = SettingsConfigDict(
         env_file=".env",

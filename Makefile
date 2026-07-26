@@ -2,7 +2,7 @@
        lint lint-backend lint-frontend typecheck build build-frontend \
        install install-backend install-frontend \
        docker-up docker-down docker-build \
-       migrate migrate-create seed clean
+       migrate migrate-create db-reset seed seed-bulk clean
 
 # ─── Default ────────────────────────────────────────────────────────────────
 help: ## Show this help
@@ -79,9 +79,20 @@ migrate: ## Run Alembic migrations
 migrate-create: ## Create a new Alembic migration (usage: make migrate-create MSG="add foo")
 	cd backend && uv run alembic revision --autogenerate -m "$(MSG)"
 
+db-reset: ## DESTRUCTIVE (dev only): drop+recreate schema, migrate from empty, reseed. See backend/scripts/RUNBOOK_reset_db.md
+	cd backend && uv run python scripts/reset_dev_db.py
+
 # ─── Seed ───────────────────────────────────────────────────────────────────
-seed: ## Create dev admin user
-	cd backend && uv run python scripts/seed_dev_admin.py
+# Both seeds run inside the backend container, where DATABASE_URL is injected
+# by Compose. From the host shell there is no backend/.env, so Settings falls
+# back to its localhost:5432 default while Compose publishes Postgres on 5433.
+# The base seed also runs automatically on container start when
+# AMBIENTE=development — this target is for re-running it on demand.
+seed: ## Seed the base dev dataset (admin, trainer, students, schedules)
+	docker compose exec backend uv run python scripts/seed_dev_base.py
+
+seed-bulk: ## Seed the large dev dataset (requires `make seed` first)
+	docker compose exec backend uv run python scripts/seed_dev_bulk.py
 
 # ─── Clean ──────────────────────────────────────────────────────────────────
 clean: clean-backend clean-frontend ## Clean caches from both projects
