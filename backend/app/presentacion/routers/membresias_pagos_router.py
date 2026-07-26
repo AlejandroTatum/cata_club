@@ -273,8 +273,16 @@ async def validar_pago(pago_id: int, datos: PagoValidarDTO, db: Session = Depend
     response_model=PagoResponseDTO,
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
-async def obtener_pago(pago_id: int, db: Session = Depends(obtener_sesion)):
-    return PagoServicio(db).obtener_pago(pago_id)
+async def obtener_pago(
+    pago_id: int,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+):
+    return PagoServicio(db).obtener_pago(
+        pago_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+    )
 
 
 # Historial de pagos de una persona (cualquier estado). Autenticado, NO

@@ -14,6 +14,9 @@ from app.presentacion.schemas.asistencia_schemas import (
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.servicios_negocio.politica_acceso import (
+    ADMINISTRADOR_O_ENTRENADOR, PoliticaAccesoPersona,
+)
 
 router = APIRouter(prefix="/asistencias", tags=["Asistencias"])
 
@@ -55,14 +58,29 @@ async def registrar_asistencia(datos: AsistenciaCreateDTO, db: Session = Depends
     return AsistenciaServicio(db).registrar_asistencia(datos)
 
 
-# Historial de asistencia de una persona: dato sensible (presencia/régimen),
-# requiere autenticación (no anónimo).
+# Historial de asistencia de una persona: dato sensible (presencia/régimen).
+# Exigir solo autenticación no alcanzaba: con los ids consecutivos, cualquier
+# sesión del club podía reconstruir la rutina de presencia de cualquier otro
+# socio -- incluidos los menores. Mismo criterio que el resto de las lecturas
+# por `persona_id`: dueño, su representante, o staff (que legítimamente lo
+# necesita para tomar asistencia).
 @router.get(
     "/persona/{persona_id}",
     response_model=List[AsistenciaResponseDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
-async def historial_asistencia_persona(persona_id: int, db: Session = Depends(obtener_sesion)):
+async def historial_asistencia_persona(
+    persona_id: int,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    PoliticaAccesoPersona(db).exigir_acceso(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
+        mensaje="No puede consultar el historial de asistencia de otra persona",
+    )
     return AsistenciaServicio(db).historial_por_persona(persona_id)
 
 
@@ -170,12 +188,25 @@ async def listar_alumnos_por_horario(
     return AsistenciaServicio(db).listar_alumnos_por_horario(horario_id)
 
 
+# Los horarios asignados a un alumno dicen dónde está y a qué hora. El portal
+# del alumno/representante lo consume con el `persona_id` seleccionado (ver
+# `frontend/src/app/student/page.tsx`), que siempre es el propio o el de un
+# representado: la política no le cambia nada al uso legítimo.
 @router.get(
     "/alumnos/{persona_id}/horarios",
     response_model=List[AlumnoHorarioDetalleDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
 async def listar_horarios_por_alumno(
-    persona_id: int, db: Session = Depends(obtener_sesion)
+    persona_id: int,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
 ):
+    PoliticaAccesoPersona(db).exigir_acceso(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
+        mensaje="No puede consultar los horarios de otro alumno",
+    )
     return AsistenciaServicio(db).listar_horarios_por_alumno(persona_id)

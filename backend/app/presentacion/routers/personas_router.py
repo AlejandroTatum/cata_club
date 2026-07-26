@@ -20,8 +20,10 @@ from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.antecedentes_club_servicio import AntecedentesClubServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.servicios_negocio.politica_acceso import (
+    ADMINISTRADOR_O_ENTRENADOR, SOLO_ADMINISTRADOR, PoliticaAccesoPersona,
+)
 from app.dominio.enums import TipoRol
-from app.dominio.excepciones import PermisosInsuficientes
 from pydantic import BaseModel
 from app.presentacion.schemas.base import ResponseBase
 
@@ -161,6 +163,32 @@ async def listar_entrenadores(db: Session = Depends(obtener_sesion)):
     ]
 
 
+# --- Instituciones educativas (selector para inscripción de menores) --------
+# IMPORTANTE: va ANTES de `GET /{persona_id}` por la misma razón ya
+# documentada en `/reportes` y `/entrenadores`. Estaba declarada al final del
+# archivo y quedaba tapada por el comodín, así que respondía 422 siempre. El
+# síntoma no era un error visible: las tres pantallas que consumen el selector
+# (wizard de inscripción, alta de dependiente, crear cuenta del admin) lo
+# ocultan con `instituciones.length > 0`, de modo que el campo simplemente
+# desaparecía del formulario sin avisar. `test_orden_rutas.py` deja una
+# guardia estructural para que no vuelva a pasar con otra ruta.
+class InstitucionResponseDTO(ResponseBase, BaseModel):
+    id: int
+    nombre: str
+    tipo_escuela: str
+
+
+@router.get("/instituciones", response_model=List[InstitucionResponseDTO])
+async def listar_instituciones(db: Session = Depends(obtener_sesion)):
+    """Lista todas las instituciones educativas (para selector en wizard de inscripción)."""
+    from app.infraestructura.repositorios.institucion_repositorio import InstitucionRepositorio
+    instituciones = InstitucionRepositorio(db).listar()
+    return [
+        InstitucionResponseDTO(id=i.id, nombre=i.nombre, tipo_escuela=i.tipo_escuela.value)
+        for i in instituciones
+    ]
+
+
 # --- Búsqueda (autocomplete) ------------------------------------------------
 @router.get(
     "/buscar",
@@ -177,12 +205,35 @@ async def buscar_personas(
     return PersonaServicio(db).buscar_por_nombre(q=q, rol=rol, skip=skip, limit=limit)
 
 
+# --- `PersonaResponseDTO` expone cédula, teléfono y fecha de nacimiento: PII
+# real. `GET /personas/` ya se había restringido a ADMINISTRADOR por
+# exactamente ese motivo, pero este hermano por id quedó exigiendo solo un
+# token válido -- y como los ids son enteros consecutivos, el roster completo
+# del club seguía siendo recolectable de a una persona por vez desde
+# cualquier sesión (alumno incluido). Mismo criterio que `listar_representados`
+# acá abajo: dueño, su representante, o staff.
 @router.get(
     "/{persona_id}",
     response_model=PersonaResponseDTO,
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
-async def obtener_persona(persona_id: int, db: Session = Depends(obtener_sesion)):
+async def obtener_persona(
+    persona_id: int,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    PoliticaAccesoPersona(db).exigir_acceso(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
+        # El portal del alumno muestra quién es su representante, y para eso
+        # pide la ficha del tutor con el token del propio alumno (ver
+        # `frontend/src/app/api/student/route.ts`). Sin esta rama el nombre
+        # del tutor desaparecía en silencio de la tarjeta de perfil.
+        incluir_representante_propio=True,
+        mensaje="No puede consultar los datos personales de otra persona",
+    )
     return PersonaServicio(db).obtener_persona(persona_id)
 
 
@@ -202,11 +253,12 @@ async def listar_representados(
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
     db: Session = Depends(obtener_sesion),
 ):
-    roles_usuario = token_payload.get("roles", [])
-    es_propietario = persona_id == token_payload.get("persona_id")
-    tiene_rol_administrativo = any(rol in ("ADMINISTRADOR", "ENTRENADOR") for rol in roles_usuario)
-    if not es_propietario and not tiene_rol_administrativo:
-        raise PermisosInsuficientes("Permisos insuficientes para esta operación")
+    PoliticaAccesoPersona(db).exigir_acceso_directo(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
+    )
     return PersonaServicio(db).listar_representados(persona_id)
 
 
@@ -228,11 +280,12 @@ async def crear_representado(
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
     db: Session = Depends(obtener_sesion),
 ):
-    roles_usuario = token_payload.get("roles", [])
-    es_propietario = persona_id == token_payload.get("persona_id")
-    es_admin = "ADMINISTRADOR" in roles_usuario
-    if not es_propietario and not es_admin:
-        raise PermisosInsuficientes("Permisos insuficientes para esta operación")
+    PoliticaAccesoPersona(db).exigir_acceso_directo(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=SOLO_ADMINISTRADOR,
+    )
     return PersonaServicio(db).crear_representado(persona_id, datos)
 
 
@@ -249,11 +302,12 @@ async def independizar_persona(
 ):
     """Permite a una persona independizarse de su representante legal.
     Solo puede ejecutarlo la propia persona o un ADMINISTRADOR."""
-    roles_usuario = token_payload.get("roles", [])
-    es_propietario = persona_id == token_payload.get("persona_id")
-    es_admin = "ADMINISTRADOR" in roles_usuario
-    if not es_propietario and not es_admin:
-        raise PermisosInsuficientes("Permisos insuficientes para esta operación")
+    PoliticaAccesoPersona(db).exigir_acceso_directo(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=SOLO_ADMINISTRADOR,
+    )
     return PersonaServicio(db).independizar(persona_id, datos)
 
 
@@ -288,11 +342,25 @@ async def crear_antecedentes_club(
     return AntecedentesClubServicio(db).crear(datos)
 
 
+# El historial deportivo de un alumno (nivel técnico, antigüedad, mano
+# dominante) es su dato, no del club entero: mismo criterio que el resto de
+# las lecturas por `persona_id` de este router.
 @router.get(
     "/{persona_id}/antecedentes-club", response_model=AntecedentesClubResponseDTO,
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
-async def obtener_antecedentes_club(persona_id: int, db: Session = Depends(obtener_sesion)):
+async def obtener_antecedentes_club(
+    persona_id: int,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    PoliticaAccesoPersona(db).exigir_acceso(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
+        mensaje="No puede consultar los antecedentes de club de otra persona",
+    )
     return AntecedentesClubServicio(db).obtener_por_persona(persona_id)
 
 
@@ -363,20 +431,3 @@ async def cambiar_estado_cuenta(persona_id: int, datos: EstadoCuentaDTO, db: Ses
     return RolesResponseDTO(persona_id=persona_id, roles=[r.tipo_rol.value for r in usuario.roles], activo=usuario.activo)
 
 
-# --- Instituciones educativas (selector para inscripción de menores) --------
-
-class InstitucionResponseDTO(ResponseBase, BaseModel):
-    id: int
-    nombre: str
-    tipo_escuela: str
-
-
-@router.get("/instituciones", response_model=List[InstitucionResponseDTO])
-async def listar_instituciones(db: Session = Depends(obtener_sesion)):
-    """Lista todas las instituciones educativas (para selector en wizard de inscripción)."""
-    from app.infraestructura.repositorios.institucion_repositorio import InstitucionRepositorio
-    instituciones = InstitucionRepositorio(db).listar()
-    return [
-        InstitucionResponseDTO(id=i.id, nombre=i.nombre, tipo_escuela=i.tipo_escuela.value)
-        for i in instituciones
-    ]

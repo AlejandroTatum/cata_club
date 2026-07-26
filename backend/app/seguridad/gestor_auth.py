@@ -77,7 +77,26 @@ class GestorAutenticacion:
 
     @staticmethod
     def decodificar_token(token: str = Depends(oauth2_scheme)) -> dict:
+        """Dependencia de autenticación general: exige un ACCESS token.
+
+        La verificación de `type` no es decorativa. Todos los tokens del
+        sistema van firmados con la misma clave, así que sin este chequeo
+        `jwt.decode` aceptaba por igual un refresh token (vida de 7 días) y
+        un token de recuperación de contraseña (que viaja por correo) como
+        credencial de autenticación para cualquier endpoint que solo exija
+        estar autenticado.
+
+        El caso del token de recuperación era el peor: usarlo como bearer no
+        incrementa `version_contrasenia`, así que un enlace interceptado daba
+        acceso de lectura al perfil sin dejar ninguna señal para la víctima.
+
+        `/auth/refresh` ya hacía la verificación simétrica (rechaza lo que no
+        sea `type=refresh`); esto cierra el otro lado del par.
+        """
         try:
-            return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algoritmo])
+            payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algoritmo])
         except jwt.PyJWTError:
             raise CredencialesInvalidas("Token inválido o expirado")
+        if payload.get("type") != "access":
+            raise CredencialesInvalidas("Token inválido o expirado")
+        return payload

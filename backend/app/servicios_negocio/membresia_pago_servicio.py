@@ -11,6 +11,7 @@ from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepo
 from app.infraestructura.repositorios.pago_repositorio import PagoRepositorio, ComprobantePagoRepositorio
 from app.infraestructura.repositorios.ranking_repositorio import NotificacionRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
+from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO, ComprobantePagoCreateDTO,
     PagoListItemDTO,
@@ -243,10 +244,43 @@ class PagoServicio:
         pago = Pago(**datos.model_dump(), estado_pago=EstadoPago.PENDIENTE_VALIDACION)
         return self.repo.crear(pago)
 
-    def obtener_pago(self, pago_id: int) -> Pago:
+    def obtener_pago(
+        self,
+        pago_id: int,
+        persona_id_solicitante: int | None = None,
+        roles_solicitante: list[str] | None = None,
+    ) -> Pago:
+        """Obtiene un pago por id, aplicando la misma autorización que sus
+        hermanos (`listar_pagos_de_persona`, `registrar_pago`,
+        `adjuntar_voucher`): dueño, su representante, o ADMINISTRADOR.
+
+        Sin contexto de autorización (ambos parámetros en None) se comporta
+        como antes: solo existencia. Ese modo es para los usos internos de
+        esta misma clase -- `validar_pago`, `adjuntar_comprobante` y
+        `adjuntar_voucher` ya validaron permisos en su propio nivel antes de
+        llegar acá. Es el mismo convenio que `MembresiaServicio.obtener_membresia`.
+
+        El endpoint `GET /membresias/pagos/{pago_id}` no pasaba ningún
+        contexto, así que cualquier sesión autenticada podía leer el pago de
+        cualquier otra persona: monto, y sobre todo `voucher_url`, que es la
+        URL pública en Cloudinary del comprobante bancario que subió el socio.
+        """
         pago = self.repo.obtener_por_id(pago_id)
         if not pago:
             raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
+
+        if persona_id_solicitante is None and not roles_solicitante:
+            return pago
+
+        PoliticaAccesoPersona(self.db).exigir_acceso(
+            persona_id_objetivo=pago.persona_id,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=roles_solicitante,
+            mensaje=(
+                "Solo el titular del pago, su representante, o un "
+                "administrador pueden consultarlo"
+            ),
+        )
         return pago
 
     def listar_pagos_de_persona(
