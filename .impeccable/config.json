@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "frontend/src/app/profile/__tests__/ProfilePage.test.tsx"
+        ],
+        "createdAt": "2026-07-26T16:58:39.422Z",
+        "reason": "Two false positives in one test file: the next/image vitest mock renders a raw <img> whose src arrives via props at runtime, and an it() description contains the literal string '<img>' while asserting that NO img is rendered. Neither ships an image."
+      }
+    ]
+  }
+}
