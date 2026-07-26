@@ -109,6 +109,23 @@ async def refrescar(request: Request, datos: RefreshTokenDTO, db: Session = Depe
     return AuthServicio(db).refrescar_sesion(datos.refresh_token)
 
 
+@router.post("/sesiones/invalidar")
+@limiter.limit("5/minute")
+async def invalidar_sesiones(
+    request: Request,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    """
+    E01 -- "cerrar mis otras sesiones": bombea el epoch (`version_sesion`) del
+    usuario autenticado, invalidando de inmediato todo token previo (access Y
+    refresh, ver `GestorAutenticacion.epoch_valido`) y reemitiendo un par
+    nuevo en esta misma respuesta para que el CALLER permanezca autenticado
+    (distinto de invalidar también su propia sesión actual).
+    """
+    return AuthServicio(db).invalidar_otras_sesiones(token_payload["sub"])
+
+
 @router.post("/logout", response_model=LogoutResponseDTO)
 async def logout():
     """

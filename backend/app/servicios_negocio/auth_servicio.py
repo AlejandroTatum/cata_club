@@ -225,6 +225,25 @@ class AuthServicio:
         )
         return {"access_token": access_token, "token_type": "bearer"}
 
+    # --- E01: invalidación de sesión (POST /auth/sesiones/invalidar) --------
+    def invalidar_otras_sesiones(self, correo: str) -> dict:
+        """Bombea `version_sesion` del usuario autenticado (resuelto vía el
+        `sub` del JWT, igual que el resto de operaciones self-service de esta
+        clase) y le reemite un par de tokens nuevo EN LA MISMA respuesta.
+
+        El bump del epoch invalida de inmediato TODO token previo -- access y
+        refresh, ver `GestorAutenticacion.epoch_valido` -- incluido el que se
+        usó para autenticar esta misma llamada. El re-issue es lo que
+        convierte esto en "cerrar mis OTRAS sesiones" en vez de "cerrar
+        también la mía": el caller sigue autenticado con el par nuevo, que ya
+        lleva el `sver` vigente.
+        """
+        usuario = self.obtener_usuario_actual(correo)
+        usuario.version_sesion += 1
+        self.db.commit()
+        self.db.refresh(usuario)
+        return self._emitir_par_tokens(usuario)
+
     # --- Privado: emisión del par access + refresh -------------------------
     def _emitir_par_tokens(self, usuario: Usuario) -> dict:
         roles = [rol.tipo_rol.value for rol in usuario.roles]

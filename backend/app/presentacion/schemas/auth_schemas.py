@@ -92,3 +92,19 @@ class SolicitarRecuperacionResponseDTO(ResponseBase, BaseModel):
 class RestablecerContraseniaDTO(BaseModel):
     token: str
     nueva_contrasenia: str = Field(..., min_length=8)
+
+
+# --- E01: invalidación de sesión (epoch compartido, ver gestor_auth.py) -----
+class InvalidarSesionesResponseDTO(ResponseBase, BaseModel):
+    """Mismo shape que `LoginResponseDTO` (no se reutiliza directamente por
+    el mismo criterio de nomenclatura por endpoint que separa
+    `ActualizarPerfilPropioResponseDTO` de `UsuarioMeResponseDTO`): el caller
+    recibe un par de tokens reemitido con el epoch de sesión YA incrementado,
+    de modo que permanece autenticado mientras cualquier token previo
+    (incluido el que usó para llamar a este mismo endpoint) queda invalidado.
+    No se declara como `response_model` en el router, igual que `/login` y
+    `/refresh` -- ambos devuelven el dict OAuth2 crudo sin pasar por un
+    `response_model` explícito."""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
