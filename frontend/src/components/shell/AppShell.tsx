@@ -38,6 +38,7 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
+  BookOpen,
   CircleHelp,
   MoreHorizontal,
 } from "lucide-react";
@@ -533,6 +534,29 @@ export default function AppShell({
             </span>
             <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda y soporte</span>
           </button>
+
+          {/*
+           * The browsable half of help, beside the ask-a-question half. The
+           * assistant can only answer what you thought to ask; someone who
+           * does not yet know what the club calls a thing needs a list they
+           * can read down.
+           */}
+          <Link
+            href="/ayuda"
+            title="Preguntas frecuentes"
+            aria-label="Preguntas frecuentes"
+            className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}
+          >
+            <span
+              className="flex h-[17px] w-[17px] shrink-0 items-center justify-center"
+              aria-hidden="true"
+            >
+              <BookOpen size={17} strokeWidth={1.75} />
+            </span>
+            <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>
+              Preguntas frecuentes
+            </span>
+          </Link>
 
           {session && (
             <div className="relative">

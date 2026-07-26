@@ -77,6 +77,10 @@ const APP_SHELL_PREFIXES = [
   "/profile",
   // `/admin/crear-cuenta` (admin account CRUD) renders `AppShell` itself.
   "/admin",
+  // `/ayuda` renders `AppShell` and is deliberately reachable without a
+  // session: the two questions asked most often — when does my child train,
+  // and how do I sign in — come from people who are not signed in yet.
+  "/ayuda",
 ] as const;
 
 /** `/trainer` matches `/trainer` and `/trainer/attendance`, never `/trainers`. */

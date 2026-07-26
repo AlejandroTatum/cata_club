@@ -75,6 +75,7 @@ import type {
 } from "@/services/api";
 import { fetchPaymentValidations, updatePaymentValidation } from "@/services/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
+import { usePersistentPreference } from "@/lib/persistent-preference";
 import { useToast } from "@/contexts/ToastContext";
 import { calendarIsoDate } from "@/lib/club-date";
 import {
@@ -122,6 +123,10 @@ type FilterKey = "all" | ValidationStatus;
  * Pendientes first, and it is the default — the prototype's whole point is
  * that the screen opens on the work of the day.
  */
+function isFilterKey(value: string): value is FilterKey {
+  return FILTERS.some((filter) => filter.key === value);
+}
+
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "pendiente", label: "Pendientes" },
   { key: "validado", label: "Validados" },
@@ -320,7 +325,18 @@ export default function PaymentsPage(): React.ReactElement {
   const [requests, setRequests] = useState<PaymentValidationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<FilterKey>("pendiente");
+  /**
+   * The queue remembers where the admin works from. Whoever validates payments
+   * every morning opens on "Pendientes" because that is the job; making them
+   * re-pick it daily is a tax on the screen they use most. `isFilterKey`
+   * refuses a stored value the product no longer understands, so a renamed key
+   * cannot leave them staring at an empty list under a highlighted pill.
+   */
+  const [activeFilter, setActiveFilter] = usePersistentPreference<FilterKey>(
+    "payments-queue-filter",
+    "pendiente",
+    isFilterKey,
+  );
   const [query, setQuery] = useState("");
   /** Selection is by id, never by object: the object is replaced on every
    *  approve/reject, and holding the old one is how a detail view goes stale. */

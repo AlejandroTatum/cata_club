@@ -16,12 +16,13 @@
 
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { enrollStudent, fetchInstituciones, type Institucion } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
+import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import BackLink from "@/components/BackLink";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { WizardInput, WizardTextarea, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
@@ -47,6 +48,7 @@ import {
   validateEnrollStep,
   validateEnrollment,
   STEP_ORDER,
+  isStepComplete,
   STEP_LABELS,
   STEP_SHORT_LABELS,
   initialFormData,
@@ -80,11 +82,10 @@ const ENROLLMENT_CHOICES: { value: EnrollmentType; title: string; description: s
 // Component
 // ---------------------------------------------------------------------------
 
-export default function EnrollPage(): React.ReactElement {
+function EnrollWizard(): React.ReactElement {
   const { refreshSession, isAuthenticated } = useAuth();
   const { showError } = useToast();
   const demoQuickFillEnabled = isDemoQuickFillEnabled();
-  const [step, setStep] = useState<WizardStep>("type");
   const [formData, setFormData] = useState<EnrollFormData>(initialFormData);
   const [submitting, setSubmitting] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -99,6 +100,20 @@ export default function EnrollPage(): React.ReactElement {
   const effectiveSteps = STEP_ORDER.filter(
     (s) => s !== "representative" || formData.enrollmentType === ENROLLMENT_TYPES.CHILD,
   );
+  /**
+   * A URL may address any step the visitor could have walked to on their own,
+   * and not one further — otherwise a shared or reloaded link would land them
+   * on the summary of a form they never filled, skipping the validation the
+   * wizard exists to enforce.
+   */
+  const maxReachableStep = furthestReachableIndex(effectiveSteps, (s) =>
+    isStepComplete(s, formData),
+  );
+  const { step, goToStep, goBack, resetToFirstStep } = useWizardHistory(
+    effectiveSteps,
+    maxReachableStep,
+  );
+
   const currentIndex = effectiveSteps.indexOf(step);
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === effectiveSteps.length - 1;
@@ -160,16 +175,18 @@ export default function EnrollPage(): React.ReactElement {
     if (nextIdx < effectiveSteps.length) {
       const nextStep = effectiveSteps[nextIdx];
       if (nextStep === "summary") setSummaryReviewed(false);
-      setStep(nextStep);
+      goToStep(nextStep);
     }
   }
 
+  /**
+   * "Atrás" IS the browser's Back. A wizard with two different ways to go back
+   * is a wizard where one of them throws the form away — which is exactly what
+   * Back did here before the step lived in the URL.
+   */
   function handleBack(): void {
     setFormErrors([]);
-    const prevIdx = currentIndex - 1;
-    if (prevIdx >= 0) {
-      setStep(effectiveSteps[prevIdx]);
-    }
+    if (currentIndex > 0) goBack();
   }
 
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
@@ -211,7 +228,7 @@ export default function EnrollPage(): React.ReactElement {
 
   function handleReset(): void {
     setFormData(initialFormData);
-    setStep("type");
+    resetToFirstStep();
     setConfirmed(false);
     setSubmitting(false);
     setSummaryReviewed(false);
@@ -263,7 +280,7 @@ export default function EnrollPage(): React.ReactElement {
         });
         break;
     }
-    setStep("type");
+    resetToFirstStep();
     setFormErrors([]);
     setConfirmed(false);
     setSummaryReviewed(false);
@@ -683,7 +700,7 @@ export default function EnrollPage(): React.ReactElement {
         <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
         <button
           type="button"
-          onClick={() => setStep(correctStep)}
+          onClick={() => goToStep(correctStep)}
           className={buttonClasses("secondary", "sm", "flex-none")}
         >
           Corregir
@@ -971,5 +988,15 @@ export default function EnrollPage(): React.ReactElement {
         </div>
       )}
     </>
+  );
+}
+
+export default function EnrollPage(): React.ReactElement {
+  // The wizard keeps its step in the query string, and `useSearchParams` needs
+  // a boundary to fall back to during prerender.
+  return (
+    <Suspense>
+      <EnrollWizard />
+    </Suspense>
   );
 }

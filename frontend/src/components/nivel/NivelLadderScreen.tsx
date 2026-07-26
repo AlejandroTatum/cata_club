@@ -132,6 +132,7 @@ import { ArrowRight, Trophy, Users } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
+import FirstRunHint from "@/components/FirstRunHint";
 import NivelLadder, { type LadderRung } from "@/components/nivel/NivelLadder";
 import {
   Button,
@@ -694,6 +695,18 @@ function LadderContent({
           hint={cima ? `${nivelNombre(cima)} es la cima` : "El primero es la cima"}
         />
       </div>
+
+      {/*
+       * The one rule this screen cannot state in place. A numbered list
+       * normally counts UP toward better; here nivel 1 is the best, so the
+       * ladder reads top-down and the number reads backwards from what a
+       * newcomer expects. Nobody deduces that from looking, and nobody needs
+       * to be told twice.
+       */}
+      <FirstRunHint id="nivel-ladder-1-is-the-top" className="mb-5">
+        En la escalera del club, el <strong className="font-bold text-ink">nivel 1 es la cima</strong>:
+        los números bajan a medida que un estudiante mejora.
+      </FirstRunHint>
 
       {/* The person finder. The screen's real questions are about a student,
           not about a level, and neither could be asked before. */}

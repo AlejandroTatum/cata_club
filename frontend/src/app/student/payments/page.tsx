@@ -39,6 +39,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePersistentPreference } from "@/lib/persistent-preference";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -107,6 +108,10 @@ type PagosLoadState =
   | { status: "ready"; pagos: PagoPersona[] };
 
 const FILTERS: PagoStatusFilter[] = ["TODOS", "PENDIENTE_VALIDACION", "APROBADO", "RECHAZADO"];
+
+function isPagoStatusFilter(value: string): value is PagoStatusFilter {
+  return (FILTERS as string[]).includes(value);
+}
 
 /** Shared empty list, so "not loaded yet" is a stable reference for the memos below. */
 const NO_PAGOS: PagoPersona[] = [];
@@ -839,7 +844,16 @@ function PaymentsContent({
   );
 
   const [reloadToken, setReloadToken] = useState(0);
-  const [filter, setFilter] = useState<PagoStatusFilter>("TODOS");
+  /**
+   * A family checking "¿me aprobaron el pago?" comes back to the same filter
+   * every time. Remembering it is the whole difference between one glance and
+   * three taps.
+   */
+  const [filter, setFilter] = usePersistentPreference<PagoStatusFilter>(
+    "student-payments-filter",
+    "TODOS",
+    isPagoStatusFilter,
+  );
   const [pagosState, setPagosState] = useState<PagosLoadState>({ status: "loading" });
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);

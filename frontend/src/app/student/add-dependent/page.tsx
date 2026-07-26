@@ -18,8 +18,9 @@
 
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
@@ -40,6 +41,7 @@ import {
 } from "lucide-react";
 import {
   ADD_DEPENDENT_STEP_ORDER,
+  isAddDependentStepComplete,
   ADD_DEPENDENT_STEP_LABELS,
   ADD_DEPENDENT_SHORT_LABELS,
   describeAddDependentBlocker,
@@ -63,7 +65,6 @@ function AddDependentContent(): React.ReactElement {
   const router = useRouter();
   const { showSuccess, showError } = useToast();
 
-  const [step, setStep] = useState<AddDependentStep>("child");
   const [formData, setFormData] = useState<AddDependentFormData>(initialAddDependentFormData);
   const [submitting, setSubmitting] = useState(false);
   const [summaryReviewed, setSummaryReviewed] = useState(false);
@@ -76,6 +77,19 @@ function AddDependentContent(): React.ReactElement {
   const [loadingRepresentante, setLoadingRepresentante] = useState(true);
   const [representanteLoadError, setRepresentanteLoadError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+
+  /**
+   * A URL may address any step the guardian could have walked to on their own,
+   * and no further — a reloaded or shared link must not open the summary of a
+   * dependent nobody described.
+   */
+  const maxReachableStep = furthestReachableIndex(ADD_DEPENDENT_STEP_ORDER, (s) =>
+    isAddDependentStepComplete(s, formData),
+  );
+  const { step, goToStep, goBack } = useWizardHistory(
+    ADD_DEPENDENT_STEP_ORDER,
+    maxReachableStep,
+  );
 
   const currentIndex = ADD_DEPENDENT_STEP_ORDER.indexOf(step);
   const isFirst = currentIndex === 0;
@@ -150,16 +164,14 @@ function AddDependentContent(): React.ReactElement {
     if (nextIdx < ADD_DEPENDENT_STEP_ORDER.length) {
       const nextStep = ADD_DEPENDENT_STEP_ORDER[nextIdx];
       if (nextStep === "summary") setSummaryReviewed(false);
-      setStep(nextStep);
+      goToStep(nextStep);
     }
   }
 
+  /** "Atrás" IS the browser's Back — one way back, not two that disagree. */
   function handleBack(): void {
     setFormErrors([]);
-    const prevIdx = currentIndex - 1;
-    if (prevIdx >= 0) {
-      setStep(ADD_DEPENDENT_STEP_ORDER[prevIdx]);
-    }
+    if (currentIndex > 0) goBack();
   }
 
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
@@ -439,7 +451,7 @@ function AddDependentContent(): React.ReactElement {
         <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
         <button
           type="button"
-          onClick={() => setStep(correctStep)}
+          onClick={() => goToStep(correctStep)}
           className={buttonClasses("secondary", "sm", "flex-none")}
         >
           Corregir
@@ -604,7 +616,11 @@ function AddDependentContent(): React.ReactElement {
 export default function AddDependentPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["representante"]}>
-      <AddDependentContent />
+      {/* The wizard reads its step from the query string; `useSearchParams`
+          needs a boundary to fall back to during prerender. */}
+      <Suspense>
+        <AddDependentContent />
+      </Suspense>
     </ProtectedRoute>
   );
 }

@@ -16,8 +16,9 @@
 
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
@@ -59,7 +60,6 @@ function CrearCuentaContent(): React.ReactElement {
   const router = useRouter();
   const { showSuccess, showError } = useToast();
 
-  const [step, setStep] = useState<CrearCuentaStep>("type");
   const [formData, setFormData] = useState<CrearCuentaFormData>(initialCrearCuentaFormData);
   const [submitting, setSubmitting] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -73,6 +73,20 @@ function CrearCuentaContent(): React.ReactElement {
   const [representanteSelected, setRepresentanteSelected] = useState<{ id: number; nombre: string } | null>(null);
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
   const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
+
+  /**
+   * A URL may address any step the admin could have walked to on their own,
+   * and no further — a reloaded link must not open the summary of an account
+   * nobody described.
+   */
+  const maxReachableStep = furthestReachableIndex(
+    CREAR_CUENTA_STEP_ORDER,
+    (s) => validateCrearCuentaStep(s, formData).length === 0,
+  );
+  const { step, goToStep, goBack, resetToFirstStep } = useWizardHistory(
+    CREAR_CUENTA_STEP_ORDER,
+    maxReachableStep,
+  );
 
   const currentIndex = CREAR_CUENTA_STEP_ORDER.indexOf(step);
   const isFirst = currentIndex === 0;
@@ -125,16 +139,14 @@ function CrearCuentaContent(): React.ReactElement {
     if (nextIdx < CREAR_CUENTA_STEP_ORDER.length) {
       const nextStep = CREAR_CUENTA_STEP_ORDER[nextIdx];
       if (nextStep === "summary") setSummaryReviewed(false);
-      setStep(nextStep);
+      goToStep(nextStep);
     }
   }
 
+  /** "Atrás" IS the browser's Back — one way back, not two that disagree. */
   function handleBack(): void {
     setFormErrors([]);
-    const prevIdx = currentIndex - 1;
-    if (prevIdx >= 0) {
-      setStep(CREAR_CUENTA_STEP_ORDER[prevIdx]);
-    }
+    if (currentIndex > 0) goBack();
   }
 
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
@@ -233,7 +245,7 @@ function CrearCuentaContent(): React.ReactElement {
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Jugador</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
-              Cuenta de estudiante adulto (18+) con rol ALUMNO.
+              Mayor de 18 que entrena y paga su propia mensualidad.
             </p>
           </button>
 
@@ -251,7 +263,7 @@ function CrearCuentaContent(): React.ReactElement {
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Representante</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
-              Adulto (18+) que representa a un menor. Roles REPRESENTANTE + ALUMNO.
+              Adulto que paga por sus hijos y también entrena.
             </p>
           </button>
 
@@ -269,7 +281,7 @@ function CrearCuentaContent(): React.ReactElement {
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Menor / Dependiente</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
-              Menor de 18 años vinculado a un representante. Rol ALUMNO.
+              Menor de 18 a cargo de un representante que paga por él.
             </p>
           </button>
         </div>
@@ -560,9 +572,9 @@ function CrearCuentaContent(): React.ReactElement {
   function renderSummary(): React.ReactElement {
     const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
     const typeLabels: Record<AccountType, string> = {
-      JUGADOR: "Jugador (rol ALUMNO)",
-      REPRESENTANTE: "Representante (roles REPRESENTANTE + ALUMNO)",
-      MENOR: "Menor / Dependiente (rol ALUMNO)",
+      JUGADOR: "Jugador",
+      REPRESENTANTE: "Representante que también entrena",
+      MENOR: "Menor a cargo de un representante",
     };
     return (
       <div className="space-y-4">
@@ -729,7 +741,7 @@ function CrearCuentaContent(): React.ReactElement {
                 type="button"
                 onClick={() => {
                   setFormData(initialCrearCuentaFormData);
-                  setStep("type");
+                  resetToFirstStep();
                   setConfirmed(false);
                   setSubmitting(false);
                   setSummaryReviewed(false);
@@ -819,7 +831,11 @@ function CrearCuentaContent(): React.ReactElement {
 export default function CrearCuentaPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <CrearCuentaContent />
+      {/* The wizard reads its step from the query string; `useSearchParams`
+          needs a boundary to fall back to during prerender. */}
+      <Suspense>
+        <CrearCuentaContent />
+      </Suspense>
     </ProtectedRoute>
   );
 }

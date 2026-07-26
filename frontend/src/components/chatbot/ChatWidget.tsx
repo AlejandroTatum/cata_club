@@ -37,6 +37,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import Image from "next/image";
 import { X, Send, AlertTriangle } from "lucide-react";
 import { consultarChatbot, type ChatbotTurno } from "@/services/api";
@@ -295,6 +296,14 @@ export default function ChatWidget({
             {prompt}
           </button>
         ))}
+        {/*
+         * The way OUT of asking. A chat can only answer a question you already
+         * thought of; someone who does not know what to ask needs to browse,
+         * and until now the product had no browsable answers at all.
+         */}
+        <Link href="/ayuda" className={QUICK_REPLY}>
+          Ver todas las preguntas
+        </Link>
         <a
           href={CLUB_WHATSAPP_LINK}
           target="_blank"

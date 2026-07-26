@@ -13,8 +13,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
+import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
+
+// The wizard's step lives in the query string now. The double is backed by
+// jsdom's real history so these tests walk the same URL a browser would.
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/student/enroll",
+  useSearchParams: () => useTestSearchParams(),
+}));
 
 vi.mock("next/link", () => ({
   __esModule: true,
@@ -54,9 +62,17 @@ const DEMO_PANEL_LABEL = /rellenar datos de prueba/i;
 
 beforeEach(() => {
   mockIsAuthenticated = false;
+  // Every case starts on step 1 with a clean address bar; the wizard reads its
+  // step from there, so a URL left by the previous case would decide where the
+  // next one opens.
+  resetTestHistory("/student/enroll");
 });
 
 afterEach(() => {
+  // Unmount before rewriting the URL — vitest runs `afterEach` in reverse
+  // registration order, so testing-library's cleanup would otherwise run last.
+  cleanup();
+  resetTestHistory("/");
   vi.unstubAllEnvs();
 });
 
