@@ -179,6 +179,16 @@ class AuthServicio:
           1) rotar el refresh token en cada uso (refresh + access nuevos)
           2) mantener una blacklist (Redis) de refresh revocados para permitir
              invalidación real de sesión antes de los 7 días de vida del token.
+
+        E01 -- invalidación de sesión (epoch compartido, ver `epoch_valido`):
+        este método SÍ valida el `sver` del refresh token, y no es opcional.
+        Sin este chequeo, un refresh token capturado junto al access token
+        comprometido (viajan como cookies httpOnly hermanas, ver
+        `_emitir_par_tokens`) seguía vivo hasta sus 7 días de vida y podía
+        reemitir un access token nuevo, totalmente compatible con el epoch
+        actual -- un bypass total de "cerrar mis otras sesiones", no un caso
+        de borde. `decodificar_token` ya aplica la misma regla del lado
+        access; esta es la otra mitad del par que cierra la ruta completa.
         """
         try:
             payload = jwt.decode(
@@ -204,6 +214,9 @@ class AuthServicio:
         usuario = self.repo.obtener_por_correo(correo)
         if not usuario:
             raise CredencialesInvalidas("El usuario del refresh token ya no existe")
+
+        if not GestorAutenticacion.epoch_valido(payload.get("sver"), usuario):
+            raise CredencialesInvalidas("Refresh token inválido o expirado")
 
         roles_actuales = [rol.tipo_rol.value for rol in usuario.roles]
         access_token = GestorAutenticacion.crear_token_acceso(

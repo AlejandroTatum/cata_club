@@ -1,13 +1,19 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import jwt
 from passlib.context import CryptContext
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
 
 from app.soporte_transversal.configuracion import settings
 from app.dominio.excepciones import CredencialesInvalidas
+from app.infraestructura.db import obtener_sesion
+from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
+
+if TYPE_CHECKING:
+    from app.dominio.modelos import Usuario
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -87,8 +93,29 @@ class GestorAutenticacion:
             raise CredencialesInvalidas("El enlace de recuperación es inválido o expiró")
         return payload
 
+    # --- E01: invalidación de sesión (epoch compartido access + refresh) ----
     @staticmethod
-    def decodificar_token(token: str = Depends(oauth2_scheme)) -> dict:
+    def epoch_valido(sver_claim: Optional[int], usuario: "Usuario") -> bool:
+        """Función pura: ÚNICO lugar del sistema que puede honrar el epoch de
+        sesión de un token, para que ambas rutas (access vía
+        `decodificar_token` y refresh vía `AuthServicio.refrescar_sesion`)
+        compartan exactamente la misma regla en vez de reimplementarla cada
+        una por su lado -- dos copias de "qué hace vigente a un token" es
+        justo el tipo de duplicación que reintroduce este bug en el próximo
+        refactor.
+
+        `sver_claim is None` es INVÁLIDO, no equivalente a `1`: aceptarlo
+        dejaría sobrevivir cualquier token (access o refresh) emitido antes
+        de este cambio hasta su expiración natural -- hasta 7 días en el
+        caso del refresh -- derrotando la invalidación en silencio.
+        """
+        return sver_claim is not None and sver_claim == usuario.version_sesion
+
+    @staticmethod
+    def decodificar_token(
+        token: str = Depends(oauth2_scheme),
+        db: Session = Depends(obtener_sesion),
+    ) -> dict:
         """Dependencia de autenticación general: exige un ACCESS token.
 
         La verificación de `type` no es decorativa. Todos los tokens del
@@ -104,11 +131,21 @@ class GestorAutenticacion:
 
         `/auth/refresh` ya hacía la verificación simétrica (rechaza lo que no
         sea `type=refresh`); esto cierra el otro lado del par.
+
+        El parámetro `db` es nuevo (E01: invalidación de sesión). Esta
+        dependencia YA estaba acoplada a FastAPI (`Depends(oauth2_scheme)`),
+        así que no pierde pureza por esto; el callable en sí no cambia de
+        identidad (sigue siendo `GestorAutenticacion.decodificar_token`), así
+        que los ~55 `Depends(...)` que la referencian en toda la app -- y los
+        overrides de `conftest.py` -- no requieren ningún cambio.
         """
         try:
             payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algoritmo])
         except jwt.PyJWTError:
             raise CredencialesInvalidas("Token inválido o expirado")
         if payload.get("type") != "access":
+            raise CredencialesInvalidas("Token inválido o expirado")
+        usuario = UsuarioRepositorio(db).obtener_por_correo(payload.get("sub"))
+        if not usuario or not GestorAutenticacion.epoch_valido(payload.get("sver"), usuario):
             raise CredencialesInvalidas("Token inválido o expirado")
         return payload
