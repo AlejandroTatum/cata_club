@@ -157,6 +157,8 @@ class MembresiaRepositorio:
             )
         )
         return self.db.query(stmt_pendiente).scalar()
+
+    def listar(self, skip: int = 0, limit: int = 200) -> List[Membresia]:
         """Listado paginado de todas las membresías. Útil para dashboards
         que necesitan conocer el estado de todas las membresías sin hacer
         N+1 consultas individuales."""

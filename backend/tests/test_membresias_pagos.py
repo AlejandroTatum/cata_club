@@ -334,6 +334,71 @@ def test_estadisticas_membresias_requiere_admin(client_sin_permisos):
     assert response.status_code == 403
 
 
+# --- GET /membresias/ (listado paginado admin) ------------------------------
+# `MembresiaRepositorio.listar` había quedado como código huérfano (ver
+# `test_membresia_repositorio.py`): el endpoint respondía 500 desde que se
+# agregó. Estos tests fijan la forma de la respuesta a nivel API.
+
+def test_listar_membresias_vacio_da_200_con_items_vacios(client):
+    response = client.get("/api/v1/membresias/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["total"] == 0
+
+
+def test_listar_membresias_devuelve_paginated_response_con_shape_correcta(client):
+    persona = _crear_persona(client)
+    tipo = _crear_tipo_membresia(client)
+    creada = client.post(
+        "/api/v1/membresias/",
+        json={
+            "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+            "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+        },
+    ).json()
+
+    response = client.get("/api/v1/membresias/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["skip"] == 0
+    assert body["limit"] == 50
+    assert len(body["items"]) == 1
+    assert body["items"][0]["id"] == creada["id"]
+    assert body["items"][0]["estado"] == "INACTIVA"
+
+
+def test_listar_membresias_respeta_skip_y_limit(client):
+    tipo = _crear_tipo_membresia(client)
+    for i in range(3):
+        persona = _crear_persona(client, cedula=f"171003{4200 + i}")
+        client.post(
+            "/api/v1/membresias/",
+            json={
+                "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+                "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+            },
+        )
+
+    response = client.get("/api/v1/membresias/?skip=1&limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert body["skip"] == 1
+    assert body["limit"] == 1
+    assert len(body["items"]) == 1
+
+
+def test_listar_membresias_requiere_admin(client_sin_permisos):
+    response = client_sin_permisos.get("/api/v1/membresias/")
+
+    assert response.status_code == 403
+
+
 # --- GET /membresias/pagos/persona/{persona_id} (historial propio) ----------
 def test_alumno_ve_su_propio_historial_de_pagos_incluyendo_rechazado_con_motivo(client):
     """`client` autentica como persona_id=1; al ser la primera persona creada
