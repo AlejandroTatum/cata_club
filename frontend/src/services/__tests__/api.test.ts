@@ -24,6 +24,7 @@ import {
   marcarNotificacionLeida,
   fetchMiPerfil,
   actualizarMiPerfil,
+  invalidarOtrasSesiones,
   fetchHorarios,
   crearHorario,
   actualizarHorario,
@@ -501,6 +502,28 @@ describe("actualizarMiPerfil", () => {
       }),
     );
     expect(result).toEqual(perfil);
+  });
+});
+
+describe("invalidarOtrasSesiones", () => {
+  it("calls POST /api/auth/sesiones/invalidar and returns the confirmation message", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ mensaje: "Se cerraron sus otras sesiones. Este dispositivo sigue conectado." }),
+    );
+
+    const result = await invalidarOtrasSesiones();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/auth/sesiones/invalidar",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(result).toEqual({ mensaje: "Se cerraron sus otras sesiones. Este dispositivo sigue conectado." });
+  });
+
+  it("throws a typed error when the BFF route rejects the request", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(401, { message: "Token inválido o expirado" }));
+
+    await expect(invalidarOtrasSesiones()).rejects.toThrow("Token inválido o expirado");
   });
 });
 

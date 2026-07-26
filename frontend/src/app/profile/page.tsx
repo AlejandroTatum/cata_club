@@ -43,13 +43,11 @@
  * Two fields the prototype draws are NOT rendered, because nothing in the API
  * can produce them (see the report accompanying this change):
  *
- * - "Cédula": neither `PerfilPropio` (`UsuarioMeResponseDTO`) nor
- *   `StudentProfileSummary` carries it. Only the admin-facing
- *   `/personas/{id}` does, and that is not readable by the account itself.
- * - "Cerrar otras sesiones": there is no session-invalidation endpoint.
- *   `auth_router.py` exposes login/registro/me/refresh/logout/recuperar/
- *   restablecer and nothing that revokes another device's token, so the row
- *   would be a button that cannot do what it says.
+ * "Cédula" is NOT rendered, because nothing in the API can produce it (see
+ * the report accompanying this change): neither `PerfilPropio`
+ * (`UsuarioMeResponseDTO`) nor `StudentProfileSummary` carries it. Only the
+ * admin-facing `/personas/{id}` does, and that is not readable by the
+ * account itself.
  */
 
 "use client";
@@ -66,8 +64,10 @@ import {
   solicitarRecuperacion,
   fetchStudentPortal,
   subirFotoPerfil,
+  invalidarOtrasSesiones,
   ApiClientError,
 } from "@/services/api";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import type { StudentPortalSummary, StudentProfileSummary, MembershipSummary } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
 // `formatLevelName`, not `describeRanking`: this page prints the level beside
@@ -271,6 +271,12 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
+  // ---- "Cerrar otras sesiones" (E01, slice B4) ---------------------------
+  const [confirmingInvalidation, setConfirmingInvalidation] = useState(false);
+  const [invalidatingSessions, setInvalidatingSessions] = useState(false);
+  const [sessionsMessage, setSessionsMessage] = useState<string | null>(null);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+
   // ---- Profile photo upload — the caller's own avatar, for BOTH branches.
   // `POST /auth/me/foto` is self-service and role-agnostic. ----
   const fotoInputRef = useRef<HTMLInputElement>(null);
@@ -374,6 +380,33 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       showError(message);
     } finally {
       setRequestingPassword(false);
+    }
+  }
+
+  /**
+   * POST /auth/sesiones/invalidar via the BFF: bumps the session epoch and
+   * reissues a fresh token pair as cookies in the same response, so THIS
+   * device stays authenticated (see `invalidarOtrasSesiones`'s docstring).
+   * No redirect and no manual retry here on either branch — a stale-token
+   * failure is already handled globally by `services/api.ts`'s 401
+   * refresh-and-retry (`subscribeAuthFailure` in `AuthContext`), so this
+   * handler only needs to report success or surface a message, never spin.
+   */
+  async function handleInvalidateOtherSessions(): Promise<void> {
+    setConfirmingInvalidation(false);
+    setInvalidatingSessions(true);
+    setSessionsError(null);
+    setSessionsMessage(null);
+    try {
+      const result = await invalidarOtrasSesiones();
+      setSessionsMessage(result.mensaje);
+      showSuccess(result.mensaje);
+    } catch (error: unknown) {
+      const message = toErrorMessage(error, "No se pudieron cerrar las otras sesiones.");
+      setSessionsError(message);
+      showError(message);
+    } finally {
+      setInvalidatingSessions(false);
     }
   }
 
@@ -631,10 +664,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           the page's own grammar three rows after establishing it — and left
           the reader guessing what the button beside a bare noun would do.
 
-          Two rows, not three: `auth_router.py` exposes login/registro/me/
-          refresh/logout/recuperar/restablecer and nothing that revokes another
-          device's token, so a "cerrar otras sesiones" row would be a button
-          that cannot do what it says. */}
+          Three rows now (E01, slice B4): `POST /auth/sesiones/invalidar`
+          exists, so "Otras sesiones" is no longer a button that cannot do
+          what it says. */}
       <CardSection title="Seguridad" testId="profile-column-status">
         <DetailRow
           label="Contraseña"
@@ -660,7 +692,45 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             Cerrar sesión en este equipo
           </span>
         </DetailRow>
+        <DetailRow
+          label="Otras sesiones"
+          action={
+            <Button
+              size="sm"
+              onClick={() => setConfirmingInvalidation(true)}
+              disabled={invalidatingSessions}
+            >
+              {invalidatingSessions ? "Cerrando…" : "Cerrar otras sesiones"}
+            </Button>
+          }
+        >
+          <span className="text-[13px] font-normal text-ink-2">
+            Cierra su sesión en todos los demás dispositivos; este equipo sigue conectado
+          </span>
+        </DetailRow>
       </CardSection>
+
+      {sessionsMessage && (
+        <p role="status" className="text-sm text-state-ok">
+          {sessionsMessage}
+        </p>
+      )}
+      {sessionsError && (
+        <p role="alert" className="text-sm text-cata-red">
+          {sessionsError}
+        </p>
+      )}
+
+      <ConfirmDialog
+        open={confirmingInvalidation}
+        variant="danger"
+        title="Cerrar otras sesiones"
+        message="Se cerrará su sesión en todos los demás dispositivos y navegadores. Este equipo seguirá conectado. ¿Desea continuar?"
+        confirmLabel="Cerrar otras sesiones"
+        cancelLabel="Cancelar"
+        onConfirm={() => void handleInvalidateOtherSessions()}
+        onCancel={() => setConfirmingInvalidation(false)}
+      />
 
       {passwordMessage && (
         <p role="status" className="text-sm text-state-ok">

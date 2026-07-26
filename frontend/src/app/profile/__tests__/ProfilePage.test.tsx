@@ -62,6 +62,7 @@ const mockFetchStudentPortal = vi.fn();
 const mockSubirFotoPerfil = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
+const mockInvalidarOtrasSesiones = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchMiPerfil: () => mockFetchMiPerfil(),
@@ -71,6 +72,7 @@ vi.mock("@/services/api", () => ({
   subirFotoPerfil: (archivo: File) => mockSubirFotoPerfil(archivo),
   fetchNotificaciones: () => mockFetchNotificaciones(),
   marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
+  invalidarOtrasSesiones: () => mockInvalidarOtrasSesiones(),
   ApiClientError: class ApiClientError extends Error {
     status: number;
     constructor(message: string, status: number) {
@@ -1003,7 +1005,7 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(screen.queryByText(/cédula/i)).not.toBeInTheDocument();
   });
 
-  it("offers the security actions as rows, and no action it cannot perform", async () => {
+  it("offers the security actions as rows, including closing other sessions", async () => {
     await renderAdmin();
 
     const security = screen.getByTestId("profile-column-status");
@@ -1011,8 +1013,14 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(within(security).getByRole("button", { name: /cambiar contraseña/i })).toBeInTheDocument();
     expect(within(security).getByText(/cerrar sesión en este equipo/i)).toBeInTheDocument();
     expect(within(security).getByRole("button", { name: /^salir$/i })).toBeInTheDocument();
-    // There is no session-invalidation endpoint, so no row claims to close one.
-    expect(within(security).queryByText(/otras sesiones/i)).not.toBeInTheDocument();
+    // POST /auth/sesiones/invalidar now exists (slice B4) — the third row.
+    // Exact match on the row LABEL: a substring regex also matches the
+    // button's own text ("Cerrar otras sesiones"), which is a second,
+    // unrelated element.
+    expect(within(security).getByText("Otras sesiones")).toBeInTheDocument();
+    expect(
+      within(security).getByRole("button", { name: /cerrar otras sesiones/i }),
+    ).toBeInTheDocument();
   });
 
   it("closes the session from the security row", async () => {
@@ -1029,5 +1037,79 @@ describe("ProfilePage — the redesigned account layout", () => {
     fireEvent.click(screen.getByRole("button", { name: /^salir$/i }));
 
     expect(auth.logout).toHaveBeenCalled();
+  });
+});
+
+describe("ProfilePage — close other sessions (E01, slice B4)", () => {
+  beforeEach(() => {
+    mockInvalidarOtrasSesiones.mockReset();
+  });
+
+  async function renderAdmin(): Promise<void> {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await screen.findAllByText("Ana Admin");
+  }
+
+  it("does not call the endpoint until the confirmation dialog is accepted", async () => {
+    await renderAdmin();
+
+    fireEvent.click(screen.getByRole("button", { name: /cerrar otras sesiones/i }));
+
+    // The confirmation dialog gates the call — clicking the row's own button
+    // only OPENS it, it must never call the API directly.
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(mockInvalidarOtrasSesiones).not.toHaveBeenCalled();
+  });
+
+  it("cancelling the dialog leaves the session untouched", async () => {
+    await renderAdmin();
+
+    fireEvent.click(screen.getByRole("button", { name: /cerrar otras sesiones/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancelar/i }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockInvalidarOtrasSesiones).not.toHaveBeenCalled();
+  });
+
+  it("confirming the dialog calls the endpoint and surfaces the success message", async () => {
+    mockInvalidarOtrasSesiones.mockResolvedValueOnce({
+      mensaje: "Se cerraron sus otras sesiones. Este dispositivo sigue conectado.",
+    });
+    await renderAdmin();
+
+    fireEvent.click(screen.getByRole("button", { name: /cerrar otras sesiones/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^cerrar otras sesiones$/i }));
+
+    await waitFor(() => {
+      expect(mockInvalidarOtrasSesiones).toHaveBeenCalledTimes(1);
+    });
+    expect(
+      await screen.findByText("Se cerraron sus otras sesiones. Este dispositivo sigue conectado."),
+    ).toBeInTheDocument();
+    // The caller's own screen is untouched — no redirect, no crash, no 401 loop.
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an error message when the endpoint call fails", async () => {
+    mockInvalidarOtrasSesiones.mockRejectedValueOnce(
+      new Error("No se pudieron cerrar las otras sesiones."),
+    );
+    await renderAdmin();
+
+    fireEvent.click(screen.getByRole("button", { name: /cerrar otras sesiones/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^cerrar otras sesiones$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudieron cerrar las otras sesiones.",
+    );
   });
 });

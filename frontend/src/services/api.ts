@@ -1351,6 +1351,21 @@ export async function actualizarMiPerfil(data: ActualizarPerfilPropioPayload): P
   });
 }
 
+/**
+ * Close every OTHER session for the logged-in user — POST
+ * /api/auth/sesiones/invalidar. The backend bumps the caller's session
+ * epoch (`version_sesion`) and reissues a fresh token pair as HttpOnly
+ * cookies in the same response, so THIS device stays authenticated while
+ * any token minted before this call (any other device/tab) is rejected on
+ * its next request. The BFF route never echoes a token in the JSON body —
+ * only this confirmation message.
+ */
+export async function invalidarOtrasSesiones(): Promise<{ mensaje: string }> {
+  return request<{ mensaje: string }>(apiEndpoint("/auth/sesiones/invalidar"), {
+    method: "POST",
+  });
+}
+
 /** Longer than DEFAULT_TIMEOUT_MS (10s) — subirFotoPerfil is the only caller
  * that uploads a binary body (up to the backend's 5MB cap), which can take
  * longer than a small JSON payload on a slow connection. */
