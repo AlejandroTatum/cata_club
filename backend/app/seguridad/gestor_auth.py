@@ -25,11 +25,17 @@ class GestorAutenticacion:
         return pwd_context.verify(contrasenia_plana, contrasenia_hash)
 
     @staticmethod
-    def crear_token_acceso(datos: dict, expiracion_minutos: Optional[int] = None) -> str:
+    def crear_token_acceso(datos: dict, version_sesion: int, expiracion_minutos: Optional[int] = None) -> str:
+        """`version_sesion` es OBLIGATORIO (sin default) a propósito, igual que
+        `version_contrasenia` en `crear_token_recuperacion`: así ningún call
+        site puede emitir un token "olvidando" el claim `sver` en silencio.
+        En este slice el claim se emite pero nada lo valida todavía (ver
+        `GestorAutenticacion.epoch_valido`, cableado en un slice posterior)."""
         payload = datos.copy()
         # El claim `type` distingue un access token de un refresh token;
         # el endpoint /auth/refresh valida que lo que recibe sea `type=refresh`.
         payload["type"] = "access"
+        payload["sver"] = version_sesion
         expira = datetime.now(timezone.utc) + timedelta(
             minutes=expiracion_minutos or settings.jwt_expira_minutos
         )
@@ -37,12 +43,18 @@ class GestorAutenticacion:
         return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algoritmo)
 
     @staticmethod
-    def crear_token_refresco(datos: dict) -> str:
+    def crear_token_refresco(datos: dict, version_sesion: int) -> str:
         """Emite un refresh token (vida larga, type=refresh). Sirve únicamente
         para pedir un nuevo access token vía /auth/refresh; NO se usa para
-        autenticar requests a endpoints de negocio (eso requiere access token)."""
+        autenticar requests a endpoints de negocio (eso requiere access token).
+
+        `version_sesion` obligatorio por el mismo motivo que en
+        `crear_token_acceso`: el claim `sver` debe viajar en AMBOS tokens del
+        par para que la invalidación de sesión pueda cerrar también el lado
+        refresh (ver nota de `epoch_valido`)."""
         payload = datos.copy()
         payload["type"] = "refresh"
+        payload["sver"] = version_sesion
         expira = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_expira_dias)
         payload.update({"exp": expira})
         return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algoritmo)

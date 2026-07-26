@@ -207,7 +207,8 @@ class AuthServicio:
 
         roles_actuales = [rol.tipo_rol.value for rol in usuario.roles]
         access_token = GestorAutenticacion.crear_token_acceso(
-            {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles_actuales}
+            {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles_actuales},
+            version_sesion=usuario.version_sesion,
         )
         return {"access_token": access_token, "token_type": "bearer"}
 
@@ -215,11 +216,11 @@ class AuthServicio:
     def _emitir_par_tokens(self, usuario: Usuario) -> dict:
         roles = [rol.tipo_rol.value for rol in usuario.roles]
         claims = {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles}
-        access_token = GestorAutenticacion.crear_token_acceso(claims)
+        access_token = GestorAutenticacion.crear_token_acceso(claims, version_sesion=usuario.version_sesion)
         # El refresh token no necesita roles (solo sirve para pedir un nuevo
         # access token; los roles se releyan del usuario en cada refresh).
         refresh_claims = {"sub": usuario.correo, "persona_id": usuario.persona_id}
-        refresh_token = GestorAutenticacion.crear_token_refresco(refresh_claims)
+        refresh_token = GestorAutenticacion.crear_token_refresco(refresh_claims, version_sesion=usuario.version_sesion)
         return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
     # --- E01-RF003: recuperación de contraseña -------------------------------

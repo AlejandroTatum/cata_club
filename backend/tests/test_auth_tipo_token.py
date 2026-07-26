@@ -41,7 +41,7 @@ def usuario_real(db_session):
 def test_refresh_token_no_autentica_endpoints_de_negocio(client_sin_token, usuario_real):
     """Un refresh token solo sirve para pedir un access token en /auth/refresh."""
     refresh = GestorAutenticacion.crear_token_refresco(
-        {"sub": "ana@cataclub.test", "persona_id": usuario_real.id}
+        {"sub": "ana@cataclub.test", "persona_id": usuario_real.id}, version_sesion=1
     )
     respuesta = client_sin_token.get(
         "/api/v1/auth/me", headers={"Authorization": f"Bearer {refresh}"}
@@ -66,7 +66,7 @@ def test_token_de_recuperacion_no_autentica_endpoints_de_negocio(client_sin_toke
 def test_access_token_si_autentica(client_sin_token, usuario_real):
     """Contraparte positiva: el access token legítimo sigue funcionando."""
     access = GestorAutenticacion.crear_token_acceso(
-        {"sub": "ana@cataclub.test", "persona_id": usuario_real.id, "roles": ["ALUMNO"]}
+        {"sub": "ana@cataclub.test", "persona_id": usuario_real.id, "roles": ["ALUMNO"]}, version_sesion=1
     )
     respuesta = client_sin_token.get(
         "/api/v1/auth/me", headers={"Authorization": f"Bearer {access}"}

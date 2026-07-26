@@ -174,7 +174,7 @@ def test_restablecer_contrasenia_con_token_valido(client):
 def test_restablecer_contrasenia_con_token_de_acceso_falla():
     """El token de recuperación es de un solo propósito -- un access token
     normal no debe servir para resetear la contraseña."""
-    token_acceso = GestorAutenticacion.crear_token_acceso({"sub": "x@x.com"})
+    token_acceso = GestorAutenticacion.crear_token_acceso({"sub": "x@x.com"}, version_sesion=1)
     with pytest.raises(Exception):
         GestorAutenticacion.decodificar_token_recuperacion(token_acceso)
 

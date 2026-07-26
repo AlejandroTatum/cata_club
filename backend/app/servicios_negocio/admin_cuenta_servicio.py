@@ -152,9 +152,9 @@ class AdminCuentaServicio:
         """Emite el par access + refresh tokens para auto-login."""
         roles = [rol.tipo_rol.value for rol in usuario.roles]
         claims = {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles}
-        access = GestorAutenticacion.crear_token_acceso(claims)
+        access = GestorAutenticacion.crear_token_acceso(claims, version_sesion=usuario.version_sesion)
         refresh_claims = {"sub": usuario.correo, "persona_id": usuario.persona_id}
-        refresh = GestorAutenticacion.crear_token_refresco(refresh_claims)
+        refresh = GestorAutenticacion.crear_token_refresco(refresh_claims, version_sesion=usuario.version_sesion)
         return {
             "access_token": access,
             "refresh_token": refresh,

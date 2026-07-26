@@ -133,6 +133,15 @@ class Usuario(Base):
     # E01-RF013: permite al Administrador suspender una cuenta sin borrar los
     # datos (Persona/historial). Antes solo existía DELETE (borrado duro).
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # E01: versión monotónica de la SESIÓN. Dominio de invalidación separado
+    # de `version_contrasenia` a propósito: "cerrar mis otras sesiones" y
+    # "cambié mi contraseña" son eventos independientes, y reusar la misma
+    # columna acoplaría uno con el otro sin que el usuario lo pida. Se
+    # compara contra el claim `sver` de los tokens access/refresh (ver
+    # `GestorAutenticacion.epoch_valido`). A diferencia de `version_contrasenia`
+    # (solo default de Python), esta columna SÍ lleva `server_default`: un
+    # INSERT crudo que salte el ORM no debe dejarla en NULL.
+    version_sesion: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), unique=True)
     persona: Mapped["Persona"] = relationship(back_populates="usuario")
