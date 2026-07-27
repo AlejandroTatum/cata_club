@@ -33,6 +33,7 @@ export type AuthErrorKind =
   | "session_validation_failed"
   | "timeout"
   | "backend_unavailable"
+  | "config_error"
   | "unknown";
 
 export interface LoginSuccess {
@@ -154,6 +155,12 @@ export async function login(email: string, password: string): Promise<LoginResul
     // mislabeled as such.
     const isSessionValidationFailure = hasErrorCode(json) && json.error === "unauthorized";
     return { ok: false, error: isSessionValidationFailure ? "session_validation_failed" : "invalid_credentials" };
+  }
+  // A misconfigured BFF (missing BACKEND_API_URL and friends) is a permanent
+  // fault, not a blip. It must never be folded into the retry-flavoured
+  // copy the outage kinds get — see loginErrorFeedback in src/app/login/page.tsx.
+  if (response.status === 500 && hasErrorCode(json) && json.error === "config_error") {
+    return { ok: false, error: "config_error" };
   }
   if (!response.ok) {
     return { ok: false, error: "unknown" };

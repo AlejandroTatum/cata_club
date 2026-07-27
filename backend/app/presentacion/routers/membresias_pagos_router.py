@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, Query, status
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
@@ -15,8 +15,12 @@ from app.presentacion.schemas.membresia_pago_schemas import (
 )
 from app.presentacion.schemas.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
-from app.servicios_negocio.membresia_pago_servicio import MembresiaServicio, PagoServicio
+from app.servicios_negocio.membresia_pago_servicio import (
+    MembresiaServicio, PagoServicio, TAMANO_MAXIMO_VOUCHER_BYTES,
+)
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.soporte_transversal.lectura_archivos import leer_con_limite
+from app.soporte_transversal.rate_limit import limiter
 
 _COLUMNAS_PAGOS_PDF = [
     "Estudiante", "Monto", "Tipo de Pago", "Vigencia Desde", "Vigencia Hasta",
@@ -250,7 +254,9 @@ async def obtener_membresia(
     response_model=PagoResponseDTO,
     status_code=201,
 )
+@limiter.limit("10/minute")
 async def registrar_pago(
+    request: Request,
     datos: PagoCreateDTO,
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
@@ -264,7 +270,8 @@ async def registrar_pago(
 
 @router.patch("/pagos/{pago_id}/validar", response_model=PagoResponseDTO,
               dependencies=[Depends(GestorPermisos(ROL_ADMIN))])
-async def validar_pago(pago_id: int, datos: PagoValidarDTO, db: Session = Depends(obtener_sesion)):
+@limiter.limit("20/minute")
+async def validar_pago(request: Request, pago_id: int, datos: PagoValidarDTO, db: Session = Depends(obtener_sesion)):
     return PagoServicio(db).validar_pago(pago_id, datos)
 
 
@@ -316,7 +323,10 @@ async def listar_pagos_de_persona(
     response_model=ComprobantePagoResponseDTO, status_code=201,
     dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
 )
-async def adjuntar_comprobante(pago_id: int, datos: ComprobantePagoCreateDTO, db: Session = Depends(obtener_sesion)):
+@limiter.limit("20/minute")
+async def adjuntar_comprobante(
+    request: Request, pago_id: int, datos: ComprobantePagoCreateDTO, db: Session = Depends(obtener_sesion),
+):
     return PagoServicio(db).adjuntar_comprobante(pago_id, datos)
 
 
@@ -325,13 +335,15 @@ async def adjuntar_comprobante(pago_id: int, datos: ComprobantePagoCreateDTO, db
 # validar dueño/admin): a diferencia del ComprobantePago oficial, este
 # adjunta la imagen/PDF que el cliente sube como evidencia de transferencia.
 @router.post("/pagos/{pago_id}/voucher", response_model=PagoResponseDTO, status_code=201)
+@limiter.limit("5/minute")
 async def subir_voucher(
+    request: Request,
     pago_id: int,
     archivo: UploadFile = File(...),
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    contenido = await archivo.read()
+    contenido = await leer_con_limite(archivo, TAMANO_MAXIMO_VOUCHER_BYTES)
     return PagoServicio(db).adjuntar_voucher(
         pago_id=pago_id,
         persona_id_solicitante=token_payload.get("persona_id"),

@@ -67,6 +67,24 @@ describe("login", () => {
     );
   });
 
+  it("surfaces a server misconfiguration as config_error, not backend_unavailable", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(500, { error: "config_error", message: "BACKEND_API_URL is not set." }),
+    );
+
+    const result = await login("admin@cataclub.com", "admin123");
+
+    expect(result).toEqual({ ok: false, error: "config_error" });
+  });
+
+  it("still reports an unlabelled 500 as unknown", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(500, {}));
+
+    const result = await login("admin@cataclub.com", "admin123");
+
+    expect(result).toEqual({ ok: false, error: "unknown" });
+  });
+
   it("never includes a token anywhere in the resolved session", async () => {
     vi.mocked(global.fetch).mockResolvedValue(okResponse(validSession));
 

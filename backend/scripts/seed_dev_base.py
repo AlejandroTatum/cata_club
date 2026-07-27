@@ -611,18 +611,37 @@ def main() -> None:
         }
 
         asignaciones_creadas = 0
+        # Counted separately from `asignaciones_creadas` because the seed is
+        # idempotent: on a re-run every assignment already exists and nothing
+        # is created, which says nothing about whether the mapping worked.
+        # Conflating the two made a fully-seeded database report itself as
+        # broken on every subsequent run.
+        alumnos_sin_mapeo: list[int] = []
+        # Holding the ALUMNO role without a membership is a LEGITIMATE state,
+        # not missing data: EnrollmentServicio grants a representante both
+        # REPRESENTANTE and ALUMNO (enrollment_servicio.py, `_asignar_rol`
+        # calls) while only the enrolled child gets a Membresia. Those parents
+        # are not training, so they must not be assigned to horarios and must
+        # not be reported as a defect. Only a membership whose category the
+        # mapping cannot place is a real gap.
+        sin_membresia = 0
         for persona_id in alumno_persona_ids:
             membresia = db.query(Membresia).filter(Membresia.persona_id == persona_id).first()
             if not membresia or not membresia.tipo_membresia_id:
+                sin_membresia += 1
                 continue
             tipo_membresia = db.query(TipoMembresia).filter(
                 TipoMembresia.id == membresia.tipo_membresia_id
             ).first()
             if not tipo_membresia:
+                alumnos_sin_mapeo.append(persona_id)
                 continue
             categorias_horario = MIEMBRO_A_CATEGORIAS_HORARIOS.get(
                 tipo_membresia.categoria, []
             )
+            if not categorias_horario:
+                alumnos_sin_mapeo.append(persona_id)
+                continue
             for cat_horario in categorias_horario:
                 for horario in horarios_por_categoria.get(cat_horario, []):
                     _, created = _obtener_o_crear(
@@ -633,9 +652,28 @@ def main() -> None:
                     )
                     if created:
                         asignaciones_creadas += 1
-        print(f"[seed] Asignaciones alumno_horario creadas: {asignaciones_creadas}")
-        if asignaciones_creadas == 0 and alumno_persona_ids:
-            print("[seed] WARN: alumno_horario vacío — alumnos sin categoría de membresía mapeada.")
+
+        db.flush()
+        asignaciones_totales = db.query(AlumnoHorario).count()
+        print(
+            f"[seed] Asignaciones alumno_horario creadas: {asignaciones_creadas} "
+            f"(total en tabla: {asignaciones_totales}); "
+            f"{sin_membresia} con rol ALUMNO sin membresía (representantes, esperado)."
+        )
+
+        # Only a genuinely unusable state warrants a warning: a membership the
+        # mapping could not place, or an empty table despite having students.
+        if alumnos_sin_mapeo:
+            print(
+                f"[seed] WARN: {len(alumnos_sin_mapeo)} alumno(s) con membresía de "
+                f"categoría no mapeada (persona_id: {alumnos_sin_mapeo}) — no aparecerán "
+                "en el wizard de asistencia. Revisá MIEMBRO_A_CATEGORIAS_HORARIOS."
+            )
+        if alumno_persona_ids and asignaciones_totales == 0:
+            print(
+                "[seed] WARN: alumno_horario vacío — /asistencias/horarios/:id/alumnos "
+                "va a responder [] para todos los horarios."
+            )
 
         db.commit()
         print("[seed] Base seed completado exitosamente.")

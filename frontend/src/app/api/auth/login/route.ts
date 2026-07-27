@@ -14,6 +14,10 @@ function isLoginBody(value: unknown): value is LoginBody {
 
 const ERROR_STATUS: Record<AuthErrorCode, number> = {
   invalid_credentials: 401,
+  // 500, not 503: the server is misconfigured, not overloaded. A 503 invites
+  // the client (and any proxy in front of it) to retry a request that can
+  // never succeed until a human fixes the deployment.
+  config_error: 500,
   backend_unavailable: 503,
   timeout: 503,
   invalid_response: 502,

@@ -51,6 +51,7 @@ from app.dominio.modelos import (
     NivelRanking,
     Ranking,
     Asistencia,
+    AlumnoHorario,
 )
 from app.dominio.enums import (
     TipoRol,
@@ -506,6 +507,23 @@ def main() -> None:
                 EstadoAsistencia.PRESENTE, EstadoAsistencia.JUSTIFICADO,
             ]
             for horario in horarios_entrenador:
+                # Inscribir ANTES de registrar asistencia. Sin esto el seed
+                # producía un estado que la propia API no puede generar: la
+                # única vía real de alta es `asignar_alumno_a_horario`, y
+                # `GET /asistencias/horarios/{id}/alumnos` lee solo
+                # `alumno_horario` -- así que el roster de "tomar asistencia"
+                # salía vacío de los mismos alumnos que `GET
+                # /asistencias/reportes` sí listaba, y las dos pantallas se
+                # contradecían.
+                for persona in estudiantes_con_asistencia:
+                    _obtener_o_crear(
+                        db,
+                        AlumnoHorario,
+                        (AlumnoHorario.persona_id == persona.id)
+                        & (AlumnoHorario.horario_id == horario.id),
+                        {"persona_id": persona.id, "horario_id": horario.id},
+                    )
+
                 fechas = _fechas_recientes(horario.dia_semana, 4)
                 for f_idx, fecha in enumerate(fechas):
                     for p_idx, persona in enumerate(estudiantes_con_asistencia):

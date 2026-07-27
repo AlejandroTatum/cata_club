@@ -71,6 +71,11 @@ function loginErrorFeedback(error: AuthErrorKind): { message: string; descriptio
         message: "No se pudo conectar con el servidor",
         description: "El servicio no está disponible. Intente nuevamente en unos minutos.",
       };
+    case "config_error":
+      return {
+        message: "El servidor no está configurado correctamente",
+        description: "No es un problema de su conexión. Avise al administrador del sistema.",
+      };
     case "unknown":
     default:
       return {

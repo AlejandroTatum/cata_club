@@ -74,6 +74,10 @@ def test_reporte_asistencia_filtra_por_horario_y_periodo(client):
         "/api/v1/asistencias/horarios",
         json={"categoria": "FORMATIVO", "dia_semana": "LUNES", "entrenador_id": entrenador["id"]},
     ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
 
     client.post(
         "/api/v1/asistencias/",

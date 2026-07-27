@@ -100,6 +100,21 @@ class AsistenciaServicio:
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
         self._validar_entrenador(datos.entrenador_id)
 
+        # LIFE-1: antes de esta línea el upsert de más abajo era ciego a si
+        # el alumno está realmente inscrito en el horario -- se podía
+        # registrar/editar asistencia para cualquier (persona, horario) sin
+        # que exista un `AlumnoHorario`. Va ANTES del `if existente:` porque
+        # una actualización es tan afirmación de pertenencia como una
+        # creación: si desasignaron al alumno después de que ya existía la
+        # fila, reeditarla no debe convertirse en un bypass de la regla que
+        # sí aplica el alta.
+        if not self.repo_alumno_horario.obtener_por_persona_y_horario(
+            datos.persona_id, datos.horario_id
+        ):
+            raise OperacionInvalida(
+                f"La persona {datos.persona_id} no está inscrita en el horario {datos.horario_id}"
+            )
+
         existente = self.repo.buscar_por_persona_horario_fecha(
             datos.persona_id, datos.horario_id, datos.fecha_entrenamiento
         )

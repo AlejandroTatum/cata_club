@@ -177,10 +177,18 @@ async def desasignar_alumno_de_horario(
     AsistenciaServicio(db).desasignar_alumno_de_horario(persona_id, horario_id)
 
 
+# SEC-1: roster completo del horario (nombre, edad y persona_id de cada
+# alumno inscrito). Antes solo exigia token valido -- cualquier sesion
+# autenticada (alumno, representante) podia enumerar esos datos de CUALQUIER
+# horario. No hay ownership que aplicar aca (el recurso es un horario, no una
+# persona) ni carve-out para el propio inscrito: el DTO expone tambien a los
+# compañeros. Mismo gate que su hermano `desasignar_alumno_de_horario` (:170).
+# Quien necesita "mis horarios" tiene `GET /asistencias/alumnos/{id}/horarios`
+# (ownership-gated, sin cambios).
 @router.get(
     "/horarios/{horario_id}/alumnos",
     response_model=List[AlumnoHorarioDetalleDTO],
-    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
 )
 async def listar_alumnos_por_horario(
     horario_id: int, db: Session = Depends(obtener_sesion)

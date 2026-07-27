@@ -10,6 +10,7 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRe
 from app.presentacion.schemas.auth_schemas import RegistroUsuarioDTO, ActualizarPerfilPropioDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.firma_archivos import es_firma_valida
 
 
 class AuthServicio:
@@ -138,6 +139,15 @@ class AuthServicio:
 
         if content_type not in self.TIPOS_MIME_PERMITIDOS_FOTO_PERFIL:
             raise OperacionInvalida("Formato de archivo no permitido. Use JPG o PNG")
+        # La firma binaria real debe coincidir con el tipo declarado: el
+        # Content-Type que manda el cliente no prueba nada sobre el
+        # contenido real (decisión de diseño 2.3, sdd/production-readiness).
+        if not es_firma_valida(contenido, content_type):
+            raise OperacionInvalida(
+                "El contenido del archivo no coincide con el formato declarado"
+            )
+        # Defensa en profundidad: el router ya acota la lectura vía
+        # `leer_con_limite` antes de llegar acá.
         if len(contenido) > self.TAMANO_MAXIMO_FOTO_PERFIL_BYTES:
             raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
 

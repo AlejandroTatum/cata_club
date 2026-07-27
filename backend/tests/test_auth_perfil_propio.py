@@ -239,6 +239,26 @@ def test_subir_foto_perfil_tipo_no_permitido_da_400(client, db_session):
     assert "formato" in resp.json()["detail"].lower()
 
 
+@patch("app.infraestructura.cloudinary_cliente.subir_foto_perfil")
+def test_subir_foto_perfil_firma_no_coincide_con_content_type_da_400(_mock_cloudinary, client, db_session):
+    """Declara `image/jpeg` pero el contenido real no tiene la firma binaria
+    de un JPEG -- debe rechazarse ANTES de llamar a Cloudinary
+    (REQ-SEC-3, sdd/production-readiness)."""
+    persona = _crear_persona(db_session, cedula="1710034333", nombres="Elena", telefono="0991112228")
+    rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")
+    _crear_usuario_para_persona(db_session, persona, correo="elena@cataclub.com", roles=[rol_admin])
+    _restaurar_override_token(correo="elena@cataclub.com", persona_id=persona.id, roles=["ADMINISTRADOR"])
+
+    contenido = b"esto no es una imagen real" + b"\x00" * 50
+    resp = client.post(
+        "/api/v1/auth/me/foto",
+        files={"archivo": ("foto.jpg", contenido, "image/jpeg")},
+    )
+    assert resp.status_code == 400
+    assert "no coincide" in resp.json()["detail"].lower()
+    _mock_cloudinary.assert_not_called()
+
+
 def test_subir_foto_perfil_excede_tamano_maximo_da_400(client, db_session):
     persona = _crear_persona(db_session, cedula="1710034317", nombres="Camila", telefono="0991112226")
     rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")

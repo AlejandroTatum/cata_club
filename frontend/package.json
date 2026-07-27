@@ -4,9 +4,10 @@
   "private": true,
   "description": "Cata Club admin frontend — Table tennis club management system, Pair 3 university project",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/check-env.mjs && next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/check-env.mjs && next start",
+    "check-env": "node scripts/check-env.mjs",
     "lint": "next lint",
     "type-check": "tsc --noEmit --incremental false",
     "test": "vitest run",

@@ -1,16 +1,23 @@
 """
 Fixtures compartidas para las pruebas del backend.
-Usa SQLite en memoria (no requiere PostgreSQL) para validar que el modelo de
-dominio, los repositorios, los servicios de negocio y los routers funcionan
-de punta a punta.
+
+La suite corre contra PostgreSQL real (decisión de diseño 1.1/1.2/1.3,
+sdd/production-readiness): `TEST_DATABASE_URL` es OBLIGATORIO (ver
+`db-test` en docker-compose.yml, o el servicio Postgres de CI en
+.github/workflows/ci.yml). El esquema lo crea Alembic real
+(`alembic upgrade head`) — nunca `Base.metadata.create_all` — y el
+aislamiento por test es vía transacción externa + savepoints. La rama
+SQLite transitoria y el allow-list de fallout (`_pendientes_postgres.py`)
+se eliminaron en el commit de sunset (PR-06f) una vez reparado el único
+archivo que la migración a Postgres expuso.
 """
 import sys
 import os
 from datetime import date as _date_cls
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -18,7 +25,24 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Deshabilitar rate limiting en tests
 os.environ.setdefault("AMBIENTE", "test")
 
-from app.dominio.modelos import Base, Persona, Usuario, Rol
+# Contrato de un solo env var (decisión 1.1): tanto esta suite como Alembic
+# (vía `settings.database_url`, leído en `alembic/env.py`) apuntan al MISMO
+# Postgres. Esto tiene que pasar ANTES de importar cualquier módulo de
+# `app.*` de más abajo: `settings` es un singleton (`Settings()`) que lee
+# las env vars una sola vez, al importarse
+# `app.soporte_transversal.configuracion`.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
+if not TEST_DATABASE_URL:
+    raise RuntimeError(
+        "TEST_DATABASE_URL no está definido. La suite requiere Postgres "
+        "real -- levantá `db-test` (`docker compose --profile test up -d "
+        "db-test`) y corré con, por ejemplo, TEST_DATABASE_URL="
+        "postgresql+psycopg://usuario:password@localhost:5436/cataclub_test "
+        "(ver docker-compose.yml). Ya no existe una rama SQLite de respaldo."
+    )
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+
+from app.dominio.modelos import Persona, Usuario, Rol
 from app.dominio.enums import TipoRol
 from app.infraestructura.db import obtener_sesion
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -96,22 +120,72 @@ def persona_sin_usuario(db_session):
     return p
 
 
+@pytest.fixture(scope="session")
+def motor_test():
+    """Motor de Postgres para toda la sesión de pytest (decisión 1.1/1.3).
+    `NullPool`: cada test abre su propia conexión/transacción explícita;
+    poolear entre tests que además corren secuencialmente no aporta nada."""
+    engine = create_engine(TEST_DATABASE_URL, poolclass=NullPool)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def esquema_migrado(motor_test):
+    """Crea el esquema UNA vez por sesión aplicando las migraciones reales
+    de Alembic (decisión 1.2) — nunca `Base.metadata.create_all`, así se
+    ejercitan los ENUM nativos, las FKs y cualquier `ALTER TYPE` real, cosas
+    que `create_all` jamás corre."""
+    with motor_test.connect() as conexion:
+        conexion.execute(text("DROP SCHEMA public CASCADE"))
+        conexion.execute(text("CREATE SCHEMA public"))
+        conexion.commit()
+    from alembic.config import Config as AlembicConfig
+    from alembic import command as alembic_command
+    raiz_backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    alembic_cfg = AlembicConfig(os.path.join(raiz_backend, "alembic.ini"))
+    alembic_command.upgrade(alembic_cfg, "head")
+
+
+_secuencias_cache: list[str] = []
+
+
+def _reiniciar_secuencias(conexion) -> None:
+    """Resetea cada secuencia a 1 dentro de la transacción externa del test.
+    `ALTER SEQUENCE ... RESTART WITH n` es transaccional en Postgres (a
+    diferencia de `nextval`/`setval`, que nunca se deshacen) y por lo tanto
+    se revierte con el `ROLLBACK` de teardown de `db_session` — verificado
+    empíricamente contra Postgres 16 real en
+    `backend/scripts/spike_secuencias_postgres.sql`. Esto preserva, sin
+    reescribirlos, a los tests existentes que hardcodean ids bajos (ej.
+    `"persona_id": 1` en los fixtures `client*` más abajo)."""
+    global _secuencias_cache
+    if not _secuencias_cache:
+        filas = conexion.execute(text(
+            "SELECT sequence_name FROM information_schema.sequences "
+            "WHERE sequence_schema = 'public'"
+        )).fetchall()
+        _secuencias_cache = [fila[0] for fila in filas]
+    for nombre in _secuencias_cache:
+        conexion.execute(text(f'ALTER SEQUENCE "{nombre}" RESTART WITH 1'))
+
+
 @pytest.fixture()
-def db_session():
-    """Motor SQLite en memoria, tablas frescas por cada test."""
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    session = TestingSessionLocal()
+def db_session(motor_test):
+    """Sesión de BD por test: aislamiento por transacción externa +
+    savepoints (decisión 1.3) — cada `commit()` de repositorio libera un
+    SAVEPOINT en vez de terminar la transacción externa, así que el
+    `rollback()` final descarta todo lo escrito por el test."""
+    conexion = motor_test.connect()
+    transaccion = conexion.begin()
+    _reiniciar_secuencias(conexion)
+    sesion = Session(bind=conexion, join_transaction_mode="create_savepoint")
     try:
-        yield session
+        yield sesion
     finally:
-        session.close()
-        Base.metadata.drop_all(bind=engine)
+        sesion.close()
+        transaccion.rollback()
+        conexion.close()
 
 
 @pytest.fixture()

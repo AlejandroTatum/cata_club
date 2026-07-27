@@ -1,0 +1,57 @@
+# Overlay de DESARROLLO. `docker compose` lo carga automáticamente junto a
+# `docker-compose.yml` cuando no se pasa ningún `-f` -- por eso el flujo
+# local (`docker compose up`, `make dev-backend`, etc.) no cambia con esta
+# PR. Acá viven las DOS cosas que la producción no puede tener nunca
+# (decisión de diseño 4.1, sdd/production-readiness):
+#
+#   1. `build:` -- construir la imagen del frontend es justo lo que se
+#      midió como causa de OOM en un droplet de 2GB.
+#   2. Puertos publicados en el host -- en producción, Caddy es el único
+#      punto de entrada (PR-14 continuación) y `db`/`redis` nunca deben ser
+#      alcanzables desde fuera del droplet.
+#
+# NUNCA se aplica junto con `docker-compose.prod.yml`. El overlay de
+# producción se invoca explícito: `docker compose -f docker-compose.yml
+# -f docker-compose.prod.yml <comando>`.
+services:
+  db:
+    ports:
+      - "5433:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+      # El resolver DNS embebido de la red bridge por defecto falla para
+      # descargar paquetes (PyPI) en algunos setups aunque el host tenga
+      # internet — se construye sobre la red del host para evitarlo. Solo
+      # afecta al build, no al contenedor en ejecución.
+      network: host
+    ports:
+      - "8000:8000"
+
+  celery-worker:
+    build:
+      context: ./backend
+      network: host
+
+  celery-beat:
+    build:
+      context: ./backend
+      network: host
+
+  frontend:
+    build:
+      context: ./frontend
+      # Mismo motivo que el build del backend: se construye sobre la red
+      # del host para evitar el fallo del resolver DNS embebido.
+      network: host
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+        NEXT_PUBLIC_APP_NAME: Cata Club Admin
+        NEXT_PUBLIC_USE_MOCKS: "false"
+    ports:
+      - "3000:3000"

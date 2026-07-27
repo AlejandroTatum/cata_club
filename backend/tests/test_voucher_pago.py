@@ -160,6 +160,49 @@ def test_subir_voucher_tipo_no_permitido_da_400(client):
     assert "formato" in resp.json()["detail"].lower()
 
 
+@patch("app.infraestructura.cloudinary_cliente.subir_voucher_pago")
+def test_subir_voucher_firma_no_coincide_con_content_type_da_400(_mock_cloudinary, client):
+    """El cliente declara `image/jpeg` pero el contenido real no tiene la
+    firma binaria de un JPEG -- debe rechazarse ANTES de llamar a Cloudinary
+    (REQ-SEC-3, sdd/production-readiness)."""
+    persona = _crear_persona(client, cedula="1710034115")
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+
+    _autenticar_como_duenio(client, persona["id"])
+
+    contenido = b"esto no es una imagen real" + b"\x00" * 50
+    resp = client.post(
+        f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+        files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
+    )
+    assert resp.status_code == 400
+    assert "no coincide" in resp.json()["detail"].lower()
+    _mock_cloudinary.assert_not_called()
+
+
+@patch("app.infraestructura.cloudinary_cliente.subir_voucher_pago")
+def test_subir_voucher_excede_tamano_maximo_da_400_antes_de_cloudinary(_mock_cloudinary, client):
+    """La lectura acotada (`leer_con_limite`) debe rechazar un archivo de
+    más de 5MB sin llegar a invocar Cloudinary."""
+    persona = _crear_persona(client, cedula="1710034123")
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+
+    _autenticar_como_duenio(client, persona["id"])
+
+    contenido_grande = b"\xff\xd8\xff\xe0" + b"\x00" * (5 * 1024 * 1024 + 1)
+    resp = client.post(
+        f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+        files={"archivo": ("voucher.jpg", contenido_grande, "image/jpeg")},
+    )
+    assert resp.status_code == 400
+    assert "tamaño" in resp.json()["detail"].lower()
+    _mock_cloudinary.assert_not_called()
+
+
 def test_subir_voucher_sin_ser_duenio_ni_admin_da_403(client_sin_permisos, client):
     """
     Esquema:

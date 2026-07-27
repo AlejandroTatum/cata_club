@@ -165,7 +165,25 @@ def test_perfil_ranking_ajeno_rechazado_para_alumno(client_sin_permisos):
 def test_marcar_notificacion_ajena_como_leida_falla(client, db_session):
     from app.dominio.modelos import Notificacion
     from app.dominio.enums import TipoNotificacion
-    notif = Notificacion(persona_id=999, tipo=TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO, mensaje="x")
+    # `client` autentica con persona_id=1 (ver docstring del archivo), pero
+    # esa identidad no tiene fila propia en `persona` salvo que se cree a
+    # propósito. Con el reseteo de secuencias por test (decisión 1.4,
+    # sdd/production-readiness), la PRIMERA Persona creada en este test se
+    # llevaría justo el id=1 -- por eso creamos primero "la propia" (deja
+    # documentada la correspondencia con el token) y luego una segunda,
+    # genuinamente distinta, para la notificación ajena. Un id inventado
+    # (ej. 999) violaría la FK de `notificacion.persona_id` contra Postgres
+    # real, que sí la hace cumplir (a diferencia de la rama SQLite
+    # transitoria).
+    _crear_persona(client, "1719990000")
+    otra_persona = _crear_persona(client, "1719990011")
+    assert otra_persona["id"] != 1
+
+    notif = Notificacion(
+        persona_id=otra_persona["id"],
+        tipo=TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO,
+        mensaje="x",
+    )
     db_session.add(notif)
     db_session.commit()
     db_session.refresh(notif)

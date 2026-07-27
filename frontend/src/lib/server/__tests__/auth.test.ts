@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   getBackendApiUrl,
+  backendFetch,
   backendLogin,
   backendMe,
   backendRefresh,
@@ -73,6 +74,41 @@ describe("getBackendApiUrl", () => {
   it("throws a clear error when BACKEND_API_URL is missing", () => {
     delete process.env.BACKEND_API_URL;
     expect(() => getBackendApiUrl()).toThrow(/BACKEND_API_URL/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// backendFetch — misconfiguration must not masquerade as an outage
+// ---------------------------------------------------------------------------
+
+describe("backendFetch", () => {
+  it("reports a missing BACKEND_API_URL as config_error, not backend_unavailable", async () => {
+    delete process.env.BACKEND_API_URL;
+
+    const result = await backendFetch("/auth/login", { method: "POST" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error.code).toBe("config_error");
+    expect(result.error.message).toMatch(/BACKEND_API_URL/);
+  });
+
+  it("never attempts a network call when the backend URL is missing", async () => {
+    delete process.env.BACKEND_API_URL;
+
+    await backendFetch("/auth/login", { method: "POST" });
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("still reports a genuine network failure as backend_unavailable", async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new TypeError("fetch failed"));
+
+    const result = await backendFetch("/auth/login", { method: "POST" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error.code).toBe("backend_unavailable");
   });
 });
 

@@ -12,6 +12,7 @@ from app.infraestructura.repositorios.pago_repositorio import PagoRepositorio, C
 from app.infraestructura.repositorios.ranking_repositorio import NotificacionRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
+from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO, ComprobantePagoCreateDTO,
     PagoListItemDTO,
@@ -494,6 +495,8 @@ class PagoServicio:
           2. Pago está PENDIENTE_VALIDACION (400 OperacionInvalida)
           3. Solicitante es el dueño del pago o admin (403 PermisosInsuficientes)
           4. content_type permitido JPG/PNG/PDF (400 OperacionInvalida)
+          4b. la firma binaria real coincide con el tipo declarado (400
+              OperacionInvalida) -- REQ-SEC-3, sdd/production-readiness
           5. tamaño <= 5 MB (400 OperacionInvalida)
           6. Subida a Cloudinary (carpeta vouchers) + commit en Pago.
 
@@ -538,7 +541,18 @@ class PagoServicio:
         if not content_type or content_type not in TIPOS_MIME_PERMITIDOS_VOUCHER:
             raise OperacionInvalida("Formato de archivo no permitido. Use JPG, PNG o PDF")
 
-        # 5. Tamaño máximo.
+        # 4b. La firma binaria real debe coincidir con el tipo declarado: el
+        # Content-Type que manda el cliente no prueba nada sobre el
+        # contenido real (decisión de diseño 2.3, sdd/production-readiness).
+        if not es_firma_valida(contenido, content_type):
+            raise OperacionInvalida(
+                "El contenido del archivo no coincide con el formato declarado"
+            )
+
+        # 5. Tamaño máximo. Defensa en profundidad: el router ya acota la
+        # lectura vía `leer_con_limite` antes de llegar acá, pero este
+        # chequeo protege a cualquier otro llamador futuro de este método
+        # que no pase por esa ruta.
         if len(contenido) > TAMANO_MAXIMO_VOUCHER_BYTES:
             raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
 

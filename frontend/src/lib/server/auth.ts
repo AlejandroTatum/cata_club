@@ -223,6 +223,7 @@ function isBackendRefreshResponse(value: unknown): value is BackendRefreshRespon
 
 export type AuthErrorCode =
   | "invalid_credentials"
+  | "config_error"
   | "backend_unavailable"
   | "timeout"
   | "invalid_response"
@@ -247,10 +248,29 @@ const BACKEND_TIMEOUT_MS = 10_000;
  * `backendMe`, and `backendRefresh` already use.
  */
 export async function backendFetch(path: string, init: RequestInit): Promise<AuthResult<Response>> {
+  // Resolved OUTSIDE the try on purpose. `getBackendApiUrl()` throws when the
+  // server is misconfigured, and swallowing that into the catch below would
+  // report a permanent deployment fault as a transient outage — the user is
+  // told to "try again in a few minutes" for something no amount of waiting
+  // fixes. Config faults and network faults are different failures and must
+  // stay distinguishable all the way to the UI.
+  let baseUrl: string;
+  try {
+    baseUrl = getBackendApiUrl();
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      error: {
+        code: "config_error",
+        message: error instanceof Error ? error.message : "Configuración del servidor inválida.",
+      },
+    };
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
   try {
-    const response = await fetch(`${getBackendApiUrl()}${path}`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       ...init,
       signal: controller.signal,
     });

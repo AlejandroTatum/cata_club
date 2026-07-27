@@ -11,6 +11,7 @@ from app.presentacion.schemas.auth_schemas import (
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.auth_servicio import AuthServicio
+from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.soporte_transversal.rate_limit import limiter
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
@@ -90,7 +91,7 @@ async def actualizar_foto_perfil(
     persona_id de path param), igual que `PATCH /auth/me`, de modo que un
     usuario nunca pueda reemplazar la foto de otro.
     """
-    contenido = await archivo.read()
+    contenido = await leer_con_limite(archivo, AuthServicio.TAMANO_MAXIMO_FOTO_PERFIL_BYTES)
     return AuthServicio(db).actualizar_foto_perfil(
         correo_actual=token_payload["sub"],
         contenido=contenido,

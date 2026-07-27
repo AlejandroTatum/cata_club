@@ -6,8 +6,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-usuario}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: ${POSTGRES_DB:-cataclub_db}
-    ports:
-      - "5433:5432"
     volumes:
       - cataclub_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,11 +14,42 @@ services:
       timeout: 5s
       retries: 10
 
+  # Postgres efímero exclusivo para la suite de tests del backend (perfil
+  # "test": no se levanta con `docker compose up` normal, hay que pedirlo
+  # explícito con `--profile test up -d db-test`). Deliberadamente separado
+  # del `db` de desarrollo — un bug de rollback en los tests jamás debe
+  # poder tocar datos reales (ver decisión de diseño 1.1,
+  # sdd/production-readiness). `tmpfs` + fsync/synchronous_commit/
+  # full_page_writes desactivados: la durabilidad no importa para datos que
+  # se destruyen al bajar el contenedor, y esto acelera notablemente la
+  # migración de esquema + las ~780 pruebas que corren sobre esta BD.
+  db-test:
+    image: postgres:16-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-usuario}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: cataclub_test
+    ports:
+      - "5436:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    command: >
+      postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-usuario} -d cataclub_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   mailpit:
     image: axllent/mailpit:latest
@@ -32,17 +61,14 @@ services:
       MP_MAX_MESSAGES: 500
 
   backend:
-    build:
-      context: ./backend
-      # Mismo motivo que el build del frontend: el resolver DNS embebido de
-      # la red bridge por defecto falla para descargar paquetes (PyPI) en
-      # algunos setups aunque el host tenga internet — se construye sobre la
-      # red del host para evitarlo. Solo afecta al build, no al contenedor
-      # en ejecución.
-      network: host
+    # Sin `image:` local a esta imagen no le corresponde entrar en el
+    # overlay de producción sin uno; PR-16 (CD) la publica en GHCR con el
+    # tag `IMAGE_TAG` (ver decisión de diseño 4.2, sdd/production-readiness).
+    # `docker-compose.override.yml` agrega `build:` para desarrollo local:
+    # cuando ambas claves están presentes, Compose construye y etiqueta el
+    # resultado con este nombre -- el flujo local no cambia.
+    image: ghcr.io/kthiu666/cata_club-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     environment: &backend_env
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-usuario}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-cataclub_db}
       REDIS_URL: redis://redis:6379/0
@@ -74,7 +100,11 @@ services:
       # --- Chatbot de FAQ (gateway OpenCode) ---
       OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      # PR-09 (sdd/production-readiness): antes apuntaba a /docs. En
+      # producción /docs se deshabilita (PR-10), así que el healthcheck no
+      # puede depender de esa ruta -- /health no tiene dependencias (ni BD
+      # ni auth) y existe justo para esto.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -83,68 +113,49 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     # entrypoint.sh: fail-fast si `alembic upgrade head` falla (ver
     # backend/scripts/RUNBOOK_reset_db.md). El `;` que encadenaba esto
     # inline aquí antes NO propagaba el fallo de la migración.
     command: sh scripts/entrypoint.sh
 
   celery-worker:
-    build:
-      context: ./backend
-      # Mismo motivo que el build del frontend: el resolver DNS embebido de
-      # la red bridge por defecto falla para descargar paquetes (PyPI) en
-      # algunos setups aunque el host tenga internet — se construye sobre la
-      # red del host para evitarlo. Solo afecta al build, no al contenedor
-      # en ejecución.
-      network: host
+    image: ghcr.io/kthiu666/cata_club-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment: *backend_env
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       backend:
         condition: service_started
-    command: uv run celery -A app.infraestructura.tareas.celery_app worker --loglevel=info
+    # --concurrency fijo (decisión de diseño 4.6, sdd/production-readiness):
+    # sin esto, el modo prefork por defecto de Celery genera un proceso
+    # hijo POR CORE DEL HOST -- 745MB medidos en un host de desarrollo de
+    # 12 cores, un valor que un droplet de 2GB no puede sostener.
+    # --max-tasks-per-child recicla los hijos periódicamente, la defensa
+    # más barata disponible contra fugas de memoria lentas.
+    command: uv run celery -A app.infraestructura.tareas.celery_app worker --loglevel=info --concurrency=2 --max-tasks-per-child=100
 
   celery-beat:
-    build:
-      context: ./backend
-      # Mismo motivo que el build del frontend: el resolver DNS embebido de
-      # la red bridge por defecto falla para descargar paquetes (PyPI) en
-      # algunos setups aunque el host tenga internet — se construye sobre la
-      # red del host para evitarlo. Solo afecta al build, no al contenedor
-      # en ejecución.
-      network: host
+    image: ghcr.io/kthiu666/cata_club-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment: *backend_env
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       backend:
         condition: service_started
     command: uv run celery -A app.infraestructura.tareas.celery_app beat --loglevel=info
 
   frontend:
     restart: unless-stopped
-    build:
-      context: ./frontend
-      # The default bridge network's embedded DNS resolver fails to reach
-      # external registries (npm, Google Fonts) in some setups even when the
-      # host itself has working internet — build on the host's network stack
-      # instead, which sidesteps that resolver entirely. Build-time only;
-      # doesn't affect the running container's network at all.
-      network: host
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
-        NEXT_PUBLIC_APP_NAME: Cata Club Admin
-        NEXT_PUBLIC_USE_MOCKS: "false"
-    ports:
-      - "3000:3000"
+    # Igual que `backend`: sin `image:` local, la publica PR-16 en GHCR.
+    # `docker-compose.override.yml` agrega `build:` para desarrollo local.
+    image: ghcr.io/kthiu666/cata_club-frontend:${IMAGE_TAG:-latest}
     environment:
       # Server-only — the Next.js BFF (src/app/api/auth/**) calls FastAPI directly
       # over the compose network, not through localhost.

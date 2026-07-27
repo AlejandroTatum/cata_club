@@ -1,0 +1,28 @@
+# Overlay de PRODUCCIÓN. Se aplica SIEMPRE junto a `docker-compose.yml`, y
+# NUNCA junto a `docker-compose.override.yml` (ese es solo para desarrollo
+# local -- ver el comentario de ese archivo):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml <comando>
+#
+# Deliberadamente angosto en esta PR (sdd/production-readiness, PR-14): la
+# base ya no tiene `build:` ni puertos publicados, así que este overlay no
+# necesita QUITAR nada -- esa es la propiedad estructural que buscaba la
+# decisión de diseño 4.1 (los overlays de Compose se fusionan, nunca pueden
+# remover una clave). Caddy (TLS + reverse proxy), límites de memoria por
+# servicio, y logging rotado quedan para la continuación de esta PR (ver
+# decisiones de diseño 4.5/4.6/4.7): no forman parte de la propiedad de
+# seguridad medida (build en el droplet OOM-ea un 2GB) que esta PR entrega.
+services:
+  backend:
+    environment:
+      # Hardcodeado, no `${AMBIENTE:-production}`: este overlay debe forzar
+      # producción sin depender de que nadie exporte la variable.
+      AMBIENTE: production
+
+  celery-worker:
+    environment:
+      AMBIENTE: production
+
+  celery-beat:
+    environment:
+      AMBIENTE: production
