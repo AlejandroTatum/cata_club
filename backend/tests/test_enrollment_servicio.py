@@ -2,8 +2,8 @@ from datetime import date
 
 import pytest
 
-from app.dominio.enums import TipoRol
-from app.dominio.modelos import Persona, Usuario
+from app.dominio.enums import TipoNotificacion, TipoRol
+from app.dominio.modelos import Notificacion, Persona, Usuario
 from app.presentacion.schemas.enrollment_schemas import (
     EnrollmentAlumnoDTO,
     EnrollmentCreateDTO,
@@ -280,3 +280,92 @@ def test_credenciales_menor_contrasenia_corta_rechazada_schema(db_session):
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
             correo="lucas@test.com", contrasenia="123",
         )
+
+
+# --- Notificación a administradores (hueco de cobertura) -------------------
+# Ninguna prueba anterior de este archivo llega a crear una Notificacion:
+# `_notificar_nueva_inscripcion` sale temprano cuando no existe el rol
+# ADMINISTRADOR en la base (`rol_admin is None`), y ningún escenario previo
+# lo creaba. Por eso las 455 pruebas pasaban mientras producción moría con
+# `invalid input value for enum tiponotificacion: "NUEVA_INSCRIPCION"`.
+
+def _crear_administrador(db_session, correo: str = "admin@cataclub.test") -> int:
+    """Crea una Persona + Usuario con rol ADMINISTRADOR y devuelve su
+    persona_id. Es la precondición que activa la notificación."""
+    from app.dominio.modelos import Rol
+
+    persona = Persona(
+        nombres="Admin", apellidos="Principal", cedula="1701010101",
+        fecha_nacimiento=date(1985, 3, 10), telefono="0990000001",
+    )
+    db_session.add(persona)
+    db_session.flush()
+    usuario = Usuario(
+        correo=correo, contrasenia="hash", persona_id=persona.id,
+        roles=[Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Administrador")],
+    )
+    db_session.add(usuario)
+    db_session.commit()
+    return persona.id
+
+
+def test_inscripcion_con_representante_notifica_a_los_administradores(db_session):
+    """La autoinscripción debe dejar una notificación NUEVA_INSCRIPCION para
+    cada administrador. Exige que el label exista en el enum de PostgreSQL."""
+    admin_id = _crear_administrador(db_session)
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(),
+    )
+
+    resultado = EnrollmentServicio(db_session).enroll(datos)
+
+    assert resultado["access_token"]
+    notificaciones = (
+        db_session.query(Notificacion)
+        .filter(Notificacion.persona_id == admin_id)
+        .all()
+    )
+    assert len(notificaciones) == 1
+    assert notificaciones[0].tipo == TipoNotificacion.NUEVA_INSCRIPCION
+    assert "Lucas Martinez" in notificaciones[0].mensaje
+
+
+def test_autoinscripcion_adulto_notifica_a_los_administradores(db_session):
+    """Segundo camino de `enroll()`: adulto con credenciales propias."""
+    admin_id = _crear_administrador(db_session)
+    datos = EnrollmentCreateDTO(
+        alumno=_alumno_dto(cedula="1798765432", fecha_nacimiento=date(2000, 1, 1)),
+        credenciales_alumno=EnrollmentCredencialesDTO(
+            correo="jugador@example.com", contrasenia="password8",
+        ),
+    )
+
+    EnrollmentServicio(db_session).enroll(datos)
+
+    tipos = [
+        n.tipo for n in db_session.query(Notificacion)
+        .filter(Notificacion.persona_id == admin_id).all()
+    ]
+    assert tipos == [TipoNotificacion.NUEVA_INSCRIPCION]
+
+
+def test_inscripcion_sin_credenciales_notifica_a_los_administradores(db_session):
+    """Tercer camino de `enroll()`: registro sin auto-login."""
+    admin_id = _crear_administrador(db_session)
+    datos = EnrollmentCreateDTO(
+        alumno=_alumno_dto(cedula="1755555555", fecha_nacimiento=date(2000, 1, 1)),
+    )
+
+    resultado = EnrollmentServicio(db_session).enroll(datos)
+
+    assert "persona_id" in resultado
+    tipos = [
+        n.tipo for n in db_session.query(Notificacion)
+        .filter(Notificacion.persona_id == admin_id).all()
+    ]
+    assert tipos == [TipoNotificacion.NUEVA_INSCRIPCION]
