@@ -18,7 +18,11 @@
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { NextRequest } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { POST } from "@/app/api/groups/horarios/route";
+import { PUT } from "@/app/api/groups/horarios/[id]/route";
+import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 import {
   obtenerRolesDePersona,
   asignarRol,
@@ -36,6 +40,7 @@ import {
   fetchPagosDePersona,
   desasignarAlumnoDeHorario,
   actualizarHorario,
+  crearHorario,
   eliminarHorario,
   updatePaymentValidation,
   fetchStudentPortal,
@@ -81,6 +86,18 @@ function collectRouteMatchers(): { pattern: string; regex: RegExp }[] {
 }
 
 const ROUTE_MATCHERS = collectRouteMatchers();
+
+/** A non-expired access token the BFF handlers accept as the auth cookie. */
+function makeSeamJwt(): string {
+  const encode = (value: object): string =>
+    Buffer.from(JSON.stringify(value))
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  return `${encode({ alg: "none", typ: "JWT" })}.${encode({ sub: "1", exp })}.sig`;
+}
 
 /** The pathname (query stripped) of the single fetch a client call performs. */
 async function capturePathname(call: () => Promise<unknown>): Promise<string> {
@@ -178,5 +195,126 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     const url = new URL(String(fetchSpy.mock.calls[0]?.[0]), "http://localhost");
     expect(url.pathname).toBe("/api/personas/2/roles");
     expect(url.searchParams.get("tipoRol")).toBe("ENTRENADOR");
+  });
+});
+
+/**
+ * Body seam — the client's payload must be accepted by the handler it targets.
+ *
+ * The block above proves each client URL resolves to a real `route.ts`; the
+ * handler tests prove each handler works. Neither proves the client and the
+ * handler agree on the *body*: handler tests build their own request body, so
+ * a client that sends a different shape stays invisible to them. That is the
+ * same failure class as the `quitarRol` 404 documented at the top of this
+ * file, one layer deeper — the request reaches the handler and is rejected
+ * with a 400 instead of vanishing into a 404.
+ *
+ * These tests take the body `crearHorario`/`actualizarHorario` actually build
+ * and run it through the real POST/PUT handlers, then assert the payload the
+ * handler forwards matches the backend's `HorarioCreateDTO`/`HorarioUpdateDTO`
+ * key set exactly.
+ */
+describe("API client bodies are accepted by the BFF handler they target", () => {
+  const ACCESS = makeSeamJwt();
+
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_USE_MOCKS = "true";
+    process.env.BACKEND_API_URL = "http://localhost:8000/api/v1";
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.NEXT_PUBLIC_USE_MOCKS;
+    delete process.env.BACKEND_API_URL;
+  });
+
+  /** The JSON body of the single fetch a client call performs. */
+  async function captureBody(call: () => Promise<unknown>): Promise<unknown> {
+    const fetchSpy = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    await call().catch(() => undefined);
+
+    expect(fetchSpy).toHaveBeenCalled();
+    const body = fetchSpy.mock.calls[0]?.[1]?.body;
+    vi.restoreAllMocks();
+    return JSON.parse(String(body));
+  }
+
+  /** The JSON body the handler forwarded to FastAPI. */
+  function forwardedToBackend(): Record<string, unknown> {
+    const init = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    return JSON.parse(String(init?.body));
+  }
+
+  it("crearHorario's body is accepted by POST /api/groups/horarios", async () => {
+    // Shape identical to the DTO `groups/page.tsx` builds on submit —
+    // `nivel_ranking_id` included, because the real UI sends it.
+    const clientBody = await captureBody(() =>
+      crearHorario({
+        dia_semana: "LUNES",
+        categoria: "COMPETITIVO",
+        entrenador_id: 5,
+        nivel_ranking_id: 3,
+      }),
+    );
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: 1 }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await POST(
+      new NextRequest("http://localhost/api/groups/horarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
+        body: JSON.stringify(clientBody),
+      }),
+    );
+
+    expect(response.status).not.toBe(400);
+    expect(Object.keys(forwardedToBackend()).sort()).toEqual([
+      "categoria",
+      "dia_semana",
+      "entrenador_id",
+    ]);
+  });
+
+  it("actualizarHorario's body is accepted by PUT /api/groups/horarios/[id]", async () => {
+    // `groups/page.tsx` reuses the same `shared` object for updates.
+    const clientBody = await captureBody(() =>
+      actualizarHorario(3, {
+        categoria: "COMPETITIVO",
+        entrenador_id: 5,
+        nivel_ranking_id: 3,
+      }),
+    );
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: 3 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await PUT(
+      new NextRequest("http://localhost/api/groups/horarios/3", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
+        body: JSON.stringify(clientBody),
+      }),
+      { params: { id: "3" } },
+    );
+
+    expect(response.status).not.toBe(400);
+    expect(Object.keys(forwardedToBackend()).sort()).toEqual(["categoria", "entrenador_id"]);
   });
 });

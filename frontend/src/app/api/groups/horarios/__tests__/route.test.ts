@@ -1,16 +1,17 @@
 /**
  * Route Handler Tests — GET/POST /api/groups/horarios
  *
- * GET is new (added in the gestion-horarios PR-C bugfix). POST already
- * existed but had no coverage — left untouched here per PR-C's scope
- * (only the GET addition is under test).
+ * POST speaks the `categoria`-derived contract: the backend's
+ * `HorarioCreateDTO` accepts exactly `categoria`, `dia_semana` and
+ * `entrenador_id`, deriving `hora_inicio`/`hora_fin` from
+ * `CATEGORIA_METADATA[categoria]`.
  *
  * @vitest-environment node
  */
 
 import { NextRequest } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { GET } from "../route";
+import { GET, POST } from "../route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -33,6 +34,23 @@ function getRequest(query = "", cookie = ""): NextRequest {
     method: "GET",
     headers: cookie ? { cookie } : {},
   });
+}
+
+function postRequest(body: unknown, cookie = ""): NextRequest {
+  return new NextRequest("http://localhost/api/groups/horarios", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookie ? { cookie } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+/** The JSON body the handler forwarded to FastAPI on its Nth fetch. */
+function forwardedBody(callIndex = 0): Record<string, unknown> {
+  const init = vi.mocked(global.fetch).mock.calls[callIndex]?.[1];
+  return JSON.parse(String(init?.body));
 }
 
 beforeEach(() => {
@@ -89,5 +107,66 @@ describe("GET /api/groups/horarios", () => {
 
     expect(response.status).toBe(500);
     expect(body.message).toBe("Error interno");
+  });
+});
+
+describe("POST /api/groups/horarios", () => {
+  const validBody = { categoria: "COMPETITIVO", dia_semana: "LUNES", entrenador_id: 5 };
+
+  it("returns 401 when no access token cookie is present", async () => {
+    const response = await POST(postRequest(validBody));
+    expect(response.status).toBe(401);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards exactly categoria, dia_semana and entrenador_id with the bearer token", async () => {
+    const creado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5, nivelRankingId: null };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creado, 201));
+
+    const access = makeJwt(3600);
+    const response = await POST(postRequest(validBody, `${ACCESS_TOKEN_COOKIE}=${access}`));
+    const body = await response.json();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/asistencias/horarios",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: `Bearer ${access}` }),
+      }),
+    );
+    expect(forwardedBody()).toEqual(validBody);
+    expect(response.status).toBe(201);
+    expect(body).toEqual(creado);
+  });
+
+  it("returns 400 when categoria is missing", async () => {
+    const access = makeJwt(3600);
+    const response = await POST(
+      postRequest({ dia_semana: "LUNES", entrenador_id: 5 }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+    );
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when entrenador_id is not a number (triangulation)", async () => {
+    const access = makeJwt(3600);
+    const response = await POST(
+      postRequest({ ...validBody, entrenador_id: "5" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+    );
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("propagates backend errors", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ message: "Ya existe un horario para ese día." }, 409));
+
+    const access = makeJwt(3600);
+    const response = await POST(postRequest(validBody, `${ACCESS_TOKEN_COOKIE}=${access}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.message).toBe("Ya existe un horario para ese día.");
   });
 });

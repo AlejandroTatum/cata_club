@@ -4,7 +4,8 @@
  * GET: lists training schedules (optionally filtered by `?categoria=`).
  *      Proxies to FastAPI's GET /asistencias/horarios.
  * POST: creates a new training schedule. Proxies to FastAPI's
- *       POST /asistencias/horarios.
+ *       POST /asistencias/horarios, whose `HorarioCreateDTO` accepts exactly
+ *       `categoria`, `dia_semana` and `entrenador_id`.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,12 +17,14 @@ import {
   badRequestResponse,
 } from "@/lib/server/bff-helpers";
 
+/** `hora_inicio`/`hora_fin` are absent on purpose: the backend derives them
+ *  server-side from `CATEGORIA_METADATA[categoria]`, so they are not input.
+ *  `nivel_ranking_id` is not part of the schedule either — ranking level lives
+ *  on `Ranking`. Forwarding any of them makes FastAPI reject the request. */
 interface CrearHorarioBody {
+  categoria?: unknown;
   dia_semana?: unknown;
-  hora_inicio?: unknown;
-  hora_fin?: unknown;
   entrenador_id?: unknown;
-  nivel_ranking_id?: unknown;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -43,12 +46,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const body = rawBody as CrearHorarioBody;
   if (
+    typeof body.categoria !== "string" ||
     typeof body.dia_semana !== "string" ||
-    typeof body.hora_inicio !== "string" ||
-    typeof body.hora_fin !== "string" ||
     typeof body.entrenador_id !== "number"
   ) {
-    return badRequestResponse("dia_semana, hora_inicio, hora_fin y entrenador_id son obligatorios.");
+    return badRequestResponse("Seleccione la categoría, el día y el entrenador.");
   }
 
   return proxyToBackend("/asistencias/horarios", {
@@ -56,11 +58,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     accessToken,
     successStatus: 201,
     body: {
+      categoria: body.categoria,
       dia_semana: body.dia_semana,
-      hora_inicio: body.hora_inicio,
-      hora_fin: body.hora_fin,
       entrenador_id: body.entrenador_id,
-      nivel_ranking_id: body.nivel_ranking_id ?? null,
     },
   });
 }

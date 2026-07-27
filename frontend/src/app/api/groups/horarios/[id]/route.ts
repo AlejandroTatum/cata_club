@@ -1,7 +1,10 @@
 /**
  * BFF proxy — PUT/DELETE /api/groups/horarios/[id]
  *
- * PUT: updates a training schedule.
+ * PUT: updates a training schedule. FastAPI's `HorarioUpdateDTO` accepts
+ *      exactly `categoria`, `dia_semana` and `entrenador_id`, all optional
+ *      and applied with `exclude_unset`, so only the keys present in the
+ *      incoming body are forwarded.
  * DELETE: removes a training schedule.
  * Proxies to FastAPI's PUT/DELETE /asistencias/horarios/{id}.
  */
@@ -19,12 +22,14 @@ import {
   badRequestResponse,
 } from "@/lib/server/bff-helpers";
 
+/** `hora_inicio`/`hora_fin` are absent on purpose: the backend derives them
+ *  server-side from `CATEGORIA_METADATA[categoria]`, so they are not input.
+ *  `nivel_ranking_id` is not part of the schedule either — ranking level lives
+ *  on `Ranking`. Forwarding any of them makes FastAPI reject the request. */
 interface ActualizarHorarioBody {
+  categoria?: unknown;
   dia_semana?: unknown;
-  hora_inicio?: unknown;
-  hora_fin?: unknown;
   entrenador_id?: unknown;
-  nivel_ranking_id?: unknown;
 }
 
 function buildBackendUrl(id: string): string {
@@ -43,11 +48,9 @@ export async function PUT(
 
   const body = rawBody as ActualizarHorarioBody;
   const UPDATABLE_FIELDS: Array<[keyof ActualizarHorarioBody, string]> = [
+    ["categoria", "categoria"],
     ["dia_semana", "dia_semana"],
-    ["hora_inicio", "hora_inicio"],
-    ["hora_fin", "hora_fin"],
     ["entrenador_id", "entrenador_id"],
-    ["nivel_ranking_id", "nivel_ranking_id"],
   ];
   const payload: Record<string, unknown> = {};
   for (const [key, field] of UPDATABLE_FIELDS) {
