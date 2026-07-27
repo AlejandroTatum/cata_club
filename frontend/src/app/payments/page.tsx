@@ -68,6 +68,7 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  Clock,
 } from "lucide-react";
 import type {
   PaymentValidationRequest,
@@ -77,6 +78,7 @@ import { fetchPaymentValidations, updatePaymentValidation } from "@/services/api
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import { usePersistentPreference } from "@/lib/persistent-preference";
 import { useToast } from "@/contexts/ToastContext";
+import { useDeferredCommit } from "@/lib/deferred-commit";
 import { calendarIsoDate } from "@/lib/club-date";
 import {
   paginatePaymentRequests,
@@ -342,7 +344,6 @@ export default function PaymentsPage(): React.ReactElement {
    *  approve/reject, and holding the old one is how a detail view goes stale. */
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [rejectionReasonKey, setRejectionReasonKey] = useState("");
   const [rejectionNote, setRejectionNote] = useState("");
@@ -393,15 +394,6 @@ export default function PaymentsPage(): React.ReactElement {
     void loadRequests();
   }, [loadRequests]);
 
-  /**
-   * One feedback channel: the toast. An outcome the user just caused is a
-   * toast; only state that must persist on the page (a field-level validation
-   * message, a load that failed and can be retried) is rendered inline.
-   */
-  useEffect(() => {
-    if (actionError) showError(actionError);
-  }, [actionError, showError]);
-
   const selectedRequest = useMemo(
     () => requests.find((r) => r.id === selectedId) ?? null,
     [requests, selectedId],
@@ -417,7 +409,6 @@ export default function PaymentsPage(): React.ReactElement {
     setShowRejectForm(false);
     setRejectionReasonKey("");
     setRejectionNote("");
-    setActionError(null);
     setPreviewUnavailable(false);
     setVoucherModalOpen(false);
   }, [selectedId]);
@@ -614,6 +605,9 @@ export default function PaymentsPage(): React.ReactElement {
   /** The pending queue as it stood before the in-flight decision resolves. */
   const pendingBeforeDecision = useRef<PaymentValidationRequest[]>([]);
 
+  /** Holds a decision for a few seconds so "Deshacer" can still mean something. */
+  const deferredDecision = useDeferredCommit();
+
   /**
    * Opening a payment swaps the queue out for the detail IN PLACE — same URL,
    * same `<main>`, no dialog. Without help, that leaves focus on a button that
@@ -648,48 +642,98 @@ export default function PaymentsPage(): React.ReactElement {
     setSelectedId(getAutoAdvanceId(pendingBeforeDecision.current, updated.id));
   }
 
-  async function handleApprove(): Promise<void> {
-    if (!selectedRequest || !checklistComplete) return;
+  /**
+   * Decide now, send in a moment — the only honest undo for this screen.
+   *
+   * Approving flips the payment, activates the membership and hands a receipt
+   * to a worker that generates a PDF. Reverting that afterwards would not be
+   * an undo, it would be a compensating transaction with visible fallout: a
+   * membership that blinked active, a receipt already sent for a payment now
+   * pending again. So the decision is held for a few seconds instead, the
+   * queue moves immediately, and "Deshacer" cancels something that never
+   * happened. `useDeferredCommit` guarantees the hold is never silently
+   * dropped: another decision, leaving the page, or closing the tab all send
+   * it rather than discard it.
+   */
+  function decide(
+    request: PaymentValidationRequest,
+    optimistic: PaymentValidationRequest,
+    dto: Parameters<typeof updatePaymentValidation>[1],
+    confirmation: { label: string; message: string; description: string; failure: string },
+  ): void {
+    const previousRequests = requests;
+    const previousSelectedId = selectedId;
+
     pendingBeforeDecision.current = pending;
-    setActionLoading("approve");
-    setActionError(null);
-    try {
-      const startDate = editStartDate || selectedRequest.startDate;
-      applyDecision(
-        await updatePaymentValidation(selectedRequest.id, {
-          action: "approved",
-          startDate,
-          endDate: calcEditEndDate(startDate, editMonths),
-        }),
-      );
-      showSuccess("Pago aprobado. La membresía ahora está activa.");
-    } catch (err) {
-      console.error("[payments] approve failed", err);
-      setActionError("Error al aprobar el pago");
-    } finally {
-      setActionLoading(null);
-    }
+    applyDecision(optimistic);
+
+    const putItBack = (): void => {
+      setRequests(previousRequests);
+      setSelectedId(previousSelectedId);
+    };
+
+    showSuccess(confirmation.message, {
+      description: confirmation.description,
+      action: { label: "Deshacer", onAction: deferredDecision.undo },
+    });
+
+    deferredDecision.schedule({
+      label: confirmation.label,
+      commit: async () => {
+        const saved = await updatePaymentValidation(request.id, dto);
+        // The server owns the canonical row — dates it normalised, the
+        // validation timestamp, the validator's name.
+        setRequests((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+      },
+      onUndo: putItBack,
+      onError: (err: unknown) => {
+        console.error("[payments] decision failed", err);
+        putItBack();
+        // The window is gone and the admin has moved on, so there is no
+        // control left to attach this to: it has to travel to them.
+        showError(confirmation.failure, {
+          description: `${request.studentName} volvió a la cola de pendientes.`,
+        });
+      },
+    });
   }
 
-  async function handleRejectSubmit(): Promise<void> {
+  function handleApprove(): void {
+    if (!selectedRequest || !checklistComplete) return;
+    const request = selectedRequest;
+    const startDate = editStartDate || request.startDate;
+    const endDate = calcEditEndDate(startDate, editMonths);
+
+    decide(
+      request,
+      { ...request, validationStatus: "validado", startDate, endDate },
+      { action: "approved", startDate, endDate },
+      {
+        label: `Aprobación de ${request.studentName}`,
+        message: "Pago aprobado. La membresía ahora está activa.",
+        description: "Puede deshacerlo durante unos segundos.",
+        failure: "No se pudo aprobar el pago.",
+      },
+    );
+  }
+
+  function handleRejectSubmit(): void {
     if (!selectedRequest) return;
     const rejectionReason = composeRejectionReason(rejectionReasonKey, rejectionNote);
     if (!rejectionReason) return;
+    const request = selectedRequest;
 
-    pendingBeforeDecision.current = pending;
-    setActionLoading("reject");
-    setActionError(null);
-    try {
-      applyDecision(
-        await updatePaymentValidation(selectedRequest.id, { action: "rejected", rejectionReason }),
-      );
-      showSuccess("Pago rechazado. Se le avisó al responsable con el motivo elegido.");
-    } catch (err) {
-      console.error("[payments] reject failed", err);
-      setActionError("Error al rechazar el pago");
-    } finally {
-      setActionLoading(null);
-    }
+    decide(
+      request,
+      { ...request, validationStatus: "rechazado", rejectionReason },
+      { action: "rejected", rejectionReason },
+      {
+        label: `Rechazo de ${request.studentName}`,
+        message: "Pago rechazado. Se le avisó al responsable con el motivo elegido.",
+        description: "Puede deshacerlo durante unos segundos.",
+        failure: "No se pudo rechazar el pago.",
+      },
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -726,6 +770,33 @@ export default function PaymentsPage(): React.ReactElement {
   function renderQueue(): React.ReactElement {
     return (
       <>
+        {/*
+         * A decision that is still reversible is a state the admin is IN, and
+         * a toast is a state that scrolls away — it dismisses itself, and the
+         * next one buries it. This row lasts exactly as long as the hold does,
+         * so "did that go through yet?" has an answer on the screen rather
+         * than only in a notification that may already be gone.
+         *
+         * No focus class on the button: the system indicator in `globals.css`
+         * already paints every button, and outranks Tailwind's utilities.
+         */}
+        {deferredDecision.pendingLabel && (
+          <div
+            role="status"
+            className="mb-4 flex flex-wrap items-center gap-3 rounded-ctl border border-line-2 bg-sunken px-4 py-2.5 text-[12.5px] font-semibold text-ink-2"
+          >
+            <Clock size={14} strokeWidth={2} aria-hidden="true" className="shrink-0 text-ink-3" />
+            <span>{deferredDecision.pendingLabel} — se envía en unos segundos.</span>
+            <button
+              type="button"
+              onClick={deferredDecision.undo}
+              className="ml-auto rounded px-2 py-1 font-bold text-ink underline underline-offset-2"
+            >
+              Deshacer
+            </button>
+          </div>
+        )}
+
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {FILTERS.map((f) => (
             <FilterPill

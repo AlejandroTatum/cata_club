@@ -6,7 +6,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import { ToastProvider, useToast } from "@/contexts/ToastContext";
 import ToastContainer from "@/components/ToastContainer";
@@ -221,5 +221,68 @@ describe("ToastContainer — a toast that explains itself", () => {
     );
     expect(detail.className).not.toMatch(/text-(current|white)\/\d/);
     expect(detail.className).not.toMatch(/\bopacity-\d/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A toast that carries an undo.
+//
+// The usability evaluation's blunt finding was "no existe deshacer en ninguna
+// parte". The place to offer it is the toast that reports what just happened,
+// because that is the one moment the user is already looking at the outcome —
+// but only if it stays on screen long enough to notice it, decide, and reach
+// the control.
+// ---------------------------------------------------------------------------
+
+describe("ToastContainer — undo action", () => {
+  function ActionToaster({ onAction }: { onAction: () => void }): React.ReactElement {
+    const { showSuccess } = useToast();
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          showSuccess("Marcados como presentes", {
+            action: { label: "Deshacer", onAction },
+          })
+        }
+      >
+        marcar
+      </button>
+    );
+  }
+
+  it("renders the action as a button the user can reach", () => {
+    render(
+      <ToastProvider>
+        <ActionToaster onAction={vi.fn()} />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "marcar" }));
+
+    expect(screen.getByRole("button", { name: "Deshacer" })).toBeInTheDocument();
+  });
+
+  it("runs the action and dismisses the toast when it is pressed", () => {
+    const onAction = vi.fn();
+    render(
+      <ToastProvider>
+        <ActionToaster onAction={onAction} />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "marcar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deshacer" }));
+
+    expect(onAction).toHaveBeenCalledTimes(1);
+    // The offer is spent — leaving it up invites a second, silent undo.
+    expect(screen.queryByRole("button", { name: "Deshacer" })).not.toBeInTheDocument();
+  });
+
+  it("does not render an action button for an ordinary toast", () => {
+    renderHarness();
+    fireEvent.click(screen.getByRole("button", { name: "Trigger success" }));
+
+    expect(screen.queryByRole("button", { name: "Deshacer" })).not.toBeInTheDocument();
   });
 });

@@ -26,7 +26,7 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
 from app.infraestructura.repositorios.antecedentes_club_repositorio import AntecedentesClubRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.infraestructura.repositorios.ranking_repositorio import NotificacionRepositorio
-from app.presentacion.schemas.enrollment_schemas import EnrollmentCreateDTO
+from app.presentacion.schemas.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentCreateDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import (
     _calcular_edad, EDAD_MINIMA_ALUMNO, EDAD_MAXIMA_ALUMNO, EDAD_MAYORIA_EDAD,
@@ -196,7 +196,7 @@ class EnrollmentServicio:
         usuario.roles.append(rol)
         self.db.commit()
 
-    def _crear_usuario_alumno(self, alumno_data: "EnrollmentAlumnoDTO", persona_id: int) -> Usuario:
+    def _crear_usuario_alumno(self, alumno_data: EnrollmentAlumnoDTO, persona_id: int) -> Usuario:
         """Crea Usuario + ALUMNO para un menor con credenciales propias."""
         if self.repo_usuario.obtener_por_correo(alumno_data.correo):
             raise EntidadDuplicada("El correo del alumno ya está en uso")

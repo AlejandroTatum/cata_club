@@ -1,4 +1,4 @@
-from app.dominio.modelos import Persona, Usuario, Rol
+from app.dominio.modelos import Usuario, Rol
 from app.dominio.enums import TipoRol
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad

@@ -27,14 +27,13 @@ For a larger dataset, run the bulk seed manually:
 
 import os
 import sys
-from datetime import date, time
+from datetime import date
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.infraestructura.db import SessionLocal
 from datetime import datetime, timezone
 
-from app.infraestructura.db import SessionLocal
 from app.dominio.modelos import (
     Persona,
     Usuario,
@@ -49,7 +48,6 @@ from app.dominio.modelos import (
 )
 from app.dominio.enums import (
     TipoRol,
-    DiaSemana,
     Categoria,
     TipoModalidad,
     EstadoMembresia,

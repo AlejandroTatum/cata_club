@@ -7,7 +7,6 @@ transaccional. Soporta tres tipos de cuenta:
   - REPRESENTANTE: adulto que representa a un menor (rol REPRESENTANTE + ALUMNO)
   - MENOR: dependiente de un representante existente (rol ALUMNO)
 """
-from datetime import date, timezone
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades

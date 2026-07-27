@@ -50,6 +50,21 @@ import {
 
 export type ToastVariant = "error" | "success" | "info" | "warning";
 
+/**
+ * A single reversal offered alongside the outcome.
+ *
+ * The usability evaluation's finding was blunt — "no existe deshacer en
+ * ninguna parte" — and the toast is where an undo belongs: it is the one
+ * moment the user is already looking at what just happened. `onAction` runs
+ * and the toast dismisses itself, because an offer that can be taken twice is
+ * a second, silent mutation.
+ */
+export interface ToastAction {
+  /** The verb on the button, e.g. "Deshacer". */
+  label: string;
+  onAction: () => void;
+}
+
 export interface ToastItem {
   id: string;
   variant: ToastVariant;
@@ -57,6 +72,8 @@ export interface ToastItem {
   message: string;
   /** The consequence or the next step. Rendered under the title. */
   description?: string;
+  /** An offer to reverse what just happened, for as long as the toast lives. */
+  action?: ToastAction;
 }
 
 /** The optional second argument every `show*` shortcut accepts. */
@@ -65,6 +82,8 @@ export interface ToastDetail {
   description?: string;
   /** Overrides the measured dwell time for this toast only. */
   duration?: number;
+  /** Offer to reverse the outcome. Extends the dwell time — see below. */
+  action?: ToastAction;
 }
 
 export interface ShowToastOptions extends ToastDetail {
@@ -99,6 +118,16 @@ export const TOAST_DURATION_MS = 4500;
 /** The ceiling. Past this a toast stops being transient and starts nagging. */
 export const TOAST_MAX_DURATION_MS = 10000;
 
+/**
+ * The floor for a toast carrying an undo.
+ *
+ * Reading a confirmation takes as long as it takes; ACTING on one takes
+ * longer — notice it, decide it was wrong, then travel to the control. The
+ * usual undo window is around this figure, and anything shorter turns the
+ * offer into a taunt.
+ */
+export const TOAST_UNDO_DURATION_MS = 8000;
+
 /** Time to notice the toast at all, before any of it has been read. */
 const NOTICE_MS = 1500;
 
@@ -110,10 +139,15 @@ const MS_PER_CHARACTER = 55;
  * so a one-line confirmation resolves to exactly `TOAST_DURATION_MS` and only
  * genuinely long copy earns more time.
  */
-export function toastDurationFor(message: string, description?: string): number {
+export function toastDurationFor(
+  message: string,
+  description?: string,
+  hasAction = false,
+): number {
   const characters = message.length + (description ? description.length : 0);
   const readingTime = NOTICE_MS + characters * MS_PER_CHARACTER;
-  return Math.min(TOAST_MAX_DURATION_MS, Math.max(TOAST_DURATION_MS, readingTime));
+  const floor = hasAction ? TOAST_UNDO_DURATION_MS : TOAST_DURATION_MS;
+  return Math.min(TOAST_MAX_DURATION_MS, Math.max(floor, readingTime));
 }
 
 // ---------------------------------------------------------------------------
@@ -142,13 +176,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const showToast = useCallback(
-    ({ variant, message, description, duration }: ShowToastOptions) => {
+    ({ variant, message, description, duration, action }: ShowToastOptions) => {
       const id = `toast-${++counterRef.current}`;
-      setToasts((prev) => [{ id, variant, message, description }, ...prev]);
+      setToasts((prev) => [{ id, variant, message, description, action }, ...prev]);
 
       const timer = setTimeout(
         () => removeToast(id),
-        duration ?? toastDurationFor(message, description),
+        duration ?? toastDurationFor(message, description, action !== undefined),
       );
       timersRef.current.set(id, timer);
     },

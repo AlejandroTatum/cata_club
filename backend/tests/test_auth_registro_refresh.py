@@ -18,7 +18,6 @@ from datetime import date
 from app.dominio.modelos import Usuario, Rol
 from app.dominio.enums import TipoRol
 from app.seguridad.gestor_auth import GestorAutenticacion
-from app.infraestructura.db import obtener_sesion
 
 
 # --- helpers ---------------------------------------------------------------

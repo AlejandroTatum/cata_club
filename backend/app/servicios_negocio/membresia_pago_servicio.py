@@ -1,6 +1,5 @@
 from datetime import datetime, date, timezone
 from decimal import Decimal
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion

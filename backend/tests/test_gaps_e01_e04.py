@@ -242,7 +242,6 @@ def test_menor_no_puede_registrar_su_propio_pago(client):
 
     from fastapi.testclient import TestClient
     from main import app
-    from app.infraestructura.db import obtener_sesion
 
     # Simula que quien llama es el propio menor (su token, no el admin fijo
     # del fixture `client`).

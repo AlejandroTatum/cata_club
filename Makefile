@@ -58,7 +58,7 @@ test-compose: ## Validate production compose layering (no build/ports leak into 
 lint: lint-backend lint-frontend ## Lint both projects
 
 lint-backend: ## Lint backend (ruff)
-	cd backend && uv run ruff check . || true
+	cd backend && uv run ruff check .
 
 lint-frontend: ## Lint frontend (next lint)
 	cd frontend && pnpm lint

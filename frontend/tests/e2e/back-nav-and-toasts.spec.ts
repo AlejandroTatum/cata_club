@@ -201,9 +201,24 @@ test.describe("Back navigation + toasts", () => {
       .fill("El comprobante está borroso.");
     await page.getByRole("button", { name: "Rechazar y avisar" }).click();
 
+    /*
+     * The decision is HELD for `UNDO_WINDOW_MS` (8s, src/lib/deferred-commit.ts)
+     * before the request goes out, so the failure cannot arrive any sooner than
+     * that. The timeout has to clear the window with room for the round trip on
+     * a loaded CI runner, or this test fails on timing rather than on behaviour.
+     *
+     * The queue reports the failure through a toast rather than an inline
+     * banner: by the time it lands, the window is gone and the admin may have
+     * moved on, so there is no control left to attach it to.
+     */
     await expect(
-      page.getByRole("alert").filter({ hasText: /error al rechazar el pago/i }).first(),
-    ).toBeVisible({ timeout: 10_000 });
+      page.getByRole("alert").filter({ hasText: /no se pudo rechazar el pago/i }).first(),
+    ).toBeVisible({ timeout: 20_000 });
+
+    // And it names the payment that came back, so the admin knows what to redo.
+    await expect(
+      page.getByRole("alert").filter({ hasText: /volvió a la cola de pendientes/i }).first(),
+    ).toBeVisible();
 
     // The detail view carries its own way back to the queue, and a failed
     // rejection must leave the payment where it was rather than swallow it.

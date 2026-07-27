@@ -74,7 +74,7 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
                     "persona_id": persona.id,
                     "vence": pago.fecha_fin.isoformat(),
                 })
-            except Exception as exc:
+            except Exception:
                 logger.exception(
                     "Fallo notificando vencimiento (pago_id=%s)", pago.id
                 )

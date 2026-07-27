@@ -54,8 +54,14 @@ jobs:
 
       - name: Install dependencies
         # --no-build: instala solo wheels, sin ejecutar setup scripts de
-        # sdists. Verificado que los 72 paquetes del lock resuelven a wheels.
+        # sdists. Verificado que los 75 paquetes del lock resuelven a wheels.
         run: uv sync --frozen --no-build
+
+      - name: Lint
+        # Sin este gate el backend acumulo 23 errores de ruff sin que nadie
+        # los viera: el workflow solo linteaba el frontend. La config vive en
+        # backend/pyproject.toml ([tool.ruff]).
+        run: uv run --frozen --no-build ruff check .
 
       - name: Run tests
         env:

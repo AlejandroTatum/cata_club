@@ -11,7 +11,6 @@ Las peticiones no usan body completo cuando solo buscamos el 401/403 temprano
 (el check de auth corre ANTES que el de validación del body, así no llegamos
 a 422 por schema incompleto).
 """
-from datetime import date
 
 
 # --- Sin token -> 401 -------------------------------------------------------
