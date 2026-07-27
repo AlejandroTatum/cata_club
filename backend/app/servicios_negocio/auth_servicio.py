@@ -5,6 +5,7 @@ from app.dominio.modelos import Usuario
 from app.dominio.excepciones import (
     CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
 )
+from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.presentacion.schemas.auth_schemas import RegistroUsuarioDTO, ActualizarPerfilPropioDTO
@@ -55,11 +56,14 @@ class AuthServicio:
                 "Contacte al administrador del club."
             )
 
+        # Endpoint público: los dos casos comparten el mismo texto a propósito,
+        # para no revelar si lo que ya estaba tomado era la cédula o el correo
+        # (ver app/dominio/mensajes.py).
         if persona.usuario is not None:
-            raise EntidadDuplicada("Esta persona ya tiene una cuenta registrada")
+            raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 
         if self.repo.obtener_por_correo(datos.correo) is not None:
-            raise EntidadDuplicada("El correo ya está en uso por otra cuenta")
+            raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 
         hash_contrasenia = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
         nuevo_usuario = Usuario(

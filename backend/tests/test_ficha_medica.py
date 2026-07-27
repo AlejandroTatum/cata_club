@@ -125,3 +125,24 @@ def test_actualizar_datos_de_emergencia_parcial(client):
     assert body["alergias"] == "Ninguna"
     assert body["contactoEmergencia"] == "Luis Pérez"
     assert body["telefonoEmergencia"] == "0987654321"
+
+
+def test_upsert_sin_tipo_sangre_es_400_y_no_nombra_el_campo_interno(client):
+    """PATCH sobre una persona SIN ficha médica y sin tipo de sangre.
+
+    Antes levantaba `EntidadNoEncontrada` -> 404, pero la persona existe y la
+    ficha aún no: no es un recurso ausente, es un dato de entrada que falta,
+    o sea un fallo de validación (400). Además el texto filtraba el nombre de
+    la columna del backend (`tipo_sangre`) a un usuario final.
+    """
+    persona = _crear_persona(client, cedula="1710034073")
+
+    resp = client.patch(
+        f"/api/v1/fichas-medicas/persona/{persona['id']}",
+        json={"alergias": "Polen"},
+    )
+
+    assert resp.status_code == 400
+    detalle = resp.json()["detail"]
+    assert "tipo_sangre" not in detalle
+    assert "tipo de sangre" in detalle.lower()

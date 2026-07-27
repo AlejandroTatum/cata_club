@@ -17,6 +17,7 @@ from datetime import date
 
 from app.dominio.modelos import Usuario, Rol
 from app.dominio.enums import TipoRol
+from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -144,7 +145,7 @@ def test_registro_falla_si_correo_ya_existe(client, db_session):
         json={"cedula": "1710034099", "correo": "repetido@cataclub.com", "contrasenia": "clave12345"},
     )
     assert resp.status_code == 400
-    assert "correo" in resp.json()["detail"].lower()
+    assert resp.json()["detail"] == MENSAJE_IDENTIDAD_DUPLICADA
 
 
 # --- /auth/me ---------------------------------------------------------------

@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
+import { isDuplicateIdentityError, MENSAJE_IDENTIDAD_DUPLICADA } from "@/lib/duplicate-identity";
 
 describe("isDuplicateIdentityError", () => {
   it.each([
+    // Generic message returned by the public / representative flows. Pinned on
+    // the backend side too — see backend/tests/test_mensajes_identidad_duplicada.py.
+    MENSAJE_IDENTIDAD_DUPLICADA,
+    "Ya existe una cuenta registrada con los datos ingresados.",
+    "ya existe una cuenta registrada con los datos ingresados",
+    // Precise messages, still returned by the admin panel.
     "Ya existe una persona con la cédula 1712345678",
     "Ya existe una persona con la cedula 1712345678",
     "YA EXISTE UNA PERSONA CON LA CÉDULA 1712345678",

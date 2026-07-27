@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades
 from app.dominio.enums import TipoRol
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
+from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.soporte_transversal.tiempo import hoy_club
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -50,7 +51,7 @@ class PersonaServicio:
 
     def registrar_persona(self, datos: PersonaCreateDTO) -> Persona:
         if self.repo.obtener_por_cedula(datos.cedula):
-            raise EntidadDuplicada(f"Ya existe una persona con la cédula {datos.cedula}")
+            raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 
         edad = _calcular_edad(datos.fecha_nacimiento)
         if edad < EDAD_MINIMA_ALUMNO or edad > EDAD_MAXIMA_ALUMNO:
@@ -119,7 +120,7 @@ class PersonaServicio:
         # crear también el Usuario + rol ALUMNO para el menor.
         if datos.correo and datos.contrasenia:
             if self.repo_usuario.obtener_por_correo(datos.correo):
-                raise EntidadDuplicada("El correo ya está en uso por otra cuenta")
+                raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
             from app.seguridad.gestor_auth import GestorAutenticacion
             hash_pw = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
             usuario = Usuario(

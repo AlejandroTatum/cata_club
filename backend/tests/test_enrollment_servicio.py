@@ -10,6 +10,7 @@ from app.presentacion.schemas.enrollment_schemas import (
     EnrollmentCredencialesDTO,
     EnrollmentRepresentanteDTO,
 )
+from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 
 
@@ -147,7 +148,9 @@ def test_inscripcion_menor_correo_duplicado_rechazada(db_session):
         ),
     )
     from app.dominio.excepciones import EntidadDuplicada
-    with pytest.raises(EntidadDuplicada, match="correo"):
+    # Texto genérico e idéntico para cédula y correo, a propósito:
+    # ver app/dominio/mensajes.py y tests/test_mensajes_identidad_duplicada.py.
+    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
         EnrollmentServicio(db_session).enroll(datos)
 
 
@@ -191,7 +194,7 @@ def test_alumno_cedula_duplicada_rechazada(db_session):
         alumno=_alumno_dto(cedula="1712345678"),  # misma cédula que representante
     )
     from app.dominio.excepciones import EntidadDuplicada
-    with pytest.raises(EntidadDuplicada, match="cédula"):
+    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
         EnrollmentServicio(db_session).enroll(datos)
 
 
@@ -213,7 +216,7 @@ def test_representante_cedula_duplicada_rechazada(db_session):
         alumno=_alumno_dto(cedula="1798765432"),
     )
     from app.dominio.excepciones import EntidadDuplicada
-    with pytest.raises(EntidadDuplicada, match="cédula"):
+    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
         EnrollmentServicio(db_session).enroll(datos)
 
 
@@ -256,7 +259,7 @@ def test_representante_correo_duplicado_rechazado(db_session):
         alumno=_alumno_dto(),
     )
     from app.dominio.excepciones import EntidadDuplicada
-    with pytest.raises(EntidadDuplicada, match="correo"):
+    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
         EnrollmentServicio(db_session).enroll(datos)
 
 

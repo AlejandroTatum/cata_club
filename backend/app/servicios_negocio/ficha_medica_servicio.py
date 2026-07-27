@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import FichaMedica, Enfermedades
-from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada
+from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import FichaMedicaRepositorio
 from app.presentacion.schemas.persona_schemas import FichaMedicaCreateDTO, FichaMedicaUpdateDTO
@@ -49,7 +49,13 @@ class FichaMedicaServicio:
         if ficha is None:
             tipo_sangre = datos.tipo_sangre
             if tipo_sangre is None:
-                raise EntidadNoEncontrada("No existe ficha médica para esta persona; tipo_sangre es requerido para crearla")
+                # La persona existe y la ficha todavía no: falta un dato de
+                # entrada, no un recurso. Por eso `OperacionInvalida` (400) y
+                # no `EntidadNoEncontrada` (404). El texto tampoco nombra la
+                # columna interna `tipo_sangre`.
+                raise OperacionInvalida(
+                    "Para crear la ficha médica debe indicar el tipo de sangre."
+                )
             ficha = FichaMedica(
                 tipo_sangre=tipo_sangre,
                 persona_id=persona_id,

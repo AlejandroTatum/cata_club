@@ -1129,11 +1129,20 @@ export async function asignarRol(personaId: number, tipoRol: BackendTipoRol): Pr
   });
 }
 
-/** Admin-only: remove a backend role from a persona. */
+/**
+ * Admin-only: remove a backend role from a persona.
+ *
+ * The role travels in the query string, not as a path segment: the BFF handler
+ * is `app/api/personas/[id]/roles/route.ts` and there is no `[tipoRol]` segment
+ * below it, so `/roles/ENTRENADOR` resolves to no handler and Next.js answers
+ * its HTML 404 page. It is the BFF that re-shapes this into the backend's
+ * `DELETE /personas/{id}/roles/{tipo_rol}`.
+ */
 export async function quitarRol(personaId: number, tipoRol: BackendTipoRol): Promise<RolesResponse> {
-  return request<RolesResponse>(apiEndpoint(`/personas/${personaId}/roles/${tipoRol}`), {
-    method: "DELETE",
-  });
+  return request<RolesResponse>(
+    apiEndpoint(`/personas/${personaId}/roles?tipoRol=${encodeURIComponent(tipoRol)}`),
+    { method: "DELETE" },
+  );
 }
 
 /** Admin-only: activate or deactivate a person's account. */

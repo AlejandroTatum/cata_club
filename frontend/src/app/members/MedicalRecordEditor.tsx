@@ -23,6 +23,10 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
+  // Load-bearing default, not cosmetic: the backend's PATCH upsert rejects
+  // creating a first record without a blood type (400). `DESCONOCIDO` is a
+  // valid TipoSangre, so pre-selecting it keeps that error unreachable from
+  // the UI — see MedicalRecordEditor.test.tsx.
   const [tipoSangre, setTipoSangre] = useState<TipoSangre>("DESCONOCIDO");
   const [enfermedadesInput, setEnfermedadesInput] = useState("");
   const [alergias, setAlergias] = useState("");

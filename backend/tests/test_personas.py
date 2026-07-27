@@ -1,6 +1,7 @@
 from datetime import date
 
 from app.dominio.enums import TipoRol
+from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.dominio.modelos import Persona, Rol, Usuario, FichaMedica
 from app.seguridad.gestor_auth import GestorAutenticacion
 from tests.conftest import crear_entrenador
@@ -51,7 +52,7 @@ def test_no_permite_cedula_duplicada(client):
     client.post("/api/v1/personas/", json=_payload_persona())
     resp = client.post("/api/v1/personas/", json=_payload_persona())
     assert resp.status_code == 400
-    assert "cédula" in resp.json()["detail"]
+    assert resp.json()["detail"] == MENSAJE_IDENTIDAD_DUPLICADA
 
 
 def test_obtener_persona_inexistente_da_404(client):
@@ -270,7 +271,7 @@ def test_crear_representado_cedula_duplicada_rechazada(client, db_session):
         json=_payload_representado(cedula=representante.cedula),
     )
     assert resp.status_code == 400
-    assert "cédula" in resp.json()["detail"]
+    assert resp.json()["detail"] == MENSAJE_IDENTIDAD_DUPLICADA
 
     total_personas = db_session.query(Persona).count()
     assert total_personas == 1  # solo el representante, nada se creó
@@ -353,7 +354,7 @@ def test_crear_representado_correo_duplicado_rechazada(client, db_session):
         json=payload2,
     )
     assert resp2.status_code == 400
-    assert "correo" in resp2.json()["detail"].lower()
+    assert resp2.json()["detail"] == MENSAJE_IDENTIDAD_DUPLICADA
 
 
 def test_crear_representado_con_credenciales_correo_invalido_rechazado(client, db_session):

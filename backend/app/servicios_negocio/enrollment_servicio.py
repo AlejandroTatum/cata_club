@@ -19,6 +19,7 @@ from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, Ant
 from app.dominio.enums import TipoRol, TipoNotificacion
 from app.soporte_transversal.tiempo import hoy_club
 from app.dominio.excepciones import EntidadDuplicada, OperacionInvalida
+from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import (
     UsuarioRepositorio, FichaMedicaRepositorio,
@@ -63,12 +64,10 @@ class EnrollmentServicio:
         if datos.representante:
             # Validar cédula única del representante
             if self.repo_persona.obtener_por_cedula(datos.representante.cedula):
-                raise EntidadDuplicada(
-                    f"Ya existe una persona con la cédula {datos.representante.cedula}"
-                )
+                raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
             # Validar correo único
             if self.repo_usuario.obtener_por_correo(datos.representante.correo):
-                raise EntidadDuplicada("El correo del representante ya está en uso")
+                raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 
             # Validar que el representante sea mayor de edad
             edad_rep = _calcular_edad(datos.representante.fecha_nacimiento)
@@ -93,9 +92,7 @@ class EnrollmentServicio:
 
         # 3. Validar cédula única del alumno
         if self.repo_persona.obtener_por_cedula(datos.alumno.cedula):
-            raise EntidadDuplicada(
-                f"Ya existe una persona con la cédula {datos.alumno.cedula}"
-            )
+            raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 
         # 4. Validar regla de menores
         if EDAD_MINIMA_ALUMNO <= edad < EDAD_MAYORIA_EDAD and not representante_id:
@@ -168,7 +165,7 @@ class EnrollmentServicio:
         if datos.credenciales_alumno:
             # Autoinscripción sin representante (adulto)
             if self.repo_usuario.obtener_por_correo(datos.credenciales_alumno.correo):
-                raise EntidadDuplicada("El correo ya está en uso")
+                raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
             hash_pw = GestorAutenticacion.obtener_hash_contrasenia(
                 datos.credenciales_alumno.contrasenia
             )
@@ -202,7 +199,7 @@ class EnrollmentServicio:
     def _crear_usuario_alumno(self, alumno_data: EnrollmentAlumnoDTO, persona_id: int) -> Usuario:
         """Crea Usuario + ALUMNO para un menor con credenciales propias."""
         if self.repo_usuario.obtener_por_correo(alumno_data.correo):
-            raise EntidadDuplicada("El correo del alumno ya está en uso")
+            raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
         hash_pw = GestorAutenticacion.obtener_hash_contrasenia(alumno_data.contrasenia)
         usuario = Usuario(
             correo=alumno_data.correo,
