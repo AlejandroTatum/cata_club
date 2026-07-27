@@ -582,6 +582,7 @@ function AddDependentContent(): React.ReactElement {
 
           <WizardNavigation
             formErrors={formErrors}
+            duplicateIdentityAudience="representative"
             isFirst={isFirst}
             isLast={isLast}
             submitting={submitting}

@@ -8,6 +8,8 @@ import type { InputHTMLAttributes, ReactElement, ReactNode } from "react";
 import { User, Calendar, Hash, Phone, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { calculateAge } from "@/app/student/enroll/enroll-utils";
 import { Button } from "@/components/ui";
+import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
+import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 
 const ACCENTED_CHARS: Record<string, string> = {
   á: "a", é: "e", í: "i", ó: "o", ú: "u", ü: "u", ñ: "n",
@@ -297,6 +299,13 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
 
 interface WizardNavigationProps {
   formErrors: string[];
+  /**
+   * Who is filling this wizard in. When one of `formErrors` is the backend's
+   * "already registered" answer, the alert grows an escape hatch pointing at
+   * whatever the next step is for THIS audience — an error that only restates
+   * the problem is a dead end. Omit it and the alert behaves as before.
+   */
+  duplicateIdentityAudience?: DuplicateIdentityAudience;
   isFirst: boolean;
   isLast: boolean;
   submitting: boolean;
@@ -312,16 +321,23 @@ interface WizardNavigationProps {
 
 /** Validation-errors alert + Atrás/Siguiente navigation chrome — shared by both wizards' step footer. The final step renders `submitButton` instead of "Siguiente". */
 export function WizardNavigation(props: WizardNavigationProps): ReactElement {
+  const duplicateHelpAudience =
+    props.duplicateIdentityAudience !== undefined && props.formErrors.some(isDuplicateIdentityError)
+      ? props.duplicateIdentityAudience
+      : null;
   return (
     <>
       {props.formErrors.length > 0 && (
         <div className="alert-error mt-4 items-start" role="alert">
           <AlertTriangle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
-          <ul className="list-inside list-disc space-y-1">
-            {props.formErrors.map((err, i) => (
-              <li key={i}>{err}</li>
-            ))}
-          </ul>
+          <div className="space-y-2">
+            <ul className="list-inside list-disc space-y-1">
+              {props.formErrors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+            {duplicateHelpAudience && <DuplicateIdentityHelp audience={duplicateHelpAudience} />}
+          </div>
         </div>
       )}
 

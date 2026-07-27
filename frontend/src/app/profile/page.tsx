@@ -156,7 +156,20 @@ function DetailRow({
         {children}
         {note && <span className="text-xs font-normal text-ink-3">{note}</span>}
       </span>
-      {action && <span className="ml-auto flex-none">{action}</span>}
+      {/*
+        A COLUMN, not just `ml-auto`. The only rows that pass an action are the
+        three "Seguridad" ones, and each passes a sentence as its value — so
+        with the action sized to its own button, every row left its sentence a
+        different width, wrapped at a different point, and put its button on a
+        different line. Rows that share a shape have to share it exactly.
+
+        `w-full` below `sm`: at 375px the sentence and the button never share a
+        line anyway, so the action takes its own, right-aligned, on all three
+        rows alike instead of on whichever ones happened to overflow.
+      */}
+      {action && (
+        <span className="ml-auto flex w-full justify-end sm:w-[210px] sm:flex-none">{action}</span>
+      )}
     </div>
   );
 }

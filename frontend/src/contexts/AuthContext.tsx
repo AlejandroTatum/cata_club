@@ -26,6 +26,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import type { AuthSession, LoginResult } from "@/services/auth";
 import { authService } from "@/services/auth";
 import { subscribeAuthFailure, discardInFlightRefresh, setCurrentMockRole } from "@/services/api";
@@ -74,6 +75,7 @@ const SESSION_REVALIDATE_INTERVAL_MS = 5 * 60 * 1000;
 // ---------------------------------------------------------------------------
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const sessionRef = useRef<AuthSession | null>(null);
@@ -160,9 +162,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // for why this is a client-side mitigation, not a full guarantee).
     loggingOutRef.current = true;
     discardInFlightRefresh();
-    await authService.logout();
-    setSession(null);
-  }, []);
+    try {
+      await authService.logout();
+    } catch (err) {
+      /*
+       * `authService.logout` is documented to always resolve, so this is a
+       * belt-and-braces path. It is SWALLOWED rather than rethrown because
+       * every call site fires logout without awaiting it, and a rejection
+       * would surface as an unhandled promise rejection instead of anything a
+       * user could act on. The local session is cleared below either way.
+       */
+      console.error("[auth] logout request failed", err);
+    } finally {
+      setSession(null);
+      /*
+       * Navigate from HERE rather than leaving it to whatever rendered the
+       * button. Until this line, landing on /login was only ever a side effect
+       * of ProtectedRoute reacting to the session going null — so every screen
+       * that deliberately has no ProtectedRoute (/ayuda is public by design)
+       * left the user on the page, still showing an authenticated header.
+       * Owning the redirect in the one place logout happens covers the header
+       * menu, the mobile menu and the profile screen at once.
+       *
+       * `replace`, not `push`: the page the user just logged out of must not be
+       * one Back button away.
+       */
+      router.replace("/login");
+    }
+  }, [router]);
 
   const value: AuthContextValue = {
     session,

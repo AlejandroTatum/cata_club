@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades
 from app.dominio.enums import TipoRol
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
+from app.soporte_transversal.tiempo import hoy_club
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import (
@@ -27,7 +28,10 @@ EDAD_MAYORIA_EDAD = 18
 
 
 def _calcular_edad(fecha_nacimiento: date, referencia: date | None = None) -> int:
-    ref = referencia or date.today()
+    # Día del CLUB, no del contenedor: un cumpleaños ocurre a la medianoche
+    # LOCAL, y de esta edad depende si el alumno necesita representante legal.
+    # Con `date.today()` (UTC) el alumno "cumplía años" cinco horas antes.
+    ref = referencia or hoy_club()
     anos = ref.year - fecha_nacimiento.year
     if (ref.month, ref.day) < (fecha_nacimiento.month, fecha_nacimiento.day):
         anos -= 1

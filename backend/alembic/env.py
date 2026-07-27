@@ -57,11 +57,34 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _ejecutar_migraciones(connection) -> None:
+    """Configura el contexto sobre una conexión ya abierta y corre."""
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        render_as_batch=True,
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
-    Crea un Engine y asocia una conexión al contexto.
+    Crea un Engine y asocia una conexión al contexto, SALVO que quien invoca
+    ya haya puesto una conexión en `config.attributes["connection"]` (receta
+    estándar de Alembic para ejecución programática). Ese caso lo usa el
+    arnés de migraciones de los tests (`backend/tests/arnes_migraciones.py`)
+    para apuntar a su base de datos efímera sin tener que mutar el singleton
+    `settings` ni variables de entorno globales del proceso.
     """
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        _ejecutar_migraciones(connection)
+        return
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -69,15 +92,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-            render_as_batch=True,
-        )
-
-        with context.begin_transaction():
-            context.run_migrations()
+        _ejecutar_migraciones(connection)
 
 
 if context.is_offline_mode():

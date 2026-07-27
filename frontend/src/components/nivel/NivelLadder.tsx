@@ -51,8 +51,11 @@
  *     `personasActuales`. The headcount a rung shows is `students.length`, i.e.
  *     derived from the roster the panel lists BY NAME, so the number and the
  *     names can never disagree.
- *   - ONE action per rung, and it says what it assigns: "Asignar estudiantes".
- *     There is no "Promover".
+ *   - ONE control per rung, and it names BOTH things it does: "Ver y asignar".
+ *     It used to read "Asignar estudiantes", which hid the fact that the panel
+ *     it opens is also the only place the level's roster is listed by name —
+ *     so seeing who holds a level meant pressing a button that reads like it
+ *     changes something. There is still no "Promover".
  */
 
 "use client";
@@ -83,7 +86,7 @@ export interface LadderRung {
 
 export interface NivelLadderProps {
   rungs: LadderRung[];
-  /** Opens the rung's two-column panel. The rung's only action. */
+  /** Toggles the rung's two-column panel — its roster and its assign column. */
   onAssign: (nivelId: number) => void;
   /** `nivel.id` whose panel is currently open, if any. */
   openNivelId?: number | null;
@@ -225,9 +228,11 @@ export default function NivelLadder({
                 className="ml-auto flex-none"
                 onClick={() => onAssign(rung.id)}
                 aria-expanded={isOpen}
-                aria-label={`Asignar estudiantes al nivel ${rung.nombre}`}
+                /* Same words as the visible label, plus the rung it belongs to
+                   — the accessible name must contain the visible one. */
+                aria-label={`Ver y asignar estudiantes del nivel ${rung.nombre}`}
               >
-                Asignar estudiantes
+                Ver y asignar
               </Button>
             </div>
 

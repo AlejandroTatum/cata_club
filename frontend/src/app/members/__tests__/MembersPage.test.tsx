@@ -496,6 +496,32 @@ describe("MembersPage — Editar member modal", () => {
     expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("surfaces the last-admin refusal and leaves the role checkbox checked", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    const adminCheckbox = within(dialog).getByRole("checkbox", { name: /admin/i });
+
+    fireEvent.click(adminCheckbox);
+    await waitFor(() => expect(adminCheckbox).toBeChecked());
+
+    const refusal =
+      "No se puede quitar el rol ADMINISTRADOR: es el último administrador activo del sistema";
+    mockQuitarRol.mockRejectedValueOnce(new Error(refusal));
+    fireEvent.click(adminCheckbox);
+
+    await waitFor(() => {
+      expect(within(dialog).getByRole("alert")).toHaveTextContent(/último administrador activo/i);
+    });
+    // The role was NOT removed on the backend, so the toggle must stay checked.
+    expect(adminCheckbox).toBeChecked();
+  });
+
   it("toggling the account activo/inactivo state inside the modal calls cambiarEstadoCuenta", async () => {
     render(
       <ToastProvider>

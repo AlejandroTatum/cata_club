@@ -139,7 +139,7 @@ const ROSTER: AlumnoConNivel[] = [
 
 /** Waits for the ladder to have rendered. */
 async function waitForLadder(): Promise<void> {
-  await screen.findByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" });
+  await screen.findByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" });
 }
 
 describe("NivelPage — the trainer gets the admin's screen", () => {
@@ -201,11 +201,35 @@ describe("NivelPage — the trainer gets the admin's screen", () => {
     expect(recordedAllowedRoles[0]).not.toContain("representante");
   });
 
+  it("offers each rung a control that says it also SHOWS who is on the level", async () => {
+    /*
+     * The rung's single control opened a panel that already listed the roster,
+     * but it was labelled "Asignar estudiantes" — so the only way to find out
+     * who holds a level was to press a button that reads like it changes
+     * something. The label has to name both halves of what the control does.
+     */
+    render(<NivelPage />);
+    await waitForLadder();
+
+    const rungControl = screen.getByRole("button", {
+      name: "Ver y asignar estudiantes del nivel Nivel Cima",
+    });
+    expect(rungControl).toHaveTextContent("Ver y asignar");
+    expect(rungControl).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(rungControl);
+
+    expect(rungControl).toHaveAttribute("aria-expanded", "true");
+    // Opening it reveals the roster, and the panel heading names it as such.
+    expect(await screen.findByText("Estudiantes del nivel Nivel Cima")).toBeInTheDocument();
+    expect(screen.getByText("Pedro Ramírez")).toBeInTheDocument();
+  });
+
   it("lets a trainer place an unassigned student — the trainer holds that permission", async () => {
     render(<NivelPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
     );
@@ -220,7 +244,7 @@ describe("NivelPage — the trainer gets the admin's screen", () => {
     render(<NivelPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" }));
     fireEvent.change(await screen.findByLabelText("Nuevo nivel para Pedro Ramírez"), {
       target: { value: "2" },
     });

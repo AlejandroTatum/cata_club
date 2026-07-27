@@ -248,7 +248,14 @@ function SituationLink({ href, children }: { href: string; children: React.React
 /** One upcoming session, on the product's 56px detail row. */
 function TrainingRow({ session, first }: { session: UpcomingTraining; first: boolean }): React.ReactElement {
   return (
-    <li className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-5 py-3 last:border-b-0">
+    /*
+     * `flex-1` with `min-h-drow` as the floor: the card is stretched to its
+     * neighbour's height, and with at most three sessions all the slack used to
+     * pool into one dead band between the last row and the footer. The rows
+     * share it instead. `items-center` already had the content centred, so a
+     * taller row just breathes more.
+     */
+    <li className="flex min-h-drow flex-1 flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-5 py-3 last:border-b-0">
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2 text-[15px] font-bold tracking-tight text-ink">
           {session.diaLabel}

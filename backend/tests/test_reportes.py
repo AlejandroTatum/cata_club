@@ -228,6 +228,42 @@ def test_reporte_periodo_pdf_422_fechas_invertidas(client):
     assert resp.status_code == 422
 
 
+# Un rango invertido devolvía 200 con lista vacía: una respuesta silenciosa y
+# equivocada ("no hubo asistencias") en vez de un error. Se alinea con los
+# hermanos de personas y pagos, que ya devuelven 422 con el mismo mensaje.
+def test_reporte_asistencia_422_fechas_invertidas(client):
+    resp = client.get(
+        "/api/v1/asistencias/reportes",
+        params={"fecha_inicio": "2026-12-31", "fecha_fin": "2026-01-01"},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "La fecha de inicio debe ser anterior a la fecha de fin."
+
+
+def test_reporte_asistencia_pdf_422_fechas_invertidas(client):
+    resp = client.get(
+        "/api/v1/asistencias/reportes/pdf",
+        params={"fecha_inicio": "2026-12-31", "fecha_fin": "2026-01-01"},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "La fecha de inicio debe ser anterior a la fecha de fin."
+
+
+def test_reporte_asistencia_acepta_un_solo_dia_y_filtros_parciales(client):
+    """El rango es opcional y combinable: un único día (inicio == fin) y un
+    extremo suelto siguen siendo consultas válidas, no errores."""
+    assert client.get(
+        "/api/v1/asistencias/reportes",
+        params={"fecha_inicio": "2026-07-06", "fecha_fin": "2026-07-06"},
+    ).status_code == 200
+    assert client.get(
+        "/api/v1/asistencias/reportes", params={"fecha_inicio": "2026-07-06"}
+    ).status_code == 200
+    assert client.get(
+        "/api/v1/asistencias/reportes", params={"fecha_fin": "2026-07-06"}
+    ).status_code == 200
+
+
 def test_reporte_asistencia_pdf_admin_200(client):
     entrenador = _crear_persona(client, "1791919191")
     alumno = _crear_persona(client, "1792929292")

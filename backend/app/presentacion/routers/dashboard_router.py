@@ -1,11 +1,9 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
+from app.soporte_transversal.tiempo import ahora_club
 from app.dominio.enums import DiaSemana, EstadoMembresia, EstadoPago
 from app.dominio.modelos import HorarioEntrenamiento, Membresia, Pago, Persona
 from app.presentacion.schemas.dashboard_schemas import DashboardStatsDTO
@@ -13,8 +11,8 @@ from app.servicios_negocio.gestor_permisos import GestorPermisos
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
-_TIMEZONE = ZoneInfo("America/Guayaquil")
-
+# La zona horaria del club vivía aquí (`ZoneInfo("America/Guayaquil")`).
+# Ahora es única y compartida: `app/soporte_transversal/tiempo.py`.
 _WEEKDAY_MAP = {
     0: DiaSemana.LUNES,
     1: DiaSemana.MARTES,
@@ -48,7 +46,7 @@ async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardSta
         or 0
     )
 
-    today_weekday = _WEEKDAY_MAP[datetime.now(tz=_TIMEZONE).weekday()]
+    today_weekday = _WEEKDAY_MAP[ahora_club().weekday()]
     today_schedules = (
         db.query(func.count(HorarioEntrenamiento.id))
         .filter(HorarioEntrenamiento.dia_semana == today_weekday)

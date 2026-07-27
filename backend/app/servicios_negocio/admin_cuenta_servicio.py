@@ -2,10 +2,16 @@
 Servicio de creación de cuentas por el Administrador.
 
 Orquesta la creación de Persona + Usuario + Rol en un solo request
-transaccional. Soporta tres tipos de cuenta:
+transaccional. Soporta cuatro tipos de cuenta:
   - JUGADOR: adulto que juega (rol ALUMNO)
   - REPRESENTANTE: adulto que representa a un menor (rol REPRESENTANTE + ALUMNO)
   - MENOR: dependiente de un representante existente (rol ALUMNO)
+  - ENTRENADOR: adulto que dicta los entrenamientos (rol ENTRENADOR)
+
+ENTRENADOR es el único tipo que NO recibe ALUMNO: entrena al club, no se
+matricula en él. Antes de existir este tipo, dar de alta a un entrenador
+exigía crear la cuenta como JUGADOR y después corregir los roles a mano
+desde el panel de miembros.
 """
 from sqlalchemy.orm import Session
 
@@ -22,6 +28,24 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import (
     _calcular_edad, EDAD_MINIMA_ALUMNO, EDAD_MAXIMA_ALUMNO, EDAD_MAYORIA_EDAD,
 )
+
+
+# Tipos de cuenta que exigen mayoría de edad, con su plural en español para
+# el mensaje de error (`tipo_cuenta.lower() + "s"` producía "jugadors").
+TIPOS_CUENTA_ADULTA = {
+    "JUGADOR": "jugadores",
+    "REPRESENTANTE": "representantes",
+    "ENTRENADOR": "entrenadores",
+}
+
+# Roles otorgados por tipo de cuenta. ENTRENADOR no recibe ALUMNO: dicta los
+# entrenamientos, no se matricula.
+ROLES_POR_TIPO_CUENTA = {
+    "JUGADOR": (TipoRol.ALUMNO,),
+    "REPRESENTANTE": (TipoRol.REPRESENTANTE, TipoRol.ALUMNO),
+    "MENOR": (TipoRol.ALUMNO,),
+    "ENTRENADOR": (TipoRol.ENTRENADOR,),
+}
 
 
 class AdminCuentaServicio:
@@ -52,12 +76,12 @@ class AdminCuentaServicio:
         # 3. Validar edad según tipo de cuenta
         edad = _calcular_edad(datos.fecha_nacimiento)
 
-        if datos.tipo_cuenta in ("JUGADOR", "REPRESENTANTE"):
+        if datos.tipo_cuenta in TIPOS_CUENTA_ADULTA:
             if edad < EDAD_MAYORIA_EDAD:
                 raise OperacionInvalida(
-                    f"Los {datos.tipo_cuenta.lower()}s deben ser mayores de edad "
-                    f"({EDAD_MAYORIA_EDAD} años o más); la edad calculada "
-                    f"es {edad} años."
+                    f"Los {TIPOS_CUENTA_ADULTA[datos.tipo_cuenta]} deben ser "
+                    f"mayores de edad ({EDAD_MAYORIA_EDAD} años o más); la "
+                    f"edad calculada es {edad} años."
                 )
 
         if datos.tipo_cuenta == "MENOR":
@@ -115,13 +139,8 @@ class AdminCuentaServicio:
         self.repo_usuario.crear(usuario)
 
         # 7. Asignar roles según tipo de cuenta
-        if datos.tipo_cuenta == "JUGADOR":
-            self._asignar_rol(usuario, TipoRol.ALUMNO)
-        elif datos.tipo_cuenta == "REPRESENTANTE":
-            self._asignar_rol(usuario, TipoRol.REPRESENTANTE)
-            self._asignar_rol(usuario, TipoRol.ALUMNO)
-        elif datos.tipo_cuenta == "MENOR":
-            self._asignar_rol(usuario, TipoRol.ALUMNO)
+        for tipo_rol in ROLES_POR_TIPO_CUENTA.get(datos.tipo_cuenta, ()):
+            self._asignar_rol(usuario, tipo_rol)
 
         # 8. Crear Ficha Médica si se proporcionó
         if datos.ficha_medica:

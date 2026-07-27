@@ -127,6 +127,99 @@ def test_alumno_se_asigna_automaticamente_al_matricularse(client):
     assert "ALUMNO" in payload["roles"]
 
 
+# --- Bloqueo de auto-exclusión de administradores ---------------------------
+# Quitar (o desactivar) el último rol ADMINISTRADOR deja al sistema sin
+# ninguna vía de recuperación dentro de la aplicación: no hay comando de
+# rescate ni "super usuario" de respaldo. Estos tests fijan las dos barreras.
+def _autenticar_como(persona_id: int, roles=("ADMINISTRADOR",)) -> None:
+    """Reapunta el token del cliente de pruebas a otra persona sin recrear el
+    TestClient: los overrides viven en la app, no en la fixture."""
+    from main import app
+    app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+        "sub": f"admin{persona_id}@cataclub.test",
+        "persona_id": persona_id,
+        "roles": list(roles),
+    }
+
+
+def _crear_administrador(client, cedula: str, correo: str) -> dict:
+    persona = _crear_persona(client, cedula)
+    _registrar_credenciales(client, persona["cedula"], correo)
+    resp = client.post(
+        f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ADMINISTRADOR"}
+    )
+    assert resp.status_code == 201
+    return persona
+
+
+def test_admin_no_puede_quitarse_su_propio_rol_administrador(client):
+    uno = _crear_administrador(client, "1766000001", "admin_a@x.com")
+    _crear_administrador(client, "1766000002", "admin_b@x.com")
+
+    _autenticar_como(uno["id"])
+    resp = client.delete(f"/api/v1/personas/{uno['id']}/roles/ADMINISTRADOR")
+
+    assert resp.status_code == 400
+    assert "sí mismo" in resp.json()["detail"]
+    # El rol sigue ahí: la operación no se aplicó a medias.
+    assert "ADMINISTRADOR" in client.get(f"/api/v1/personas/{uno['id']}/roles").json()["roles"]
+
+
+def test_no_se_puede_quitar_el_ultimo_rol_administrador_del_sistema(client):
+    solo = _crear_administrador(client, "1766000003", "admin_c@x.com")
+
+    _autenticar_como(9999)
+    resp = client.delete(f"/api/v1/personas/{solo['id']}/roles/ADMINISTRADOR")
+
+    assert resp.status_code == 400
+    assert "último administrador" in resp.json()["detail"]
+
+
+def test_se_puede_quitar_el_rol_administrador_si_queda_otro_activo(client):
+    uno = _crear_administrador(client, "1766000004", "admin_d@x.com")
+    otro = _crear_administrador(client, "1766000005", "admin_e@x.com")
+
+    _autenticar_como(uno["id"])
+    resp = client.delete(f"/api/v1/personas/{otro['id']}/roles/ADMINISTRADOR")
+
+    assert resp.status_code == 200
+    assert resp.json()["roles"] == []
+
+
+def test_una_cuenta_admin_desactivada_no_cuenta_como_administrador_restante(client):
+    activo = _crear_administrador(client, "1766000006", "admin_f@x.com")
+    inactivo = _crear_administrador(client, "1766000007", "admin_g@x.com")
+    client.patch(f"/api/v1/personas/{inactivo['id']}/cuenta/estado", json={"activo": False})
+
+    _autenticar_como(9999)
+    resp = client.delete(f"/api/v1/personas/{activo['id']}/roles/ADMINISTRADOR")
+
+    assert resp.status_code == 400
+    assert "último administrador" in resp.json()["detail"]
+
+
+def test_no_se_puede_desactivar_la_cuenta_del_ultimo_administrador(client):
+    solo = _crear_administrador(client, "1766000008", "admin_h@x.com")
+
+    _autenticar_como(9999)
+    resp = client.patch(f"/api/v1/personas/{solo['id']}/cuenta/estado", json={"activo": False})
+
+    assert resp.status_code == 400
+    assert "último administrador" in resp.json()["detail"]
+
+
+def test_quitar_un_rol_no_administrador_no_activa_la_barrera(client):
+    """La barrera es específica de ADMINISTRADOR: quitar ENTRENADOR al único
+    entrenador del sistema sigue siendo una operación legítima."""
+    persona = _crear_persona(client, "1766000009")
+    _registrar_credenciales(client, persona["cedula"], "entrenador_unico@x.com")
+    client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ENTRENADOR"})
+
+    resp = client.delete(f"/api/v1/personas/{persona['id']}/roles/ENTRENADOR")
+
+    assert resp.status_code == 200
+
+
 # --- Estado de cuenta (E01-RF013) --------------------------------------------
 def test_cuenta_desactivada_no_puede_loguearse(client):
     persona = _crear_persona(client, "1755555555")

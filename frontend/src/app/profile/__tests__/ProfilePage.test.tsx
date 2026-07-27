@@ -1023,6 +1023,36 @@ describe("ProfilePage — the redesigned account layout", () => {
     ).toBeInTheDocument();
   });
 
+  it("puts every Seguridad action in the same column so the three rows line up", async () => {
+    /*
+     * These three rows are the only `DetailRow`s that pass a SENTENCE as the
+     * value AND an action. With the action merely `ml-auto`, the width left for
+     * each sentence depended on its own button's width, so the rows wrapped at
+     * different points and the buttons landed at different heights — the
+     * "misaligned" report. A shared action column makes the three value columns
+     * identical, so they wrap identically.
+     */
+    await renderAdmin();
+
+    const security = screen.getByTestId("profile-column-status");
+    const buttons = [
+      within(security).getByRole("button", { name: /cambiar contraseña/i }),
+      within(security).getByRole("button", { name: /^salir$/i }),
+      within(security).getByRole("button", { name: /cerrar otras sesiones/i }),
+    ];
+
+    const wrappers = buttons.map((button) => button.parentElement);
+    for (const wrapper of wrappers) {
+      expect(wrapper).not.toBeNull();
+      // Its own line on a phone, a fixed right-hand column from `sm` up.
+      expect(wrapper?.className).toMatch(/\bw-full\b/);
+      expect(wrapper?.className).toMatch(/\bjustify-end\b/);
+      expect(wrapper?.className).toMatch(/\bsm:w-\[210px\](\s|$)/);
+    }
+    // Identical, not merely similar: one column, not three near-misses.
+    expect(new Set(wrappers.map((wrapper) => wrapper?.className)).size).toBe(1);
+  });
+
   it("closes the session from the security row", async () => {
     const auth = sessionForRole("admin");
     mockUseAuth.mockReturnValue(auth);

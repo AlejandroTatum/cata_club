@@ -82,6 +82,31 @@ def test_crear_cuenta_representante_asigna_roles_representante_y_alumno(db_sessi
     assert roles == {TipoRol.REPRESENTANTE, TipoRol.ALUMNO}
 
 
+def test_crear_cuenta_entrenador_asigna_solo_rol_entrenador(db_session):
+    """Un entrenador entrena, no se matricula: recibe ENTRENADOR y nada más
+    (a diferencia de REPRESENTANTE, que sí arrastra ALUMNO)."""
+    datos = AdminCrearCuentaDTO(**_base_payload(
+        tipo_cuenta="ENTRENADOR",
+        correo="entrenador@test.com",
+    ))
+    result = AdminCuentaServicio(db_session).crear_cuenta(datos)
+
+    assert "access_token" in result
+    usuario = db_session.query(Usuario).filter(Usuario.correo == "entrenador@test.com").one()
+    roles = {r.tipo_rol for r in usuario.roles}
+    assert roles == {TipoRol.ENTRENADOR}
+
+
+def test_entrenador_menor_de_edad_rechazado(client, db_session):
+    resp = client.post("/api/v1/personas/admin/cuentas", json=_base_payload(
+        tipo_cuenta="ENTRENADOR",
+        fecha_nacimiento="2020-01-01",
+        correo="entrenador_menor@test.com",
+    ))
+    assert resp.status_code == 400
+    assert "mayores de edad" in resp.json()["detail"]
+
+
 def test_crear_cuenta_menor_asigna_rol_alumno(db_session):
     rep = _crear_representante_adulto(db_session)
     datos = AdminCrearCuentaDTO(**_base_payload(

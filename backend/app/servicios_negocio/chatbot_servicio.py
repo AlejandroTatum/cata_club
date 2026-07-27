@@ -35,6 +35,22 @@ MODELO_CHATBOT = "deepseek-v4-flash-free"
 MAX_TOKENS_RESPUESTA = 4096
 MAX_TURNOS_HISTORIAL = 6
 
+# --- Presupuesto de tiempo --------------------------------------------------
+# El BFF (frontend/src/app/api/chatbot/route.ts, CHATBOT_TIMEOUT_MS) aborta la
+# request a los 30s. El SDK de openai, si no se le fija nada, usa 600s de
+# timeout y 2 reintentos: es decir, el backend podía seguir reintentando (y
+# gastando tokens) durante minutos contra un cliente que ya colgó, y el usuario
+# solo veía "no se pudo contactar" sin que nadie cortara nada.
+#
+# Presupuesto: TIMEOUT_LLM_SEGUNDOS * (1 + MAX_REINTENTOS_LLM) = 12 * 2 = 24s,
+# que deja ~6s de margen bajo los 30s del BFF para la red y el resto del
+# handler. La latencia real medida contra el tier gratuito es de ~3-6s, así que
+# 12s por intento solo se agota cuando el gateway realmente está degradado.
+# Si se toca CHATBOT_TIMEOUT_MS en el BFF, hay que rehacer esta cuenta.
+TIMEOUT_BFF_SEGUNDOS = 30.0
+TIMEOUT_LLM_SEGUNDOS = 12.0
+MAX_REINTENTOS_LLM = 1
+
 # --- Contenido de las FAQ, embebido directo en el system prompt -------------
 # Nota: a propósito NO se listan rutas/URLs (/trainer/attendance, /groups, etc.)
 # — solo nombres de sección tal como aparecen en el menú — porque el chatbot
@@ -123,9 +139,14 @@ class ChatbotServicio:
         # app) — os.environ.get(...) directo NO se popula solo desde .env,
         # así que hay que pasarlo explícito al cliente openai (a diferencia
         # de anthropic.Anthropic(), que sí lee la env var automáticamente).
+        # timeout/max_retries explícitos: sin ellos el SDK usa 600s y 2
+        # reintentos y el backend sobrevive al abort del BFF (ver la cuenta del
+        # presupuesto de tiempo arriba).
         self._client = openai.OpenAI(
             base_url=OPENCODE_ZEN_BASE_URL,
             api_key=settings.opencode_api_key,
+            timeout=TIMEOUT_LLM_SEGUNDOS,
+            max_retries=MAX_REINTENTOS_LLM,
         )
 
     def consultar(self, mensaje: str, historial: Optional[List[dict]] = None) -> str:
@@ -136,7 +157,30 @@ class ChatbotServicio:
                 max_tokens=MAX_TOKENS_RESPUESTA,
                 messages=mensajes,
             )
-        except (openai.APIError, openai.APIConnectionError) as exc:
+        # El orden importa: RateLimitError, APITimeoutError y APIConnectionError
+        # son todas subclases de APIError, así que van de lo más específico a lo
+        # más general. Antes se capturaban las cuatro en un solo `except` con un
+        # único 502, y el usuario no podía distinguir "esperá un momento" de
+        # "el asistente está caído" ni de "tardó demasiado".
+        except openai.RateLimitError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "El asistente está recibiendo demasiadas consultas. "
+                    "Espera unos segundos e inténtalo de nuevo."
+                ),
+            ) from exc
+        except openai.APITimeoutError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="El asistente tardó demasiado en responder. Vuelve a intentarlo.",
+            ) from exc
+        except openai.APIConnectionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="El asistente no está disponible en este momento. Inténtalo más tarde.",
+            ) from exc
+        except openai.APIError as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="No se pudo contactar al asistente. Inténtalo de nuevo en un momento.",

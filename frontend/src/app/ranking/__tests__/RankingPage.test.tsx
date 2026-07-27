@@ -154,7 +154,7 @@ function rungs(): HTMLElement[] {
 
 /** Waits for the ladder to have loaded, without matching a `<select>` option. */
 async function waitForLadder(): Promise<void> {
-  await screen.findByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" });
+  await screen.findByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" });
 }
 
 describe("RankingPage — la escalera", () => {
@@ -262,11 +262,13 @@ describe("RankingPage — la escalera", () => {
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
   });
 
-  it("offers 'Asignar' as the only rung action — never 'Promover'", async () => {
+  it("offers 'Ver y asignar' as the only rung control — never 'Promover'", async () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    expect(screen.getAllByRole("button", { name: /^asignar estudiantes a/i })).toHaveLength(3);
+    expect(
+      screen.getAllByRole("button", { name: /^ver y asignar estudiantes del nivel/i }),
+    ).toHaveLength(3);
     expect(screen.queryByRole("button", { name: /promover/i })).not.toBeInTheDocument();
   });
 
@@ -274,9 +276,9 @@ describe("RankingPage — la escalera", () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
 
-    expect(await screen.findByText("Asignar estudiantes al nivel Nivel Medio")).toBeInTheDocument();
+    expect(await screen.findByText("Estudiantes del nivel Nivel Medio")).toBeInTheDocument();
     expect(
       within(rungs()[1]).getByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
     ).toBeInTheDocument();
@@ -286,7 +288,7 @@ describe("RankingPage — la escalera", () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
     );
@@ -302,7 +304,7 @@ describe("RankingPage — la escalera", () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" }));
 
     const izquierda = (await screen.findByRole("heading", { name: "Sin nivel asignado (1)" }))
       .closest("section") as HTMLElement;
@@ -325,7 +327,7 @@ describe("RankingPage — la escalera", () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" }));
     await screen.findByRole("heading", { name: "En el nivel Nivel Cima (1)" });
 
     // "Asignar" is `asignar-nivel-inicial`, and he already has a level. The
@@ -341,7 +343,7 @@ describe("RankingPage — la escalera", () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
     await screen.findByRole("heading", { name: "Sin nivel asignado (1)" });
 
     expect(
@@ -354,7 +356,7 @@ describe("RankingPage — la escalera", () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
     fireEvent.change(await screen.findByLabelText(/buscar estudiante para el nivel nivel medio/i), {
       target: { value: "sofía" },
     });
@@ -371,7 +373,7 @@ describe("RankingPage — la escalera", () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
     );
@@ -391,7 +393,7 @@ describe("RankingPage — la escalera", () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
     );
@@ -405,7 +407,7 @@ describe("RankingPage — la escalera", () => {
     const { unmount } = render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Medio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Asignar Sofía González al nivel Nivel Medio" }),
     );
@@ -450,7 +452,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
     render(<RankingPage />);
     await waitForLadder();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Base" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Base" }));
 
     const section = (await screen.findByRole("heading", { name: "Sin nivel asignado (1)" }))
       .closest("section") as HTMLElement;
@@ -469,7 +471,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
       screen.queryByRole("heading", { name: /^Sin nivel asignado/ }),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Base" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Base" }));
     expect(
       await screen.findAllByRole("heading", { name: "Sin nivel asignado (1)" }),
     ).toHaveLength(1);
@@ -588,7 +590,7 @@ describe("RankingPage — what the old table could do", () => {
   });
 
   function openCima(): void {
-    fireEvent.click(screen.getByRole("button", { name: "Asignar estudiantes al nivel Nivel Cima" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" }));
   }
 
   it("moves a resident of the open rung without asking for their name", async () => {

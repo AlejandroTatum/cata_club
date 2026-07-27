@@ -35,9 +35,14 @@ describe("resolveShellKind", () => {
     expect(resolveShellKind("/student/add-dependent")).toBe("app");
   });
 
-  it("keeps /student/enroll public even though it sits under /student", () => {
-    expect(resolveShellKind("/student/enroll")).toBe("public");
-    expect(resolveShellKind("/student/enroll/step")).toBe("public");
+  it("gives /student/enroll its own chrome instead of the app shell above it", () => {
+    /*
+     * Session-free, so it must not inherit `/student`'s AppShell — but it is
+     * not a top-nav page either. The wizard draws its own stepper and progress
+     * header, and the public `Header` stacked a second horizontal bar over it.
+     */
+    expect(resolveShellKind("/student/enroll")).toBe("standalone");
+    expect(resolveShellKind("/student/enroll/step")).toBe("standalone");
   });
 
   it("does not treat a longer sibling segment as a descendant", () => {
@@ -73,6 +78,11 @@ describe("hidesTopHeader", () => {
 
   it("keeps the top header on public routes", () => {
     expect(hidesTopHeader("/")).toBe(false);
-    expect(hidesTopHeader("/student/enroll")).toBe(false);
+    expect(hidesTopHeader("/contacto")).toBe(false);
+  });
+
+  it("hides the top header on the enrollment wizard", () => {
+    expect(hidesTopHeader("/student/enroll")).toBe(true);
+    expect(hidesTopHeader("/student/enroll/step")).toBe(true);
   });
 });

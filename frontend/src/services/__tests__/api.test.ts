@@ -37,6 +37,7 @@ import {
   downloadBlob,
   exportNuevosPorPeriodoPdf,
   exportAsistenciaReportePdf,
+  consultarChatbot,
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, Entrenador } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
@@ -299,6 +300,33 @@ describe("timeout / abort", () => {
       expect(capturedSignal.aborted).toBe(true);
 
       await expect(promise).rejects.toThrow(/aborted/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives the chatbot longer than the BFF's own 30 s abort", async () => {
+    vi.useFakeTimers();
+
+    let capturedSignal: AbortSignal | undefined;
+    vi.mocked(global.fetch).mockImplementation((_url, opts) => {
+      capturedSignal = opts?.signal as AbortSignal | undefined;
+      return new Promise(() => {});
+    });
+
+    try {
+      const promise = consultarChatbot("¿Cómo veo mis pagos?");
+      promise.catch(() => {});
+
+      // The BFF (src/app/api/chatbot/route.ts) aborts at 30 s and answers 504.
+      // If the browser client gave up at the shared 10 s default it would throw
+      // a bare AbortError instead — no status, so the widget could not tell a
+      // slow answer from a dead backend.
+      await vi.advanceTimersByTimeAsync(30_001);
+
+      expect(capturedSignal).toBeDefined();
+      if (!capturedSignal) throw new Error("Expected fetch to receive an AbortSignal.");
+      expect(capturedSignal.aborted).toBe(false);
     } finally {
       vi.useRealTimers();
     }

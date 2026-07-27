@@ -25,6 +25,7 @@ from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
 from app.dominio.modelos import Pago, Membresia, Persona
 from app.dominio.enums import EstadoPago, EstadoMembresia
+from app.soporte_transversal.tiempo import hoy_club
 
 
 logger = logging.getLogger("cataclub.tareas.alertas")
@@ -47,7 +48,11 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
         dict con resumen ejecutable de la corrida (snapshot útil para logging
         y para mostrar en un panel de salud del systema).
     """
-    hoy = date.today()
+    # Día del CLUB, no del contenedor (mismo criterio que
+    # `vencimientos_tareas.py`): la ventana "hoy + 5 días" se compara contra
+    # `Pago.fecha_fin`, una fecha de calendario del club, y Celery Beat ya
+    # planifica en `America/Guayaquil`.
+    hoy = hoy_club()
     fecha_objetivo = hoy + timedelta(days=5)
 
     alertas_enviadas: list[dict] = []

@@ -40,7 +40,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { X, Send, AlertTriangle } from "lucide-react";
-import { consultarChatbot, type ChatbotTurno } from "@/services/api";
+import { consultarChatbot, ApiClientError, type ChatbotTurno } from "@/services/api";
 import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 import { getQuickReplies, TALK_TO_CLUB_LABEL } from "./chat-quick-replies";
 import { ASSISTANT_FOCUS_RING } from "./chat-focus-ring";
@@ -64,6 +64,30 @@ interface MensajeChat extends ChatbotTurno {
 }
 
 let proximoId = 0;
+
+/**
+ * One message per failure class, keyed by the status the BFF forwards from the
+ * backend (see src/app/api/chatbot/route.ts and the backend's
+ * chatbot_servicio.py, which maps each provider failure to its own status).
+ *
+ * This used to be a single string for every rejection, which is why the
+ * failures read as random: a rate limit, a timeout and an unreachable gateway
+ * all came out as "no se pudo contactar". Each case now says what the user can
+ * actually do — wait, retry, or come back later.
+ */
+function mensajeDeError(error: unknown): string {
+  const status = error instanceof ApiClientError ? error.status : null;
+  switch (status) {
+    case 429:
+      return `Estás preguntando muy seguido. Espera unos segundos y vuelve a intentarlo.`;
+    case 504:
+      return `${BOT_NAME} tardó demasiado en responder. Vuelve a intentarlo.`;
+    case 503:
+      return `${BOT_NAME} no está disponible en este momento. Inténtalo más tarde.`;
+    default:
+      return `No se pudo contactar a ${BOT_NAME}. Inténtalo de nuevo en un momento.`;
+  }
+}
 
 /** `.bub` — 12px radius, 86% max width, with the tail corner squared off. */
 const BUBBLE_BASE =
@@ -148,8 +172,8 @@ export default function ChatWidget({
     try {
       const { reply } = await consultarChatbot(limpio, historial);
       setMensajes((prev) => [...prev, { id: proximoId++, rol: "asistente", texto: reply }]);
-    } catch {
-      setError(`No se pudo contactar a ${BOT_NAME}. Inténtalo de nuevo en un momento.`);
+    } catch (err: unknown) {
+      setError(mensajeDeError(err));
     } finally {
       setEnviando(false);
     }

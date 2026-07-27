@@ -9,6 +9,8 @@
  *   - JUGADOR: adult player (rol ALUMNO)
  *   - REPRESENTANTE: adult who represents a minor (rol REPRESENTANTE + ALUMNO)
  *   - MENOR: dependent minor with optional own login (rol ALUMNO)
+ *   - ENTRENADOR: adult who runs the sessions (rol ENTRENADOR only — a coach
+ *     trains the club, they are not enrolled in it)
  *
  * For MENOR, the admin must also assign a representante legal via search.
  * All labels and copy are in Spanish per app convention.
@@ -37,6 +39,7 @@ import {
   FileText,
   Search,
   Heart,
+  Dumbbell,
 } from "lucide-react";
 import {
   CREAR_CUENTA_STEP_ORDER,
@@ -230,7 +233,7 @@ function CrearCuentaContent(): React.ReactElement {
           Seleccione el tipo de cuenta que desea crear:
         </p>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <button
             type="button"
             onClick={() => selectAccountType("JUGADOR")}
@@ -282,6 +285,24 @@ function CrearCuentaContent(): React.ReactElement {
             <h3 className="mb-1 font-semibold text-cata-text">Menor / Dependiente</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
               Menor de 18 a cargo de un representante que paga por él.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => selectAccountType("ENTRENADOR")}
+            className={`rounded-xl border-2 p-5 text-left transition-all duration-200 ${
+              formData.accountType === "ENTRENADOR"
+                ? "border-cata-red/40 bg-cata-red/10 ring-1 ring-cata-red/20"
+                : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
+            }`}
+          >
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
+              <Dumbbell size={20} strokeWidth={1.5} className="text-emerald-700" aria-hidden="true" />
+            </div>
+            <h3 className="mb-1 font-semibold text-cata-text">Entrenador</h3>
+            <p className="text-xs leading-relaxed text-cata-text/65">
+              Mayor de 18 que dicta los entrenamientos. No paga mensualidad.
             </p>
           </button>
         </div>
@@ -575,6 +596,7 @@ function CrearCuentaContent(): React.ReactElement {
       JUGADOR: "Jugador",
       REPRESENTANTE: "Representante que también entrena",
       MENOR: "Menor a cargo de un representante",
+      ENTRENADOR: "Entrenador del club",
     };
     return (
       <div className="space-y-4">
@@ -798,6 +820,7 @@ function CrearCuentaContent(): React.ReactElement {
 
               <WizardNavigation
                 formErrors={formErrors}
+                duplicateIdentityAudience="admin"
                 isFirst={isFirst}
                 isLast={isLast}
                 submitting={submitting}

@@ -105,6 +105,23 @@ describe("GET /api/attendance/records", () => {
     );
   });
 
+  it("passes the backend's 422 for an inverted date range straight through", async () => {
+    const detail = "La fecha de inicio debe ser anterior a la fecha de fin.";
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail, message: detail }, 422));
+
+    const access = makeJwt(3600);
+    const request = new NextRequest(
+      "http://localhost/api/attendance/records?fechaInicio=2026-12-31&fechaFin=2026-01-01",
+      { headers: { cookie: `${ACCESS_TOKEN_COOKIE}=${access}` } },
+    );
+    const response = await GET(request);
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ message: detail });
+    // The enrichment lookups must not run once the report itself failed.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("returns 503 when the backend is unreachable", async () => {
     vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
 

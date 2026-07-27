@@ -65,18 +65,15 @@ def _agregar_pago(db, membresia: Membresia, persona: Persona, estado_pago: Estad
 
 
 def _connegar_hoy(monkeypatch, hoy: date) -> None:
-    """Parchea `date.today()` dentro del módulo de la tarea."""
-    class _FechaFija(date):
-        @classmethod
-        def today(cls):
-            return hoy
-
-    monkeypatch.setattr(venc_mod, "date", _FechaFija)
+    """Parchea `hoy_club()` dentro del módulo de la tarea. La tarea ya no usa
+    `date.today()`: el día que le importa es el del club, no el del
+    contenedor (UTC) — ver `app/soporte_transversal/tiempo.py`."""
+    monkeypatch.setattr(venc_mod, "hoy_club", lambda: hoy)
 
 
 def _run_task(db_session, monkeypatch, hoy: date) -> dict:
     """Inyecta el db_session del fixture en `SessionLocal` (la tarea usa
-    `with SessionLocal() as db:`), parchea `date.today()`, y llama la
+    `with SessionLocal() as db:`), congela el día del club, y llama la
     tarea directamente."""
     _connegar_hoy(monkeypatch, hoy)
 

@@ -28,6 +28,29 @@ const MOCK_SESSION = {
  */
 const SCHEDULE_SLOT = /18:00\s*—\s*19:00/;
 
+/**
+ * Wednesday 2026-07-22, 13:00 in `America/Guayaquil` (the club time zone).
+ *
+ * The screen reads the CURRENT weekday twice — `selectVisibleSchedules` narrows
+ * the picker to today, and an effect auto-expands today's accordion panel — and
+ * the only mocked schedule is a `lun` one. Left on the real clock, this spec
+ * therefore ran a DIFFERENT path every Monday: the panel was already open, the
+ * unconditional "lunes" click below closed it, and the slot button never
+ * appeared. That is a genuine test bug and it red CI once a week.
+ *
+ * Pinning is preferred over making the click conditional on `aria-expanded`,
+ * because a conditional click would keep the branch taken varying by weekday —
+ * the same non-determinism, just no longer failing loudly. A defect in either
+ * branch would then surface on one day in seven. With the clock fixed, the spec
+ * exercises exactly one path on every run, and it is the collapsed-by-default
+ * path these assertions were written for. The auto-expand default itself is
+ * covered by the unit tests around `selectVisibleSchedules` / `todayDiaSemana`.
+ *
+ * The instant is chosen after `MOCK_SESSION.loggedInAt` so a pinned "now" never
+ * predates the session it is paired with.
+ */
+const FIXED_NOW = new Date("2026-07-22T18:00:00.000Z");
+
 async function fulfillJson(route: Route, body: unknown): Promise<void> {
   await route.fulfill({
     status: 200,
@@ -37,6 +60,8 @@ async function fulfillJson(route: Route, body: unknown): Promise<void> {
 }
 
 async function mockTrainerAttendanceRuntime(page: Page): Promise<void> {
+  /* Before the first `goto`, so the page never observes the real clock. */
+  await page.clock.setFixedTime(FIXED_NOW);
   await page.context().addCookies([{
     name: "access_token",
     value: MOCK_ACCESS_TOKEN,

@@ -561,7 +561,7 @@ function LadderContent({
       <div className="border-t border-line bg-canvas px-5 py-4">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h3 className="flex-1 text-[13px] font-bold text-ink">
-            Asignar estudiantes al nivel {nombre}
+            Estudiantes del nivel {nombre}
           </h3>
           <Button size="sm" onClick={() => setOpenNivelId(null)}>
             Cerrar

@@ -12,7 +12,15 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type AccountType = "JUGADOR" | "REPRESENTANTE" | "MENOR";
+/**
+ * Mirrors the backend's `tipo_cuenta` Literal in `admin_cuenta_schemas.py`.
+ * ENTRENADOR gets the ENTRENADOR role and nothing else — a coach trains the
+ * club, they are not enrolled in it.
+ */
+export type AccountType = "JUGADOR" | "REPRESENTANTE" | "MENOR" | "ENTRENADOR";
+
+/** Account types the backend requires to be of age. */
+export const ADULT_ACCOUNT_TYPES: readonly AccountType[] = ["JUGADOR", "REPRESENTANTE", "ENTRENADOR"];
 
 /** Wizard step identifiers. */
 export type CrearCuentaStep = "type" | "personal" | "health" | "credentials" | "summary";
@@ -125,8 +133,8 @@ function validatePersonal(data: CrearCuentaFormData): string[] {
   // Age validation based on account type
   if (data.accountType && data.fechaNacimiento && isValidDate(data.fechaNacimiento)) {
     const age = calculateAge(data.fechaNacimiento);
-    if (data.accountType === "JUGADOR" || data.accountType === "REPRESENTANTE") {
-      if (age < 18) errors.push("Los jugadores y representantes deben ser mayores de edad (18+).");
+    if (ADULT_ACCOUNT_TYPES.includes(data.accountType)) {
+      if (age < 18) errors.push("Los jugadores, representantes y entrenadores deben ser mayores de edad (18+).");
     }
     if (data.accountType === "MENOR") {
       if (age >= 18) errors.push("La persona es mayor de edad. Use tipo Jugador o Representante.");

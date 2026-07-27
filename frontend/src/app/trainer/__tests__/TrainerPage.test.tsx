@@ -238,6 +238,26 @@ describe("TrainerPage — Mi día", () => {
     window.removeEventListener(OPEN_HELP_CHAT_EVENT, listener);
   });
 
+  it("says on screen what 'Avisar al club' actually does", async () => {
+    /*
+     * There is no notify-the-club endpoint; the button opens the help assistant
+     * with the message already written, and the trainer still has to send it.
+     * That was documented in a source comment only, so on screen the button
+     * promised something it does not do by itself.
+     */
+    render(<TrainerPage />);
+    await screen.findByText(/Última lista/);
+
+    const button = screen.getByRole("button", { name: /Avisar al club/ });
+    const hint = screen.getByText(
+      "Abre el asistente con el mensaje ya escrito. Usted lo revisa y lo envía.",
+    );
+    expect(hint).toBeInTheDocument();
+    // The hint has to reach a screen reader from the button too, not just sit
+    // near it visually.
+    expect(button).toHaveAttribute("aria-describedby", hint.id);
+  });
+
   it("stays quiet about absences when nobody has reached the threshold", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([
       record("present", "Sofia Vera"),

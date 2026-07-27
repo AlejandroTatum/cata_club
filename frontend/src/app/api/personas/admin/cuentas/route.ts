@@ -10,6 +10,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 
+/**
+ * Must mirror the backend's `tipo_cuenta` Literal in
+ * `admin_cuenta_schemas.py`. This handler rejects anything outside the list
+ * before the request leaves the BFF, so a type the backend supports but that
+ * is missing here is silently unreachable.
+ */
+const TIPOS_CUENTA = ["JUGADOR", "REPRESENTANTE", "MENOR", "ENTRENADOR"];
+
 interface AdminCuentaBody {
   tipo_cuenta: string;
   nombres: string;
@@ -43,7 +51,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ message: "El cuerpo de la solicitud no es válido." }, { status: 400 });
   }
 
-  if (!body.tipo_cuenta || !["JUGADOR", "REPRESENTANTE", "MENOR"].includes(body.tipo_cuenta)) {
+  if (!body.tipo_cuenta || !TIPOS_CUENTA.includes(body.tipo_cuenta)) {
     return NextResponse.json({ message: "El tipo de cuenta no es válido." }, { status: 400 });
   }
 

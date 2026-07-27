@@ -1,6 +1,6 @@
 /**
  * POST /api/chatbot — BFF proxy to the backend's public (no auth),
- * rate-limited (15/min) `POST /chatbot/consultar`. Static-FAQ helper for
+ * burst-rate-limited `POST /chatbot/consultar`. Static-FAQ helper for
  * navigating the app — no personal/sensitive data involved, so this proxy
  * skips auth entirely (no `backendFetchAuthed`).
  *
@@ -16,7 +16,13 @@ import { NextResponse } from "next/server";
 import { getBackendApiUrl } from "@/lib/server/auth";
 import { passthroughBackendError } from "@/lib/server/backend-client";
 
-/** LLM completions can run longer than typical CRUD calls — see module docstring. */
+/**
+ * LLM completions can run longer than typical CRUD calls — see module
+ * docstring. The backend's own openai client is budgeted to stay under this
+ * (TIMEOUT_LLM_SEGUNDOS * (1 + MAX_REINTENTOS_LLM) = 24s, see
+ * backend/app/servicios_negocio/chatbot_servicio.py), so changing this number
+ * means redoing that arithmetic too.
+ */
 const CHATBOT_TIMEOUT_MS = 30_000;
 
 interface ChatbotRequestBody {

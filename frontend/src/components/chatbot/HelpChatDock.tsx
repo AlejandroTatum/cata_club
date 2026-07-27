@@ -212,7 +212,14 @@ function useDockClearance(dockRef: React.RefObject<HTMLElement | null>): DockCle
  * `.launcher` — a coal disc wearing CATA-BOT's own face. Coal and not red:
  * red is this product's primary-CTA and destructive colour, and a red disc
  * floating over every screen would outrank the actual CTA on all of them.
- * 44px on a phone (the touch-target floor) and 52px from `lg` up.
+ * 44px on a phone (the touch-target floor) and 76px from `lg` up.
+ *
+ * The phone disc is pinned at 44px and CANNOT grow: the corner budget below is
+ * what lets it sit beside the landing's WhatsApp CTA at all, and the 56px FAB
+ * this replaced is exactly what made that impossible. So when the disc read as
+ * too small to notice, the face inside it grew to fill it (40px of a 44px disc)
+ * rather than the disc growing outward. From `lg` up the corner is empty, so
+ * there the whole disc grows instead — 52px to 76px.
  *
  * `right-2` on phones, not the `right-3` that would match the panel: the
  * landing's contact card leaves its WhatsApp CTA ending a constant 57px from
@@ -225,7 +232,7 @@ const LAUNCHER_CLASSES =
   "fixed bottom-4 right-2 z-40 flex h-11 w-11 items-center justify-center rounded-full " +
   "bg-coal text-white shadow-[0_10px_28px_rgba(19,19,22,0.30)] " +
   "transition-[transform,opacity] duration-200 ease-out hover:bg-coal-3 " +
-  "lg:bottom-5 lg:right-5 lg:h-[52px] lg:w-[52px]";
+  "lg:bottom-5 lg:right-5 lg:h-[76px] lg:w-[76px]";
 
 export default function HelpChatDock(): React.ReactElement {
   const { session } = useAuth();
@@ -284,7 +291,7 @@ export default function HelpChatDock(): React.ReactElement {
           size makes Next serve exactly that many real pixels and every HiDPI
           screen upscales them.
         */}
-        <span className="relative block h-8 w-8 overflow-hidden rounded-full lg:h-9 lg:w-9">
+        <span className="relative block h-10 w-10 overflow-hidden rounded-full lg:h-16 lg:w-16">
           <Image src="/brand/cata-bot.png" alt="" fill sizes="128px" className="object-contain" />
         </span>
       </button>

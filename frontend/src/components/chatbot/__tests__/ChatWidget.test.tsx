@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react";
 import ChatWidget from "@/components/chatbot/ChatWidget";
 import { getQuickReplies } from "@/components/chatbot/chat-quick-replies";
 
@@ -113,6 +113,68 @@ describe("ChatWidget", () => {
     await waitFor(() => {
       expect(screen.getByText(/no se pudo contactar a cata-bot/i)).toBeInTheDocument();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// One message per failure class.
+//
+// The widget used to answer every rejection with the same "no se pudo
+// contactar" string, which made a rate limit, a timeout and a dead backend
+// indistinguishable — the failures read as random. The backend now maps each
+// provider failure to its own status (429/504/503/502) and the BFF forwards it
+// verbatim, so the copy can finally tell the user what to do about it.
+// ---------------------------------------------------------------------------
+
+describe("ChatWidget — error copy per failure class", () => {
+  async function enviarYLeerAlerta(status: number): Promise<string> {
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(status));
+
+    render(<ChatWidget open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/mensaje para cata-bot/i), { target: { value: "hola" } });
+    fireEvent.click(screen.getByRole("button", { name: /enviar mensaje/i }));
+
+    const alerta = await screen.findByRole("alert");
+    return alerta.textContent ?? "";
+  }
+
+  it("tells the user to wait when they are asking too fast (429)", async () => {
+    expect(await enviarYLeerAlerta(429)).toMatch(/espera/i);
+  });
+
+  it("says it took too long on a timeout (504)", async () => {
+    expect(await enviarYLeerAlerta(504)).toMatch(/tard/i);
+  });
+
+  it("says the assistant is unavailable when the backend cannot reach it (503)", async () => {
+    expect(await enviarYLeerAlerta(503)).toMatch(/no está disponible/i);
+  });
+
+  it("falls back to the generic message on any other failure (502)", async () => {
+    expect(await enviarYLeerAlerta(502)).toMatch(/no se pudo contactar a cata-bot/i);
+  });
+
+  it("gives each failure class a message of its own", async () => {
+    const mensajes: string[] = [];
+    for (const status of [429, 504, 503, 502]) {
+      mensajes.push(await enviarYLeerAlerta(status));
+      cleanup();
+      vi.mocked(global.fetch).mockReset();
+    }
+
+    expect(new Set(mensajes).size).toBe(mensajes.length);
+  });
+
+  it("keeps the alert inside the role=alert block with its error styling", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(429));
+
+    render(<ChatWidget open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/mensaje para cata-bot/i), { target: { value: "hola" } });
+    fireEvent.click(screen.getByRole("button", { name: /enviar mensaje/i }));
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveClass("bg-state-bad-bg");
+    expect(alerta).toHaveClass("text-state-bad");
   });
 });
 

@@ -400,6 +400,36 @@ describe("StudentPage — próximos entrenamientos", () => {
     vi.useRealTimers();
   });
 
+  it("lets the training rows absorb the card's spare height instead of pooling it", async () => {
+    /*
+     * The card is `h-full` so it matches the taller card beside it, the list is
+     * `flex-1` and the footer is `mt-auto`. With at most three rows, all the
+     * leftover height collected into one dead band between the last row and the
+     * footer. Sharing it across the rows keeps the card full without inventing
+     * content or letting the footer float.
+     */
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-22T09:00:00-05:00"));
+    mockFetchHorariosPorAlumno.mockResolvedValue([
+      asignacion("MIERCOLES", "15:00:00", "18:00:00", 1),
+    ]);
+
+    render(<StudentPage />);
+
+    const panel = await screen.findByTestId("student-situation");
+    await waitFor(() => {
+      expect(within(panel).getByText("Miércoles")).toBeInTheDocument();
+    });
+
+    const rows = within(panel).getAllByRole("listitem");
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.className).toMatch(/\bflex-1\b/);
+    }
+
+    vi.useRealTimers();
+  });
+
   it("moves past a window that has already closed today instead of calling it 'hoy'", async () => {
     // Same Wednesday, 21:00 — the 15:00–18:00 session is over.
     vi.useFakeTimers({ toFake: ["Date"] });

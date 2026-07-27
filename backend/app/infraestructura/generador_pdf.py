@@ -24,10 +24,25 @@ from reportlab.platypus import (
     HRFlowable,
 )
 
+from app.soporte_transversal.tiempo import ahora_club
+
 _LOGO_PATH = Path(__file__).parent / "assets" / "cata-club-logo.jpeg"
 _ROJO_INSTITUCIONAL = "#D92128"
 _NEGRO_INSTITUCIONAL = "#111111"
 _NOMBRE_CLUB = "Cata Club - Academia de Tenis"
+
+FORMATO_SELLO_COMPROBANTE = "%d/%m/%Y %H:%M:%S"
+FORMATO_SELLO_REPORTE = "%d/%m/%Y %H:%M"
+
+
+def sello_de_tiempo(formato: str) -> str:
+    """Hora del CLUB formateada para imprimir en un PDF.
+
+    Es una hora que una persona lee en papel: un comprobante emitido a las
+    19:30 del lunes no puede decir "martes 00:30". Por eso NO usa
+    `datetime.now()`, que en un contenedor UTC devuelve la hora UTC
+    (ver `app/soporte_transversal/tiempo.py`)."""
+    return ahora_club().strftime(formato)
 
 
 def generar_comprobante_pago_pdf(
@@ -148,7 +163,7 @@ def generar_comprobante_pago_pdf(
     elementos.append(HRFlowable(width="50%", thickness=0.5, color=colors.grey))
     elementos.append(Paragraph(
         f"Documento generado electrónicamente el "
-        f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}."
+        f"{sello_de_tiempo(FORMATO_SELLO_COMPROBANTE)}."
         f" Valor sin firma física tiene plena validez interna.",
         ParagraphStyle("Pie", parent=cuerpo, fontSize=8, textColor=colors.grey),
     ))
@@ -250,7 +265,7 @@ def generar_reporte_pdf(
     elementos: list = [
         Paragraph(titulo, titulo_estilo),
         Paragraph(
-            f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            f"Generado el {sello_de_tiempo(FORMATO_SELLO_REPORTE)}"
             + (f" por {generado_por}" if generado_por else ""),
             subtitulo_estilo,
         ),

@@ -958,6 +958,7 @@ function EnrollWizard(): React.ReactElement {
 
               <WizardNavigation
                 formErrors={formErrors}
+                duplicateIdentityAudience="self-service"
                 isFirst={isFirst}
                 isLast={isLast}
                 submitting={submitting}

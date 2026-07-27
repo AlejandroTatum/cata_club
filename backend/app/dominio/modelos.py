@@ -125,7 +125,7 @@ class Usuario(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     correo: Mapped[str] = mapped_column(String(100), unique=True)
     contrasenia: Mapped[str] = mapped_column(String(255))
-    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora_utc)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
     # E01-RF003: versión monotónica de la contraseña. Cada vez que se
     # restablece o cambia la contraseña se incrementa, invalidando tokens de
     # recuperación emitidos antes de ese cambio (single-use por diseño).
@@ -165,7 +165,7 @@ class Persona(Base):
 
     # E04-RF014: el reporte "alumnos nuevos por periodo" necesita saber
     # cuándo se dio de alta cada Persona -- no existía ningún timestamp.
-    fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=_ahora_utc)
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
 
     # --- Relación reflexiva: 1 adulto representa a 0..* personas ---
     representante_id: Mapped[Optional[int]] = mapped_column(ForeignKey("persona.id"), nullable=True)
@@ -243,7 +243,7 @@ class Membresia(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     estado: Mapped[EstadoMembresia] = mapped_column(SAEnum(EstadoMembresia))
     monto_aplicado: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    fecha_activacion: Mapped[datetime] = mapped_column(DateTime)
+    fecha_activacion: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # E04-RF002: auditoría de por qué monto_aplicado quedó en 0 -- necesario
     # para que un reporte financiero no lo confunda con un error de cobro.
     es_gratuidad_familiar: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -266,8 +266,8 @@ class Pago(Base):
     motivo_rechazo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     estado_pago: Mapped[EstadoPago] = mapped_column(SAEnum(EstadoPago))
     tipo_pago: Mapped[TipoPago] = mapped_column(SAEnum(TipoPago))
-    fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=_ahora_utc)
-    fecha_validacion: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
+    fecha_validacion: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     fecha_inicio: Mapped[date] = mapped_column(Date)
     fecha_fin: Mapped[date] = mapped_column(Date)
 
@@ -284,7 +284,7 @@ class Pago(Base):
     # está PENDIENTE_VALIDACION. No constituye tabla nueva: son columnas en Pago.
     voucher_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     voucher_formato: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    voucher_fecha_carga: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    voucher_fecha_carga: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     comprobante: Mapped[Optional["ComprobantePago"]] = relationship(back_populates="pago", uselist=False)
 
@@ -294,7 +294,7 @@ class ComprobantePago(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     archivo_url: Mapped[str] = mapped_column(String(255))
     formato_archivo: Mapped[str] = mapped_column(String(20))
-    fecha_carga: Mapped[datetime] = mapped_column(DateTime, default=_ahora_utc)
+    fecha_carga: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
 
     pago_id: Mapped[int] = mapped_column(ForeignKey("pago.id"), unique=True)
     pago: Mapped["Pago"] = relationship(back_populates="comprobante")
@@ -369,7 +369,7 @@ class Asistencia(Base):
     __tablename__ = "asistencia"
     id: Mapped[int] = mapped_column(primary_key=True)
     fecha_entrenamiento: Mapped[date] = mapped_column(Date)
-    fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=_ahora_utc)
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
     estado: Mapped[EstadoAsistencia] = mapped_column(SAEnum(EstadoAsistencia))
     justificativo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     estado_justificativo: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
@@ -397,7 +397,7 @@ class AlumnoHorario(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     horario_id: Mapped[int] = mapped_column(ForeignKey(_HORARIO_FK))
-    fecha_asignacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora_utc)
+    fecha_asignacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
 
     persona: Mapped["Persona"] = relationship(back_populates="alumno_horarios")
     horario: Mapped["HorarioEntrenamiento"] = relationship(back_populates="alumno_horarios")
@@ -504,7 +504,7 @@ class Notificacion(Base):
     tipo: Mapped[TipoNotificacion] = mapped_column(SAEnum(TipoNotificacion))
     mensaje: Mapped[str] = mapped_column(String(255))
     leida: Mapped[bool] = mapped_column(Boolean, default=False)
-    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora_utc)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
     # Id de la entidad relacionada (ej. el Ranking o JustificativoRanking que
     # originó la notificación), sin FK estricta porque el tipo de entidad
     # varía según `tipo` -- mantenerlo simple evita una jerarquía de tablas.

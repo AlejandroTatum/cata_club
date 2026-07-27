@@ -78,22 +78,18 @@ def crear_entrenador(db_session, cedula: str = "1710034065") -> int:
 FECHA_CONGELADA_HOY = _date_cls(2029, 1, 1)
 
 
-class _FechaCongelada(_date_cls):
-    """Subclase de `date` cuyo `today()` devuelve una fecha fija. Sigue
-    permitiendo construir `date(...)` normalmente para los tests que
-    explicitan fechas (ej. fecha_entrenamiento)."""
-    @classmethod
-    def today(cls):
-        return FECHA_CONGELADA_HOY
-
-
 @pytest.fixture(autouse=True)
 def _congelar_hoy_en_persona_servicio(monkeypatch):
-    """Parchea el `date` importado en `persona_servicio` para que los
+    """Parchea el `hoy_club()` importado en `persona_servicio` para que los
     tests no dependan del reloj real (ver nota FECHA_CONGELADA_HOY).
-    Autouse: aplica a todos los tests sin necesidad de pedirlo explícito."""
+    Autouse: aplica a todos los tests sin necesidad de pedirlo explícito.
+
+    Antes se parcheaba `ps.date` con una subclase de `date`; el servicio ya
+    no llama a `date.today()` sino a `hoy_club()` (ver
+    `app/soporte_transversal/tiempo.py`), porque la edad de un alumno se
+    define por el día del club, no por el del contenedor (UTC)."""
     import app.servicios_negocio.persona_servicio as ps
-    monkeypatch.setattr(ps, "date", _FechaCongelada)
+    monkeypatch.setattr(ps, "hoy_club", lambda: FECHA_CONGELADA_HOY)
 
 
 @pytest.fixture(autouse=True)
@@ -145,6 +141,35 @@ def esquema_migrado(motor_test):
     raiz_backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     alembic_cfg = AlembicConfig(os.path.join(raiz_backend, "alembic.ini"))
     alembic_command.upgrade(alembic_cfg, "head")
+
+
+@pytest.fixture(scope="session")
+def motor_arnes_migraciones():
+    """Base de datos EFÍMERA y separada donde el arnés ejercita migraciones
+    sobre datos preexistentes (ver `tests/arnes_migraciones.py`).
+
+    No puede ser la base de la suite: el arnés hace `DROP SCHEMA public
+    CASCADE` por escenario, y eso destruiría el esquema que
+    `esquema_migrado` (scope=session) construye UNA vez para el resto de
+    las pruebas. Vive en el mismo servidor Postgres (`TEST_DATABASE_URL`),
+    respetando el contrato de un solo env var (decisión 1.1)."""
+    from tests.arnes_migraciones import crear_bd_del_arnes, destruir_bd_del_arnes
+
+    motor, nombre_bd = crear_bd_del_arnes(TEST_DATABASE_URL)
+    try:
+        yield motor
+    finally:
+        motor.dispose()
+        destruir_bd_del_arnes(TEST_DATABASE_URL, nombre_bd)
+
+
+@pytest.fixture()
+def arnes_migracion(motor_arnes_migraciones):
+    """Arnés por prueba. El aislamiento lo da `preparar()`, que reconstruye
+    el esquema desde cero en cada escenario."""
+    from tests.arnes_migraciones import ArnesMigracion
+
+    return ArnesMigracion(motor_arnes_migraciones)
 
 
 _secuencias_cache: list[str] = []

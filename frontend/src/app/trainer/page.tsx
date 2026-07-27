@@ -21,7 +21,10 @@
  *
  * "Avisar al club" has no endpoint behind it: nothing in the API notifies the
  * club about a student. It opens the help assistant with the message already
- * written (see `openHelpChat`), which is the only real channel there is.
+ * written (see `openHelpChat`), which is the only real channel there is. That
+ * used to be documented HERE and nowhere the trainer could see it, so the
+ * button read as "the club has been told" when in fact the trainer still has to
+ * send the message — hence the hint rendered next to it.
  */
 
 "use client";
@@ -62,6 +65,9 @@ import {
 
 /** The order the four states are read in — best news first, as on every other screen. */
 const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
+
+/** Ties the "Avisar al club" button to the sentence explaining what it opens. */
+const ABSENCE_NOTICE_HINT_ID = "trainer-absence-notice-hint";
 
 /**
  * `.btn.xl` (`_sistema.css:174`) — 52px, 22px padding, 15px label, 12px
@@ -259,11 +265,24 @@ export default function TrainerPage(): React.ReactElement {
                       <Button
                         variant="dark"
                         size="sm"
+                        aria-describedby={ABSENCE_NOTICE_HINT_ID}
                         onClick={(): void => openHelpChat(buildAbsenceNotice(absenceAlert))}
                       >
                         <Megaphone size={14} strokeWidth={2} aria-hidden="true" />
                         Avisar al club
                       </Button>
+                      {/*
+                        Full width under the row, so the button keeps its place
+                        beside the count and the explanation never squeezes it.
+                        `aria-describedby` above carries the same sentence to a
+                        screen reader, which cannot infer it from proximity.
+                      */}
+                      <p
+                        id={ABSENCE_NOTICE_HINT_ID}
+                        className="m-0 w-full text-[12.5px] text-ink-3"
+                      >
+                        Abre el asistente con el mensaje ya escrito. Usted lo revisa y lo envía.
+                      </p>
                     </div>
                   )}
                 </div>

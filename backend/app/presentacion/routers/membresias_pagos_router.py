@@ -5,6 +5,7 @@ from typing import List, Optional
 from datetime import date
 
 from app.infraestructura.db import obtener_sesion
+from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.dominio.enums import EstadoPago
 from app.presentacion.schemas.membresia_pago_schemas import (
@@ -215,7 +216,10 @@ async def reporte_pagos_pdf(
         columnas=_COLUMNAS_PAGOS_PDF,
         filas=_pagos_a_filas(items),
     )
-    fecha_iso = date.today().isoformat()
+    # Día del CLUB: la fecha del nombre de archivo es la que un humano lee
+    # para saber de cuándo es el reporte. Uno descargado a las 19:30 del lunes
+    # no puede llamarse con la fecha del martes.
+    fecha_iso = hoy_club().isoformat()
     return construir_respuesta_pdf(pdf_bytes, f"reporte-pagos_{fecha_iso}.pdf")
 
 

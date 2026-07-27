@@ -23,17 +23,6 @@ export type ShellKind =
   | "public";
 
 /**
- * Routes under an app-shell prefix that must stay PUBLIC.
- *
- * `/student/enroll` is the real public enrollment funnel — the landing links
- * straight to it and `middleware-utils.ts` lists it in `PUBLIC_EXCEPTIONS`.
- * It must never assume a session, so it wins over the `/student` prefix
- * below. Prototype `05-inscripcion.html` also draws it shell-less (`.app
- * plain`), confirming it is not an `AppShell` screen.
- */
-const PUBLIC_EXCEPTION_PREFIXES = ["/student/enroll"] as const;
-
-/**
  * Public auth screens render their own full-bleed split-screen shell (see
  * `AuthShell`) with a dark brand panel that already carries identity plus a
  * "volver al sitio" link.
@@ -57,7 +46,23 @@ const AUTH_SHELL_PREFIXES = [
  * a dónde navegar]"*. A dark top nav whose only link is "Inicio" was the
  * worst of both worlds.
  */
-const STANDALONE_PREFIXES = ["/unauthorized"] as const;
+const STANDALONE_PREFIXES = [
+  "/unauthorized",
+  /*
+   * `/student/enroll` is the public enrollment funnel — the landing links
+   * straight to it and `middleware-utils.ts` lists it in `PUBLIC_EXCEPTIONS`
+   * — so it must never inherit the `/student` AppShell below. It used to be
+   * routed to "public" for that reason, but that bought it the institutional
+   * top `Header`, stacked over a wizard that already draws its own progress
+   * header and stepper: two horizontal bars competing on the same screen.
+   *
+   * Standalone expresses the actual intent. It still wins over `/student`
+   * (checked first, same as before) and still implies no session, while
+   * matching prototype `05-inscripcion.html`, which draws the funnel
+   * shell-less (`.app plain`).
+   */
+  "/student/enroll",
+] as const;
 
 /**
  * Sections that render `AppShell`. Prefix-based: every descendant of a
@@ -93,11 +98,11 @@ function matchesAny(pathname: string, prefixes: readonly string[]): boolean {
 }
 
 /**
- * Resolve the chrome a pathname gets. Order matters: public exceptions are
- * checked before the app-shell prefixes they live under.
+ * Resolve the chrome a pathname gets. Order matters: the auth and standalone
+ * prefixes are checked before the app-shell prefixes they may live under, so
+ * `/student/enroll` never inherits `/student`'s shell.
  */
 export function resolveShellKind(pathname: string): ShellKind {
-  if (matchesAny(pathname, PUBLIC_EXCEPTION_PREFIXES)) return "public";
   if (matchesAny(pathname, AUTH_SHELL_PREFIXES)) return "auth";
   if (matchesAny(pathname, STANDALONE_PREFIXES)) return "standalone";
   if (matchesAny(pathname, APP_SHELL_PREFIXES)) return "app";

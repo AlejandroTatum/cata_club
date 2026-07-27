@@ -30,16 +30,18 @@ def _fecha_creacion_iso_esperada(usuario: Usuario) -> str:
     """Formato ISO 8601 real que produce `ResponseBase` para un DTO servido a
     través de FastAPI (`response_model=...`).
 
-    NOTA (gap pre-existente, descubierto en este cambio, fuera de alcance
-    arreglar aquí): `ResponseBase._serialize_datetime_utc` (base.py) solo
-    agrega el sufijo 'Z' cuando el modelo se serializa en `mode="python"`.
-    En el pipeline real de FastAPI (`mode="json"`), pydantic ya convierte el
-    datetime naive a string ANTES de que el wrap-serializer corra, así que el
-    `isinstance(value, datetime)` deja de matchear y el 'Z' nunca se agrega.
-    Se documenta el comportamiento real (sin 'Z') en vez de arreglar
-    `base.py`, que afectaría muchos otros DTOs fuera del alcance de esta
-    tarea (exponer `fecha_creacion`)."""
-    return usuario.fecha_creacion.isoformat()
+    El gap que documentaba la versión anterior de este helper ("el sufijo 'Z'
+    nunca se agrega") era un SÍNTOMA del bug de zona horaria, no un problema
+    de `base.py`: `usuario.fecha_creacion` era naive porque la columna era
+    `timestamp without time zone`, y pydantic serializa un datetime naive sin
+    ningún offset — el navegador lo interpretaba como hora LOCAL y mostraba
+    una diferencia de 5 horas.
+
+    Desde que la columna es `timestamptz` (migración `a7c1e9d4f6b2`) el valor
+    llega aware y pydantic emite el offset por sí solo ('Z' cuando la sesión
+    de BD está en UTC, como en los contenedores). `isoformat()` sobre el
+    valor aware describe ese mismo instante."""
+    return usuario.fecha_creacion.isoformat().replace("+00:00", "Z")
 
 
 # --- helpers (mismo patrón que test_auth_registro_refresh.py) ---------------

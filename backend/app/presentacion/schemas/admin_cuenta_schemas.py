@@ -2,8 +2,8 @@
 DTOs para el endpoint admin de creación de cuentas.
 
 Permite al Administrador crear cuentas completas (Persona + Usuario + Rol)
-en un solo request, para adultos (Jugador/Representante) y menores
-(Dependiente con representante asignado).
+en un solo request, para adultos (Jugador/Representante/Entrenador) y
+menores (Dependiente con representante asignado).
 """
 from pydantic import BaseModel, EmailStr, Field
 from datetime import date
@@ -17,7 +17,7 @@ class AdminCrearCuentaDTO(BaseModel):
 
     Creación unificada de Persona + Usuario + Rol desde el panel admin.
     """
-    tipo_cuenta: Literal["JUGADOR", "REPRESENTANTE", "MENOR"]
+    tipo_cuenta: Literal["JUGADOR", "REPRESENTANTE", "MENOR", "ENTRENADOR"]
 
     # --- Datos de la Persona (comunes a todos los tipos) ---
     nombres: str = Field(..., min_length=1, max_length=100)

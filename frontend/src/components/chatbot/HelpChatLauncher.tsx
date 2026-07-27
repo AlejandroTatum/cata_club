@@ -80,7 +80,11 @@ export default function HelpChatLauncher({
       aria-expanded={open}
       className={className ? `${TRIGGER_CLASSES[variant]} ${className}` : TRIGGER_CLASSES[variant]}
     >
-      <MessageCircle size={variant === "landing" ? 17 : 13} strokeWidth={2} aria-hidden="true" />
+      {/* Nudged up from 17/13 so the assistant reads as an offer rather than a
+          footnote. Deliberately NOT scaled to match the floating launcher: this
+          glyph sits inline with an 11.5px label, and an icon that outgrows its
+          own text stops looking like part of the sentence. */}
+      <MessageCircle size={variant === "landing" ? 20 : 16} strokeWidth={2} aria-hidden="true" />
       {label}
     </button>
   );

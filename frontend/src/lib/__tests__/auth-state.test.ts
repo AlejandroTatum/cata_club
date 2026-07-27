@@ -138,6 +138,16 @@ describe("applyLogout", () => {
 // wiring, and Finding 1's outage-vs-unauthenticated contract.
 // ---------------------------------------------------------------------------
 
+/*
+ * AuthProvider now owns the post-logout redirect, so it consumes `useRouter`.
+ * These tests are about hydration and revalidation, not navigation — the stub
+ * exists so the provider can mount. The redirect itself is asserted in
+ * `src/contexts/__tests__/AuthContext.test.tsx`.
+ */
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+}));
+
 const mockGetSession = vi.fn<() => Promise<SessionOutcome>>();
 
 vi.mock("@/services/auth", () => ({

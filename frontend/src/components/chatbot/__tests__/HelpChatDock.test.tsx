@@ -60,6 +60,34 @@ describe("HelpChatDock — the launcher", () => {
     expect(launcher.className).toMatch(/\bh-11\b/);
   });
 
+  it("shows CATA-BOT's face big enough to read, without widening the phone corner", () => {
+    /*
+     * The complaint was that the assistant was hard to SEE. The 44px phone disc
+     * cannot grow — it is exactly what lets the launcher sit beside the
+     * landing's WhatsApp CTA — so on a phone the face grows inside it instead,
+     * and from `lg` up, where the corner is empty, the whole disc grows.
+     */
+    const { container } = render(<HelpChatDock />);
+
+    const launcher = screen.getByRole("button", { name: /abrir cata-bot/i });
+    // The phone footprint is unchanged: same disc, same inset.
+    expect(launcher.className).toMatch(/\bh-11\b/);
+    expect(launcher.className).toMatch(/\bright-2\b/);
+    // From `lg` up the disc is no longer the old 52px.
+    expect(launcher.className).not.toMatch(/lg:h-\[52px\]/);
+    expect(launcher.className).toMatch(/lg:h-\[76px\]/);
+    expect(launcher.className).toMatch(/lg:w-\[76px\]/);
+
+    const glyph = container.querySelector("span.rounded-full");
+    expect(glyph).not.toBeNull();
+    // 40px inside the 44px disc on a phone, 64px inside the 76px disc from
+    // `lg` up — the face, not the padding, is what carries the disc.
+    expect(glyph?.className).toMatch(/\bh-10\b/);
+    expect(glyph?.className).toMatch(/\bw-10\b/);
+    expect(glyph?.className).toMatch(/\blg:h-16\b/);
+    expect(glyph?.className).toMatch(/\blg:w-16\b/);
+  });
+
   it("carries a focus indicator that survives a light page", () => {
     render(<HelpChatDock />);
     const launcher = screen.getByRole("button", { name: /abrir cata-bot/i });

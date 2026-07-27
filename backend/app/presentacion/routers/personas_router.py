@@ -5,6 +5,7 @@ from typing import List, Optional
 from datetime import date, datetime, time, timezone
 
 from app.infraestructura.db import obtener_sesion
+from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaUpdateDTO,
@@ -140,7 +141,10 @@ async def reporte_nuevos_por_periodo_pdf(
         columnas=_COLUMNAS_PERSONAS_PDF,
         filas=_personas_a_filas(personas),
     )
-    fecha_iso = date.today().isoformat()
+    # Día del CLUB: la fecha del nombre de archivo es la que un humano lee
+    # para saber de cuándo es el reporte. Uno descargado a las 19:30 del lunes
+    # no puede llamarse con la fecha del martes.
+    fecha_iso = hoy_club().isoformat()
     return construir_respuesta_pdf(pdf_bytes, f"reporte-periodo_{fecha_iso}.pdf")
 
 
@@ -416,8 +420,18 @@ async def asignar_rol(persona_id: int, datos: RolAsignarDTO, db: Session = Depen
     "/{persona_id}/roles/{tipo_rol}", response_model=RolesResponseDTO,
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
-async def quitar_rol(persona_id: int, tipo_rol: TipoRol, db: Session = Depends(obtener_sesion)):
-    usuario = RolServicio(db).quitar_rol(persona_id, tipo_rol)
+async def quitar_rol(
+    persona_id: int,
+    tipo_rol: TipoRol,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+):
+    """El `persona_id` del solicitante se toma del token, nunca del cliente:
+    es lo que permite bloquear que un administrador se quite a sí mismo el
+    rol ADMINISTRADOR y se deje fuera del sistema."""
+    usuario = RolServicio(db).quitar_rol(
+        persona_id, tipo_rol, persona_id_solicitante=token_payload.get("persona_id")
+    )
     return RolesResponseDTO(persona_id=persona_id, roles=[r.tipo_rol.value for r in usuario.roles], activo=usuario.activo)
 
 

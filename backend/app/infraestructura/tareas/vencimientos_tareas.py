@@ -23,7 +23,6 @@ Idempotencia:
     condición es `fecha_fin del pago aprobado más reciente < hoy`, calculada en
     runtime via SQL (no cacheada).
 """
-from datetime import date
 import logging
 
 from sqlalchemy import select, func
@@ -32,6 +31,7 @@ from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
 from app.dominio.modelos import Membresia, Pago
 from app.dominio.enums import EstadoMembresia, EstadoPago
+from app.soporte_transversal.tiempo import hoy_club
 
 
 logger = logging.getLogger("cataclub.tareas.vencimientos")
@@ -56,7 +56,12 @@ def marcar_membresias_vencidas(self) -> dict:
         snapshot (membresia_id, persona_id, vencimiento) por cada una. Útil
         para logging y para un panel de salud del sistema.
     """
-    hoy = date.today()
+    # Día del CLUB, no del contenedor: Celery Beat ya planifica esta tarea en
+    # `America/Guayaquil` (`celery_app.py::timezone`), así que calcular la
+    # ventana con `date.today()` (UTC) haría que el planificador y la tarea
+    # discreparan sobre qué día es. `Pago.fecha_fin` además es una fecha de
+    # calendario pactada con el socio, no un instante.
+    hoy = hoy_club()
     vencidas: list[dict] = []
 
     with SessionLocal() as db:

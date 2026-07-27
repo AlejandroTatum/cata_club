@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
@@ -6,6 +6,7 @@ from datetime import date
 
 from app.dominio.enums import Categoria
 from app.infraestructura.db import obtener_sesion
+from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaResponseDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
@@ -19,6 +20,25 @@ from app.servicios_negocio.politica_acceso import (
 )
 
 router = APIRouter(prefix="/asistencias", tags=["Asistencias"])
+
+
+def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[date]) -> None:
+    """Rechaza un rango invertido con el MISMO 422 y el mismo texto que los
+    reportes de personas y de pagos (`personas_router`,
+    `membresias_pagos_router`). Sin esto, invertir las fechas devolvía 200 con
+    una lista vacía: una respuesta silenciosa y equivocada.
+
+    A diferencia de sus hermanos (que usan `>=`), aquí se compara con `>`
+    porque el filtro del repositorio es inclusivo en ambos extremos
+    (`>= fecha_inicio`, `<= fecha_fin`): un reporte de un solo día se pide con
+    `fecha_inicio == fecha_fin` y es una consulta legítima."""
+    if fecha_inicio is None or fecha_fin is None:
+        return
+    if fecha_inicio > fecha_fin:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La fecha de inicio debe ser anterior a la fecha de fin.",
+        )
 
 
 @router.post("/horarios", response_model=HorarioResponseDTO, status_code=status.HTTP_201_CREATED,
@@ -97,6 +117,7 @@ async def reporte_asistencia(
     fecha_fin: Optional[date] = Query(default=None),
     db: Session = Depends(obtener_sesion),
 ):
+    _validar_rango_de_fechas(fecha_inicio, fecha_fin)
     return AsistenciaServicio(db).generar_reporte(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
@@ -123,6 +144,7 @@ async def reporte_asistencia_pdf(
     fecha_fin: Optional[date] = Query(default=None),
     db: Session = Depends(obtener_sesion),
 ):
+    _validar_rango_de_fechas(fecha_inicio, fecha_fin)
     registros = AsistenciaServicio(db).generar_reporte(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
@@ -145,7 +167,10 @@ async def reporte_asistencia_pdf(
         columnas=columnas,
         filas=filas,
     )
-    fecha_iso = date.today().isoformat()
+    # Día del CLUB: la fecha del nombre de archivo es la que un humano lee
+    # para saber de cuándo es el reporte. Uno descargado a las 19:30 del lunes
+    # no puede llamarse con la fecha del martes.
+    fecha_iso = hoy_club().isoformat()
     return construir_respuesta_pdf(pdf_bytes, f"reporte-asistencia_{fecha_iso}.pdf")
 
 

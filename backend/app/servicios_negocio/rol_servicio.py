@@ -57,11 +57,49 @@ class RolServicio:
         self.db.refresh(usuario)
         return usuario
 
-    def quitar_rol(self, persona_id: int, tipo_rol: TipoRol) -> Usuario:
+    # --- Barrera anti-bloqueo de administradores ---------------------------
+    # Quitar el rol ADMINISTRADOR (o desactivar la cuenta) del último
+    # administrador activo deja al club sin ninguna vía de recuperación dentro
+    # de la aplicación: no existe un comando de rescate ni una cuenta de
+    # respaldo. Por eso ambas operaciones se validan contra el mismo conteo.
+    def _asegurar_que_queda_otro_administrador(self, usuario: Usuario, accion: str) -> None:
+        es_admin = any(r.tipo_rol == TipoRol.ADMINISTRADOR for r in usuario.roles)
+        if not es_admin:
+            return
+        if self.repo_usuario.contar_administradores_activos(excluir_usuario_id=usuario.id) > 0:
+            return
+        raise OperacionInvalida(
+            f"No se puede {accion}: es el último administrador activo del "
+            "sistema y quedaría sin acceso de administración. Asigne el rol "
+            "ADMINISTRADOR a otra cuenta activa antes de continuar."
+        )
+
+    def _asegurar_que_no_se_quita_a_si_mismo(
+        self, usuario: Usuario, persona_id_solicitante: int | None
+    ) -> None:
+        if persona_id_solicitante is None:
+            return
+        if usuario.persona_id != persona_id_solicitante:
+            return
+        raise OperacionInvalida(
+            "No puede quitarse a sí mismo el rol ADMINISTRADOR: perdería el "
+            "acceso de administración de inmediato. Pídale a otro "
+            "administrador que lo haga."
+        )
+
+    def quitar_rol(
+        self,
+        persona_id: int,
+        tipo_rol: TipoRol,
+        persona_id_solicitante: int | None = None,
+    ) -> Usuario:
         usuario = self._obtener_usuario_de_persona(persona_id)
         rol = next((r for r in usuario.roles if r.tipo_rol == tipo_rol), None)
         if not rol:
             raise EntidadNoEncontrada(f"Esta persona no tiene el rol {tipo_rol.value}")
+        if tipo_rol == TipoRol.ADMINISTRADOR:
+            self._asegurar_que_no_se_quita_a_si_mismo(usuario, persona_id_solicitante)
+            self._asegurar_que_queda_otro_administrador(usuario, "quitar el rol ADMINISTRADOR")
         usuario.roles.remove(rol)
         self.db.commit()
         self.db.refresh(usuario)
@@ -87,6 +125,8 @@ class RolServicio:
     # --- E01-RF013: activar/desactivar cuenta sin borrar datos -------------
     def cambiar_estado_cuenta(self, persona_id: int, activo: bool) -> Usuario:
         usuario = self._obtener_usuario_de_persona(persona_id)
+        if not activo:
+            self._asegurar_que_queda_otro_administrador(usuario, "desactivar esta cuenta")
         usuario.activo = activo
         self.db.commit()
         self.db.refresh(usuario)
