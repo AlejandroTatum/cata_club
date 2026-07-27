@@ -8,9 +8,9 @@ from main import app
 
 
 # --- GET /health (PR-09) ----------------------------------------------------
-# Debe existir ANTES de endurecer /docs (PR-10): el healthcheck de
-# docker-compose.yml hoy apunta a /docs, y quitarle CSP/docs_url sin antes
-# tener un reemplazo rompería el propio healthcheck del deploy.
+# Existía ANTES de endurecer /docs (PR-10b): el healthcheck de
+# docker-compose.yml ya migró de /docs a /health, así que apagar la
+# documentación en producción no rompe el healthcheck del deploy.
 def test_health_no_declara_ninguna_dependencia():
     """Guardia estructural: /health no debe depender de `obtener_sesion` ni
     de autenticación -- tiene que responder incluso si la BD está caída,

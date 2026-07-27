@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario
 from app.dominio.enums import Categoria
+from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
 
 
 class HorarioRepositorio:
@@ -35,8 +36,11 @@ class HorarioRepositorio:
         return horario
 
     def eliminar(self, horario: HorarioEntrenamiento) -> None:
-        self.db.delete(horario)
-        self.db.commit()
+        eliminar_o_error_de_dominio(
+            self.db, horario,
+            "No se puede eliminar este horario porque tiene asistencias "
+            "registradas o alumnos asignados. Elimina esos registros primero.",
+        )
 
 
 class AsistenciaRepositorio:

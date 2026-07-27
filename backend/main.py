@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.configuracion import settings, urls_documentacion
 from app.soporte_transversal.rate_limit import limiter
 from app.presentacion.routers import (
     auth_router,
@@ -22,7 +22,13 @@ from app.dominio.excepciones import (
     CredencialesInvalidas, PermisosInsuficientes,
 )
 
-app = FastAPI(title=settings.app_nombre, version=settings.app_version)
+# `urls_documentacion` apaga /docs, /redoc y /openapi.json solo cuando
+# AMBIENTE=production; en development y test siguen encendidas (PR-10b).
+app = FastAPI(
+    title=settings.app_nombre,
+    version=settings.app_version,
+    **urls_documentacion(settings.ambiente),
+)
 
 # --- Rate limiting -----------------------------------------------------------
 # Se deshabilita en ambiente de test (limiter es NoOpLimiter, ver rate_limit.py).

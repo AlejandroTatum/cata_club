@@ -1,5 +1,34 @@
-from pydantic import Field, field_validator
+from typing import Optional
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Valor por defecto de `database_url`: sirve para levantar el proyecto local
+# sin configurar nada, pero en producción apunta a un Postgres que no existe.
+_DATABASE_URL_DE_EJEMPLO = "postgresql+psycopg://usuario:password@localhost:5432/cataclub_db"
+
+# Único ambiente en el que los chequeos de fail-fast de `_exigir_config_de_produccion`
+# están activos. En `development` y `test` un .env incompleto NUNCA debe
+# impedir el arranque: convertir un olvido de configuración en un stack muerto
+# es peor que el default inseguro que se está evitando.
+_AMBIENTE_ESTRICTO = "production"
+
+
+def urls_documentacion(ambiente: str) -> dict[str, Optional[str]]:
+    """Rutas de la documentación interactiva según el ambiente.
+
+    En producción se apagan las tres (`/docs`, `/redoc` y también
+    `/openapi.json`: dejar el esquema servido revela toda la superficie de la
+    API aunque Swagger UI no se renderice). Fuera de producción quedan
+    encendidas a propósito — son útiles para demostrar y explorar la API.
+
+    El healthcheck del contenedor backend NO depende de `/docs`: apunta a
+    `/health` desde PR-09 (ver docker-compose.yml), así que apagarlas no
+    rompe el deploy.
+    """
+    if ambiente == _AMBIENTE_ESTRICTO:
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
 
 # Marcadores que indican que `jwt_secret_key` NO fue reemplazado por una clave
 # real. Si el arranque detecta uno de ellos, lanza (fail-fast) para impedir
@@ -29,7 +58,7 @@ class Settings(BaseSettings):
     app_version: str = "1.3.0"
     ambiente: str = "production"
 
-    database_url: str = "postgresql+psycopg://usuario:password@localhost:5432/cataclub_db"
+    database_url: str = _DATABASE_URL_DE_EJEMPLO
 
     jwt_secret_key: str = "CAMBIAR_EN_.env_POR_UNA_CLAVE_SEGURA"
     jwt_algoritmo: str = "HS256"
@@ -134,6 +163,43 @@ class Settings(BaseSettings):
         """Lista de hosts permitidos para `scripts/reset_dev_db.py`, parseada
         desde CSV (ver `reset_hosts_permitidos_raw`)."""
         return [h.strip() for h in self.reset_hosts_permitidos_raw.split(",") if h.strip()]
+
+    @model_validator(mode="after")
+    def _exigir_config_de_produccion(self) -> "Settings":
+        """Fail-fast SOLO con `AMBIENTE=production`.
+
+        Estos ajustes tienen un default cómodo para desarrollo que en
+        producción es directamente inseguro o inservible: apuntar al Postgres
+        de ejemplo, o quedarse sin orígenes CORS (lo que deja al frontend sin
+        poder hablar con la API y suele "arreglarse" a las apuradas con un
+        comodín). Fallar acá, al arrancar, es preferible a fallar en la
+        primera petición real.
+
+        Condicionado a producción a propósito: en `development` y `test` este
+        validador NO se ejecuta, así que un `.env` incompleto sigue
+        arrancando igual que antes de este cambio (ver
+        `tests/test_configuracion.py`).
+        """
+        if self.ambiente != _AMBIENTE_ESTRICTO:
+            return self
+
+        faltantes: list[str] = []
+        if not self.database_url.strip() or self.database_url == _DATABASE_URL_DE_EJEMPLO:
+            faltantes.append(
+                "DATABASE_URL sigue siendo la URL de ejemplo del repo; define "
+                "la cadena de conexión real del Postgres de producción."
+            )
+        if not self.cors_origenes:
+            faltantes.append(
+                "CORS_ORIGENES está vacío; define los orígenes del frontend "
+                "(CSV, ej: https://cataclub.com)."
+            )
+        if faltantes:
+            raise ValueError(
+                "Configuración de producción incompleta (AMBIENTE=production): "
+                + " ".join(faltantes)
+            )
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",

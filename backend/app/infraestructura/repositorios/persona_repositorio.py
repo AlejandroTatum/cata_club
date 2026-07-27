@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, Rol, usuario_rol
 from app.dominio.enums import TipoRol
+from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
 
 
 class PersonaRepositorio:
@@ -52,8 +53,12 @@ class PersonaRepositorio:
         return persona
 
     def eliminar(self, persona: Persona) -> None:
-        self.db.delete(persona)
-        self.db.commit()
+        eliminar_o_error_de_dominio(
+            self.db, persona,
+            "No se puede eliminar a esta persona porque tiene registros "
+            "asociados (asistencias, pagos, membresías, ficha médica u "
+            "horarios a cargo). Elimina o reasigna esos registros primero.",
+        )
 
     # --- Reportes (E04-RF014) --------------------------------------------------
     def listar_nuevas_por_periodo(self, fecha_inicio, fecha_fin) -> List[Persona]:
