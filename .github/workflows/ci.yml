@@ -71,6 +71,25 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://usuario:password@localhost:5432/cataclub_test
         run: uv run --frozen --no-build pytest tests/ -v --cov=app --cov-report=term-missing
 
+      - name: Compose config tests (production layering)
+        # `tests/test_docker_compose_config.py` vive FUERA de `backend/tests/`
+        # a propósito, así que el paso de arriba (`pytest tests/` con
+        # working-directory: backend, o sea `backend/tests`) nunca lo veía:
+        # su único invocador era `make test-compose` y en CI no lo corría
+        # nadie. Se engancha aquí y no en el job `docker-images` porque:
+        #   - solo necesita Docker Compose (preinstalado en ubuntu-latest) y
+        #     JWT_SECRET_KEY (docker-compose.yml lo declara con `:?`, así que
+        #     `docker compose config` falla sin él); NO necesita Postgres.
+        #   - este job ya tiene el venv del backend con pytest instalado, así
+        #     que el paso cuesta ~1s en vez de re-montar Python + uv.
+        #   - da señal temprana: si el layering de producción se rompe, falla
+        #     acá en segundos en vez de esperar a que se construyan las dos
+        #     imágenes en `docker-images`.
+        # Mismo comando que `make test-compose` (ruta relativa desde backend/).
+        env:
+          JWT_SECRET_KEY: "clave_super_secreta_y_segura_de_mas_de_32_caracteres_para_los_tests"
+        run: uv run --frozen --no-build pytest ../tests/test_docker_compose_config.py -v
+
   migraciones-desde-cero:
     name: Migraciones desde DB vacia (empty -> head)
     runs-on: ubuntu-latest
@@ -180,3 +199,217 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+
+  docker-images:
+    name: Imagenes Docker (build, arranque real y publicacion en GHCR)
+    runs-on: ubuntu-latest
+    # Hasta este job, NINGUNA parte del pipeline construía un contenedor ni
+    # levantaba la pila: las imágenes que corre producción no las validaba
+    # nadie. Ese hueco fue el que dejó pasar un contenedor de frontend que
+    # directamente no podía arrancar (PR #170, `HOSTNAME=0.0.0.0` en
+    # frontend/Dockerfile) -- el bug era invisible para los tests unitarios
+    # porque solo existe en la imagen construida.
+    #
+    # Este job ejercita la ruta de PRODUCCIÓN, no la de desarrollo:
+    # `docker-compose.override.yml` es quien aporta `build:` y los puertos
+    # publicados, y Compose lo auto-carga con `docker compose` a secas -- por
+    # eso aquí SIEMPRE se pasan `-f docker-compose.yml -f
+    # docker-compose.prod.yml` explícitos y el override nunca entra. Como el
+    # overlay de producción no tiene `build:`, las dos imágenes se construyen
+    # aparte y se etiquetan exactamente con el nombre que la base espera
+    # (`ghcr.io/alejandrotatum/cata_club-{backend,frontend}:${IMAGE_TAG}`);
+    # Compose las consume por referencia. Así se prueba el mismo apilado que
+    # corre en el droplet, incluido `AMBIENTE: production` (que, entre otras
+    # cosas, oculta /docs -- por eso el healthcheck del backend apunta a
+    # /health y no a /docs).
+    permissions:
+      # Alcance mínimo y acotado a ESTE job (el workflow no declara
+      # `permissions` global, así que el resto de jobs conserva el default):
+      # leer el código para el checkout y escribir paquetes para el push a
+      # GHCR. Se autentica con el GITHUB_TOKEN integrado -- no hace falta
+      # ningún secreto nuevo.
+      contents: read
+      packages: write
+    env:
+      # Tag inmutable = SHA del commit. Es el que consume la pila durante la
+      # verificación, así que lo que se arranca y lo que se publica es
+      # literalmente la misma imagen.
+      IMAGE_TAG: ${{ github.sha }}
+      IMAGEN_BACKEND: ghcr.io/alejandrotatum/cata_club-backend
+      IMAGEN_FRONTEND: ghcr.io/alejandrotatum/cata_club-frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        # Accion de terceros: pineada al SHA del commit en vez del tag movil,
+        # igual que astral-sh/setup-uv en los jobs de arriba.
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Generate a throwaway JWT_SECRET_KEY
+        # docker-compose.yml declara `JWT_SECRET_KEY: "${JWT_SECRET_KEY:?...}"`,
+        # así que CUALQUIER comando de Compose (incluido `ps`) falla sin la
+        # variable. Se genera al vuelo y se descarta con el runner: jamás se
+        # hardcodea un secreto real ni se necesita uno de repositorio.
+        run: |
+          clave=$(openssl rand -hex 32)
+          echo "::add-mask::$clave"
+          echo "JWT_SECRET_KEY=$clave" >> "$GITHUB_ENV"
+
+      - name: Build backend image
+        # `load: true` deja la imagen en el daemon local para que Compose la
+        # consuma por referencia y, si toca publicar, se empuje EXACTAMENTE el
+        # mismo artefacto que se acaba de verificar (nada se reconstruye).
+        # `provenance: false` porque los attestations no son compatibles con
+        # `load`. Cache de GitHub Actions (type=gha) con scope propio por
+        # imagen para que las dos no se pisen entre sí.
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./backend
+          load: true
+          provenance: false
+          tags: ${{ env.IMAGEN_BACKEND }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Build frontend image
+        # Las NEXT_PUBLIC_* se inlinean en el bundle en tiempo de build (ver
+        # frontend/Dockerfile), así que van como build args, no como env de
+        # runtime. Valores elegidos para CI:
+        #   NEXT_PUBLIC_API_URL: el mismo del override de desarrollo. Es
+        #     inerte en esta app -- el navegador siempre pega same-origin a
+        #     los Route Handlers del BFF (src/services/api.ts, `getBaseUrl()`
+        #     devuelve ""), y el servidor de Next habla con FastAPI por
+        #     `BACKEND_API_URL`, que es env de RUNTIME y lo inyecta Compose.
+        #   NEXT_PUBLIC_APP_NAME: mismo valor que en desarrollo; solo alimenta
+        #     el <title> (src/app/layout.tsx).
+        #   NEXT_PUBLIC_USE_MOCKS: el que SÍ importa. `api.ts` lo lee con
+        #     `!== "false"`, o sea que si queda sin definir la imagen sale con
+        #     los mocks ENCENDIDOS. Se fija explícito a "false".
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./frontend
+          load: true
+          provenance: false
+          tags: ${{ env.IMAGEN_FRONTEND }}:${{ env.IMAGE_TAG }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+            NEXT_PUBLIC_APP_NAME=Cata Club Admin
+            NEXT_PUBLIC_USE_MOCKS=false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+      - name: Boot the production stack
+        # Los `-f` se escriben completos en cada paso a propósito, en vez de
+        # esconderlos en una variable: una variable que contiene un comando
+        # solo funciona por word splitting del shell, y basta con que alguien
+        # la entrecomille (o cambie el `shell:`) para que el override de
+        # desarrollo vuelva a colarse en silencio. Acá eso no puede pasar.
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+      - name: Wait until every healthchecked service is healthy
+        # Nada de `sleep`: se sondea `docker compose ps` hasta que TODO
+        # servicio esté `running` y, si declara healthcheck, `healthy`. La
+        # lista no se hardcodea -- sale del propio `ps`, así que un servicio
+        # nuevo queda cubierto solo. Timeout acotado (7 min: el `start_period`
+        # más largo es el de celery-worker/beat, 90s) y fallo ruidoso, nunca
+        # un cuelgue hasta el timeout del runner.
+        #
+        # Tres detalles que antes hacían esta guardia CIEGA a un contenedor en
+        # crash-loop (backend, celery-worker y celery-beat llevan
+        # `restart: unless-stopped`, así que reinician para siempre):
+        #
+        #   1. `ps` SIN `-a` omite los contenedores que no están corriendo: uno
+        #      `exited` desaparece del listado y por lo tanto del conjunto de
+        #      pendientes. Con `-a` siempre está.
+        #   2. Un contenedor que reinicia reporta `Health` VACÍO durante casi
+        #      todo el ciclo -- el filtro anterior (`select(.Health != "")`)
+        #      lo leía como "este servicio no declara salud, ignoralo" y daba
+        #      la pila por buena. Ahora el criterio es primero `.State`: si no
+        #      está `running`, está pendiente, tenga salud o no. Un servicio
+        #      que genuinamente no reporta salud y está `running` sigue sin
+        #      exigirla, igual que antes. Ojo: no alcanza con mirar este
+        #      compose para saber quién reporta salud -- `mailpit` no declara
+        #      `healthcheck:` acá y aun así reporta `healthy`, porque la imagen
+        #      `axllent/mailpit` trae su propio HEALTHCHECK en su Dockerfile.
+        #   3. `restarting`/`exited`/`dead`/`paused` no son "todavía no": son
+        #      falla. Se exige que el síntoma persista 3 sondeos seguidos
+        #      (~20s) para no confundirlo con el parpadeo exited->restarting
+        #      de un arranque normal, y entonces se corta al instante en vez de
+        #      quemar los 420s completos.
+        #
+        # La línea de estado reporta `.State` cuando no hay salud (p.ej.
+        # `celery-worker=restarting`), para que el fallo sea diagnosticable
+        # desde el log sin abrir los diagnósticos.
+        run: |
+          limite=$((SECONDS + 420))
+          sondeos_rotos=0
+          while true; do
+            instantanea=$(docker compose -f docker-compose.yml -f docker-compose.prod.yml ps -a --format json)
+            estado=$(printf '%s\n' "$instantanea" \
+              | jq -rs '[.[] | .Service + "=" + (if .Health == "" then .State else .Health end)] | join(" ")')
+            rotos=$(printf '%s\n' "$instantanea" \
+              | jq -rs '[.[] | select(.State == "restarting" or .State == "exited" or .State == "dead" or .State == "paused") | .Service + "=" + .State] | join(" ")')
+            pendientes=$(printf '%s\n' "$instantanea" \
+              | jq -rs '[.[] | select(.State != "running" or (.Health != "" and .Health != "healthy")) | .Service] | join(" ")')
+            if [ -n "$rotos" ]; then
+              sondeos_rotos=$((sondeos_rotos + 1))
+              if [ "$sondeos_rotos" -ge 3 ]; then
+                echo "::error::Servicios caidos o en reinicio permanente: $rotos (estado: $estado)"
+                exit 1
+              fi
+            else
+              sondeos_rotos=0
+            fi
+            if [ -z "$pendientes" ]; then
+              echo "Todos los servicios estan running y los que declaran salud estan healthy: $estado"
+              break
+            fi
+            if [ "$SECONDS" -ge "$limite" ]; then
+              echo "::error::Timeout esperando healthy. Estado final: $estado"
+              exit 1
+            fi
+            echo "esperando a: $pendientes (estado: $estado)"
+            sleep 10
+          done
+
+      - name: Dump diagnostics (on failure)
+        # Sin esto, un fallo de arranque en CI es una caja negra: `ps` da el
+        # estado de salud de cada servicio y los logs, la razón real.
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --no-color --tail=200
+
+      - name: Log in to GHCR
+        # Solo en `push` a main: un PR (y en especial uno desde un fork) NUNCA
+        # debe poder publicar imágenes. Y va DESPUÉS de la verificación de
+        # arranque, así que una imagen que no levanta jamás llega al registro.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push images to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # Dos tags por imagen, a propósito:
+        #   - <sha del commit>: inmutable. Es a lo que se debe fijar un deploy
+        #     para poder reproducirlo o hacer rollback exacto; nunca cambia de
+        #     contenido.
+        #   - latest: movil. Es el default de `${IMAGE_TAG:-latest}` en
+        #     docker-compose.yml, o sea lo que arrastra un `docker compose
+        #     pull` sin variables en el droplet.
+        # Se publica el binario ya cargado y verificado (`docker tag` + `push`),
+        # no una reconstrucción: lo que se probó es bit a bit lo que se sube.
+        run: |
+          for imagen in "$IMAGEN_BACKEND" "$IMAGEN_FRONTEND"; do
+            docker tag "$imagen:$IMAGE_TAG" "$imagen:latest"
+            docker push "$imagen:$IMAGE_TAG"
+            docker push "$imagen:latest"
+          done
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v --remove-orphans

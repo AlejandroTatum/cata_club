@@ -30,8 +30,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-usuario}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: cataclub_test
-    ports:
-      - "5436:5432"
+    # El puerto 5436 lo publica `docker-compose.override.yml`, no este
+    # archivo: los puertos publicados viven SOLO en el overlay de desarrollo
+    # (decisión de diseño 4.1). `docker compose --profile test up -d db-test`
+    # carga el override automáticamente, así que la suite del backend sigue
+    # llegando a localhost:5436 sin cambios.
     tmpfs:
       - /var/lib/postgresql/data
     command: >
@@ -51,23 +54,29 @@ services:
       timeout: 5s
       retries: 10
 
+  # Cazamoscas de correo para DESARROLLO. Sus puertos publicados (1025 SMTP,
+  # 8025 UI web) viven en `docker-compose.override.yml`, NO acá: la UI no
+  # tiene autenticación de ningún tipo, y con ellos en la base el render de
+  # producción los publicaba en 0.0.0.0 -- los overlays de Compose solo
+  # fusionan, jamás pueden remover una clave, así que
+  # `docker-compose.prod.yml` no tenía forma de quitarlos. Como
+  # `SMTP_HOST: ${SMTP_HOST:-mailpit}`, un operador que no sobrescriba el
+  # SMTP manda el correo transaccional real (incluidos los enlaces de
+  # recuperación de contraseña) a un buzón abierto a internet.
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
-    ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # UI web para ver correos capturados
     environment:
       MP_MAX_MESSAGES: 500
 
   backend:
-    # Sin `image:` local a esta imagen no le corresponde entrar en el
-    # overlay de producción sin uno; PR-16 (CD) la publica en GHCR con el
-    # tag `IMAGE_TAG` (ver decisión de diseño 4.2, sdd/production-readiness).
-    # `docker-compose.override.yml` agrega `build:` para desarrollo local:
-    # cuando ambas claves están presentes, Compose construye y etiqueta el
-    # resultado con este nombre -- el flujo local no cambia.
-    image: ghcr.io/kthiu666/cata_club-backend:${IMAGE_TAG:-latest}
+    # Imagen publicada en GHCR por el CI de ESTE repositorio, bajo el
+    # namespace de su dueño actual, con el tag `IMAGE_TAG` (ver decisión de
+    # diseño 4.2, sdd/production-readiness). `docker-compose.override.yml`
+    # agrega `build:` para desarrollo local: cuando ambas claves están
+    # presentes, Compose construye y etiqueta el resultado con este nombre
+    # -- el flujo local no cambia.
+    image: ghcr.io/alejandrotatum/cata_club-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment: &backend_env
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-usuario}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-cataclub_db}
@@ -120,7 +129,7 @@ services:
     command: sh scripts/entrypoint.sh
 
   celery-worker:
-    image: ghcr.io/kthiu666/cata_club-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/alejandrotatum/cata_club-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment: *backend_env
     depends_on:
@@ -137,9 +146,24 @@ services:
     # --max-tasks-per-child recicla los hijos periódicamente, la defensa
     # más barata disponible contra fugas de memoria lentas.
     command: uv run celery -A app.infraestructura.tareas.celery_app worker --loglevel=info --concurrency=2 --max-tasks-per-child=100
+    healthcheck:
+      # `inspect ping` SIN `-d` interroga a todos los workers del broker y
+      # responde OK si contesta cualquiera -- inútil como healthcheck de ESTE
+      # contenedor. Con `-d celery@$HOSTNAME` (Docker inyecta el ID del
+      # contenedor en HOSTNAME, y ese es el nodename por defecto de Celery)
+      # la sonda falla exactamente cuando este worker deja de responder.
+      # `uv run` porque la imagen ejecuta todo dentro del venv gestionado por
+      # uv, igual que el `command:` de arriba.
+      test: ["CMD-SHELL", "uv run celery -A app.infraestructura.tareas.celery_app inspect ping -d celery@$$HOSTNAME -t 10 > /dev/null"]
+      interval: 30s
+      timeout: 20s
+      # start_period generoso: el worker tiene que arrancar el runtime de uv,
+      # importar la app y conectar con Redis antes de poder contestar el ping.
+      start_period: 90s
+      retries: 5
 
   celery-beat:
-    image: ghcr.io/kthiu666/cata_club-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/alejandrotatum/cata_club-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment: *backend_env
     depends_on:
@@ -149,17 +173,68 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-    command: uv run celery -A app.infraestructura.tareas.celery_app beat --loglevel=info
+    # Dos banderas que existen SOLO para que el healthcheck de abajo sea una
+    # sonda de "beat sigue tickeando" y no un simple "el proceso existe":
+    #
+    #   --schedule: por defecto el PersistentScheduler escribe
+    #     `celerybeat-schedule` en el CWD (/app) y el nombre real del archivo
+    #     depende del backend de `dbm` de la imagen (en python:3.13-slim sin
+    #     gdbm resuelve a `dbm.sqlite3` y aparecen además `-wal`/`-shm`).
+    #     Fijar la ruta hace la sonda determinista, y /tmp es escribible por
+    #     `appuser` sin depender de los permisos de /app.
+    #   --max-interval: el bucle de beat solo sincroniza el schedule DESPUÉS
+    #     de despertar (celery/beat.py: `tick()` -> `sleep(interval)` ->
+    #     `should_sync()`). Con el schedule diario de esta app el intervalo
+    #     es el máximo (300s por defecto), así que el mtime se refrescaría
+    #     cada ~300s y quedaría demasiado cerca de la ventana de la sonda.
+    #     Con 60s, el sync cae en el primer despertar pasados los 180s de
+    #     `sync_every`: refresco garantizado cada <=240s. El costo es un tick
+    #     por minuto, que no dispara ninguna tarea.
+    command: uv run celery -A app.infraestructura.tareas.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule --max-interval 60
+    healthcheck:
+      # beat NO es un worker: no responde a `inspect ping`. Y comprobar que
+      # el proceso existe no prueba nada -- un beat colgado sigue vivo, y esa
+      # es exactamente la falla que importa. Lo que sí se observa desde fuera
+      # es que el PersistentScheduler reescribe su base de datos de schedule
+      # en cada sync, así que la sonda exige que el archivo exista Y que su
+      # mtime sea reciente: si beat deja de tickear, el mtime se congela y la
+      # sonda pasa a unhealthy. Ventana de 420s = 240s de refresco garantizado
+      # (ver `--max-interval` arriba) + margen para no marcar unhealthy por un
+      # sync que se retrasa. Glob porque `dbm` materializa el store en varios
+      # archivos según el backend disponible.
+      test: ["CMD", "python", "-c", "import glob,os,sys,time; f=glob.glob('/tmp/celerybeat-schedule*'); sys.exit(1) if not f else sys.exit(0 if time.time()-max(map(os.path.getmtime,f)) < 420 else 1)"]
+      interval: 30s
+      timeout: 10s
+      # beat escribe el schedule al arrancar, tras conectar con el broker.
+      start_period: 90s
+      retries: 3
 
   frontend:
     restart: unless-stopped
-    # Igual que `backend`: sin `image:` local, la publica PR-16 en GHCR.
+    # Igual que `backend`: la publica el CI de este repositorio en GHCR, bajo
+    # el namespace de su dueño actual.
     # `docker-compose.override.yml` agrega `build:` para desarrollo local.
-    image: ghcr.io/kthiu666/cata_club-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/alejandrotatum/cata_club-frontend:${IMAGE_TAG:-latest}
     environment:
       # Server-only — the Next.js BFF (src/app/api/auth/**) calls FastAPI directly
       # over the compose network, not through localhost.
       BACKEND_API_URL: http://backend:8000/api/v1
+    healthcheck:
+      # `node -e` y no curl/wget: la imagen final es `node:20-alpine` sin
+      # curl, y el wget de BusyBox no distingue bien los códigos de estado.
+      # Node ya está ahí (es el runtime del servidor), así que la sonda no
+      # agrega superficie a la imagen. Sale != 0 si el status no es 200 o si
+      # la conexión falla, igual que el idioma del healthcheck del backend.
+      # /api/health es deliberadamente sin dependencias: mide este proceso,
+      # no el backend.
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      # 15s, no los 60s del backend: el servidor standalone de Next ya viene
+      # compilado en la imagen -- solo arranca `node server.js` y escucha; no
+      # migra base de datos ni espera a nadie.
+      start_period: 15s
+      retries: 5
     depends_on:
       backend:
         condition: service_healthy

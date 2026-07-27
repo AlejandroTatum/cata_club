@@ -35,7 +35,11 @@ install-frontend: ## Install frontend dependencies (pnpm)
 	cd frontend && pnpm install
 
 # ─── Testing ────────────────────────────────────────────────────────────────
-test: test-backend test-frontend ## Run all tests
+# `test-compose` incluido a propósito: es el mismo gate que corre CI (paso
+# "Compose config tests" del job `backend` en .github/workflows/ci.yml), así
+# que una corrida local reproduce la señal de CI y no descubre el fallo
+# recién en el PR. No necesita Postgres, solo Docker Compose.
+test: test-backend test-compose test-frontend ## Run all tests
 
 # Requiere `db-test` corriendo (`docker compose --profile test up -d
 # db-test`, ver docker-compose.yml): la suite ya no tiene una rama SQLite de

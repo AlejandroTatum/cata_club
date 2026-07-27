@@ -18,9 +18,29 @@ services:
     ports:
       - "5433:5432"
 
+  # Postgres efímero de la suite del backend (perfil "test", ver
+  # docker-compose.yml). El puerto vive acá y no en la base porque
+  # `docker compose config` de producción renderiza también los servicios
+  # con `profiles:` -- dejarlo en la base lo publicaba en el render de
+  # producción aunque el contenedor nunca arranque ahí. `docker compose
+  # --profile test up -d db-test` (sin `-f`) carga este override solo, así
+  # que `make test-backend` sigue llegando a localhost:5436.
+  db-test:
+    ports:
+      - "5436:5432"
+
   redis:
     ports:
       - "6379:6379"
+
+  # mailpit es una herramienta de DESARROLLO y su UI web no pide
+  # credenciales: publicar 8025 (y 1025 SMTP) solo puede pasar acá. En la
+  # base, el render de producción los exponía en 0.0.0.0 y ningún overlay
+  # podía quitarlos (los overlays de Compose solo fusionan).
+  mailpit:
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # UI web para ver correos capturados
 
   backend:
     build:
