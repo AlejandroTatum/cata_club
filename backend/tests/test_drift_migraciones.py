@@ -15,45 +15,23 @@ from alembic.runtime.migration import MigrationContext
 from app.dominio.modelos import Base
 
 
-# Drift preexistente y ya documentado — no introducido por este cambio ni
-# por el harness de Postgres. La migración `644d352bf590` (ver su docstring,
-# líneas 16-21) ya corrió `alembic revision --autogenerate` y encontró este
-# mismo par de diferencias, y las excluyó deliberadamente de ese slice
-# quirúrgico por no estar relacionadas. Este PR (production-readiness /
-# test-database-foundation) tampoco es el lugar para resolverlas: decidir
-# si `uq_alumno_horario` debe re-agregarse al modelo o eliminarse de la BD
-# es una decisión de producto/dominio (¿puede una persona tener más de una
-# fila `alumno_horario` para el mismo horario?), no un efecto colateral de
-# construir un harness de tests. Se filtran explícitamente, por nombre, para
-# que esta prueba SÍ proteja contra cualquier drift NUEVO sin bloquearse en
-# uno ya conocido y trazado.
-_DRIFT_PREEXISTENTE_CONOCIDO = {
-    ("remove_constraint", "uq_alumno_horario"),
-    ("remove_column", "ranking", "ultimo_combate_o_asistencia"),
-}
-
-
-def _clave(diferencia: tuple) -> tuple:
-    tipo = diferencia[0]
-    if tipo == "remove_constraint":
-        return (tipo, diferencia[1].name)
-    if tipo == "remove_column":
-        return (tipo, diferencia[2], diferencia[3].name)
-    return diferencia
-
-
+# Sin exclusiones, a propósito. Esta prueba llevaba una lista blanca con
+# los dos únicos casos de drift preexistente (`uq_alumno_horario` y
+# `ranking.ultimo_combate_o_asistencia`); ambos quedaron resueltos: el
+# constraint se declaró en `AlumnoHorario` (la base ya lo tenía desde
+# `b2c3d4e5f6a7`, no hizo falta migración) y la columna muerta la elimina
+# `c9e4b1d78f30`. Se borró también la maquinaria de filtrado: un conjunto
+# vacío es código muerto, y mantenerlo invitaba a registrar drift nuevo ahí
+# en vez de arreglarlo. Si algún día apareciera una diferencia realmente
+# inevitable, agregar el filtro de vuelta es trivial y obliga a justificarlo
+# en ese momento.
 def test_no_hay_drift_entre_modelos_y_migraciones(motor_test, esquema_migrado):
     with motor_test.connect() as conexion:
         contexto = MigrationContext.configure(conexion)
         diferencias = compare_metadata(contexto, Base.metadata)
 
-    diferencias_nuevas = [
-        d for d in diferencias if _clave(d) not in _DRIFT_PREEXISTENTE_CONOCIDO
-    ]
-
-    assert diferencias_nuevas == [], (
-        "El esquema migrado (alembic upgrade head) difiere de Base.metadata "
-        "más allá del drift preexistente ya conocido: falta una migración, "
-        "o el modelo ORM quedó desalineado del esquema real. Diferencias "
-        f"nuevas detectadas: {diferencias_nuevas}"
+    assert diferencias == [], (
+        "El esquema migrado (alembic upgrade head) difiere de Base.metadata: "
+        "falta una migración, o el modelo ORM quedó desalineado del esquema "
+        f"real. Diferencias detectadas: {diferencias}"
     )

@@ -17,6 +17,7 @@ from typing import List, Optional
 
 from sqlalchemy import (
     String, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, Table, Column,
+    UniqueConstraint,
     Enum as SAEnum,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -394,6 +395,18 @@ class Asistencia(Base):
 # ---------------------------------------------------------------------------
 class AlumnoHorario(Base):
     __tablename__ = "alumno_horario"
+    # El par (persona_id, horario_id) es único: la fila NO lleva ningún dato
+    # que pudiera distinguir dos asignaciones del mismo alumno al mismo
+    # horario (solo `id` y `fecha_asignacion`), y
+    # `AsistenciaServicio.asignar_alumno_a_horario` ya rechaza el duplicado
+    # con `OperacionInvalida`. La restricción existe en la base desde
+    # `b2c3d4e5f6a7` y se declara acá para que el modelo la refleje: es la
+    # red de seguridad ante escrituras concurrentes que burlen el chequeo
+    # previo del servicio. No hace falta migración — la base ya la tiene.
+    __table_args__ = (
+        UniqueConstraint("persona_id", "horario_id", name="uq_alumno_horario"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     horario_id: Mapped[int] = mapped_column(ForeignKey(_HORARIO_FK))

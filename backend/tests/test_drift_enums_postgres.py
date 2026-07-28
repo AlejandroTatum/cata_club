@@ -10,10 +10,9 @@ tablas, columnas, índices, constraints y tipos de columna, pero para una
 columna `tiponotificacion` ya existente ve "enum llamado tiponotificacion" a
 ambos lados y la da por igual. Alembic solo aprende a diagnosticar labels con
 el plugin de terceros `alembic-postgresql-enum`, que este proyecto no usa
-(ver `pyproject.toml`). Por eso su lista de exclusiones — que solo contiene
-`uq_alumno_horario` y `ranking.ultimo_combate_o_asistencia` — no tiene nada
-que ver con que el drift de `NUEVA_INSCRIPCION` pasara: ese drift era
-invisible para `compare_metadata` con o sin exclusiones. Extender aquel
+(ver `pyproject.toml`). Aquella prueba hoy corre sin ninguna exclusión, y
+aun así el drift de `NUEVA_INSCRIPCION` se le escapa: es invisible para
+`compare_metadata` por construcción, no por una lista blanca. Extender aquel
 archivo no habría servido; hace falta consultar `pg_enum` directamente, que
 es lo que hace esta prueba.
 
