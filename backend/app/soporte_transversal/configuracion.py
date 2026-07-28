@@ -1,4 +1,6 @@
+import ipaddress
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -42,10 +44,88 @@ _PLACEHOLDERS_SECRETO = (
 )
 
 
+# Catchers de correo de desarrollo: interceptan TODO lo que se les envía y lo
+# muestran en una UI local. `docker-compose.yml` inyecta
+# `SMTP_HOST=${SMTP_HOST:-mailpit}`, así que quien no lo sobreescriba corre
+# producción contra uno de estos. El envío tiene ÉXITO — no hay excepción, no
+# hay log de error — y el correo de recuperación de contraseña desaparece en
+# una bandeja que nadie lee. Se comparan en minúsculas.
+_HOSTS_DE_CATCHER_DE_CORREO = ("mailpit", "mailhog")
+
+# Únicos esquemas que sirven en un enlace incrustado en un correo: el cliente
+# de correo del usuario tiene que poder abrirlo en un navegador.
+_ESQUEMAS_PUBLICOS = ("http", "https")
+
+
 def _es_secreto_inseguro(valor: str) -> bool:
     if not valor or len(valor) < 16:
         return True
     return any(p in valor for p in _PLACEHOLDERS_SECRETO)
+
+
+def _normalizar_host_smtp(valor: str) -> str:
+    """Reduce un `SMTP_HOST` escrito de cualquier forma a solo el hostname,
+    en minúsculas y sin punto final.
+
+    Existe porque comparar el valor CRUDO contra la lista de catchers era un
+    falso negativo garantizado: `mailpit:1025`, `smtp://mailpit` y `mailpit.`
+    resuelven al mismo catcher y ninguno coincidía literalmente.
+
+    IPv6: un literal entre corchetes (`[::1]`, `[2001:db8::1]:587`) se
+    desarma por los corchetes. Un literal SIN corchetes (`::1`) tiene más de
+    un `:` y se deja pasar INTACTO a propósito — partirlo por el primer `:`
+    lo destruiría, y ningún catcher de desarrollo se configura como IPv6.
+    """
+    host = valor.strip()
+    # Prefijo `esquema://` opcional (smtp://, smtps://).
+    if "://" in host:
+        host = host.split("://", 1)[1]
+    # Cualquier path o barra sobrante después del host.
+    host = host.split("/", 1)[0]
+    # Puerto opcional.
+    if host.startswith("["):
+        host = host[1:].split("]", 1)[0]
+    elif host.count(":") == 1:
+        host = host.split(":", 1)[0]
+    return host.rstrip(".").lower()
+
+
+def _es_catcher_de_correo(valor: str) -> bool:
+    """True si `valor` apunta a un catcher de desarrollo (ver
+    `_HOSTS_DE_CATCHER_DE_CORREO`).
+
+    Compara ETIQUETAS completas, no subcadenas: coincide el host normalizado
+    entero (`mailpit`) o su primera etiqueta (`mailpit.internal`,
+    `mailhog.local`), pero NO un proveedor real que apenas contenga la
+    palabra (`smtp.mailpitservice.com` pasa: su primera etiqueta es `smtp`).
+    """
+    host = _normalizar_host_smtp(valor)
+    if not host:
+        return False
+    return (
+        host in _HOSTS_DE_CATCHER_DE_CORREO
+        or host.split(".", 1)[0] in _HOSTS_DE_CATCHER_DE_CORREO
+    )
+
+
+def _es_host_inalcanzable_desde_afuera(host: str) -> bool:
+    """True si `host` solo tiene sentido dentro de la máquina que lo escribe.
+
+    Se apoya en `ipaddress` en lugar de una lista literal: `is_loopback`
+    cubre TODO `127.0.0.0/8` (no solo `127.0.0.1`) y `::1` de una sola vez.
+
+    `is_unspecified` (`0.0.0.0`, `::`) también cuenta como inválido, decisión
+    deliberada: son direcciones de BIND ("escuchá en todas las interfaces"),
+    no de destino. Un navegador no puede abrirlas de forma útil, así que
+    dentro de un correo son tan inservibles como localhost.
+    """
+    host = host.rstrip(".").lower()   # `localhost.` es el mismo host
+    try:
+        direccion = ipaddress.ip_address(host)
+    except ValueError:
+        # No es una IP: queda el caso por nombre.
+        return host == "localhost" or host.endswith(".localhost")
+    return direccion.is_loopback or direccion.is_unspecified
 
 
 class Settings(BaseSettings):
@@ -170,10 +250,12 @@ class Settings(BaseSettings):
 
         Estos ajustes tienen un default cómodo para desarrollo que en
         producción es directamente inseguro o inservible: apuntar al Postgres
-        de ejemplo, o quedarse sin orígenes CORS (lo que deja al frontend sin
+        de ejemplo, quedarse sin orígenes CORS (lo que deja al frontend sin
         poder hablar con la API y suele "arreglarse" a las apuradas con un
-        comodín). Fallar acá, al arrancar, es preferible a fallar en la
-        primera petición real.
+        comodín), mandar el correo a un catcher de desarrollo o incrustar
+        enlaces a localhost en correos que se abren en otro dispositivo.
+        Fallar acá, al arrancar, es preferible a fallar en la primera petición
+        real — o peor, a NO fallar y perder los correos en silencio.
 
         Condicionado a producción a propósito: en `development` y `test` este
         validador NO se ejecuta, así que un `.env` incompleto sigue
@@ -194,6 +276,64 @@ class Settings(BaseSettings):
                 "CORS_ORIGENES está vacío; define los orígenes del frontend "
                 "(CSV, ej: https://cataclub.com)."
             )
+        # Correo transaccional. Sin esto la recuperación de contraseña se
+        # rompe EN SILENCIO en producción: nadie recibe un error.
+        smtp_host = self.smtp_host.strip()
+        if not smtp_host:
+            faltantes.append(
+                "SMTP_HOST está vacío; define el servidor SMTP real (ej: "
+                "smtp.sendgrid.net) o la recuperación de contraseña fallará "
+                "en el primer intento."
+            )
+        elif _es_catcher_de_correo(smtp_host):
+            faltantes.append(
+                f"SMTP_HOST apunta a '{smtp_host}', un catcher de correo de "
+                "desarrollo: el envío tiene éxito pero el correo nunca llega "
+                "al usuario. Define el servidor SMTP real de producción."
+            )
+        # Asimetría deliberada con FRONTEND_URL: acá NO se rechaza localhost ni
+        # 127.0.0.1. Un Postfix o relay corriendo en la misma máquina es un
+        # patrón legítimo de producción, y bloquearlo sería un falso positivo
+        # que obliga al operador a pelearse con el arranque.
+
+        # FRONTEND_URL sí rechaza localhost, y la razón es la que justifica la
+        # asimetría de arriba: esta URL no la marca el servidor, se incrusta en
+        # un correo que se abre en el dispositivo de OTRA persona. Ahí
+        # localhost es inequívocamente incorrecto — el enlace de
+        # `/reset-password?token=...` muere al llegar.
+        frontend_url = self.frontend_url.strip()
+        if not frontend_url:
+            faltantes.append(
+                "FRONTEND_URL está vacío; define la URL pública del frontend "
+                "(ej: https://cataclub.com) o los enlaces de recuperación de "
+                "contraseña saldrán sin host."
+            )
+        else:
+            # Primero: ¿es siquiera una URL ABSOLUTA y abrible? La pregunta
+            # NO es "¿el host está en una lista negra?" — preguntarlo así era
+            # el bug: `urlparse` devuelve `hostname=None` para todo valor sin
+            # esquema, y ese None nunca coincide con ninguna lista, así que
+            # `cataclub.com` (el operador olvida `https://`) y
+            # `localhost:3000` (donde `localhost` se parsea como ESQUEMA)
+            # pasaban intactos y el correo salía con un enlace muerto.
+            partes = urlparse(frontend_url)
+            if partes.scheme.lower() not in _ESQUEMAS_PUBLICOS or not partes.hostname:
+                faltantes.append(
+                    f"FRONTEND_URL='{frontend_url}' no es una URL absoluta "
+                    "utilizable: falta el esquema http/https o el host. El "
+                    "valor se incrusta tal cual en el correo de recuperación, "
+                    "así que sin esquema el enlace no abre. Define la URL "
+                    "completa (ej: https://cataclub.com)."
+                )
+            elif _es_host_inalcanzable_desde_afuera(partes.hostname):
+                faltantes.append(
+                    f"FRONTEND_URL apunta a '{frontend_url}': ese enlace viaja "
+                    "dentro del correo de recuperación y no abre en el "
+                    "dispositivo del usuario (localhost, loopback o dirección "
+                    "de bind). Define la URL pública del frontend "
+                    "(ej: https://cataclub.com)."
+                )
+
         if faltantes:
             raise ValueError(
                 "Configuración de producción incompleta (AMBIENTE=production): "
