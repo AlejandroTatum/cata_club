@@ -45,6 +45,7 @@ class PoliticaAccesoPersona:
         roles_solicitante: list[str] | None,
         roles_privilegiados: tuple[str, ...] = SOLO_ADMINISTRADOR,
         incluir_representante_propio: bool = False,
+        incluir_titular: bool = True,
     ) -> bool:
         """
         El orden de evaluación no es casual y se conserva del código original:
@@ -53,6 +54,14 @@ class PoliticaAccesoPersona:
         representación. Así, un solicitante sin ningún vínculo real nunca
         provoca una lectura que permita distinguir "persona inexistente" de
         "persona que no es mía" -- ambos casos terminan en el mismo 403.
+
+        `incluir_titular` apaga la rama del dueño: el propio interesado deja
+        de pasar y queda SOLO el rol privilegiado o el representante. Va
+        encendido por defecto porque es el criterio de todos los call sites
+        previos; se apaga en la ficha médica (`GET`/`PATCH
+        /fichas-medicas/persona/{id}`), donde abrir el dato de salud al propio
+        titular es una decisión de producto todavía no tomada. Volver a
+        abrirla es borrar el `incluir_titular=False` de ese router.
 
         `incluir_representante_propio` habilita el sentido INVERSO del
         vínculo: que el representado pueda leer la ficha de SU representante.
@@ -70,7 +79,7 @@ class PoliticaAccesoPersona:
         if persona_id_solicitante is None:
             return False
 
-        if persona_id_solicitante == persona_id_objetivo:
+        if incluir_titular and persona_id_solicitante == persona_id_objetivo:
             return True
 
         persona_objetivo = self._repo_persona.obtener_por_id(persona_id_objetivo)
@@ -96,6 +105,7 @@ class PoliticaAccesoPersona:
         roles_solicitante: list[str] | None,
         roles_privilegiados: tuple[str, ...] = SOLO_ADMINISTRADOR,
         incluir_representante_propio: bool = False,
+        incluir_titular: bool = True,
         mensaje: str = (
             "Solo la propia persona, su representante, o un administrador "
             "pueden acceder a estos datos"
@@ -110,6 +120,7 @@ class PoliticaAccesoPersona:
             roles_solicitante=roles_solicitante,
             roles_privilegiados=roles_privilegiados,
             incluir_representante_propio=incluir_representante_propio,
+            incluir_titular=incluir_titular,
         ):
             raise PermisosInsuficientes(mensaje)
 

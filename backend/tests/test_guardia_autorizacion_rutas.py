@@ -128,6 +128,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/asistencias/horarios"),                           # (a)
     ("GET", "/asistencias/persona/{persona_id}"),                # (b)
     ("GET", "/auth/me"),                                         # (b) - propio via `sub`
+    ("GET", "/fichas-medicas/persona/{persona_id}"),             # (b) - admin o representante, SIN el titular
     ("GET", "/geografia/cantones"),                              # (a)
     ("GET", "/geografia/cantones/{canton_id}"),                  # (a)
     ("GET", "/geografia/paises"),                                # (a)
@@ -150,6 +151,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/ranking/notificaciones/mias"),                     # (b) - propio via `persona_id` del token
     ("GET", "/ranking/{persona_id}/perfil"),                     # (b) - chequeo inline equivalente a PoliticaAccesoPersona
     ("PATCH", "/auth/me"),                                       # (b) - propio via `sub`
+    ("PATCH", "/fichas-medicas/persona/{persona_id}"),           # (b) - admin o representante, SIN el titular
     ("PATCH", "/ranking/notificaciones/{notificacion_id}/leer"), # (b) - propio via `persona_id` del token
     ("POST", "/auth/me/foto"),                                   # (b) - propio via `sub`
     ("POST", "/auth/sesiones/invalidar"),                        # (b) - propio via `sub`
@@ -173,7 +175,6 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/dashboard/stats"): frozenset({"ADMINISTRADOR"}),
-    ("GET", "/fichas-medicas/persona/{persona_id}"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/estadisticas"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/pagos"): frozenset({"ADMINISTRADOR"}),
@@ -185,7 +186,6 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/ranking/alumnos-con-nivel"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/ranking/asignaciones"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
-    ("PATCH", "/fichas-medicas/persona/{persona_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/membresias/pagos/{pago_id}/validar"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),

@@ -5,6 +5,9 @@ from typing import List
 from app.infraestructura.db import obtener_sesion
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.servicios_negocio.politica_acceso import (
+    ADMINISTRADOR_O_ENTRENADOR, PoliticaAccesoPersona,
+)
 from app.servicios_negocio.ranking_servicio import (
     NivelRankingServicio, RankingServicio, NotificacionServicio,
 )
@@ -103,20 +106,20 @@ async def obtener_perfil_alumno(
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
     """Consulta privada: solo el propio alumno, su representante, o un
-    ADMINISTRADOR/ENTRENADOR pueden verla."""
-    roles = token_payload.get("roles", [])
-    solicitante_id = token_payload.get("persona_id")
-    es_propio = solicitante_id == persona_id
-    if not es_propio and not any(r in ROL_ADMIN_O_ENTRENADOR for r in roles):
-        from app.dominio.excepciones import PermisosInsuficientes
-        from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
-        persona_objetivo = PersonaRepositorio(db).obtener_por_id(persona_id)
-        es_representante = (
-            persona_objetivo is not None
-            and persona_objetivo.representante_id == solicitante_id
-        )
-        if not es_representante:
-            raise PermisosInsuficientes("No puede consultar el perfil de ranking de otra persona")
+    ADMINISTRADOR/ENTRENADOR pueden verla.
+
+    El criterio no cambió: antes estaba escrito a mano acá, ahora lo resuelve
+    `PoliticaAccesoPersona` -- la misma regla única que usan personas,
+    asistencias, pagos y ficha médica. `incluir_titular` queda en su default
+    (`True`) porque este endpoint SÍ deja al propio alumno ver su perfil, y
+    `roles_privilegiados` se pasa explícito para conservar al ENTRENADOR."""
+    PoliticaAccesoPersona(db).exigir_acceso(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles"),
+        roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
+        mensaje="No puede consultar el perfil de ranking de otra persona",
+    )
     return RankingServicio(db).obtener_perfil_alumno(persona_id)
 
 
