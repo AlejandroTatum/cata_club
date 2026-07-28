@@ -1,8 +1,8 @@
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Persona, Usuario, Rol, usuario_rol
+from app.dominio.modelos import Persona, Ranking, Usuario, Rol, usuario_rol
 from app.dominio.enums import TipoRol
 from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
 
@@ -54,6 +54,41 @@ class PersonaRepositorio:
             .order_by(*self._ORDEN_NOMINA)
             .all()
         )
+
+    def listar_por_rol_con_ranking(
+        self, tipo_rol: TipoRol
+    ) -> List[Tuple[Persona, Optional[Ranking]]]:
+        """Igual que `listar_por_rol`, pero trae además la fila de `Ranking`
+        de cada persona (o `None`) en la MISMA sentencia.
+
+        Existe para que el roster de niveles no dispare un SELECT de ranking
+        por alumno (N+1: con 68 alumnos eran 69 consultas). Detalles que NO
+        son negociables:
+
+        - `outerjoin`: una persona puede no tener fila de `Ranking` todavía
+          (aún sin grupo asignado). Con un INNER JOIN esos alumnos
+          desaparecerían del roster sin error visible -- son justamente los
+          que la pantalla muestra como "Sin nivel asignado".
+        - `distinct`: el filtro por rol pasa por persona-usuario-rol, que
+          multiplica filas cuando el usuario tiene varios roles. `listar_por_rol`
+          no lo notaba porque `Query` deduplica entidades completas; acá las
+          filas son tuplas, así que la deduplicación es explícita. Es segura
+          porque `Ranking.persona_id` es UNIQUE: como mucho hay una fila de
+          ranking por persona, nunca un producto cartesiano real.
+        - Mismo `_ORDEN_NOMINA` que `listar_por_rol`: el orden del listado no
+          puede cambiar por optimizar la consulta.
+        """
+        stmt = (
+            select(Persona, Ranking)
+            .join(Usuario, Usuario.persona_id == Persona.id)
+            .join(usuario_rol, usuario_rol.c.usuario_id == Usuario.id)
+            .join(Rol, Rol.id == usuario_rol.c.rol_id)
+            .outerjoin(Ranking, Ranking.persona_id == Persona.id)
+            .where(Rol.tipo_rol == tipo_rol)
+            .distinct()
+            .order_by(*self._ORDEN_NOMINA)
+        )
+        return [(persona, ranking) for persona, ranking in self.db.execute(stmt)]
 
     def crear(self, persona: Persona) -> Persona:
         self.db.add(persona)

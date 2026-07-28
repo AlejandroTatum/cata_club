@@ -117,12 +117,15 @@ class RankingServicio:
     def listar_alumnos_con_nivel(self) -> list[AlumnoConNivelDTO]:
         """Lista todos los alumnos (rol ALUMNO) con su nivel_ranking_id actual.
         Si no tienen Ranking creado, `nivel_ranking_id` es null. Accesible para
-        ADMINISTRADOR y ENTRENADOR — reemplaza la dependencia con /personas/."""
+        ADMINISTRADOR y ENTRENADOR — reemplaza la dependencia con /personas/.
+
+        La nómina y el ranking vienen en UNA sola sentencia
+        (`listar_por_rol_con_ranking`): antes se listaban los alumnos y después
+        se consultaba el ranking de cada uno, o sea 1+N consultas."""
         from app.dominio.enums import TipoRol
-        alumnos = PersonaRepositorio(self.db).listar_por_rol(TipoRol.ALUMNO)
+        filas = PersonaRepositorio(self.db).listar_por_rol_con_ranking(TipoRol.ALUMNO)
         resultado: list[AlumnoConNivelDTO] = []
-        for alumno in alumnos:
-            ranking = self.repo.obtener_por_persona(alumno.id)
+        for alumno, ranking in filas:
             nivel_id = None
             if ranking is not None and ranking.esta_en_ranking:
                 nivel_id = ranking.nivel_ranking_id

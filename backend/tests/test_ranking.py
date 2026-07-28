@@ -209,3 +209,51 @@ def test_listar_alumnos_con_nivel_rechaza_a_un_alumno(client_sin_permisos):
     resp = client_sin_permisos.get("/api/v1/ranking/alumnos-con-nivel")
 
     assert resp.status_code == 403
+
+
+def test_listar_alumnos_con_nivel_devuelve_el_roster_con_y_sin_nivel(
+    client_entrenador, db_session
+):
+    """Las dos pruebas de arriba solo miran el status code: el cuerpo de la
+    respuesta no tenía ninguna cobertura. Este test fija la forma del payload
+    (camelCase) y, sobre todo, que un alumno SIN nivel asignado sigue estando
+    en el roster con `nivelRankingId` en null."""
+    from datetime import date
+
+    from app.dominio.enums import TipoRol
+    from app.dominio.modelos import NivelRanking, Persona, Ranking, Rol, Usuario
+
+    def _alta_alumno(nombres, apellidos, cedula):
+        persona = Persona(
+            nombres=nombres, apellidos=apellidos, cedula=cedula,
+            fecha_nacimiento=date(2000, 1, 1), telefono="0991234567",
+        )
+        db_session.add(persona)
+        db_session.flush()
+        db_session.add(Usuario(
+            correo=f"alumno{cedula}@cataclub.test", contrasenia="hash",
+            persona_id=persona.id,
+            roles=[Rol(tipo_rol=TipoRol.ALUMNO, descripcion="Alumno")],
+        ))
+        db_session.commit()
+        return persona
+
+    nivel = NivelRanking(numero_nivel=1, nombre="Elite")
+    db_session.add(nivel)
+    db_session.commit()
+
+    con_nivel = _alta_alumno("Ana", "Alvarez", "1710034400")
+    sin_nivel = _alta_alumno("Beto", "Benitez", "1710034401")
+    db_session.add(Ranking(persona_id=con_nivel.id, nivel_ranking_id=nivel.id))
+    db_session.commit()
+
+    resp = client_entrenador.get("/api/v1/ranking/alumnos-con-nivel")
+
+    assert resp.status_code == 200
+    cuerpo = resp.json()
+    assert [item["personaId"] for item in cuerpo] == [con_nivel.id, sin_nivel.id]
+    assert cuerpo[0] == {
+        "personaId": con_nivel.id, "nombres": "Ana", "apellidos": "Alvarez",
+        "nivelRankingId": nivel.id,
+    }
+    assert cuerpo[1]["nivelRankingId"] is None
