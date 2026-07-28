@@ -21,8 +21,20 @@ class PersonaRepositorio:
     def obtener_por_cedula(self, cedula: str) -> Optional[Persona]:
         return self.db.query(Persona).filter(Persona.cedula == cedula).first()
 
+    # Orden estable del roster: como se lee una nómina, por apellidos y luego
+    # nombres. El id va de desempate para que el orden sea TOTAL -- sin él,
+    # dos homónimos podrían repartirse de forma distinta entre páginas y
+    # `OFFSET/LIMIT` repetiría o se saltaría filas.
+    _ORDEN_NOMINA = (Persona.apellidos.asc(), Persona.nombres.asc(), Persona.id.asc())
+
     def listar(self, skip: int = 0, limit: int = 50) -> List[Persona]:
-        return self.db.query(Persona).offset(skip).limit(limit).all()
+        return (
+            self.db.query(Persona)
+            .order_by(*self._ORDEN_NOMINA)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
     def contar(self) -> int:
         return self.db.query(Persona).count()
@@ -36,6 +48,10 @@ class PersonaRepositorio:
             .join(Usuario, Usuario.persona_id == Persona.id)
             .join(Usuario.roles)
             .filter(Rol.tipo_rol == tipo_rol)
+            # Mismo orden de nómina que `listar`: alimenta selectores
+            # (entrenadores) y el ranking, donde un orden alfabético estable
+            # es lo que el usuario espera al buscar un nombre en la lista.
+            .order_by(*self._ORDEN_NOMINA)
             .all()
         )
 
@@ -86,4 +102,10 @@ class PersonaRepositorio:
         stmt = stmt.where(
             (Persona.nombres.ilike(filtro)) | (Persona.apellidos.ilike(filtro))
         )
+        # `skip`/`limit` viajaban por toda la cadena (router -> servicio ->
+        # repositorio) sin llegar nunca a la sentencia: el tope `le=50` del
+        # router era decorativo y una `q` de dos caracteres que matcheara a
+        # todo el club devolvía el club entero. El `order_by` es parte del
+        # arreglo: sin orden total, paginar con OFFSET no es determinista.
+        stmt = stmt.order_by(*self._ORDEN_NOMINA).offset(skip).limit(limit)
         return list(self.db.execute(stmt).scalars().all())

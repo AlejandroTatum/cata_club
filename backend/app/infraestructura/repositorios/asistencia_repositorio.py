@@ -3,7 +3,7 @@ from typing import Optional, List
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario
+from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario, Persona
 from app.dominio.enums import Categoria
 from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
 
@@ -136,7 +136,12 @@ class AlumnoHorarioRepositorio:
         stmt = (
             select(AlumnoHorario)
             .options(joinedload(AlumnoHorario.persona))
+            .join(Persona, Persona.id == AlumnoHorario.persona_id)
             .where(AlumnoHorario.horario_id == horario_id)
+            # Se lee como la nómina de la clase: por apellidos y nombres del
+            # alumno, con el id de la asignación de desempate para que el
+            # orden sea TOTAL y no dependa del motor.
+            .order_by(Persona.apellidos.asc(), Persona.nombres.asc(), AlumnoHorario.id.asc())
         )
         return list(self.db.execute(stmt).scalars().unique().all())
 

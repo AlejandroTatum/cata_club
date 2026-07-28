@@ -80,7 +80,17 @@ async def registrar_persona(persona_in: PersonaCreateDTO, db: Session = Depends(
     response_model=PaginatedResponse[PersonaResponseDTO],
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
-def listar_personas(skip: int = 0, limit: int = 50, db: Session = Depends(obtener_sesion)):
+# `skip`/`limit` eran defaults planos de Python (sin `Query(...)`, sin `ge=`
+# ni `le=`): `limit=100000` pedía el roster entero de una y `skip=-5` llegaba
+# hasta Postgres como "OFFSET must not be negative" (un 500). Mismo contrato
+# que `GET /membresias/pagos`. El tope es 200 porque es exactamente lo que
+# piden los tres consumidores del BFF (`PERSONAS_PAGE_LIMIT` en
+# `api/members`, `attendance-adapter` y `payments-adapter`).
+def listar_personas(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(obtener_sesion),
+):
     items, total = PersonaServicio(db).listar_personas(skip, limit)
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 

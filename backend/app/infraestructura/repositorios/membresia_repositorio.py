@@ -168,6 +168,13 @@ class MembresiaRepositorio:
                 joinedload(Membresia.persona),
                 joinedload(Membresia.tipo_membresia),
             )
+            # Lo más reciente primero, mismo criterio que
+            # `PagoRepositorio.listar`: el admin reconoce una membresía por
+            # cuándo se activó, y las últimas altas son las que revisa. El id
+            # desempata las activadas en el mismo instante para que el orden
+            # sea TOTAL — sin eso, `OFFSET/LIMIT` podría repetir o saltear
+            # filas entre páginas.
+            .order_by(Membresia.fecha_activacion.desc(), Membresia.id.desc())
             .offset(skip)
             .limit(limit)
         )

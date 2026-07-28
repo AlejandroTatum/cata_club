@@ -103,3 +103,53 @@ def test_listar_no_incurre_en_n_mas_uno_al_cargar_relaciones(db_session):
         f"Se esperaba 1 sola sentencia SELECT (joinedload), se ejecutaron "
         f"{len(selects)}: {selects}"
     )
+
+
+def test_listar_ordena_por_fecha_de_activacion_descendente(db_session):
+    """Sin `ORDER BY`, el reparto de filas entre páginas queda a criterio del
+    motor: una membresía puede repetirse entre páginas o no aparecer nunca.
+    El orden fijado es el mismo criterio que ya usa `PagoRepositorio.listar`
+    (lo más reciente primero), con el id como desempate para que sea total."""
+    tipo = _crear_tipo_membresia(db_session)
+    # Insertadas en orden CRONOLÓGICO ascendente: un listado sin orden
+    # devolvería el orden físico de inserción y no pasaría esta aserción.
+    fechas = [
+        datetime(2026, 1, 10, tzinfo=timezone.utc),
+        datetime(2026, 3, 10, tzinfo=timezone.utc),
+        datetime(2026, 5, 10, tzinfo=timezone.utc),
+    ]
+    for i, fecha in enumerate(fechas):
+        persona = _crear_persona(db_session, cedula=f"171003{4600 + i}")
+        db_session.add(Membresia(
+            estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
+            fecha_activacion=fecha, persona_id=persona.id,
+            tipo_membresia_id=tipo.id,
+        ))
+    db_session.commit()
+
+    membresias = MembresiaRepositorio(db_session).listar(skip=0, limit=200)
+
+    assert [m.fecha_activacion.date() for m in membresias] == [
+        date(2026, 5, 10), date(2026, 3, 10), date(2026, 1, 10),
+    ]
+
+
+def test_listar_desempata_por_id_descendente_con_igual_fecha(db_session):
+    tipo = _crear_tipo_membresia(db_session)
+    fecha = datetime(2026, 4, 1, tzinfo=timezone.utc)
+    creadas = []
+    for i in range(3):
+        persona = _crear_persona(db_session, cedula=f"171003{4700 + i}")
+        membresia = Membresia(
+            estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
+            fecha_activacion=fecha, persona_id=persona.id,
+            tipo_membresia_id=tipo.id,
+        )
+        db_session.add(membresia)
+        db_session.flush()
+        creadas.append(membresia)
+    db_session.commit()
+
+    membresias = MembresiaRepositorio(db_session).listar(skip=0, limit=200)
+
+    assert [m.id for m in membresias] == [m.id for m in reversed(creadas)]

@@ -396,3 +396,77 @@ def test_crear_representado_admin_puede_usar_endpoint(client, db_session):
         json=_payload_representado(),
     )
     assert resp.status_code == 201
+
+
+# --- Búsqueda (autocomplete): `skip`/`limit` reales -------------------------
+# `buscar_por_nombre` declaraba `skip`/`limit` en toda la cadena (router ->
+# servicio -> repositorio) pero el repositorio nunca los aplicaba a la
+# sentencia. El `le=50` del router era decorativo: una `q` de dos caracteres
+# que matcheara a todo el club devolvía el club entero.
+def _crear_personas_buscables(client, cantidad: int) -> None:
+    for i in range(cantidad):
+        client.post(
+            "/api/v1/personas/",
+            json={
+                "nombres": f"Alumno{i}", "apellidos": "Torres",
+                "cedula": f"171003{4800 + i}", "fecha_nacimiento": "2010-05-14",
+                "telefono": "0991234567",
+            },
+        )
+
+
+def test_buscar_personas_respeta_el_limit(client):
+    _crear_personas_buscables(client, cantidad=5)
+
+    resp = client.get("/api/v1/personas/buscar?q=Torres&limit=2")
+
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
+
+
+def test_buscar_personas_respeta_el_skip(client):
+    _crear_personas_buscables(client, cantidad=5)
+
+    primera_pagina = client.get("/api/v1/personas/buscar?q=Torres&skip=0&limit=2").json()
+    segunda_pagina = client.get("/api/v1/personas/buscar?q=Torres&skip=2&limit=2").json()
+
+    assert len(primera_pagina) == 2
+    assert len(segunda_pagina) == 2
+    assert {p["id"] for p in primera_pagina}.isdisjoint({p["id"] for p in segunda_pagina})
+
+
+# --- `GET /personas/`: paginación acotada -----------------------------------
+# Era el único de los cuatro endpoints paginados declarado con defaults planos
+# de Python (`skip: int = 0, limit: int = 50`), sin `Query(...)`: aceptaba
+# `limit=100000` y `skip=-5`. El tope es 200 porque el BFF del frontend pide
+# `/personas/?limit=200` (`PERSONAS_PAGE_LIMIT`) desde la pantalla de Miembros,
+# el adaptador de asistencias y el de pagos.
+def test_listar_personas_respeta_skip_y_limit(client):
+    _crear_personas_buscables(client, cantidad=3)
+
+    resp = client.get("/api/v1/personas/?skip=1&limit=1")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 3
+    assert body["skip"] == 1
+    assert body["limit"] == 1
+    assert len(body["items"]) == 1
+
+
+def test_listar_personas_rechaza_limit_sobre_el_tope(client):
+    assert client.get("/api/v1/personas/?limit=201").status_code == 422
+
+
+def test_listar_personas_rechaza_limit_cero(client):
+    assert client.get("/api/v1/personas/?limit=0").status_code == 422
+
+
+def test_listar_personas_rechaza_skip_negativo(client):
+    assert client.get("/api/v1/personas/?skip=-5").status_code == 422
+
+
+def test_listar_personas_acepta_el_limit_del_tope(client):
+    """200 es el valor exacto que pide el BFF de la pantalla de Miembros:
+    el borde tiene que seguir siendo válido."""
+    assert client.get("/api/v1/personas/?limit=200").status_code == 200
