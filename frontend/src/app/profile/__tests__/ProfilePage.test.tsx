@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import ProfilePage from "@/app/profile/page";
 import type { PerfilPropio } from "@/types/domain";
 import { ToastProvider } from "@/contexts/ToastContext";
@@ -155,6 +155,30 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
+// Waits
+// ---------------------------------------------------------------------------
+
+/**
+ * Waits until the STAFF branch has actually finished loading.
+ *
+ * Do NOT replace this with `await screen.findAllByText("Ana Admin")`. That name
+ * is the SESSION's (`sessionForRole(...)`), and AppShell's sidebar account menu
+ * paints it on the very first render — while `staffState` is still
+ * `{ status: "loading" }` and nothing from `fetchMiPerfil()` exists yet. So that
+ * wait resolves against shell chrome and proves nothing about the fetch: under
+ * CI load the assertions that follow ran against the loading state (flaky
+ * failures), and every `queryBy*(...).not.toBeInTheDocument()` after it passed
+ * VACUOUSLY — a permanent false green.
+ *
+ * `profile-hero` only exists in the settled ("ready") layout — the loading and
+ * error states render `ProfileShell` without it — so awaiting it is a signal
+ * only the resolved fetch can produce.
+ */
+async function waitForStaffProfile(): Promise<HTMLElement> {
+  return screen.findByTestId("profile-hero");
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -173,7 +197,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     // personal" column) — assert both occurrences exist. Scoped to <main>
     // since the session name ("Ana Admin") also appears once more in the
     // AppShell sidebar footer, which is unrelated shell chrome.
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     const main = screen.getByRole("main");
     expect(within(main).getAllByText("Ana Admin").length).toBe(2);
     expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(2);
@@ -205,7 +229,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
       </ToastProvider>,
     );
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     const main = within(screen.getByRole("main"));
     expect(main.getByText("Roles asignados")).toBeInTheDocument();
     for (const label of ["Administrador", "Entrenador", "Alumno", "Representante"]) {
@@ -225,7 +249,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
       </ToastProvider>,
     );
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     const main = within(screen.getByRole("main"));
     expect(main.getByText("Rol")).toBeInTheDocument();
     expect(main.queryByText("Roles asignados")).not.toBeInTheDocument();
@@ -268,7 +292,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
       </ToastProvider>,
     );
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     expect(screen.queryByDisplayValue("Ana")).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("Admin")).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("ADMINISTRADOR")).not.toBeInTheDocument();
@@ -471,7 +495,7 @@ describe("ProfilePage — student/representante summary view", () => {
       </ToastProvider>,
     );
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     expect(screen.queryByRole("link", { name: /ver portal completo/i })).not.toBeInTheDocument();
   });
 
@@ -507,7 +531,7 @@ describe("ProfilePage — staff view loading/error (structurally distinct from t
     mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
     fireEvent.click(retryButton);
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     expect(within(screen.getByRole("main")).getAllByText("Ana Admin")).toHaveLength(2);
     expect(mockFetchMiPerfil).toHaveBeenCalledTimes(2);
   });
@@ -527,7 +551,7 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
 
     fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
 
@@ -551,7 +575,7 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
 
     fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
 
@@ -569,7 +593,7 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
 
     fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
     const telefonoInput = screen.getByLabelText(/teléfono/i);
@@ -623,7 +647,7 @@ describe("ProfilePage — change password", () => {
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
 
     fireEvent.click(screen.getByRole("button", { name: /cambiar contraseña/i }));
 
@@ -645,7 +669,7 @@ describe("ProfilePage — change password", () => {
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
 
     fireEvent.click(screen.getByRole("button", { name: /cambiar contraseña/i }));
 
@@ -664,7 +688,7 @@ describe("ProfilePage — unified layout structure", () => {
       </ToastProvider>,
     );
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     expect(screen.getByRole("heading", { level: 1, name: "Perfil" })).toBeInTheDocument();
     expect(
       // Usted, not tú: the marketing voice stops at the auth screens.
@@ -685,7 +709,7 @@ describe("ProfilePage — unified layout structure", () => {
       </ToastProvider>,
     );
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     expect(screen.queryByTestId("profile-column-links")).not.toBeInTheDocument();
     expect(screen.queryByText("Accesos rápidos")).not.toBeInTheDocument();
   });
@@ -702,7 +726,7 @@ describe("ProfilePage — profile photo upload (staff branch, own hero avatar)",
       </ToastProvider>,
     );
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     const hero = screen.getByTestId("profile-hero");
     expect(within(hero).queryByRole("img", { name: /foto de perfil/i })).not.toBeInTheDocument();
   });
@@ -720,7 +744,7 @@ describe("ProfilePage — profile photo upload (staff branch, own hero avatar)",
       </ToastProvider>,
     );
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     const hero = screen.getByTestId("profile-hero");
     const img = within(hero).getByRole("img", { name: /foto de perfil/i });
     expect(img).toHaveAttribute("src", "https://res.cloudinary.com/test/image/upload/perfil-ana.jpg");
@@ -736,7 +760,7 @@ describe("ProfilePage — profile photo upload (staff branch, own hero avatar)",
       </ToastProvider>,
     );
 
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
     expect(screen.getByTestId("foto-perfil-input")).toHaveAttribute("accept", "image/jpeg,image/png");
   });
 
@@ -753,7 +777,7 @@ describe("ProfilePage — profile photo upload (staff branch, own hero avatar)",
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
 
     const input = screen.getByTestId("foto-perfil-input");
     const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
@@ -782,7 +806,7 @@ describe("ProfilePage — profile photo upload (staff branch, own hero avatar)",
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
 
     const input = screen.getByTestId("foto-perfil-input");
     const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
@@ -848,6 +872,14 @@ describe("ProfilePage — profile photo upload (student/representante branch, ow
     );
 
     await screen.findAllByText("Sofía Alumna");
+    // That wait only proves the PORTAL fetch resolved. The supplementary
+    // fotoUrl fetch fails SILENTLY — it paints nothing — so no DOM signal marks
+    // its arrival and the negative assertions below would pass vacuously while
+    // it is still pending. Await the rejection itself inside `act`, which also
+    // flushes the microtask running the component's own `.catch`.
+    await act(async () => {
+      await (mockFetchMiPerfil.mock.results[0]?.value as Promise<unknown>).catch(() => {});
+    });
     // No alert/error surfaced — the failure is cosmetic-only (silent), and
     // the avatar just falls back to the generic icon.
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -946,7 +978,7 @@ describe("ProfilePage — the redesigned account layout", () => {
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
   }
 
   it("puts the page action in the page header row, not floating above the content", async () => {
@@ -1062,7 +1094,7 @@ describe("ProfilePage — the redesigned account layout", () => {
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
 
     fireEvent.click(screen.getByRole("button", { name: /^salir$/i }));
 
@@ -1083,7 +1115,7 @@ describe("ProfilePage — close other sessions (E01, slice B4)", () => {
         <ProfilePage />
       </ToastProvider>,
     );
-    await screen.findAllByText("Ana Admin");
+    await waitForStaffProfile();
   }
 
   it("does not call the endpoint until the confirmation dialog is accepted", async () => {
