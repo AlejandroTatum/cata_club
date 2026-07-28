@@ -67,6 +67,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
 function isEnrollmentRequest(value: unknown): value is EnrollmentRequest {
   if (!isRecord(value) || !isStudent(value.alumno) || !isMedicalRecord(value.fichaMedica)) return false;
+  if (value.credencialesMenor !== undefined && !isCredentials(value.credencialesMenor)) return false;
   const hasStudentCredentials = isCredentials(value.credencialesAlumno);
   const hasRepresentative = isRepresentative(value.representante);
   return (hasStudentCredentials && value.representante === undefined) ||
@@ -83,7 +84,8 @@ function isStudent(value: unknown): value is JsonRecord {
     isNonEmptyString(value.apellidos) &&
     isCedula(value.cedula) &&
     isDate(value.fechaNacimiento) &&
-    isNonEmptyString(value.telefono);
+    isNonEmptyString(value.telefono) &&
+    isOptionalNumber(value.institucionId);
 }
 
 function isMedicalRecord(value: unknown): boolean {
@@ -91,8 +93,11 @@ function isMedicalRecord(value: unknown): boolean {
     isBloodType(value.tipoSangre) &&
     isNonEmptyString(value.contactoEmergencia) &&
     isNonEmptyString(value.telefonoEmergencia) &&
-    isOptionalString(value.condicionesSalud) &&
-    isOptionalString(value.alergias) &&
+    // Required by EnrollmentMedicalRecord, but "" is a legitimate value: an
+    // empty condicionesSalud/alergias means "none", so the key must be present
+    // and a string without being forced to carry text.
+    isRequiredString(value.condicionesSalud) &&
+    isRequiredString(value.alergias) &&
     isOptionalString(value.observaciones);
 }
 
@@ -108,8 +113,16 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function isRequiredString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
 function isOptionalString(value: unknown): boolean {
   return value === undefined || typeof value === "string";
+}
+
+function isOptionalNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value));
 }
 
 function isCedula(value: unknown): boolean {

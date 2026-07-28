@@ -67,7 +67,11 @@ export interface BackendEnrollmentCreateDTO {
  * stuffed into an unrelated field.
  */
 function buildFichaMedica(fichaMedica: EnrollmentMedicalRecord): BackendEnrollmentFichaMedica {
-  const enfermedades = fichaMedica.condicionesSalud
+  // Belt and braces: route.ts's isMedicalRecord is the gate that guarantees
+  // condicionesSalud is a present string, so a bad body is a 400 before it
+  // reaches here. The fallback exists only so a future loosening of that
+  // validator can never turn a malformed body into a 500 on `.split`.
+  const enfermedades = (fichaMedica.condicionesSalud ?? "")
     .split(",")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);

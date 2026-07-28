@@ -135,3 +135,119 @@ describe("POST /api/enrollment", () => {
     expect(response.status).toBe(405);
   });
 });
+
+/**
+ * `EnrollmentMedicalRecord` declares `condicionesSalud` and `alergias` as
+ * required strings (empty allowed) and only `observaciones` as optional. The
+ * validator used to accept all three as optional, so a body omitting
+ * `condicionesSalud` reached the adapter and crashed on `.split(",")` — a 500
+ * where the client deserved a 400.
+ */
+describe("POST /api/enrollment — fichaMedica field contract", () => {
+  function bodyWithFichaMedica(overrides: Record<string, unknown>): unknown {
+    return { ...validBody, fichaMedica: { ...validBody.fichaMedica, ...overrides } };
+  }
+
+  function bodyWithoutFichaMedicaField(field: string): unknown {
+    const fichaMedica: Record<string, unknown> = { ...validBody.fichaMedica };
+    delete fichaMedica[field];
+    return { ...validBody, fichaMedica };
+  }
+
+  it("rejects a fichaMedica without condicionesSalud with 400, not a 500", async () => {
+    const response = await POST(enrollRequest(bodyWithoutFichaMedicaField("condicionesSalud")));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ detail: expect.any(String) }));
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a fichaMedica without alergias with 400", async () => {
+    const response = await POST(enrollRequest(bodyWithoutFichaMedicaField("alergias")));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ detail: expect.any(String) }));
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-string condicionesSalud with 400", async () => {
+    for (const invalid of [42, null, ["asma"]]) {
+      vi.mocked(global.fetch).mockClear();
+
+      const response = await POST(enrollRequest(bodyWithFichaMedica({ condicionesSalud: invalid })));
+
+      expect(response.status).toBe(400);
+      expect(global.fetch).not.toHaveBeenCalled();
+    }
+  });
+
+  // An empty condicionesSalud means "no health conditions" — the wizard
+  // initialises the textarea to "". Tightening this to a non-empty check would
+  // force healthy students to invent a condition, so pin the accepted case.
+  it("accepts an empty condicionesSalud as 'no conditions'", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    const response = await POST(enrollRequest(bodyWithFichaMedica({ condicionesSalud: "" })));
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("accepts an empty alergias", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    const response = await POST(enrollRequest(bodyWithFichaMedica({ alergias: "" })));
+
+    expect(response.status).toBe(201);
+  });
+
+  it("accepts a fichaMedica without observaciones, which is genuinely optional", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    const response = await POST(enrollRequest(bodyWithoutFichaMedicaField("observaciones")));
+
+    expect(response.status).toBe(201);
+  });
+});
+
+/**
+ * Same drift class as fichaMedica: fields the type declares but the validator
+ * never inspected, so a malformed value was forwarded to the backend.
+ */
+describe("POST /api/enrollment — optional field contract", () => {
+  it("rejects a non-number institucionId with 400", async () => {
+    const body = { ...validBody, alumno: { ...validBody.alumno, institucionId: "3" } };
+
+    const response = await POST(enrollRequest(body));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts a numeric institucionId", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+    const body = { ...validBody, alumno: { ...validBody.alumno, institucionId: 3 } };
+
+    const response = await POST(enrollRequest(body));
+
+    expect(response.status).toBe(201);
+  });
+
+  it("rejects a malformed credencialesMenor with 400", async () => {
+    const body = { ...validBody, credencialesMenor: { correo: "not-an-email", contrasenia: "short" } };
+
+    const response = await POST(enrollRequest(body));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts a well-formed credencialesMenor", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+    const body = { ...validBody, credencialesMenor: { correo: "hijo@example.com", contrasenia: "password8" } };
+
+    const response = await POST(enrollRequest(body));
+
+    expect(response.status).toBe(201);
+  });
+});
