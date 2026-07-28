@@ -237,6 +237,25 @@ jobs:
       IMAGE_TAG: ${{ github.sha }}
       IMAGEN_BACKEND: ghcr.io/alejandrotatum/cata_club-backend
       IMAGEN_FRONTEND: ghcr.io/alejandrotatum/cata_club-frontend
+      # El overlay de produccion fija `AMBIENTE: production`, y con eso se
+      # activa `_exigir_config_de_produccion` (configuracion.py), que rechaza
+      # los defaults de desarrollo del compose: `SMTP_HOST=mailpit` (el correo
+      # se envia con exito y muere en el catcher) y `FRONTEND_URL=localhost`
+      # (el enlace de recuperacion viaja en el correo y no abre en el
+      # dispositivo del usuario). Sin estas dos variables el backend NO
+      # arranca -- y no debe: esa es justamente la falla que el validador
+      # existe para provocar.
+      #
+      # Por eso este bloque `env:` vale como checklist ejecutable de lo minimo
+      # que un despliegue real tiene que definir: si mañana el validador exige
+      # una variable mas, este job se cae acá, en CI, y no en el servidor.
+      #
+      # Los valores son de mentira a proposito. `.invalid` esta reservado por
+      # RFC 2606 y no resuelve nunca, asi que ni siquiera por accidente se
+      # puede enviar correo desde CI. Solo tienen que pasar el validador: un
+      # host SMTP que no sea un catcher, y una URL absoluta https sin loopback.
+      SMTP_HOST: smtp.ci.invalid
+      FRONTEND_URL: https://cataclub.ci.invalid
 
     steps:
       - uses: actions/checkout@v4
