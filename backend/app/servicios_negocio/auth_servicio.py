@@ -36,6 +36,14 @@ class AuthServicio:
         # para no filtrar información de cuentas ajenas.
         if not usuario.activo:
             raise CredencialesInvalidas("Correo o contraseña incorrectos")
+        # Baja lógica de la PERSONA: quien ya no es miembro del club no entra,
+        # aunque su cuenta figure como activa. No es redundante con el chequeo
+        # de arriba: dar de baja a una persona desactiva su `Usuario`, pero
+        # reactivar la cuenta (`PATCH /personas/{id}/cuenta/estado`) es una
+        # operación independiente que no reincorpora a nadie al club. Sin esta
+        # línea, ese camino le devolvería el acceso a un ex-miembro.
+        if not usuario.persona.activo:
+            raise CredencialesInvalidas("Correo o contraseña incorrectos")
 
         return self._emitir_par_tokens(usuario)
 

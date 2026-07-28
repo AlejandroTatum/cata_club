@@ -9,7 +9,7 @@ from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaUpdateDTO,
-    PersonaBusquedaDTO, RepresentadoCreateDTO, IndependizarDTO,
+    PersonaBusquedaDTO, RepresentadoCreateDTO, IndependizarDTO, EstadoPersonaDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
     EntrenadorResponseDTO,
 )
@@ -333,12 +333,27 @@ async def actualizar_persona(persona_id: int, cambios: PersonaUpdateDTO, db: Ses
     return PersonaServicio(db).actualizar_persona(persona_id, cambios)
 
 
-@router.delete(
-    "/{persona_id}", status_code=status.HTTP_204_NO_CONTENT,
+# --- Baja lógica de una persona --------------------------------------------
+# Reemplaza al `DELETE /personas/{persona_id}` que existía acá: aquel hacía un
+# borrado duro y destruía, junto con la fila, el historial de asistencias, los
+# pagos y la ficha médica -- registros que un club que cobra dinero tiene que
+# conservar. Un menor inscrito por su representante ni siquiera tiene
+# `Usuario`, así que hasta ahora borrarlo era la ÚNICA forma de sacarlo de la
+# nómina.
+#
+# La forma es la del hermano `PATCH /{persona_id}/cuenta/estado` (E01-RF013),
+# que gobierna el flag del `Usuario`: mismo verbo, mismo cuerpo `{activo}`,
+# mismo rol. Lo que NO se reutiliza a propósito es el verbo DELETE: este
+# proyecto ya pagó el costo de un botón "crear horario" que no creaba ningún
+# horario, y un DELETE que no borra es exactamente la misma mentira.
+@router.patch(
+    "/{persona_id}/estado", response_model=PersonaResponseDTO,
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
-async def eliminar_persona(persona_id: int, db: Session = Depends(obtener_sesion)):
-    PersonaServicio(db).eliminar_persona(persona_id)
+async def cambiar_estado_persona(
+    persona_id: int, datos: EstadoPersonaDTO, db: Session = Depends(obtener_sesion)
+):
+    return PersonaServicio(db).cambiar_estado(persona_id, datos.activo)
 
 
 # --- AntecedentesClub (E01-RF008): existían los DTOs pero ningún endpoint ---

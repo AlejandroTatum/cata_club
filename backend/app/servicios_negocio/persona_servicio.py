@@ -153,7 +153,10 @@ class PersonaServicio:
         return persona
 
     def listar_representados(self, persona_id: int) -> list[Persona]:
-        return self.obtener_persona(persona_id).representados
+        """Dependientes ACTIVOS. `obtener_persona` se conserva para que un
+        `persona_id` inexistente siga dando 404 y no una lista vacía."""
+        self.obtener_persona(persona_id)
+        return self.repo.listar_representados(persona_id)
 
     def listar_entrenadores(self) -> list[Persona]:
         """Personas con rol ENTRENADOR — usado por el selector de entrenador
@@ -166,9 +169,41 @@ class PersonaServicio:
         datos = cambios.model_dump(exclude_unset=True)
         return self.repo.actualizar(persona, datos)
 
-    def eliminar_persona(self, persona_id: int) -> None:
+    # --- Baja lógica (reemplaza el borrado duro) --------------------------
+    def cambiar_estado(self, persona_id: int, activo: bool) -> Persona:
+        """Da de baja o reincorpora a una persona SIN borrar nada.
+
+        Reemplaza al viejo `eliminar_persona`, que hacía un DELETE real y se
+        llevaba puesto el historial de asistencias, los pagos y la ficha
+        médica del ex-miembro.
+
+        Dos reglas que no son negociables:
+
+        1. Dar de baja a una persona TAMBIÉN desactiva su `Usuario`, si lo
+           tiene: quien ya no es miembro no puede seguir entrando al sistema.
+           Reusa la misma barrera anti-bloqueo de `RolServicio` para no dejar
+           al club sin ningún administrador activo por esta puerta lateral.
+        2. Reincorporarla NO reactiva la cuenta. El estado de la CUENTA es una
+           preocupación separada del estado de MEMBRESÍA (una cuenta puede
+           estar suspendida por razones propias: contraseña comprometida,
+           sanción). Devolver el acceso es una decisión explícita y aparte,
+           vía `PATCH /personas/{id}/cuenta/estado`.
+
+        Idempotente: aplicar el mismo estado dos veces no es un error.
+        """
         persona = self.obtener_persona(persona_id)
-        self.repo.eliminar(persona)
+        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
+
+        if not activo and usuario is not None:
+            # Import local: `RolServicio` ya importa este módulo indirectamente
+            # a través de los repositorios; hacerlo arriba crearía un ciclo.
+            from app.servicios_negocio.rol_servicio import RolServicio
+            RolServicio(self.db)._asegurar_que_queda_otro_administrador(
+                usuario, "dar de baja a esta persona"
+            )
+            usuario.activo = False
+
+        return self.repo.actualizar(persona, {"activo": activo})
 
     def independizar(self, persona_id: int, datos: IndependizarDTO) -> Persona:
         """Permite a un ex-menor (mayor de edad) independizarse de su

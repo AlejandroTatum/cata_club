@@ -61,6 +61,15 @@ class PersonaUpdateDTO(BaseModel):
     institucion_id: Optional[int] = None
 
 
+class EstadoPersonaDTO(BaseModel):
+    """Cuerpo de `PATCH /personas/{persona_id}/estado`: baja lógica o
+    reincorporación de una persona al club. Misma forma que el
+    `EstadoCuentaDTO` de `PATCH /personas/{persona_id}/cuenta/estado`, que
+    gobierna el flag del `Usuario` (acceso al sistema) en vez del de la
+    `Persona` (pertenencia al club)."""
+    activo: bool
+
+
 class IndependizarDTO(BaseModel):
     """Payload para que un ex-menor (ya mayor de edad) o un administrador
     independice a una persona de su representante legal."""
@@ -78,6 +87,10 @@ class PersonaResponseDTO(ResponseBase, BaseModel):
     telefono_contacto: Optional[str] = Field(default=None, examples=["0998765432"])
     representante_id: Optional[int] = Field(default=None, examples=[None])
     fecha_registro: Optional[datetime] = Field(default=None, examples=["2024-01-15T10:30:00Z"])
+    # Baja lógica: la UI necesita distinguir a un miembro activo de uno dado
+    # de baja para poder marcarlo en el roster admin (que sí los sigue
+    # listando) y ofrecer reincorporarlo.
+    activo: bool = Field(default=True, examples=[True])
 
 
 class EntrenadorResponseDTO(ResponseBase, BaseModel):

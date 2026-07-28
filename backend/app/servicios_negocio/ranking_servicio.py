@@ -225,12 +225,27 @@ class NotificacionServicio:
         return self.repo.listar_por_persona(persona_id)
 
     def listar_para_persona_y_hijos(self, persona_id: int) -> list[Notificacion]:
-        """Para representantes: incluye notificaciones propias y de sus hijos."""
+        """Para representantes: incluye notificaciones propias y de sus hijos.
+
+        Baja lógica: los dependientes salen de
+        `PersonaRepositorio.listar_representados`, que filtra por `activo`, y
+        NO de la relación ORM `persona.representados`, que no se puede
+        filtrar. Es el mismo criterio operativo que el resto de los listados:
+        el feed alimenta el portal del representante, y ahí un dependiente
+        dado de baja ya no aparece en ningún lado -- dejar sus notificaciones
+        colgadas para siempre sería la única traza de alguien que el sistema
+        dice que ya no está.
+        """
         from app.dominio.modelos import Persona
+        from app.infraestructura.repositorios.persona_repositorio import (
+            PersonaRepositorio,
+        )
         persona = self.db.get(Persona, persona_id)
         if not persona:
             return []
-        hijos_ids = [h.id for h in persona.representados]
+        hijos_ids = [
+            h.id for h in PersonaRepositorio(self.db).listar_representados(persona_id)
+        ]
         todos_ids = [persona_id] + hijos_ids
         return (
             self.db.query(Notificacion)

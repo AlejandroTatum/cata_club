@@ -137,7 +137,10 @@ class AlumnoHorarioRepositorio:
             select(AlumnoHorario)
             .options(joinedload(AlumnoHorario.persona))
             .join(Persona, Persona.id == AlumnoHorario.persona_id)
-            .where(AlumnoHorario.horario_id == horario_id)
+            # Baja lógica: es la nómina OPERATIVA de la clase (la hoja de
+            # asistencia del entrenador). Alguien que ya no está en el club no
+            # puede figurar como presente ni ausente de una clase de hoy.
+            .where(AlumnoHorario.horario_id == horario_id, Persona.activo.is_(True))
             # Se lee como la nómina de la clase: por apellidos y nombres del
             # alumno, con el id de la asignación de desempate para que el
             # orden sea TOTAL y no dependa del motor.

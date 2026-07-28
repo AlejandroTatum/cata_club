@@ -52,6 +52,32 @@ RAIZ_BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SUFIJO_BD_ARNES = "_arnes_migraciones"
 
 
+def _sufijo_de_proceso() -> str:
+    """Discriminante por PROCESO del nombre de la base efímera.
+
+    Por qué existe (esto no es cosmético): `crear_bd_del_arnes` arranca con
+    `DROP DATABASE ... WITH (FORCE)`, y `FORCE` no falla cuando hay sesiones
+    conectadas: las MATA. Con un nombre derivado únicamente de la base de la
+    suite, dos sesiones de pytest solapadas contra el mismo Postgres apuntan
+    a la MISMA base efímera, y el `DROP ... FORCE` de la que arranca segunda
+    fulmina la conexión que la primera tiene abierta en mitad de un `alembic
+    upgrade`. El cliente lo ve como `OperationalError: server closed the
+    connection unexpectedly`; el servidor lo registra como `terminating
+    connection due to administrator command`, y los intentos siguientes de
+    esa sesión mueren con `FATAL: database "..." does not exist` hasta que la
+    otra termina de recrearla.
+
+    Solaparse es fácil sin darse cuenta: dos terminales, el runner del editor
+    corriendo un archivo mientras la consola corre la suite, o dos jobs de CI
+    compartiendo un mismo servicio Postgres. El PID basta como discriminante:
+    dos procesos VIVOS nunca comparten PID, que es exactamente la condición
+    bajo la que el `DROP ... FORCE` hace daño. Un PID reciclado solo puede
+    encontrarse con la base huérfana de un proceso ya muerto, y esa es
+    justamente la que corresponde borrar.
+    """
+    return str(os.getpid())
+
+
 def urls_del_arnes(url_suite: str) -> tuple[str, str, str]:
     """Deriva, desde la URL de la suite, la terna
     (url_de_mantenimiento, url_del_arnes, nombre_de_la_bd_del_arnes).
@@ -59,9 +85,14 @@ def urls_del_arnes(url_suite: str) -> tuple[str, str, str]:
     La URL de mantenimiento apunta a la base `postgres` porque `CREATE
     DATABASE` / `DROP DATABASE` no pueden ejecutarse desde la base que se
     está creando o destruyendo.
+
+    El nombre lleva el sufijo de proceso (ver `_sufijo_de_proceso`): es lo
+    que impide que dos sesiones de pytest solapadas se maten la base entre
+    sí. Sigue por debajo del límite de 63 bytes de un identificador de
+    Postgres (`cataclub_test_arnes_migraciones_1234567` son 40 caracteres).
     """
     url = make_url(url_suite)
-    nombre_bd = f"{url.database}{SUFIJO_BD_ARNES}"
+    nombre_bd = f"{url.database}{SUFIJO_BD_ARNES}_{_sufijo_de_proceso()}"
     return (
         url.set(database="postgres").render_as_string(hide_password=False),
         url.set(database=nombre_bd).render_as_string(hide_password=False),
@@ -71,13 +102,35 @@ def urls_del_arnes(url_suite: str) -> tuple[str, str, str]:
 
 def crear_bd_del_arnes(url_suite: str) -> tuple[Engine, str]:
     """Crea (recreando si ya existía) la base efímera del arnés y devuelve
-    su motor junto al nombre de la base, para poder destruirla después."""
+    su motor junto al nombre de la base, para poder destruirla después.
+
+    El motor se construye DESPUÉS del `DROP`/`CREATE` y con `NullPool`, así
+    que ninguna conexión de este proceso puede sobrevivir al borrado: no hay
+    conexiones ociosas en un pool y la base a la que apunta el motor es la
+    recién creada."""
     url_mantenimiento, url_arnes, nombre_bd = urls_del_arnes(url_suite)
     _ejecutar_en_mantenimiento(url_mantenimiento, [
         f'DROP DATABASE IF EXISTS "{nombre_bd}" WITH (FORCE)',
         f'CREATE DATABASE "{nombre_bd}"',
     ])
     return create_engine(url_arnes, poolclass=NullPool), nombre_bd
+
+
+# Nota deliberada: NO existe un barrido de bases "huérfanas" del arnés.
+#
+# Es tentador: si a pytest lo matan con SIGKILL, su base efímera queda sin
+# borrar, y sobre un Postgres persistente se irían acumulando. El barrido
+# obvio -- borrar las bases con el prefijo del arnés que no tengan ninguna
+# sesión en `pg_stat_activity` -- se probó y REINTRODUCE exactamente el bug
+# que el sufijo por proceso vino a arreglar: con `NullPool` una corrida viva
+# no mantiene ninguna conexión abierta ENTRE sentencias, así que su base
+# aparece con cero sesiones y el barrido de otra corrida se la lleva puesta.
+# Medido: 3 de 12 corridas concurrentes fallaban con `FATAL: database "..."
+# does not exist`. "Sin conexiones" no significa "abandonada".
+#
+# El costo de no barrer es acotado: `db-test` monta su datadir en tmpfs (ver
+# docker-compose.yml), así que las huérfanas mueren con el contenedor, y en
+# CI el servicio Postgres es nuevo en cada job.
 
 
 def destruir_bd_del_arnes(url_suite: str, nombre_bd: str) -> None:

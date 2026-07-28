@@ -168,6 +168,16 @@ class Persona(Base):
     # cuándo se dio de alta cada Persona -- no existía ningún timestamp.
     fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
 
+    # Baja LÓGICA: quien deja el club se DESACTIVA, nunca se borra. El
+    # `DELETE /personas/{id}` anterior destruía junto con la fila el historial
+    # de asistencias, los pagos y la ficha médica -- registros que un club que
+    # cobra dinero está obligado a conservar. Es un plano distinto del de
+    # `Usuario.activo` (E01-RF013): aquel gobierna el ACCESO al sistema, este
+    # la PERTENENCIA al club. Un menor inscrito por su representante no tiene
+    # `Usuario`, así que sin esta columna no había ninguna forma de sacarlo de
+    # la nómina que no fuera borrarlo.
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
     # --- Relación reflexiva: 1 adulto representa a 0..* personas ---
     representante_id: Mapped[Optional[int]] = mapped_column(ForeignKey("persona.id"), nullable=True)
     representante: Mapped[Optional["Persona"]] = relationship(

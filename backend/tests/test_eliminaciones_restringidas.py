@@ -53,34 +53,16 @@ def _crear_asistencia(db_session, persona_id: int, entrenador_id: int, horario_i
     return asistencia
 
 
-# --- Repositorio: la violación de integridad se traduce a dominio ----------
-def test_eliminar_persona_con_asistencias_lanza_operacion_invalida(db_session):
-    entrenador_id = _crear_entrenador(db_session)
-    alumno = _crear_alumno(db_session)
-    horario = _crear_horario(db_session, entrenador_id)
-    _crear_asistencia(db_session, alumno.id, entrenador_id, horario.id)
+# --- Persona: ya no hay borrado que restringir -----------------------------
+# El repositorio de Persona dejó de exponer `eliminar`: la baja es LÓGICA
+# (`Persona.activo`, ver `test_baja_logica_persona.py`), porque el borrado
+# duro se llevaba puesto el historial de asistencias, pagos y ficha médica.
+# Las pruebas de "borrado bloqueado por dependientes" de Persona murieron con
+# el borrado; queda esta guardia estructural para que no vuelva a aparecer.
+def test_el_repositorio_de_persona_no_expone_borrado(db_session):
     repo = PersonaRepositorio(db_session)
 
-    with pytest.raises(OperacionInvalida) as error:
-        repo.eliminar(alumno)
-
-    assert "asistencias" in error.value.mensaje.lower() or "registros" in error.value.mensaje.lower()
-
-
-def test_eliminar_persona_bloqueada_deja_la_persona_intacta(db_session):
-    """La sesión queda usable después del rollback interno: la persona sigue
-    existiendo y se puede seguir consultando sin `PendingRollbackError`."""
-    entrenador_id = _crear_entrenador(db_session)
-    alumno = _crear_alumno(db_session)
-    horario = _crear_horario(db_session, entrenador_id)
-    _crear_asistencia(db_session, alumno.id, entrenador_id, horario.id)
-    repo = PersonaRepositorio(db_session)
-    persona_id = alumno.id
-
-    with pytest.raises(OperacionInvalida):
-        repo.eliminar(alumno)
-
-    assert repo.obtener_por_id(persona_id) is not None
+    assert not hasattr(repo, "eliminar")
 
 
 def test_eliminar_horario_con_asistencias_lanza_operacion_invalida(db_session):
@@ -110,32 +92,7 @@ def test_eliminar_horario_bloqueado_deja_el_horario_intacto(db_session):
     assert repo.obtener_por_id(horario_id) is not None
 
 
-# --- El borrado sin dependientes sigue funcionando -------------------------
-def test_eliminar_persona_sin_dependientes_sigue_borrando(db_session):
-    alumno = _crear_alumno(db_session, cedula="1710034077")
-    repo = PersonaRepositorio(db_session)
-    persona_id = alumno.id
-
-    repo.eliminar(alumno)
-
-    assert repo.obtener_por_id(persona_id) is None
-
-
 # --- Contrato HTTP: 400 en vez de 500 --------------------------------------
-def test_delete_persona_con_asistencias_responde_400(client, db_session):
-    entrenador_id = _crear_entrenador(db_session)
-    alumno = _crear_alumno(db_session)
-    horario = _crear_horario(db_session, entrenador_id)
-    _crear_asistencia(db_session, alumno.id, entrenador_id, horario.id)
-
-    respuesta = client.delete(f"/api/v1/personas/{alumno.id}")
-
-    assert respuesta.status_code == 400
-    cuerpo = respuesta.json()
-    assert cuerpo["detail"] == cuerpo["message"]
-    assert "elimin" in cuerpo["message"].lower()
-
-
 def test_delete_horario_con_asistencias_responde_400(client, db_session):
     entrenador_id = _crear_entrenador(db_session)
     alumno = _crear_alumno(db_session)

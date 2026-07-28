@@ -169,7 +169,9 @@ RUTAS_SOLO_AUTENTICADAS = {
 RUTAS_ROLES_REQUERIDOS = {
     ("DELETE", "/asistencias/desasignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("DELETE", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
-    ("DELETE", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
+    # `DELETE /personas/{persona_id}` ya no existe: la baja de una persona es
+    # LÓGICA (`PATCH /personas/{persona_id}/estado`, más abajo), porque el
+    # borrado duro destruía asistencias, pagos y ficha médica del ex-miembro.
     ("DELETE", "/personas/{persona_id}/roles/{tipo_rol}"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
@@ -190,6 +192,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("PATCH", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/cuenta/estado"): frozenset({"ADMINISTRADOR"}),
+    ("PATCH", "/personas/{persona_id}/estado"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/ranking/{persona_id}/mover-de-nivel"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),

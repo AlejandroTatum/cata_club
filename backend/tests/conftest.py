@@ -152,13 +152,22 @@ def motor_arnes_migraciones():
     CASCADE` por escenario, y eso destruiría el esquema que
     `esquema_migrado` (scope=session) construye UNA vez para el resto de
     las pruebas. Vive en el mismo servidor Postgres (`TEST_DATABASE_URL`),
-    respetando el contrato de un solo env var (decisión 1.1)."""
+    respetando el contrato de un solo env var (decisión 1.1).
+
+    El nombre de la base lo discrimina el PID (ver `_sufijo_de_proceso` en
+    `tests/arnes_migraciones.py`): dos sesiones de pytest solapadas contra el
+    mismo Postgres NO deben compartirla, porque el `DROP DATABASE ... WITH
+    (FORCE)` de arranque mata las conexiones de la otra sesión en mitad de un
+    `alembic upgrade`."""
     from tests.arnes_migraciones import crear_bd_del_arnes, destruir_bd_del_arnes
 
     motor, nombre_bd = crear_bd_del_arnes(TEST_DATABASE_URL)
     try:
         yield motor
     finally:
+        # `dispose()` ANTES del `DROP`: aunque `NullPool` no guarda conexiones
+        # ociosas, el orden deja explícito que ninguna conexión de este
+        # proceso sobrevive a la base a la que apunta.
         motor.dispose()
         destruir_bd_del_arnes(TEST_DATABASE_URL, nombre_bd)
 

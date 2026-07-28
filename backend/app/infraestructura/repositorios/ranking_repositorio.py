@@ -2,7 +2,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import NivelRanking, Ranking, Notificacion
+from app.dominio.modelos import NivelRanking, Persona, Ranking, Notificacion
 
 
 class NivelRankingRepositorio:
@@ -46,6 +46,11 @@ class RankingRepositorio:
         stmt = (
             select(Ranking)
             .options(joinedload(Ranking.persona), joinedload(Ranking.nivel_ranking))
+            # Baja lógica: listado OPERATIVO. Un ex-miembro no ocupa cupo de
+            # nivel ni puede ser movido de nivel. `solo_activos` (más abajo)
+            # es otra cosa: se refiere a `Ranking.esta_en_ranking`.
+            .join(Persona, Persona.id == Ranking.persona_id)
+            .where(Persona.activo.is_(True))
         )
         if solo_activos:
             stmt = stmt.where(Ranking.esta_en_ranking.is_(True))
@@ -61,7 +66,10 @@ class RankingRepositorio:
         stmt = (
             select(Ranking)
             .options(joinedload(Ranking.persona))
-            .where(Ranking.nivel_ranking_id == nivel_id)
+            # Baja lógica: mismo criterio que `listar_todos` -- el roster de
+            # un nivel es operativo (quién entrena y compite en él hoy).
+            .join(Persona, Persona.id == Ranking.persona_id)
+            .where(Ranking.nivel_ranking_id == nivel_id, Persona.activo.is_(True))
         )
         if solo_activos:
             stmt = stmt.where(Ranking.esta_en_ranking.is_(True))

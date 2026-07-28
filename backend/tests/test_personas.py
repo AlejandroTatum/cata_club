@@ -116,18 +116,17 @@ def test_listar_representados_entrenador_puede_consultar_cualquier_persona(clien
     assert resp.status_code == 200
 
 
-def test_actualizar_y_eliminar_persona(client):
+def test_actualizar_persona(client):
     persona = client.post("/api/v1/personas/", json=_payload_persona()).json()
 
     resp = client.patch(f"/api/v1/personas/{persona['id']}", json={"telefono": "0987654321"})
     assert resp.status_code == 200
     assert resp.json()["telefono"] == "0987654321"
 
-    resp = client.delete(f"/api/v1/personas/{persona['id']}")
-    assert resp.status_code == 204
 
-    resp = client.get(f"/api/v1/personas/{persona['id']}")
-    assert resp.status_code == 404
+# El tramo de borrado que vivía en este test murió con `DELETE /personas/{id}`:
+# la baja de una persona hoy es lógica y se prueba en
+# `test_baja_logica_persona.py`.
 
 
 # --- GET /personas/entrenadores: selector real de entrenador (dropdown) ----

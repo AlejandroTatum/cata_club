@@ -4,13 +4,16 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Ranking, Usuario, Rol, usuario_rol
 from app.dominio.enums import TipoRol
-from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
 
 
 class PersonaRepositorio:
     """Encapsula todo el acceso a datos de Persona. Es la ÚNICA clase
     del proyecto que debe importar Session y ejecutar db.query/add/commit
-    para esta entidad."""
+    para esta entidad.
+
+    NO expone `eliminar`: una Persona nunca se borra. La baja es lógica
+    (`Persona.activo`), porque su historial de asistencias, pagos y ficha
+    médica tiene que sobrevivir a que deje el club."""
 
     def __init__(self, db: Session):
         self.db = db
@@ -27,6 +30,11 @@ class PersonaRepositorio:
     # `OFFSET/LIMIT` repetiría o se saltaría filas.
     _ORDEN_NOMINA = (Persona.apellidos.asc(), Persona.nombres.asc(), Persona.id.asc())
 
+    # `listar`/`contar` alimentan el roster ADMINISTRATIVO (`GET /personas/`,
+    # la página admin de Miembros): a propósito NO filtran por `activo`. Si
+    # escondieran a las personas dadas de baja, un administrador no tendría
+    # ninguna forma de volver a encontrarlas para reactivarlas. El DTO expone
+    # `activo` para que la UI las pueda marcar.
     def listar(self, skip: int = 0, limit: int = 50) -> List[Persona]:
         return (
             self.db.query(Persona)
@@ -39,6 +47,23 @@ class PersonaRepositorio:
     def contar(self) -> int:
         return self.db.query(Persona).count()
 
+    def listar_representados(self, representante_id: int) -> List[Persona]:
+        """Dependientes ACTIVOS de un representante.
+
+        Baja lógica: un dependiente dado de baja ya no entrena, así que no
+        pertenece a la lista operativa que ven el portal del representante y
+        el panel admin. Sigue siendo alcanzable por el roster administrativo
+        (`listar`) y por `obtener_por_id`, que es por donde se lo reactiva."""
+        return (
+            self.db.query(Persona)
+            .filter(
+                Persona.representante_id == representante_id,
+                Persona.activo.is_(True),
+            )
+            .order_by(*self._ORDEN_NOMINA)
+            .all()
+        )
+
     def listar_por_rol(self, tipo_rol: TipoRol) -> List[Persona]:
         """Personas con un Usuario que tenga el `tipo_rol` dado (ej. listar
         entrenadores para un selector). Mismo criterio de "rol asignado" que
@@ -48,6 +73,10 @@ class PersonaRepositorio:
             .join(Usuario, Usuario.persona_id == Persona.id)
             .join(Usuario.roles)
             .filter(Rol.tipo_rol == tipo_rol)
+            # Baja lógica: listado OPERATIVO (selector de entrenador para
+            # asignar a un horario). A alguien que ya no está en el club no se
+            # le puede asignar una clase, así que no debe ni aparecer.
+            .filter(Persona.activo.is_(True))
             # Mismo orden de nómina que `listar`: alimenta selectores
             # (entrenadores) y el ranking, donde un orden alfabético estable
             # es lo que el usuario espera al buscar un nombre en la lista.
@@ -84,7 +113,9 @@ class PersonaRepositorio:
             .join(usuario_rol, usuario_rol.c.usuario_id == Usuario.id)
             .join(Rol, Rol.id == usuario_rol.c.rol_id)
             .outerjoin(Ranking, Ranking.persona_id == Persona.id)
-            .where(Rol.tipo_rol == tipo_rol)
+            # Baja lógica: listado OPERATIVO (roster de niveles del
+            # entrenador). Un ex-miembro no compite ni ocupa cupo de nivel.
+            .where(Rol.tipo_rol == tipo_rol, Persona.activo.is_(True))
             .distinct()
             .order_by(*self._ORDEN_NOMINA)
         )
@@ -103,17 +134,13 @@ class PersonaRepositorio:
         self.db.refresh(persona)
         return persona
 
-    def eliminar(self, persona: Persona) -> None:
-        eliminar_o_error_de_dominio(
-            self.db, persona,
-            "No se puede eliminar a esta persona porque tiene registros "
-            "asociados (asistencias, pagos, membresías, ficha médica u "
-            "horarios a cargo). Elimina o reasigna esos registros primero.",
-        )
-
     # --- Reportes (E04-RF014) --------------------------------------------------
     def listar_nuevas_por_periodo(self, fecha_inicio, fecha_fin) -> List[Persona]:
-        """E04-RF014: alumnos nuevos registrados en un rango de fechas."""
+        """E04-RF014: alumnos nuevos registrados en un rango de fechas.
+
+        Reporte HISTÓRICO: a propósito NO filtra por `activo`. Haberse
+        registrado en marzo es un hecho que no deja de ser cierto porque la
+        persona se dio de baja en junio; esconderla falsearía el reporte."""
         return (
             self.db.query(Persona)
             .filter(Persona.fecha_registro >= fecha_inicio, Persona.fecha_registro <= fecha_fin)
@@ -137,6 +164,11 @@ class PersonaRepositorio:
         stmt = stmt.where(
             (Persona.nombres.ilike(filtro)) | (Persona.apellidos.ilike(filtro))
         )
+        # Baja lógica: el autocomplete es OPERATIVO -- se usa para elegir a
+        # quién registrarle un pago, una asistencia o una membresía. Ofrecer a
+        # un ex-miembro ahí es invitar a operar sobre alguien que ya no está.
+        # Para encontrarlo y reactivarlo está el roster admin (`listar`).
+        stmt = stmt.where(Persona.activo.is_(True))
         # `skip`/`limit` viajaban por toda la cadena (router -> servicio ->
         # repositorio) sin llegar nunca a la sentencia: el tope `le=50` del
         # router era decorativo y una `q` de dos caracteres que matcheara a
