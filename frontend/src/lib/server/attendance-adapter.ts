@@ -5,12 +5,14 @@
  * return — server-only, used by src/app/api/attendance/** and
  * src/app/api/ranking/**. Mirrors src/lib/server/payments-adapter.ts.
  *
- * Documented backend gap (do NOT work around by fabricating data): the
- * domain model has `HorarioEntrenamiento.nivel_ranking_id` (FK) and
- * `NivelRanking.horarios` (relationship), but neither `HorarioResponseDTO`
- * nor `NivelRankingResponseDTO`/`NivelRankingConOcupacionDTO` exposes that
- * link. There is currently no way, through the API, to know which
- * NivelRanking (Grupo) a Horario belongs to. `HorarioResponseDTO` also has
+ * Documented backend gap (do NOT work around by fabricating data): there is
+ * no link at all between a Horario and a NivelRanking. The domain model used
+ * to carry `HorarioEntrenamiento.nivel_ranking_id`, but that column was
+ * dropped (migration `c4d5e6f7a8b9`) because the two are independent: a
+ * student's level lives on `Ranking.nivel_ranking_id` and says nothing about
+ * which horarios they attend. So there is no way, through the API or the
+ * schema, to know which NivelRanking (Grupo) a Horario belongs to — the
+ * question has no answer, not just no endpoint. `HorarioResponseDTO` also has
  * no `cancha`, `cupoMaximo`, or `activo` field — those exist only on the
  * mock-era `ScheduleSlot` type (src/app/attendance/attendance-utils.ts) and
  * have no real equivalent. This adapter intentionally omits them rather

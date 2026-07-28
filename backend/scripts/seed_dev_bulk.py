@@ -383,8 +383,6 @@ def _asignar_ranking(db, persona: Persona, indice: int, niveles: dict[int, Nivel
     ranking = Ranking(
         persona_id=persona.id,
         nivel_ranking_id=nivel_id,
-        esta_en_ranking=True,
-        puntaje_acumulado=0,
     )
     db.add(ranking)
     db.flush()

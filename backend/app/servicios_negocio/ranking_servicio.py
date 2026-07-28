@@ -19,11 +19,14 @@ de producto y removido de este servicio. La tarea Celery Beat
 `limpiar_ranking_por_inactividad`, que dependía del mismo dato huérfano
 (`Ranking.ultimo_combate_o_asistencia`, ya no escrito por nadie tras el
 cierre mensual), fue removida por la misma razón (falso positivo masivo: sin
-escritor, todos quedaban "inactivos"). Hoy no existe ningún mecanismo
-automático que ponga `esta_en_ranking = False`; la baja es
-administrativa/manual. Los resultados mensuales, justificativos, reingreso y
-selección oficial (funcionalidad competitiva) fueron removidos por completo;
-lo que queda de este módulo es exclusivamente la asignación de alumnos a
+escritor, todos quedaban "inactivos"). El flag `Ranking.esta_en_ranking` que
+sobrevivió a esa limpieza también fue eliminado: sin esos dos mecanismos no
+quedó ningún camino que lo pusiera en False -- la "baja manual" que decía el
+comentario nunca se implementó --, así que era True para toda fila. Hoy el
+estado de asignación se lee de `nivel_ranking_id`: si tiene nivel, está
+asignado. Los resultados mensuales, justificativos, reingreso y selección
+oficial (funcionalidad competitiva) fueron removidos por completo; lo que
+queda de este módulo es exclusivamente la asignación de alumnos a
 niveles/grupos de entrenamiento.
 """
 from sqlalchemy.orm import Session
@@ -98,7 +101,7 @@ class RankingServicio:
 
     # --- Listados para frontend -----------------------------------------------
     def listar_asignaciones(self) -> list[AsignacionRankingResponseDTO]:
-        rankings = self.repo.listar_todos(solo_activos=True)
+        rankings = self.repo.listar_todos()
         resultado = []
         for r in rankings:
             nivel = r.nivel_ranking
@@ -109,7 +112,6 @@ class RankingServicio:
                     nivel_ranking_id=r.nivel_ranking_id,
                     nivel_ranking_nombre=nivel.nombre if nivel else None,
                     nivel_ranking_numero=nivel.numero_nivel if nivel else 0,
-                    esta_en_ranking=r.esta_en_ranking,
                 )
             )
         return resultado
@@ -126,9 +128,7 @@ class RankingServicio:
         filas = PersonaRepositorio(self.db).listar_por_rol_con_ranking(TipoRol.ALUMNO)
         resultado: list[AlumnoConNivelDTO] = []
         for alumno, ranking in filas:
-            nivel_id = None
-            if ranking is not None and ranking.esta_en_ranking:
-                nivel_id = ranking.nivel_ranking_id
+            nivel_id = ranking.nivel_ranking_id if ranking is not None else None
             resultado.append(
                 AlumnoConNivelDTO(
                     persona_id=alumno.id,
@@ -154,13 +154,13 @@ class RankingServicio:
             ranking = Ranking(persona_id=datos.persona_id, nivel_ranking_id=datos.nivel_ranking_id)
             return self.repo.crear(ranking)
 
-        if ranking.esta_en_ranking and ranking.nivel_ranking_id is not None:
+        # Tener nivel ES estar asignado: no hay flag aparte que consultar.
+        if ranking.nivel_ranking_id is not None:
             raise OperacionInvalida(
                 "Esta persona ya tiene un nivel de ranking asignado; use el "
                 "endpoint de movimiento para reasignarla"
             )
         ranking.nivel_ranking_id = datos.nivel_ranking_id
-        ranking.esta_en_ranking = True
         return self.repo.guardar_cambios(ranking)
 
     def mover_de_nivel(self, persona_id: int, nuevo_nivel_id: int) -> Ranking:
@@ -178,7 +178,7 @@ class RankingServicio:
         return self.repo.guardar_cambios(ranking)
 
     def obtener_tabla_de_nivel(self, nivel_id: int) -> list[TablaRankingItemDTO]:
-        """Roster de un nivel (persona_id + nombre + esta_en_ranking).
+        """Roster de un nivel (persona_id + nombre).
 
         Ex-E03-RF010 ("tabla de posiciones"): ya no ordena ni expone
         posición/puntaje (ver `TablaRankingItemDTO`). Se mantiene porque el
@@ -187,12 +187,11 @@ class RankingServicio:
         (ver apply-progress de `limpieza-asistencia-y-nivel-entrenador`
         slice E)."""
         NivelRankingServicio(self.db).obtener_nivel(nivel_id)  # 404 si no existe
-        rankings = self.repo.listar_por_nivel(nivel_id, solo_activos=True)
+        rankings = self.repo.listar_por_nivel(nivel_id)
         return [
             TablaRankingItemDTO(
                 persona_id=r.persona_id,
                 persona_nombre_completo=f"{r.persona.nombres} {r.persona.apellidos}",
-                esta_en_ranking=r.esta_en_ranking,
             )
             for r in rankings
         ]
@@ -205,14 +204,12 @@ class RankingServicio:
                 persona_id=persona_id,
                 nivel_ranking_id=None,
                 nivel_ranking_nombre=None,
-                esta_en_ranking=False,
             )
         nivel = ranking.nivel_ranking
         return PerfilRankingAlumnoDTO(
             persona_id=persona_id,
             nivel_ranking_id=ranking.nivel_ranking_id,
             nivel_ranking_nombre=(nivel.nombre if nivel else None),
-            esta_en_ranking=ranking.esta_en_ranking,
         )
 
 

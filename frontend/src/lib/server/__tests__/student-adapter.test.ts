@@ -79,12 +79,28 @@ describe("buildRankingView", () => {
       personaId: 5,
       nivelRankingId: 1,
       nivelRankingNombre: "Avanzados",
-      estaEnRanking: true,
     };
     expect(buildRankingView(perfil)).toEqual({
       status: "available",
+      nivelRankingId: 1,
       nivelNombre: "Avanzados",
-      estaEnRanking: true,
+    });
+  });
+
+  // `estaEnRanking` was a permanently-true flag with no writer; the level id
+  // is now the only assignment signal, so it has to reach the view. A student
+  // with no level yet must arrive as `nivelRankingId: null`, not as a missing
+  // field the UI would read as "assigned".
+  it("carries a null nivelRankingId through for a student with no level yet", () => {
+    const perfil: BackendPerfilRanking = {
+      personaId: 7,
+      nivelRankingId: null,
+      nivelRankingNombre: null,
+    };
+    expect(buildRankingView(perfil)).toEqual({
+      status: "available",
+      nivelRankingId: null,
+      nivelNombre: null,
     });
   });
 });

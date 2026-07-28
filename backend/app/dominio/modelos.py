@@ -466,46 +466,28 @@ class Enfermedades(Base):
 # ---------------------------------------------------------------------------
 # Ranking (E03)
 #
-# Regla E03 (actualizada — el comentario original de este bloque describía una
-# fórmula desactualizada de 90/80/70... que NO corresponde a los requisitos
-# reales; se corrige aquí):
-#   - Fórmula de puntos (RF004), definida junto con el equipo a partir de los
-#     tres anclajes del requisito (puesto 1 = 90, puesto 90+ = 1, descenso
-#     proporcional entre medio): puntos(p) = max(91 - p, 1). Implementada en
-#     app.servicios_negocio.ranking_servicio.calcular_puntos_por_posicion.
-#   - Es OBLIGATORIO diferenciar un alumno que "No participó" de uno que quedó
-#     en "Último lugar con 0 puntos". Se resuelve con `participo` (Boolean):
-#       * participo=False  -> No figura en el ranking (no suma, no se muestra).
-#       * participo=True   -> Sí figura, aunque el puntaje sea 0 (último lugar).
-#   - `esta_en_ranking` es el flag de VISIBILIDAD usado por los endpoints del
-#     frontend. Los dos mecanismos que antes lo ponían en False
-#     automáticamente ya no existen: la tarea de Celery Beat de limpieza por
-#     inactividad (dependía de `ultimo_combate_o_asistencia`, campo también
-#     removido -- ver apply-progress de `limpieza-asistencia-y-nivel-
-#     entrenador` slice E) y el cierre mensual manual RF007 (removido en la
-#     slice B2 del mismo change). Hoy la baja es manual/administrativa.
+# Ya NO es un ranking competitivo: toda esa funcionalidad (puntos, posiciones,
+# cierre mensual, justificativos, reingreso) fue derogada por decisión de
+# producto. Lo único que queda de esta tabla es la ASIGNACIÓN de un alumno a
+# un nivel/grupo de entrenamiento, y por eso su estado se reduce a una sola
+# columna de negocio:
 #   - `nivel_ranking_id`: el nivel de ranking ES el grupo de entrenamiento
 #     (ver NivelRanking arriba). Puede ser NULL momentáneamente entre que se
 #     crea la fila de Ranking (alumno nuevo) y el Entrenador le asigna nivel
 #     inicial (RF002) -- por eso es nullable, no obligatorio en el modelo.
+#     Su presencia ES el estado de asignación: no hay un flag aparte que
+#     pueda contradecirla.
+#
+# Las columnas `puntaje_acumulado`, `posicion_actual`, `participo` y
+# `esta_en_ranking` existieron aquí y fueron eliminadas: las tres primeras
+# perdieron a su único escritor (el cierre mensual RF007) y `esta_en_ranking`
+# nunca tuvo ningún camino -- automático ni manual -- que lo pusiera en False,
+# así que era permanentemente True para toda fila.
 # ---------------------------------------------------------------------------
 class Ranking(Base):
     __tablename__ = "ranking"
     id: Mapped[int] = mapped_column(primary_key=True)
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), unique=True)
-    # Congelados: el único escritor era el cierre mensual RF007 (removido en
-    # slice B2 de `limpieza-asistencia-y-nivel-entrenador`). Ya no se exponen
-    # en TablaRankingItemDTO/PerfilRankingAlumnoDTO/AsignacionRankingResponseDTO;
-    # siguen en el modelo solo porque RankingResponseDTO (asignar-nivel-inicial,
-    # mover-de-nivel) todavía los declara.
-    puntaje_acumulado: Mapped[int] = mapped_column(default=0)
-    posicion_actual: Mapped[Optional[int]] = mapped_column(nullable=True)
-
-    # --- Diferenciación explícita E03 ---
-    participo: Mapped[bool] = mapped_column(Boolean, default=False)
-    # ----------------------------------------------------------------------
-
-    esta_en_ranking: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # --- E03-RF002/RF009: nivel operativo actual (= grupo de entrenamiento) ---
     nivel_ranking_id: Mapped[Optional[int]] = mapped_column(
@@ -528,7 +510,7 @@ class Notificacion(Base):
     mensaje: Mapped[str] = mapped_column(String(255))
     leida: Mapped[bool] = mapped_column(Boolean, default=False)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
-    # Id de la entidad relacionada (ej. el Ranking o JustificativoRanking que
+    # Id de la entidad relacionada (ej. el Ranking o la Membresia que
     # originó la notificación), sin FK estricta porque el tipo de entidad
     # varía según `tipo` -- mantenerlo simple evita una jerarquía de tablas.
     entidad_relacionada_id: Mapped[Optional[int]] = mapped_column(nullable=True)

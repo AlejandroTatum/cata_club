@@ -1,9 +1,10 @@
 /**
  * BFF proxy — GET /api/ranking/asignaciones
  *
- * Returns all students in the ranking with their assigned level,
- * position and score. Translates the backend response into the
- * shape the frontend expects.
+ * Returns all students in the ranking with their assigned level. There is no
+ * position or score: the competitive ranking was removed, and those columns
+ * no longer exist. Translates the backend response into the shape the
+ * frontend expects.
  */
 
 import { NextRequest, NextResponse } from "next/server";

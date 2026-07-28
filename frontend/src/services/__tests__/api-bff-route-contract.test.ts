@@ -254,16 +254,20 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
   }
 
   it("crearHorario's body is accepted by POST /api/groups/horarios", async () => {
-    // Shape identical to the DTO `groups/page.tsx` builds on submit —
-    // `nivel_ranking_id` included, because the real UI sends it.
-    const clientBody = await captureBody(() =>
-      crearHorario({
-        dia_semana: "LUNES",
-        categoria: "COMPETITIVO",
-        entrenador_id: 5,
-        nivel_ranking_id: 3,
-      }),
-    );
+    // Shape identical to the DTO `groups/page.tsx` builds on submit. The UI
+    // no longer sends `nivel_ranking_id` (dropped column, `c4d5e6f7a8b9`),
+    // but a stale client still could, so it is injected raw below to keep
+    // pinning that the route strips unknown keys instead of forwarding them.
+    const clientBody = {
+      ...((await captureBody(() =>
+        crearHorario({
+          dia_semana: "LUNES",
+          categoria: "COMPETITIVO",
+          entrenador_id: 5,
+        }),
+      )) as Record<string, unknown>),
+      nivel_ranking_id: 3,
+    };
 
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ id: 1 }), {
@@ -289,14 +293,17 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
   });
 
   it("actualizarHorario's body is accepted by PUT /api/groups/horarios/[id]", async () => {
-    // `groups/page.tsx` reuses the same `shared` object for updates.
-    const clientBody = await captureBody(() =>
-      actualizarHorario(3, {
-        categoria: "COMPETITIVO",
-        entrenador_id: 5,
-        nivel_ranking_id: 3,
-      }),
-    );
+    // `groups/page.tsx` reuses the same `shared` object for updates. Same
+    // stale-client injection as the POST case above.
+    const clientBody = {
+      ...((await captureBody(() =>
+        actualizarHorario(3, {
+          categoria: "COMPETITIVO",
+          entrenador_id: 5,
+        }),
+      )) as Record<string, unknown>),
+      nivel_ranking_id: 3,
+    };
 
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ id: 3 }), {

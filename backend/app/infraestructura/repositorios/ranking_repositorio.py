@@ -21,7 +21,7 @@ class NivelRankingRepositorio:
     def contar_personas_en_nivel(self, nivel_id: int) -> int:
         return (
             self.db.query(Ranking)
-            .filter(Ranking.nivel_ranking_id == nivel_id, Ranking.esta_en_ranking.is_(True))
+            .filter(Ranking.nivel_ranking_id == nivel_id)
             .count()
         )
 
@@ -42,22 +42,19 @@ class RankingRepositorio:
     def obtener_por_persona(self, persona_id: int) -> Optional[Ranking]:
         return self.db.query(Ranking).filter(Ranking.persona_id == persona_id).first()
 
-    def listar_todos(self, solo_activos: bool = True) -> list[Ranking]:
+    def listar_todos(self) -> list[Ranking]:
         stmt = (
             select(Ranking)
             .options(joinedload(Ranking.persona), joinedload(Ranking.nivel_ranking))
             # Baja lógica: listado OPERATIVO. Un ex-miembro no ocupa cupo de
-            # nivel ni puede ser movido de nivel. `solo_activos` (más abajo)
-            # es otra cosa: se refiere a `Ranking.esta_en_ranking`.
+            # nivel ni puede ser movido de nivel.
             .join(Persona, Persona.id == Ranking.persona_id)
             .where(Persona.activo.is_(True))
+            .order_by(Ranking.persona_id)
         )
-        if solo_activos:
-            stmt = stmt.where(Ranking.esta_en_ranking.is_(True))
-        stmt = stmt.order_by(Ranking.persona_id)
         return list(self.db.execute(stmt).scalars().unique().all())
 
-    def listar_por_nivel(self, nivel_id: int, solo_activos: bool = True) -> list[Ranking]:
+    def listar_por_nivel(self, nivel_id: int) -> list[Ranking]:
         """Roster de un nivel. Ordena por `persona_id` (determinístico) --
         antes ordenaba por `posicion_actual`, pero ese campo quedó congelado
         en NULL para todas las filas desde que se removió `cerrar_mes()`
@@ -70,10 +67,8 @@ class RankingRepositorio:
             # un nivel es operativo (quién entrena y compite en él hoy).
             .join(Persona, Persona.id == Ranking.persona_id)
             .where(Ranking.nivel_ranking_id == nivel_id, Persona.activo.is_(True))
+            .order_by(Ranking.persona_id.asc())
         )
-        if solo_activos:
-            stmt = stmt.where(Ranking.esta_en_ranking.is_(True))
-        stmt = stmt.order_by(Ranking.persona_id.asc())
         return list(self.db.execute(stmt).scalars().all())
 
     def crear(self, ranking: Ranking) -> Ranking:

@@ -72,7 +72,7 @@ type HorariosState =
 
 function levelTagLabel(profile: StudentProfileSummary): string | null {
   const { ranking } = profile;
-  if (ranking.status !== "available" || !ranking.estaEnRanking) return null;
+  if (ranking.status !== "available" || ranking.nivelRankingId === null) return null;
   return formatLevelName(ranking.nivelNombre);
 }
 

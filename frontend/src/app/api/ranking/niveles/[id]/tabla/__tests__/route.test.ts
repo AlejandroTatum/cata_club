@@ -33,7 +33,6 @@ function getRequest(cookie = ""): NextRequest {
 const tablaItem = {
   personaId: 3,
   personaNombreCompleto: "Sofia Alumna",
-  estaEnRanking: true,
 };
 
 beforeEach(() => {

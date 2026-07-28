@@ -138,7 +138,7 @@ El sistema gestiona un club de tenis de mesa con:
 - **Ranking** por niveles con asignación y movimiento de alumnos
 - **Clases extra** para membresías personalizadas
 - **Fichas médicas** y antecedentes del club
-- **Automatizaciones** (Celery Beat): alertas de vencimiento, limpieza de ranking
+- **Automatizaciones** (Celery Beat): alertas de vencimiento de membresía y marcado automático de membresías vencidas
 
 ## Despliegue
 

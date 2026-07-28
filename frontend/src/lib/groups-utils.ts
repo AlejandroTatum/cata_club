@@ -72,8 +72,8 @@ export interface HorarioGroupRow {
 
 /**
  * A visual grouping of `Horario` rows that share categoria, horaInicio,
- * horaFin, entrenadorId and nivelRankingId — the "same weekly schedule,
- * recurring on N días" case. Built by `groupHorarios()`.
+ * horaFin and entrenadorId — the "same weekly schedule, recurring on N días"
+ * case. Built by `groupHorarios()`.
  */
 export interface HorarioGroup {
   key: string;
@@ -81,7 +81,6 @@ export interface HorarioGroup {
   horaInicio: string;
   horaFin: string;
   entrenadorId: number;
-  nivelRankingId: number | null;
   rows: HorarioGroupRow[];
 }
 
@@ -386,18 +385,20 @@ export function buildTrainingSessions(
 /** Monday→Sunday order used to sort a `HorarioGroup`'s rows. */
 const DIA_SEMANA_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
 
-/** Composite grouping key: same categoria + horario + entrenador + nivel = same weekly schedule. */
+/** Composite grouping key: same categoria + horario + entrenador = same weekly schedule. */
 function horarioGroupKey(h: Horario): string {
-  return `${h.categoria}|${h.horaInicio}|${h.horaFin}|${h.entrenadorId}|${h.nivelRankingId ?? "null"}`;
+  return `${h.categoria}|${h.horaInicio}|${h.horaFin}|${h.entrenadorId}`;
 }
 
 /**
  * Group flat `Horario` rows (one per día) that share (categoria, horaInicio,
- * horaFin, entrenadorId, nivelRankingId) into a single `HorarioGroup`,
- * collecting each row's día into `rows`, sorted Monday→Sunday.
+ * horaFin, entrenadorId) into a single `HorarioGroup`, collecting each row's
+ * día into `rows`, sorted Monday→Sunday.
  *
- * Rows that differ in ANY of the 5 grouping fields land in separate groups
- * (e.g. a different entrenadorId), even if the rest match.
+ * Rows that differ in ANY of the 4 grouping fields land in separate groups
+ * (e.g. a different entrenadorId), even if the rest match. A 5th segment
+ * used to hash `nivelRankingId`, but the backend dropped that column
+ * (migration `c4d5e6f7a8b9`) and never sends it, so it was a constant.
  */
 export function groupHorarios(horarios: Horario[]): HorarioGroup[] {
   const groupsByKey = new Map<string, HorarioGroup>();
@@ -412,7 +413,6 @@ export function groupHorarios(horarios: Horario[]): HorarioGroup[] {
         horaInicio: h.horaInicio,
         horaFin: h.horaFin,
         entrenadorId: h.entrenadorId,
-        nivelRankingId: h.nivelRankingId,
         rows: [],
       };
       groupsByKey.set(key, group);

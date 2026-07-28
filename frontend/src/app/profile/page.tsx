@@ -453,7 +453,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const fechaCreacion = props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
 
   const nivel =
-    props.kind === "student" && self && self.ranking.status === "available" && self.ranking.estaEnRanking
+    props.kind === "student" && self && self.ranking.status === "available" && self.ranking.nivelRankingId !== null
       ? formatLevelName(self.ranking.nivelNombre)
       : null;
 
@@ -785,7 +785,7 @@ function DependantRow({ profile }: { profile: StudentProfileSummary }): React.Re
   const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
   const membership = describeMembership(profile.membership);
   const nivel =
-    profile.ranking.status === "available" && profile.ranking.estaEnRanking
+    profile.ranking.status === "available" && profile.ranking.nivelRankingId !== null
       ? formatLevelName(profile.ranking.nivelNombre)
       : null;
 

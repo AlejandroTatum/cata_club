@@ -512,8 +512,6 @@ def main() -> None:
                 ranking = Ranking(
                     persona_id=hijo_persona.id,
                     nivel_ranking_id=hijo["nivel_ranking_id"],
-                    esta_en_ranking=True,
-                    puntaje_acumulado=0,
                 )
                 db.add(ranking)
                 hijos_creados += 1
@@ -570,7 +568,6 @@ def main() -> None:
             ranking = Ranking(
                 persona_id=alu_persona.id,
                 nivel_ranking_id=alu["nivel_ranking_id"],
-                esta_en_ranking=True,
             )
             db.add(ranking)
 

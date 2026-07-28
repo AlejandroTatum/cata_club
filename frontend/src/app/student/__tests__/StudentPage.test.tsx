@@ -265,7 +265,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
       ...PORTAL,
       self: {
         ...PORTAL.self!,
-        ranking: { status: "available", nivelNombre: "Nivel 3", estaEnRanking: true },
+        ranking: { status: "available", nivelRankingId: 3, nivelNombre: "Nivel 3" },
         membership: { id: 4, estado: "ACTIVA", personaId: 9, montoAplicado: "25.00", categoria: "Mensual", modalidad: "MENSUAL", franjaHoraria: "Tarde" },
       },
     });

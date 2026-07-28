@@ -105,11 +105,15 @@ describe("describeRanking", () => {
     expect(describeRanking(ranking).label).toBe("No disponible");
   });
 
+  // "Sin nivel asignado" now hangs off `nivelRankingId`, not the removed
+  // `estaEnRanking` flag. That flag was permanently true whenever a ranking
+  // row existed, so the only case it ever caught was "no row at all"; a row
+  // that existed without a level was mislabelled as active.
   it("describes an available ranking with no nivel assigned yet", () => {
     const ranking: StudentRankingSummary = {
       status: "available",
+      nivelRankingId: null,
       nivelNombre: null,
-      estaEnRanking: false,
     };
     const result = describeRanking(ranking);
     expect(result.label).toBe("Sin nivel asignado");
@@ -119,13 +123,27 @@ describe("describeRanking", () => {
   it("describes an active ranking without exposing position/points (removed — frozen data, no writer since cerrar_mes() removal)", () => {
     const ranking: StudentRankingSummary = {
       status: "available",
+      nivelRankingId: 4,
       nivelNombre: "Intermedios",
-      estaEnRanking: true,
     };
     const result = describeRanking(ranking);
     expect(result.label).toBe("Intermedios");
     expect(result.detail).toBe("Activo en este nivel.");
     expect(result.detail).not.toMatch(/Posición|pts/);
+    expect(result.tone).toBe("ok");
+  });
+
+  it("falls back to a placeholder label for an assigned nivel whose nombre is null", () => {
+    // `NivelRanking.nombre` is nullable, so an assigned student can have a
+    // level id and no name. That is still ASSIGNED — branching on the name
+    // instead of the id would silently demote them to "Sin nivel asignado".
+    const ranking: StudentRankingSummary = {
+      status: "available",
+      nivelRankingId: 9,
+      nivelNombre: null,
+    };
+    const result = describeRanking(ranking);
+    expect(result.label).toBe("Nivel sin nombre");
     expect(result.tone).toBe("ok");
   });
 });

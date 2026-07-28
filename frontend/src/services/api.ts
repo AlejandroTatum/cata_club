@@ -422,7 +422,6 @@ export interface NivelConOcupacion {
 export interface TablaRankingItem {
   personaId: number;
   personaNombreCompleto: string;
-  estaEnRanking: boolean;
 }
 
 /** One student's attendance mark, part of a `registerAttendance` batch. */
@@ -494,6 +493,10 @@ export async function registerAttendance(data: RegisterAttendanceRequest): Promi
  * `@/services/categorias`) — the response still carries them for display,
  * but `CrearHorarioDTO`/`ActualizarHorarioDTO` below no longer accept them
  * as client input.
+ *
+ * There is no `nivelRankingId`: a horario is not tied to a ranking level.
+ * The backing column was dropped by migration `c4d5e6f7a8b9`, and a student's
+ * level lives on `Ranking.nivel_ranking_id` alone.
  */
 export interface Horario {
   id: number;
@@ -502,7 +505,6 @@ export interface Horario {
   horaFin: string;
   categoria: string;
   entrenadorId: number;
-  nivelRankingId: number | null;
 }
 
 /** `hora_inicio`/`hora_fin` are intentionally absent: the backend derives and
@@ -513,7 +515,6 @@ export interface CrearHorarioDTO {
   dia_semana: string;
   categoria: string;
   entrenador_id: number;
-  nivel_ranking_id?: number | null;
 }
 
 /** See `CrearHorarioDTO` — `hora_inicio`/`hora_fin` are dropped here too. */
@@ -521,7 +522,6 @@ export interface ActualizarHorarioDTO {
   dia_semana?: string;
   categoria?: string;
   entrenador_id?: number;
-  nivel_ranking_id?: number | null;
 }
 
 /** Fetch all training schedules. */
@@ -722,8 +722,10 @@ function isEnrollmentResponse(value: unknown): value is EnrollmentResponse {
 export type StudentRankingSummary =
   | {
       status: "available";
+      /** `null` means "not assigned to a level yet". Replaces the removed
+       *  `estaEnRanking`, a flag no code path could ever set to false. */
+      nivelRankingId: number | null;
       nivelNombre: string | null;
-      estaEnRanking: boolean;
     }
   | { status: "unavailable"; reason: "forbidden" | "error" };
 
@@ -820,7 +822,6 @@ export interface AsignacionRanking {
   nivelRankingId: number;
   nivelRankingNombre: string | null;
   nivelRankingNumero: number;
-  estaEnRanking: boolean;
 }
 
 export async function fetchAsignacionesRanking(): Promise<AsignacionRanking[]> {

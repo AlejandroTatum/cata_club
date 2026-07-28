@@ -288,9 +288,9 @@ describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () 
 
 describe("GroupsPage — categoria card grid (one card per training group)", () => {
   const RECURRING_ROWS = [
-    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
-    { id: 102, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
-    { id: 103, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
+    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
+    { id: 102, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
+    { id: 103, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
   ];
 
   /** The club's real shape: five weekdays of one categoria, plus its Saturday. */
@@ -302,7 +302,6 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
       horaFin: "20:00",
       categoria: "COMPETITIVO",
       entrenadorId: 1,
-      nivelRankingId: 2,
     })),
   ];
 
@@ -479,8 +478,8 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
 
   it("keeps a categoria whose weekdays have different trainers on ONE card, naming both", async () => {
     mockFetchHorarios.mockResolvedValue([
-      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: null },
-      { id: 202, diaSemana: "MARTES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2, nivelRankingId: null },
+      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
+      { id: 202, diaSemana: "MARTES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2 },
     ]);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
@@ -496,8 +495,8 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
 
   it("asks which configuration to edit when a categoria's weekdays are split", async () => {
     mockFetchHorarios.mockResolvedValue([
-      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: null },
-      { id: 202, diaSemana: "MARTES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2, nivelRankingId: null },
+      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
+      { id: 202, diaSemana: "MARTES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2 },
     ]);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
@@ -522,7 +521,6 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
           horaFin: `1${6 + c}:00`,
           categoria,
           entrenadorId: 1,
-          nivelRankingId: null,
         })),
       ),
     );
@@ -542,7 +540,7 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
     mockFetchNivelesConOcupacion.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
     mockFetchHorarios.mockResolvedValue([
-      { id: 801, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
+      { id: 801, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
     ]);
     mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
   });
@@ -579,7 +577,7 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
     mockFetchNivelesConOcupacion.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
     mockFetchHorarios.mockResolvedValue([
-      { id: 901, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "NO_EXISTE", entrenadorId: 1, nivelRankingId: 2 },
+      { id: 901, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "NO_EXISTE", entrenadorId: 1 },
     ]);
     mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
   });
@@ -606,8 +604,8 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
 
 describe("GroupsPage — day-diffing unified save (PR2b)", () => {
   const GROUP_ROWS = [
-    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7, nivelRankingId: 2 },
-    { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7, nivelRankingId: 2 },
+    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
+    { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
   ];
 
   beforeEach(() => {
@@ -644,11 +642,11 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
 
     await waitFor(() => {
       expect(mockCrearHorario).toHaveBeenCalledWith(
-        expect.objectContaining({ dia_semana: "VIERNES", categoria: "COMPETITIVO", entrenador_id: 7, nivel_ranking_id: 2 }),
+        expect.objectContaining({ dia_semana: "VIERNES", categoria: "COMPETITIVO", entrenador_id: 7 }),
       );
     });
-    expect(mockActualizarHorario).toHaveBeenCalledWith(301, expect.objectContaining({ categoria: "COMPETITIVO", entrenador_id: 7, nivel_ranking_id: 2 }));
-    expect(mockActualizarHorario).toHaveBeenCalledWith(303, expect.objectContaining({ categoria: "COMPETITIVO", entrenador_id: 7, nivel_ranking_id: 2 }));
+    expect(mockActualizarHorario).toHaveBeenCalledWith(301, expect.objectContaining({ categoria: "COMPETITIVO", entrenador_id: 7 }));
+    expect(mockActualizarHorario).toHaveBeenCalledWith(303, expect.objectContaining({ categoria: "COMPETITIVO", entrenador_id: 7 }));
   });
 
   it("unticking a día with zero enrolled students deletes it silently, without a confirmation dialog", async () => {
@@ -711,8 +709,8 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
   // Two categorias, therefore two cards: the accordion is per card, and the
   // card is the categoria now.
   const GROUPS = [
-    { id: 401, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: null },
-    { id: 402, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 2, nivelRankingId: null },
+    { id: 401, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
+    { id: 402, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 2 },
   ];
 
   beforeEach(() => {
@@ -804,13 +802,13 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
 
 describe("GroupsPage — grupo-level roster: union across días, assign/unassign to every día (bugfix)", () => {
   const MULTI_DIA_GROUP_ROWS = [
-    { id: 601, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: 2 },
-    { id: 602, diaSemana: "MIERCOLES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1, nivelRankingId: 2 },
+    { id: 601, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
+    { id: 602, diaSemana: "MIERCOLES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
   ];
   // A second training group — a different categoria, therefore a different
   // card. It exists to prove the roster union stops at the categoria it
   // belongs to instead of pooling every schedule on the screen.
-  const SINGLE_DIA_ROW = { id: 603, diaSemana: "VIERNES", horaInicio: "20:00", horaFin: "21:15", categoria: "ADULTOS", entrenadorId: 9, nivelRankingId: 2 };
+  const SINGLE_DIA_ROW = { id: 603, diaSemana: "VIERNES", horaInicio: "20:00", horaFin: "21:15", categoria: "ADULTOS", entrenadorId: 9 };
 
   // Nivel-matched (grupoId "2") but NEVER enrolled via AlumnoHorario for any
   // row above — proves the roster is sourced from fetchAlumnosPorHorario, not
@@ -1112,9 +1110,9 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
   }
 
   const GROUP_ROWS = [
-    { id: 701, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5, nivelRankingId: 2 },
-    { id: 702, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5, nivelRankingId: 2 },
-    { id: 703, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5, nivelRankingId: 2 },
+    { id: 701, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5 },
+    { id: 702, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5 },
+    { id: 703, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5 },
   ];
 
   beforeEach(() => {
@@ -1215,14 +1213,14 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
 
 describe("GroupsPage — save resyncs local state after a mid-sequence failure (bugfix)", () => {
   const GROUP_ROWS = [
-    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7, nivelRankingId: 2 },
-    { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7, nivelRankingId: 2 },
+    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
+    { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
   ];
   // Simulates the backend state AFTER the partial failure: día VIERNES (705)
   // was already created successfully before actualizarHorario(303) rejected.
   const RESYNCED_ROWS = [
     ...GROUP_ROWS,
-    { id: 705, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7, nivelRankingId: 2 },
+    { id: 705, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
   ];
 
   beforeEach(() => {
@@ -1278,7 +1276,7 @@ describe("GroupsPage — save resyncs local state after a mid-sequence failure (
 
 describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary auto-fill)", () => {
   const GROUP_ROWS = [
-    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7, nivelRankingId: 2 },
+    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
   ];
 
   beforeEach(() => {

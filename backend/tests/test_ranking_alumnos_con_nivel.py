@@ -48,11 +48,8 @@ def _crear_nivel(db_session, numero_nivel=1, nombre="Elite"):
     return nivel
 
 
-def _asignar_ranking(db_session, persona_id, nivel_id, esta_en_ranking=True):
-    ranking = Ranking(
-        persona_id=persona_id, nivel_ranking_id=nivel_id,
-        esta_en_ranking=esta_en_ranking,
-    )
+def _asignar_ranking(db_session, persona_id, nivel_id):
+    ranking = Ranking(persona_id=persona_id, nivel_ranking_id=nivel_id)
     db_session.add(ranking)
     db_session.commit()
     return ranking
@@ -120,23 +117,29 @@ def test_alumno_sin_ranking_aparece_con_nivel_nulo(db_session):
     """Un alumno sin fila de `Ranking` es un caso legítimo (todavía no fue
     asignado a un grupo). Debe aparecer con `nivel_ranking_id = None` — es
     exactamente la columna "Sin nivel asignado" del panel. Un INNER JOIN lo
-    haría desaparecer del roster sin error visible."""
+    haría desaparecer del roster sin error visible.
+
+    El otro camino al mismo estado es tener fila de `Ranking` pero sin nivel
+    (`nivel_ranking_id` NULL): pasa entre que se crea la fila y el entrenador
+    asigna el nivel inicial. Desde que se eliminó `esta_en_ranking`, esos dos
+    son los ÚNICOS caminos a "sin nivel", y ambos se leen de la misma
+    columna."""
     nivel = _crear_nivel(db_session)
     con_ranking = _crear_alumno(
         db_session, "Ana", "Alvarez", "1710034100",
     )
     _asignar_ranking(db_session, con_ranking.id, nivel.id)
     sin_ranking = _crear_alumno(db_session, "Beto", "Benitez", "1710034101")
-    # Baja administrativa: tiene fila, pero fuera del ranking -> también null.
-    dado_de_baja = _crear_alumno(db_session, "Carla", "Cordova", "1710034102")
-    _asignar_ranking(db_session, dado_de_baja.id, nivel.id, esta_en_ranking=False)
+    # Fila creada pero sin nivel todavía -> también null.
+    sin_nivel = _crear_alumno(db_session, "Carla", "Cordova", "1710034102")
+    _asignar_ranking(db_session, sin_nivel.id, None)
 
     resultado = RankingServicio(db_session).listar_alumnos_con_nivel()
     por_persona = {dto.persona_id: dto for dto in resultado}
 
     assert por_persona[con_ranking.id].nivel_ranking_id == nivel.id
     assert por_persona[sin_ranking.id].nivel_ranking_id is None
-    assert por_persona[dado_de_baja.id].nivel_ranking_id is None
+    assert por_persona[sin_nivel.id].nivel_ranking_id is None
     assert por_persona[sin_ranking.id].nombres == "Beto"
     assert por_persona[sin_ranking.id].apellidos == "Benitez"
 

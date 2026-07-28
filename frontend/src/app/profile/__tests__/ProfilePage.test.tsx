@@ -310,8 +310,8 @@ describe("ProfilePage — student/representante summary view", () => {
         fechaNacimiento: "2012-05-10",
         ranking: {
           status: "available",
+          nivelRankingId: 3,
           nivelNombre: "Nivel 3",
-          estaEnRanking: true,
         },
         recentSessions: [],
         membership: { id: 1, estado: "ACTIVA", personaId: 1, montoAplicado: "85.00", categoria: "Mensual", modalidad: "MENSUAL", franjaHoraria: "Tarde" },

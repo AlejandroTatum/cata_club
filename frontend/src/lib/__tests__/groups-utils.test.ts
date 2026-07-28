@@ -467,12 +467,12 @@ describe("buildTrainingSessions", () => {
 
 describe("groupHorarios", () => {
   const RECURRING_ROWS: Horario[] = [
-    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
-    { id: 102, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
-    { id: 103, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1, nivelRankingId: 2 },
+    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
+    { id: 102, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
+    { id: 103, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
   ];
 
-  it("collapses 3 rows sharing categoria/horario/entrenador/nivel into 1 group with 3 rows sorted Mon→Sun", () => {
+  it("collapses 3 rows sharing categoria/horario/entrenador into 1 group with 3 rows sorted Mon→Sun", () => {
     const groups = groupHorarios(RECURRING_ROWS);
 
     expect(groups).toHaveLength(1);
@@ -480,9 +480,18 @@ describe("groupHorarios", () => {
     expect(groups[0].horaInicio).toBe("18:00");
     expect(groups[0].horaFin).toBe("20:00");
     expect(groups[0].entrenadorId).toBe(1);
-    expect(groups[0].nivelRankingId).toBe(2);
     expect(groups[0].rows.map((r) => r.diaSemana)).toEqual(["LUNES", "MIERCOLES", "VIERNES"]);
     expect(groups[0].rows.map((r) => r.id)).toEqual([101, 103, 102]);
+  });
+
+  it("does not carry a nivelRankingId on the group", () => {
+    // The backing DB column was dropped by migration `c4d5e6f7a8b9`, so
+    // `/groups/horarios` never sends one. Keeping it in the dedup key meant
+    // every real row hashed on the same literal `"null"` — a key segment
+    // that could not vary. See the deleted "null vs non-null nivel" case.
+    const [group] = groupHorarios(RECURRING_ROWS);
+    expect(group).not.toHaveProperty("nivelRankingId");
+    expect(group.key).not.toMatch(/null/);
   });
 
   it("keeps rows with a different entrenadorId in a separate group", () => {
@@ -498,19 +507,6 @@ describe("groupHorarios", () => {
     expect(entrenadorIds).toEqual([1, 2]);
   });
 
-  it("treats null nivelRankingId as its own group key distinct from a non-null nivel", () => {
-    const rows: Horario[] = [
-      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 5, nivelRankingId: null },
-      { id: 202, diaSemana: "MARTES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 5, nivelRankingId: 3 },
-    ];
-    const groups = groupHorarios(rows);
-
-    expect(groups).toHaveLength(2);
-    const withNull = groups.find((g) => g.nivelRankingId === null)!;
-    expect(withNull.rows).toHaveLength(1);
-    expect(withNull.rows[0].id).toBe(201);
-  });
-
   it("returns an empty array for an empty input", () => {
     expect(groupHorarios([])).toEqual([]);
   });
@@ -518,12 +514,11 @@ describe("groupHorarios", () => {
 
 describe("diffGroupSave", () => {
   const EXISTING_GROUP: HorarioGroup = {
-    key: "COMPETITIVO|18:00|20:00|1|2",
+    key: "COMPETITIVO|18:00|20:00|1",
     categoria: "COMPETITIVO",
     horaInicio: "18:00",
     horaFin: "20:00",
     entrenadorId: 1,
-    nivelRankingId: 2,
     rows: [
       { id: 101, diaSemana: "LUNES" },
       { id: 103, diaSemana: "MIERCOLES" },

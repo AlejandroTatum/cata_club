@@ -127,6 +127,68 @@ def test_tabla_de_nivel_no_expone_posicion_ni_puntaje(client):
     assert fila["personaId"] == persona["id"]
 
 
+# --- Residuo competitivo: columnas y campos eliminados ----------------------
+# Las tres columnas congeladas (`puntaje_acumulado`, `posicion_actual`,
+# `participo`) y el flag `esta_en_ranking` ya no existen: las primeras nunca
+# volvieron a tener escritor tras remover el cierre mensual, y el flag no
+# tenía ningún camino que lo pusiera en False (la "baja manual" que describía
+# el comentario del modelo nunca se implementó), así que era permanentemente
+# True para toda fila. Hoy la pertenencia a un nivel se lee de
+# `nivel_ranking_id`, que es el único dato que alguien puede mover.
+def test_el_modelo_ranking_ya_no_tiene_columnas_del_ranking_competitivo():
+    from app.dominio.modelos import Ranking
+
+    columnas = set(Ranking.__table__.columns.keys())
+    assert columnas.isdisjoint(
+        {"puntaje_acumulado", "posicion_actual", "participo", "esta_en_ranking"}
+    ), f"Quedan columnas del ranking competitivo en `ranking`: {sorted(columnas)}"
+
+
+def test_asignar_nivel_inicial_no_expone_campos_del_ranking_competitivo(client):
+    nivel = _crear_nivel(client, 3, "Principiante")
+    persona = _crear_persona(client, "1719990011")
+
+    resp = _asignar_nivel(client, persona["id"], nivel["id"])
+
+    assert resp.status_code == 201
+    cuerpo = resp.json()
+    for campo in ("puntajeAcumulado", "posicionActual", "participo", "estaEnRanking"):
+        assert campo not in cuerpo, f"`{campo}` sigue en la respuesta: {cuerpo}"
+    assert cuerpo["nivelRankingId"] == nivel["id"]
+
+
+def test_mover_de_nivel_no_expone_campos_del_ranking_competitivo(client):
+    origen = _crear_nivel(client, 4, "Origen")
+    destino = _crear_nivel(client, 5, "Destino")
+    persona = _crear_persona(client, "1719990022")
+    _asignar_nivel(client, persona["id"], origen["id"])
+
+    resp = client.patch(
+        f"/api/v1/ranking/{persona['id']}/mover-de-nivel",
+        params={"nuevo_nivel_id": destino["id"]},
+    )
+
+    assert resp.status_code == 200
+    cuerpo = resp.json()
+    for campo in ("puntajeAcumulado", "posicionActual", "participo", "estaEnRanking"):
+        assert campo not in cuerpo, f"`{campo}` sigue en la respuesta: {cuerpo}"
+    assert cuerpo["nivelRankingId"] == destino["id"]
+
+
+def test_asignaciones_tabla_y_perfil_no_exponen_esta_en_ranking(client):
+    nivel = _crear_nivel(client, 6, "Roster")
+    persona = _crear_persona(client, "1719990033")
+    _asignar_nivel(client, persona["id"], nivel["id"])
+
+    asignaciones = client.get("/api/v1/ranking/asignaciones")
+    tabla = client.get(f"/api/v1/ranking/niveles/{nivel['id']}/tabla")
+    perfil = client.get(f"/api/v1/ranking/{persona['id']}/perfil")
+
+    assert "estaEnRanking" not in asignaciones.json()[0]
+    assert "estaEnRanking" not in tabla.json()[0]
+    assert "estaEnRanking" not in perfil.json()
+
+
 # --- Perfil privado del alumno (E04-RF012) ----------------------------------
 def test_perfil_ranking_visible_para_admin_o_entrenador(client):
     nivel = _crear_nivel(client, 1, "Elite")
@@ -153,7 +215,6 @@ def test_perfil_ranking_no_expone_posicion_ni_puntaje(client):
     assert "posicionActual" not in body
     assert "puntajeAcumulado" not in body
     assert body["nivelRankingNombre"] == "Elite"
-    assert body["estaEnRanking"] is True
 
 
 def test_perfil_ranking_ajeno_rechazado_para_alumno(client_sin_permisos):

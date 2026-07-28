@@ -53,7 +53,6 @@ const perfilDisponible = {
   personaId: 5,
   nivelRankingId: 1,
   nivelRankingNombre: "Intermedios",
-  estaEnRanking: true,
 };
 
 beforeEach(() => {

@@ -492,7 +492,6 @@ function makeHorario(overrides: Partial<Horario> = {}): Horario {
     horaFin: "20:00",
     categoria: "COMPETITIVO",
     entrenadorId: 5,
-    nivelRankingId: null,
     ...overrides,
   };
 }

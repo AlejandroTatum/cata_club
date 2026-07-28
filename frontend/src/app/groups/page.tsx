@@ -202,11 +202,14 @@ function DiaTrack({ track, dias }: { track: string[]; dias: string[] }): React.R
   );
 }
 
-/** Shared (non-día) fields edited across the whole day-group at once — PR2b. */
+/** Shared (non-día) fields edited across the whole day-group at once — PR2b.
+ *
+ * A horario has no nivel de ranking: the column was dropped by migration
+ * `c4d5e6f7a8b9` and `HorarioCreateDTO` never accepted one, so the form used
+ * to collect a value the BFF silently discarded. */
 interface HorarioFormData {
   categoria: Categoria;
   entrenador_id: number | null;
-  nivel_ranking_id: number | null;
 }
 
 /** One día-group row pending deletion after student-safety check, awaiting user confirmation. */
@@ -247,7 +250,6 @@ const DEFAULT_CATEGORIA: Categoria = CATEGORIA_OPTIONS[0];
 const EMPTY_FORM: HorarioFormData = {
   categoria: DEFAULT_CATEGORIA,
   entrenador_id: null,
-  nivel_ranking_id: null,
 };
 
 export default function GroupsPage(): React.ReactElement {
@@ -548,7 +550,6 @@ export default function GroupsPage(): React.ReactElement {
     setFormData({
       categoria: (group.categoria as Categoria) ?? DEFAULT_CATEGORIA,
       entrenador_id: group.entrenadorId,
-      nivel_ranking_id: group.nivelRankingId,
     });
     setSelectedDias(new Set(group.rows.map((row) => row.diaSemana)));
   }
@@ -618,7 +619,6 @@ export default function GroupsPage(): React.ReactElement {
     const shared = {
       categoria: formData.categoria,
       entrenador_id: entrenadorId,
-      nivel_ranking_id: formData.nivel_ranking_id,
     };
     try {
       const group: HorarioGroup = editingGroup ?? {
@@ -627,7 +627,6 @@ export default function GroupsPage(): React.ReactElement {
         horaInicio: horarioDe(shared.categoria).horaInicio,
         horaFin: horarioDe(shared.categoria).horaFin,
         entrenadorId: shared.entrenador_id,
-        nivelRankingId: shared.nivel_ranking_id,
         rows: [],
       };
       const diff = diffGroupSave(group, selectedDias);
@@ -817,27 +816,6 @@ export default function GroupsPage(): React.ReactElement {
               {entrenadores.map((entrenador) => (
                 <option key={entrenador.id} value={entrenador.id}>
                   {entrenador.nombreCompleto}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="horario-nivel" className="mb-1 block text-xs font-medium text-cata-text/65">
-              Nivel de ranking <span className="text-cata-text/40">(opcional)</span>
-            </label>
-            <select
-              id="horario-nivel"
-              className="input-field w-full"
-              value={formData.nivel_ranking_id ?? ""}
-              onChange={(e) => setFormData((prev) => ({
-                ...prev,
-                nivel_ranking_id: e.target.value ? Number(e.target.value) : null,
-              }))}
-            >
-              <option value="">Sin nivel asignado</option>
-              {niveles.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.nombre ?? `Nivel ${n.numeroNivel}`}
                 </option>
               ))}
             </select>

@@ -365,7 +365,6 @@ const CATEGORIA_GROUPS: HorarioGroup[] = [
     horaInicio: "18:00",
     horaFin: "20:00",
     entrenadorId: 1,
-    nivelRankingId: 2,
     rows: [
       { id: 101, diaSemana: "LUNES" },
       { id: 102, diaSemana: "MIERCOLES" },
@@ -378,7 +377,6 @@ const CATEGORIA_GROUPS: HorarioGroup[] = [
     horaInicio: "15:00",
     horaFin: "16:00",
     entrenadorId: 2,
-    nivelRankingId: null,
     rows: [
       { id: 201, diaSemana: "LUNES" },
       { id: 202, diaSemana: "MARTES" },
@@ -393,7 +391,6 @@ const CATEGORIA_GROUPS: HorarioGroup[] = [
     horaInicio: "15:00",
     horaFin: "16:00",
     entrenadorId: 7,
-    nivelRankingId: null,
     rows: [{ id: 203, diaSemana: "VIERNES" }],
   },
 ];

@@ -37,12 +37,13 @@ import type { EstadoAsistencia } from "@/types/domain";
 /** `PerfilRankingAlumnoDTO` (see backend app/presentacion/schemas/ranking_schemas.py).
  * No longer carries `posicionActual`/`puntajeAcumulado` — backend stopped
  * exposing them (frozen forever since `cerrar_mes()` was removed; see
- * apply-progress of `limpieza-asistencia-y-nivel-entrenador` slice E). */
+ * apply-progress of `limpieza-asistencia-y-nivel-entrenador` slice E) — nor
+ * `estaEnRanking`, whose column was dropped: it had no writer that could set
+ * it to false, so `nivelRankingId` is the assignment state now. */
 export interface BackendPerfilRanking {
   personaId: number;
   nivelRankingId: number | null;
   nivelRankingNombre: string | null;
-  estaEnRanking: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,8 +53,10 @@ export interface BackendPerfilRanking {
 export type StudentRankingView =
   | {
       status: "available";
+      /** `null` means "not assigned to a level yet" — the only assignment
+       *  signal left after `estaEnRanking` was dropped. */
+      nivelRankingId: number | null;
       nivelNombre: string | null;
-      estaEnRanking: boolean;
     }
   | { status: "unavailable"; reason: "forbidden" | "error" };
 
@@ -217,7 +220,7 @@ export function buildStudentProfileView(
 export function buildRankingView(perfil: BackendPerfilRanking): StudentRankingView {
   return {
     status: "available",
+    nivelRankingId: perfil.nivelRankingId,
     nivelNombre: perfil.nivelRankingNombre,
-    estaEnRanking: perfil.estaEnRanking,
   };
 }

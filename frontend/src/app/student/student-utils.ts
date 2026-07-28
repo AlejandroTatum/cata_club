@@ -92,6 +92,12 @@ export interface RankingDisplay {
  * writer since `cerrar_mes()` was removed) — showing a frozen number as if
  * it were live was the actual reliability bug this addresses. See
  * apply-progress of `limpieza-asistencia-y-nivel-entrenador` slice E.
+ *
+ * "Sin nivel asignado" keys off `nivelRankingId`, not the removed
+ * `estaEnRanking` flag: that flag was true for every ranking row that
+ * existed, so a row created before the trainer picked a level was shown as
+ * "Activo en este nivel" with no level. Reading the level id gets that case
+ * right and covers the old one (no row at all → id null) unchanged.
  */
 export function describeRanking(ranking: StudentRankingSummary): RankingDisplay {
   if (ranking.status === "unavailable") {
@@ -99,7 +105,7 @@ export function describeRanking(ranking: StudentRankingSummary): RankingDisplay 
       ? { label: "No disponible", detail: "Solo el propio alumno puede ver este perfil.", tone: "warn" }
       : { label: "No disponible", detail: "No se pudo consultar el ranking en este momento.", tone: "warn" };
   }
-  if (!ranking.estaEnRanking) {
+  if (ranking.nivelRankingId === null) {
     return { label: "Sin nivel asignado", detail: "Aún no fue asignado a un nivel de ranking.", tone: "warn" };
   }
   return {
