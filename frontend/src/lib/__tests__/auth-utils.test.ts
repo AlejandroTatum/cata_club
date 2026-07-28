@@ -167,8 +167,8 @@ describe("getNavLinksForRole", () => {
   });
 
   it("keeps the trainer's level-assignment section reachable", () => {
-    // Trainers do assign levels: the backend grants ENTRENADOR both
-    // `asignar-nivel-inicial` and `mover-de-nivel`, and `/trainer/nivel` is a
+    // Trainers do assign levels: the backend grants ENTRENADOR the same
+    // `PATCH /personas/{id}/nivel` it grants ADMINISTRADOR, and `/trainer/nivel` is a
     // live screen. The 403 that once justified hiding it came from the roster
     // endpoint, which now has a trainer-readable replacement.
     const links = getNavLinksForRole("trainer");

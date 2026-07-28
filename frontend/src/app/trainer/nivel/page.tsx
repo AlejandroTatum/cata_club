@@ -7,9 +7,9 @@
  * the back link ("Volver a Entrenador") and the role this route admits differ,
  * which is the whole reason the two routes still exist instead of one.
  *
- * The trainer is not a lesser actor here — the backend grants ENTRENADOR both
- * `asignar-nivel-inicial` and `mover-de-nivel`, so every control on the screen
- * is theirs to use.
+ * The trainer is not a lesser actor here — the backend grants ENTRENADOR the
+ * same `PATCH /personas/{id}/nivel` it grants ADMINISTRADOR, so every control
+ * on the screen is theirs to use.
  */
 
 "use client";

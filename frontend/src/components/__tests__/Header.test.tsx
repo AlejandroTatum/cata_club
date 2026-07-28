@@ -296,8 +296,8 @@ describe("Header", (): void => {
     render(<Header />);
 
     // Trainer gets Inicio + Mi día + Pasar lista + Niveles. Level assignment
-    // is NOT an admin-only action — the backend grants ENTRENADOR both
-    // `asignar-nivel-inicial` and `mover-de-nivel` — and `/trainer/nivel`
+    // is NOT an admin-only action — the backend grants ENTRENADOR the same
+    // `PATCH /personas/{id}/nivel` it grants ADMINISTRADOR — and `/trainer/nivel`
     // renders the same ladder screen `/ranking` does, under the same label.
     expect(screen.getByRole("link", { name: /Inicio/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Mi día" })).toBeInTheDocument();

@@ -13,9 +13,8 @@ from app.servicios_negocio.ranking_servicio import (
 )
 from app.presentacion.schemas.ranking_schemas import (
     NivelRankingCreateDTO, NivelRankingResponseDTO, NivelRankingConOcupacionDTO,
-    AsignarNivelInicialDTO, RankingResponseDTO, TablaRankingItemDTO,
-    PerfilRankingAlumnoDTO, NotificacionResponseDTO, AsignacionRankingResponseDTO,
-    AlumnoConNivelDTO,
+    TablaRankingItemDTO, PerfilRankingAlumnoDTO, NotificacionResponseDTO,
+    AsignacionRankingResponseDTO, AlumnoConNivelDTO,
 )
 
 router = APIRouter(prefix="/ranking", tags=["ranking"])
@@ -54,8 +53,8 @@ async def listar_asignaciones(db: Session = Depends(obtener_sesion)):
 # entrenador `/trainer/nivel`). El frontend lo pedía a `GET /personas/`, que es
 # ADMINISTRADOR-only por exponer PII -> el entrenador recibía un 403 real y la
 # página nunca cargaba. `AlumnoConNivelDTO` no expone PII, así que el permiso
-# puede ser el mismo que ya tienen las dos mutaciones de esta pantalla
-# (`asignar-nivel-inicial` y `mover-de-nivel`).
+# puede ser el mismo que ya tiene la mutación de esta pantalla
+# (`PATCH /personas/{persona_id}/nivel`).
 @router.get(
     "/alumnos-con-nivel", response_model=List[AlumnoConNivelDTO],
     dependencies=[Depends(GestorPermisos(ROL_ADMIN_O_ENTRENADOR))],
@@ -76,23 +75,12 @@ async def obtener_tabla_de_nivel(nivel_id: int, db: Session = Depends(obtener_se
     return RankingServicio(db).obtener_tabla_de_nivel(nivel_id)
 
 
-# --- Asignación de nivel inicial (E03-RF002) --------------------------------
-@router.post(
-    "/asignar-nivel-inicial", response_model=RankingResponseDTO, status_code=201,
-    dependencies=[Depends(GestorPermisos(ROL_ADMIN_O_ENTRENADOR))],
-)
-async def asignar_nivel_inicial(datos: AsignarNivelInicialDTO, db: Session = Depends(obtener_sesion)):
-    return RankingServicio(db).asignar_nivel_inicial(datos)
-
-
-@router.patch(
-    "/{persona_id}/mover-de-nivel", response_model=RankingResponseDTO,
-    dependencies=[Depends(GestorPermisos(ROL_ADMIN_O_ENTRENADOR))],
-)
-async def mover_de_nivel(persona_id: int, nuevo_nivel_id: int, db: Session = Depends(obtener_sesion)):
-    """Aplica manualmente un ascenso/descenso decidido por el
-    Entrenador/Administrador."""
-    return RankingServicio(db).mover_de_nivel(persona_id, nuevo_nivel_id)
+# --- Asignación de nivel (E03-RF002) ----------------------------------------
+# Vive en `personas_router` (`PATCH /personas/{persona_id}/nivel`), no acá:
+# es UNA operación idempotente sobre una persona, no dos endpoints (uno de
+# alta y otro de movimiento) que obligaban a la UI a saber si el alumno ya
+# tenía nivel. La lógica sigue siendo de este módulo -- ese router llama a
+# `RankingServicio.asignar_nivel`, no la duplica.
 
 
 # --- Perfil privado del alumno (E04-RF012) ----------------------------------

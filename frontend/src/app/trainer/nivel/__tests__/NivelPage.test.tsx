@@ -84,8 +84,7 @@ vi.mock("@/contexts/ToastContext", () => ({
 
 const mockFetchAlumnosConNivel = vi.fn();
 const mockFetchNivelesConOcupacion = vi.fn();
-const mockAssignStudentToNivel = vi.fn();
-const mockMoveStudentToNivel = vi.fn();
+const mockSetStudentNivel = vi.fn();
 
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
@@ -99,8 +98,7 @@ vi.mock("@/services/api", () => {
   return {
     fetchAlumnosConNivel: () => mockFetchAlumnosConNivel(),
     fetchNivelesConOcupacion: () => mockFetchNivelesConOcupacion(),
-    assignStudentToNivel: (personaId: number, nivelId: number) => mockAssignStudentToNivel(personaId, nivelId),
-    moveStudentToNivel: (personaId: number, nivelId: number) => mockMoveStudentToNivel(personaId, nivelId),
+    setStudentNivel: (personaId: number, nivelId: number | null) => mockSetStudentNivel(personaId, nivelId),
     fetchNotificaciones: vi.fn().mockResolvedValue([]),
     marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
     ApiClientError: MockApiClientError,
@@ -148,8 +146,7 @@ describe("NivelPage — the trainer gets the admin's screen", () => {
     mockPathname.mockReturnValue("/trainer/nivel");
     mockFetchAlumnosConNivel.mockReset().mockResolvedValue(ROSTER);
     mockFetchNivelesConOcupacion.mockReset().mockResolvedValue(NIVELES);
-    mockAssignStudentToNivel.mockReset().mockResolvedValue(undefined);
-    mockMoveStudentToNivel.mockReset().mockResolvedValue(undefined);
+    mockSetStudentNivel.mockReset().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
     mockShowError.mockClear();
     mockShowSuccess.mockClear();
@@ -235,12 +232,12 @@ describe("NivelPage — the trainer gets the admin's screen", () => {
     );
 
     await waitFor(() => {
-      expect(mockAssignStudentToNivel).toHaveBeenCalledWith(10, 2);
+      expect(mockSetStudentNivel).toHaveBeenCalledWith(10, 2);
     });
     expect(mockShowSuccess).toHaveBeenCalled();
   });
 
-  it("lets a trainer move a student already on a rung, from that rung's roster", async () => {
+  it("lets a trainer re-level a student already on a rung, from that rung's roster", async () => {
     render(<NivelPage />);
     await waitForLadder();
 
@@ -249,13 +246,42 @@ describe("NivelPage — the trainer gets the admin's screen", () => {
       target: { value: "2" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Mover a Pedro Ramírez desde el nivel Nivel Cima" }),
+      screen.getByRole("button", { name: "Asignar a Pedro Ramírez desde el nivel Nivel Cima" }),
     );
 
     await waitFor(() => {
-      expect(mockMoveStudentToNivel).toHaveBeenCalledWith(11, 2);
+      expect(mockSetStudentNivel).toHaveBeenCalledWith(11, 2);
     });
-    expect(mockAssignStudentToNivel).not.toHaveBeenCalled();
+    // ONE call: the "Asignar"/"Mover" fork the trainer used to see is gone.
+    expect(mockSetStudentNivel).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a trainer take a student off a level entirely", async () => {
+    // Sameness includes the un-assign: the trainer holds the same
+    // `PATCH /personas/{id}/nivel` permission the admin does, and `null` is a
+    // destination that endpoint accepts. Every other assertion in this file
+    // passes a numeric level id, so nothing here would notice if the null
+    // path stopped sending null.
+    render(<NivelPage />);
+    await waitForLadder();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" }));
+    fireEvent.change(await screen.findByLabelText("Nuevo nivel para Pedro Ramírez"), {
+      target: { value: "sin-nivel" },
+    });
+    const boton = screen.getByRole("button", {
+      name: "Quitar a Pedro Ramírez desde el nivel Nivel Cima",
+    });
+    expect(boton).toHaveTextContent("Quitar");
+    fireEvent.click(boton);
+
+    await waitFor(() => {
+      expect(mockSetStudentNivel).toHaveBeenCalledWith(11, null);
+    });
+    expect(mockSetStudentNivel).toHaveBeenCalledTimes(1);
+    expect(mockShowSuccess).toHaveBeenCalledWith("El estudiante quedó sin nivel.");
+    expect(screen.getByRole("heading", { name: "En el nivel Nivel Cima (0)" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sin nivel asignado (2)" })).toBeInTheDocument();
   });
 
   it("renders the same content the admin's /ranking renders", async () => {

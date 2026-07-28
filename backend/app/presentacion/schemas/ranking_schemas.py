@@ -46,15 +46,23 @@ class NivelRankingConOcupacionDTO(NivelRankingResponseDTO):
     necesita_revision: bool  # True si personas_actuales < capacidad_minima
 
 
-# --- Asignación de nivel inicial (E03-RF002) --------------------------------
-class AsignarNivelInicialDTO(BaseModel):
-    persona_id: int
-    nivel_ranking_id: int
+# --- Asignación de nivel (E03-RF002) ----------------------------------------
+class AsignarNivelDTO(BaseModel):
+    """Cuerpo de `PATCH /personas/{persona_id}/nivel`: el nivel al que va el
+    alumno, y nada más. La persona viaja en la URL, no en el cuerpo.
+
+    `None` NO es "no me dijeron nada": es el estado "sin nivel". Es la única
+    forma que existe de desasignar a un alumno -- antes no había ninguna,
+    porque el endpoint de movimiento exigía un destino.
+
+    Por eso el campo es obligatorio aunque admita `None` (`Field(...)`):
+    mandar `{}` no es "dejalo como está", es un cuerpo incompleto."""
+    nivel_ranking_id: Optional[int] = Field(...)
 
 
 # --- Ranking (fila por persona) ---------------------------------------------
 class RankingResponseDTO(ResponseBase, BaseModel):
-    """Response de asignar-nivel-inicial/mover-de-nivel.
+    """Response de `PATCH /personas/{persona_id}/nivel`.
 
     Solo lleva la identidad de la fila y el nivel asignado: los campos del
     ranking competitivo (`puntaje_acumulado`, `posicion_actual`, `participo`,

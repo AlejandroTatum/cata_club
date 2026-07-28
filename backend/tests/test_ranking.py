@@ -27,11 +27,180 @@ def _crear_nivel(client, numero_nivel, nombre="Nivel"):
     ).json()
 
 
-def _asignar_nivel(client, persona_id, nivel_id):
-    return client.post(
-        "/api/v1/ranking/asignar-nivel-inicial",
-        json={"persona_id": persona_id, "nivel_ranking_id": nivel_id},
+def _patch_nivel(client, persona_id, nivel_id):
+    """La operación única e idempotente: `PATCH /personas/{id}/nivel`."""
+    return client.patch(
+        f"/api/v1/personas/{persona_id}/nivel",
+        json={"nivel_ranking_id": nivel_id},
     )
+
+
+# --- Asignación de nivel: UNA operación idempotente (PATCH /personas/{id}/nivel)
+# Reemplaza a `POST /ranking/asignar-nivel-inicial` + `PATCH
+# /ranking/{id}/mover-de-nivel`: el usuario hace UNA sola cosa ("este alumno va
+# a este nivel") y no tiene por qué saber en cuál de los tres estados de datos
+# estaba (sin fila, fila con nivel NULL, fila con nivel).
+def test_asignar_nivel_crea_la_fila_de_ranking_si_no_existe(client):
+    nivel = _crear_nivel(client, 1, "Elite")
+    persona = _crear_persona(client, "1720000001")
+
+    resp = _patch_nivel(client, persona["id"], nivel["id"])
+
+    assert resp.status_code == 200
+    assert resp.json()["nivelRankingId"] == nivel["id"]
+    assert resp.json()["personaId"] == persona["id"]
+
+
+def test_asignar_nivel_dos_veces_con_el_mismo_nivel_es_idempotente(client):
+    nivel = _crear_nivel(client, 1, "Elite")
+    persona = _crear_persona(client, "1720000002")
+
+    primera = _patch_nivel(client, persona["id"], nivel["id"])
+    segunda = _patch_nivel(client, persona["id"], nivel["id"])
+
+    assert primera.status_code == 200
+    assert segunda.status_code == 200
+    assert segunda.json() == primera.json()
+    tabla = client.get(f"/api/v1/ranking/niveles/{nivel['id']}/tabla").json()
+    assert [fila["personaId"] for fila in tabla] == [persona["id"]]
+
+
+def test_asignar_nivel_reasigna_a_un_nivel_distinto(client):
+    origen = _crear_nivel(client, 1, "Origen")
+    destino = _crear_nivel(client, 2, "Destino")
+    persona = _crear_persona(client, "1720000003")
+    _patch_nivel(client, persona["id"], origen["id"])
+
+    resp = _patch_nivel(client, persona["id"], destino["id"])
+
+    assert resp.status_code == 200
+    assert resp.json()["nivelRankingId"] == destino["id"]
+    assert client.get(f"/api/v1/ranking/niveles/{origen['id']}/tabla").json() == []
+
+
+def test_asignar_nivel_bloquea_al_llegar_a_la_capacidad_maxima(client):
+    nivel = _crear_nivel(client, 1, "Elite")
+    for i in range(10):
+        persona = _crear_persona(client, cedula=f"172000010{i}")
+        assert _patch_nivel(client, persona["id"], nivel["id"]).status_code == 200
+
+    persona_11 = _crear_persona(client, "1720000199")
+    resp = _patch_nivel(client, persona_11["id"], nivel["id"])
+
+    assert resp.status_code == 400
+    assert "capacidad máxima" in resp.json()["detail"]
+
+
+def test_reasignar_al_mismo_nivel_lleno_sigue_siendo_idempotente(client):
+    """La capacidad se valida sobre quien ENTRA al nivel. Un alumno que ya
+    está adentro no vuelve a ocupar un cupo, así que repetir la llamada sobre
+    un nivel al tope no puede fallar -- si fallara, la operación dejaría de
+    ser idempotente justo en el nivel más usado."""
+    nivel = _crear_nivel(client, 1, "Elite")
+    personas = [_crear_persona(client, cedula=f"172000020{i}") for i in range(10)]
+    for persona in personas:
+        assert _patch_nivel(client, persona["id"], nivel["id"]).status_code == 200
+
+    resp = _patch_nivel(client, personas[0]["id"], nivel["id"])
+
+    assert resp.status_code == 200
+    assert resp.json()["nivelRankingId"] == nivel["id"]
+
+
+def test_asignar_nivel_a_una_persona_inexistente_devuelve_404(client):
+    nivel = _crear_nivel(client, 1, "Elite")
+
+    resp = _patch_nivel(client, 999999, nivel["id"])
+
+    assert resp.status_code == 404
+
+
+def test_asignar_un_nivel_inexistente_devuelve_404(client):
+    persona = _crear_persona(client, "1720000300")
+
+    resp = _patch_nivel(client, persona["id"], 999999)
+
+    assert resp.status_code == 404
+
+
+def test_asignar_nivel_requiere_admin_o_entrenador(client_sin_permisos):
+    resp = _patch_nivel(client_sin_permisos, 1, 1)
+
+    assert resp.status_code == 403
+
+
+def test_asignar_nivel_lo_puede_hacer_un_entrenador(client_entrenador, db_session):
+    """Los datos se siembran con `db_session` y no con la fixture `client`:
+    las dos fixtures pisan los mismos `dependency_overrides` globales, así que
+    pedirlas juntas deja al cliente "admin" autenticado como ENTRENADOR."""
+    from datetime import date
+
+    from app.dominio.modelos import NivelRanking, Persona
+
+    nivel = NivelRanking(numero_nivel=1, nombre="Elite")
+    persona = Persona(
+        nombres="Deportista", apellidos="Entrenado", cedula="1720000301",
+        fecha_nacimiento=date(2010, 5, 14), telefono="0991234567",
+    )
+    db_session.add_all([nivel, persona])
+    db_session.commit()
+
+    resp = _patch_nivel(client_entrenador, persona.id, nivel.id)
+
+    assert resp.status_code == 200
+
+
+# --- Quitar el nivel (`nivel_ranking_id: null`) -----------------------------
+# Antes NO existía forma de desasignar a un alumno: `mover-de-nivel` exigía un
+# destino y ningún endpoint ponía `nivel_ranking_id` en NULL. En esta forma el
+# hueco se expresa solo: "su nivel es ninguno".
+def test_quitar_el_nivel_con_null_deja_al_alumno_sin_nivel(client):
+    nivel = _crear_nivel(client, 1, "Elite")
+    persona = _crear_persona(client, "1720000400")
+    _patch_nivel(client, persona["id"], nivel["id"])
+
+    resp = _patch_nivel(client, persona["id"], None)
+
+    assert resp.status_code == 200
+    assert resp.json()["nivelRankingId"] is None
+    assert client.get(f"/api/v1/ranking/niveles/{nivel['id']}/tabla").json() == []
+
+
+def test_quitar_el_nivel_libera_un_cupo_del_nivel(client):
+    nivel = _crear_nivel(client, 1, "Elite")
+    personas = [_crear_persona(client, cedula=f"172000050{i}") for i in range(10)]
+    for persona in personas:
+        _patch_nivel(client, persona["id"], nivel["id"])
+    espera = _crear_persona(client, "1720000599")
+    assert _patch_nivel(client, espera["id"], nivel["id"]).status_code == 400
+
+    _patch_nivel(client, personas[0]["id"], None)
+
+    assert _patch_nivel(client, espera["id"], nivel["id"]).status_code == 200
+
+
+def test_quitar_el_nivel_es_idempotente_sin_fila_de_ranking(client):
+    persona = _crear_persona(client, "1720000600")
+
+    resp = _patch_nivel(client, persona["id"], None)
+
+    assert resp.status_code == 200
+    assert resp.json()["nivelRankingId"] is None
+
+
+# --- Endpoints viejos removidos ---------------------------------------------
+# Se mira la tabla de rutas y no el status de una llamada: `POST
+# /ranking/asignar-nivel-inicial` con datos inexistentes también responde 404,
+# así que un 404 por sí solo no distingue "la ruta no existe" de "la ruta
+# existe y no encontró la fila".
+def test_los_dos_endpoints_viejos_de_asignacion_ya_no_estan_montados():
+    from main import app
+
+    rutas = app.openapi()["paths"]
+
+    assert "post" not in rutas.get("/api/v1/ranking/asignar-nivel-inicial", {})
+    assert "patch" not in rutas.get("/api/v1/ranking/{persona_id}/mover-de-nivel", {})
+    assert "patch" in rutas["/api/v1/personas/{persona_id}/nivel"]
 
 
 # --- Niveles de ranking (RF001) ----------------------------------------------
@@ -55,30 +224,11 @@ def test_listar_niveles_marca_necesita_revision_bajo_minimo(client):
     assert resp.json()[0]["necesitaRevision"] is True  # 0 personas < mínimo 6
 
 
-def test_asignar_nivel_bloquea_al_llegar_a_capacidad_maxima(client):
-    nivel = _crear_nivel(client, 1, "Elite")
-    for i in range(10):
-        persona = _crear_persona(client, cedula=f"170000000{i}")
-        resp = _asignar_nivel(client, persona["id"], nivel["id"])
-        assert resp.status_code == 201
-
-    persona_11 = _crear_persona(client, cedula="1799999999")
-    resp = _asignar_nivel(client, persona_11["id"], nivel["id"])
-    assert resp.status_code == 400
-    assert "capacidad máxima" in resp.json()["detail"]
-
-
-def test_asignar_nivel_inicial_requiere_entrenador(client_sin_permisos):
-    resp = _asignar_nivel(client_sin_permisos, 999, 1)
-    assert resp.status_code == 403
-
-
-def test_no_se_puede_reasignar_nivel_ya_asignado_con_endpoint_de_asignacion(client):
-    nivel = _crear_nivel(client, 1, "Elite")
-    persona = _crear_persona(client, cedula="1711111111")
-    _asignar_nivel(client, persona["id"], nivel["id"])
-    resp = _asignar_nivel(client, persona["id"], nivel["id"])
-    assert resp.status_code == 400
+# La capacidad máxima, el 403 sin rol y la reasignación se prueban arriba,
+# sobre `PATCH /personas/{id}/nivel`. La regla "ya tiene nivel, use el endpoint
+# de movimiento" que se probaba acá desapareció con la división de endpoints:
+# hoy repetir la llamada es válido y su test es
+# `test_asignar_nivel_dos_veces_con_el_mismo_nivel_es_idempotente`.
 
 
 # --- Cierre mensual: superficie removida (spec "Removed endpoints return 404") ---
@@ -104,7 +254,7 @@ def test_listar_cierres_mensuales_removido_devuelve_404(client):
 def test_listado_de_asignaciones_no_expone_posicion_ni_puntaje(client):
     nivel = _crear_nivel(client, 1, "Elite")
     persona = _crear_persona(client, "1716667788")
-    _asignar_nivel(client, persona["id"], nivel["id"])
+    _patch_nivel(client, persona["id"], nivel["id"])
 
     resp = client.get("/api/v1/ranking/asignaciones")
     assert resp.status_code == 200
@@ -117,7 +267,7 @@ def test_listado_de_asignaciones_no_expone_posicion_ni_puntaje(client):
 def test_tabla_de_nivel_no_expone_posicion_ni_puntaje(client):
     nivel = _crear_nivel(client, 2, "Intermedio")
     persona = _crear_persona(client, "1717778899")
-    _asignar_nivel(client, persona["id"], nivel["id"])
+    _patch_nivel(client, persona["id"], nivel["id"])
 
     resp = client.get(f"/api/v1/ranking/niveles/{nivel['id']}/tabla")
     assert resp.status_code == 200
@@ -144,29 +294,26 @@ def test_el_modelo_ranking_ya_no_tiene_columnas_del_ranking_competitivo():
     ), f"Quedan columnas del ranking competitivo en `ranking`: {sorted(columnas)}"
 
 
-def test_asignar_nivel_inicial_no_expone_campos_del_ranking_competitivo(client):
+def test_asignar_nivel_no_expone_campos_del_ranking_competitivo(client):
     nivel = _crear_nivel(client, 3, "Principiante")
     persona = _crear_persona(client, "1719990011")
 
-    resp = _asignar_nivel(client, persona["id"], nivel["id"])
+    resp = _patch_nivel(client, persona["id"], nivel["id"])
 
-    assert resp.status_code == 201
+    assert resp.status_code == 200
     cuerpo = resp.json()
     for campo in ("puntajeAcumulado", "posicionActual", "participo", "estaEnRanking"):
         assert campo not in cuerpo, f"`{campo}` sigue en la respuesta: {cuerpo}"
     assert cuerpo["nivelRankingId"] == nivel["id"]
 
 
-def test_mover_de_nivel_no_expone_campos_del_ranking_competitivo(client):
+def test_reasignar_de_nivel_no_expone_campos_del_ranking_competitivo(client):
     origen = _crear_nivel(client, 4, "Origen")
     destino = _crear_nivel(client, 5, "Destino")
     persona = _crear_persona(client, "1719990022")
-    _asignar_nivel(client, persona["id"], origen["id"])
+    _patch_nivel(client, persona["id"], origen["id"])
 
-    resp = client.patch(
-        f"/api/v1/ranking/{persona['id']}/mover-de-nivel",
-        params={"nuevo_nivel_id": destino["id"]},
-    )
+    resp = _patch_nivel(client, persona["id"], destino["id"])
 
     assert resp.status_code == 200
     cuerpo = resp.json()
@@ -178,7 +325,7 @@ def test_mover_de_nivel_no_expone_campos_del_ranking_competitivo(client):
 def test_asignaciones_tabla_y_perfil_no_exponen_esta_en_ranking(client):
     nivel = _crear_nivel(client, 6, "Roster")
     persona = _crear_persona(client, "1719990033")
-    _asignar_nivel(client, persona["id"], nivel["id"])
+    _patch_nivel(client, persona["id"], nivel["id"])
 
     asignaciones = client.get("/api/v1/ranking/asignaciones")
     tabla = client.get(f"/api/v1/ranking/niveles/{nivel['id']}/tabla")
@@ -193,7 +340,7 @@ def test_asignaciones_tabla_y_perfil_no_exponen_esta_en_ranking(client):
 def test_perfil_ranking_visible_para_admin_o_entrenador(client):
     nivel = _crear_nivel(client, 1, "Elite")
     persona = _crear_persona(client, "1715556677")
-    _asignar_nivel(client, persona["id"], nivel["id"])
+    _patch_nivel(client, persona["id"], nivel["id"])
 
     resp = client.get(f"/api/v1/ranking/{persona['id']}/perfil")
     assert resp.status_code == 200
@@ -207,7 +354,7 @@ def test_perfil_ranking_no_expone_posicion_ni_puntaje(client):
     (student-adapter.ts -> GET /ranking/{id}/perfil)."""
     nivel = _crear_nivel(client, 1, "Elite")
     persona = _crear_persona(client, "1718889900")
-    _asignar_nivel(client, persona["id"], nivel["id"])
+    _patch_nivel(client, persona["id"], nivel["id"])
 
     resp = client.get(f"/api/v1/ranking/{persona['id']}/perfil")
     assert resp.status_code == 200

@@ -64,7 +64,7 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
         // The prototype `docs/ux/prototipos/19-entrenador.html` dropped this
         // row on the premise that trainers do not assign levels. They do:
         // `/trainer/nivel` is a live screen and the backend grants ENTRENADOR
-        // both `asignar-nivel-inicial` and `mover-de-nivel`. The 403 that
+        // the same `PATCH /personas/{id}/nivel` it grants an admin. The 403 that
         // prompted the removal came from the roster endpoint, and is fixed —
         // the screen now reads `GET /ranking/alumnos-con-nivel`.
         //

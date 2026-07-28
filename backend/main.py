@@ -1,6 +1,9 @@
+import logging
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy.exc import IntegrityError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.soporte_transversal.configuracion import settings, urls_documentacion
@@ -24,6 +27,8 @@ from app.dominio.excepciones import (
 
 # `urls_documentacion` apaga /docs, /redoc y /openapi.json solo cuando
 # AMBIENTE=production; en development y test siguen encendidas (PR-10b).
+_log = logging.getLogger(__name__)
+
 app = FastAPI(
     title=settings.app_nombre,
     version=settings.app_version,
@@ -61,6 +66,31 @@ for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
             return _respuesta_error(codigo, exc.mensaje)
         return _handler
     app.add_exception_handler(_excepcion, _crear_handler(_codigo))
+
+
+# --- Último recurso: un IntegrityError nunca debería salir como 500 --------
+# Defensa en profundidad, NO el arreglo de ningún caso concreto: los caminos
+# conocidos ya lo tratan donde corresponde (`eliminacion_segura` lo traduce a
+# `OperacionInvalida` en los borrados restringidos, y el upsert de nivel
+# reintenta contra la fila que ganó la carrera, ver
+# `RankingRepositorio.crear_o_recuperar_por_persona`). Lo que cubre esto es
+# cualquier violación de constraint que se escape de esos caminos: 409 dice
+# "chocaste con el estado actual de los datos", que es cierto, mientras que un
+# 500 le dice al cliente que el servidor se rompió y no le da nada accionable.
+#
+# No lo silencia: se registra con traceback, así que un constraint violado por
+# un bug sigue siendo diagnosticable en el log en lugar de desaparecer.
+#
+# No afecta a `test_restricciones_unicidad.py` ni a `test_restricciones_fk.py`:
+# esas pruebas ejercitan la sesión de SQLAlchemy directamente (`db_session`),
+# sin pasar por la app, así que siguen viendo el `IntegrityError` crudo.
+@app.exception_handler(IntegrityError)
+async def _integrity_error_handler(request: Request, exc: IntegrityError):
+    _log.exception("IntegrityError no manejado en %s %s", request.method, request.url.path)
+    return _respuesta_error(
+        status.HTTP_409_CONFLICT,
+        "La operación entra en conflicto con el estado actual de los datos.",
+    )
 
 
 # --- HTTPException de FastAPI también devuelve {detail, message} ------------

@@ -193,7 +193,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("PATCH", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/cuenta/estado"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/estado"): frozenset({"ADMINISTRADOR"}),
-    ("PATCH", "/ranking/{persona_id}/mover-de-nivel"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    # Reemplaza a `POST /ranking/asignar-nivel-inicial` + `PATCH
+    # /ranking/{persona_id}/mover-de-nivel`, que pedían exactamente estos dos
+    # roles: la operación única hereda el mismo permiso, no uno nuevo.
+    ("PATCH", "/personas/{persona_id}/nivel"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/horarios"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
@@ -210,7 +213,6 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
-    ("POST", "/ranking/asignar-nivel-inicial"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/ranking/niveles"): frozenset({"ADMINISTRADOR"}),
     ("PUT", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
 }

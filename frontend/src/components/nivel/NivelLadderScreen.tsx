@@ -16,8 +16,8 @@
  * admin."* Until now the club shipped two different screens for the same job:
  * this ladder at `/ranking` (admin) and `NivelAsignacionPanel`, an upstream
  * table, at `/trainer/nivel`. Both read `GET /ranking/alumnos-con-nivel`, and
- * the backend grants ENTRENADOR both `asignar-nivel-inicial` and
- * `mover-de-nivel` — the two roles do exactly the same work, so they get
+ * the backend grants ENTRENADOR the same `PATCH /personas/{id}/nivel` it
+ * grants ADMINISTRADOR — the two roles do exactly the same work, so they get
  * exactly the same screen.
  *
  * This component IS that screen. `/ranking` and `/trainer/nivel` are both
@@ -111,11 +111,17 @@
  *     `cuposDisponibles` and `necesitaRevision`; none of the three reaches the
  *     UI. The backend still computes them to validate capacity server-side. A
  *     headcount with no maximum beside it is not an occupancy indicator.
- *   - NO "Promover". A student with no level yet is "Asignar"
- *     (`POST /ranking/asignar-nivel-inicial`); one already on a rung is
- *     "Mover" (`PATCH /ranking/mover-de-nivel`). Two endpoints, and the word
- *     says which of the two the row will call — never a judgement about the
- *     direction of the change.
+ *   - NO "Promover", and — since the endpoints collapsed — no "Mover" either.
+ *     Every row that places a student says "Asignar" and calls the one
+ *     idempotent `PATCH /personas/{id}/nivel`. The old pair of words was not a
+ *     product distinction: it named which of two backend endpoints the row
+ *     would hit ("Asignar" = `asignar-nivel-inicial`, for a student with no
+ *     level; "Mover" = `mover-de-nivel`, for one who had one), a difference
+ *     the person using the screen never had. The one word left is true in both
+ *     cases and, like "Promover", passes no judgement on the direction.
+ *     The only OTHER word on this screen is "Quitar", and it is a genuinely
+ *     different action: taking a student off their level altogether
+ *     (`nivelRankingId: null`), which no endpoint could express before.
  *   - Two stats, no judgement: Estudiantes asignados and Niveles.
  *
  * NAME vs RANK still wants a product decision, though the screen no longer
@@ -145,10 +151,9 @@ import {
 import { useToast } from "@/contexts/ToastContext";
 import {
   ApiClientError,
-  assignStudentToNivel,
   fetchAlumnosConNivel,
   fetchNivelesConOcupacion,
-  moveStudentToNivel,
+  setStudentNivel,
   type AlumnoConNivel,
   type NivelConOcupacion,
 } from "@/services/api";
@@ -190,6 +195,40 @@ const PANEL_COLUMN_MAX_HEIGHT = "max-h-[19rem]";
 /** Display name for a level, falling back to its rank when unnamed. */
 function nivelNombre(nivel: NivelConOcupacion): string {
   return nivel.nombre ?? `Nivel ${nivel.numeroNivel}`;
+}
+
+/**
+ * "No level" as a `<select>` option value. A `<select>` only speaks strings and
+ * `""` is already taken by "nothing picked yet", so the third state needs a
+ * token of its own rather than an empty string doing double duty.
+ */
+const SIN_NIVEL_VALUE = "sin-nivel";
+const SIN_NIVEL_LABEL = "Sin nivel";
+
+/** The picked destination, back as the string the `<select>` renders. */
+function selectValue(destino: number | null | undefined): string {
+  if (destino === undefined) return "";
+  if (destino === null) return SIN_NIVEL_VALUE;
+  return String(destino);
+}
+
+/**
+ * The word on the button.
+ *
+ * ONE verb for placing a student, where the screen used to choose between
+ * "Asignar" and "Mover" by looking at whether the student already had a level.
+ * That choice existed because the two words called two different endpoints;
+ * with one idempotent operation underneath there is one true word, and
+ * "Asignar" is the one that is true in both cases — a student is being
+ * assigned to the level named in the picker beside it, whatever they held
+ * before. "Mover" would be a lie on a student who has no level, and
+ * "Promover" was already rejected here for asserting a direction.
+ *
+ * "Quitar" is NOT the same action under another name: it is the only other
+ * thing this control can do (`nivelRankingId: null`), and it says so.
+ */
+function verboPara(destino: number | null | undefined): string {
+  return destino === null ? "Quitar" : "Asignar";
 }
 
 export interface NivelLadderScreenProps {
@@ -240,8 +279,12 @@ function LadderContent({
   const [panelSearch, setPanelSearch] = useState("");
   /** The page-level person finder — "where is Juan, and move him". */
   const [studentSearch, setStudentSearch] = useState("");
-  /** Target level picked per student in a direct assign/move row. */
-  const [targetNivelIds, setTargetNivelIds] = useState<Record<string, number>>({});
+  /**
+   * Destination picked per student in a row. `null` is a real choice — "no
+   * level" — and is why the map's value is nullable while a student ABSENT
+   * from the map is simply "nothing picked yet, the button stays disabled".
+   */
+  const [targetNivelIds, setTargetNivelIds] = useState<Record<string, number | null>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [successIds, setSuccessIds] = useState<Set<string>>(new Set());
   const [assignError, setAssignError] = useState<string | null>(null);
@@ -331,17 +374,19 @@ function LadderContent({
     setTargetNivelIds((prev) => {
       const next = { ...prev };
       if (value === "") delete next[studentId];
+      else if (value === SIN_NIVEL_VALUE) next[studentId] = null;
       else next[studentId] = Number(value);
       return next;
     });
   }
 
   /**
-   * Assign or move — one gesture for the user, two endpoints underneath. A
-   * student with no level yet takes `asignar-nivel-inicial`; anyone already
-   * on a rung takes `mover-de-nivel`.
+   * One gesture, one call: "this student goes to this level". The screen no
+   * longer asks whether they already had one — the backend operation is
+   * idempotent and works from any of the three data states, which is exactly
+   * why the "Asignar"/"Mover" split could be deleted.
    */
-  async function handleAssign(student: NivelStudentRef, nivelId: number): Promise<void> {
+  async function handleAssign(student: NivelStudentRef, nivelId: number | null): Promise<void> {
     setSavingId(student.id);
     setAssignError(null);
 
@@ -352,11 +397,7 @@ function LadderContent({
     }
 
     try {
-      if (student.nivelRankingId === null) {
-        await assignStudentToNivel(Number(student.id), nivelId);
-      } else {
-        await moveStudentToNivel(Number(student.id), nivelId);
-      }
+      await setStudentNivel(Number(student.id), nivelId);
 
       // Optimistic: the rung's roster updates without a refetch.
       setRoster((prev) =>
@@ -373,7 +414,11 @@ function LadderContent({
         delete next[student.id];
         return next;
       });
-      showSuccess("Nivel asignado correctamente.");
+      showSuccess(
+        nivelId === null
+          ? "El estudiante quedó sin nivel."
+          : "Nivel asignado correctamente.",
+      );
 
       const timer = setTimeout(() => {
         setSuccessIds((prev) => {
@@ -406,7 +451,6 @@ function LadderContent({
     const nombre = studentFullName(student);
     const actual = niveles.find((nivel) => nivel.id === student.nivelRankingId) ?? null;
     const destino = targetNivelIds[student.id];
-    const verbo = student.nivelRankingId === null ? "Asignar" : "Mover";
     const selectId = `nivel-destino-busqueda-${student.id}`;
 
     return (
@@ -433,7 +477,7 @@ function LadderContent({
           // picker everything and push the action onto a line of its own. A row
           // is "who · where they are · where they go · go", left to right.
           className="input-field h-ctl flex-1 sm:w-[168px] sm:flex-none"
-          value={destino ?? ""}
+          value={selectValue(destino)}
           onChange={(event) => pickTargetNivel(student.id, event.target.value)}
         >
           <option value="">Elegir nivel…</option>
@@ -444,6 +488,9 @@ function LadderContent({
                 {nivelNombre(nivel)}
               </option>
             ))}
+          {student.nivelRankingId !== null ? (
+            <option value={SIN_NIVEL_VALUE}>{SIN_NIVEL_LABEL}</option>
+          ) : null}
         </select>
 
         <Button
@@ -453,13 +500,13 @@ function LadderContent({
           onClick={() => {
             if (destino !== undefined) void handleAssign(student, destino);
           }}
-          aria-label={`${verbo} a ${nombre}`}
+          aria-label={`${verboPara(destino)} a ${nombre}`}
         >
           {savingId === student.id
             ? "Guardando…"
             : successIds.has(student.id)
               ? "Listo"
-              : verbo}
+              : verboPara(destino)}
         </Button>
       </li>
     );
@@ -472,6 +519,11 @@ function LadderContent({
    * move a student you are LOOKING at rather than one whose name you can
    * already spell into the page search. In-table metrics (32px), because a
    * roster row is a denser register than the page's own controls.
+   *
+   * Its picker also carries "Sin nivel", the unassign the API gained with
+   * this shape. Every row whose student HOLDS a level offers it — here and in
+   * the page finder — and no row that has none does, because there is nothing
+   * to take away.
    */
   function renderRosterRow(
     student: NivelStudentRef,
@@ -498,10 +550,10 @@ function LadderContent({
         <select
           id={selectId}
           className="input-field h-ctl-sm min-h-ctl-sm w-28 flex-none px-3 py-0 text-[12.5px]"
-          value={destino ?? ""}
+          value={selectValue(destino)}
           onChange={(event) => pickTargetNivel(student.id, event.target.value)}
         >
-          <option value="">Mover a…</option>
+          <option value="">Elegir nivel…</option>
           {nivelesPorPuesto
             .filter((nivel) => nivel.id !== student.nivelRankingId)
             .map((nivel) => (
@@ -509,6 +561,7 @@ function LadderContent({
                 {nivelNombre(nivel)}
               </option>
             ))}
+          <option value={SIN_NIVEL_VALUE}>{SIN_NIVEL_LABEL}</option>
         </select>
 
         <Button
@@ -518,9 +571,9 @@ function LadderContent({
           onClick={() => {
             if (destino !== undefined) void handleAssign(student, destino);
           }}
-          aria-label={`Mover a ${nombre} desde el nivel ${nivelActualNombre}`}
+          aria-label={`${verboPara(destino)} a ${nombre} desde el nivel ${nivelActualNombre}`}
         >
-          {savingId === student.id ? "Guardando…" : "Mover"}
+          {savingId === student.id ? "Guardando…" : verboPara(destino)}
         </Button>
       </li>
     );
@@ -542,9 +595,9 @@ function LadderContent({
    * list is which instead of running two rosters together.
    *
    * The left column is deliberately NOT "every student": it is the population
-   * with no level at all, which is what makes "Asignar" the right word on it
-   * and `asignar-nivel-inicial` the right endpoint. Students who already hold
-   * some OTHER level are reached through the page finder, or through the right
+   * with no level at all, so its rows need no destination picker — the rung
+   * they are looking at IS the destination. Students who already hold some
+   * OTHER level are reached through the page finder, or through the right
    * column of the rung they are actually on.
    */
   function renderPanel(): React.ReactElement | null {

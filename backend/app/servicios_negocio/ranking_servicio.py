@@ -29,6 +29,8 @@ oficial (funcionalidad competitiva) fueron removidos por completo; lo que
 queda de este módulo es exclusivamente la asignación de alumnos a
 niveles/grupos de entrenamiento.
 """
+from typing import Optional
+
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import NivelRanking, Ranking, Notificacion
@@ -38,7 +40,7 @@ from app.infraestructura.repositorios.ranking_repositorio import (
     NivelRankingRepositorio, RankingRepositorio, NotificacionRepositorio,
 )
 from app.presentacion.schemas.ranking_schemas import (
-    NivelRankingCreateDTO, AsignarNivelInicialDTO,
+    NivelRankingCreateDTO,
     NivelRankingConOcupacionDTO, TablaRankingItemDTO, PerfilRankingAlumnoDTO,
     AsignacionRankingResponseDTO, AlumnoConNivelDTO,
 )
@@ -139,42 +141,63 @@ class RankingServicio:
             )
         return resultado
 
-    # --- E03-RF002: asignación de nivel inicial -----------------------------
-    def asignar_nivel_inicial(self, datos: AsignarNivelInicialDTO) -> Ranking:
-        persona = self.repo_persona.obtener_por_id(datos.persona_id)
+    # --- E03-RF002: asignación de nivel (operación única e idempotente) -----
+    def asignar_nivel(self, persona_id: int, nivel_ranking_id: Optional[int]) -> Ranking:
+        """"Este alumno va a este nivel" -- UNA operación, se llame las veces
+        que se llame y sin importar en qué estado estaba el alumno.
+
+        Reemplaza a `asignar_nivel_inicial` + `mover_de_nivel`. Esos dos
+        métodos existían solo porque el dato tiene tres estados (sin fila de
+        `Ranking`, fila con nivel NULL, fila con nivel) y cada uno cubría un
+        subconjunto: el primero fallaba si ya había nivel, el segundo fallaba
+        si no había fila. El que llama no tiene por qué saber en cuál de los
+        tres estaba, así que acá se hace upsert y desaparece la pregunta.
+
+        Reglas conservadas de los dos métodos viejos:
+          - La persona debe existir (venía de `asignar_nivel_inicial`; el
+            movimiento no lo comprobaba, se apoyaba en la FK de la fila ya
+            creada). Se conserva la comprobación más estricta de las dos.
+          - El nivel de destino debe existir (venía de los dos).
+          - `capacidad_maxima` es un tope duro (venía de los dos).
+
+        Reglas eliminadas a propósito, porque eran el precio de la división:
+          - "ya tiene nivel asignado, use el endpoint de movimiento".
+          - "no existe ranking para la persona".
+
+        `nivel_ranking_id=None` quita el nivel: no valida capacidad (nadie
+        entra a ningún lado) y sigue creando la fila si hacía falta, para que
+        el resultado sea el mismo se llame una o cinco veces.
+        """
+        persona = self.repo_persona.obtener_por_id(persona_id)
         if not persona:
-            raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
+            raise EntidadNoEncontrada(f"Persona con id {persona_id} no encontrada")
 
-        nivel_servicio = NivelRankingServicio(self.db)
-        nivel_servicio.obtener_nivel(datos.nivel_ranking_id)  # 404 si no existe
-        nivel_servicio._validar_capacidad_disponible(datos.nivel_ranking_id)
-
-        ranking = self.repo.obtener_por_persona(datos.persona_id)
-        if ranking is None:
-            ranking = Ranking(persona_id=datos.persona_id, nivel_ranking_id=datos.nivel_ranking_id)
-            return self.repo.crear(ranking)
-
-        # Tener nivel ES estar asignado: no hay flag aparte que consultar.
-        if ranking.nivel_ranking_id is not None:
-            raise OperacionInvalida(
-                "Esta persona ya tiene un nivel de ranking asignado; use el "
-                "endpoint de movimiento para reasignarla"
-            )
-        ranking.nivel_ranking_id = datos.nivel_ranking_id
-        return self.repo.guardar_cambios(ranking)
-
-    def mover_de_nivel(self, persona_id: int, nuevo_nivel_id: int) -> Ranking:
-        """Aplica manualmente un ascenso/descenso decidido por el
-        Entrenador/Administrador."""
         ranking = self.repo.obtener_por_persona(persona_id)
-        if not ranking:
-            raise EntidadNoEncontrada(f"No existe ranking para la persona {persona_id}")
+        ya_estaba_en_el_nivel = ranking is not None and ranking.nivel_ranking_id == nivel_ranking_id
 
-        nivel_servicio = NivelRankingServicio(self.db)
-        nivel_servicio.obtener_nivel(nuevo_nivel_id)
-        nivel_servicio._validar_capacidad_disponible(nuevo_nivel_id)
+        if nivel_ranking_id is not None and not ya_estaba_en_el_nivel:
+            nivel_servicio = NivelRankingServicio(self.db)
+            nivel_servicio.obtener_nivel(nivel_ranking_id)  # 404 si no existe
+            # La capacidad se valida sobre quien ENTRA: un alumno que ya está
+            # en el nivel no vuelve a ocupar cupo, y si se validara igual la
+            # segunda llamada fallaría sobre un nivel al tope -- es decir, la
+            # operación dejaría de ser idempotente.
+            nivel_servicio._validar_capacidad_disponible(nivel_ranking_id)
 
-        ranking.nivel_ranking_id = nuevo_nivel_id
+        if ranking is None:
+            # `crear_o_recuperar_por_persona` puede devolver la fila que OTRA
+            # petición simultánea alcanzó a insertar (ver su docstring): el
+            # `persona_id` es UNIQUE y las dos peticiones leyeron `None`. Si
+            # eso pasa, la perdedora no falla -- cae en el mismo camino de
+            # actualización de abajo y termina dejando el destino que pidió,
+            # que es lo que "idempotente" tiene que significar también bajo
+            # concurrencia. Si ganó la carrera, la asignación de abajo es un
+            # no-op sobre el valor que acaba de escribir.
+            ranking = self.repo.crear_o_recuperar_por_persona(
+                Ranking(persona_id=persona_id, nivel_ranking_id=nivel_ranking_id)
+            )
+
+        ranking.nivel_ranking_id = nivel_ranking_id
         return self.repo.guardar_cambios(ranking)
 
     def obtener_tabla_de_nivel(self, nivel_id: int) -> list[TablaRankingItemDTO]:

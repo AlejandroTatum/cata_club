@@ -63,8 +63,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 const mockFetchMembers = vi.fn();
-const mockAssignStudentToNivel = vi.fn();
-const mockMoveStudentToNivel = vi.fn();
+const mockSetStudentNivel = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 const mockFetchHorarios = vi.fn().mockResolvedValue([]);
@@ -88,8 +87,7 @@ vi.mock("@/services/api", () => {
   }
   return {
     fetchMembers: () => mockFetchMembers(),
-    assignStudentToNivel: (personaId: number, nivelId: number) => mockAssignStudentToNivel(personaId, nivelId),
-    moveStudentToNivel: (personaId: number, nivelId: number) => mockMoveStudentToNivel(personaId, nivelId),
+    setStudentNivel: (personaId: number, nivelId: number | null) => mockSetStudentNivel(personaId, nivelId),
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     fetchHorarios: () => mockFetchHorarios(),
@@ -190,10 +188,9 @@ async function findUnassignedRow(): Promise<HTMLElement> {
 describe.skip("GroupsPage — unassigned dropdown assign (MOVED to RankingPage — issue #43)", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
-    mockAssignStudentToNivel.mockReset();
-    mockMoveStudentToNivel.mockReset();
+    mockSetStudentNivel.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [UNASSIGNED_ACCOUNT], niveles: NIVELES });
-    mockAssignStudentToNivel.mockResolvedValue(undefined);
+    mockSetStudentNivel.mockResolvedValue(undefined);
   });
 
   it("renders one dropdown + Asignar button per unassigned student, not one button per nivel", async () => {
@@ -218,7 +215,7 @@ describe.skip("GroupsPage — unassigned dropdown assign (MOVED to RankingPage �
     fireEvent.click(within(row).getByRole("button", { name: /asignar/i }));
 
     await waitFor(() => {
-      expect(mockAssignStudentToNivel).toHaveBeenCalledWith(10, 2);
+      expect(mockSetStudentNivel).toHaveBeenCalledWith(10, 2);
     });
   });
 

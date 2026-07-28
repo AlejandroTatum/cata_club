@@ -1,5 +1,6 @@
 from typing import Optional
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import NivelRanking, Persona, Ranking, Notificacion
@@ -74,6 +75,38 @@ class RankingRepositorio:
     def crear(self, ranking: Ranking) -> Ranking:
         self.db.add(ranking)
         self.db.commit()
+        self.db.refresh(ranking)
+        return ranking
+
+    def crear_o_recuperar_por_persona(self, ranking: Ranking) -> Ranking:
+        """INSERT que tolera perder la carrera contra otra transacción.
+
+        `Ranking.persona_id` es UNIQUE, así que dos peticiones simultáneas
+        para la misma persona sin fila previa leen las dos `None` e insertan
+        las dos: la perdedora choca contra el índice único. Sin esto, ese
+        choque sale como `IntegrityError` crudo -- que `main.py` no mapea a
+        ningún código -- y el cliente recibe un 500, justo en la operación
+        que anuncia ser idempotente.
+
+        El `rollback()` NO es opcional: un flush fallido deja la sesión en
+        estado inválido y cualquier consulta posterior sobre ella explota
+        (`PendingRollbackError`). Recién después de deshacer se puede releer,
+        y la relectura abre una transacción nueva que, en READ COMMITTED, ya
+        ve la fila que la ganadora commiteó.
+
+        Si tras el rollback la fila sigue sin existir, la violación no era la
+        carrera que este método cubre (por ejemplo una FK colgante), así que
+        se re-lanza sin disfrazarla.
+        """
+        try:
+            self.db.add(ranking)
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            existente = self.obtener_por_persona(ranking.persona_id)
+            if existente is None:
+                raise
+            return existente
         self.db.refresh(ranking)
         return ranking
 

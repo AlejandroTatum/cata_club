@@ -633,24 +633,23 @@ export async function fetchAlumnosConNivel(): Promise<AlumnoConNivel[]> {
 }
 
 /**
- * Assign a student with no prior nivel/group (`grupoId === null`) to one —
- * `POST /ranking/asignar-nivel-inicial`. Backend-role-restricted to
- * ENTRENADOR; an admin caller gets a real 403 here (see
- * src/app/api/groups/assign/route.ts's doc comment) — this is not a client
- * bug, it reflects the actual backend authorization rule.
+ * Put a student on a level — `PATCH /personas/{id}/nivel`. Admin and trainer.
+ *
+ * ONE call for what used to be `assignStudentToNivel` and `moveStudentToNivel`.
+ * Those two mirrored two backend endpoints that each refused half the cases
+ * (one rejected a student who already held a level, the other a student who
+ * did not), so every caller had to branch on the student's current level
+ * before choosing a function. The backend operation is idempotent now:
+ * calling this twice with the same level succeeds twice and leaves the same
+ * state, whatever the student's starting point was.
+ *
+ * `nivelRankingId: null` takes the student off their level. There was no way
+ * to express that before — the move endpoint required a destination.
  */
-export async function assignStudentToNivel(personaId: number, nivelRankingId: number): Promise<void> {
-  await request<unknown>(apiEndpoint("/groups/assign"), {
-    method: "POST",
-    body: JSON.stringify({ personaId, nivelRankingId }),
-  });
-}
-
-/** Move an already-ranked student to a different nivel/group — `PATCH /ranking/{id}/mover-de-nivel`. Works for admin and entrenador. */
-export async function moveStudentToNivel(personaId: number, nivelRankingId: number): Promise<void> {
-  await request<unknown>(apiEndpoint("/groups/move"), {
+export async function setStudentNivel(personaId: number, nivelRankingId: number | null): Promise<void> {
+  await request<unknown>(apiEndpoint(`/personas/${personaId}/nivel`), {
     method: "PATCH",
-    body: JSON.stringify({ personaId, nivelRankingId }),
+    body: JSON.stringify({ nivelRankingId }),
   });
 }
 
