@@ -227,6 +227,18 @@ class PagoServicio:
         if not membresia:
             raise EntidadNoEncontrada(f"Membresía con id {datos.membresia_id} no encontrada")
 
+        # La membresía debe pertenecer a la MISMA persona del pago (auditoría,
+        # crítico 1): sin este chequeo, cualquier usuario podía registrar un
+        # pago propio apuntando a la membresía de un tercero y, al aprobarse,
+        # activar la membresía ajena. El pago cruzado es inconsistente para
+        # cualquier rol, así que aplica también a un ADMINISTRADOR. Mismo
+        # criterio de respuesta que el resto de recursos ajenos existentes
+        # (ver test_seguridad_acceso_recursos.py): 403, no 404.
+        if membresia.persona_id != datos.persona_id:
+            raise PermisosInsuficientes(
+                "La membresía indicada no pertenece a la persona del pago"
+            )
+
         if self.repo.existe_pendiente_para_membresia(datos.membresia_id):
             raise OperacionInvalida(
                 "Esta membresía ya tiene un pago pendiente de validación. "
