@@ -12,6 +12,7 @@ from app.presentacion.routers import (
     auth_router,
     personas_router,
     membresias_pagos_router,
+    descuentos_router,
     asistencias_router,
     ficha_medica_router,
     geografia_router,
@@ -133,6 +134,7 @@ app.add_middleware(_CabecerasDeSeguridadMiddleware)
 app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(personas_router.router, prefix="/api/v1")
 app.include_router(membresias_pagos_router.router, prefix="/api/v1")
+app.include_router(descuentos_router.router, prefix="/api/v1")
 app.include_router(asistencias_router.router, prefix="/api/v1")
 app.include_router(ficha_medica_router.router, prefix="/api/v1")
 app.include_router(geografia_router.router, prefix="/api/v1")

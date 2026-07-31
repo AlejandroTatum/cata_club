@@ -4,12 +4,15 @@ from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion
+from app.dominio.modelos import (
+    Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion, DescuentoAplicado,
+)
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio, TipoMembresiaRepositorio
 from app.infraestructura.repositorios.pago_repositorio import PagoRepositorio, ComprobantePagoRepositorio
+from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
 from app.infraestructura.repositorios.ranking_repositorio import NotificacionRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
@@ -185,6 +188,7 @@ class PagoServicio:
         self.repo_membresia = MembresiaRepositorio(db)
         self.repo_persona = PersonaRepositorio(db)
         self.repo_notificacion = NotificacionRepositorio(db)
+        self.repo_descuento = DescuentoRepositorio(db)
 
     def registrar_pago(
         self,
@@ -223,6 +227,16 @@ class PagoServicio:
             raise PermisosInsuficientes(
                 "Solo la propia persona, su representante, o un administrador "
                 "pueden registrar este pago"
+            )
+
+        # Issue #11 (modelo firmado §4): aplicar descuentos es decisión del
+        # ADMINISTRADOR -- "el admin decide, el sistema registra". El dueño o
+        # su representante pueden registrar el pago, pero no adjuntarle
+        # descuentos. `persona_id_solicitante` además queda registrado como
+        # quien autorizó, así que debe existir en el token.
+        if datos.descuento_ids and (not es_admin or persona_id_solicitante is None):
+            raise PermisosInsuficientes(
+                "Solo un administrador puede aplicar descuentos al registrar un pago"
             )
 
         # Recién aquí (ya autorizado) se resuelve existencia real y, si
@@ -267,7 +281,18 @@ class PagoServicio:
                 f"(${precio_mensual})."
             )
 
-        pago = Pago(**datos.model_dump(), estado_pago=EstadoPago.PENDIENTE_VALIDACION)
+        # Issue #11: resolver los valores VIGENTES del catálogo, congelarlos
+        # y descontar el monto base. `aplicaciones` viaja por la relación del
+        # pago para que el INSERT de todo (pago + filas congeladas) sea una
+        # sola transacción: no puede quedar un pago descontado sin su detalle.
+        aplicaciones, monto_final = self._congelar_descuentos(datos, persona_id_solicitante)
+
+        pago = Pago(
+            **datos.model_dump(exclude={"descuento_ids"}),
+            estado_pago=EstadoPago.PENDIENTE_VALIDACION,
+        )
+        pago.monto = monto_final
+        pago.descuentos_aplicados = aplicaciones
         # Red de seguridad del invariante 1 (issue #8): si otra petición
         # concurrente registró su pendiente ENTRE el chequeo de arriba y este
         # INSERT, el índice `uq_pago_pendiente_por_membresia` lo rechaza y se
@@ -281,6 +306,63 @@ class PagoServicio:
             if "uq_pago_pendiente_por_membresia" in str(error.orig):
                 raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO) from error
             raise
+
+    # --- Issue #11: descuentos aplicados al registrar --------------------------
+    def _congelar_descuentos(
+        self, datos: PagoCreateDTO, autorizado_por_persona_id: int | None,
+    ) -> tuple[list[DescuentoAplicado], Decimal]:
+        """Resuelve cada descuento solicitado contra el catálogo VIGENTE y
+        devuelve (filas congeladas, monto final del pago).
+
+        Invariantes firmados (docs/concepto-alcance-modelo.md §4):
+        - Valor congelado: cada `DescuentoAplicado` copia el valor calculado
+          HOY (y el porcentaje vigente, si aplica). Cambios posteriores al
+          catálogo no alteran estas filas -- son el hecho histórico.
+        - Tope: la suma de descuentos no supera el monto base (100 %); no
+          existen pagos negativos. Un pago de $0 (beca total) es válido y
+          sigue el flujo normal de registro + aprobación.
+        - Un descuento inactivo no puede aplicarse (el catálogo es vivo,
+          pero solo su presente ofrece; su pasado ya quedó congelado).
+        """
+        if not datos.descuento_ids:
+            return [], datos.monto
+
+        if len(set(datos.descuento_ids)) != len(datos.descuento_ids):
+            raise OperacionInvalida("La solicitud repite un mismo descuento")
+
+        total = Decimal("0.00")
+        aplicaciones: list[DescuentoAplicado] = []
+        for descuento_id in datos.descuento_ids:
+            descuento = self.repo_descuento.obtener_por_id(descuento_id)
+            if not descuento:
+                raise EntidadNoEncontrada(f"Descuento con id {descuento_id} no encontrado")
+            if not descuento.activo:
+                raise OperacionInvalida(
+                    f"El descuento '{descuento.nombre}' está inactivo y no puede aplicarse"
+                )
+            if descuento.porcentaje is not None:
+                valor = (datos.monto * descuento.porcentaje / Decimal("100")).quantize(
+                    Decimal("0.01")
+                )
+            else:
+                valor = descuento.monto
+            total += valor
+            aplicaciones.append(
+                DescuentoAplicado(
+                    descuento_id=descuento.id,
+                    persona_id=datos.persona_id,
+                    autorizado_por_persona_id=autorizado_por_persona_id,
+                    valor_aplicado=valor,
+                    porcentaje_aplicado=descuento.porcentaje,
+                )
+            )
+
+        if total > datos.monto:
+            raise OperacionInvalida(
+                "El descuento total no puede superar el 100% del monto del pago "
+                f"(monto base ${datos.monto}, descuentos ${total})"
+            )
+        return aplicaciones, datos.monto - total
 
     def obtener_pago(
         self,

@@ -134,22 +134,44 @@ def crear_membresia_api(client, persona_id: int, tipo_id: int) -> dict:
     ).json()
 
 
+def registrar_pago_api(
+    client,
+    persona_id: int,
+    membresia_id: int,
+    *,
+    monto: str = "35.00",
+    descuento_ids: Optional[list[int]] = None,
+):
+    """POST /membresias/pagos devolviendo la Response CRUDA (no .json()):
+    las pruebas de descuentos (issue #11) necesitan asertar también los
+    códigos de error (400/403/404), no solo el cuerpo del caso feliz."""
+    payload = {
+        "monto": monto, "tipo_pago": "TRANSFERENCIA",
+        "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
+        "persona_id": persona_id, "membresia_id": membresia_id,
+    }
+    if descuento_ids is not None:
+        payload["descuento_ids"] = descuento_ids
+    return client.post("/api/v1/membresias/pagos", json=payload)
+
+
 def crear_pago_api(client, persona_id: int, membresia_id: int) -> dict:
-    return client.post(
-        "/api/v1/membresias/pagos",
-        json={
-            "monto": "35.00", "tipo_pago": "TRANSFERENCIA",
-            "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
-            "persona_id": persona_id, "membresia_id": membresia_id,
-        },
-    ).json()
+    return registrar_pago_api(client, persona_id, membresia_id).json()
+
+
+def escenario_membresia_sin_pago_api(client) -> tuple[dict, dict]:
+    """Persona + tipo + membresía (sin ningún pago todavía) vía API.
+    Devuelve (persona, membresia). Base común de las pruebas que registran
+    el pago con variantes propias (ej. con descuentos aplicados)."""
+    persona = crear_persona_api(client)
+    tipo = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], tipo["id"])
+    return persona, membresia
 
 
 def escenario_pago_pendiente_api(client) -> tuple[dict, dict, dict]:
     """Persona + tipo + membresía + pago PENDIENTE_VALIDACION vía API.
     Devuelve (persona, membresia, pago)."""
-    persona = crear_persona_api(client)
-    tipo = crear_tipo_membresia_api(client)
-    membresia = crear_membresia_api(client, persona["id"], tipo["id"])
+    persona, membresia = escenario_membresia_sin_pago_api(client)
     pago = crear_pago_api(client, persona["id"], membresia["id"])
     return persona, membresia, pago

@@ -177,6 +177,14 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/dashboard/stats"): frozenset({"ADMINISTRADOR"}),
+    # Catálogo de descuentos (issue #11): TODO el CRUD es del ADMINISTRADOR
+    # -- el catálogo es del club y la decisión de aplicar es del admin. El
+    # listado incluye inactivos (vista de administración), por eso ni la
+    # lectura es de "cualquier autenticado".
+    ("GET", "/descuentos/"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
+    ("PATCH", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/descuentos/"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/estadisticas"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/pagos"): frozenset({"ADMINISTRADOR"}),

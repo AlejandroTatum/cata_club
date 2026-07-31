@@ -17,7 +17,7 @@ from typing import List, Optional
 
 from sqlalchemy import (
     String, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, Table, Column,
-    Index, UniqueConstraint, text,
+    CheckConstraint, Index, UniqueConstraint, text,
     Enum as SAEnum,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -345,6 +345,82 @@ class Pago(Base):
     voucher_fecha_carga: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     comprobante: Mapped[Optional["ComprobantePago"]] = relationship(back_populates="pago", uselist=False)
+
+    # Descuentos aplicados a ESTE pago con su valor congelado (issue #11).
+    descuentos_aplicados: Mapped[List["DescuentoAplicado"]] = relationship(back_populates="pago")
+
+
+# ---------------------------------------------------------------------------
+# Descuentos (issue #11, modelo firmado docs/concepto-alcance-modelo.md §4)
+#
+# Dos entidades deliberadamente separadas:
+#   - `Descuento`: catálogo VIVO administrado por el club (CRUD del admin).
+#     Sin motor de reglas: el sistema no calcula elegibilidad, el admin decide.
+#   - `DescuentoAplicado`: hecho HISTÓRICO por pago, con el valor congelado
+#     al momento de aplicar. Cambios posteriores al catálogo jamás alteran
+#     pagos ya registrados -- eso es exactamente lo que garantiza la copia.
+# ---------------------------------------------------------------------------
+class Descuento(Base):
+    __tablename__ = "descuento"
+    # Invariantes del catálogo EN LA BASE (mismo criterio que issue #8: el
+    # chequeo del DTO/servicio es el camino primario de error, el CHECK es la
+    # red de seguridad ante escrituras que lo burlen):
+    #   - exactamente UNO de porcentaje/monto definido (XOR);
+    #   - porcentaje en (0, 100]; monto fijo positivo.
+    __table_args__ = (
+        CheckConstraint(
+            "(porcentaje IS NULL) <> (monto IS NULL)",
+            name="ck_descuento_porcentaje_o_monto",
+        ),
+        CheckConstraint(
+            "porcentaje IS NULL OR (porcentaje > 0 AND porcentaje <= 100)",
+            name="ck_descuento_porcentaje_en_rango",
+        ),
+        CheckConstraint(
+            "monto IS NULL OR monto > 0",
+            name="ck_descuento_monto_positivo",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(100), unique=True)
+    porcentaje: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    monto: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    # Baja SUAVE: un descuento que deja de ofrecerse se DESACTIVA, nunca se
+    # borra -- sus aplicaciones históricas lo referencian por FK y el club
+    # conserva la historia (misma filosofía que `Persona.activo`).
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    aplicaciones: Mapped[List["DescuentoAplicado"]] = relationship(back_populates="descuento")
+
+
+class DescuentoAplicado(Base):
+    __tablename__ = "descuento_aplicado"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Valor CONGELADO en dinero al momento de aplicar (para un descuento
+    # porcentual, el resultado de aplicar el porcentaje vigente al monto base
+    # del pago; para uno de monto fijo, ese monto). Es la única fuente de
+    # verdad histórica: el catálogo puede cambiar después sin tocar esto.
+    valor_aplicado: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    # Porcentaje vigente al aplicar (NULL si el descuento era de monto fijo);
+    # también congelado, para poder auditar "era el 50 % de entonces".
+    porcentaje_aplicado: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
+
+    pago_id: Mapped[int] = mapped_column(ForeignKey("pago.id"))
+    pago: Mapped["Pago"] = relationship(back_populates="descuentos_aplicados")
+
+    descuento_id: Mapped[int] = mapped_column(ForeignKey("descuento.id"))
+    descuento: Mapped["Descuento"] = relationship(back_populates="aplicaciones")
+
+    # A quién se le aplicó y qué administrador lo autorizó. Dos FKs a Persona
+    # sin back_populates: Persona no necesita navegar sus descuentos (se
+    # consultan siempre desde el pago).
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    persona: Mapped["Persona"] = relationship(foreign_keys=[persona_id])
+
+    autorizado_por_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    autorizado_por: Mapped["Persona"] = relationship(foreign_keys=[autorizado_por_persona_id])
 
 
 class ComprobantePago(Base):

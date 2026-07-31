@@ -5,6 +5,7 @@ from typing import Optional
 
 from app.dominio.enums import EstadoMembresia, TipoModalidad, EstadoPago, TipoPago
 from app.presentacion.schemas.base import ResponseBase
+from app.presentacion.schemas.descuento_schemas import DescuentoAplicadoResponseDTO
 
 
 # --- TipoMembresia ---
@@ -47,6 +48,11 @@ class PagoCreateDTO(BaseModel):
     fecha_fin: date
     persona_id: int
     membresia_id: int
+    # Issue #11: descuentos del catálogo a aplicar en ESTE registro (solo un
+    # ADMINISTRADOR puede enviarlos; ver `PagoServicio.registrar_pago`). El
+    # `monto` de arriba es el monto BASE (sin descontar): el servicio resuelve
+    # los valores vigentes, los congela y calcula el monto final.
+    descuento_ids: list[int] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _orden_fechas(self) -> "PagoCreateDTO":
@@ -89,6 +95,8 @@ class PagoResponseDTO(ResponseBase, BaseModel):
     voucher_url: Optional[str] = None
     voucher_formato: Optional[str] = None
     voucher_fecha_carga: Optional[datetime] = None
+    # Issue #11: detalle congelado de los descuentos aplicados a este pago.
+    descuentos_aplicados: list[DescuentoAplicadoResponseDTO] = Field(default_factory=list)
 
 
 # --- Listado / cola de validación (GET /membresias/pagos) -------------------
