@@ -85,8 +85,17 @@ class NivelRankingServicio:
     def _validar_capacidad_disponible(self, nivel_id: int) -> None:
         """E03-RF001: máximo 10 por nivel, se bloquea de forma dura. El
         mínimo de 6 NO se bloquea aquí (ver docstring de NivelRanking en
-        modelos.py) -- se informa vía listar_niveles_con_ocupacion."""
-        nivel = self.obtener_nivel(nivel_id)
+        modelos.py) -- se informa vía listar_niveles_con_ocupacion.
+
+        La fila del nivel se lee con `FOR UPDATE` (issue #8): sin serializar,
+        dos asignaciones concurrentes al último cupo contaban las dos la
+        misma ocupación, pasaban las dos y el nivel excedía su capacidad. El
+        lock ordena el leer-luego-escribir completo: la segunda espera el
+        commit de la primera y su conteo ya la incluye. Se libera con el
+        commit de la asignación."""
+        nivel = self.repo.obtener_por_id_bloqueado(nivel_id)
+        if not nivel:
+            raise EntidadNoEncontrada(f"Nivel de ranking con id {nivel_id} no encontrado")
         actuales = self.repo.contar_personas_en_nivel(nivel_id)
         if actuales >= nivel.capacidad_maxima:
             raise OperacionInvalida(

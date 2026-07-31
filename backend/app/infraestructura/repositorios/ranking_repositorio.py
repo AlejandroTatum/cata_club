@@ -13,6 +13,22 @@ class NivelRankingRepositorio:
     def obtener_por_id(self, nivel_id: int) -> Optional[NivelRanking]:
         return self.db.get(NivelRanking, nivel_id)
 
+    def obtener_por_id_bloqueado(self, nivel_id: int) -> Optional[NivelRanking]:
+        """`SELECT ... FOR UPDATE` sobre la fila del nivel (issue #8).
+
+        La capacidad máxima tiene forma de CONTEO, no de unicidad, así que no
+        hay índice que la respalde: lo que serializa el leer-luego-escribir es
+        este lock. Dos asignaciones concurrentes al mismo nivel se ordenan
+        aquí -- la segunda espera a que la primera commitee y recién entonces
+        cuenta, viendo la fila recién insertada. El lock se libera con el
+        commit de la propia asignación."""
+        return (
+            self.db.query(NivelRanking)
+            .filter(NivelRanking.id == nivel_id)
+            .with_for_update()
+            .first()
+        )
+
     def obtener_por_numero(self, numero_nivel: int) -> Optional[NivelRanking]:
         return self.db.query(NivelRanking).filter(NivelRanking.numero_nivel == numero_nivel).first()
 

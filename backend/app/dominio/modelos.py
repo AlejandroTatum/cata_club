@@ -17,7 +17,7 @@ from typing import List, Optional
 
 from sqlalchemy import (
     String, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, Table, Column,
-    UniqueConstraint,
+    Index, UniqueConstraint, text,
     Enum as SAEnum,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -263,6 +263,25 @@ class TipoMembresia(Base):
 
 class Membresia(Base):
     __tablename__ = "membresia"
+    # Invariante de negocio EN LA BASE (auditoría hallazgo 7, issue #8): una
+    # sola membresía ACTIVA por persona. El chequeo de
+    # `MembresiaServicio.crear_membresia` sigue siendo el camino primario de
+    # error (UX); este índice único PARCIAL es la red de seguridad ante
+    # escrituras concurrentes que lo burlen -- en particular dos
+    # `validar_pago` simultáneos aprobando pagos de dos membresías INACTIVAS
+    # de la misma persona. Parcial a propósito: el historial (VENCIDA,
+    # INACTIVA) convive sin límite; el WHERE es el espejo exacto del chequeo
+    # del servicio (`estado == ACTIVA`). Creado por la migración
+    # `c3d9f2b7a1e5`.
+    __table_args__ = (
+        Index(
+            "uq_membresia_activa_por_persona",
+            "persona_id",
+            unique=True,
+            postgresql_where=text("estado = 'ACTIVA'"),
+        ),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     estado: Mapped[EstadoMembresia] = mapped_column(SAEnum(EstadoMembresia))
     monto_aplicado: Mapped[Decimal] = mapped_column(Numeric(10, 2))
@@ -284,6 +303,22 @@ class Membresia(Base):
 
 class Pago(Base):
     __tablename__ = "pago"
+    # Invariante de negocio EN LA BASE (auditoría hallazgo 7, issue #8): un
+    # solo pago PENDIENTE_VALIDACION por membresía. El chequeo de
+    # `PagoServicio.registrar_pago` (`existe_pendiente_para_membresia`) sigue
+    # siendo el camino primario de error; este índice único PARCIAL respalda
+    # ante dos registros concurrentes que pasen los dos el chequeo. Parcial a
+    # propósito: el historial APROBADO/RECHAZADO de la membresía no queda
+    # limitado. Creado por la migración `c3d9f2b7a1e5`.
+    __table_args__ = (
+        Index(
+            "uq_pago_pendiente_por_membresia",
+            "membresia_id",
+            unique=True,
+            postgresql_where=text("estado_pago = 'PENDIENTE_VALIDACION'"),
+        ),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     monto: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     motivo_rechazo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
