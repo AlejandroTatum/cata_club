@@ -113,6 +113,7 @@ const mockActualizarFichaMedica = vi.fn();
 const mockFetchTiposMembresia = vi.fn().mockResolvedValue([]);
 const mockCrearMembresia = vi.fn();
 const mockRegistrarPago = vi.fn();
+const mockFetchDescuentos = vi.fn().mockResolvedValue([]);
 const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 
@@ -137,6 +138,7 @@ vi.mock("@/services/api", () => {
     fetchTiposMembresia: () => mockFetchTiposMembresia(),
     crearMembresia: (data: unknown) => mockCrearMembresia(data),
     registrarPago: (data: unknown) => mockRegistrarPago(data),
+    fetchDescuentos: () => mockFetchDescuentos(),
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     ApiClientError: MockApiClientError,
@@ -748,6 +750,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     mockFetchMembers.mockReset();
     mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
     mockRegistrarPago.mockReset();
+    mockFetchDescuentos.mockReset().mockResolvedValue([]);
   });
 
   it("renders a 'Registrar pago' button inside the student card when the student has a membership", async () => {
@@ -837,6 +840,162 @@ describe("MembersPage — Registrar pago inline form", () => {
     await waitFor(() => {
       expect(within(dialog).getByText(/pago registrado/i)).toBeInTheDocument();
     });
+  });
+
+  it("offers active discounts, previews the final amount and submits descuentoIds (issue #12)", async () => {
+    const cuentaConMembresia: MemberAccount = {
+      ...ACCOUNT,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            tipo: "Mensual (Tarde)",
+            estado: "vencida",
+            fechaInicio: "2026-06-01",
+            fechaFin: "2026-06-30",
+            monto: 85,
+            id: 42,
+          },
+        },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia], niveles: [] });
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
+      { id: 2, nombre: "Beca vieja", porcentaje: "100", monto: null, activo: false },
+    ]);
+    mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+
+    // Only ACTIVE discounts are offered for application; the inactive one
+    // stays visible in the catalog screen but never here.
+    const mediaBeca = await within(dialog).findByRole("checkbox", { name: /media beca/i });
+    expect(within(dialog).queryByRole("checkbox", { name: /beca vieja/i })).not.toBeInTheDocument();
+
+    fireEvent.click(mediaBeca);
+
+    // Client-side DISPLAY preview: 85 − 50 % = 42.50 (backend recomputes).
+    expect(await within(dialog).findByText(/monto final/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/42,50/)).toBeInTheDocument();
+
+    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
+    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+
+    await waitFor(() => {
+      expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
+    });
+    // `monto` stays the BASE amount: the backend freezes catalog values and
+    // computes the final amount itself.
+    expect(mockRegistrarPago.mock.calls[0][0]).toMatchObject({
+      monto: 85,
+      descuentoIds: [1],
+    });
+  });
+
+  it("omits descuentoIds when no discount is selected", async () => {
+    const cuentaConMembresia: MemberAccount = {
+      ...ACCOUNT,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            tipo: "Mensual (Tarde)",
+            estado: "vencida",
+            fechaInicio: "2026-06-01",
+            fechaFin: "2026-06-30",
+            monto: 85,
+            id: 42,
+          },
+        },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia], niveles: [] });
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
+    ]);
+    mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+    await within(dialog).findByRole("checkbox", { name: /media beca/i });
+
+    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
+    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+
+    await waitFor(() => {
+      expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
+    });
+    expect("descuentoIds" in (mockRegistrarPago.mock.calls[0][0] as Record<string, unknown>)).toBe(false);
+  });
+
+  it("surfaces the backend cap-exceeded 400 as a normal form error", async () => {
+    const cuentaConMembresia: MemberAccount = {
+      ...ACCOUNT,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            tipo: "Mensual (Tarde)",
+            estado: "vencida",
+            fechaInicio: "2026-06-01",
+            fechaFin: "2026-06-30",
+            monto: 85,
+            id: 42,
+          },
+        },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia], niveles: [] });
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Beca parcial", porcentaje: "60", monto: null, activo: true },
+      { id: 2, nombre: "Familiar", porcentaje: "50", monto: null, activo: true },
+    ]);
+    const { ApiClientError } = await import("@/services/api");
+    mockRegistrarPago.mockRejectedValueOnce(
+      new ApiClientError("El descuento total no puede superar el 100% del monto", 400),
+    );
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: /beca parcial/i }));
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /familiar/i }));
+
+    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
+    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+
+    expect(
+      await within(dialog).findByText("El descuento total no puede superar el 100% del monto"),
+    ).toBeInTheDocument();
   });
 
   it("does NOT render a 'Registrar pago' button when the student has no membership", async () => {

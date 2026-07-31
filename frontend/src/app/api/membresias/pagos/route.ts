@@ -41,6 +41,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Issue #12: optional catalog discounts to apply on this registration.
+  // Optional and default-absent so pre-discount callers are unchanged; when
+  // present it must be a list of numeric ids (the backend's `descuento_ids`).
+  const rawDescuentoIds = (body as Record<string, unknown>).descuentoIds;
+  if (
+    rawDescuentoIds !== undefined
+    && (!Array.isArray(rawDescuentoIds) || rawDescuentoIds.some((id) => typeof id !== "number"))
+  ) {
+    return NextResponse.json(
+      { message: "descuentoIds debe ser una lista de identificadores numéricos." },
+      { status: 400 },
+    );
+  }
+
   const payload = body as {
     monto: number;
     tipoPago: string;
@@ -48,6 +62,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     fechaFin: string;
     personaId: number;
     membresiaId: number;
+    descuentoIds?: number[];
   };
 
   const result = await backendFetchAuthed(request, "/membresias/pagos", {
@@ -60,6 +75,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       fecha_fin: payload.fechaFin,
       persona_id: payload.personaId,
       membresia_id: payload.membresiaId,
+      ...(payload.descuentoIds !== undefined ? { descuento_ids: payload.descuentoIds } : {}),
     }),
   });
 

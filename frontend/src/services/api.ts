@@ -1071,7 +1071,10 @@ export async function fetchPagosDePersona(personaId: string): Promise<PagoPerson
   });
 }
 
-/** Payload for registering a new pending payment — `POST /api/membresias/pagos`. */
+/** Payload for registering a new pending payment — `POST /api/membresias/pagos`.
+ *  `monto` is always the BASE amount: when `descuentoIds` are attached the
+ *  backend resolves each discount's current value, freezes it and computes
+ *  the final amount itself (frozen-value semantics, issue #12). */
 export interface RegistrarPagoInput {
   monto: number;
   tipoPago: "EFECTIVO" | "TRANSFERENCIA";
@@ -1079,6 +1082,9 @@ export interface RegistrarPagoInput {
   fechaFin: string;
   personaId: number;
   membresiaId: number;
+  /** Catalog discounts to apply on THIS registration (admin-only decision).
+   *  Optional and default-empty so existing flows are unchanged. */
+  descuentoIds?: number[];
 }
 
 /** Register a new pending payment (PENDIENTE_VALIDACION) — `POST /api/membresias/pagos`.
@@ -1133,6 +1139,66 @@ export async function crearMembresia(data: {
       tipo_membresia_id: data.tipoMembresiaId,
       monto_aplicado: data.montoAplicado,
     }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Descuentos — catálogo del club (issue #12, admin-only)
+// ---------------------------------------------------------------------------
+
+/**
+ * `DescuentoResponseDTO` (backend app/presentacion/schemas/descuento_schemas.py).
+ * Exactly one of `porcentaje`/`monto` is set — the catalog invariant. Decimals
+ * arrive serialized as strings, same as `PagoPersona.monto`.
+ */
+export interface DescuentoCatalogo {
+  id: number;
+  nombre: string;
+  porcentaje: string | null;
+  monto: string | null;
+  activo: boolean;
+}
+
+/** Payload for creating a catalog discount — exactly one of porcentaje/monto. */
+export interface CrearDescuentoInput {
+  nombre: string;
+  porcentaje: number | null;
+  monto: number | null;
+}
+
+/** PATCH payload: only the provided fields are applied. Explicit nulls in
+ *  `porcentaje`/`monto` are meaningful — they clear the other modality. */
+export interface ActualizarDescuentoInput {
+  nombre?: string;
+  porcentaje?: number | null;
+  monto?: number | null;
+  activo?: boolean;
+}
+
+/** Admin-only: full discount catalog, ACTIVE AND INACTIVE — `GET /api/descuentos`.
+ *  The list is the administration view (and the road to reactivating). */
+export async function fetchDescuentos(): Promise<DescuentoCatalogo[]> {
+  return request<DescuentoCatalogo[]>(apiEndpoint("/descuentos"), { method: "GET" });
+}
+
+/** Admin-only: create a catalog discount — `POST /api/descuentos`. */
+export async function crearDescuento(data: CrearDescuentoInput): Promise<DescuentoCatalogo> {
+  return request<DescuentoCatalogo>(apiEndpoint("/descuentos"), {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/** Admin-only: partial update / soft toggle — `PATCH /api/descuentos/:id`.
+ *  There is no DELETE: deactivating is the only "removal" (history keeps
+ *  referencing the discount by FK; applied values stay frozen). */
+export async function actualizarDescuento(
+  id: number,
+  data: ActualizarDescuentoInput,
+): Promise<DescuentoCatalogo> {
+  return request<DescuentoCatalogo>(apiEndpoint(`/descuentos/${id}`), {
+    method: "PATCH",
+    body: JSON.stringify(data),
   });
 }
 

@@ -132,15 +132,16 @@ describe("getNavLinksForRole", () => {
 
   it("returns admin links including /groups, /members and /attendance", () => {
     const links = getNavLinksForRole("admin");
-    expect(links).toHaveLength(8);
+    expect(links).toHaveLength(9);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
     expect(links[1]).toEqual({ href: "/dashboard", label: "Panel de Control" });
     expect(links[2]).toEqual({ href: "/members", label: "Miembros" });
     expect(links[3]).toEqual({ href: "/ranking", label: "Niveles" });
     expect(links[4]).toEqual({ href: "/groups", label: "Horarios" });
     expect(links[5]).toEqual({ href: "/payments", label: "Membresías y Pagos" });
-    expect(links[6]).toEqual({ href: "/attendance", label: "Asistencias" });
-    expect(links[7]).toEqual({ href: "/reports", label: "Reportes" });
+    expect(links[6]).toEqual({ href: "/discounts", label: "Descuentos" });
+    expect(links[7]).toEqual({ href: "/attendance", label: "Asistencias" });
+    expect(links[8]).toEqual({ href: "/reports", label: "Reportes" });
   });
 
   // Labels are Spanish and name the destination. The old set said
