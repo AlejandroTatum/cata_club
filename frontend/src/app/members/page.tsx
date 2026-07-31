@@ -65,8 +65,9 @@ import {
   Upload,
   UserPlus,
 } from "lucide-react";
-import { fetchMembers, obtenerRolesDePersona, asignarRol, quitarRol, cambiarEstadoCuenta, actualizarPersona, fetchFichaMedica, actualizarFichaMedica, fetchTiposMembresia, crearMembresia, registrarPago } from "@/services/api";
-import type { TipoMembresiaCatalogo, RegistrarPagoInput } from "@/services/api";
+import { fetchMembers, obtenerRolesDePersona, asignarRol, quitarRol, cambiarEstadoCuenta, actualizarPersona, fetchFichaMedica, actualizarFichaMedica, fetchTiposMembresia, crearMembresia, registrarPago, fetchDescuentos } from "@/services/api";
+import type { TipoMembresiaCatalogo, RegistrarPagoInput, DescuentoCatalogo } from "@/services/api";
+import { computeMontoFinal, descuentosActivos, descuentoValorLabel } from "@/app/discounts/discounts-utils";
 import { nivelToGrupo } from "@/app/groups/groups-page-utils";
 import { getUserInitials } from "@/lib/auth-utils";
 import {
@@ -206,6 +207,12 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const paymentFileInputRef = useRef<HTMLInputElement>(null);
   const [paymentVoucherFile, setPaymentVoucherFile] = useState<File | null>(null);
+  // Discounts to apply on THIS registration (issue #12). The catalog is
+  // fetched lazily when the form opens; only ACTIVE discounts are offered.
+  // `null` = not fetched yet (or fetch failed: the form degrades to the
+  // pre-discount behavior — the backend is the authority anyway).
+  const [descuentosCatalogo, setDescuentosCatalogo] = useState<DescuentoCatalogo[] | null>(null);
+  const [selectedDescuentoIds, setSelectedDescuentoIds] = useState<number[]>([]);
 
   const membershipLabel = student.membresia
     ? MEMBERSHIP_STATUS_LABELS[student.membresia.estado]
@@ -225,6 +232,18 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
   const personaId = Number(student.id);
   const age = calculateAge(student.fechaNacimiento);
   const paymentMonthlyPrice = student.membresia?.monto != null ? Number(student.membresia.monto) : 0;
+
+  // Active discounts offered in the payment form, and the DISPLAY-ONLY final
+  // amount preview (the backend freezes values and recomputes on register).
+  const descuentosOfrecidos = descuentosActivos(descuentosCatalogo ?? []);
+  const descuentosSeleccionados = descuentosOfrecidos.filter((d) => selectedDescuentoIds.includes(d.id));
+  const montoFinalPreview = computeMontoFinal(Number(paymentMonto) || 0, descuentosSeleccionados);
+
+  function toggleDescuento(id: number): void {
+    setSelectedDescuentoIds((prev) =>
+      prev.includes(id) ? prev.filter((selected) => selected !== id) : [...prev, id],
+    );
+  }
 
   async function handleOpenCreateMembership(): Promise<void> {
     setShowCreateMembership(true);
@@ -288,6 +307,14 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
     setPaymentError(null);
     setPaymentSuccess(false);
     setPaymentVoucherFile(null);
+    setSelectedDescuentoIds([]);
+    if (descuentosCatalogo === null) {
+      fetchDescuentos()
+        .then((catalogo) => setDescuentosCatalogo(catalogo))
+        // A failed catalog fetch never blocks registering a payment: the
+        // form simply offers no discounts (same as an empty catalog).
+        .catch(() => setDescuentosCatalogo([]));
+    }
     // A calendar date, so `calcPaymentEndDate` adds months to a day rather
     // than to an instant.
     const hoy = clubToday();
@@ -326,12 +353,16 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
     setPaymentError(null);
     try {
       const input: RegistrarPagoInput = {
+        // Always the BASE amount: with discounts attached the backend
+        // resolves and freezes the catalog values and computes the final
+        // amount itself (the preview shown in the form is display-only).
         monto: montoNum,
         tipoPago: paymentTipoPago,
         fechaInicio: paymentFechaInicio,
         fechaFin: paymentFechaFin,
         personaId,
         membresiaId: student.membresia.id,
+        ...(selectedDescuentoIds.length > 0 ? { descuentoIds: selectedDescuentoIds } : {}),
       };
       const nuevoPago = await registrarPago(input);
       if (paymentVoucherFile && nuevoPago?.id) {
@@ -525,6 +556,35 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                 <p className="text-[10px] text-cata-text/45">
                   {Number(paymentMonto) / paymentMonthlyPrice} meses de vigencia (precio mensual: ${paymentMonthlyPrice})
                 </p>
+              )}
+              {/* Descuentos del catálogo (issue #12): decisión del admin al
+                  registrar. Solo se ofrecen los ACTIVOS; el monto final es
+                  una vista previa — el backend congela valores y recalcula. */}
+              {descuentosOfrecidos.length > 0 && (
+                <fieldset className="rounded-lg border border-cata-border/50 bg-cata-surface/50 px-2.5 py-2">
+                  <legend className="px-1 text-xs font-medium text-cata-text/65">Descuentos</legend>
+                  <div className="space-y-1">
+                    {descuentosOfrecidos.map((descuento) => (
+                      <label key={descuento.id} className="flex items-center gap-2 text-xs text-cata-text">
+                        <input
+                          type="checkbox"
+                          checked={selectedDescuentoIds.includes(descuento.id)}
+                          onChange={() => toggleDescuento(descuento.id)}
+                          className="h-3.5 w-3.5 rounded border-cata-border"
+                        />
+                        <span>
+                          {descuento.nombre}
+                          <span className="text-cata-text/45"> · {descuentoValorLabel(descuento)}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {descuentosSeleccionados.length > 0 && (
+                    <p className="mt-1.5 border-t border-cata-border/50 pt-1.5 text-xs font-semibold text-cata-text">
+                      Monto final con descuentos: {formatCurrency(montoFinalPreview)}
+                    </p>
+                  )}
+                </fieldset>
               )}
               {paymentTipoPago === "TRANSFERENCIA" && (
                 <label className="block text-xs font-medium text-cata-text/65">

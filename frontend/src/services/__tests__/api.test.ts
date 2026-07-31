@@ -33,13 +33,17 @@ import {
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
   fetchEntrenadores,
+  fetchDescuentos,
+  crearDescuento,
+  actualizarDescuento,
+  registrarPago,
   subirFotoPerfil,
   downloadBlob,
   exportNuevosPorPeriodoPdf,
   exportAsistenciaReportePdf,
   consultarChatbot,
 } from "../api";
-import type { PaymentValidationRequest, Horario, AlumnoHorario, Entrenador } from "../api";
+import type { PaymentValidationRequest, Horario, AlumnoHorario, Entrenador, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
@@ -858,6 +862,127 @@ describe("downloadBlob / report PDF exports", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/asistencias/reportes/pdf?fechaInicio=2026-01-01&fechaFin=2026-12-31&horarioId=3",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Descuentos — catálogo admin (issue #12)
+// ---------------------------------------------------------------------------
+
+function makeDescuento(overrides: Partial<DescuentoCatalogo> = {}): DescuentoCatalogo {
+  return {
+    id: 1,
+    nombre: "Beca municipal",
+    porcentaje: "100",
+    monto: null,
+    activo: true,
+    ...overrides,
+  };
+}
+
+describe("fetchDescuentos", () => {
+  it("GETs /api/descuentos and returns the full catalog (active + inactive)", async () => {
+    const items = [makeDescuento(), makeDescuento({ id: 2, nombre: "Vieja", activo: false })];
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(items));
+
+    const result = await fetchDescuentos();
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/descuentos", expect.anything());
+    expect(result).toEqual(items);
+  });
+});
+
+describe("crearDescuento", () => {
+  it("POSTs /api/descuentos with nombre + porcentaje", async () => {
+    const created = makeDescuento({ porcentaje: "50" });
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(created, { status: 201 }));
+
+    const result = await crearDescuento({ nombre: "Media beca", porcentaje: 50, monto: null });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/descuentos",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ nombre: "Media beca", porcentaje: 50, monto: null }),
+      }),
+    );
+    expect(result).toEqual(created);
+  });
+
+  it("surfaces the backend domain message on a 400 (e.g. duplicate name)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(400, { message: "Ya existe un descuento con ese nombre" }),
+    );
+
+    await expect(
+      crearDescuento({ nombre: "Beca municipal", porcentaje: 100, monto: null }),
+    ).rejects.toThrow("Ya existe un descuento con ese nombre");
+  });
+});
+
+describe("actualizarDescuento", () => {
+  it("PATCHes /api/descuentos/:id with only the provided fields", async () => {
+    const updated = makeDescuento({ activo: false });
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(updated));
+
+    const result = await actualizarDescuento(1, { activo: false });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/descuentos/1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ activo: false }) }),
+    );
+    expect(result).toEqual(updated);
+  });
+
+  it("sends explicit nulls so the discount modality can change", async () => {
+    const updated = makeDescuento({ porcentaje: null, monto: "10.00" });
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(updated));
+
+    await actualizarDescuento(1, { porcentaje: null, monto: 10 });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/descuentos/1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ porcentaje: null, monto: 10 }) }),
+    );
+  });
+});
+
+describe("registrarPago — descuentos", () => {
+  it("includes descuentoIds in the POST body when provided", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ id: 7, estadoPago: "PENDIENTE_VALIDACION" }, { status: 201 }),
+    );
+
+    await registrarPago({
+      monto: 35,
+      tipoPago: "EFECTIVO",
+      fechaInicio: "2026-08-01",
+      fechaFin: "2026-08-31",
+      personaId: 9,
+      membresiaId: 4,
+      descuentoIds: [1, 2],
+    });
+
+    const body = JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body));
+    expect(body.descuentoIds).toEqual([1, 2]);
+  });
+
+  it("keeps the payload unchanged when no descuentos are selected", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ id: 8, estadoPago: "PENDIENTE_VALIDACION" }, { status: 201 }),
+    );
+
+    await registrarPago({
+      monto: 35,
+      tipoPago: "EFECTIVO",
+      fechaInicio: "2026-08-01",
+      fechaFin: "2026-08-31",
+      personaId: 9,
+      membresiaId: 4,
+    });
+
+    const body = JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body));
+    expect("descuentoIds" in body).toBe(false);
   });
 });
 

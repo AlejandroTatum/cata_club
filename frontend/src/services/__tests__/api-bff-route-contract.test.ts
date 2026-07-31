@@ -23,6 +23,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/groups/horarios/route";
 import { PUT } from "@/app/api/groups/horarios/[id]/route";
 import { PATCH as PATCH_NIVEL } from "@/app/api/personas/[id]/nivel/route";
+import { POST as POST_PAGO } from "@/app/api/membresias/pagos/route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 import {
   obtenerRolesDePersona,
@@ -48,6 +49,10 @@ import {
   searchStudents,
   setStudentNivel,
   subirVoucherPago,
+  registrarPago,
+  fetchDescuentos,
+  crearDescuento,
+  actualizarDescuento,
 } from "../api";
 
 const API_ROOT = path.resolve(
@@ -173,6 +178,9 @@ describe("API client URLs resolve to a real BFF route handler", () => {
       "subirVoucherPago",
       () => subirVoucherPago(4, new File(["x"], "voucher.png", { type: "image/png" })),
     ],
+    ["fetchDescuentos", () => fetchDescuentos()],
+    ["crearDescuento", () => crearDescuento({ nombre: "Beca", porcentaje: 50, monto: null })],
+    ["actualizarDescuento", () => actualizarDescuento(3, { activo: false })],
   ];
 
   it.each(CASES)("%s targets an existing route handler", async (_name, call) => {
@@ -327,6 +335,44 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
 
     expect(response.status).not.toBe(400);
     expect(Object.keys(forwardedToBackend()).sort()).toEqual(["categoria", "entrenador_id"]);
+  });
+
+  /**
+   * The discount seam (issue #12): the client sends camelCase `descuentoIds`
+   * and the pago handler is the only thing translating it into the backend's
+   * `descuento_ids`. A drift on either side would silently register the pago
+   * WITHOUT its discounts — no 400, just a wrong (undiscounted) amount.
+   */
+  it("registrarPago's descuentoIds are accepted and translated by POST /api/membresias/pagos", async () => {
+    const clientBody = await captureBody(() =>
+      registrarPago({
+        monto: 35,
+        tipoPago: "EFECTIVO",
+        fechaInicio: "2026-08-01",
+        fechaFin: "2026-08-31",
+        personaId: 9,
+        membresiaId: 4,
+        descuentoIds: [1, 2],
+      }),
+    );
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: 1 }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await POST_PAGO(
+      new NextRequest("http://localhost/api/membresias/pagos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
+        body: JSON.stringify(clientBody),
+      }),
+    );
+
+    expect(response.status).not.toBe(400);
+    expect(forwardedToBackend().descuento_ids).toEqual([1, 2]);
   });
 
   /**

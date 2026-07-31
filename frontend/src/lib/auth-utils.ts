@@ -50,6 +50,7 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
         { href: "/ranking", label: "Niveles" },
         { href: "/groups", label: "Horarios" },
         { href: "/payments", label: "Membresías y Pagos" },
+        { href: "/discounts", label: "Descuentos" },
         { href: "/attendance", label: "Asistencias" },
         { href: "/reports", label: "Reportes" },
       );
