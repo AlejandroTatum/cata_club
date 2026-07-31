@@ -18,6 +18,8 @@ Dos familias de pruebas:
    PDF para pagos APROBADOS sin comprobante más viejos que el umbral.
 
 CONVENIOS DE FIXTURE:
+- Las fábricas del grafo persona→tipo→membresía→pago viven en
+  `tests/fabricas_pagos.py` (compartidas con `test_invariantes_constraints.py`).
 - `_DISPARO_ORIGINAL` se captura en import (durante la colección), ANTES de
   que el autouse `_mock_disparo_celery_comprobante` de conftest.py parchee el
   método por test. Así los tests que necesitan el camino real pueden
@@ -29,77 +31,71 @@ CONVENIOS DE FIXTURE:
 """
 import threading
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 from sqlalchemy.orm import Session
 
 import app.servicios_negocio.membresia_pago_servicio as mps
-from app.dominio.enums import (
-    EstadoMembresia, EstadoPago, TipoModalidad, TipoPago,
-)
+from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import (
     ComprobantePago, Membresia, Notificacion, Pago, Persona, TipoMembresia,
 )
+from app.infraestructura.tareas import comprobante_tareas as ct
 from app.presentacion.schemas.membresia_pago_schemas import PagoValidarDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
+from tests.fabricas_pagos import (
+    crear_membresia_orm,
+    crear_pago_orm,
+    crear_persona_orm,
+    crear_tipo_membresia_orm,
+    escenario_pago_pendiente_api,
+)
 
 # Capturado en tiempo de colección: el método REAL, antes del stub autouse.
 _DISPARO_ORIGINAL = mps.PagoServicio._disparar_generacion_comprobante_pdf
 
 
-# --- Helpers HTTP (mismo patrón que test_membresias_pagos.py) ---------------
+# --- Helpers locales ---------------------------------------------------------
 
-def _crear_persona(client, cedula="1710034065"):
-    return client.post(
-        "/api/v1/personas/",
-        json={
-            "nombres": "Ana", "apellidos": "Torres", "cedula": cedula,
-            "fecha_nacimiento": "2010-05-14", "telefono": "0991234567",
-        },
-    ).json()
+def _validar(client, pago_id: int, estado: str, motivo: str | None = None):
+    """PATCH /validar con el payload mínimo del caso."""
+    payload = {"estado_pago": estado}
+    if motivo is not None:
+        payload["motivo_rechazo"] = motivo
+    return client.patch(f"/api/v1/membresias/pagos/{pago_id}/validar", json=payload)
 
 
-def _crear_tipo_membresia(client):
-    return client.post(
-        "/api/v1/membresias/tipos",
-        json={
-            "categoria": "Adultos", "franja_horaria": "18:00-19:00",
-            "precio": "35.00", "modalidad": "MENSUAL",
-        },
-    ).json()
+def _contar_notificaciones(db_session, pago_id: int) -> int:
+    return (
+        db_session.query(Notificacion)
+        .filter(Notificacion.entidad_relacionada_id == pago_id)
+        .count()
+    )
 
 
-def _crear_membresia(client, persona_id, tipo_id):
-    return client.post(
-        "/api/v1/membresias/",
-        json={
-            "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
-            "persona_id": persona_id, "tipo_membresia_id": tipo_id,
-        },
-    ).json()
+def _usar_sesion_del_test(monkeypatch, db_session) -> None:
+    """Inyecta el `db_session` del fixture en el `SessionLocal` que abren las
+    tareas de `comprobante_tareas` (mismo patrón que
+    `test_vencimientos_tareas.py::_run_task`)."""
+
+    @contextmanager
+    def _sesion():
+        yield db_session
+
+    monkeypatch.setattr(ct, "SessionLocal", _sesion)
 
 
-def _crear_pago(client, persona_id, membresia_id):
-    return client.post(
-        "/api/v1/membresias/pagos",
-        json={
-            "monto": "35.00", "tipo_pago": "TRANSFERENCIA",
-            "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
-            "persona_id": persona_id, "membresia_id": membresia_id,
-        },
-    ).json()
-
-
-def _escenario_pago_pendiente(client):
-    """Persona + tipo + membresía + pago PENDIENTE_VALIDACION vía API."""
-    persona = _crear_persona(client)
-    tipo = _crear_tipo_membresia(client)
-    membresia = _crear_membresia(client, persona["id"], tipo["id"])
-    pago = _crear_pago(client, persona["id"], membresia["id"])
-    return persona, membresia, pago
+def _espiar_redespachos(monkeypatch) -> list[int]:
+    """Reemplaza `generar_comprobante_pdf_tarea.delay` por un registro de los
+    pago_id despachados (no hay broker en el entorno de test)."""
+    redespachos: list[int] = []
+    monkeypatch.setattr(
+        ct.generar_comprobante_pdf_tarea, "delay", lambda pid: redespachos.append(pid)
+    )
+    return redespachos
 
 
 @pytest.fixture()
@@ -116,14 +112,6 @@ def espia_disparo(monkeypatch):
     return llamadas
 
 
-def _contar_notificaciones(db_session, pago_id: int) -> int:
-    return (
-        db_session.query(Notificacion)
-        .filter(Notificacion.entidad_relacionada_id == pago_id)
-        .count()
-    )
-
-
 # --- 1. Guardia de estado ---------------------------------------------------
 
 def test_reaprobar_pago_aprobado_devuelve_400_sin_repetir_efectos(
@@ -131,20 +119,13 @@ def test_reaprobar_pago_aprobado_devuelve_400_sin_repetir_efectos(
 ):
     """Revalidar un pago ya APROBADO debe rechazarse con 400 y NO repetir
     ningún efecto: ni segunda notificación, ni segundo disparo de la tarea."""
-    persona, membresia, pago = _escenario_pago_pendiente(client)
+    persona, membresia, pago = escenario_pago_pendiente_api(client)
 
-    resp_1 = client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
-    )
-    assert resp_1.status_code == 200
+    assert _validar(client, pago["id"], "APROBADO").status_code == 200
     assert espia_disparo == [pago["id"]]
     assert _contar_notificaciones(db_session, pago["id"]) == 1
 
-    resp_2 = client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
-    )
+    resp_2 = _validar(client, pago["id"], "APROBADO")
     assert resp_2.status_code == 400
     assert "APROBADO" in resp_2.json()["detail"]
 
@@ -159,16 +140,10 @@ def test_reaprobar_pago_aprobado_devuelve_400_sin_repetir_efectos(
 def test_rechazar_pago_ya_aprobado_devuelve_400(client, db_session, espia_disparo):
     """Un pago APROBADO no puede pasar a RECHAZADO: el ciclo de vida termina
     al validar. La membresía activada no debe verse afectada."""
-    persona, membresia, pago = _escenario_pago_pendiente(client)
-    assert client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
-    ).status_code == 200
+    persona, membresia, pago = escenario_pago_pendiente_api(client)
+    assert _validar(client, pago["id"], "APROBADO").status_code == 200
 
-    resp = client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "RECHAZADO", "motivo_rechazo": "Cambio de opinión"},
-    )
+    resp = _validar(client, pago["id"], "RECHAZADO", motivo="Cambio de opinión")
     assert resp.status_code == 400
     assert "APROBADO" in resp.json()["detail"]
 
@@ -181,16 +156,12 @@ def test_aprobar_pago_rechazado_devuelve_400(client, db_session, espia_disparo):
     """Un pago RECHAZADO no puede resucitar como APROBADO: el socio debe
     registrar un pago nuevo. La membresía sigue INACTIVA y la tarea Celery
     nunca se dispara."""
-    persona, membresia, pago = _escenario_pago_pendiente(client)
-    assert client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "RECHAZADO", "motivo_rechazo": "Comprobante ilegible"},
+    persona, membresia, pago = escenario_pago_pendiente_api(client)
+    assert _validar(
+        client, pago["id"], "RECHAZADO", motivo="Comprobante ilegible"
     ).status_code == 200
 
-    resp = client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
-    )
+    resp = _validar(client, pago["id"], "APROBADO")
     assert resp.status_code == 400
     assert "RECHAZADO" in resp.json()["detail"]
 
@@ -209,35 +180,22 @@ def escenario_pago_concurrente(motor_test):
     commiteadas). Limpia sus filas al terminar, como
     `test_ranking_concurrencia.py::escenario_concurrente`."""
     sesion = Session(bind=motor_test)
-    persona = Persona(
-        nombres="Carrera", apellidos="Aprobación", cedula="1799000902",
-        fecha_nacimiento=date(1990, 1, 1), telefono="0990000902",
+    persona = crear_persona_orm(
+        sesion, "1799000902", nombres="Carrera", apellidos="Aprobación",
+        telefono="0990000902",
     )
-    tipo = TipoMembresia(
-        categoria="Concurrencia Pagos", franja_horaria="18:00-19:00",
-        precio=Decimal("35.00"), modalidad=TipoModalidad.MENSUAL,
+    tipo = crear_tipo_membresia_orm(
+        sesion, categoria="Concurrencia Pagos", precio=Decimal("35.00"),
     )
-    sesion.add_all([persona, tipo])
-    sesion.flush()
-    membresia = Membresia(
-        estado=EstadoMembresia.INACTIVA,
+    membresia = crear_membresia_orm(
+        sesion, persona, tipo, EstadoMembresia.INACTIVA,
         monto_aplicado=Decimal("35.00"),
         fecha_activacion=datetime(2026, 7, 1, tzinfo=timezone.utc),
-        persona_id=persona.id,
-        tipo_membresia_id=tipo.id,
     )
-    sesion.add(membresia)
-    sesion.flush()
-    pago = Pago(
-        monto=Decimal("35.00"),
-        estado_pago=EstadoPago.PENDIENTE_VALIDACION,
-        tipo_pago=TipoPago.TRANSFERENCIA,
-        fecha_inicio=date(2026, 7, 1),
-        fecha_fin=date(2026, 7, 31),
-        persona_id=persona.id,
-        membresia_id=membresia.id,
+    pago = crear_pago_orm(
+        sesion, persona, membresia, EstadoPago.PENDIENTE_VALIDACION,
+        monto=Decimal("35.00"), tipo_pago=TipoPago.TRANSFERENCIA,
     )
-    sesion.add(pago)
     sesion.commit()
     ids = (pago.id, membresia.id, tipo.id, persona.id)
     sesion.close()
@@ -330,8 +288,6 @@ def test_fallo_al_encolar_no_pierde_la_aprobacion(client, db_session, monkeypatc
     """Si Redis cae después del commit de la aprobación, la petición debe
     responder 200 igual (el dinero ya fue validado); el pago queda APROBADO
     y visible para la reconciliación, que lo re-despacha."""
-    from app.infraestructura.tareas import comprobante_tareas as ct
-
     # Camino real de disparo (el autouse de conftest lo anula) + broker caído.
     monkeypatch.setattr(
         mps.PagoServicio, "_disparar_generacion_comprobante_pdf", _DISPARO_ORIGINAL
@@ -342,11 +298,8 @@ def test_fallo_al_encolar_no_pierde_la_aprobacion(client, db_session, monkeypatc
 
     monkeypatch.setattr(ct.generar_comprobante_pdf_tarea, "delay", _delay_roto)
 
-    persona, membresia, pago = _escenario_pago_pendiente(client)
-    resp = client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
-    )
+    persona, membresia, pago = escenario_pago_pendiente_api(client)
+    resp = _validar(client, pago["id"], "APROBADO")
 
     assert resp.status_code == 200
     assert resp.json()["estadoPago"] == "APROBADO"
@@ -356,17 +309,9 @@ def test_fallo_al_encolar_no_pierde_la_aprobacion(client, db_session, monkeypatc
 
     # El pago aprobado sin comprobante es visible para la reconciliación
     # (umbral en 0 para no esperar minutos reales en el test).
-    redespachos: list[int] = []
-    monkeypatch.setattr(
-        ct.generar_comprobante_pdf_tarea, "delay", lambda pid: redespachos.append(pid)
-    )
+    redespachos = _espiar_redespachos(monkeypatch)
     monkeypatch.setattr(ct, "UMBRAL_RECONCILIACION_MINUTOS", 0)
-
-    @contextmanager
-    def _sesion_del_test():
-        yield db_session
-
-    monkeypatch.setattr(ct, "SessionLocal", _sesion_del_test)
+    _usar_sesion_del_test(monkeypatch, db_session)
 
     resultado = ct.reconciliar_comprobantes_faltantes()
 
@@ -378,39 +323,25 @@ def test_fallo_al_encolar_no_pierde_la_aprobacion(client, db_session, monkeypatc
 
 def _sembrar_pago(db, cedula: str, estado_pago: EstadoPago,
                   fecha_validacion: datetime | None) -> Pago:
-    """Pago sembrado directo vía ORM (patrón de test_vencimientos_tareas.py)."""
-    persona = Persona(
-        nombres="Reconcilia", apellidos=f"Caso{cedula[-3:]}", cedula=cedula,
-        fecha_nacimiento=date(1990, 1, 1), telefono=f"099{cedula[-7:]}",
+    """Pago sembrado directo vía ORM sobre las fábricas compartidas
+    (patrón de test_vencimientos_tareas.py)."""
+    persona = crear_persona_orm(
+        db, cedula, nombres="Reconcilia", apellidos=f"Caso{cedula[-3:]}",
+        telefono=f"099{cedula[-7:]}",
     )
-    db.add(persona)
-    db.flush()
-    tipo = TipoMembresia(
-        categoria=f"Reconciliación {cedula[-3:]}", franja_horaria="18:00-19:00",
-        precio=Decimal("35.00"), modalidad=TipoModalidad.MENSUAL,
+    tipo = crear_tipo_membresia_orm(
+        db, categoria=f"Reconciliación {cedula[-3:]}", precio=Decimal("35.00"),
     )
-    db.add(tipo)
-    db.flush()
-    membresia = Membresia(
-        estado=EstadoMembresia.ACTIVA,
+    membresia = crear_membresia_orm(
+        db, persona, tipo, EstadoMembresia.ACTIVA,
         monto_aplicado=Decimal("35.00"),
         fecha_activacion=datetime(2026, 7, 1, tzinfo=timezone.utc),
-        persona_id=persona.id,
-        tipo_membresia_id=tipo.id,
     )
-    db.add(membresia)
-    db.flush()
-    pago = Pago(
-        monto=Decimal("35.00"),
-        estado_pago=estado_pago,
-        tipo_pago=TipoPago.TRANSFERENCIA,
+    pago = crear_pago_orm(
+        db, persona, membresia, estado_pago,
+        monto=Decimal("35.00"), tipo_pago=TipoPago.TRANSFERENCIA,
         fecha_validacion=fecha_validacion,
-        fecha_inicio=date(2026, 7, 1),
-        fecha_fin=date(2026, 7, 31),
-        persona_id=persona.id,
-        membresia_id=membresia.id,
     )
-    db.add(pago)
     db.commit()
     return pago
 
@@ -422,8 +353,6 @@ def test_reconciliacion_redespacha_solo_aprobados_viejos_sin_comprobante(
     viejos que el umbral; deja en paz a los recientes (el disparo original
     puede seguir en vuelo), a los que ya tienen comprobante, y a los
     pendientes."""
-    from app.infraestructura.tareas import comprobante_tareas as ct
-
     ahora = datetime.now(timezone.utc)
     viejo = ahora - timedelta(minutes=30)
     reciente = ahora - timedelta(minutes=1)
@@ -441,16 +370,8 @@ def test_reconciliacion_redespacha_solo_aprobados_viejos_sin_comprobante(
     )
     db_session.commit()
 
-    redespachos: list[int] = []
-    monkeypatch.setattr(
-        ct.generar_comprobante_pdf_tarea, "delay", lambda pid: redespachos.append(pid)
-    )
-
-    @contextmanager
-    def _sesion_del_test():
-        yield db_session
-
-    monkeypatch.setattr(ct, "SessionLocal", _sesion_del_test)
+    redespachos = _espiar_redespachos(monkeypatch)
+    _usar_sesion_del_test(monkeypatch, db_session)
 
     resultado = ct.reconciliar_comprobantes_faltantes()
 
@@ -468,8 +389,6 @@ def test_redespacho_es_idempotente_si_ya_hay_comprobante(db_session, monkeypatch
     Cloudinary — reutiliza la URL histórica. (El public_id determinístico
     `comprobante-{id:08d}` cubre además la carrera de dos workers: el segundo
     upload sobrescribe el mismo objeto, nunca duplica.)"""
-    from app.infraestructura.tareas import comprobante_tareas as ct
-
     viejo = datetime.now(timezone.utc) - timedelta(minutes=30)
     pago = _sembrar_pago(db_session, "1712000005", EstadoPago.APROBADO, viejo)
     url_historica = "https://res.cloudinary.com/demo/comprobante-historico.pdf"
@@ -483,12 +402,7 @@ def test_redespacho_es_idempotente_si_ya_hay_comprobante(db_session, monkeypatch
         ct, "subir_pdf_membresia",
         lambda *a, **k: subidas.append("subida") or "https://no-deberia-usarse",
     )
-
-    @contextmanager
-    def _sesion_del_test():
-        yield db_session
-
-    monkeypatch.setattr(ct, "SessionLocal", _sesion_del_test)
+    _usar_sesion_del_test(monkeypatch, db_session)
 
     resultado = ct.generar_comprobante_pdf_tarea(pago.id)
 
