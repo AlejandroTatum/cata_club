@@ -1,10 +1,11 @@
 /**
  * BFF proxy — GET /api/ranking/asignaciones
  *
- * Returns all students in the ranking with their assigned level. There is no
- * position or score: the competitive ranking was removed, and those columns
- * no longer exist. Translates the backend response into the shape the
- * frontend expects.
+ * Returns a page of students in the ranking with their assigned level, in the
+ * backend's standard `{items, total, skip, limit}` envelope (issue #7). There
+ * is no position or score: the competitive ranking was removed, and those
+ * columns no longer exist. `skip`/`limit` are forwarded verbatim — the
+ * backend validates the bounds (`skip >= 0`, `1 <= limit <= 200`).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,10 +19,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ message: "No autenticado." }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const qs = new URLSearchParams();
+  const skip = searchParams.get("skip");
+  const limit = searchParams.get("limit");
+  if (skip) qs.set("skip", skip);
+  if (limit) qs.set("limit", limit);
+  const suffix = qs.size > 0 ? `?${qs.toString()}` : "";
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
   try {
-    const response = await fetch(`${getBackendApiUrl()}/ranking/asignaciones`, {
+    const response = await fetch(`${getBackendApiUrl()}/ranking/asignaciones${suffix}`, {
       method: "GET",
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: controller.signal,

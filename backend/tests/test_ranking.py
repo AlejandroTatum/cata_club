@@ -258,7 +258,7 @@ def test_listado_de_asignaciones_no_expone_posicion_ni_puntaje(client):
 
     resp = client.get("/api/v1/ranking/asignaciones")
     assert resp.status_code == 200
-    fila = resp.json()[0]
+    fila = resp.json()["items"][0]
     assert "posicionActual" not in fila
     assert "puntajeAcumulado" not in fila
     assert fila["personaId"] == persona["id"]
@@ -331,7 +331,7 @@ def test_asignaciones_tabla_y_perfil_no_exponen_esta_en_ranking(client):
     tabla = client.get(f"/api/v1/ranking/niveles/{nivel['id']}/tabla")
     perfil = client.get(f"/api/v1/ranking/{persona['id']}/perfil")
 
-    assert "estaEnRanking" not in asignaciones.json()[0]
+    assert "estaEnRanking" not in asignaciones.json()["items"][0]
     assert "estaEnRanking" not in tabla.json()[0]
     assert "estaEnRanking" not in perfil.json()
 
@@ -458,10 +458,13 @@ def test_listar_alumnos_con_nivel_devuelve_el_roster_con_y_sin_nivel(
     resp = client_entrenador.get("/api/v1/ranking/alumnos-con-nivel")
 
     assert resp.status_code == 200
-    cuerpo = resp.json()
-    assert [item["personaId"] for item in cuerpo] == [con_nivel.id, sin_nivel.id]
-    assert cuerpo[0] == {
+    # Paginado (issue #7): el roster viaja en el envelope estándar
+    # `{items, total, skip, limit}`; la forma de cada fila no cambió.
+    filas = resp.json()["items"]
+    assert resp.json()["total"] == 2
+    assert [item["personaId"] for item in filas] == [con_nivel.id, sin_nivel.id]
+    assert filas[0] == {
         "personaId": con_nivel.id, "nombres": "Ana", "apellidos": "Alvarez",
         "nivelRankingId": nivel.id,
     }
-    assert cuerpo[1]["nivelRankingId"] is None
+    assert filas[1]["nivelRankingId"] is None

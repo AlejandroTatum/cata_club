@@ -96,20 +96,23 @@ def test_listar_alumnos_con_nivel_no_incurre_en_n_mas_uno(db_session, contar_sel
     db_session.expire_all()  # fuerza recarga real desde la BD, no la identity map
 
     with contar_selects() as sentencias:
-        resultado = RankingServicio(db_session).listar_alumnos_con_nivel()
+        resultado, total = RankingServicio(db_session).listar_alumnos_con_nivel()
 
     assert len(resultado) == cantidad
+    assert total == cantidad
     selects = [s for s in sentencias if s.strip().upper().startswith("SELECT")]
-    # Exactamente 1, no "pocas": el listado entero se resuelve con un unico
-    # OUTER JOIN. Un tope holgado (<= 2) dejaria pasar en verde una regresion
-    # a dos consultas -- por ejemplo volver a separar el ranking en un
-    # `WHERE persona_id IN (...)` --, que es justo la clase de crecimiento por
-    # peticion que este guard existe para impedir.
-    assert len(selects) == 1, (
+    # Exactamente 2, no "pocas": la página se resuelve con un unico OUTER
+    # JOIN y el `total` del envelope paginado (issue #7) con un unico COUNT.
+    # Ambas son constantes: no crecen con la cantidad de alumnos. Un tope
+    # holgado (<= 3) dejaria pasar en verde una regresion a tres consultas
+    # -- por ejemplo volver a separar el ranking en un `WHERE persona_id IN
+    # (...)` --, que es justo la clase de crecimiento por peticion que este
+    # guard existe para impedir.
+    assert len(selects) == 2, (
         f"N+1 detectado: {cantidad} alumnos produjeron {len(selects)} SELECTs. "
-        f"El listado debe resolverse con un solo OUTER JOIN entre persona y "
-        f"ranking, no con una consulta de ranking por alumno. Sentencias: "
-        f"{selects}"
+        f"El listado debe resolverse con un OUTER JOIN para la página y un "
+        f"COUNT para el total, no con una consulta de ranking por alumno. "
+        f"Sentencias: {selects}"
     )
 
 
@@ -134,7 +137,7 @@ def test_alumno_sin_ranking_aparece_con_nivel_nulo(db_session):
     sin_nivel = _crear_alumno(db_session, "Carla", "Cordova", "1710034102")
     _asignar_ranking(db_session, sin_nivel.id, None)
 
-    resultado = RankingServicio(db_session).listar_alumnos_con_nivel()
+    resultado, _total = RankingServicio(db_session).listar_alumnos_con_nivel()
     por_persona = {dto.persona_id: dto for dto in resultado}
 
     assert por_persona[con_ranking.id].nivel_ranking_id == nivel.id
@@ -153,7 +156,7 @@ def test_listar_alumnos_con_nivel_respeta_el_orden_de_nomina(db_session):
     # Homónimos de apellido: desempata por nombres.
     _crear_alumno(db_session, "Bruno", "Molina", "1710034203")
 
-    resultado = RankingServicio(db_session).listar_alumnos_con_nivel()
+    resultado, _total = RankingServicio(db_session).listar_alumnos_con_nivel()
 
     assert [(d.apellidos, d.nombres) for d in resultado] == [
         ("Alvarez", "Ana"),
@@ -177,8 +180,11 @@ def test_persona_con_varios_roles_aparece_una_sola_vez(db_session):
         db_session, "Fabio", "Fuentes", "1710034302", roles=(TipoRol.ENTRENADOR,),
     )
 
-    resultado = RankingServicio(db_session).listar_alumnos_con_nivel()
+    resultado, total = RankingServicio(db_session).listar_alumnos_con_nivel()
 
     ids = [dto.persona_id for dto in resultado]
     assert ids.count(multirol.id) == 1
     assert len(ids) == 2
+    # El COUNT del total deduplica con el mismo criterio (DISTINCT sobre
+    # persona): la multirol tampoco puede contarse dos veces.
+    assert total == 2

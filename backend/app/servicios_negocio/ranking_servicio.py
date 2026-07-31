@@ -102,8 +102,14 @@ class RankingServicio:
         self.repo_persona = PersonaRepositorio(db)
 
     # --- Listados para frontend -----------------------------------------------
-    def listar_asignaciones(self) -> list[AsignacionRankingResponseDTO]:
-        rankings = self.repo.listar_todos()
+    # Paginados (issue #7): crecen con el padrón, así que devuelven la página
+    # pedida MÁS el total del conjunto filtrado, para el envelope
+    # `PaginatedResponse` estándar del router.
+    def listar_asignaciones(
+        self, skip: int = 0, limit: Optional[int] = None
+    ) -> tuple[list[AsignacionRankingResponseDTO], int]:
+        rankings = self.repo.listar_todos(skip=skip, limit=limit)
+        total = self.repo.contar_activos()
         resultado = []
         for r in rankings:
             nivel = r.nivel_ranking
@@ -116,18 +122,27 @@ class RankingServicio:
                     nivel_ranking_numero=nivel.numero_nivel if nivel else 0,
                 )
             )
-        return resultado
+        return resultado, total
 
-    def listar_alumnos_con_nivel(self) -> list[AlumnoConNivelDTO]:
-        """Lista todos los alumnos (rol ALUMNO) con su nivel_ranking_id actual.
-        Si no tienen Ranking creado, `nivel_ranking_id` es null. Accesible para
-        ADMINISTRADOR y ENTRENADOR — reemplaza la dependencia con /personas/.
+    def listar_alumnos_con_nivel(
+        self, skip: int = 0, limit: Optional[int] = None
+    ) -> tuple[list[AlumnoConNivelDTO], int]:
+        """Página de alumnos (rol ALUMNO) con su nivel_ranking_id actual, más
+        el total de alumnos activos. Si no tienen Ranking creado,
+        `nivel_ranking_id` es null. Accesible para ADMINISTRADOR y ENTRENADOR
+        — reemplaza la dependencia con /personas/.
 
         La nómina y el ranking vienen en UNA sola sentencia
         (`listar_por_rol_con_ranking`): antes se listaban los alumnos y después
-        se consultaba el ranking de cada uno, o sea 1+N consultas."""
+        se consultaba el ranking de cada uno, o sea 1+N consultas. Con la
+        paginación se suma UNA sentencia de conteo (constante, no crece con
+        N): página + total = 2 consultas exactas."""
         from app.dominio.enums import TipoRol
-        filas = PersonaRepositorio(self.db).listar_por_rol_con_ranking(TipoRol.ALUMNO)
+        repo_persona = PersonaRepositorio(self.db)
+        filas = repo_persona.listar_por_rol_con_ranking(
+            TipoRol.ALUMNO, skip=skip, limit=limit
+        )
+        total = repo_persona.contar_por_rol(TipoRol.ALUMNO)
         resultado: list[AlumnoConNivelDTO] = []
         for alumno, ranking in filas:
             nivel_id = ranking.nivel_ranking_id if ranking is not None else None
@@ -139,7 +154,7 @@ class RankingServicio:
                     nivel_ranking_id=nivel_id,
                 )
             )
-        return resultado
+        return resultado, total
 
     # --- E03-RF002: asignación de nivel (operación única e idempotente) -----
     def asignar_nivel(self, persona_id: int, nivel_ranking_id: Optional[int]) -> Ranking:

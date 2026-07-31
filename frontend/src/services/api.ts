@@ -609,6 +609,21 @@ export interface AlumnoConNivel {
 }
 
 /**
+ * Page size for the roster listings that became paginated on the backend
+ * (issue #7): alumnos-con-nivel, asignaciones and horario rosters. 200 is the
+ * backend's hard cap (`le=200`) and the same ceiling `PERSONAS_PAGE_LIMIT`
+ * already uses in `src/app/api/members/route.ts` — one capped page, matching
+ * how the members screen consumes `GET /personas/`.
+ */
+const ROSTER_PAGE_LIMIT = 200;
+
+/** Standard backend pagination envelope (`PaginatedResponse` in FastAPI). */
+interface PaginatedEnvelope<T> {
+  items: T[];
+  total: number;
+}
+
+/**
  * List all students (rol ALUMNO) with their current `nivelRankingId` (null if
  * unassigned). Available to both admin and trainer; replaces `fetchMembers`
  * for the nivel-asignation panel because `/personas/` is admin-only.
@@ -621,9 +636,12 @@ export async function fetchAlumnosConNivel(): Promise<AlumnoConNivel[]> {
   // a crash: `undefined !== null` counted every student as assigned while
   // `undefined === nivel.id` matched no level, so /ranking reported "68 de 68
   // asignados" over eleven levels that all read "Sin estudiantes".
-  const items = await request<{ personaId: number; nombres: string; apellidos: string; nivelRankingId: number | null }[]>(
-    apiEndpoint("/ranking/alumnos-con-nivel"),
-  );
+  //
+  // Paginated (issue #7): the endpoint answers the standard `{items, total}`
+  // envelope; one page at the backend's cap, same as `PERSONAS_PAGE_LIMIT`.
+  const { items } = await request<
+    PaginatedEnvelope<{ personaId: number; nombres: string; apellidos: string; nivelRankingId: number | null }>
+  >(apiEndpoint(`/ranking/alumnos-con-nivel?limit=${ROSTER_PAGE_LIMIT}`));
   return items.map((it) => ({
     personaId: it.personaId,
     nombres: it.nombres,
@@ -824,7 +842,11 @@ export interface AsignacionRanking {
 }
 
 export async function fetchAsignacionesRanking(): Promise<AsignacionRanking[]> {
-  return request<AsignacionRanking[]>(apiEndpoint("/ranking/asignaciones"));
+  // Paginated (issue #7): standard `{items, total}` envelope, one capped page.
+  const { items } = await request<PaginatedEnvelope<AsignacionRanking>>(
+    apiEndpoint(`/ranking/asignaciones?limit=${ROSTER_PAGE_LIMIT}`),
+  );
+  return items;
 }
 
 // ---------------------------------------------------------------------------
@@ -1472,12 +1494,17 @@ export async function desasignarAlumnoDeHorario(personaId: number, horarioId: nu
   );
 }
 
-/** List all students assigned to a specific schedule. */
+/** List the students assigned to a specific schedule (one page at the backend's cap). */
 export async function fetchAlumnosPorHorario(horarioId: number): Promise<AlumnoHorario[]> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
-  return request<AlumnoHorario[]>(apiEndpoint(`/groups/horarios/${horarioId}/alumnos`), {
-    headers: mockHeaders,
-  });
+  // Paginated (issue #7): standard `{items, total}` envelope. A single class
+  // roster is bounded in practice, so one page at the cap keeps every caller
+  // (groups, trainer, trainer/attendance) working unchanged.
+  const { items } = await request<PaginatedEnvelope<AlumnoHorario>>(
+    apiEndpoint(`/groups/horarios/${horarioId}/alumnos?limit=${ROSTER_PAGE_LIMIT}`),
+    { headers: mockHeaders },
+  );
+  return items;
 }
 
 /** List all schedules assigned to a specific student. */

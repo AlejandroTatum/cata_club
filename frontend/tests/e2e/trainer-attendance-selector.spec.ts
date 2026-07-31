@@ -78,19 +78,27 @@ async function mockTrainerAttendanceRuntime(page: Page): Promise<void> {
       entrenadorNombre: "Carla Entrenadora",
     },
   ]));
-  await page.route("**/api/groups/horarios/11/alumnos", (route: Route) => fulfillJson(route, [
-    {
-      id: 1,
-      personaId: 9,
-      personaNombreCompleto: "Ana López",
-      edad: 12,
-      horarioId: 11,
-      horarioDia: "lun",
-      horarioHoraInicio: "18:00",
-      horarioHoraFin: "19:00",
-      fechaAsignacion: "2026-01-01T00:00:00Z",
-    },
-  ]));
+  // Paginated endpoint (issue #7): the client appends `?limit=200` (hence the
+  // trailing `*` in the pattern) and the body is the `{items, total, ...}`
+  // envelope.
+  await page.route("**/api/groups/horarios/11/alumnos*", (route: Route) => fulfillJson(route, {
+    items: [
+      {
+        id: 1,
+        personaId: 9,
+        personaNombreCompleto: "Ana López",
+        edad: 12,
+        horarioId: 11,
+        horarioDia: "lun",
+        horarioHoraInicio: "18:00",
+        horarioHoraFin: "19:00",
+        fechaAsignacion: "2026-01-01T00:00:00Z",
+      },
+    ],
+    total: 1,
+    skip: 0,
+    limit: 200,
+  }));
   await page.route("**/api/ranking/notificaciones/mias", (route: Route) => fulfillJson(route, []));
   await page.route("**/api/attendance/records*", (route: Route) => fulfillJson(route, []));
 }

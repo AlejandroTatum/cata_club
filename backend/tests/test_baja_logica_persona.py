@@ -373,7 +373,7 @@ def test_desactivada_desaparece_de_la_nomina_del_horario(client, db_session):
 
     respuesta = client.get(f"/api/v1/asistencias/horarios/{horario.id}/alumnos")
     assert respuesta.status_code == 200
-    assert alumno.id not in [a["personaId"] for a in respuesta.json()]
+    assert alumno.id not in [a["personaId"] for a in respuesta.json()["items"]]
 
 
 def test_desactivada_desaparece_del_roster_de_alumnos_con_nivel(client, db_session):
@@ -384,7 +384,7 @@ def test_desactivada_desaparece_del_roster_de_alumnos_con_nivel(client, db_sessi
 
     respuesta = client.get("/api/v1/ranking/alumnos-con-nivel")
     assert respuesta.status_code == 200
-    assert alumno.id not in [a["personaId"] for a in respuesta.json()]
+    assert alumno.id not in [a["personaId"] for a in respuesta.json()["items"]]
 
 
 def test_desactivada_desaparece_de_la_tabla_del_nivel(client, db_session):
@@ -414,7 +414,7 @@ def test_desactivada_desaparece_de_las_asignaciones_de_ranking(client, db_sessio
 
     respuesta = client.get("/api/v1/ranking/asignaciones")
     assert respuesta.status_code == 200
-    assert alumno.id not in [r["personaId"] for r in respuesta.json()]
+    assert alumno.id not in [r["personaId"] for r in respuesta.json()["items"]]
 
 
 # --- Listados ADMINISTRATIVOS: la persona desactivada SIGUE apareciendo -----

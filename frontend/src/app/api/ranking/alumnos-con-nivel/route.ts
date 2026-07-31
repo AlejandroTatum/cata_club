@@ -1,10 +1,13 @@
 /**
  * BFF proxy — GET /api/ranking/alumnos-con-nivel
  *
- * Lightweight list of students (rol ALUMNO) with their current
- * nivel_ranking_id (null if unassigned). Accessible to both
+ * Lightweight page of students (rol ALUMNO) with their current
+ * nivel_ranking_id (null if unassigned), in the backend's standard
+ * `{items, total, skip, limit}` envelope (issue #7). Accessible to both
  * ADMINISTRADOR and ENTRENADOR, replacing the /personas/ dependency that
- * the /trainer/nivel panel couldn't reach as a trainer.
+ * the /trainer/nivel panel couldn't reach as a trainer. `skip`/`limit` are
+ * forwarded verbatim — the backend validates the bounds
+ * (`skip >= 0`, `1 <= limit <= 200`).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,10 +21,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ message: "No autenticado." }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const qs = new URLSearchParams();
+  const skip = searchParams.get("skip");
+  const limit = searchParams.get("limit");
+  if (skip) qs.set("skip", skip);
+  if (limit) qs.set("limit", limit);
+  const suffix = qs.size > 0 ? `?${qs.toString()}` : "";
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
   try {
-    const response = await fetch(`${getBackendApiUrl()}/ranking/alumnos-con-nivel`, {
+    const response = await fetch(`${getBackendApiUrl()}/ranking/alumnos-con-nivel${suffix}`, {
       method: "GET",
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: controller.signal,

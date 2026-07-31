@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -43,7 +43,7 @@ class RankingRepositorio:
     def obtener_por_persona(self, persona_id: int) -> Optional[Ranking]:
         return self.db.query(Ranking).filter(Ranking.persona_id == persona_id).first()
 
-    def listar_todos(self) -> list[Ranking]:
+    def listar_todos(self, skip: int = 0, limit: Optional[int] = None) -> list[Ranking]:
         stmt = (
             select(Ranking)
             .options(joinedload(Ranking.persona), joinedload(Ranking.nivel_ranking))
@@ -51,9 +51,26 @@ class RankingRepositorio:
             # nivel ni puede ser movido de nivel.
             .join(Persona, Persona.id == Ranking.persona_id)
             .where(Persona.activo.is_(True))
+            # `persona_id` es UNIQUE en `ranking`: orden TOTAL, así que la
+            # paginación por OFFSET/LIMIT (issue #7) es determinista.
             .order_by(Ranking.persona_id)
+            .offset(skip)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return list(self.db.execute(stmt).scalars().unique().all())
+
+    def contar_activos(self) -> int:
+        """Total de asignaciones de personas ACTIVAS: el mismo filtro de baja
+        lógica que `listar_todos`, para que el `total` paginado sea
+        consistente con lo que el listado muestra."""
+        stmt = (
+            select(func.count())
+            .select_from(Ranking)
+            .join(Persona, Persona.id == Ranking.persona_id)
+            .where(Persona.activo.is_(True))
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def listar_por_nivel(self, nivel_id: int) -> list[Ranking]:
         """Roster de un nivel. Ordena por `persona_id` (determinístico) --
