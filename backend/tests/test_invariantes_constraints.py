@@ -39,11 +39,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.enums import (
-    EstadoMembresia, EstadoPago, TipoModalidad, TipoPago, TipoRol,
+    EstadoMembresia, EstadoPago, TipoRol,
 )
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import (
-    Membresia, NivelRanking, Pago, Persona, Ranking, Rol, TipoMembresia, Usuario,
+    Membresia, NivelRanking, Persona, Ranking, Rol, Usuario,
 )
 from app.infraestructura.repositorios import (
     ranking_repositorio, usuario_ficha_repositorio,
@@ -51,50 +51,17 @@ from app.infraestructura.repositorios import (
 from app.servicios_negocio.ranking_servicio import RankingServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 
-
-# ---------------------------------------------------------------------------
-# Fábricas mínimas (ORM directo: estas pruebas BURLAN los chequeos de los
-# servicios a propósito, para demostrar que la base los respalda).
-# ---------------------------------------------------------------------------
-def _crear_persona(sesion, cedula: str) -> Persona:
-    persona = Persona(
-        nombres="Invariante", apellidos="Constraint", cedula=cedula,
-        fecha_nacimiento=date(1990, 1, 1), telefono="0990001111",
-    )
-    sesion.add(persona)
-    sesion.flush()
-    return persona
-
-
-def _crear_tipo_membresia(sesion) -> TipoMembresia:
-    tipo = TipoMembresia(
-        categoria="Adultos", franja_horaria="18:00-19:00",
-        precio=Decimal("30.00"), modalidad=TipoModalidad.MENSUAL,
-    )
-    sesion.add(tipo)
-    sesion.flush()
-    return tipo
-
-
-def _crear_membresia(sesion, persona, tipo, estado: EstadoMembresia) -> Membresia:
-    membresia = Membresia(
-        estado=estado, monto_aplicado=Decimal("30.00"),
-        fecha_activacion=datetime.now(timezone.utc),
-        persona_id=persona.id, tipo_membresia_id=tipo.id,
-    )
-    sesion.add(membresia)
-    sesion.flush()
-    return membresia
-
-
-def _crear_pago(sesion, persona, membresia, estado: EstadoPago) -> Pago:
-    pago = Pago(
-        monto=Decimal("30.00"), estado_pago=estado, tipo_pago=TipoPago.EFECTIVO,
-        fecha_inicio=date(2026, 7, 1), fecha_fin=date(2026, 7, 31),
-        persona_id=persona.id, membresia_id=membresia.id,
-    )
-    sesion.add(pago)
-    return pago
+# Fábricas mínimas compartidas (ORM directo: estas pruebas BURLAN los chequeos
+# de los servicios a propósito, para demostrar que la base los respalda). La
+# única copia vive en `tests/fabricas_pagos.py`, junto a las variantes API.
+from tests.fabricas_pagos import (
+    crear_membresia_orm as _crear_membresia,
+    crear_pago_orm as _crear_pago,
+    crear_persona_orm as _crear_persona,
+    crear_tipo_membresia_api,
+    crear_tipo_membresia_orm as _crear_tipo_membresia,
+)
+from tests.fabricas_pagos import crear_persona_api as _crear_persona_api_compartida
 
 
 # ---------------------------------------------------------------------------
@@ -427,23 +394,10 @@ def test_operaciones_concurrentes_sobre_los_dos_ultimos_admins_dejan_al_menos_un
 # código, mismo mensaje) que cuando el chequeo la atrapa primero.
 # ---------------------------------------------------------------------------
 def _crear_persona_api(client, cedula="1710034065"):
-    return client.post(
-        "/api/v1/personas/",
-        json={
-            "nombres": "Ana", "apellidos": "Torres", "cedula": cedula,
-            "fecha_nacimiento": "1990-05-14", "telefono": "0991234567",
-        },
-    ).json()
+    return _crear_persona_api_compartida(client, cedula, fecha_nacimiento="1990-05-14")
 
 
-def _crear_tipo_membresia_api(client):
-    return client.post(
-        "/api/v1/membresias/tipos",
-        json={
-            "categoria": "Adultos", "franja_horaria": "18:00-19:00",
-            "precio": "35.00", "modalidad": "MENSUAL",
-        },
-    ).json()
+_crear_tipo_membresia_api = crear_tipo_membresia_api
 
 
 def test_pago_pendiente_duplicado_responde_igual_por_chequeo_o_por_constraint(

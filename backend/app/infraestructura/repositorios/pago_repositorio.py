@@ -24,6 +24,14 @@ class PagoRepositorio:
     def obtener_por_id(self, pago_id: int) -> Optional[Pago]:
         return self.db.get(Pago, pago_id)
 
+    def obtener_por_id_con_bloqueo(self, pago_id: int) -> Optional[Pago]:
+        """Lee el pago con `SELECT ... FOR UPDATE`: la fila queda bloqueada
+        hasta el commit/rollback de esta transacción. Dos validaciones
+        concurrentes del mismo pago se serializan en Postgres: la segunda
+        espera y relee el estado ya commiteado por la primera (con lo que la
+        guardia de estado de `validar_pago` la rechaza)."""
+        return self.db.get(Pago, pago_id, with_for_update=True)
+
     def listar(
         self,
         estado_pago: Optional[EstadoPago] = None,
