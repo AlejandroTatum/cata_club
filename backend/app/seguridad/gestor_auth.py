@@ -112,6 +112,23 @@ class GestorAutenticacion:
         return sver_claim is not None and sver_claim == usuario.version_sesion
 
     @staticmethod
+    def sesion_vigente(sver_claim: Optional[int], usuario: "Usuario") -> bool:
+        """Regla COMPLETA de vigencia de una sesión: compone el epoch
+        (`epoch_valido`, que se mantiene puro y sin cambios) con el estado de
+        la cuenta (`usuario.activo`). Un token con `sver` vigente pero de una
+        cuenta desactivada NO es una sesión vigente: sin este chequeo, un
+        usuario suspendido conservaba acceso hasta la expiración natural de
+        sus tokens.
+
+        Misma filosofía que `epoch_valido`: ÚNICO lugar del sistema que puede
+        decidir si una sesión sigue viva. AMBAS rutas de token (access vía
+        `decodificar_token` y refresh vía `AuthServicio.refrescar_sesion`)
+        deben llamar a ESTE método, nunca componer las dos condiciones por su
+        lado -- dos copias de la regla es justo la bifurcación que reintroduce
+        este bug en el próximo refactor."""
+        return usuario.activo and GestorAutenticacion.epoch_valido(sver_claim, usuario)
+
+    @staticmethod
     def decodificar_token(
         token: str = Depends(oauth2_scheme),
         db: Session = Depends(obtener_sesion),
@@ -146,6 +163,6 @@ class GestorAutenticacion:
         if payload.get("type") != "access":
             raise CredencialesInvalidas("Token inválido o expirado")
         usuario = UsuarioRepositorio(db).obtener_por_correo(payload.get("sub"))
-        if not usuario or not GestorAutenticacion.epoch_valido(payload.get("sver"), usuario):
+        if not usuario or not GestorAutenticacion.sesion_vigente(payload.get("sver"), usuario):
             raise CredencialesInvalidas("Token inválido o expirado")
         return payload

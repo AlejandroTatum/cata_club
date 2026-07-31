@@ -202,6 +202,11 @@ class PersonaServicio:
                 usuario, "dar de baja a esta persona"
             )
             usuario.activo = False
+            # Criterio unificado (issue #4): la baja lógica RETIRA acceso
+            # (desactiva el `Usuario`), así que también invalida sus sesiones
+            # activas. Reincorporar no reactiva la cuenta (regla 2 de arriba)
+            # y por lo tanto tampoco bombea nada.
+            usuario.revocar_sesiones()
 
         return self.repo.actualizar(persona, {"activo": activo})
 
