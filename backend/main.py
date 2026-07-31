@@ -22,7 +22,7 @@ from app.presentacion.routers import (
 )
 from app.dominio.excepciones import (
     EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
-    CredencialesInvalidas, PermisosInsuficientes,
+    CredencialesInvalidas, PermisosInsuficientes, ServicioNoDisponible,
 )
 
 # `urls_documentacion` apaga /docs, /redoc y /openapi.json solo cuando
@@ -58,6 +58,7 @@ _MAPA_EXCEPCIONES = {
     OperacionInvalida: status.HTTP_400_BAD_REQUEST,
     CredencialesInvalidas: status.HTTP_401_UNAUTHORIZED,
     PermisosInsuficientes: status.HTTP_403_FORBIDDEN,
+    ServicioNoDisponible: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 
 for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():

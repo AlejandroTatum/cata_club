@@ -38,3 +38,9 @@ class CredencialesInvalidas(ErrorDominio):
 class PermisosInsuficientes(ErrorDominio):
     """El usuario autenticado no tiene el rol requerido (-> HTTP 403)."""
     pass
+
+
+class ServicioNoDisponible(ErrorDominio):
+    """Una dependencia necesaria para completar la operación no respondió,
+    ej. el broker de tareas al encolar un envío de correo (-> HTTP 503)."""
+    pass
