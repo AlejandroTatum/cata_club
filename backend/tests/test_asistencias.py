@@ -166,7 +166,8 @@ def test_listar_alumnos_por_horario_incluye_edad_calculada(client, db_session):
 
     resp = client.get(f"/api/v1/asistencias/horarios/{horario['id']}/alumnos")
     assert resp.status_code == 200
-    body = resp.json()
+    # Paginado (issue #7): el roster viaja en el envelope `{items, total, ...}`.
+    body = resp.json()["items"]
     assert len(body) == 1
     edad_esperada = _calcular_edad(date(2010, 5, 14))
     assert body[0]["edad"] == edad_esperada

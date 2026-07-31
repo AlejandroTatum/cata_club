@@ -144,7 +144,7 @@ class AsistenciaServicio:
         )
 
     # --- Asignación directa Alumno ↔ Horario ---------------------------------
-    def asignar_alumno_a_horario(self, datos: AlumnoHorarioCreateDTO) -> AlumnoHorario:
+    def asignar_alumno_a_horario(self, datos: AlumnoHorarioCreateDTO) -> AlumnoHorarioDetalleDTO:
         """Asigna un alumno a un horario específico de forma directa."""
         if not self.repo_persona.obtener_por_id(datos.persona_id):
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
@@ -163,7 +163,12 @@ class AsistenciaServicio:
             persona_id=datos.persona_id,
             horario_id=datos.horario_id,
         )
-        return self.repo_alumno_horario.crear(alumno_horario)
+        # Devuelve el DTO de la asignación recién creada. Antes el router
+        # relistaba el horario entero y tomaba `[-1]`: con el roster ordenado
+        # por apellidos eso ni siquiera garantizaba devolver al recién
+        # asignado, y con el listado paginado (issue #7) directamente dejó de
+        # tener sentido pedir una página para encontrar UNA fila conocida.
+        return self._a_detalle_dto(self.repo_alumno_horario.crear(alumno_horario))
 
     def desasignar_alumno_de_horario(
         self, persona_id: int, horario_id: int
@@ -178,26 +183,35 @@ class AsistenciaServicio:
             )
         self.repo_alumno_horario.eliminar(asignacion)
 
-    def listar_alumnos_por_horario(self, horario_id: int) -> list[AlumnoHorarioDetalleDTO]:
-        """Lista todos los alumnos asignados a un horario específico."""
+    @staticmethod
+    def _a_detalle_dto(a: AlumnoHorario) -> AlumnoHorarioDetalleDTO:
+        """Proyección compartida AlumnoHorario -> DTO de detalle (la usan el
+        alta, el roster del horario y los horarios del alumno)."""
+        return AlumnoHorarioDetalleDTO(
+            id=a.id,
+            persona_id=a.persona_id,
+            persona_nombre_completo=f"{a.persona.nombres} {a.persona.apellidos}",
+            edad=_calcular_edad(a.persona.fecha_nacimiento),
+            horario_id=a.horario_id,
+            horario_dia=a.horario.dia_semana,
+            horario_hora_inicio=a.horario.hora_inicio,
+            horario_hora_fin=a.horario.hora_fin,
+            fecha_asignacion=a.fecha_asignacion,
+        )
+
+    def listar_alumnos_por_horario(
+        self, horario_id: int, skip: int = 0, limit: Optional[int] = None
+    ) -> tuple[list[AlumnoHorarioDetalleDTO], int]:
+        """Página de alumnos asignados a un horario, más el total de alumnos
+        activos de ese horario (paginado, issue #7)."""
         if not self.repo_horario.obtener_por_id(horario_id):
             raise EntidadNoEncontrada(f"Horario con id {horario_id} no encontrado")
 
-        asignaciones = self.repo_alumno_horario.listar_por_horario(horario_id)
-        return [
-            AlumnoHorarioDetalleDTO(
-                id=a.id,
-                persona_id=a.persona_id,
-                persona_nombre_completo=f"{a.persona.nombres} {a.persona.apellidos}",
-                edad=_calcular_edad(a.persona.fecha_nacimiento),
-                horario_id=a.horario_id,
-                horario_dia=a.horario.dia_semana,
-                horario_hora_inicio=a.horario.hora_inicio,
-                horario_hora_fin=a.horario.hora_fin,
-                fecha_asignacion=a.fecha_asignacion,
-            )
-            for a in asignaciones
-        ]
+        asignaciones = self.repo_alumno_horario.listar_por_horario(
+            horario_id, skip=skip, limit=limit
+        )
+        total = self.repo_alumno_horario.contar_por_horario(horario_id)
+        return [self._a_detalle_dto(a) for a in asignaciones], total
 
     def listar_horarios_por_alumno(self, persona_id: int) -> list[AlumnoHorarioDetalleDTO]:
         """Lista todos los horarios asignados a un alumno específico."""
@@ -205,17 +219,4 @@ class AsistenciaServicio:
             raise EntidadNoEncontrada(f"Persona con id {persona_id} no encontrada")
 
         asignaciones = self.repo_alumno_horario.listar_por_persona(persona_id)
-        return [
-            AlumnoHorarioDetalleDTO(
-                id=a.id,
-                persona_id=a.persona_id,
-                persona_nombre_completo=f"{a.persona.nombres} {a.persona.apellidos}",
-                edad=_calcular_edad(a.persona.fecha_nacimiento),
-                horario_id=a.horario_id,
-                horario_dia=a.horario.dia_semana,
-                horario_hora_inicio=a.horario.hora_inicio,
-                horario_hora_fin=a.horario.hora_fin,
-                fecha_asignacion=a.fecha_asignacion,
-            )
-            for a in asignaciones
-        ]
+        return [self._a_detalle_dto(a) for a in asignaciones]

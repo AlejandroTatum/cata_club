@@ -49,11 +49,17 @@ afterEach(() => {
 });
 
 describe("fetchAlumnosConNivel — GET /api/ranking/alumnos-con-nivel", () => {
-  /** Verbatim from the live backend (`AlumnoConNivelDTO extends ResponseBase`). */
-  const WIRE = [
-    { personaId: 4, nombres: "Sofia", apellidos: "Vera Loaiza", nivelRankingId: 4 },
-    { personaId: 9, nombres: "Kevin", apellidos: "Sabando", nivelRankingId: null },
-  ];
+  /** Verbatim from the live backend: the paginated envelope (issue #7) with
+   * camelCase rows (`AlumnoConNivelDTO extends ResponseBase`). */
+  const WIRE = {
+    items: [
+      { personaId: 4, nombres: "Sofia", apellidos: "Vera Loaiza", nivelRankingId: 4 },
+      { personaId: 9, nombres: "Kevin", apellidos: "Sabando", nivelRankingId: null },
+    ],
+    total: 2,
+    skip: 0,
+    limit: 200,
+  };
 
   it("reads the camelCase keys the backend actually sends", async () => {
     vi.mocked(global.fetch).mockResolvedValue(okResponse(WIRE));
@@ -81,7 +87,12 @@ describe("fetchAlumnosConNivel — GET /api/ranking/alumnos-con-nivel", () => {
 
   it("does NOT silently accept a snake_case body", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
-      okResponse([{ persona_id: 4, nombres: "Sofia", apellidos: "Vera", nivel_ranking_id: 4 }]),
+      okResponse({
+        items: [{ persona_id: 4, nombres: "Sofia", apellidos: "Vera", nivel_ranking_id: 4 }],
+        total: 1,
+        skip: 0,
+        limit: 200,
+      }),
     );
 
     const [student] = await fetchAlumnosConNivel();

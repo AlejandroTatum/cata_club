@@ -1,5 +1,5 @@
 from typing import Optional, List, Tuple
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Ranking, Usuario, Rol, usuario_rol
@@ -85,7 +85,7 @@ class PersonaRepositorio:
         )
 
     def listar_por_rol_con_ranking(
-        self, tipo_rol: TipoRol
+        self, tipo_rol: TipoRol, skip: int = 0, limit: Optional[int] = None
     ) -> List[Tuple[Persona, Optional[Ranking]]]:
         """Igual que `listar_por_rol`, pero trae además la fila de `Ranking`
         de cada persona (o `None`) en la MISMA sentencia.
@@ -118,8 +118,30 @@ class PersonaRepositorio:
             .where(Rol.tipo_rol == tipo_rol, Persona.activo.is_(True))
             .distinct()
             .order_by(*self._ORDEN_NOMINA)
+            # Paginación (issue #7): el roster crece con el padrón. El orden
+            # ya es TOTAL (`_ORDEN_NOMINA` termina en `Persona.id`), condición
+            # necesaria para que OFFSET/LIMIT no repita ni saltee filas.
+            .offset(skip)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return [(persona, ranking) for persona, ranking in self.db.execute(stmt)]
+
+    def contar_por_rol(self, tipo_rol: TipoRol) -> int:
+        """Total de personas ACTIVAS con el rol dado: el MISMO filtro que
+        `listar_por_rol_con_ranking`, para que el `total` del envelope
+        paginado cuente el conjunto completo y no la página. `DISTINCT`
+        por la misma razón que allá: el JOIN con roles multiplica filas
+        cuando el usuario tiene varios roles."""
+        stmt = (
+            select(func.count(func.distinct(Persona.id)))
+            .select_from(Persona)
+            .join(Usuario, Usuario.persona_id == Persona.id)
+            .join(usuario_rol, usuario_rol.c.usuario_id == Usuario.id)
+            .join(Rol, Rol.id == usuario_rol.c.rol_id)
+            .where(Rol.tipo_rol == tipo_rol, Persona.activo.is_(True))
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def crear(self, persona: Persona) -> Persona:
         self.db.add(persona)

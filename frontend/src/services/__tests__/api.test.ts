@@ -645,23 +645,36 @@ describe("fetchEntrenadores", () => {
 });
 
 describe("fetchAlumnosPorHorario", () => {
-  it("GETs /api/groups/horarios/:id/alumnos", async () => {
+  // Paginated backend (issue #7): the endpoint answers the standard
+  // `{items, total, skip, limit}` envelope and the client requests one page
+  // at the backend's cap (limit=200), unwrapping `items` for its callers.
+  it("GETs /api/groups/horarios/:id/alumnos and unwraps the paginated envelope", async () => {
     const items = [makeAlumnoHorario(), makeAlumnoHorario({ id: 11, personaId: 4 })];
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(items));
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ items, total: 2, skip: 0, limit: 200 }),
+    );
 
     const result = await fetchAlumnosPorHorario(1);
 
-    expect(global.fetch).toHaveBeenCalledWith("/api/groups/horarios/1/alumnos", expect.anything());
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/groups/horarios/1/alumnos?limit=200",
+      expect.anything(),
+    );
     expect(result).toEqual(items);
   });
 
   it("targets a different horario id (triangulation)", async () => {
     const items = [makeAlumnoHorario({ id: 20, horarioId: 7 })];
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(items));
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ items, total: 1, skip: 0, limit: 200 }),
+    );
 
     const result = await fetchAlumnosPorHorario(7);
 
-    expect(global.fetch).toHaveBeenCalledWith("/api/groups/horarios/7/alumnos", expect.anything());
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/groups/horarios/7/alumnos?limit=200",
+      expect.anything(),
+    );
     expect(result).toEqual(items);
   });
 });

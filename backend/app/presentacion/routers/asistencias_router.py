@@ -12,6 +12,7 @@ from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaResponseDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO,
 )
+from app.presentacion.schemas.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
@@ -184,9 +185,11 @@ async def reporte_asistencia_pdf(
 async def asignar_alumno_a_horario(
     datos: AlumnoHorarioCreateDTO, db: Session = Depends(obtener_sesion)
 ):
-    servicio = AsistenciaServicio(db)
-    servicio.asignar_alumno_a_horario(datos)
-    return servicio.listar_alumnos_por_horario(datos.horario_id)[-1]
+    # El servicio devuelve el DTO de la asignación creada. Antes acá se
+    # relistaba el horario y se tomaba `[-1]`, que con el roster ordenado por
+    # apellidos no era necesariamente el recién asignado, y con el listado
+    # paginado (issue #7) habría devuelto la última fila de una página.
+    return AsistenciaServicio(db).asignar_alumno_a_horario(datos)
 
 
 @router.delete(
@@ -210,15 +213,23 @@ async def desasignar_alumno_de_horario(
 # compañeros. Mismo gate que su hermano `desasignar_alumno_de_horario` (:170).
 # Quien necesita "mis horarios" tiene `GET /asistencias/alumnos/{id}/horarios`
 # (ownership-gated, sin cambios).
+# Paginado (issue #7): la nómina de un horario crece con el padrón. Mismo
+# contrato de `skip`/`limit` que `GET /personas/` (tope 200).
 @router.get(
     "/horarios/{horario_id}/alumnos",
-    response_model=List[AlumnoHorarioDetalleDTO],
+    response_model=PaginatedResponse[AlumnoHorarioDetalleDTO],
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
 )
 async def listar_alumnos_por_horario(
-    horario_id: int, db: Session = Depends(obtener_sesion)
+    horario_id: int,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(obtener_sesion),
 ):
-    return AsistenciaServicio(db).listar_alumnos_por_horario(horario_id)
+    items, total = AsistenciaServicio(db).listar_alumnos_por_horario(
+        horario_id, skip=skip, limit=limit
+    )
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 # Los horarios asignados a un alumno dicen dónde está y a qué hora. El portal

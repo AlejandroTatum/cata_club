@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -11,6 +11,7 @@ from app.servicios_negocio.politica_acceso import (
 from app.servicios_negocio.ranking_servicio import (
     NivelRankingServicio, RankingServicio, NotificacionServicio,
 )
+from app.presentacion.schemas.base import PaginatedResponse
 from app.presentacion.schemas.ranking_schemas import (
     NivelRankingCreateDTO, NivelRankingResponseDTO, NivelRankingConOcupacionDTO,
     TablaRankingItemDTO, PerfilRankingAlumnoDTO, NotificacionResponseDTO,
@@ -40,13 +41,20 @@ async def listar_niveles(db: Session = Depends(obtener_sesion)):
     return NivelRankingServicio(db).listar_niveles_con_ocupacion()
 
 
+# Paginado (issue #7): este listado crece con el padrón. Mismo contrato de
+# `skip`/`limit` que `GET /personas/` y `GET /membresias/pagos` (tope 200).
 @router.get(
-    "/asignaciones", response_model=List[AsignacionRankingResponseDTO],
+    "/asignaciones", response_model=PaginatedResponse[AsignacionRankingResponseDTO],
     dependencies=[Depends(GestorPermisos(ROL_ADMIN_O_ENTRENADOR))],
 )
-async def listar_asignaciones(db: Session = Depends(obtener_sesion)):
-    """Listado de todos los alumnos en el ranking (con su nivel y posición)."""
-    return RankingServicio(db).listar_asignaciones()
+async def listar_asignaciones(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(obtener_sesion),
+):
+    """Listado paginado de los alumnos en el ranking (con su nivel)."""
+    items, total = RankingServicio(db).listar_asignaciones(skip=skip, limit=limit)
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 # Roster mínimo para la pantalla de asignación de nivel (admin `/ranking` y
@@ -56,14 +64,20 @@ async def listar_asignaciones(db: Session = Depends(obtener_sesion)):
 # puede ser el mismo que ya tiene la mutación de esta pantalla
 # (`PATCH /personas/{persona_id}/nivel`).
 @router.get(
-    "/alumnos-con-nivel", response_model=List[AlumnoConNivelDTO],
+    "/alumnos-con-nivel", response_model=PaginatedResponse[AlumnoConNivelDTO],
     dependencies=[Depends(GestorPermisos(ROL_ADMIN_O_ENTRENADOR))],
 )
-async def listar_alumnos_con_nivel(db: Session = Depends(obtener_sesion)):
-    """Lista ligera de alumnos con su nivel_ranking_id actual — accesible para
+async def listar_alumnos_con_nivel(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(obtener_sesion),
+):
+    """Página de alumnos con su nivel_ranking_id actual — accesible para
     ADMINISTRADOR y ENTRENADOR. Reemplaza la dependencia del panel de nivel
-    con /personas/ (solo admin), que lasciaba al entrenador sin acceso."""
-    return RankingServicio(db).listar_alumnos_con_nivel()
+    con /personas/ (solo admin), que dejaba al entrenador sin acceso.
+    Paginado (issue #7): con ~2000 alumnos la lista completa degradaba."""
+    items, total = RankingServicio(db).listar_alumnos_con_nivel(skip=skip, limit=limit)
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get(

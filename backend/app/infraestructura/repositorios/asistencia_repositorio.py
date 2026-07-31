@@ -1,6 +1,6 @@
 from datetime import date
 from typing import Optional, List
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario, Persona
@@ -132,7 +132,9 @@ class AlumnoHorarioRepositorio:
         )
         return self.db.execute(stmt).scalars().first()
 
-    def listar_por_horario(self, horario_id: int) -> List[AlumnoHorario]:
+    def listar_por_horario(
+        self, horario_id: int, skip: int = 0, limit: Optional[int] = None
+    ) -> List[AlumnoHorario]:
         stmt = (
             select(AlumnoHorario)
             .options(joinedload(AlumnoHorario.persona))
@@ -143,10 +145,26 @@ class AlumnoHorarioRepositorio:
             .where(AlumnoHorario.horario_id == horario_id, Persona.activo.is_(True))
             # Se lee como la nómina de la clase: por apellidos y nombres del
             # alumno, con el id de la asignación de desempate para que el
-            # orden sea TOTAL y no dependa del motor.
+            # orden sea TOTAL y no dependa del motor. Ese orden total es
+            # también lo que hace determinista al OFFSET/LIMIT (issue #7).
             .order_by(Persona.apellidos.asc(), Persona.nombres.asc(), AlumnoHorario.id.asc())
+            .offset(skip)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return list(self.db.execute(stmt).scalars().unique().all())
+
+    def contar_por_horario(self, horario_id: int) -> int:
+        """Total de alumnos ACTIVOS del horario: el mismo filtro que
+        `listar_por_horario`, para que el `total` del envelope paginado
+        cuente la nómina completa de la clase y no la página."""
+        stmt = (
+            select(func.count())
+            .select_from(AlumnoHorario)
+            .join(Persona, Persona.id == AlumnoHorario.persona_id)
+            .where(AlumnoHorario.horario_id == horario_id, Persona.activo.is_(True))
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def listar_por_persona(self, persona_id: int) -> List[AlumnoHorario]:
         stmt = (
