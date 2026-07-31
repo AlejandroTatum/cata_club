@@ -66,6 +66,15 @@ class RolServicio:
         es_admin = any(r.tipo_rol == TipoRol.ADMINISTRADOR for r in usuario.roles)
         if not es_admin:
             return
+        # Serialización del conteo (issue #8): sin lock, dos operaciones
+        # concurrentes sobre los dos últimos administradores (quitar rol a
+        # uno + desactivar al otro) veían cada una que "queda otro" y el club
+        # terminaba sin ningún administrador. La fila del catálogo
+        # ADMINISTRADOR actúa como mutex (ver docstring de
+        # `RolRepositorio.bloquear_por_tipo`): la segunda operación espera el
+        # commit de la primera y su conteo ya ve el cambio. Si el usuario es
+        # admin, la fila del catálogo existe por construcción.
+        self.repo_rol.bloquear_por_tipo(TipoRol.ADMINISTRADOR)
         if self.repo_usuario.contar_administradores_activos(excluir_usuario_id=usuario.id) > 0:
             return
         raise OperacionInvalida(

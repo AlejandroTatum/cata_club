@@ -1,5 +1,6 @@
 from datetime import datetime, date, timezone
 from decimal import Decimal
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion
@@ -32,6 +33,22 @@ TIPOS_MIME_PERMITIDOS_VOUCHER = {"image/jpeg", "image/png", "application/pdf"}
 TAMANO_MAXIMO_VOUCHER_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
+# --- Invariantes respaldados por la base (issue #8) --------------------------
+# Los chequeos de servicio siguen siendo el camino primario de error (UX);
+# los índices únicos parciales de `c3d9f2b7a1e5` son la red de seguridad ante
+# la carrera que el chequeo no puede ver. Cuando la red atrapa, la API debe
+# responder EL MISMO error de dominio que el chequeo -- por eso los mensajes
+# viven en constantes compartidas entre ambos caminos.
+MENSAJE_PAGO_PENDIENTE_DUPLICADO = (
+    "Esta membresía ya tiene un pago pendiente de validación. "
+    "Espere a que sea validado antes de registrar uno nuevo."
+)
+MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
+    "La persona ya tiene una membresía activa. "
+    "Cancele o deje vencer la actual antes de crear una nueva."
+)
+
+
 class MembresiaServicio:
     def __init__(self, db: Session):
         self.db = db
@@ -52,10 +69,7 @@ class MembresiaServicio:
             raise EntidadNoEncontrada(f"Tipo de membresía con id {datos.tipo_membresia_id} no encontrado")
         existentes = self.repo.listar_por_persona(datos.persona_id)
         if any(m.estado == EstadoMembresia.ACTIVA for m in existentes):
-            raise OperacionInvalida(
-                "La persona ya tiene una membresía activa. "
-                "Cancele o deje vencer la actual antes de crear una nueva."
-            )
+            raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA)
         # Estado y fecha_activacion NO vienen del payload (B-12): una membresía
         # nace INACTIVA y se ACTIVA al aprobarse su primer pago. La
         # fecha_activacion intermedia es necesaria porque la columna es NOT
@@ -240,10 +254,7 @@ class PagoServicio:
             )
 
         if self.repo.existe_pendiente_para_membresia(datos.membresia_id):
-            raise OperacionInvalida(
-                "Esta membresía ya tiene un pago pendiente de validación. "
-                "Espere a que sea validado antes de registrar uno nuevo."
-            )
+            raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
 
         # El monto debe ser un múltiplo exacto del precio mensual de la membresía.
         precio_mensual = membresia.monto_aplicado
@@ -254,7 +265,19 @@ class PagoServicio:
             )
 
         pago = Pago(**datos.model_dump(), estado_pago=EstadoPago.PENDIENTE_VALIDACION)
-        return self.repo.crear(pago)
+        # Red de seguridad del invariante 1 (issue #8): si otra petición
+        # concurrente registró su pendiente ENTRE el chequeo de arriba y este
+        # INSERT, el índice `uq_pago_pendiente_por_membresia` lo rechaza y se
+        # traduce al MISMO error de dominio que habría dado el chequeo. El
+        # `rollback()` es obligatorio: un flush fallido deja la sesión
+        # inválida para cualquier uso posterior.
+        try:
+            return self.repo.crear(pago)
+        except IntegrityError as error:
+            self.db.rollback()
+            if "uq_pago_pendiente_por_membresia" in str(error.orig):
+                raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO) from error
+            raise
 
     def obtener_pago(
         self,
@@ -406,11 +429,24 @@ class PagoServicio:
             # to subsequent DB queries unless we explicitly flush. The 4th-family
             # gratuity rule (E04-RF002) depends on an accurate count, which
             # includes the membership we just activated.
-            self.db.flush()
-
-            self._aplicar_regla_familiar_si_corresponde(membresia, pago)
-
-            self.repo.guardar_cambios(pago)
+            #
+            # Red de seguridad del invariante 2 (issue #8): aprobar es el
+            # ÚNICO escritor de ACTIVA, y `crear_membresia` no puede ver la
+            # carrera de dos membresías INACTIVAS de la misma persona cuyos
+            # pagos se aprueban a la vez (o una segunda aprobación con otra
+            # ya activa). El índice `uq_membresia_activa_por_persona` la
+            # rechaza en el flush/commit y se traduce al MISMO error de
+            # dominio que da el chequeo de `crear_membresia`. El `rollback()`
+            # es obligatorio: un flush fallido deja la sesión inválida.
+            try:
+                self.db.flush()
+                self._aplicar_regla_familiar_si_corresponde(membresia, pago)
+                self.repo.guardar_cambios(pago)
+            except IntegrityError as error:
+                self.db.rollback()
+                if "uq_membresia_activa_por_persona" in str(error.orig):
+                    raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
+                raise
             self._disparar_generacion_comprobante_pdf(pago_id)
             self._crear_notificacion_pago(
                 pago=pago,
