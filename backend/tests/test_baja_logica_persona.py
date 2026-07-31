@@ -30,7 +30,6 @@ from app.dominio.modelos import (
 from app.infraestructura.db import obtener_sesion
 from app.seguridad.gestor_auth import GestorAutenticacion
 from main import app
-from tests.conftest import crear_entrenador
 
 
 # --- Fábricas ---------------------------------------------------------------
@@ -60,10 +59,10 @@ def _crear_usuario(db_session, persona: Persona, tipo_rol: TipoRol = TipoRol.ALU
     return usuario
 
 
-def _crear_horario(db_session, entrenador_id: int) -> HorarioEntrenamiento:
+def _crear_horario(db_session) -> HorarioEntrenamiento:
     horario = HorarioEntrenamiento(
         categoria=Categoria.JUVENIL, dia_semana=DiaSemana.LUNES,
-        hora_inicio=time(17, 0), hora_fin=time(18, 0), entrenador_id=entrenador_id,
+        hora_inicio=time(17, 0), hora_fin=time(18, 0),
     )
     db_session.add(horario)
     db_session.commit()
@@ -71,13 +70,13 @@ def _crear_horario(db_session, entrenador_id: int) -> HorarioEntrenamiento:
     return horario
 
 
-def _crear_historial_completo(db_session, persona: Persona, entrenador_id: int) -> dict:
+def _crear_historial_completo(db_session, persona: Persona) -> dict:
     """Siembra asistencia + membresía/pago + ficha médica para `persona`.
     Es exactamente el historial que el borrado duro destruía."""
-    horario = _crear_horario(db_session, entrenador_id)
+    horario = _crear_horario(db_session)
     asistencia = Asistencia(
         fecha_entrenamiento=date(2029, 3, 3), estado=EstadoAsistencia.PRESENTE,
-        persona_id=persona.id, entrenador_id=entrenador_id, horario_id=horario.id,
+        persona_id=persona.id, horario_id=horario.id,
     )
     tipo = TipoMembresia(
         categoria="JUVENIL", franja_horaria="TARDE",
@@ -272,9 +271,8 @@ def test_historial_sobrevive_a_la_desactivacion(client, db_session):
     """Asistencias, pagos y ficha médica siguen existiendo y siendo legibles
     por un administrador después de dar de baja a la persona. Esto es lo que
     el borrado duro destruía."""
-    entrenador_id = crear_entrenador(db_session, "1710034073")
     persona = _crear_persona(db_session, cedula="1710034065")
-    _crear_historial_completo(db_session, persona, entrenador_id)
+    _crear_historial_completo(db_session, persona)
 
     assert _desactivar(client, persona.id).status_code == 200
 
@@ -292,14 +290,8 @@ def test_historial_sobrevive_a_la_desactivacion(client, db_session):
 
 
 # --- Listados OPERATIVOS: la persona desactivada desaparece -----------------
-def test_desactivada_desaparece_del_selector_de_entrenadores(client, db_session):
-    entrenador_id = crear_entrenador(db_session, "1710034073")
-
-    _desactivar(client, entrenador_id)
-
-    respuesta = client.get("/api/v1/personas/entrenadores")
-    assert respuesta.status_code == 200
-    assert entrenador_id not in [e["id"] for e in respuesta.json()]
+# El test del selector de entrenadores murió con `GET /personas/entrenadores`
+# (issue #13): sin relación entrenador–horario no hay selector que filtrar.
 
 
 def test_desactivada_desaparece_del_autocomplete_de_busqueda(client, db_session):
@@ -363,8 +355,7 @@ def test_desactivada_desaparece_del_feed_de_notificaciones_del_representante(
 
 
 def test_desactivada_desaparece_de_la_nomina_del_horario(client, db_session):
-    entrenador_id = crear_entrenador(db_session, "1710034073")
-    horario = _crear_horario(db_session, entrenador_id)
+    horario = _crear_horario(db_session)
     alumno = _crear_persona(db_session, cedula="1710034065")
     db_session.add(AlumnoHorario(persona_id=alumno.id, horario_id=horario.id))
     db_session.commit()

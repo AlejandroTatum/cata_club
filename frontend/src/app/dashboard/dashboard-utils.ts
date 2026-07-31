@@ -326,10 +326,13 @@ export function buildActivityFeed(
     }
   }
 
+  // Una sesión por (fecha, horario). Sin "quién registró": la asistencia ya
+  // no guarda quién dictó la clase (issue #13), así que el sujeto del evento
+  // es el propio horario.
   const sessions = new Map<string, { record: AttendanceRecord; count: number }>();
   for (const record of records) {
     if (toSortableTime(record.fecha) === null) continue;
-    const key = `${record.fecha}|${record.horario}|${record.entrenador}`;
+    const key = `${record.fecha}|${record.horario}`;
     const existing = sessions.get(key);
     if (existing) existing.count += 1;
     else sessions.set(key, { record, count: 1 });
@@ -338,9 +341,9 @@ export function buildActivityFeed(
     events.push({
       id: `att-${key}`,
       kind: "attendance-session",
-      initials: initialsFor(record.entrenador),
-      subject: record.entrenador,
-      detail: `registró la lista de ${record.horario} · ${count} ${count === 1 ? "estudiante" : "estudiantes"}`,
+      initials: initialsFor(record.horario),
+      subject: record.horario,
+      detail: `lista registrada · ${count} ${count === 1 ? "estudiante" : "estudiantes"}`,
       at: record.fecha,
     });
   }

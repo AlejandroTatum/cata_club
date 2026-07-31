@@ -8,31 +8,26 @@ from datetime import time
 from app.dominio.enums import Categoria, DiaSemana
 from app.dominio.modelos import HorarioEntrenamiento
 from app.infraestructura.repositorios.asistencia_repositorio import HorarioRepositorio
-from tests.conftest import crear_entrenador as _crear_entrenador
 
-
-def _horario(entrenador_id: int, categoria: Categoria, dia: DiaSemana, h_inicio: time, h_fin: time) -> HorarioEntrenamiento:
+def _horario(categoria: Categoria, dia: DiaSemana, h_inicio: time, h_fin: time) -> HorarioEntrenamiento:
     return HorarioEntrenamiento(
         categoria=categoria, dia_semana=dia, hora_inicio=h_inicio, hora_fin=h_fin,
-        entrenador_id=entrenador_id,
     )
 
 
 def test_crear_persiste_y_retorna_horario_con_id_asignado(db_session):
-    entrenador_id = _crear_entrenador(db_session)
     repo = HorarioRepositorio(db_session)
 
-    creado = repo.crear(_horario(entrenador_id, Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
+    creado = repo.crear(_horario(Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
 
     assert creado.id is not None
     assert repo.obtener_por_id(creado.id).categoria == Categoria.JUVENIL
 
 
 def test_listar_sin_filtro_retorna_todos_los_horarios(db_session):
-    entrenador_id = _crear_entrenador(db_session)
     repo = HorarioRepositorio(db_session)
-    repo.crear(_horario(entrenador_id, Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
-    repo.crear(_horario(entrenador_id, Categoria.ADULTOS, DiaSemana.MARTES, time(20, 0), time(21, 15)))
+    repo.crear(_horario(Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
+    repo.crear(_horario(Categoria.ADULTOS, DiaSemana.MARTES, time(20, 0), time(21, 15)))
 
     resultado = repo.listar()
 
@@ -41,11 +36,10 @@ def test_listar_sin_filtro_retorna_todos_los_horarios(db_session):
 
 def test_listar_con_filtro_categoria_retorna_solo_esa_categoria(db_session):
     """Triangulación: mismo dataset, distinto filtro -> distinto subconjunto."""
-    entrenador_id = _crear_entrenador(db_session)
     repo = HorarioRepositorio(db_session)
-    repo.crear(_horario(entrenador_id, Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
-    repo.crear(_horario(entrenador_id, Categoria.JUVENIL, DiaSemana.MARTES, time(17, 0), time(18, 0)))
-    repo.crear(_horario(entrenador_id, Categoria.ADULTOS, DiaSemana.MIERCOLES, time(20, 0), time(21, 15)))
+    repo.crear(_horario(Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
+    repo.crear(_horario(Categoria.JUVENIL, DiaSemana.MARTES, time(17, 0), time(18, 0)))
+    repo.crear(_horario(Categoria.ADULTOS, DiaSemana.MIERCOLES, time(20, 0), time(21, 15)))
 
     solo_juvenil = repo.listar(categoria=Categoria.JUVENIL)
     solo_adultos = repo.listar(categoria=Categoria.ADULTOS)
@@ -57,9 +51,8 @@ def test_listar_con_filtro_categoria_retorna_solo_esa_categoria(db_session):
 
 
 def test_actualizar_persiste_cambios_en_el_horario(db_session):
-    entrenador_id = _crear_entrenador(db_session)
     repo = HorarioRepositorio(db_session)
-    horario = repo.crear(_horario(entrenador_id, Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
+    horario = repo.crear(_horario(Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
 
     horario.dia_semana = DiaSemana.MARTES
     actualizado = repo.actualizar(horario)
@@ -69,9 +62,8 @@ def test_actualizar_persiste_cambios_en_el_horario(db_session):
 
 
 def test_eliminar_borra_el_horario(db_session):
-    entrenador_id = _crear_entrenador(db_session)
     repo = HorarioRepositorio(db_session)
-    horario = repo.crear(_horario(entrenador_id, Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
+    horario = repo.crear(_horario(Categoria.JUVENIL, DiaSemana.LUNES, time(17, 0), time(18, 0)))
 
     repo.eliminar(horario)
 

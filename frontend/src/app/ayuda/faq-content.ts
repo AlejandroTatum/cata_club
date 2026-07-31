@@ -69,7 +69,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       {
         question: "¿Por qué mi pantalla no se parece a la de otra persona del club?",
         answer:
-          "Cada quien ve solo lo suyo. Un administrador ve la gestión completa del club; un entrenador ve lo de sus grupos; una familia ve Mi Cuenta, con su propia información y nada más.",
+          "Cada quien ve solo lo suyo. Un administrador ve la gestión completa del club; un entrenador ve lo operativo del día a día; una familia ve Mi Cuenta, con su propia información y nada más.",
       },
     ],
   },
@@ -113,7 +113,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         question: "¿Dónde veo lo que ya cargué?",
-        answer: "En Historial Asistencia, con las listas que usted mismo registró.",
+        answer: "En Historial Asistencia, con las listas registradas por sesión.",
       },
     ],
   },
@@ -143,7 +143,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       {
         question: "¿Quién define los horarios?",
         answer:
-          "El administrador, desde Gestión de Horarios. Cada horario queda asociado a un grupo y a un entrenador.",
+          "El administrador, desde Gestión de Horarios. Cada horario pertenece a una categoría con su día y su hora; la clase la da el entrenador disponible.",
       },
     ],
   },

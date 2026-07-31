@@ -3,7 +3,7 @@
  *
  * PUT speaks the `categoria`-derived contract: the backend's
  * `HorarioUpdateDTO` accepts exactly `categoria`, `dia_semana` and
- * `entrenador_id` (all optional, applied with `exclude_unset`), deriving
+ * (all optional, applied with `exclude_unset`), deriving
  * `hora_inicio`/`hora_fin` from `CATEGORIA_METADATA[categoria]`.
  *
  * @vitest-environment node
@@ -64,12 +64,12 @@ describe("PUT /api/groups/horarios/[id]", () => {
   });
 
   it("forwards categoria to the backend with the bearer token", async () => {
-    const actualizado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5, nivelRankingId: null };
+    const actualizado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", nivelRankingId: null };
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(actualizado));
 
     const access = makeJwt(3600);
     const response = await PUT(
-      putRequest({ categoria: "COMPETITIVO", dia_semana: "LUNES", entrenador_id: 5 }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      putRequest({ categoria: "COMPETITIVO", dia_semana: "LUNES" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
       { params: { id: "1" } },
     );
     const body = await response.json();
@@ -81,7 +81,7 @@ describe("PUT /api/groups/horarios/[id]", () => {
         headers: expect.objectContaining({ Authorization: `Bearer ${access}` }),
       }),
     );
-    expect(forwardedBody()).toEqual({ categoria: "COMPETITIVO", dia_semana: "LUNES", entrenador_id: 5 });
+    expect(forwardedBody()).toEqual({ categoria: "COMPETITIVO", dia_semana: "LUNES" });
     expect(response.status).toBe(200);
     expect(body).toEqual(actualizado);
   });

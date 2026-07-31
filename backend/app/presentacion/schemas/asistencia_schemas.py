@@ -13,16 +13,18 @@ class HorarioCreateDTO(BaseModel):
 
     El nivel de ranking NO vive en el horario: horario y nivel son
     independientes (un alumno puede trained en cualquier horario sin que
-    medie su nivel, y el nivel se asigna por `Ranking.nivel_ranking_id`)."""
+    medie su nivel, y el nivel se asigna por `Ranking.nivel_ranking_id`).
+
+    Sin `entrenador_id`: el club no asigna entrenadores a horarios -- la
+    clase la da el entrenador disponible (issue #13,
+    docs/concepto-alcance-modelo.md §4)."""
     categoria: Categoria
     dia_semana: DiaSemana
-    entrenador_id: int
 
 
 class HorarioUpdateDTO(BaseModel):
     categoria: Optional[Categoria] = None
     dia_semana: Optional[DiaSemana] = None
-    entrenador_id: Optional[int] = None
 
 
 class HorarioResponseDTO(ResponseBase, HorarioCreateDTO):
@@ -37,7 +39,6 @@ class AsistenciaCreateDTO(BaseModel):
     justificativo: Optional[str] = None
     estado_justificativo: Optional[bool] = None
     persona_id: int
-    entrenador_id: int
     horario_id: int
 
 
@@ -49,7 +50,6 @@ class AsistenciaResponseDTO(ResponseBase, BaseModel):
     justificativo: Optional[str] = None
     estado_justificativo: Optional[bool] = None
     persona_id: int
-    entrenador_id: int
     horario_id: int
 
 

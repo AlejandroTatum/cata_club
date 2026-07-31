@@ -52,13 +52,10 @@ export interface TrainingSchedule {
   /** "HH:mm", seconds already trimmed by the adapter. */
   horaInicio: string;
   horaFin: string;
-  entrenadorId: number;
-  /** Titular trainer's display name — resolved server-side from `/personas`. */
-  entrenadorNombre: string;
   nivelRankingId: number | null;
 }
 
-/** A recent attendance record, enriched with student/trainer names. */
+/** A recent attendance record, enriched with the student's name. */
 export interface AttendanceRecord {
   id: string;
   fecha: string;
@@ -69,7 +66,6 @@ export interface AttendanceRecord {
   personaId: number;
   estudiante: string;
   estado: EstadoAsistencia;
-  entrenador: string;
 }
 
 /** Aggregate counts for today's attendance overview. */

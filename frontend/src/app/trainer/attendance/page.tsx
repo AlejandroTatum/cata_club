@@ -113,8 +113,6 @@ import {
   toAttendanceMarks,
   buildAttendanceSummary,
   buildRosterFromAlumnoHorarios,
-  resolveEntrenadorId,
-  resolveDisplayTrainerName,
   type SessionStudent,
   type StoredAttendanceDraft,
   type WizardLocation,
@@ -322,18 +320,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
     [selectedScheduleId, sessionDate],
   );
 
-  // Admins may register attendance on a trainer's behalf (backend requires
-  // entrenadorId to belong to an actual ENTRENADOR — see attendance-utils.ts).
-  const trainerName = resolveDisplayTrainerName(
-    session?.user?.role ?? null,
-    session?.user?.name,
-    selectedSchedule,
-  );
-  const entrenadorPersonaId = resolveEntrenadorId(
-    session?.user?.role ?? null,
-    session?.user?.id,
-    selectedSchedule,
-  );
+  // Sin relación entrenador–horario (issue #13): la asistencia no registra
+  // quién dictó la sesión, así que no hay entrenador que resolver.
 
   // /trainer is gated to the "trainer" role only — an admin using this page
   // must bounce back to their own attendance overview, not the trainer panel.
@@ -628,7 +616,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
-    if (!selectedScheduleId || entrenadorPersonaId === null) return;
+    if (!selectedScheduleId) return;
     // Only the confirmation step files a session. Without this, a submit that
     // reached the form from anywhere else would file one straight from the
     // roll call — see the `key` on the advance/submit buttons for the way that
@@ -642,7 +630,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
     try {
       const registration = await registerAttendance({
         horarioId: selectedScheduleId,
-        entrenadorId: entrenadorPersonaId,
         // `toAttendanceMarks` strips the frontend-only `unmarked` sentinel,
         // which the backend contract does not accept.
         students: toAttendanceMarks(students),
@@ -945,7 +932,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                   />
                                 )}
                               </span>
-                              <span className="text-[11.5px] text-ink-3">{sched.entrenadorNombre}</span>
                             </button>
                           );
                         })}
@@ -1247,7 +1233,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
           </>
         )}
 
-        <p className="text-xs text-ink-3">Registrando como: {trainerName}</p>
       </div>
     );
   }
@@ -1270,12 +1255,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
               {formatDay(selectedSchedule.diaSemana)} {selectedSchedule.horaInicio} —{" "}
               {selectedSchedule.horaFin}
             </dd>
-          </div>
-          <div className="flex h-drow items-center gap-4 border-b border-line px-5">
-            <dt className="w-[160px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
-              Registra
-            </dt>
-            <dd className="flex-1 text-sm font-semibold text-ink">{trainerName}</dd>
           </div>
           <div className="flex min-h-drow items-center gap-4 px-5 py-3">
             <dt className="w-[160px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
@@ -1427,8 +1406,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
               ha sido registrada exitosamente.
             </p>
             <p className="mb-2 text-sm leading-relaxed text-ink-2">
-              <strong className="text-ink">{trainerName}</strong> figura como
-              el entrenador que tomó la asistencia de{" "}
+              Se registró la asistencia de{" "}
               <strong className="text-ink">{result?.createdCount ?? 0} estudiantes</strong>.
             </p>
             {students.length > 0 && (
@@ -1595,7 +1573,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               variant="primary"
                               disabled={
                                 submitting ||
-                                entrenadorPersonaId === null ||
                                 students.length === 0 ||
                                 unmarkedCount > 0
                               }

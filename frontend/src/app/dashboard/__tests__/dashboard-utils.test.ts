@@ -152,7 +152,6 @@ function buildRecord(overrides: Partial<AttendanceRecord> = {}): AttendanceRecor
     personaId: 1,
     estudiante: "Sofia Vera Zamora",
     estado: "present",
-    entrenador: "Carlos Mendoza",
     ...overrides,
   };
 }
@@ -326,8 +325,8 @@ describe("buildActivityFeed", () => {
     expect(feed).toHaveLength(1);
     expect(feed[0]).toMatchObject({
       kind: "attendance-session",
-      subject: "Carlos Mendoza",
-      detail: "registró la lista de Lunes 15:00 — 16:00 · 3 estudiantes",
+      subject: "Lunes 15:00 — 16:00",
+      detail: "lista registrada · 3 estudiantes",
     });
   });
 

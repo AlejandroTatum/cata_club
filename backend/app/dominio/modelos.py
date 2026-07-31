@@ -211,9 +211,7 @@ class Persona(Base):
 
     # --- Relaciones 1 a muchos ---
     # Como alumno:
-    asistencias: Mapped[List["Asistencia"]] = relationship(
-        back_populates="persona", foreign_keys="Asistencia.persona_id"
-    )
+    asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="persona")
     pagos: Mapped[List["Pago"]] = relationship(back_populates="persona")
     membresias: Mapped[List["Membresia"]] = relationship(back_populates="persona")
     # 1..0..1 con Ranking: una persona puede o no tener fila de ranking.
@@ -222,14 +220,6 @@ class Persona(Base):
 
     # Asignación directa a horarios
     alumno_horarios: Mapped[List["AlumnoHorario"]] = relationship(back_populates="persona")
-
-    # Como entrenador:
-    horarios_a_cargo: Mapped[List["HorarioEntrenamiento"]] = relationship(
-        back_populates="entrenador", foreign_keys="HorarioEntrenamiento.entrenador_id"
-    )
-    asistencias_dictadas: Mapped[List["Asistencia"]] = relationship(
-        back_populates="entrenador", foreign_keys="Asistencia.entrenador_id"
-    )
 
 
 class AntecedentesClub(Base):
@@ -467,9 +457,8 @@ class NivelRanking(Base):
 
 class HorarioEntrenamiento(Base):
     """
-    entrenador_id: entrenador TITULAR asignado a este horario (fijo por defecto).
-    No garantiza que sea quien dicte cada sesión puntual -- eso lo registra
-    Asistencia.entrenador_id, que puede diferir por sustituciones.
+    Sin entrenador titular: el club no asigna entrenadores a horarios -- la
+    clase la da el entrenador disponible (docs/concepto-alcance-modelo.md §4).
     """
     __tablename__ = "horario_entrenamiento"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -482,11 +471,6 @@ class HorarioEntrenamiento(Base):
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time] = mapped_column(Time)
 
-    entrenador_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
-    entrenador: Mapped["Persona"] = relationship(
-        back_populates="horarios_a_cargo", foreign_keys=[entrenador_id]
-    )
-
     # Horario y nivel de ranking son INDEPENDIENTES: un alumno puede estar en
     # cualquier horario sin que medie su nivel de ranking, y viceversa. El
     # nivel de cada alumno vive exclusivamente en `Ranking.nivel_ranking_id`.
@@ -496,9 +480,8 @@ class HorarioEntrenamiento(Base):
 
 class Asistencia(Base):
     """
-    entrenador_id: quien REALMENTE dictó esta sesión puntual. Suele coincidir
-    con HorarioEntrenamiento.entrenador (el titular) pero puede diferir cuando
-    hay una sustitución -- por eso se registra por asistencia, no se asume.
+    No registra quién dictó la sesión: los entrenadores cobran un mensual
+    fijo y el dato no tiene consumidor (docs/concepto-alcance-modelo.md §4).
     """
     __tablename__ = "asistencia"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -509,14 +492,7 @@ class Asistencia(Base):
     estado_justificativo: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
-    persona: Mapped["Persona"] = relationship(
-        back_populates="asistencias", foreign_keys=[persona_id]
-    )
-
-    entrenador_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
-    entrenador: Mapped["Persona"] = relationship(
-        back_populates="asistencias_dictadas", foreign_keys=[entrenador_id]
-    )
+    persona: Mapped["Persona"] = relationship(back_populates="asistencias")
 
     horario_id: Mapped[int] = mapped_column(ForeignKey(_HORARIO_FK))
     horario: Mapped["HorarioEntrenamiento"] = relationship(back_populates="asistencias")

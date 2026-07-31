@@ -14,9 +14,8 @@
  *     answers is "how recent is this?".
  *   · "← Volver al Panel" is gone: the sidebar already does that.
  *
- * Domain rule: schedules are NOT trainer-owned. `entrenadorId` on a Horario is
- * the titular trainer; the attendance record carries whoever actually
- * registered it, which can differ (substitution).
+ * Domain rule (issue #13): schedules are NOT trainer-owned and attendance
+ * does not record who taught the session — any trainer operates any session.
  */
 
 "use client";
@@ -179,7 +178,6 @@ export default function AttendancePage(): React.ReactElement {
                     <TableHeaderCell>Horario</TableHeaderCell>
                     <TableHeaderCell>Estudiante</TableHeaderCell>
                     <TableHeaderCell>Estado</TableHeaderCell>
-                    <TableHeaderCell>Registrado por</TableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -193,7 +191,6 @@ export default function AttendancePage(): React.ReactElement {
                           {getAttendanceLabel(record.estado)}
                         </Badge>
                       </TableCell>
-                      <TableCell>{record.entrenador}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

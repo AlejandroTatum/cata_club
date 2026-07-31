@@ -5,7 +5,7 @@
  *      Proxies to FastAPI's GET /asistencias/horarios.
  * POST: creates a new training schedule. Proxies to FastAPI's
  *       POST /asistencias/horarios, whose `HorarioCreateDTO` accepts exactly
- *       `categoria`, `dia_semana` and `entrenador_id`.
+ *       `categoria` and `dia_semana` (no trainer — issue #13).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -24,7 +24,6 @@ import {
 interface CrearHorarioBody {
   categoria?: unknown;
   dia_semana?: unknown;
-  entrenador_id?: unknown;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -45,12 +44,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (bodyError) return bodyError;
 
   const body = rawBody as CrearHorarioBody;
-  if (
-    typeof body.categoria !== "string" ||
-    typeof body.dia_semana !== "string" ||
-    typeof body.entrenador_id !== "number"
-  ) {
-    return badRequestResponse("Seleccione la categoría, el día y el entrenador.");
+  if (typeof body.categoria !== "string" || typeof body.dia_semana !== "string") {
+    return badRequestResponse("Seleccione la categoría y el día.");
   }
 
   return proxyToBackend("/asistencias/horarios", {
@@ -60,7 +55,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     body: {
       categoria: body.categoria,
       dia_semana: body.dia_semana,
-      entrenador_id: body.entrenador_id,
     },
   });
 }

@@ -60,11 +60,11 @@ Generales:
 - Para iniciar sesión, el usuario ingresa su correo y contraseña en la pantalla de login. Si olvidó la
   contraseña, existe recuperación de contraseña vía correo electrónico desde la misma pantalla de login.
 - Cada rol ve una parte distinta de la app: el administrador tiene acceso completo a la gestión del club
-  (miembros, grupos, pagos, asistencia, niveles, reportes); el entrenador ve solo lo referido a su/s
-  grupo/s (tomar asistencia, historial de asistencia, nivel técnico de sus alumnos); el
+  (miembros, grupos, pagos, asistencia, niveles, reportes); el entrenador ve lo operativo del día a día
+  (tomar asistencia, historial de asistencia, nivel técnico de los alumnos); el
   representante/estudiante ve únicamente "Mi Cuenta", con su propia información.
 - Los horarios de las clases (día y hora) los define y gestiona el administrador desde "Gestión de
-  Horarios"; cada horario queda asociado a un grupo/nivel y a un entrenador.
+  Horarios". No hay entrenadores asignados a horarios: cada clase la da el entrenador disponible.
 
 Horarios de clases por categoría (días y horas fijos del club):
 - Formativo (5 a 10 años): Lunes a Viernes, de 15:00 a 16:00.
@@ -81,13 +81,13 @@ Representante/Estudiante (sección "Mi Cuenta"):
   estudiante/representante directamente — si necesita actualizarla, debe pedírselo a un administrador.
 
 Entrenador:
-- Toma la asistencia de su grupo desde la sección "Asistencia".
-- Puede ver el historial de asistencia que él mismo cargó desde "Historial Asistencia".
+- Toma la asistencia de cualquier grupo desde la sección "Asistencia".
+- Puede ver el historial de asistencias registradas desde "Historial Asistencia".
 - Puede actualizar el nivel técnico (principiante, intermedio o avanzado) de un alumno desde la sección
   "Nivel".
 
 Administrador:
-- Gestiona horarios y grupos (día, hora, entrenador asignado) desde "Gestión de Horarios".
+- Gestiona horarios y grupos (día y hora) desde "Gestión de Horarios".
 - Registra pagos y membresías desde "Membresías y Pagos".
 - Genera reportes desde "Reportes".
 - La sección "Ranking" ya no es una clasificación competitiva: es donde se asignan alumnos a

@@ -135,8 +135,6 @@ export interface SessionSummary {
   fecha: string;
   /** The horario descriptor as the API renders it, e.g. "Lunes 15:00 — 16:00". */
   horario: string;
-  /** Who actually filed it — can differ from the horario's titular trainer. */
-  registradoPor: string;
   counts: Record<EstadoAsistencia, number>;
   total: number;
 }
@@ -169,7 +167,6 @@ export function groupRecordsBySession(records: AttendanceRecord[]): SessionSumma
       session = {
         fecha: record.fecha,
         horario: record.horario,
-        registradoPor: record.entrenador,
         counts: emptyCounts(),
         total: 0,
       };

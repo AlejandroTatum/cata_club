@@ -66,24 +66,16 @@ describe("horarioLabel", () => {
 });
 
 describe("buildTrainingSchedule", () => {
-  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", entrenadorId: 2, nivelRankingId: null };
+  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", nivelRankingId: null };
 
-  it("maps a backend Horario into a TrainingSchedule with the resolved trainer name", () => {
-    const personas = new Map([[2, { id: 2, nombres: "Carla", apellidos: "Trainer" }]]);
-    expect(buildTrainingSchedule(horario, personas)).toEqual({
+  it("maps a backend Horario into a TrainingSchedule (no trainer — issue #13)", () => {
+    expect(buildTrainingSchedule(horario)).toEqual({
       id: 1,
       diaSemana: "lun",
       horaInicio: "15:00",
       horaFin: "16:30",
-      entrenadorId: 2,
-      entrenadorNombre: "Carla Trainer",
       nivelRankingId: null,
     });
-  });
-
-  it("falls back to a placeholder name when the trainer isn't in the persona map", () => {
-    const built = buildTrainingSchedule(horario, new Map());
-    expect(built.entrenadorNombre).toBe("Entrenador 2");
   });
 });
 
@@ -96,13 +88,11 @@ describe("buildAttendanceRecord", () => {
     justificativo: null,
     estadoJustificativo: null,
     personaId: 3,
-    entrenadorId: 2,
     horarioId: 1,
   };
-  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", entrenadorId: 2, nivelRankingId: null };
+  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", nivelRankingId: null };
   const personas = new Map([
     [3, { id: 3, nombres: "Sofia", apellidos: "Alumna" }],
-    [2, { id: 2, nombres: "Carla", apellidos: "Trainer" }],
   ]);
 
   it("builds a fully-resolved AttendanceRecord", () => {
@@ -113,7 +103,6 @@ describe("buildAttendanceRecord", () => {
       personaId: 3,
       estudiante: "Sofia Alumna",
       estado: "present",
-      entrenador: "Carla Trainer",
     });
   });
 
@@ -122,9 +111,8 @@ describe("buildAttendanceRecord", () => {
     expect(built.horario).toBe("Horario 1");
   });
 
-  it("falls back to placeholder names when personas are missing from the map", () => {
+  it("falls back to a placeholder name when the persona is missing from the map", () => {
     const built = buildAttendanceRecord(asistencia, horario, new Map());
     expect(built.estudiante).toBe("Persona 3");
-    expect(built.entrenador).toBe("Persona 2");
   });
 });

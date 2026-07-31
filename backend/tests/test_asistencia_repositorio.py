@@ -12,7 +12,6 @@ from app.dominio.modelos import AlumnoHorario, HorarioEntrenamiento, Persona
 from app.infraestructura.repositorios.asistencia_repositorio import (
     AlumnoHorarioRepositorio,
 )
-from tests.conftest import crear_entrenador
 
 
 def _crear_persona(db_session, cedula: str, nombres: str, apellidos: str) -> Persona:
@@ -26,11 +25,9 @@ def _crear_persona(db_session, cedula: str, nombres: str, apellidos: str) -> Per
 
 
 def _crear_horario(db_session) -> HorarioEntrenamiento:
-    entrenador_id = crear_entrenador(db_session, cedula="1710034500")
     horario = HorarioEntrenamiento(
         categoria=Categoria.JUVENIL, dia_semana=DiaSemana.LUNES,
         hora_inicio=time(18, 0), hora_fin=time(19, 30),
-        entrenador_id=entrenador_id,
     )
     db_session.add(horario)
     db_session.flush()

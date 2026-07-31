@@ -94,7 +94,6 @@ function todayRecord(id: string): AttendanceRecord {
     personaId: Number(id.replace(/\D/g, "")) || 1,
     estudiante: `Estudiante ${id}`,
     estado: "present",
-    entrenador: "Carlos Mendoza",
   };
 }
 
@@ -226,7 +225,7 @@ describe("DashboardPage — actividad reciente", () => {
 
     expect(await screen.findByText("Actividad reciente")).toBeInTheDocument();
     expect(screen.getByText(/subió un comprobante de \$25,00/)).toBeInTheDocument();
-    expect(screen.getByText(/registró la lista de Lunes 15:00 — 16:00 · 2 estudiantes/)).toBeInTheDocument();
+    expect(screen.getByText(/lista registrada · 2 estudiantes/)).toBeInTheDocument();
   });
 
   it("caps the feed so it cannot dominate the page", async () => {

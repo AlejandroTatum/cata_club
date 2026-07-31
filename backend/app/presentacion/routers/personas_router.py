@@ -11,7 +11,6 @@ from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaUpdateDTO,
     PersonaBusquedaDTO, RepresentadoCreateDTO, IndependizarDTO, EstadoPersonaDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
-    EntrenadorResponseDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
 from app.presentacion.schemas.ranking_schemas import AsignarNivelDTO, RankingResponseDTO
@@ -160,28 +159,15 @@ async def reporte_nuevos_por_periodo_pdf(
     return construir_respuesta_pdf(pdf_bytes, f"reporte-periodo_{fecha_iso}.pdf")
 
 
-# --- Selector de entrenador (dropdown al crear/editar un Horario) -----------
-# IMPORTANTE: debe declararse ANTES de `GET /{persona_id}` por la misma razón
-# que `/reportes` arriba — de lo contrario "entrenadores" se interpretaría
-# como un persona_id. Lectura para cualquier autenticado (mismo criterio que
-# `listar_horarios` en asistencias_router.py): no es un dato sensible ni
-# mutación, solo permite elegir un entrenador real por nombre.
-@router.get(
-    "/entrenadores",
-    response_model=List[EntrenadorResponseDTO],
-    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
-)
-async def listar_entrenadores(db: Session = Depends(obtener_sesion)):
-    entrenadores = PersonaServicio(db).listar_entrenadores()
-    return [
-        EntrenadorResponseDTO(id=p.id, nombre_completo=f"{p.nombres} {p.apellidos}")
-        for p in entrenadores
-    ]
+# `GET /entrenadores` (selector de entrenador para el formulario de horarios)
+# se eliminó con la relación entrenador–horario (issue #13,
+# docs/concepto-alcance-modelo.md §4): sin titular que elegir, la ruta no
+# tenía consumidor. `test_personas.py` deja una guardia estructural.
 
 
 # --- Instituciones educativas (selector para inscripción de menores) --------
 # IMPORTANTE: va ANTES de `GET /{persona_id}` por la misma razón ya
-# documentada en `/reportes` y `/entrenadores`. Estaba declarada al final del
+# documentada en `/reportes`. Estaba declarada al final del
 # archivo y quedaba tapada por el comodín, así que respondía 422 siempre. El
 # síntoma no era un error visible: las tres pantallas que consumen el selector
 # (wizard de inscripción, alta de dependiente, crear cuenta del admin) lo

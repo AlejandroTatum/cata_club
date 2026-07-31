@@ -6,7 +6,7 @@
  * BFF Route Handlers: role enforcement (ADMINISTRADOR/ENTRENADOR for both
  * read and write) is the backend's job via `GestorPermisos` — these handlers
  * just proxy whatever status FastAPI returns. GET enriches each Asistencia
- * with student/trainer names and a "Día HH:mm — HH:mm" schedule label
+ * with the student's name and a "Día HH:mm — HH:mm" schedule label
  * (resolved via a single `/asistencias/horarios` + `/personas` lookup, see
  * src/lib/server/attendance-adapter.ts) since the DTO only carries bare ids.
  * Consumed by the admin `/attendance` overview and the trainer dashboard's
@@ -83,7 +83,6 @@ interface RegisterAttendanceStudent {
 
 interface RegisterAttendanceBody {
   horarioId: number;
-  entrenadorId: number;
   fechaEntrenamiento?: string;
   students: RegisterAttendanceStudent[];
 }
@@ -111,7 +110,6 @@ function parseRegisterBody(value: unknown): RegisterAttendanceBody | { error: st
   const body = value as Record<string, unknown>;
 
   if (!isPositiveInteger(body.horarioId)) return { error: "horarioId es obligatorio y debe ser un entero positivo." };
-  if (!isPositiveInteger(body.entrenadorId)) return { error: "entrenadorId es obligatorio y debe ser un entero positivo." };
   if (body.fechaEntrenamiento !== undefined && typeof body.fechaEntrenamiento !== "string") {
     return { error: "fechaEntrenamiento debe ser una fecha en formato YYYY-MM-DD." };
   }
@@ -132,7 +130,6 @@ function parseRegisterBody(value: unknown): RegisterAttendanceBody | { error: st
 
   return {
     horarioId: body.horarioId,
-    entrenadorId: body.entrenadorId,
     fechaEntrenamiento: typeof body.fechaEntrenamiento === "string" ? body.fechaEntrenamiento : undefined,
     students,
   };
@@ -162,7 +159,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           fecha_entrenamiento: fecha,
           estado: ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND[student.estado],
           persona_id: student.personaId,
-          entrenador_id: parsed.entrenadorId,
           horario_id: parsed.horarioId,
         }),
       });

@@ -335,16 +335,16 @@ def main() -> None:
 
         # ==================================================================
         # 3. Horarios (5 categorías; Competitivo corre Lun-Sáb = 26 filas)
+        # Sin entrenador titular (issue #13): el horario es solo categoría,
+        # día y hora; la clase la da el entrenador disponible.
         # ==================================================================
-        trainer_persona_id = db.query(Usuario).filter(Usuario.correo == TRAINER_CORREO).first().persona_id
         horario_count = 0
         for categoria, h_inicio, h_fin in HORARIOS:
             for dia in dias_para(categoria):
                 _, created = _obtener_o_crear(
                     db, HorarioEntrenamiento,
                     (
-                        (HorarioEntrenamiento.entrenador_id == trainer_persona_id)
-                        & (HorarioEntrenamiento.dia_semana == dia)
+                        (HorarioEntrenamiento.dia_semana == dia)
                         & (HorarioEntrenamiento.hora_inicio == h_inicio)
                     ),
                     {
@@ -352,7 +352,6 @@ def main() -> None:
                         "dia_semana": dia,
                         "hora_inicio": h_inicio,
                         "hora_fin": h_fin,
-                        "entrenador_id": trainer_persona_id,
                     },
                 )
                 if created:

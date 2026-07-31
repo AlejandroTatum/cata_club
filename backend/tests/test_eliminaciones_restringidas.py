@@ -17,7 +17,6 @@ from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, Persona
 from app.infraestructura.repositorios.asistencia_repositorio import HorarioRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
-from tests.conftest import crear_entrenador as _crear_entrenador
 
 
 def _crear_alumno(db_session, cedula: str = "1710034099") -> Persona:
@@ -31,10 +30,10 @@ def _crear_alumno(db_session, cedula: str = "1710034099") -> Persona:
     return persona
 
 
-def _crear_horario(db_session, entrenador_id: int) -> HorarioEntrenamiento:
+def _crear_horario(db_session) -> HorarioEntrenamiento:
     horario = HorarioEntrenamiento(
         categoria=Categoria.JUVENIL, dia_semana=DiaSemana.LUNES,
-        hora_inicio=time(17, 0), hora_fin=time(18, 0), entrenador_id=entrenador_id,
+        hora_inicio=time(17, 0), hora_fin=time(18, 0),
     )
     db_session.add(horario)
     db_session.commit()
@@ -42,10 +41,10 @@ def _crear_horario(db_session, entrenador_id: int) -> HorarioEntrenamiento:
     return horario
 
 
-def _crear_asistencia(db_session, persona_id: int, entrenador_id: int, horario_id: int) -> Asistencia:
+def _crear_asistencia(db_session, persona_id: int, horario_id: int) -> Asistencia:
     asistencia = Asistencia(
         fecha_entrenamiento=date(2025, 3, 3), estado=EstadoAsistencia.PRESENTE,
-        persona_id=persona_id, entrenador_id=entrenador_id, horario_id=horario_id,
+        persona_id=persona_id, horario_id=horario_id,
     )
     db_session.add(asistencia)
     db_session.commit()
@@ -66,10 +65,9 @@ def test_el_repositorio_de_persona_no_expone_borrado(db_session):
 
 
 def test_eliminar_horario_con_asistencias_lanza_operacion_invalida(db_session):
-    entrenador_id = _crear_entrenador(db_session)
     alumno = _crear_alumno(db_session)
-    horario = _crear_horario(db_session, entrenador_id)
-    _crear_asistencia(db_session, alumno.id, entrenador_id, horario.id)
+    horario = _crear_horario(db_session)
+    _crear_asistencia(db_session, alumno.id, horario.id)
     repo = HorarioRepositorio(db_session)
 
     with pytest.raises(OperacionInvalida) as error:
@@ -79,10 +77,9 @@ def test_eliminar_horario_con_asistencias_lanza_operacion_invalida(db_session):
 
 
 def test_eliminar_horario_bloqueado_deja_el_horario_intacto(db_session):
-    entrenador_id = _crear_entrenador(db_session)
     alumno = _crear_alumno(db_session)
-    horario = _crear_horario(db_session, entrenador_id)
-    _crear_asistencia(db_session, alumno.id, entrenador_id, horario.id)
+    horario = _crear_horario(db_session)
+    _crear_asistencia(db_session, alumno.id, horario.id)
     repo = HorarioRepositorio(db_session)
     horario_id = horario.id
 
@@ -94,10 +91,9 @@ def test_eliminar_horario_bloqueado_deja_el_horario_intacto(db_session):
 
 # --- Contrato HTTP: 400 en vez de 500 --------------------------------------
 def test_delete_horario_con_asistencias_responde_400(client, db_session):
-    entrenador_id = _crear_entrenador(db_session)
     alumno = _crear_alumno(db_session)
-    horario = _crear_horario(db_session, entrenador_id)
-    _crear_asistencia(db_session, alumno.id, entrenador_id, horario.id)
+    horario = _crear_horario(db_session)
+    _crear_asistencia(db_session, alumno.id, horario.id)
 
     respuesta = client.delete(f"/api/v1/asistencias/horarios/{horario.id}")
 

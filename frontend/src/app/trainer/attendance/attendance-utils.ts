@@ -9,9 +9,9 @@
  * selection is involved.
  */
 
-import type { EstadoAsistencia, UserRole } from "@/types/domain";
+import type { EstadoAsistencia } from "@/types/domain";
 import type { AlumnoHorario, AttendanceStudentMark } from "@/services/api";
-import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
+import type { AttendanceRecord } from "@/app/attendance/attendance-utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -527,36 +527,7 @@ export function buildWizardQuery(horarioId: number | null, step: WizardStep): st
   return query ? `?${query}` : "";
 }
 
-// ---------------------------------------------------------------------------
-// Admin-on-behalf-of-trainer resolution (PR8): backend's `_validar_entrenador`
-// requires `entrenador_id` to belong to an ENTRENADOR — an admin's own id
-// never qualifies, so the schedule's titular trainer is submitted instead.
-// ---------------------------------------------------------------------------
-
-type ScheduleEntrenador = Pick<TrainingSchedule, "entrenadorId" | "entrenadorNombre">;
-
-/** Resolve the persona id to submit as `entrenadorId` on the record. */
-export function resolveEntrenadorId(
-  role: UserRole | null,
-  sessionUserId: string | number | null | undefined,
-  selectedSchedule: ScheduleEntrenador | null,
-): number | null {
-  if (role === "admin") {
-    return selectedSchedule?.entrenadorId ?? null;
-  }
-  if (sessionUserId === null || sessionUserId === undefined) return null;
-  const parsed = Number(sessionUserId);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-/** Resolve the trainer name shown in "Registrando como" copy — mirrors `resolveEntrenadorId`. */
-export function resolveDisplayTrainerName(
-  role: UserRole | null,
-  sessionUserName: string | null | undefined,
-  selectedSchedule: ScheduleEntrenador | null,
-): string {
-  if (role === "admin") {
-    return selectedSchedule?.entrenadorNombre ?? "Entrenador";
-  }
-  return sessionUserName ?? "Entrenador";
-}
+// `resolveEntrenadorId`/`resolveDisplayTrainerName` (admin-on-behalf-of-
+// trainer resolution, PR8) were removed with the trainer–schedule relation
+// (issue #13): attendance no longer records who taught the session, so there
+// is no `entrenadorId` to resolve.

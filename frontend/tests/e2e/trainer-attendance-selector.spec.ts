@@ -19,12 +19,8 @@ const MOCK_SESSION = {
 
 /**
  * The one mocked slot, as the selector labels it: an em dash between the two
- * times, then the trainer's name ("18:00 — 19:00 Carla Entrenadora").
- *
- * Anchored on the times rather than on the whole label so the assertion is
- * about the SLOT the trainer is picking — the same thing `18:00 a 19:00` used
- * to identify before the label was reworded — and does not break when the
- * trailing trainer name changes.
+ * times ("18:00 — 19:00"). Since issue #13 the label carries no trainer name:
+ * schedules are not trainer-owned.
  */
 const SCHEDULE_SLOT = /18:00\s*—\s*19:00/;
 
@@ -74,8 +70,7 @@ async function mockTrainerAttendanceRuntime(page: Page): Promise<void> {
       diaSemana: "lun",
       horaInicio: "18:00",
       horaFin: "19:00",
-      entrenadorId: 2,
-      entrenadorNombre: "Carla Entrenadora",
+      nivelRankingId: null,
     },
   ]));
   // Paginated endpoint (issue #7): the client appends `?limit=200` (hence the

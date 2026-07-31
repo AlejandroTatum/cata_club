@@ -64,31 +64,15 @@ class PersonaRepositorio:
             .all()
         )
 
-    def listar_por_rol(self, tipo_rol: TipoRol) -> List[Persona]:
-        """Personas con un Usuario que tenga el `tipo_rol` dado (ej. listar
-        entrenadores para un selector). Mismo criterio de "rol asignado" que
-        `AsistenciaServicio._validar_entrenador` usa para validar."""
-        return (
-            self.db.query(Persona)
-            .join(Usuario, Usuario.persona_id == Persona.id)
-            .join(Usuario.roles)
-            .filter(Rol.tipo_rol == tipo_rol)
-            # Baja lógica: listado OPERATIVO (selector de entrenador para
-            # asignar a un horario). A alguien que ya no está en el club no se
-            # le puede asignar una clase, así que no debe ni aparecer.
-            .filter(Persona.activo.is_(True))
-            # Mismo orden de nómina que `listar`: alimenta selectores
-            # (entrenadores) y el ranking, donde un orden alfabético estable
-            # es lo que el usuario espera al buscar un nombre en la lista.
-            .order_by(*self._ORDEN_NOMINA)
-            .all()
-        )
+    # `listar_por_rol` (selector de entrenadores) se eliminó con la relación
+    # entrenador–horario (issue #13): su único consumidor era el dropdown de
+    # `GET /personas/entrenadores`.
 
     def listar_por_rol_con_ranking(
         self, tipo_rol: TipoRol, skip: int = 0, limit: Optional[int] = None
     ) -> List[Tuple[Persona, Optional[Ranking]]]:
-        """Igual que `listar_por_rol`, pero trae además la fila de `Ranking`
-        de cada persona (o `None`) en la MISMA sentencia.
+        """Personas con el `tipo_rol` dado, más la fila de `Ranking` de cada
+        una (o `None`) en la MISMA sentencia.
 
         Existe para que el roster de niveles no dispare un SELECT de ranking
         por alumno (N+1: con 68 alumnos eran 69 consultas). Detalles que NO
@@ -99,12 +83,11 @@ class PersonaRepositorio:
           desaparecerían del roster sin error visible -- son justamente los
           que la pantalla muestra como "Sin nivel asignado".
         - `distinct`: el filtro por rol pasa por persona-usuario-rol, que
-          multiplica filas cuando el usuario tiene varios roles. `listar_por_rol`
-          no lo notaba porque `Query` deduplica entidades completas; acá las
+          multiplica filas cuando el usuario tiene varios roles; acá las
           filas son tuplas, así que la deduplicación es explícita. Es segura
           porque `Ranking.persona_id` es UNIQUE: como mucho hay una fila de
           ranking por persona, nunca un producto cartesiano real.
-        - Mismo `_ORDEN_NOMINA` que `listar_por_rol`: el orden del listado no
+        - Mismo `_ORDEN_NOMINA` que `listar`: el orden del listado no
           puede cambiar por optimizar la consulta.
         """
         stmt = (

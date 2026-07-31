@@ -32,7 +32,6 @@ import {
   fetchAlumnosPorHorario,
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
-  fetchEntrenadores,
   fetchDescuentos,
   crearDescuento,
   actualizarDescuento,
@@ -43,7 +42,7 @@ import {
   exportAsistenciaReportePdf,
   consultarChatbot,
 } from "../api";
-import type { PaymentValidationRequest, Horario, AlumnoHorario, Entrenador, DescuentoCatalogo } from "../api";
+import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
@@ -495,7 +494,6 @@ function makeHorario(overrides: Partial<Horario> = {}): Horario {
     horaInicio: "18:00",
     horaFin: "20:00",
     categoria: "COMPETITIVO",
-    entrenadorId: 5,
     ...overrides,
   };
 }
@@ -592,7 +590,7 @@ describe("crearHorario", () => {
     const created = makeHorario();
     vi.mocked(global.fetch).mockResolvedValue(okResponse(created, { status: 201 }));
 
-    const dto = { dia_semana: "LUNES", categoria: "COMPETITIVO", entrenador_id: 5 };
+    const dto = { dia_semana: "LUNES", categoria: "COMPETITIVO" };
     const result = await crearHorario(dto);
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -632,21 +630,8 @@ describe("eliminarHorario", () => {
   });
 });
 
-function makeEntrenador(overrides: Partial<Entrenador> = {}): Entrenador {
-  return { id: 5, nombreCompleto: "Carlos Ruiz", ...overrides };
-}
-
-describe("fetchEntrenadores", () => {
-  it("GETs /api/personas/entrenadores", async () => {
-    const items = [makeEntrenador(), makeEntrenador({ id: 9, nombreCompleto: "Diana Soto" })];
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(items));
-
-    const result = await fetchEntrenadores();
-
-    expect(global.fetch).toHaveBeenCalledWith("/api/personas/entrenadores", expect.anything());
-    expect(result).toEqual(items);
-  });
-});
+// `fetchEntrenadores` tests removed with the trainer–schedule relation
+// (issue #13): the endpoint and the client function no longer exist.
 
 describe("fetchAlumnosPorHorario", () => {
   // Paginated backend (issue #7): the endpoint answers the standard

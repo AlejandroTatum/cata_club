@@ -2,9 +2,9 @@
  * BFF proxy — PUT/DELETE /api/groups/horarios/[id]
  *
  * PUT: updates a training schedule. FastAPI's `HorarioUpdateDTO` accepts
- *      exactly `categoria`, `dia_semana` and `entrenador_id`, all optional
- *      and applied with `exclude_unset`, so only the keys present in the
- *      incoming body are forwarded.
+ *      exactly `categoria` and `dia_semana`, both optional and applied with
+ *      `exclude_unset`, so only the keys present in the incoming body are
+ *      forwarded.
  * DELETE: removes a training schedule.
  * Proxies to FastAPI's PUT/DELETE /asistencias/horarios/{id}.
  */
@@ -29,7 +29,6 @@ import {
 interface ActualizarHorarioBody {
   categoria?: unknown;
   dia_semana?: unknown;
-  entrenador_id?: unknown;
 }
 
 function buildBackendUrl(id: string): string {
@@ -50,7 +49,6 @@ export async function PUT(
   const UPDATABLE_FIELDS: Array<[keyof ActualizarHorarioBody, string]> = [
     ["categoria", "categoria"],
     ["dia_semana", "dia_semana"],
-    ["entrenador_id", "entrenador_id"],
   ];
   const payload: Record<string, unknown> = {};
   for (const [key, field] of UPDATABLE_FIELDS) {

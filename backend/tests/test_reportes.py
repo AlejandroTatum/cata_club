@@ -63,16 +63,11 @@ def test_reporte_asistencia_requiere_admin_o_entrenador(client_sin_permisos):
 
 
 def test_reporte_asistencia_filtra_por_horario_y_periodo(client):
-    entrenador = _crear_persona(client, "1751515151")
     alumno = _crear_persona(client, "1751515152")
-    client.post("/api/v1/auth/registro", json={
-        "cedula": entrenador["cedula"], "correo": "ent@x.com", "contrasenia": "password123",
-    })
-    client.post(f"/api/v1/personas/{entrenador['id']}/roles", json={"tipo_rol": "ENTRENADOR"})
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
-        json={"categoria": "FORMATIVO", "dia_semana": "LUNES", "entrenador_id": entrenador["id"]},
+        json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
     ).json()
     client.post(
         "/api/v1/asistencias/asignar-alumno",
@@ -83,14 +78,14 @@ def test_reporte_asistencia_filtra_por_horario_y_periodo(client):
         "/api/v1/asistencias/",
         json={
             "fecha_entrenamiento": "2026-07-06", "estado": "PRESENTE",
-            "persona_id": alumno["id"], "entrenador_id": entrenador["id"], "horario_id": horario["id"],
+            "persona_id": alumno["id"], "horario_id": horario["id"],
         },
     )
     client.post(
         "/api/v1/asistencias/",
         json={
             "fecha_entrenamiento": "2026-08-06", "estado": "AUSENTE",
-            "persona_id": alumno["id"], "entrenador_id": entrenador["id"], "horario_id": horario["id"],
+            "persona_id": alumno["id"], "horario_id": horario["id"],
         },
     )
 
@@ -265,21 +260,20 @@ def test_reporte_asistencia_acepta_un_solo_dia_y_filtros_parciales(client):
 
 
 def test_reporte_asistencia_pdf_admin_200(client):
-    entrenador = _crear_persona(client, "1791919191")
     alumno = _crear_persona(client, "1792929292")
-    client.post("/api/v1/auth/registro", json={
-        "cedula": entrenador["cedula"], "correo": "ent2@x.com", "contrasenia": "password123",
-    })
-    client.post(f"/api/v1/personas/{entrenador['id']}/roles", json={"tipo_rol": "ENTRENADOR"})
     horario = client.post(
         "/api/v1/asistencias/horarios",
-        json={"categoria": "FORMATIVO", "dia_semana": "LUNES", "entrenador_id": entrenador["id"]},
+        json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
     ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
     client.post(
         "/api/v1/asistencias/",
         json={
             "fecha_entrenamiento": "2026-07-06", "estado": "PRESENTE",
-            "persona_id": alumno["id"], "entrenador_id": entrenador["id"], "horario_id": horario["id"],
+            "persona_id": alumno["id"], "horario_id": horario["id"],
         },
     )
 

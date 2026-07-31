@@ -12,9 +12,8 @@
  *
  * The prototype's reasoning, verbatim: *"el entrenador no busca «qué hizo Ana
  * el 14»; busca «la lista del lunes pasado»"*. So each row is one session,
- * with the four state counts in the row itself, and "Registró" is shown
- * because a substitution puts a different name there than the horario's
- * titular trainer — and the club needs to see that.
+ * with the four state counts in the row itself. There is no "Registró"
+ * column: attendance does not record who taught the session (issue #13).
  *
  * ## Filters
  *
@@ -178,7 +177,6 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                       <TableHead>
                         <tr>
                           <TableHeaderCell>Sesión</TableHeaderCell>
-                          <TableHeaderCell>Registró</TableHeaderCell>
                           <TableHeaderCell>Resultado</TableHeaderCell>
                           <TableHeaderCell align="right">
                             <span className="sr-only">Acciones</span>
@@ -192,7 +190,6 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                               name={formatDate(sessionRow.fecha)}
                               sub={sessionRow.horario}
                             />
-                            <TableCell>{sessionRow.registradoPor}</TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-[5px]">
                                 {STATE_ORDER.map((estado) => (
@@ -239,10 +236,6 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
             </div>
           )}
 
-          <p className="text-xs text-ink-3">
-            Quien registró puede diferir del entrenador titular del horario — las suplencias
-            quedan asentadas.
-          </p>
         </div>
       </AppShell>
     </ProtectedRoute>

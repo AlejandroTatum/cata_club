@@ -2,32 +2,8 @@ from datetime import date
 
 from app.dominio.enums import TipoRol
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
-from app.dominio.modelos import Persona, Rol, Usuario, FichaMedica
+from app.dominio.modelos import Persona, Usuario, FichaMedica
 from app.seguridad.gestor_auth import GestorAutenticacion
-from tests.conftest import crear_entrenador
-
-
-def _crear_persona_con_rol(db_session, cedula: str, tipo_rol: TipoRol) -> int:
-    """Crea una persona con un `Usuario`/`Rol` DISTINTO a ENTRENADOR y
-    devuelve su persona_id. Usado para probar que `/personas/entrenadores`
-    realmente filtra por `tipo_rol == ENTRENADOR` (INNER JOIN por rol), no
-    solo por tener o no tener un `Usuario` asociado — de lo contrario un
-    filtro roto que devolviera "cualquier persona con cualquier rol" pasaría
-    el test igual."""
-    persona = Persona(
-        nombres="Marta", apellidos="Salazar", cedula=cedula,
-        fecha_nacimiento=date(1985, 3, 20), telefono="0993334444",
-    )
-    db_session.add(persona)
-    db_session.flush()
-    rol = Rol(tipo_rol=tipo_rol, descripcion=tipo_rol.value)
-    usuario = Usuario(
-        correo=f"otrorol{cedula}@cataclub.test",
-        contrasenia="hash", persona_id=persona.id, roles=[rol],
-    )
-    db_session.add(usuario)
-    db_session.commit()
-    return persona.id
 
 
 def _payload_persona(cedula="1710034065"):
@@ -129,37 +105,16 @@ def test_actualizar_persona(client):
 # `test_baja_logica_persona.py`.
 
 
-# --- GET /personas/entrenadores: selector real de entrenador (dropdown) ----
-def test_listar_entrenadores_devuelve_solo_personas_con_rol_entrenador(client, db_session):
-    entrenador_id = crear_entrenador(db_session, "1710034065")
-    # Persona CON Usuario/Rol pero de un rol distinto (ADMINISTRADOR) — sin
-    # esta fixture, el test pasaría igual aunque el filtro de rol estuviera
-    # roto (ej. si `listar_por_rol` devolviera cualquier persona con
-    # cualquier rol asignado, no solo ENTRENADOR), porque la única otra
-    # persona ("alumno" abajo) queda excluida solo por no tener Usuario.
-    administrador_id = _crear_persona_con_rol(db_session, "1710034081", TipoRol.ADMINISTRADOR)
-    alumno = client.post("/api/v1/personas/", json=_payload_persona("1710034073")).json()
+# --- GET /personas/entrenadores: murió con la relación entrenador–horario ---
+# (issue #13, docs/concepto-alcance-modelo.md §4). El selector de entrenador
+# del formulario de horarios era su único consumidor; sin titular en el
+# horario la ruta no tiene a quién alimentar. Guardia estructural (misma
+# técnica que `test_orden_rutas.py`) para que no reaparezca.
+def test_no_existe_ruta_de_listado_de_entrenadores():
+    from app.presentacion.routers import personas_router
 
-    resp = client.get("/api/v1/personas/entrenadores")
-    assert resp.status_code == 200
-    data = resp.json()
-    ids = [e["id"] for e in data]
-    assert entrenador_id in ids
-    assert administrador_id not in ids
-    assert alumno["id"] not in ids
-    entrenador = next(e for e in data if e["id"] == entrenador_id)
-    assert entrenador["nombreCompleto"] == "Carlos Ruiz"
-
-
-def test_listar_entrenadores_vacio_cuando_no_hay_ninguno(client):
-    resp = client.get("/api/v1/personas/entrenadores")
-    assert resp.status_code == 200
-    assert resp.json() == []
-
-
-def test_listar_entrenadores_requiere_autenticacion(client_sin_token):
-    resp = client_sin_token.get("/api/v1/personas/entrenadores")
-    assert resp.status_code == 401
+    rutas = [r.path for r in personas_router.router.routes]
+    assert "/personas/entrenadores" not in rutas
 
 
 # --- POST /personas/{persona_id}/representados (portal autoservicio) --------

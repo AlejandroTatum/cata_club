@@ -324,13 +324,12 @@ function ReportsContent(): React.ReactElement {
         downloadCsv(
           csvFilename("asistencia"),
           toCsv(
-            ["Fecha", "Horario", "Estudiante", "Estado", "Entrenador"],
+            ["Fecha", "Horario", "Estudiante", "Estado"],
             attendanceResults.map((record) => [
               formatDate(record.fecha),
               record.horario,
               record.estudiante,
               getAttendanceLabel(record.estado),
-              record.entrenador,
             ]),
           ),
         );
@@ -669,7 +668,6 @@ function AsistenciaPreview({
             <th scope="col" className={TH}>Horario</th>
             <th scope="col" className={TH}>Estudiante</th>
             <th scope="col" className={TH}>Estado</th>
-            <th scope="col" className={TH}>Entrenador</th>
           </tr>
         </thead>
         <tbody>
@@ -685,7 +683,6 @@ function AsistenciaPreview({
                   {getAttendanceLabel(record.estado)}
                 </Badge>
               </td>
-              <td className={TD}>{record.entrenador}</td>
             </tr>
           ))}
         </tbody>

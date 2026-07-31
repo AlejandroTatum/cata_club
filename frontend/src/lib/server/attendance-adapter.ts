@@ -37,7 +37,6 @@ export interface BackendHorario {
   diaSemana: BackendDiaSemana;
   horaInicio: string; // "HH:MM:SS"
   horaFin: string;
-  entrenadorId: number;
   nivelRankingId: number | null;
 }
 
@@ -49,7 +48,6 @@ export interface BackendAsistencia {
   justificativo?: string | null;
   estadoJustificativo?: boolean | null;
   personaId: number;
-  entrenadorId: number;
   horarioId: number;
 }
 
@@ -132,17 +130,12 @@ export async function fetchPersonaNameMap(request: NextRequest): Promise<Map<num
 // Builders
 // ---------------------------------------------------------------------------
 
-export function buildTrainingSchedule(
-  horario: BackendHorario,
-  personas: Map<number, BackendPersonaName>,
-): TrainingSchedule {
+export function buildTrainingSchedule(horario: BackendHorario): TrainingSchedule {
   return {
     id: horario.id,
     diaSemana: DIA_SEMANA_BACKEND_TO_FRONTEND[horario.diaSemana],
     horaInicio: trimSeconds(horario.horaInicio),
     horaFin: trimSeconds(horario.horaFin),
-    entrenadorId: horario.entrenadorId,
-    entrenadorNombre: personaFullName(personas.get(horario.entrenadorId), `Entrenador ${horario.entrenadorId}`),
     nivelRankingId: horario.nivelRankingId ?? null,
   };
 }
@@ -159,6 +152,5 @@ export function buildAttendanceRecord(
     personaId: asistencia.personaId,
     estudiante: personaFullName(personas.get(asistencia.personaId), `Persona ${asistencia.personaId}`),
     estado: ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND[asistencia.estado],
-    entrenador: personaFullName(personas.get(asistencia.entrenadorId), `Persona ${asistencia.entrenadorId}`),
   };
 }

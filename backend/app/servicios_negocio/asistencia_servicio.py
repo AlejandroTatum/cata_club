@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario
-from app.dominio.enums import TipoRol, Categoria
+from app.dominio.enums import Categoria
 from app.dominio.categoria_metadata import CATEGORIA_METADATA
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -24,21 +24,6 @@ class AsistenciaServicio:
         self.repo_persona = PersonaRepositorio(db)
         self.repo_alumno_horario = AlumnoHorarioRepositorio(db)
 
-    def _validar_entrenador(self, persona_id: int) -> None:
-        """Un entrenador (titular o sustituto) debe ser una Persona con un
-        Usuario que tenga el rol ENTRENADOR. Evita asignar por error a
-        cualquier persona (ej. un alumno) como responsable de una sesión."""
-        persona = self.repo_persona.obtener_por_id(persona_id)
-        if not persona:
-            raise EntidadNoEncontrada(f"Entrenador con id {persona_id} no encontrado")
-        tiene_rol_entrenador = bool(
-            persona.usuario and any(rol.tipo_rol == TipoRol.ENTRENADOR for rol in persona.usuario.roles)
-        )
-        if not tiene_rol_entrenador:
-            raise OperacionInvalida(
-                f"La persona con id {persona_id} no tiene el rol ENTRENADOR asignado"
-            )
-
     def _validar_dia_y_derivar_horas(self, horario: HorarioEntrenamiento) -> None:
         """`hora_inicio`/`hora_fin` nunca los envía el cliente: siempre se
         derivan de `CATEGORIA_METADATA[categoria]`. `dia_semana` debe estar
@@ -54,7 +39,6 @@ class AsistenciaServicio:
         horario.hora_fin = info.hora_fin
 
     def crear_horario(self, datos: HorarioCreateDTO) -> HorarioEntrenamiento:
-        self._validar_entrenador(datos.entrenador_id)
         horario = HorarioEntrenamiento(**datos.model_dump())
         self._validar_dia_y_derivar_horas(horario)
         return self.repo_horario.crear(horario)
@@ -69,12 +53,12 @@ class AsistenciaServicio:
         update_data = datos.model_dump(exclude_unset=True)
         if not update_data:
             raise OperacionInvalida("No se proporcionaron campos para actualizar")
-        if "entrenador_id" in update_data:
-            self._validar_entrenador(update_data["entrenador_id"])
         for key, value in update_data.items():
             setattr(horario, key, value)
-        if "categoria" in update_data or "dia_semana" in update_data:
-            self._validar_dia_y_derivar_horas(horario)
+        # Sin `entrenador_id` (issue #13), categoria y dia_semana son los
+        # únicos campos actualizables y ambos re-derivan las horas: se
+        # valida/deriva siempre.
+        self._validar_dia_y_derivar_horas(horario)
         return self.repo_horario.actualizar(horario)
 
     def eliminar_horario(self, horario_id: int) -> None:
@@ -84,10 +68,9 @@ class AsistenciaServicio:
         self.repo_horario.eliminar(horario)
 
     def registrar_asistencia(self, datos: AsistenciaCreateDTO) -> Asistencia:
-        """entrenador_id se recibe explícito en cada registro (no se copia
-        automáticamente del horario) para permitir sustituciones: por defecto
-        el frontend puede pre-llenarlo con el titular del horario, pero el
-        usuario que registra puede cambiarlo si ese día dictó otro entrenador.
+        """No se registra quién dictó la sesión: cualquier entrenador opera
+        cualquier horario y el dato no tiene consumidor (issue #13,
+        docs/concepto-alcance-modelo.md §4).
 
         Upsert por (persona_id, horario_id, fecha_entrenamiento): re-tomar
         asistencia para una sesión ya registrada (ej. reabrir el wizard
@@ -98,7 +81,6 @@ class AsistenciaServicio:
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
         if not self.repo_horario.obtener_por_id(datos.horario_id):
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
-        self._validar_entrenador(datos.entrenador_id)
 
         # LIFE-1: antes de esta línea el upsert de más abajo era ciego a si
         # el alumno está realmente inscrito en el horario -- se podía
@@ -120,7 +102,6 @@ class AsistenciaServicio:
         )
         if existente:
             existente.estado = datos.estado
-            existente.entrenador_id = datos.entrenador_id
             existente.justificativo = datos.justificativo
             existente.estado_justificativo = datos.estado_justificativo
             return self.repo.actualizar(existente)

@@ -119,8 +119,8 @@ RUTAS_PUBLICAS = {
 # Cada entrada cae en uno de dos casos, ya documentados con comentario en el
 # router correspondiente:
 #   (a) catalogo/lectura no sensible para cualquier autenticado
-#       (horarios, tipos de membresia, niveles de ranking, entrenadores,
-#       geografia -- fijado por REQ-SEC-2 en esta misma PR).
+#       (horarios, tipos de membresia, niveles de ranking, geografia --
+#       fijado por REQ-SEC-2 en esta misma PR).
 #   (b) ownership verificado DENTRO del handler via `PoliticaAccesoPersona`
 #       o un chequeo equivalente contra `token_payload["persona_id"]`.
 RUTAS_SOLO_AUTENTICADAS = {
@@ -142,7 +142,6 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/membresias/tipos"),                                # (a)
     ("GET", "/membresias/{membresia_id}"),                       # (b)
     ("GET", "/personas/buscar"),                                 # (a) - autocomplete, no PII sensible expuesta en el DTO
-    ("GET", "/personas/entrenadores"),                           # (a)
     ("GET", "/personas/{persona_id}"),                           # (b)
     ("GET", "/personas/{persona_id}/antecedentes-club"),         # (b)
     ("GET", "/personas/{persona_id}/representados"),             # (b)

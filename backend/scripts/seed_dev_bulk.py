@@ -423,19 +423,17 @@ def main() -> None:
                 "seed_dev_base.py -- las membresías/pagos se omitirán."
             )
 
-        entrenador_usuario = db.query(Usuario).filter(Usuario.correo == "entrenador@cataclub.com").first()
-        horarios_entrenador: list[HorarioEntrenamiento] = []
-        if entrenador_usuario:
-            horarios_entrenador = (
-                db.query(HorarioEntrenamiento)
-                .filter(HorarioEntrenamiento.entrenador_id == entrenador_usuario.persona_id)
-                .order_by(HorarioEntrenamiento.id)
-                .limit(3)
-                .all()
-            )
-        if not entrenador_usuario or not horarios_entrenador:
+        # Sin relación entrenador–horario (issue #13): la asistencia se
+        # siembra sobre los primeros horarios del club, sin titular.
+        horarios_asistencia: list[HorarioEntrenamiento] = (
+            db.query(HorarioEntrenamiento)
+            .order_by(HorarioEntrenamiento.id)
+            .limit(3)
+            .all()
+        )
+        if not horarios_asistencia:
             print(
-                "[seed] AVISO: no se encontró el Entrenador o sus horarios "
+                "[seed] AVISO: no se encontraron horarios "
                 "(corra primero seed_dev_base.py). La asistencia se omitirá."
             )
 
@@ -494,17 +492,17 @@ def main() -> None:
 
         # ------------------------------------------------------------------
         # 4. Asistencia histórica (últimas 4 sesiones de los primeros 3
-        #    horarios del entrenador), para un subconjunto de alumnos.
+        #    horarios del club), para un subconjunto de alumnos.
         # ------------------------------------------------------------------
         asistencias_creadas = 0
-        if entrenador_usuario and horarios_entrenador:
+        if horarios_asistencia:
             estudiantes_con_asistencia = [p for p, _ in estudiantes[:24]]
             estados_ciclo = [
                 EstadoAsistencia.PRESENTE, EstadoAsistencia.PRESENTE,
                 EstadoAsistencia.AUSENTE, EstadoAsistencia.ATRASADO,
                 EstadoAsistencia.PRESENTE, EstadoAsistencia.JUSTIFICADO,
             ]
-            for horario in horarios_entrenador:
+            for horario in horarios_asistencia:
                 # Inscribir ANTES de registrar asistencia. Sin esto el seed
                 # producía un estado que la propia API no puede generar: la
                 # única vía real de alta es `asignar_alumno_a_horario`, y
@@ -544,7 +542,6 @@ def main() -> None:
                             justificativo="Cita médica" if es_justificado else None,
                             estado_justificativo=True if es_justificado else None,
                             persona_id=persona.id,
-                            entrenador_id=entrenador_usuario.persona_id,
                             horario_id=horario.id,
                         )
                         db.add(asistencia)

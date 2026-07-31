@@ -181,8 +181,7 @@ export default function AttendanceFilters({
             <option value="">Todos los horarios</option>
             {schedules.map((schedule) => (
               <option key={schedule.id} value={schedule.id}>
-                {formatDay(schedule.diaSemana)} {schedule.horaInicio} — {schedule.horaFin} (
-                {schedule.entrenadorNombre})
+                {formatDay(schedule.diaSemana)} {schedule.horaInicio} — {schedule.horaFin}
               </option>
             ))}
           </select>

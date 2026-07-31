@@ -16,17 +16,14 @@ from sqlalchemy.exc import IntegrityError
 
 from app.dominio.enums import Categoria, DiaSemana
 from app.dominio.modelos import AlumnoHorario, HorarioEntrenamiento, Persona
-from tests.conftest import crear_entrenador
 
 
 def test_alumno_horario_duplicado_viola_uq_alumno_horario(db_session):
-    entrenador_id = crear_entrenador(db_session, cedula="1710034589")
     horario = HorarioEntrenamiento(
         dia_semana=DiaSemana.LUNES,
         hora_inicio=time(18, 0),
         hora_fin=time(19, 0),
         categoria=Categoria.JUVENIL,
-        entrenador_id=entrenador_id,
     )
     persona = Persona(
         nombres="Duplicada", apellidos="Prueba", cedula="1710034590",

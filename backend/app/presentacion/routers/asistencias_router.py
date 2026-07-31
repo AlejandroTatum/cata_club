@@ -150,7 +150,7 @@ async def reporte_asistencia_pdf(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
     )
-    columnas = ["Fecha", "Horario", "Estudiante", "Estado", "Entrenador"]
+    columnas = ["Fecha", "Horario", "Estudiante", "Estado"]
     filas = [
         [
             r.fecha_entrenamiento.strftime("%d/%m/%Y"),
@@ -158,7 +158,6 @@ async def reporte_asistencia_pdf(
             f"–{r.horario.hora_fin.strftime('%H:%M')}",
             f"{r.persona.nombres} {r.persona.apellidos}",
             r.estado.value,
-            f"{r.entrenador.nombres} {r.entrenador.apellidos}",
         ]
         for r in registros
     ]
