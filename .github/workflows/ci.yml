@@ -155,8 +155,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
+        # Sin `version:` explícito: la acción lee el campo `packageManager`
+        # de frontend/package.json (pnpm@10.33.2), que queda como única
+        # fuente de verdad. Antes CI fijaba pnpm 9 mientras el proyecto
+        # declaraba pnpm 10 -- dos versiones distintas resolviendo el mismo
+        # lockfile. `package_json_file` es necesario porque el default de la
+        # acción es el package.json de la RAÍZ del repo, que no existe.
         with:
-          version: 9
+          package_json_file: frontend/package.json
 
       - uses: actions/setup-node@v4
         with:
