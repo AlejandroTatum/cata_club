@@ -42,6 +42,12 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.coverage.report]
+# Piso apenas debajo de la cobertura real medida (91.23% el 2026-07-30):
+# una caída notable rompe el build, el ruido de un punto no. Subirlo es una
+# decisión visible en el diff, igual que el `select` de ruff.
+fail_under = 90
+
 [tool.ruff]
 target-version = "py313"
 
