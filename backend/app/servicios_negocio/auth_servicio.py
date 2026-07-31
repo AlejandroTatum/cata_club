@@ -1,9 +1,12 @@
+import logging
+
 import jwt
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Usuario
 from app.dominio.excepciones import (
     CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
+    ServicioNoDisponible,
 )
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -12,6 +15,8 @@ from app.presentacion.schemas.auth_schemas import RegistroUsuarioDTO, Actualizar
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.firma_archivos import es_firma_valida
+
+_log = logging.getLogger(__name__)
 
 
 class AuthServicio:
@@ -283,7 +288,17 @@ class AuthServicio:
         Deliberadamente NO revela si el correo existe o no (mismo mensaje de
         éxito en ambos casos) -- evita que este endpoint sirva para enumerar
         correos registrados. Si existe, dispara la tarea de Celery que
-        simula el envío (ver recuperacion_tareas.py).
+        realiza el envío (ver recuperacion_tareas.py).
+
+        Hallazgo 6 (auditoría): si la publicación de la tarea falla, el
+        endpoint NO responde el mensaje de éxito -- eso le mentiría al
+        usuario legítimo, que se quedaría esperando un correo que jamás va
+        a llegar. Se propaga un error de servicio genérico (503) cuyo texto
+        no revela nada sobre la existencia del correo. Tradeoff aceptado:
+        durante una caída del broker, un atacante que SEPA de la caída
+        podría en teoría distinguir correos registrados (solo estos
+        intentan encolar y por lo tanto solo estos fallan); mentirle al
+        usuario legítimo es el peor de los dos fallos.
         """
         usuario = self.repo.obtener_por_correo(correo)
         if usuario:
@@ -294,9 +309,12 @@ class AuthServicio:
             try:
                 enviar_enlace_recuperacion.delay(correo, token)
             except Exception:
-                # Sin broker de Celery disponible (ej. entorno de tests): no
-                # debe tumbar la request. El envío es "best effort" por diseño.
-                pass
+                _log.exception(
+                    "No se pudo encolar la tarea de recuperación de contraseña"
+                )
+                raise ServicioNoDisponible(
+                    "No se pudo procesar la solicitud. Intente nuevamente más tarde"
+                )
         return {"mensaje": "Si el correo está registrado, se envió un enlace de recuperación"}
 
     def restablecer_contrasenia(self, token: str, nueva_contrasenia: str) -> None:
@@ -308,6 +326,13 @@ class AuthServicio:
 
         usuario = self.repo.obtener_por_correo(correo)
         if not usuario or usuario.version_contrasenia != version_token:
+            raise CredencialesInvalidas("El enlace de recuperación es inválido o expiró")
+
+        # Una cuenta suspendida (o cuya persona fue dada de baja del club) no
+        # debe recuperar acceso vía restablecimiento: mismos estados que
+        # bloquean el login. Mismo mensaje genérico que un token inválido,
+        # para no revelar el estado de la cuenta a quien tenga el enlace.
+        if not usuario.activo or not usuario.persona.activo:
             raise CredencialesInvalidas("El enlace de recuperación es inválido o expiró")
 
         usuario.contrasenia = GestorAutenticacion.obtener_hash_contrasenia(nueva_contrasenia)
