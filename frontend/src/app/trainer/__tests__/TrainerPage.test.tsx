@@ -73,8 +73,6 @@ function schedule(id: number, horaInicio: string, horaFin: string): TrainingSche
     diaSemana: "lun",
     horaInicio,
     horaFin,
-    entrenadorId: 42,
-    entrenadorNombre: "Carlos Mendoza",
     nivelRankingId: 9,
   };
 }
@@ -99,7 +97,6 @@ function record(
     personaId: 1,
     estudiante,
     estado,
-    entrenador: "Carlos Mendoza",
   };
 }
 

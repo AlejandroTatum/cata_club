@@ -16,10 +16,7 @@ class HorarioRepositorio:
         return self.db.get(HorarioEntrenamiento, horario_id)
 
     def listar(self, categoria: Optional[Categoria] = None) -> List[HorarioEntrenamiento]:
-        stmt = (
-            select(HorarioEntrenamiento)
-            .options(joinedload(HorarioEntrenamiento.entrenador))
-        )
+        stmt = select(HorarioEntrenamiento)
         if categoria is not None:
             stmt = stmt.where(HorarioEntrenamiento.categoria == categoria)
         return list(self.db.execute(stmt).scalars().unique().all())
@@ -77,7 +74,6 @@ class AsistenciaRepositorio:
             select(Asistencia)
             .options(
                 joinedload(Asistencia.persona),
-                joinedload(Asistencia.entrenador),
                 joinedload(Asistencia.horario),
             )
             .where(Asistencia.persona_id == persona_id)
@@ -95,7 +91,6 @@ class AsistenciaRepositorio:
         Los tres filtros son opcionales y combinables."""
         query = self.db.query(Asistencia).options(
             joinedload(Asistencia.persona),
-            joinedload(Asistencia.entrenador),
             joinedload(Asistencia.horario),
         )
         if horario_id is not None:

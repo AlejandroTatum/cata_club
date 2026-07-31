@@ -71,8 +71,6 @@ const SCHEDULES: TrainingSchedule[] = [
     diaSemana: "lun",
     horaInicio: "15:00",
     horaFin: "16:00",
-    entrenadorId: 3,
-    entrenadorNombre: "Carlos Mendoza",
     nivelRankingId: null,
   },
   {
@@ -80,8 +78,6 @@ const SCHEDULES: TrainingSchedule[] = [
     diaSemana: "vie",
     horaInicio: "17:00",
     horaFin: "18:00",
-    entrenadorId: 3,
-    entrenadorNombre: "Carlos Mendoza",
     nivelRankingId: null,
   },
 ];
@@ -91,7 +87,6 @@ function record(
   estudiante: string,
   fecha: string,
   horario = "Lunes 15:00 — 16:00",
-  entrenador = "Carlos Mendoza",
 ): AttendanceRecord {
   return {
     id: `${estudiante}-${fecha}-${horario}-${estado}`,
@@ -100,7 +95,6 @@ function record(
     personaId: 1,
     estudiante,
     estado,
-    entrenador,
   };
 }
 
@@ -109,9 +103,9 @@ const RECORDS: AttendanceRecord[] = [
   record("present", "Diego Mendoza", "2026-07-20"),
   record("late", "Ana Garcia", "2026-07-20"),
   record("absent", "Luis Lopez", "2026-07-20"),
-  // A different session on an earlier day, filed by a substitute.
-  record("present", "Kevin Sabando", "2026-07-17", "Viernes 17:00 — 18:00", "Ana Solórzano"),
-  record("justified", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00", "Ana Solórzano"),
+  // A different session on an earlier day.
+  record("present", "Kevin Sabando", "2026-07-17", "Viernes 17:00 — 18:00"),
+  record("justified", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00"),
 ];
 
 describe("TrainerAttendanceHistoryPage", () => {
@@ -133,15 +127,13 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.queryByText("Sofia Vera")).not.toBeInTheDocument();
   });
 
-  it("shows who actually filed each list, so substitutions stay visible", async () => {
+  it("does not show who filed each list — attendance no longer records it (issue #13)", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
-    expect(within(rows[1]).getByText("Carlos Mendoza")).toBeInTheDocument();
-    expect(within(rows[2]).getByText("Ana Solórzano")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Quien registró puede diferir del entrenador titular/),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Registró")).not.toBeInTheDocument();
+    // Header: Sesión, Resultado, acciones — no trainer column.
+    expect(within(rows[0]).getAllByRole("columnheader")).toHaveLength(3);
   });
 
   it("carries the four state counts in the row itself, named for a screen reader", async () => {

@@ -236,12 +236,10 @@ export interface CategoriaCard {
   horaFin: string;
   /** Every weekday the categoría runs on, in week order, deduplicated. */
   dias: string[];
-  /** Distinct entrenadores across the categoría's rows, in first-seen order. */
-  entrenadorIds: number[];
   /**
-   * The editable units. `groupHorarios` splits a categoría whenever its rows
-   * disagree on entrenador or nivel, so more than one here means the weekdays
-   * are NOT uniformly staffed — something the card has to show, not smooth over.
+   * The editable units. With the trainer–schedule relation gone (issue #13)
+   * a categoría's rows can only disagree on hora, so in practice this holds
+   * one group per categoría.
    */
   groups: HorarioGroup[];
   /** Every underlying `HorarioEntrenamiento` row of the categoría, in week order. */
@@ -263,7 +261,6 @@ export function buildCategoriaCards(groups: HorarioGroup[]): CategoriaCard[] {
         horaInicio: group.horaInicio,
         horaFin: group.horaFin,
         dias: [],
-        entrenadorIds: [],
         groups: [],
         rows: [],
       };
@@ -271,9 +268,6 @@ export function buildCategoriaCards(groups: HorarioGroup[]): CategoriaCard[] {
     }
     card.groups.push(group);
     card.rows.push(...group.rows);
-    if (!card.entrenadorIds.includes(group.entrenadorId)) {
-      card.entrenadorIds.push(group.entrenadorId);
-    }
   }
 
   const cards = Array.from(byCategoria.values());

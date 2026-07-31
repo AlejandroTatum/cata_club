@@ -46,11 +46,10 @@ const asistencia = {
   justificativo: null,
   estadoJustificativo: null,
   personaId: 3,
-  entrenadorId: 2,
   horarioId: 1,
 };
-const horario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", entrenadorId: 2 };
-const personas = { items: [{ id: 3, nombres: "Sofia", apellidos: "Alumna" }, { id: 2, nombres: "Carla", apellidos: "Trainer" }] };
+const horario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
+const personas = { items: [{ id: 3, nombres: "Sofia", apellidos: "Alumna" }] };
 
 beforeEach(() => {
   vi.spyOn(global, "fetch");
@@ -82,7 +81,7 @@ describe("GET /api/attendance/records", () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual([
-      { id: "1", fecha: "2026-07-18", horario: "Lunes 15:00 — 16:30", personaId: 3, estudiante: "Sofia Alumna", estado: "present", entrenador: "Carla Trainer" },
+      { id: "1", fecha: "2026-07-18", horario: "Lunes 15:00 — 16:30", personaId: 3, estudiante: "Sofia Alumna", estado: "present" },
     ]);
   });
 
@@ -151,7 +150,6 @@ describe("POST /api/attendance/records", () => {
       postRequest(
         {
           horarioId: 1,
-          entrenadorId: 2,
           fechaEntrenamiento: "2026-07-18",
           students: [
             { personaId: 3, estado: "present" },
@@ -174,7 +172,6 @@ describe("POST /api/attendance/records", () => {
           fecha_entrenamiento: "2026-07-18",
           estado: "PRESENTE",
           persona_id: 3,
-          entrenador_id: 2,
           horario_id: 1,
         }),
       }),
@@ -191,7 +188,6 @@ describe("POST /api/attendance/records", () => {
       postRequest(
         {
           horarioId: 1,
-          entrenadorId: 2,
           students: [
             { personaId: 3, estado: "present" },
             { personaId: 99, estado: "absent" },
@@ -213,7 +209,7 @@ describe("POST /api/attendance/records", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest(
-        { horarioId: 999, entrenadorId: 2, students: [{ personaId: 3, estado: "present" }] },
+        { horarioId: 999, students: [{ personaId: 3, estado: "present" }] },
         `${ACCESS_TOKEN_COOKIE}=${access}`,
       ),
     );
@@ -240,7 +236,7 @@ describe("POST /api/attendance/records", () => {
       const access = makeJwt(3600);
       await POST(
         postRequest(
-          { horarioId: 1, entrenadorId: 2, students: [{ personaId: 3, estado: "present" }] },
+          { horarioId: 1, students: [{ personaId: 3, estado: "present" }] },
           `${ACCESS_TOKEN_COOKIE}=${access}`,
         ),
       );

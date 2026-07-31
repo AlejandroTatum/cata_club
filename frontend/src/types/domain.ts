@@ -74,19 +74,9 @@ export type Usuario = UsuarioEstudiante | UsuarioStaff;
 /** Training level / technical category for students. */
 export type NivelTecnico = "principiante" | "intermedio" | "avanzado";
 
-/** Trainer (Entrenador) — leads training sessions. */
-export interface Entrenador {
-  id: string;
-  usuarioId: string;
-  nombres: string;
-  apellidos: string;
-  especialidad?: string;
-  telefono: string;
-  email: string;
-  activo: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+// The mock-era `Entrenador` profile interface was removed with the
+// trainer–schedule relation (issue #13): it had no consumer, and trainers
+// exist only as personas with the ENTRENADOR role.
 
 // ---------------------------------------------------------------------------
 // Membership & Payments
@@ -218,8 +208,8 @@ export type DiaSemana = "lun" | "mar" | "mie" | "jue" | "vie" | "sab" | "dom";
 /**
  * A training session slot (Horario).
  *
- * Note: Horario does NOT own a trainer. Any trainer may register attendance
- * in any available session. See `Asistencia.entrenadorId`.
+ * Note: Horario does NOT own a trainer, and attendance does not record who
+ * taught the session (issue #13): any trainer operates any session.
  */
 export interface Horario {
   id: string;
@@ -351,7 +341,6 @@ export type EstadoAsistencia = "present" | "absent" | "late" | "justified";
 export interface Asistencia {
   id: string;
   horarioId: string;
-  entrenadorId: string;
   estudianteId: string;
   fecha: string;  // ISO date
   estado: EstadoAsistencia;

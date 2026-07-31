@@ -3,7 +3,7 @@
  *
  * POST speaks the `categoria`-derived contract: the backend's
  * `HorarioCreateDTO` accepts exactly `categoria`, `dia_semana` and
- * `entrenador_id`, deriving `hora_inicio`/`hora_fin` from
+ * deriving `hora_inicio`/`hora_fin` from
  * `CATEGORIA_METADATA[categoria]`.
  *
  * @vitest-environment node
@@ -71,7 +71,7 @@ describe("GET /api/groups/horarios", () => {
   });
 
   it("proxies GET /asistencias/horarios with the bearer token", async () => {
-    const horarios = [{ id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5, nivelRankingId: null }];
+    const horarios = [{ id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", nivelRankingId: null }];
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(horarios));
 
     const access = makeJwt(3600);
@@ -111,7 +111,7 @@ describe("GET /api/groups/horarios", () => {
 });
 
 describe("POST /api/groups/horarios", () => {
-  const validBody = { categoria: "COMPETITIVO", dia_semana: "LUNES", entrenador_id: 5 };
+  const validBody = { categoria: "COMPETITIVO", dia_semana: "LUNES" };
 
   it("returns 401 when no access token cookie is present", async () => {
     const response = await POST(postRequest(validBody));
@@ -119,8 +119,8 @@ describe("POST /api/groups/horarios", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("forwards exactly categoria, dia_semana and entrenador_id with the bearer token", async () => {
-    const creado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5, nivelRankingId: null };
+  it("forwards exactly categoria and dia_semana with the bearer token", async () => {
+    const creado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", nivelRankingId: null };
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creado, 201));
 
     const access = makeJwt(3600);
@@ -142,21 +142,33 @@ describe("POST /api/groups/horarios", () => {
   it("returns 400 when categoria is missing", async () => {
     const access = makeJwt(3600);
     const response = await POST(
-      postRequest({ dia_semana: "LUNES", entrenador_id: 5 }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      postRequest({ dia_semana: "LUNES" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
     );
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("returns 400 when entrenador_id is not a number (triangulation)", async () => {
+  it("returns 400 when dia_semana is not a string (triangulation)", async () => {
     const access = makeJwt(3600);
     const response = await POST(
-      postRequest({ ...validBody, entrenador_id: "5" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      postRequest({ ...validBody, dia_semana: 5 }, `${ACCESS_TOKEN_COOKIE}=${access}`),
     );
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not forward a stale entrenador_id — the relation is gone (issue #13)", async () => {
+    const creado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", nivelRankingId: null };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creado, 201));
+
+    const access = makeJwt(3600);
+    await POST(
+      postRequest({ ...validBody, entrenador_id: 5 }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+    );
+
+    expect(forwardedBody()).toEqual(validBody);
   });
 
   it("propagates backend errors", async () => {

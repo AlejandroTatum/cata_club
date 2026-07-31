@@ -56,7 +56,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 const SCHEDULES: TrainingSchedule[] = [
-  { id: 1, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30", entrenadorId: 42, entrenadorNombre: "Coach Martinez", nivelRankingId: null },
+  { id: 1, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30", nivelRankingId: null },
 ];
 
 function buildRecords(count: number): AttendanceRecord[] {
@@ -67,7 +67,6 @@ function buildRecords(count: number): AttendanceRecord[] {
     personaId: i + 1,
     estudiante: `Estudiante ${i + 1}`,
     estado: "present" as const,
-    entrenador: "Coach Martinez",
   }));
 }
 

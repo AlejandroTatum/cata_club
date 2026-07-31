@@ -158,12 +158,6 @@ class PersonaServicio:
         self.obtener_persona(persona_id)
         return self.repo.listar_representados(persona_id)
 
-    def listar_entrenadores(self) -> list[Persona]:
-        """Personas con rol ENTRENADOR — usado por el selector de entrenador
-        al crear/editar un `HorarioEntrenamiento` (dropdown con nombres
-        reales en vez de un ID a mano)."""
-        return self.repo.listar_por_rol(TipoRol.ENTRENADOR)
-
     def actualizar_persona(self, persona_id: int, cambios: PersonaUpdateDTO) -> Persona:
         persona = self.obtener_persona(persona_id)
         datos = cambios.model_dump(exclude_unset=True)

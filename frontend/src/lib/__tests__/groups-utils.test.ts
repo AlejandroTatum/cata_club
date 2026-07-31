@@ -467,19 +467,18 @@ describe("buildTrainingSessions", () => {
 
 describe("groupHorarios", () => {
   const RECURRING_ROWS: Horario[] = [
-    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
-    { id: 102, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
-    { id: 103, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
+    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 102, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 103, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
   ];
 
-  it("collapses 3 rows sharing categoria/horario/entrenador into 1 group with 3 rows sorted Mon→Sun", () => {
+  it("collapses 3 rows sharing categoria/horario into 1 group with 3 rows sorted Mon→Sun", () => {
     const groups = groupHorarios(RECURRING_ROWS);
 
     expect(groups).toHaveLength(1);
     expect(groups[0].categoria).toBe("COMPETITIVO");
     expect(groups[0].horaInicio).toBe("18:00");
     expect(groups[0].horaFin).toBe("20:00");
-    expect(groups[0].entrenadorId).toBe(1);
     expect(groups[0].rows.map((r) => r.diaSemana)).toEqual(["LUNES", "MIERCOLES", "VIERNES"]);
     expect(groups[0].rows.map((r) => r.id)).toEqual([101, 103, 102]);
   });
@@ -494,17 +493,22 @@ describe("groupHorarios", () => {
     expect(group.key).not.toMatch(/null/);
   });
 
-  it("keeps rows with a different entrenadorId in a separate group", () => {
+  it("does not carry an entrenadorId on the group — the relation is gone (issue #13)", () => {
+    const [group] = groupHorarios(RECURRING_ROWS);
+    expect(group).not.toHaveProperty("entrenadorId");
+    expect(group.key.split("|")).toHaveLength(3);
+  });
+
+  it("keeps rows with a different categoria in a separate group", () => {
     const rows: Horario[] = [
       RECURRING_ROWS[0],
-      { ...RECURRING_ROWS[1], id: 999, entrenadorId: 2 },
+      { ...RECURRING_ROWS[1], id: 999, categoria: "ADULTOS" },
     ];
     const groups = groupHorarios(rows);
 
     expect(groups).toHaveLength(2);
     expect(groups.map((g) => g.rows).flat()).toHaveLength(2);
-    const entrenadorIds = groups.map((g) => g.entrenadorId).sort();
-    expect(entrenadorIds).toEqual([1, 2]);
+    expect(groups.map((g) => g.categoria).sort()).toEqual(["ADULTOS", "COMPETITIVO"]);
   });
 
   it("returns an empty array for an empty input", () => {
@@ -518,7 +522,6 @@ describe("diffGroupSave", () => {
     categoria: "COMPETITIVO",
     horaInicio: "18:00",
     horaFin: "20:00",
-    entrenadorId: 1,
     rows: [
       { id: 101, diaSemana: "LUNES" },
       { id: 103, diaSemana: "MIERCOLES" },

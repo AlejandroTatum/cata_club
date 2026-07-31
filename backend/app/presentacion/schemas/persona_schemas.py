@@ -93,15 +93,6 @@ class PersonaResponseDTO(ResponseBase, BaseModel):
     activo: bool = Field(default=True, examples=[True])
 
 
-class EntrenadorResponseDTO(ResponseBase, BaseModel):
-    """Shape mínima para el selector de entrenador (dropdown) al crear/editar
-    un `HorarioEntrenamiento` — GET /personas/entrenadores. No expone datos
-    sensibles (cédula, teléfono, fecha de nacimiento) como `PersonaResponseDTO`,
-    solo lo necesario para elegir un entrenador por nombre."""
-    id: int = Field(..., examples=[1])
-    nombre_completo: str = Field(..., examples=["Carlos Ruiz"])
-
-
 class PersonaBusquedaDTO(ResponseBase, BaseModel):
     """Resultado ligero para el autocomplete de búsqueda de personas."""
     id: int

@@ -38,19 +38,19 @@
  * times over. The weekday filter went with it: five cards do not need filtering.
  *
  * What the card must never do is round the data to the ideal. The day set, the
- * time range, the entrenadores and the headcount are all derived from the rows
- * that actually exist — so the live Saturday `COMPETITIVO` row reads as "Lunes a
- * viernes + sábado", a categoría staffed by two entrenadores shows both, and a
- * student enrolled in only some weekdays is reported instead of averaged away.
+ * time range and the headcount are all derived from the rows that actually
+ * exist — so the live Saturday `COMPETITIVO` row reads as "Lunes a viernes +
+ * sábado", and a student enrolled in only some weekdays is reported instead of
+ * averaged away. There is no entrenador anywhere on the card: the club does
+ * not assign trainers to schedules (issue #13).
  *
  * v4 (full-width rows): five cards in an auto-fill grid left the screen mostly
  * empty — five small boxes across the top of a 1400px page. The collapse to five
  * groups was right; the container was not. The group is a full-width row now,
  * and the width it gains is spent on facts that were cramped or invisible
  * before: the categoría's whole week as día markers (so "Competitivo also trains
- * on Saturday" and "these rows skip Martes" are readable without parsing prose),
- * the entrenadores one per line instead of joined by a separator, and the
- * partial-enrolment note on its own footnote line. Below `xl` the five columns
+ * on Saturday" and "these rows skip Martes" are readable without parsing prose)
+ * and the partial-enrolment note on its own footnote line. Below `xl` the five columns
  * stack and each one carries the label the header strip carries on desktop —
  * five columns on a 390px phone is five squashed columns.
  */
@@ -85,10 +85,9 @@ import {
   fetchAlumnosPorHorario,
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
-  fetchEntrenadores,
   ApiClientError,
 } from "@/services/api";
-import type { Horario, CrearHorarioDTO, ActualizarHorarioDTO, NivelConOcupacion, AlumnoHorario, Entrenador } from "@/services/api";
+import type { Horario, CrearHorarioDTO, ActualizarHorarioDTO, NivelConOcupacion, AlumnoHorario } from "@/services/api";
 import {
   groupHorarios,
   diffGroupSave,
@@ -149,7 +148,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
  * values under them.
  */
 const ROW_COLUMNS =
-  "xl:grid xl:grid-cols-[minmax(140px,0.95fr)_minmax(200px,1.25fr)_minmax(110px,0.75fr)_minmax(92px,0.5fr)_192px] " +
+  "xl:grid xl:grid-cols-[minmax(140px,0.95fr)_minmax(200px,1.25fr)_minmax(92px,0.5fr)_192px] " +
   "xl:items-center xl:gap-x-5";
 
 /** `.tbl thead th` typography — the header strip and the stacked cell labels. */
@@ -158,8 +157,8 @@ const CELL_LABEL = "text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-
 /**
  * A cell's own label. Visible below `xl`, where the stacked row has no header
  * strip above it; from `xl` up it goes `sr-only` rather than `hidden`, because
- * the visible header strip is `aria-hidden` and a bare "Entrenador Uno" with no
- * label announced before it is not a row a screen reader can read.
+ * the visible header strip is `aria-hidden` and a bare value with no label
+ * announced before it is not a row a screen reader can read.
  */
 function CellLabel({ children }: { children: React.ReactNode }): React.ReactElement {
   return <span className={`mb-1 block ${CELL_LABEL} xl:sr-only`}>{children}</span>;
@@ -206,10 +205,11 @@ function DiaTrack({ track, dias }: { track: string[]; dias: string[] }): React.R
  *
  * A horario has no nivel de ranking: the column was dropped by migration
  * `c4d5e6f7a8b9` and `HorarioCreateDTO` never accepted one, so the form used
- * to collect a value the BFF silently discarded. */
+ * to collect a value the BFF silently discarded. It has no entrenador either:
+ * the trainer–schedule relation was removed (issue #13, migration
+ * `e7c3a1b9d5f2`). */
 interface HorarioFormData {
   categoria: Categoria;
-  entrenador_id: number | null;
 }
 
 /** One día-group row pending deletion after student-safety check, awaiting user confirmation. */
@@ -249,7 +249,6 @@ const DEFAULT_CATEGORIA: Categoria = CATEGORIA_OPTIONS[0];
 
 const EMPTY_FORM: HorarioFormData = {
   categoria: DEFAULT_CATEGORIA,
-  entrenador_id: null,
 };
 
 export default function GroupsPage(): React.ReactElement {
@@ -297,17 +296,6 @@ export default function GroupsPage(): React.ReactElement {
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<number | null>(null);
   /** 1-indexed page of the "Ver alumnos" roster. Reset whenever a panel opens. */
   const [alumnosPage, setAlumnosPage] = useState(1);
-
-  // Real entrenadores (rol ENTRENADOR) — feeds the "Entrenador" dropdown in
-  // the create/edit form. `entrenador_id` is a real, explicitly chosen
-  // person (notified downstream on level changes, attributed on Asistencia
-  // records) so it must never be auto-filled or left as a raw ID input.
-  // Fetched independently from `loadData()` (see `cargarEntrenadores` below):
-  // entrenadores only feed the create/edit form's dropdown, not the horarios
-  // list itself, so a failure here must never block viewing/editing existing
-  // horarios.
-  const [entrenadores, setEntrenadores] = useState<Entrenador[]>([]);
-  const [entrenadoresLoading, setEntrenadoresLoading] = useState(true);
 
   /**
    * Enrolled person-ids per `Horario.id`, for the card's "N inscriptos" line.
@@ -460,32 +448,9 @@ export default function GroupsPage(): React.ReactElement {
     }
   }, []);
 
-  /**
-   * Entrenadores are used ONLY by the create/edit form's dropdown, not by the
-   * horarios list itself — so this is fetched independently from `loadData()`
-   * (not folded into its `Promise.all`). A failure here must never surface
-   * the page-wide `loadError` and must never block viewing/editing horarios
-   * that already loaded successfully; it only degrades the dropdown to an
-   * empty/error state via `entrenadores.length === 0`.
-   */
-  const cargarEntrenadores = useCallback(async (): Promise<void> => {
-    setEntrenadoresLoading(true);
-    try {
-      const entrenadoresData = await fetchEntrenadores();
-      setEntrenadores(entrenadoresData);
-    } catch {
-      setEntrenadores([]);
-      showNotification("error", "No se pudieron cargar los entrenadores. Intente nuevamente.");
-      showError("No se pudieron cargar los entrenadores. Intente nuevamente.");
-    } finally {
-      setEntrenadoresLoading(false);
-    }
-  }, [showNotification, showError]);
-
   useEffect(() => {
     void loadData();
-    void cargarEntrenadores();
-  }, [loadData, cargarEntrenadores]);
+  }, [loadData]);
 
   /**
    * Fill in the per-session rosters once the schedules are known. Kept out of
@@ -549,7 +514,6 @@ export default function GroupsPage(): React.ReactElement {
     }
     setFormData({
       categoria: (group.categoria as Categoria) ?? DEFAULT_CATEGORIA,
-      entrenador_id: group.entrenadorId,
     });
     setSelectedDias(new Set(group.rows.map((row) => row.diaSemana)));
   }
@@ -558,9 +522,9 @@ export default function GroupsPage(): React.ReactElement {
    * Opens the "Editar" accordion tab under a categoría card.
    *
    * A categoría normally has exactly one editable group, so the form opens
-   * straight onto it. When its weekdays disagree on entrenador or nivel there
-   * is more than one, and the panel opens on a chooser instead of silently
-   * editing the first — that split is real and the admin has to see it.
+   * straight onto it. When its weekdays are split across several groups the
+   * panel opens on a chooser instead of silently editing the first — that
+   * split is real and the admin has to see it.
    */
   function openEditForm(card: CategoriaCard): void {
     selectEditingGroup(card.groups.length === 1 ? card.groups[0] : null);
@@ -609,16 +573,10 @@ export default function GroupsPage(): React.ReactElement {
       setFormError("Seleccione al menos un día.");
       return;
     }
-    const entrenadorId = formData.entrenador_id;
-    if (entrenadorId === null) {
-      setFormError("Seleccione un entrenador.");
-      return;
-    }
     setFormSubmitting(true);
     setFormError(null);
     const shared = {
       categoria: formData.categoria,
-      entrenador_id: entrenadorId,
     };
     try {
       const group: HorarioGroup = editingGroup ?? {
@@ -626,7 +584,6 @@ export default function GroupsPage(): React.ReactElement {
         categoria: shared.categoria,
         horaInicio: horarioDe(shared.categoria).horaInicio,
         horaFin: horarioDe(shared.categoria).horaFin,
-        entrenadorId: shared.entrenador_id,
         rows: [],
       };
       const diff = diffGroupSave(group, selectedDias);
@@ -792,34 +749,6 @@ export default function GroupsPage(): React.ReactElement {
               {horarioDe(formData.categoria).horaInicio} – {horarioDe(formData.categoria).horaFin}
             </p>
           </div>
-          <div>
-            <label htmlFor="horario-entrenador" className="mb-1 block text-xs font-medium text-cata-text/65">
-              Entrenador
-            </label>
-            <select
-              id="horario-entrenador"
-              className="input-field w-full"
-              value={formData.entrenador_id ?? ""}
-              onChange={(e) => setFormData((prev) => ({
-                ...prev,
-                entrenador_id: e.target.value ? Number(e.target.value) : null,
-              }))}
-              disabled={entrenadoresLoading || entrenadores.length === 0}
-            >
-              <option value="">
-                {entrenadoresLoading
-                  ? "Cargando…"
-                  : entrenadores.length === 0
-                    ? "No hay entrenadores registrados"
-                    : "Seleccionar entrenador…"}
-              </option>
-              {entrenadores.map((entrenador) => (
-                <option key={entrenador.id} value={entrenador.id}>
-                  {entrenador.nombreCompleto}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="sm:col-span-2 lg:col-span-4">
             <span className="mb-1 block text-xs font-medium text-cata-text/65">
               Días de la semana
@@ -883,9 +812,8 @@ export default function GroupsPage(): React.ReactElement {
    *
    * Goes straight to the form in the normal case (one editable group per
    * categoría). When the categoría's weekdays are split across several groups
-   * — different entrenador or nivel on different days — it asks which one
-   * first, because there is no single answer to "edit this categoría" then and
-   * picking silently would hide the split.
+   * it asks which one first, because there is no single answer to "edit this
+   * categoría" then and picking silently would hide the split.
    */
   function renderEditPanel(card: CategoriaCard): React.ReactElement {
     if (editingGroup === null && card.groups.length > 1) {
@@ -900,12 +828,11 @@ export default function GroupsPage(): React.ReactElement {
             </Button>
           </div>
           <p className="mb-3 text-[12.5px] text-ink-3">
-            Los días de esta categoría no comparten entrenador ni nivel, así que se
+            Los días de esta categoría no comparten la misma configuración, así que se
             configuran por separado. Elija cuál editar.
           </p>
           <ul className="overflow-hidden rounded-ctl border border-line">
             {card.groups.map((group) => {
-              const entrenador = entrenadores.find((e) => e.id === group.entrenadorId);
               const dias = formatDiaSet(group.rows.map((row) => row.diaSemana));
               return (
                 <li
@@ -914,10 +841,6 @@ export default function GroupsPage(): React.ReactElement {
                 >
                   <span className="min-w-0 flex-1 text-[13px] text-ink">
                     {dias}
-                    <span className="text-ink-3">
-                      {" · "}
-                      {entrenador?.nombreCompleto ?? "Entrenador sin asignar"}
-                    </span>
                   </span>
                   <Button
                     size="sm"
@@ -1112,7 +1035,6 @@ export default function GroupsPage(): React.ReactElement {
             >
               <span>Grupo</span>
               <span>Horario</span>
-              <span>Entrenador</span>
               <span>Alumnos</span>
               <span />
             </div>
@@ -1128,10 +1050,6 @@ export default function GroupsPage(): React.ReactElement {
                 // An unrecognized `categoria` has no metadata, so the track
                 // falls back to the días the rows themselves carry.
                 const diaTrack = buildDiaTrack(metadata?.dias ?? [], card.dias);
-                const entrenadoresDelGrupo = card.entrenadorIds.map((id) => ({
-                  id,
-                  nombre: entrenadores.find((e) => e.id === id)?.nombreCompleto ?? "Sin asignar",
-                }));
                 const inscriptos = countInscriptos(card.rows, personasPorHorario);
                 const parciales = countInscriptosParciales(card.rows, personasPorHorario);
 
@@ -1163,22 +1081,6 @@ export default function GroupsPage(): React.ReactElement {
                         <div className="mt-2">
                           <DiaTrack track={diaTrack} dias={card.dias} />
                         </div>
-                      </div>
-
-                      {/* Every entrenador of the categoría, one per line rather
-                          than joined by a separator: more than one means its
-                          weekdays are staffed differently, which the admin has to
-                          see. Level is deliberately absent — settled product
-                          decision. */}
-                      <div className="min-w-0">
-                        <CellLabel>
-                          {entrenadoresDelGrupo.length === 1 ? "Entrenador" : "Entrenadores"}
-                        </CellLabel>
-                        {entrenadoresDelGrupo.map((entrenador) => (
-                          <p key={entrenador.id} className="text-[13px] text-ink-2">
-                            {entrenador.nombre}
-                          </p>
-                        ))}
                       </div>
 
                       {/* Distinct students across the categoría's días. Absent

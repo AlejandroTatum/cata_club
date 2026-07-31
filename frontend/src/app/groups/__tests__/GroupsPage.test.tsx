@@ -74,7 +74,6 @@ const mockEliminarHorario = vi.fn();
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockAsignarAlumnoAHorario = vi.fn();
 const mockDesasignarAlumnoDeHorario = vi.fn();
-const mockFetchEntrenadores = vi.fn();
 
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
@@ -98,26 +97,8 @@ vi.mock("@/services/api", () => {
     fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
     asignarAlumnoAHorario: (dto: unknown) => mockAsignarAlumnoAHorario(dto),
     desasignarAlumnoDeHorario: (personaId: number, horarioId: number) => mockDesasignarAlumnoDeHorario(personaId, horarioId),
-    fetchEntrenadores: () => mockFetchEntrenadores(),
     ApiClientError: MockApiClientError,
   };
-});
-
-// Default entrenador list covers every `entrenadorId` used by fixtures across
-// this file's describe blocks (1, 2, 5, 7, 9). Individual tests override this
-// via `mockFetchEntrenadores.mockResolvedValue(...)`/`mockReset()` when they
-// need to assert on the empty/loading dropdown states specifically.
-const DEFAULT_ENTRENADORES = [
-  { id: 1, nombreCompleto: "Entrenador Uno" },
-  { id: 2, nombreCompleto: "Entrenador Dos" },
-  { id: 5, nombreCompleto: "Entrenador Cinco" },
-  { id: 7, nombreCompleto: "Entrenador Siete" },
-  { id: 9, nombreCompleto: "Entrenador Nueve" },
-];
-
-beforeEach(() => {
-  mockFetchEntrenadores.mockReset();
-  mockFetchEntrenadores.mockResolvedValue(DEFAULT_ENTRENADORES);
 });
 
 const NIVELES: NivelConOcupacion[] = [
@@ -285,9 +266,9 @@ describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () 
 
 describe("GroupsPage — categoria card grid (one card per training group)", () => {
   const RECURRING_ROWS = [
-    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
-    { id: 102, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
-    { id: 103, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
+    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 102, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 103, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
   ];
 
   /** The club's real shape: five weekdays of one categoria, plus its Saturday. */
@@ -298,7 +279,6 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
       horaInicio: "18:00",
       horaFin: "20:00",
       categoria: "COMPETITIVO",
-      entrenadorId: 1,
     })),
   ];
 
@@ -400,17 +380,15 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     }
   });
 
-  it("names the trainer and the categoria, not a fabricated table/mesa", async () => {
+  it("names the categoria without a trainer (issue #13), and no fabricated table/mesa", async () => {
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
     const card = screen.getAllByTestId("horario-card")[0];
-    await waitFor(() => {
-      expect(within(card).getByText(/entrenador uno/i)).toBeInTheDocument();
-    });
     expect(within(card).getByText("Competitivo")).toBeInTheDocument();
+    expect(card.textContent).not.toMatch(/entrenador/i);
     expect(card.textContent).not.toMatch(/mesa/i);
   });
 
@@ -473,27 +451,24 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     expect(screen.queryByRole("button", { name: /^miércoles/i })).not.toBeInTheDocument();
   });
 
-  it("keeps a categoria whose weekdays have different trainers on ONE card, naming both", async () => {
+  it("keeps a categoria whose weekdays have drifted horas on ONE card", async () => {
     mockFetchHorarios.mockResolvedValue([
-      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
-      { id: 202, diaSemana: "MARTES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2 },
+      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO" },
+      { id: 202, diaSemana: "MARTES", horaInicio: "15:30", horaFin: "16:30", categoria: "FORMATIVO" },
     ]);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
     expect(screen.getAllByTestId("horario-card")).toHaveLength(1);
-    const card = screen.getAllByTestId("horario-card")[0];
-    await waitFor(() => {
-      expect(within(card).getByText(/entrenador uno/i)).toBeInTheDocument();
-    });
-    expect(within(card).getByText(/entrenador dos/i)).toBeInTheDocument();
   });
 
   it("asks which configuration to edit when a categoria's weekdays are split", async () => {
+    // Split by drifted horas: with the trainer relation gone (issue #13) the
+    // grouping key is (categoria, horaInicio, horaFin) alone.
     mockFetchHorarios.mockResolvedValue([
-      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
-      { id: 202, diaSemana: "MARTES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 2 },
+      { id: 201, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO" },
+      { id: 202, diaSemana: "MARTES", horaInicio: "15:30", horaFin: "16:30", categoria: "FORMATIVO" },
     ]);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
@@ -517,7 +492,6 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
           horaInicio: `1${5 + c}:00`,
           horaFin: `1${6 + c}:00`,
           categoria,
-          entrenadorId: 1,
         })),
       ),
     );
@@ -537,7 +511,7 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
     mockFetchNivelesConOcupacion.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
     mockFetchHorarios.mockResolvedValue([
-      { id: 801, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 1 },
+      { id: 801, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
     ]);
     mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
   });
@@ -574,7 +548,7 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
     mockFetchNivelesConOcupacion.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
     mockFetchHorarios.mockResolvedValue([
-      { id: 901, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "NO_EXISTE", entrenadorId: 1 },
+      { id: 901, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "NO_EXISTE" },
     ]);
     mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
   });
@@ -601,8 +575,8 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
 
 describe("GroupsPage — day-diffing unified save (PR2b)", () => {
   const GROUP_ROWS = [
-    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
-    { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
+    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
   ];
 
   beforeEach(() => {
@@ -639,11 +613,13 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
 
     await waitFor(() => {
       expect(mockCrearHorario).toHaveBeenCalledWith(
-        expect.objectContaining({ dia_semana: "VIERNES", categoria: "COMPETITIVO", entrenador_id: 7 }),
+        expect.objectContaining({ dia_semana: "VIERNES", categoria: "COMPETITIVO" }),
       );
     });
-    expect(mockActualizarHorario).toHaveBeenCalledWith(301, expect.objectContaining({ categoria: "COMPETITIVO", entrenador_id: 7 }));
-    expect(mockActualizarHorario).toHaveBeenCalledWith(303, expect.objectContaining({ categoria: "COMPETITIVO", entrenador_id: 7 }));
+    expect(mockActualizarHorario).toHaveBeenCalledWith(301, expect.objectContaining({ categoria: "COMPETITIVO" }));
+    expect(mockActualizarHorario).toHaveBeenCalledWith(303, expect.objectContaining({ categoria: "COMPETITIVO" }));
+    // Sin relación entrenador–horario (issue #13): ningún DTO lleva entrenador_id.
+    expect(mockCrearHorario).not.toHaveBeenCalledWith(expect.objectContaining({ entrenador_id: expect.anything() }));
   });
 
   it("unticking a día with zero enrolled students deletes it silently, without a confirmation dialog", async () => {
@@ -706,8 +682,8 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
   // Two categorias, therefore two cards: the accordion is per card, and the
   // card is the categoria now.
   const GROUPS = [
-    { id: 401, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
-    { id: 402, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 2 },
+    { id: 401, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO" },
+    { id: 402, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
   ];
 
   beforeEach(() => {
@@ -799,13 +775,13 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
 
 describe("GroupsPage — grupo-level roster: union across días, assign/unassign to every día (bugfix)", () => {
   const MULTI_DIA_GROUP_ROWS = [
-    { id: 601, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
-    { id: 602, diaSemana: "MIERCOLES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO", entrenadorId: 1 },
+    { id: 601, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO" },
+    { id: 602, diaSemana: "MIERCOLES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO" },
   ];
   // A second training group — a different categoria, therefore a different
   // card. It exists to prove the roster union stops at the categoria it
   // belongs to instead of pooling every schedule on the screen.
-  const SINGLE_DIA_ROW = { id: 603, diaSemana: "VIERNES", horaInicio: "20:00", horaFin: "21:15", categoria: "ADULTOS", entrenadorId: 9 };
+  const SINGLE_DIA_ROW = { id: 603, diaSemana: "VIERNES", horaInicio: "20:00", horaFin: "21:15", categoria: "ADULTOS" };
 
   // Nivel-matched (grupoId "2") but NEVER enrolled via AlumnoHorario for any
   // row above — proves the roster is sourced from fetchAlumnosPorHorario, not
@@ -1107,9 +1083,9 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
   }
 
   const GROUP_ROWS = [
-    { id: 701, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5 },
-    { id: 702, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5 },
-    { id: 703, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 5 },
+    { id: 701, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 702, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 703, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
   ];
 
   beforeEach(() => {
@@ -1210,14 +1186,14 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
 
 describe("GroupsPage — save resyncs local state after a mid-sequence failure (bugfix)", () => {
   const GROUP_ROWS = [
-    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
-    { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
+    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
   ];
   // Simulates the backend state AFTER the partial failure: día VIERNES (705)
   // was already created successfully before actualizarHorario(303) rejected.
   const RESYNCED_ROWS = [
     ...GROUP_ROWS,
-    { id: 705, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
+    { id: 705, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
   ];
 
   beforeEach(() => {
@@ -1271,9 +1247,9 @@ describe("GroupsPage — save resyncs local state after a mid-sequence failure (
   });
 });
 
-describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary auto-fill)", () => {
+describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
   const GROUP_ROWS = [
-    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", entrenadorId: 7 },
+    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
   ];
 
   beforeEach(() => {
@@ -1287,109 +1263,35 @@ describe("GroupsPage — real entrenador dropdown (CRITICAL fix: no arbitrary au
     mockCrearHorario.mockResolvedValue({});
   });
 
-  it("populates the dropdown with real entrenador names, not raw ids", async () => {
+  it("the create form has no Entrenador field — the relation is gone", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
 
-    const select = await screen.findByLabelText("Entrenador");
-    expect(within(select).getByText("Entrenador Uno")).toBeInTheDocument();
-    expect(within(select).getByText("Entrenador Cinco")).toBeInTheDocument();
-    expect(within(select).queryByText(/^\d+$/)).not.toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Nuevo Horario" });
+    expect(screen.queryByLabelText("Entrenador")).not.toBeInTheDocument();
   });
 
-  it("creating a new horario sends the entrenador_id chosen from the dropdown, not an auto-filled value", async () => {
+  it("creating a new horario submits only categoria and dia_semana", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
 
     fireEvent.click(screen.getByLabelText("Lunes"));
-    fireEvent.change(await screen.findByLabelText("Entrenador"), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: /crear horario/i }));
 
     await waitFor(() => {
-      expect(mockCrearHorario).toHaveBeenCalledWith(expect.objectContaining({ entrenador_id: 5 }));
+      // FORMATIVO es la categoría por defecto del formulario "Nuevo Horario".
+      expect(mockCrearHorario).toHaveBeenCalledWith({ dia_semana: "LUNES", categoria: "FORMATIVO" });
     });
   });
 
-  it("blocks submit and shows a validation message when no entrenador is selected", async () => {
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await waitForHorarios();
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
-
-    fireEvent.click(screen.getByLabelText("Lunes"));
-    fireEvent.click(screen.getByRole("button", { name: /crear horario/i }));
-
-    // Español neutro (usted), no voseo: "Seleccione", nunca "Seleccioná".
-    expect(await screen.findByText(/seleccione un entrenador/i)).toBeInTheDocument();
-    expect(mockCrearHorario).not.toHaveBeenCalled();
-  });
-
-  it("editing an existing horario preselects the group's real entrenador by name, not a raw id input", async () => {
+  it("editing an existing horario opens the form without any trainer field", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
     fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
 
-    const select = (await screen.findByLabelText("Entrenador")) as HTMLSelectElement;
-    expect(select.value).toBe("7");
-    expect(within(select).getByRole("option", { name: "Entrenador Siete", selected: true })).toBeInTheDocument();
-  });
-
-  it("reflects the loading state (disabled + 'Cargando…') instead of a silently empty dropdown while entrenadores are still being fetched", async () => {
-    let resolveEntrenadores: (value: typeof DEFAULT_ENTRENADORES) => void = () => {};
-    mockFetchEntrenadores.mockReset();
-    mockFetchEntrenadores.mockReturnValue(
-      new Promise((resolve) => {
-        resolveEntrenadores = resolve;
-      }),
-    );
-
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
-
-    const select = (await screen.findByLabelText("Entrenador")) as HTMLSelectElement;
-    expect(select).toBeDisabled();
-    // U+2026, the product's one ellipsis — never three periods.
-    expect(within(select).getByText("Cargando…")).toBeInTheDocument();
-
-    resolveEntrenadores(DEFAULT_ENTRENADORES);
-    await waitFor(() => expect(select).toBeEnabled());
-  });
-
-  it("shows a clear message instead of failing silently when no entrenador is registered at all", async () => {
-    mockFetchEntrenadores.mockReset();
-    mockFetchEntrenadores.mockResolvedValue([]);
-
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await waitForHorarios();
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
-
-    const select = (await screen.findByLabelText("Entrenador")) as HTMLSelectElement;
-    expect(select).toBeDisabled();
-    expect(within(select).getByText("No hay entrenadores registrados")).toBeInTheDocument();
-  });
-
-  it("CRITICAL: a fetchEntrenadores failure does not block the horarios list — only degrades the dropdown", async () => {
-    mockFetchEntrenadores.mockReset();
-    mockFetchEntrenadores.mockRejectedValue(new Error("network down"));
-
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-
-    // The horarios list (backed by fetchHorarios/fetchNivelesConOcupacion/
-    // fetchMembers) must still render normally — a rejected fetchEntrenadores
-    // must never trip the page-wide loadError, since it is no longer part of
-    // the same Promise.all. A distinct, non-blocking notification about the
-    // entrenadores fetch failure is acceptable; the page-wide loadError
-    // banner (with its "Reintentar" retry-everything button) is not.
-    await waitForHorarios();
-    expect(screen.queryByText(/no se pudieron cargar los horarios\. intente nuevamente/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
-    expect(await screen.findByText(/no se pudieron cargar los entrenadores/i)).toBeInTheDocument();
-
-    // The dropdown itself degrades gracefully instead of crashing the page.
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
-    const select = (await screen.findByLabelText("Entrenador")) as HTMLSelectElement;
-    await waitFor(() => expect(select).toBeDisabled());
-    expect(within(select).getByText("No hay entrenadores registrados")).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Editar Horario" });
+    expect(screen.queryByLabelText("Entrenador")).not.toBeInTheDocument();
   });
 });

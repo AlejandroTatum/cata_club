@@ -26,8 +26,6 @@ function schedule(
     diaSemana: "lun",
     horaInicio,
     horaFin,
-    entrenadorId: 1,
-    entrenadorNombre: "Coach Torres",
     nivelRankingId: null,
   };
 }
@@ -41,7 +39,6 @@ function record(
     horario: partial.horario ?? "Lunes 15:00 — 16:00",
     personaId: partial.personaId ?? 1,
     estudiante: partial.estudiante ?? "Ana López",
-    entrenador: partial.entrenador ?? "Coach Torres",
     estado: partial.estado,
   };
 }
@@ -180,7 +177,6 @@ describe("groupRecordsBySession", () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0].counts).toEqual({ present: 2, late: 1, absent: 1, justified: 1 });
     expect(sessions[0].total).toBe(5);
-    expect(sessions[0].registradoPor).toBe("Coach Torres");
   });
 
   it("separates two horarios on the same day", () => {

@@ -34,8 +34,6 @@ import {
   toAttendanceMarks,
   buildAttendanceSummary,
   buildRosterFromAlumnoHorarios,
-  resolveEntrenadorId,
-  resolveDisplayTrainerName,
   type SessionStudent,
 } from "../attendance-utils";
 import type { AlumnoHorario } from "@/services/api";
@@ -204,7 +202,6 @@ describe("buildRosterFromAlumnoHorarios", () => {
         personaId: 3,
         estudiante: "Sofia Alumna",
         estado: "present",
-        entrenador: "Coach Torres",
       },
     ];
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
@@ -225,7 +222,6 @@ describe("buildRosterFromAlumnoHorarios", () => {
         personaId: 999,
         estudiante: "Someone Else",
         estado: "present",
-        entrenador: "Coach Torres",
       },
     ];
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
@@ -431,45 +427,9 @@ describe("countByState / buildAttendanceSummary with unmarked students", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// resolveEntrenadorId / resolveDisplayTrainerName (PR8 — admin can take
-// attendance on a trainer's behalf; backend requires entrenador_id to belong
-// to an actual ENTRENADOR, so an admin's own id is never valid).
-// ---------------------------------------------------------------------------
-
-const SCHEDULE = { entrenadorId: 42, entrenadorNombre: "Coach Martinez" };
-
-describe("resolveEntrenadorId", () => {
-  it("uses the trainer's own session id when the current user is a trainer", () => {
-    expect(resolveEntrenadorId("trainer", "17", SCHEDULE)).toBe(17);
-  });
-
-  it("uses the selected schedule's titular trainer id when the current user is an admin", () => {
-    expect(resolveEntrenadorId("admin", "99", SCHEDULE)).toBe(42);
-  });
-
-  it("returns null for an admin when no schedule is selected yet", () => {
-    expect(resolveEntrenadorId("admin", "99", null)).toBeNull();
-  });
-
-  it("returns null for a trainer with no session id", () => {
-    expect(resolveEntrenadorId("trainer", null, SCHEDULE)).toBeNull();
-  });
-});
-
-describe("resolveDisplayTrainerName", () => {
-  it("shows the trainer's own session name when the current user is a trainer", () => {
-    expect(resolveDisplayTrainerName("trainer", "Coach Torres", SCHEDULE)).toBe("Coach Torres");
-  });
-
-  it("shows the selected schedule's titular trainer name when the current user is an admin", () => {
-    expect(resolveDisplayTrainerName("admin", "Admin User", SCHEDULE)).toBe("Coach Martinez");
-  });
-
-  it("falls back to a generic label for an admin when no schedule is selected yet", () => {
-    expect(resolveDisplayTrainerName("admin", "Admin User", null)).toBe("Entrenador");
-  });
-});
+// `resolveEntrenadorId`/`resolveDisplayTrainerName` tests removed with the
+// trainer–schedule relation (issue #13): attendance no longer records who
+// taught the session.
 
 // ---------------------------------------------------------------------------
 // Row tapping (FASE 4 item 3): the whole 48px fiche cycles the state.

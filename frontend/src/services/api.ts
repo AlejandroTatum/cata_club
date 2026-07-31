@@ -430,10 +430,11 @@ export interface AttendanceStudentMark {
   estado: EstadoAsistencia;
 }
 
-/** Request body for `POST /api/attendance/records` — registers real attendance for a session. */
+/** Request body for `POST /api/attendance/records` — registers real attendance
+ * for a session. No `entrenadorId`: attendance does not record who taught the
+ * session (issue #13, docs/concepto-alcance-modelo.md §4). */
 export interface RegisterAttendanceRequest {
   horarioId: number;
-  entrenadorId: number;
   /** ISO "YYYY-MM-DD"; defaults to today (server clock) when omitted. */
   fechaEntrenamiento?: string;
   students: AttendanceStudentMark[];
@@ -497,6 +498,10 @@ export async function registerAttendance(data: RegisterAttendanceRequest): Promi
  * There is no `nivelRankingId`: a horario is not tied to a ranking level.
  * The backing column was dropped by migration `c4d5e6f7a8b9`, and a student's
  * level lives on `Ranking.nivel_ranking_id` alone.
+ *
+ * There is no `entrenadorId` either: the club does not assign trainers to
+ * schedules — whoever is available teaches the class. The backing column was
+ * dropped by migration `e7c3a1b9d5f2` (issue #13).
  */
 export interface Horario {
   id: number;
@@ -504,7 +509,6 @@ export interface Horario {
   horaInicio: string;
   horaFin: string;
   categoria: string;
-  entrenadorId: number;
 }
 
 /** `hora_inicio`/`hora_fin` are intentionally absent: the backend derives and
@@ -514,14 +518,12 @@ export interface Horario {
 export interface CrearHorarioDTO {
   dia_semana: string;
   categoria: string;
-  entrenador_id: number;
 }
 
 /** See `CrearHorarioDTO` — `hora_inicio`/`hora_fin` are dropped here too. */
 export interface ActualizarHorarioDTO {
   dia_semana?: string;
   categoria?: string;
-  entrenador_id?: number;
 }
 
 /** Fetch all training schedules. */
@@ -561,20 +563,9 @@ export async function eliminarHorario(id: number): Promise<void> {
   });
 }
 
-/** A persona with rol ENTRENADOR — feeds the entrenador dropdown when
- *  creating/editing a `Horario` (real name, not a raw ID). */
-export interface Entrenador {
-  id: number;
-  nombreCompleto: string;
-}
-
-/** Fetch all personas with rol ENTRENADOR. */
-export async function fetchEntrenadores(): Promise<Entrenador[]> {
-  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
-  return request<Entrenador[]>(apiEndpoint("/personas/entrenadores"), {
-    headers: mockHeaders,
-  });
-}
+// `Entrenador`/`fetchEntrenadores` (the trainer dropdown for the horario
+// form) were removed with the trainer–schedule relation (issue #13): the
+// backend endpoint `GET /personas/entrenadores` no longer exists.
 
 // ---------------------------------------------------------------------------
 // Members & Groups API Methods (Fase 4)

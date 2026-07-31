@@ -275,7 +275,6 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
         crearHorario({
           dia_semana: "LUNES",
           categoria: "COMPETITIVO",
-          entrenador_id: 5,
         }),
       )) as Record<string, unknown>),
       nivel_ranking_id: 3,
@@ -300,7 +299,6 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
     expect(Object.keys(forwardedToBackend()).sort()).toEqual([
       "categoria",
       "dia_semana",
-      "entrenador_id",
     ]);
   });
 
@@ -311,7 +309,6 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
       ...((await captureBody(() =>
         actualizarHorario(3, {
           categoria: "COMPETITIVO",
-          entrenador_id: 5,
         }),
       )) as Record<string, unknown>),
       nivel_ranking_id: 3,
@@ -334,7 +331,7 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
     );
 
     expect(response.status).not.toBe(400);
-    expect(Object.keys(forwardedToBackend()).sort()).toEqual(["categoria", "entrenador_id"]);
+    expect(Object.keys(forwardedToBackend()).sort()).toEqual(["categoria"]);
   });
 
   /**

@@ -364,7 +364,6 @@ const CATEGORIA_GROUPS: HorarioGroup[] = [
     categoria: "COMPETITIVO",
     horaInicio: "18:00",
     horaFin: "20:00",
-    entrenadorId: 1,
     rows: [
       { id: 101, diaSemana: "LUNES" },
       { id: 102, diaSemana: "MIERCOLES" },
@@ -376,21 +375,19 @@ const CATEGORIA_GROUPS: HorarioGroup[] = [
     categoria: "FORMATIVO",
     horaInicio: "15:00",
     horaFin: "16:00",
-    entrenadorId: 2,
     rows: [
       { id: 201, diaSemana: "LUNES" },
       { id: 202, diaSemana: "MARTES" },
     ],
   },
-  // Same categoria as the group above, different entrenador: `groupHorarios`
-  // splits it into its own editable unit, but it is still the SAME training
+  // Same categoria as the group above under a distinct key: `groupHorarios`
+  // keeps it as its own editable unit, but it is still the SAME training
   // group in the club's eyes and must land on the same card.
   {
     key: "formativo-15-b",
     categoria: "FORMATIVO",
     horaInicio: "15:00",
     horaFin: "16:00",
-    entrenadorId: 7,
     rows: [{ id: 203, diaSemana: "VIERNES" }],
   },
 ];
@@ -421,10 +418,9 @@ describe("buildCategoriaCards", () => {
     expect(cards[1].dias).toEqual(["LUNES", "MIERCOLES", "SABADO"]);
   });
 
-  it("surfaces every distinct entrenador of the categoria, so a split is visible", () => {
+  it("does not carry entrenadores on the card — the relation is gone (issue #13)", () => {
     const cards = buildCategoriaCards(CATEGORIA_GROUPS);
-    expect(cards[0].entrenadorIds).toEqual([2, 7]);
-    expect(cards[1].entrenadorIds).toEqual([1]);
+    expect(cards[0]).not.toHaveProperty("entrenadorIds");
   });
 
   it("returns an empty list for no groups", () => {

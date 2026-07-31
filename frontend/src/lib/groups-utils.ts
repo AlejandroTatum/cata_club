@@ -71,16 +71,15 @@ export interface HorarioGroupRow {
 }
 
 /**
- * A visual grouping of `Horario` rows that share categoria, horaInicio,
- * horaFin and entrenadorId — the "same weekly schedule, recurring on N días"
- * case. Built by `groupHorarios()`.
+ * A visual grouping of `Horario` rows that share categoria, horaInicio and
+ * horaFin — the "same weekly schedule, recurring on N días" case. Built by
+ * `groupHorarios()`.
  */
 export interface HorarioGroup {
   key: string;
   categoria: string;
   horaInicio: string;
   horaFin: string;
-  entrenadorId: number;
   rows: HorarioGroupRow[];
 }
 
@@ -385,20 +384,20 @@ export function buildTrainingSessions(
 /** Monday→Sunday order used to sort a `HorarioGroup`'s rows. */
 const DIA_SEMANA_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
 
-/** Composite grouping key: same categoria + horario + entrenador = same weekly schedule. */
+/** Composite grouping key: same categoria + horario = same weekly schedule. */
 function horarioGroupKey(h: Horario): string {
-  return `${h.categoria}|${h.horaInicio}|${h.horaFin}|${h.entrenadorId}`;
+  return `${h.categoria}|${h.horaInicio}|${h.horaFin}`;
 }
 
 /**
  * Group flat `Horario` rows (one per día) that share (categoria, horaInicio,
- * horaFin, entrenadorId) into a single `HorarioGroup`, collecting each row's
- * día into `rows`, sorted Monday→Sunday.
+ * horaFin) into a single `HorarioGroup`, collecting each row's día into
+ * `rows`, sorted Monday→Sunday.
  *
- * Rows that differ in ANY of the 4 grouping fields land in separate groups
- * (e.g. a different entrenadorId), even if the rest match. A 5th segment
- * used to hash `nivelRankingId`, but the backend dropped that column
- * (migration `c4d5e6f7a8b9`) and never sends it, so it was a constant.
+ * Rows that differ in ANY of the 3 grouping fields land in separate groups,
+ * even if the rest match. A 4th segment used to hash `entrenadorId`, dropped
+ * with the trainer–schedule relation (issue #13, migration `e7c3a1b9d5f2`);
+ * a 5th used to hash `nivelRankingId`, dropped by migration `c4d5e6f7a8b9`.
  */
 export function groupHorarios(horarios: Horario[]): HorarioGroup[] {
   const groupsByKey = new Map<string, HorarioGroup>();
@@ -412,7 +411,6 @@ export function groupHorarios(horarios: Horario[]): HorarioGroup[] {
         categoria: h.categoria,
         horaInicio: h.horaInicio,
         horaFin: h.horaFin,
-        entrenadorId: h.entrenadorId,
         rows: [],
       };
       groupsByKey.set(key, group);

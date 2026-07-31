@@ -1,5 +1,3 @@
-from app.dominio.modelos import Usuario, Rol
-from app.dominio.enums import TipoRol
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from datetime import date
@@ -15,102 +13,60 @@ def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
     ).json()
 
 
-def _convertir_en_entrenador(db_session, persona_id: int):
-    """Da de alta un Usuario con rol ENTRENADOR para una Persona ya creada
-    (no existe aún un endpoint de registro de usuarios; se hace vía ORM
-    directamente en el test, igual que lo haría un seed/migración)."""
-    rol = Rol(tipo_rol=TipoRol.ENTRENADOR, descripcion="Entrenador del club")
-    usuario = Usuario(
-        correo=f"entrenador{persona_id}@cataclub.test",
-        contrasenia=GestorAutenticacion.obtener_hash_contrasenia("clave123"),
-        persona_id=persona_id,
-        roles=[rol],
-    )
-    db_session.add(usuario)
-    db_session.commit()
-
-
-def test_no_permite_horario_con_entrenador_sin_rol(client):
-    """Persona sin rol ENTRENADOR no puede quedar como titular de un horario."""
-    persona = _crear_persona_api(client)
+# --- Issue #13: sin relación entrenador–horario -----------------------------
+# El club no asigna entrenadores a horarios: la clase la da quien está
+# disponible (docs/concepto-alcance-modelo.md §4). El horario se crea solo con
+# categoría y día, y la asistencia no registra quién dictó la sesión.
+def test_crear_horario_sin_entrenador(client):
     resp = client.post(
         "/api/v1/asistencias/horarios",
-        json={
-            "categoria": "JUVENIL", "dia_semana": "LUNES",
-            "entrenador_id": persona["id"],
-        },
-    )
-    assert resp.status_code == 400
-    assert "ENTRENADOR" in resp.json()["detail"]
-
-
-def test_crear_horario_con_entrenador_valido(client, db_session):
-    entrenador = _crear_persona_api(client, "1710034065", "Carlos")
-    _convertir_en_entrenador(db_session, entrenador["id"])
-
-    resp = client.post(
-        "/api/v1/asistencias/horarios",
-        json={
-            "categoria": "JUVENIL", "dia_semana": "LUNES",
-            "entrenador_id": entrenador["id"],
-        },
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
     )
     assert resp.status_code == 201
     assert resp.json()["diaSemana"] == "LUNES"
-    assert resp.json()["entrenadorId"] == entrenador["id"]
+    assert "entrenadorId" not in resp.json()
 
 
-def test_asistencia_permite_entrenador_sustituto_distinto_al_titular(client, db_session):
-    """Regla de negocio confirmada: el entrenador titular del horario puede
-    cambiar puntualmente por sustitución -- Asistencia.entrenador_id puede
-    diferir de HorarioEntrenamiento.entrenador_id."""
-    titular = _crear_persona_api(client, "1710034065", "Carlos")
-    _convertir_en_entrenador(db_session, titular["id"])
-    sustituto = _crear_persona_api(client, "1710034073", "Diego")
-    _convertir_en_entrenador(db_session, sustituto["id"])
-    alumno = _crear_persona_api(client, "1710034081", "Ana")
-
+def test_cualquier_entrenador_registra_asistencia_en_cualquier_horario(
+    client_entrenador, client,
+):
+    """Permisos simplificados (issue #13): un ENTRENADOR sin ninguna relación
+    previa con el horario puede tomar asistencia en él. Antes el payload
+    exigía un `entrenador_id` validado contra el rol; hoy alcanza con el rol
+    de quien llama -- la asistencia no registra quién dictó la clase."""
+    alumno = _crear_persona_api(client, "1710034073", "Ana")
     horario = client.post(
         "/api/v1/asistencias/horarios",
-        json={
-            "categoria": "JUVENIL", "dia_semana": "LUNES",
-            "entrenador_id": titular["id"],
-        },
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
     ).json()
     client.post(
         "/api/v1/asistencias/asignar-alumno",
         json={"persona_id": alumno["id"], "horario_id": horario["id"]},
     )
 
-    resp = client.post(
+    _restaurar_token_entrenador()
+    resp = client_entrenador.post(
         "/api/v1/asistencias/",
         json={
             "fecha_entrenamiento": str(date(2026, 7, 13)), "estado": "PRESENTE",
-            "persona_id": alumno["id"], "entrenador_id": sustituto["id"],
-            "horario_id": horario["id"],
+            "persona_id": alumno["id"], "horario_id": horario["id"],
         },
     )
     assert resp.status_code == 201
-    assert resp.json()["entrenadorId"] == sustituto["id"]
-    assert resp.json()["entrenadorId"] != horario["entrenadorId"]
+    assert "entrenadorId" not in resp.json()
 
 
-def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client, db_session):
+def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client):
     """Bug confirmado: reabrir el wizard "Tomar asistencia" para una sesión
     ya registrada y volver a enviar creaba filas duplicadas en vez de
     actualizar las existentes. `registrar_asistencia` debe hacer upsert por
     (persona_id, horario_id, fecha_entrenamiento): exactamente una fila por
     esa combinación, con el último `estado` enviado."""
-    entrenador = _crear_persona_api(client, "1710034065", "Carlos")
-    _convertir_en_entrenador(db_session, entrenador["id"])
     alumno = _crear_persona_api(client, "1710034073", "Ana")
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
-        json={
-            "categoria": "JUVENIL", "dia_semana": "LUNES",
-            "entrenador_id": entrenador["id"],
-        },
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
     ).json()
     client.post(
         "/api/v1/asistencias/asignar-alumno",
@@ -119,8 +75,7 @@ def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client, db_
 
     payload = {
         "fecha_entrenamiento": str(date(2026, 7, 20)), "estado": "PRESENTE",
-        "persona_id": alumno["id"], "entrenador_id": entrenador["id"],
-        "horario_id": horario["id"],
+        "persona_id": alumno["id"], "horario_id": horario["id"],
     }
     primera = client.post("/api/v1/asistencias/", json=payload)
     assert primera.status_code == 201
@@ -142,21 +97,16 @@ def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client, db_
     assert registros[0]["estado"] == "AUSENTE"
 
 
-def test_listar_alumnos_por_horario_incluye_edad_calculada(client, db_session):
+def test_listar_alumnos_por_horario_incluye_edad_calculada(client):
     """`AlumnoHorarioDetalleDTO.edad` debe salir calculada a partir de
     `Persona.fecha_nacimiento` vía `_calcular_edad`, no hardcodeada ni
     ausente -- roster del frontend la necesita para mostrarla junto al
     nombre del alumno."""
-    entrenador = _crear_persona_api(client, "1710034065", "Carlos")
-    _convertir_en_entrenador(db_session, entrenador["id"])
     alumno = _crear_persona_api(client, "1710034073", "Ana")
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
-        json={
-            "categoria": "JUVENIL", "dia_semana": "LUNES",
-            "entrenador_id": entrenador["id"],
-        },
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
     ).json()
 
     client.post(
@@ -194,6 +144,17 @@ def _restaurar_token_alumno():
     }
 
 
+def _restaurar_token_entrenador():
+    """Misma convención que `_restaurar_token_alumno`, pero con un token de
+    ENTRENADOR puro (sin ADMINISTRADOR): pedir `client_entrenador` antes que
+    `client` en la firma, montar los datos con `client` y restaurar este
+    token justo antes de la llamada que se quiere probar como entrenador."""
+    from main import app
+    app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+        "sub": "entrenador@cataclub.test", "persona_id": 1, "roles": ["ENTRENADOR"],
+    }
+
+
 # --- SEC-1: roster IDOR -------------------------------------------------
 # `GET /asistencias/horarios/{id}/alumnos` solo exigia un token valido (via
 # `GestorAutenticacion.decodificar_token`), sin rol ni ownership -- cualquier
@@ -201,18 +162,13 @@ def _restaurar_token_alumno():
 # persona_id de cada alumno inscrito en cualquier horario del club, solo
 # incrementando el id. El fix exige ADMINISTRADOR/ENTRENADOR sin excepcion,
 # igual que `desasignar_alumno_de_horario` (linea 170).
-def test_listar_alumnos_por_horario_rechaza_alumno_sin_relacion(client_sin_permisos, client, db_session):
+def test_listar_alumnos_por_horario_rechaza_alumno_sin_relacion(client_sin_permisos, client):
     """Un ALUMNO sin ninguna relacion con el horario debe recibir 403."""
-    entrenador = _crear_persona_api(client, "1710034065", "Carlos")
-    _convertir_en_entrenador(db_session, entrenador["id"])
     otro_alumno = _crear_persona_api(client, "1710034073", "Ana")
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
-        json={
-            "categoria": "JUVENIL", "dia_semana": "LUNES",
-            "entrenador_id": entrenador["id"],
-        },
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
     ).json()
     client.post(
         "/api/v1/asistencias/asignar-alumno",
@@ -225,23 +181,18 @@ def test_listar_alumnos_por_horario_rechaza_alumno_sin_relacion(client_sin_permi
 
 
 # --- LIFE-1: precondición de inscripción --------------------------------
-# `registrar_asistencia` validaba persona, horario y entrenador, pero nunca
-# la inscripción (`AlumnoHorario`): `POST /asistencias/` podía crear
+# `registrar_asistencia` validaba persona y horario, pero nunca la
+# inscripción (`AlumnoHorario`): `POST /asistencias/` podía crear
 # asistencia para un alumno jamás asignado a ese horario. El único camino
 # real de alta es `POST /asistencias/asignar-alumno`.
-def test_registrar_asistencia_rechaza_sin_alumno_horario_insercion(client, db_session):
+def test_registrar_asistencia_rechaza_sin_alumno_horario_insercion(client):
     """Sin inscripción previa (ni asistencia previa): el alta debe
     rechazarse y no debe quedar ninguna fila creada."""
-    entrenador = _crear_persona_api(client, "1710034065", "Carlos")
-    _convertir_en_entrenador(db_session, entrenador["id"])
     alumno = _crear_persona_api(client, "1710034073", "Ana")
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
-        json={
-            "categoria": "JUVENIL", "dia_semana": "LUNES",
-            "entrenador_id": entrenador["id"],
-        },
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
     ).json()
     # Deliberadamente NO se llama a /asistencias/asignar-alumno.
 
@@ -249,8 +200,7 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_insercion(client, db_se
         "/api/v1/asistencias/",
         json={
             "fecha_entrenamiento": str(date(2026, 7, 13)), "estado": "PRESENTE",
-            "persona_id": alumno["id"], "entrenador_id": entrenador["id"],
-            "horario_id": horario["id"],
+            "persona_id": alumno["id"], "horario_id": horario["id"],
         },
     )
     assert resp.status_code == 400
@@ -260,23 +210,18 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_insercion(client, db_se
     assert historial.json() == []
 
 
-def test_registrar_asistencia_rechaza_sin_alumno_horario_actualizacion(client, db_session):
+def test_registrar_asistencia_rechaza_sin_alumno_horario_actualizacion(client):
     """El upsert cubre altas Y actualizaciones: si la inscripción se retira
     después de que ya existe una Asistencia (`desasignar_alumno_de_horario`),
     reabrir el wizard y reenviar la misma combinación debe rechazarse igual
     que el alta -- de lo contrario la rama de actualización sería un bypass
     de la regla que la rama de creación sí aplica. La fila existente no debe
     modificarse."""
-    entrenador = _crear_persona_api(client, "1710034065", "Carlos")
-    _convertir_en_entrenador(db_session, entrenador["id"])
     alumno = _crear_persona_api(client, "1710034073", "Ana")
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
-        json={
-            "categoria": "JUVENIL", "dia_semana": "LUNES",
-            "entrenador_id": entrenador["id"],
-        },
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
     ).json()
     client.post(
         "/api/v1/asistencias/asignar-alumno",
@@ -285,8 +230,7 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_actualizacion(client, d
 
     payload = {
         "fecha_entrenamiento": str(date(2026, 7, 13)), "estado": "PRESENTE",
-        "persona_id": alumno["id"], "entrenador_id": entrenador["id"],
-        "horario_id": horario["id"],
+        "persona_id": alumno["id"], "horario_id": horario["id"],
     }
     primera = client.post("/api/v1/asistencias/", json=payload)
     assert primera.status_code == 201
@@ -307,7 +251,7 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_actualizacion(client, d
 
 
 def test_listar_alumnos_por_horario_rechaza_aunque_el_propio_este_inscrito(
-    client_sin_permisos, client, db_session,
+    client_sin_permisos, client,
 ):
     """Sin carve-out de ownership: el DTO devuelve el roster COMPLETO del
     horario (compañeros incluidos), asi que estar inscrito ahi tampoco
@@ -316,15 +260,10 @@ def test_listar_alumnos_por_horario_rechaza_aunque_el_propio_este_inscrito(
     sin cambios por este fix)."""
     alumno = _crear_persona_api(client, "0000000001")  # relleno -> id=1
     assert alumno["id"] == 1  # coincide con persona_id del token de client_sin_permisos
-    entrenador = _crear_persona_api(client, "1710034073", "Carlos")
-    _convertir_en_entrenador(db_session, entrenador["id"])
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
-        json={
-            "categoria": "JUVENIL", "dia_semana": "LUNES",
-            "entrenador_id": entrenador["id"],
-        },
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
     ).json()
     client.post(
         "/api/v1/asistencias/asignar-alumno",

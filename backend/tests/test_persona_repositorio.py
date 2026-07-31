@@ -83,18 +83,10 @@ def test_listar_pagina_sin_repetir_ni_perder_personas(db_session):
     assert {p.id for p in primera_pagina}.isdisjoint({p.id for p in segunda_pagina})
 
 
-# --- `listar_por_rol` -------------------------------------------------------
-def test_listar_por_rol_ordena_por_apellidos_y_nombres(db_session):
-    zambrano = _crear_persona(db_session, "1710034321", "Zoe", "Zambrano")
-    mendoza = _crear_persona(db_session, "1710034322", "Mario", "Mendoza")
-    alvarez = _crear_persona(db_session, "1710034323", "Beatriz", "Alvarez")
-    for persona in (zambrano, mendoza, alvarez):
-        _asignar_rol(db_session, persona, TipoRol.ENTRENADOR)
-    db_session.commit()
-
-    entrenadores = PersonaRepositorio(db_session).listar_por_rol(TipoRol.ENTRENADOR)
-
-    assert [p.apellidos for p in entrenadores] == ["Alvarez", "Mendoza", "Zambrano"]
+# `listar_por_rol` se eliminó junto con `GET /personas/entrenadores`
+# (issue #13): su único consumidor era el selector de entrenadores. El orden
+# de nómina sigue cubierto por los tests de `listar` y
+# `listar_por_rol_con_ranking`.
 
 
 # --- `buscar_por_nombre` ----------------------------------------------------

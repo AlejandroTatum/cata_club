@@ -63,11 +63,9 @@ def _asignar_ranking(db_session, persona_id, nivel_id):
 
 
 def _crear_horario(db_session):
-    entrenador_id = crear_entrenador(db_session, cedula="1710034900")
     horario = HorarioEntrenamiento(
         categoria=Categoria.JUVENIL, dia_semana=DiaSemana.LUNES,
         hora_inicio=time(18, 0), hora_fin=time(19, 30),
-        entrenador_id=entrenador_id,
     )
     db_session.add(horario)
     db_session.commit()

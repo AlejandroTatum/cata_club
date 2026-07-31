@@ -31,8 +31,7 @@ function getRequest(cookie = ""): NextRequest {
   return new NextRequest("http://localhost/api/attendance/schedules", { headers: cookie ? { cookie } : {} });
 }
 
-const horario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", entrenadorId: 2, nivelRankingId: null };
-const personas = { items: [{ id: 2, nombres: "Carla", apellidos: "Trainer" }] };
+const horario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", nivelRankingId: null };
 
 beforeEach(() => {
   vi.spyOn(global, "fetch");
@@ -53,7 +52,7 @@ describe("GET /api/attendance/schedules", () => {
   });
 
   it("calls /asistencias/horarios with Authorization: Bearer", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([])).mockResolvedValueOnce(jsonResponse({ items: [] }));
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([]));
 
     const access = makeJwt(3600);
     await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
@@ -65,8 +64,8 @@ describe("GET /api/attendance/schedules", () => {
     );
   });
 
-  it("translates backend Horarios into TrainingSchedule[] with resolved trainer names", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([horario])).mockResolvedValueOnce(jsonResponse(personas));
+  it("translates backend Horarios into TrainingSchedule[] (no trainer — issue #13)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([horario]));
 
     const access = makeJwt(3600);
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
@@ -74,7 +73,7 @@ describe("GET /api/attendance/schedules", () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual([
-      { id: 1, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30", entrenadorId: 2, entrenadorNombre: "Carla Trainer", nivelRankingId: null },
+      { id: 1, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30", nivelRankingId: null },
     ]);
   });
 

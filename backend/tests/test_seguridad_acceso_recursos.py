@@ -108,23 +108,17 @@ def test_no_puede_leer_pago_de_otra_persona(client_ajeno, victima, db_session):
 
 def test_no_puede_leer_historial_de_asistencia_ajeno(client_ajeno, victima, db_session):
     """La asistencia de un menor es, en la práctica, su rutina de presencia."""
-    entrenador = Persona(
-        nombres="Carlos", apellidos="Ruiz", cedula="1710034066",
-        fecha_nacimiento=date(1985, 1, 1), telefono="0991112222",
-    )
-    db_session.add(entrenador)
-    db_session.flush()
     horario = HorarioEntrenamiento(
         dia_semana=DiaSemana.LUNES,
         hora_inicio=datetime(2029, 1, 1, 8, 0).time(),
         hora_fin=datetime(2029, 1, 1, 9, 0).time(),
-        categoria=Categoria.ADULTOS, entrenador_id=entrenador.id,
+        categoria=Categoria.ADULTOS,
     )
     db_session.add(horario)
     db_session.flush()
     db_session.add(Asistencia(
         fecha_entrenamiento=date(2029, 1, 1), estado=EstadoAsistencia.PRESENTE,
-        persona_id=victima.id, horario_id=horario.id, entrenador_id=entrenador.id,
+        persona_id=victima.id, horario_id=horario.id,
     ))
     db_session.commit()
 
