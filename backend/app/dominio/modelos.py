@@ -149,6 +149,18 @@ class Usuario(Base):
     # 0..* en ambos lados (un rol puede existir sin usuarios asignados todavía)
     roles: Mapped[List["Rol"]] = relationship(secondary=usuario_rol, back_populates="usuarios")
 
+    def revocar_sesiones(self) -> None:
+        """Invalida TODA sesión activa de este usuario bombeando el epoch
+        (`version_sesion`): cualquier token access/refresh emitido antes de
+        esta llamada deja de ser vigente (ver `GestorAutenticacion.sesion_vigente`).
+
+        Criterio unificado (auditoría, issue #4): TODA operación que retira
+        acceso -- restablecer contraseña, desactivar la cuenta, dar de baja a
+        la persona, quitar un rol, cerrar las otras sesiones -- debe pasar por
+        este método, el ÚNICO lugar del dominio que expresa "retirar acceso".
+        Reactivar una cuenta NO retira acceso y por lo tanto no bombea."""
+        self.version_sesion += 1
+
 
 # ---------------------------------------------------------------------------
 # Persona (entidad central, con relación reflexiva Representante/Representados)

@@ -237,7 +237,7 @@ class AuthServicio:
         if not usuario:
             raise CredencialesInvalidas("El usuario del refresh token ya no existe")
 
-        if not GestorAutenticacion.epoch_valido(payload.get("sver"), usuario):
+        if not GestorAutenticacion.sesion_vigente(payload.get("sver"), usuario):
             raise CredencialesInvalidas("Refresh token inválido o expirado")
 
         roles_actuales = [rol.tipo_rol.value for rol in usuario.roles]
@@ -261,7 +261,7 @@ class AuthServicio:
         lleva el `sver` vigente.
         """
         usuario = self.obtener_usuario_actual(correo)
-        usuario.version_sesion += 1
+        usuario.revocar_sesiones()
         self.db.commit()
         self.db.refresh(usuario)
         return self._emitir_par_tokens(usuario)
@@ -312,4 +312,9 @@ class AuthServicio:
 
         usuario.contrasenia = GestorAutenticacion.obtener_hash_contrasenia(nueva_contrasenia)
         usuario.version_contrasenia += 1
+        # Criterio unificado (issue #4): restablecer la contraseña RETIRA el
+        # acceso previo. Quien restablece suele hacerlo porque sospecha que su
+        # cuenta está comprometida: un access/refresh token robado no debe
+        # sobrevivir al reset.
+        usuario.revocar_sesiones()
         self.db.commit()

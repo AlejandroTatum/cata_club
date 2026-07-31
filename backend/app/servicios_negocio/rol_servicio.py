@@ -101,6 +101,11 @@ class RolServicio:
             self._asegurar_que_no_se_quita_a_si_mismo(usuario, persona_id_solicitante)
             self._asegurar_que_queda_otro_administrador(usuario, "quitar el rol ADMINISTRADOR")
         usuario.roles.remove(rol)
+        # Criterio unificado (issue #4): el access token lleva los roles
+        # embebidos, así que un token emitido antes de esta operación conserva
+        # el rol quitado hasta su expiración natural. Bombear el epoch cierra
+        # esa ventana de inmediato.
+        usuario.revocar_sesiones()
         self.db.commit()
         self.db.refresh(usuario)
         return usuario
@@ -127,6 +132,11 @@ class RolServicio:
         usuario = self._obtener_usuario_de_persona(persona_id)
         if not activo:
             self._asegurar_que_queda_otro_administrador(usuario, "desactivar esta cuenta")
+            # Criterio unificado (issue #4): desactivar RETIRA acceso, así que
+            # además del flag se invalidan las sesiones activas. Reactivar NO
+            # bombea: devolver el acceso no invalida nada (y los tokens
+            # previos a la desactivación quedan muertos por el bump anterior).
+            usuario.revocar_sesiones()
         usuario.activo = activo
         self.db.commit()
         self.db.refresh(usuario)
