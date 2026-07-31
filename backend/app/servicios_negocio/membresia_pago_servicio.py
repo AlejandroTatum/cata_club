@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, date, timezone
 from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
@@ -47,6 +48,8 @@ MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
     "La persona ya tiene una membresía activa. "
     "Cancele o deje vencer la actual antes de crear una nueva."
 )
+
+logger = logging.getLogger("cataclub.servicios.pagos")
 
 
 class MembresiaServicio:
@@ -402,9 +405,29 @@ class PagoServicio:
           si nunca se había activado, permanece INACTIVA.
         - Aplica E04-RF002 (gratuidad del 4to familiar) al aprobar.
         - Tras aprobar, dispara asincrónicamente la generación del comprobante
-          PDF + subida a Cloudinary (vía Celery).
+          PDF + subida a Cloudinary (vía Celery). El disparo va DESPUÉS del
+          commit y su fallo no revierte la aprobación (el dinero ya fue
+          validado): la tarea de reconciliación re-despacha lo perdido (ver
+          `comprobante_tareas.reconciliar_comprobantes_faltantes`).
+
+        Guardia de estado (auditoría, hallazgo 5): solo un pago
+        PENDIENTE_VALIDACION puede validarse. La fila se lee con
+        `SELECT ... FOR UPDATE`, así dos validaciones concurrentes del mismo
+        pago se serializan: exactamente una gana; la otra relee el estado ya
+        commiteado y recibe `OperacionInvalida` (400). Sin esto, revalidar un
+        pago reactivaba la membresía, re-aplicaba la gratuidad familiar,
+        re-disparaba el PDF y duplicaba la notificación.
         """
-        pago = self.obtener_pago(pago_id)
+        pago = self.repo.obtener_por_id_con_bloqueo(pago_id)
+        if not pago:
+            raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
+
+        if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
+            raise OperacionInvalida(
+                "Solo un pago pendiente de validación puede aprobarse o "
+                f"rechazarse; este pago ya está en estado {pago.estado_pago.value}"
+            )
+
         pago.estado_pago = datos.estado_pago
         pago.motivo_rechazo = datos.motivo_rechazo
         pago.fecha_validacion = datetime.now(timezone.utc)
@@ -447,12 +470,14 @@ class PagoServicio:
                 if "uq_membresia_activa_por_persona" in str(error.orig):
                     raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
                 raise
-            self._disparar_generacion_comprobante_pdf(pago_id)
             self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_APROBADO,
                 mensaje=f"Tu pago de ${pago.monto} fue aprobado. Tu membresía está activa.",
             )
+            # Último paso, ya con la aprobación commiteada: si el broker está
+            # caído, el método loguea y NO propaga (ver su docstring).
+            self._disparar_generacion_comprobante_pdf(pago_id)
         else:
             # EstadoPago.RECHAZADO: el estado de Membresia no cambia; el rechazo
             # queda registrado únicamente en Pago.estado_pago y Pago.motivo_rechazo.
@@ -628,7 +653,21 @@ class PagoServicio:
         Encola la tarea Celery que genera el PDF del comprobante aprobado y lo
         sube a Cloudinary. Import diferido para evitar dependencia circular
         (celery_app importa tareas, tareas importan configuración, no servicios).
+
+        Un fallo al encolar (Redis caído) NO se propaga: la aprobación ya
+        está commiteada y es legítima -- fallar la petición aquí dejaría al
+        admin reintentando una validación que ya ocurrió. Se loguea con
+        severidad alta y la tarea beat `reconciliar_comprobantes_faltantes`
+        re-despacha la generación del comprobante perdido.
         """
         from app.infraestructura.tareas.comprobante_tareas import generar_comprobante_pdf_tarea
 
-        generar_comprobante_pdf_tarea.delay(pago_id)
+        try:
+            generar_comprobante_pdf_tarea.delay(pago_id)
+        except Exception:
+            logger.exception(
+                "No se pudo encolar la generación del comprobante del pago %s "
+                "(¿broker caído?). La aprobación ya está commiteada; la tarea "
+                "de reconciliación lo re-despachará.",
+                pago_id,
+            )

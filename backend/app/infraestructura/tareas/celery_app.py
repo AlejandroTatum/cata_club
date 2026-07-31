@@ -90,6 +90,15 @@ celery_app.conf.beat_schedule = {
         "task": "app.infraestructura.tareas.vencimientos_tareas.marcar_membresias_vencidas",
         "schedule": _parsear_hora_crontab("02:35"),
     },
+    # 3) Reconciliación de comprobantes perdidos (cada 15 minutos):
+    #    Re-despacha la generación del comprobante PDF para pagos APROBADOS
+    #    que siguen sin comprobante pasado el umbral (el disparo original se
+    #    perdió, p. ej. Redis caído justo después del commit de la aprobación
+    #    — auditoría, hallazgo 5).
+    "reconciliar-comprobantes-faltantes": {
+        "task": "app.infraestructura.tareas.comprobante_tareas.reconciliar_comprobantes_faltantes",
+        "schedule": crontab(minute="*/15"),
+    },
 }
 
 

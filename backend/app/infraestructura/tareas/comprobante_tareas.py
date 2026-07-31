@@ -14,6 +14,9 @@ de ReportLab + Cloudinary corre en el worker.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
 
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
@@ -25,6 +28,12 @@ from app.dominio.excepciones import EntidadNoEncontrada
 
 
 logger = logging.getLogger("cataclub.tareas.comprobante")
+
+# Un pago APROBADO sin comprobante más viejo que este umbral se considera
+# "perdido" (el disparo original falló o el worker murió) y se re-despacha.
+# Más nuevo que esto se deja en paz: el disparo original puede seguir en vuelo
+# (la propia tarea reintenta con backoff hasta 5 veces).
+UMBRAL_RECONCILIACION_MINUTOS = 10
 
 
 @celery_app.task(
@@ -99,3 +108,57 @@ def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
 
         logger.info("Comprobante creado para pago %s -> %s", pago_id, url)
     return {"pago_id": pago_id, "comprobante_url": url}
+
+
+@celery_app.task(
+    name="app.infraestructura.tareas.comprobante_tareas.reconciliar_comprobantes_faltantes",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_max=3,
+    retry_jitter=True,
+)
+def reconciliar_comprobantes_faltantes(self) -> dict:
+    """
+    Reconciliación periódica (Celery Beat): re-despacha la generación del
+    comprobante PDF para pagos APROBADOS que siguen SIN comprobante pasado
+    el umbral (auditoría, hallazgo 5: si Redis falla justo después del commit
+    de la aprobación, el disparo original se pierde en silencio).
+
+    El "outbox" es el propio estado commiteado en la aprobación: un Pago
+    APROBADO (con `fecha_validacion`) sin fila en `comprobante_pago` ES la
+    constancia de que falta el comprobante -- no hace falta tabla nueva. Se
+    exige `fecha_validacion IS NOT NULL` para no barrer datos sembrados a
+    mano que nunca pasaron por `validar_pago`.
+
+    Es seguro re-despachar: `generar_comprobante_pdf_tarea` no regenera si el
+    comprobante ya existe, y el public_id determinístico en Cloudinary
+    sobrescribe en vez de duplicar (ver su docstring).
+    """
+    limite = datetime.now(timezone.utc) - timedelta(minutes=UMBRAL_RECONCILIACION_MINUTOS)
+
+    with SessionLocal() as db:
+        stmt = (
+            select(Pago.id)
+            .outerjoin(ComprobantePago, ComprobantePago.pago_id == Pago.id)
+            .where(
+                Pago.estado_pago == EstadoPago.APROBADO,
+                Pago.fecha_validacion.is_not(None),
+                Pago.fecha_validacion < limite,
+                ComprobantePago.id.is_(None),
+            )
+            .order_by(Pago.id)
+        )
+        pago_ids = list(db.scalars(stmt).all())
+
+    for pago_id in pago_ids:
+        generar_comprobante_pdf_tarea.delay(pago_id)
+        logger.warning(
+            "Reconciliación: pago %s aprobado sin comprobante; generación re-despachada.",
+            pago_id,
+        )
+
+    if not pago_ids:
+        logger.info("Reconciliación de comprobantes: nada pendiente.")
+
+    return {"total_redespachados": len(pago_ids), "pago_ids": pago_ids}
