@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { cn } from "@/components/ui";
 
 interface BackLinkProps {
   href: string;
@@ -27,15 +28,19 @@ export default function BackLink({ href, label, className, onClick }: BackLinkPr
     <Link
       href={href}
       onClick={onClick}
-      className={
-        className ??
+      className={cn(
         // No colour of its own: `.btn-ghost` owns it. The `text-cata-text/65`
         // that used to sit here composited to 4.34:1 on the page field once
         // the canvas deepened (it was 4.58:1 on the old near-white one), and
         // it overrode the class it was decorating on all seven screens that
         // render this link.
-        "btn-ghost mb-6 -ml-2 inline-flex items-center gap-1 text-xs"
-      }
+        //
+        // `cn` MERGES: this used to be `className ??`, which handed any caller
+        // wanting one extra class the job of re-declaring the contrast fix
+        // above. No caller had fallen into it yet — closing it before one does.
+        "btn-ghost mb-6 -ml-2 inline-flex items-center gap-1 text-xs",
+        className,
+      )}
     >
       <ArrowLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       {label}
