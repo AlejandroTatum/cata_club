@@ -16,6 +16,10 @@ const colors = (extend.colors ?? {}) as Record<string, Record<string, string> | 
 const heights = (extend.height ?? {}) as Record<string, string>;
 const minHeights = (extend.minHeight ?? {}) as Record<string, string>;
 const radii = (extend.borderRadius ?? {}) as Record<string, string>;
+const spacing = (extend.spacing ?? {}) as Record<string, string>;
+
+/** The number in front of a `px` value, so a step can be compared to a metric. */
+const px = (value: string): number => Number.parseInt(value, 10);
 
 const nested = (key: string): Record<string, string> =>
   colors[key] as Record<string, string>;
@@ -150,6 +154,37 @@ describe("design tokens — metrics (_sistema.css:48-50)", () => {
 
   it("carries the two radii", () => {
     expect(radii).toMatchObject({ card: "14px", ctl: "10px" });
+  });
+});
+
+describe("design tokens — vertical rhythm (_sistema.css:152, 222, 104)", () => {
+  it("carries the three named rhythm steps", () => {
+    // `.canvas` (:152) is the page column: 20px between every first-level
+    // block. `.stats` (:222) and `.grid2` (:203) are the gutter between
+    // sibling cards: 14px. `.note` (:104), `.choice` (:333) and `.mcard`
+    // (:449) are the stack inside a card: 7px.
+    expect(spacing).toMatchObject({ page: "20px", section: "14px", field: "7px" });
+  });
+
+  it("derives every step from a committed metric instead of picking it", () => {
+    // The point of the derivation: a rhythm nobody can argue with later.
+    // `page` is half the control height, `section` IS the card radius — the
+    // gutter between two cards equals the curve that carves their corners —
+    // and `field` is half of `section`.
+    expect(px(spacing.page) * 2).toBe(px(heights.ctl));
+    expect(spacing.section).toBe(radii.card);
+    expect(px(spacing.field) * 2).toBe(px(spacing.section));
+  });
+
+  it("keeps the four numeric spacing extensions the shell already uses", () => {
+    // Named keys are additions, not a replacement: `pt-18` and friends are
+    // live in the auth shell and the landing page.
+    expect(spacing).toMatchObject({
+      "18": "4.5rem",
+      "22": "5.5rem",
+      "30": "7.5rem",
+      "88": "22rem",
+    });
   });
 });
 
