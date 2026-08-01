@@ -6,8 +6,8 @@ y el resultado medido eran **24 tamaños distintos** escritos a mano en 331 luga
 como `12.5` + `13` + `13.5` separados por medio píxel.
 
 Este documento describe la escala que reemplaza esos 24 tamaños y registra lo que costó cada
-banda al migrar. Los 24 tamaños ya están migrados; del issue #29 solo queda la consolidación de
-pesos.
+banda al migrar. Los 24 tamaños ya están migrados, y los pesos consolidados: el issue #29 está
+cerrado.
 
 ## Los ocho escalones
 
@@ -245,6 +245,81 @@ sigue esperando el suyo.
 Tampoco acá hubo líneas responsive: la única pareja viva sigue siendo el
 `min-[980px]:text-display` + `min-[980px]:leading-crisp` de `AuthShell`.
 
+## Los pesos
+
+El inventario de partida tenía cinco pesos activos: `bold` (143), `semibold` (112), `medium` (91),
+`extrabold` (21) y `normal` (7) — 374 usos.
+
+| Peso | Valor | Para qué |
+|---|---|---|
+| `font-semibold` | 600 | Etiqueta de formulario, botón, nombre de fila, chip, ítem de navegación |
+| `font-bold` | 700 | Microetiqueta en mayúsculas, cabecera de tabla, badge, cifra de tabla |
+| `font-extrabold` | 800 | Titular, título de página, número de stat, cifra de héroe |
+
+`font-normal` (400) sobrevive pero **no es un cuarto escalón**: sus siete usos deshacen un peso
+heredado —una nota dentro de una fila `font-semibold`, la línea de apoyo del toast dentro de un
+relleno `font-semibold`— que es lo mismo que hace el `400` de `.hint` en `_sistema.css`. Es la
+ausencia de una decisión, no una decisión.
+
+### Se midió el prototipo antes de elegir, y contradijo el plan
+
+El plan de implementación proponía quedarse con `normal` / `semibold` / `bold`, colapsando
+`medium → semibold` y `extrabold → bold`. La primera mitad se cumplió; la segunda no, y la razón
+está en la autoridad visual.
+
+`docs/ux/prototipos/_sistema.css` declara `font-weight` 51 veces sobre cinco valores, y el reparto
+no es parejo: **700 treinta y dos veces, 600 veinte, 800 dieciséis — y 500 y 400 exactamente una
+vez cada uno.**
+
+- El único `500` es `.nav-i` (:140), el ítem de navegación. O sea que `font-medium` tenía **una
+  línea de autoridad y noventa y un usos**: es deriva, no diseño. Se colapsó entero.
+- Los dieciséis `800` son la banda display completa: `.stat .num`, `.phead h2`, `.fcard h2`,
+  `.hero .big`, `.hero .timechip`, `.sec-t`, `.wizhead h2`, `.carnet .cname`, `.stp .n`, `.lv`.
+  De los 21 usos de `font-extrabold` en el código, **los 21 caen sobre una de esas reglas.**
+
+Colapsar `extrabold → bold` habría alejado del prototipo aprobado las dos anclas de la sección
+siguiente —el título de 26px de `PageHeader` y el número de 32px de `StatCard`— y otras diecinueve
+líneas, en pantallas que no se pueden verificar en un navegador. Bajar un peso que el sistema
+declara dieciséis veces no es simplificar: es reescribir el diseño sin decirlo.
+
+### Dónde el peso quedaba solo sosteniendo jerarquía
+
+Después de la banda micro, 91 sitios comparten 10,5px exactos, así que el peso pasó a ser el único
+portador de jerarquía por debajo de `xs`. Los cuatro casos que eso pone en riesgo se revisaron uno
+por uno, y ninguno perdió su contraste:
+
+- **`components/ui/StatCard.tsx`** sigue siendo un espécimen de tres pesos —etiqueta 10,5px/700,
+  valor 32px/800, unidad 13,5px/600— porque `extrabold` no se tocó.
+- **`components/ui/Stepper.tsx`** conserva su disco en 800 sobre 10,5px. `_sistema.css:325` lo pide
+  (`.stp .n`), y su vecina, la etiqueta de la píldora, es 12,5px/600: difieren en tamaño y en peso.
+- **`components/ToastContainer.tsx`** separa la acción del cuerpo del toast con `font-bold` +
+  `tracking-wider` + `uppercase`. El relleno del toast subió de 500 a 600, así que la distancia con
+  la acción se acorta 100 unidades, pero las otras tres señales —mayúsculas, tracking, subrayado—
+  no se tocaron, y la acción sigue siendo lo único en negrita del bloque.
+- **Las 45 microetiquetas en mayúsculas** son todas `font-bold`, y ninguna era `medium`: el barrido
+  no las alcanzó.
+
+El único contraste que sí se perdió es el quinto canal del ítem de navegación activo. `_sistema.css`
+lo separa del inactivo por relleno, color, la barra roja de 3px, el punto `--ball` y 600 contra 500;
+al retirarse `medium`, ambos quedan en 600. Los otros cuatro canales, que son los ruidosos, siguen
+en pie, y `AppShell.tsx` ya no declara el peso para no aparentar una diferencia que no existe.
+
+### El candado ahora vigila el peso
+
+`arbitrary-style-values.allowlist.ts` suma un séptimo eje. Es el único que no lista deuda que se
+achica hasta desaparecer, sino el conjunto cerrado de pesos que el producto puede escribir, y por
+eso es el único que se detecta por nombre y no por corchetes: los pesos son clases de fábrica, así
+que la deriva nunca escribe un valor arbitrario y los otros seis ejes no la veían. `font-medium`,
+`font-light`, `font-black` y las otras cinco fallan la suite.
+
+### `leading-body` cerró la cadena sin un solo uso
+
+De los siete escalones nombrados que definió el eslabón 1, `leading-body` (1,45) terminó el issue
+**sin ningún sitio que lo escriba**. No es un descuido de la migración: 1,45 es el interlineado que
+`text-base` ya trae puesto, y ningún caso necesitó aplicarlo a otro tamaño. Queda declarado como
+el nombre disponible para cuando aparezca ese caso; si no aparece, es una línea de
+`tailwind.config.ts` para borrar.
+
 ## Anclas que no se mueven
 
 Son las dos reglas duras de "La Paleta" y sirven de control negativo de cualquier verificación
@@ -280,5 +355,5 @@ Con la escala son dos, y una la resuelve el escalón:
 <h1 className="text-xl font-extrabold text-ink">
 ```
 
-El peso sigue suelto a propósito: reducir los cinco pesos activos a tres es otro PR del mismo
-issue.
+La segunda decisión es el peso, y son tres: `semibold` para la interfaz, `bold` para la
+microetiqueta, `extrabold` para el titular.
