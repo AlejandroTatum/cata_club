@@ -13,20 +13,39 @@ ejemplo: `cd backend && uv run pytest ../tests/test_docker_compose_config.py`
 (ver `make test-compose`).
 """
 import json
+import os
 import subprocess
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 
+# Clave arbitraria pero válida, usada SOLO para renderizar el compose en esta
+# suite. `docker-compose.yml` declara `${JWT_SECRET_KEY:?...}` y esa
+# interpolación ocurre al cargar CADA archivo, antes de fusionarlos: sin un
+# valor, `docker compose config` aborta y estas pruebas exigían un `.env` en la
+# raíz que ningún clon limpio (ni ningún worktree recién creado) trae. Ninguna
+# aserción depende del valor; solo de que exista.
+_JWT_PARA_RENDER = "0" * 64
 
-def _renderizar(*archivos_compose: str, perfiles: tuple[str, ...] = ()) -> dict:
+
+def _renderizar(
+    *archivos_compose: str,
+    perfiles: tuple[str, ...] = (),
+    entorno: dict[str, str] | None = None,
+) -> dict:
     args = ["docker", "compose"]
     for perfil in perfiles:
         args += ["--profile", perfil]
     for archivo in archivos_compose:
         args += ["-f", str(RAIZ / archivo)]
     args += ["config", "--format", "json"]
-    resultado = subprocess.run(args, capture_output=True, text=True, cwd=RAIZ)
+    resultado = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        cwd=RAIZ,
+        env={"JWT_SECRET_KEY": _JWT_PARA_RENDER, **os.environ, **(entorno or {})},
+    )
     assert resultado.returncode == 0, f"docker compose config falló:\n{resultado.stderr}"
     return json.loads(resultado.stdout)
 
@@ -214,3 +233,67 @@ def test_override_de_desarrollo_sigue_construyendo_las_imagenes_localmente():
         assert "build" in config["services"][servicio], (
             f"'{servicio}' perdió su `build:` en el override de desarrollo"
         )
+
+
+# ─── Overlay de QA (`docker-compose.qa.yml`, ver `make qa-up`) ──────────────
+
+_NOMBRE_PROYECTO_QA = "cataclub-qa"
+
+_ARCHIVOS_QA = (
+    "docker-compose.yml",
+    "docker-compose.override.yml",
+    "docker-compose.qa.yml",
+)
+
+
+def _config_qa() -> dict:
+    return _renderizar(*_ARCHIVOS_QA)
+
+
+def test_el_entorno_de_qa_usa_su_propio_nombre_de_proyecto():
+    """El aislamiento del entorno de QA descansa en el nombre de proyecto: es
+    lo que le da contenedores, red y volúmenes propios, separados de los del
+    stack de desarrollo. Si el overlay dejara de declararlo, `docker compose`
+    caería al nombre del directorio y `make qa-down` podría destruir el stack
+    de desarrollo del mismo checkout."""
+    assert _config_qa()["name"] == _NOMBRE_PROYECTO_QA
+
+
+def test_la_base_de_qa_no_monta_el_volumen_de_desarrollo():
+    """Criterio de aceptación del issue #33: un error en las pruebas no puede
+    tocar datos reales. La base de QA es efímera (tmpfs), así que ni siquiera
+    existe un volumen donde sobrevivan datos entre corridas."""
+    montajes = _config_qa()["services"]["db"].get("volumes", [])
+    fuentes = {m.get("source") for m in montajes}
+    assert "cataclub_db_data" not in fuentes, (
+        "el `db` de QA volvió a montar el volumen persistente de desarrollo"
+    )
+    tipos_en_pgdata = {
+        m["type"] for m in montajes if m.get("target") == "/var/lib/postgresql/data"
+    }
+    assert tipos_en_pgdata == {"tmpfs"}, (
+        f"se esperaba PGDATA en tmpfs y se encontró {tipos_en_pgdata or 'nada'}"
+    )
+
+
+def test_qa_fuerza_ambiente_development_en_todos_los_servicios_python():
+    """`scripts/entrypoint.sh` solo corre `seed_dev_base.py` cuando
+    `AMBIENTE=development`, y `_exigir_config_de_produccion` aborta el arranque
+    con `AMBIENTE=production` y configuración de desarrollo. El overlay lo fija
+    literal (no `${AMBIENTE:-...}`) para que el entorno sea reproducible aunque
+    el `.env` de quien lo levanta diga otra cosa."""
+    config = _config_qa()
+    for servicio in ("backend", "celery-worker", "celery-beat"):
+        assert config["services"][servicio]["environment"]["AMBIENTE"] == "development", (
+            f"'{servicio}' no queda en modo development en el overlay de QA"
+        )
+
+
+def test_qa_sigue_publicando_los_puertos_documentados():
+    """El README y `tests/e2e/*.live.spec.ts` apuntan a localhost:3000 y
+    localhost:8000. El overlay de QA reutiliza los puertos del override de
+    desarrollo justamente para no duplicar esa configuración."""
+    config = _config_qa()
+    for servicio, puerto in (("backend", "8000"), ("frontend", "3000")):
+        publicados = {p["published"] for p in config["services"][servicio].get("ports", [])}
+        assert puerto in publicados, f"'{servicio}' ya no publica {puerto} en QA"
