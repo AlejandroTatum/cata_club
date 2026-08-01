@@ -438,7 +438,7 @@ export default function AppShell({
         <button
           type="button"
           onClick={toggleCollapsed}
-          className="absolute -right-3 top-6 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-coal text-white/60 shadow-md transition-colors hover:bg-white/10 hover:text-white lg:flex"
+          className="absolute -right-3 top-6 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-coal text-white/60 shadow-card transition-colors hover:bg-white/10 hover:text-white lg:flex"
           aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
         >
           {collapsed ? (

@@ -1200,7 +1200,7 @@ function MemberEditDialog({
                         <label
                           key={role}
                           className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-semibold transition-colors ${
-                            "focus-within:outline focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-ball focus-within:shadow-[0_0_0_4px_#131316] "
+                            "focus-within:outline focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-ball focus-within:shadow-focus-band "
                           }${
                             selected
                               ? "border-coal bg-coal/[0.04] text-ink"
@@ -1229,7 +1229,7 @@ function MemberEditDialog({
                             }`}
                           >
                             <span
-                              className={`inline-block h-3.5 w-3.5 transform rounded-full shadow-sm transition-transform ${
+                              className={`inline-block h-3.5 w-3.5 transform rounded-full shadow-soft transition-transform ${
                                 selected ? "translate-x-5 bg-ball" : "translate-x-1 bg-white"
                               }`}
                             />

@@ -22,16 +22,36 @@
  * (18.54:1 on paper, 13.13:1 against the ball). Banning the token outright
  * would fail those two and teach the next person to delete a measured ring, so
  * the assertion looks for the companion band instead.
+ *
+ * ## Why the band is no longer a hex
+ *
+ * It used to be written inline, `shadow-[0_0_0_4px_#131316]`, so this guard
+ * could look for the literal `#131316` and be sure it had found the band. #32
+ * moved that value into `tailwind.config.ts` — the point of the arbitrary-value
+ * lock is that a measured colour belongs to the theme, and a focus indicator is
+ * the last thing that should live as a magic number in two page files.
+ *
+ * So the guard looks for the TOKEN as well: `shadow-focus-band`,
+ * `shadow-focus-band-inset`, `shadow-focus-duo` and `shadow-focus-duo-float`
+ * all resolve to a coal band in the theme. The contract is unchanged — an
+ * `outline-ball` with nothing contrasting beside it still fails. Only the
+ * spelling of the thing being looked for moved, and the hex stays accepted so
+ * that a ring written by hand is still recognised as one.
  */
 
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import tailwindConfig from "../../../tailwind.config";
 
 const SRC = join(__dirname, "..", "..");
 
-/** The coal band that has to sit next to the ball for the pair to measure. */
-const COAL = "#131316";
+/**
+ * How the coal band may be spelled: the theme tokens that carry it, or the raw
+ * hex for a ring painted by hand. All of them are 18.54:1 on paper and 13.13:1
+ * against the ball, which is the pair this guard exists to keep together.
+ */
+const COAL_BAND = /#131316|\bshadow-focus-(?:band|duo)\b/;
 
 /**
  * How far from the `outline-ball` the companion band may sit. A className is
@@ -72,7 +92,7 @@ export function bareBallRings(code: string): string[] {
   while ((match = ring.exec(code)) !== null) {
     const from = Math.max(0, match.index - COMPANION_WINDOW);
     const window = code.slice(from, match.index + COMPANION_WINDOW);
-    if (!window.includes(COAL)) bare.push(match[0]);
+    if (!COAL_BAND.test(window)) bare.push(match[0]);
   }
   return bare;
 }
@@ -101,11 +121,46 @@ describe("the focus indicator is the shared one", () => {
     // and the guard has to fire, or it is only testing that the codebase is
     // currently quiet.
     expect(bareBallRings('className="focus-visible:outline-ball"')).toHaveLength(1);
+
+    // The two spellings the band is allowed to have: the theme token the two
+    // page files now write, and the raw hex a hand-painted ring still may.
+    expect(
+      bareBallRings('className="focus-visible:outline-ball focus-visible:shadow-focus-band"'),
+    ).toHaveLength(0);
+    expect(
+      bareBallRings(
+        'className="focus-visible:outline-ball focus-visible:shadow-focus-band-inset"',
+      ),
+    ).toHaveLength(0);
     expect(
       bareBallRings(
         'className="focus-visible:outline-ball focus-visible:shadow-[0_0_0_4px_#131316]"',
       ),
     ).toHaveLength(0);
+
+    // A token that merely LOOKS like the pair is not the pair.
+    expect(
+      bareBallRings('className="focus-visible:outline-ball focus-visible:shadow-elevated"'),
+    ).toHaveLength(1);
+  });
+
+  it("only accepts a token that really resolves to the coal band", () => {
+    // The guard now trusts a NAME. That trust has to be anchored, or renaming
+    // the token in `tailwind.config.ts` would quietly turn every ring in the
+    // product back into a bare 1.41:1 yellow band with the suite still green.
+    const boxShadow = (
+      tailwindConfig.theme as { extend: { boxShadow: Record<string, string> } }
+    ).extend.boxShadow;
+
+    const accepted = Object.keys(boxShadow).filter((name) => COAL_BAND.test(`shadow-${name}`));
+
+    expect(accepted.sort()).toEqual([
+      "focus-band",
+      "focus-band-inset",
+      "focus-duo",
+      "focus-duo-float",
+    ]);
+    for (const name of accepted) expect(boxShadow[name]).toContain("#131316");
   });
 
   it("keeps `ball` available as a colour — only its bare use as a focus ring is banned", () => {

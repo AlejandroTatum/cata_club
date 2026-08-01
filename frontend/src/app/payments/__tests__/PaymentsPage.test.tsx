@@ -292,7 +292,7 @@ describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
     // inside the outline is what clears 3:1; the ring is inset because the
     // section clips overflow. Measurements: color-contrast.test.ts.
     expect(detailHeading().className).toContain("focus-visible:outline-ball");
-    expect(detailHeading().className).toContain("focus-visible:shadow-[inset_0_0_0_4px_#131316]");
+    expect(detailHeading().className).toContain("focus-visible:shadow-focus-band-inset");
   });
 
   it("returns focus to the row action it came from", async () => {

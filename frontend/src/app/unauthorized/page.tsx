@@ -48,7 +48,7 @@ function UnauthorizedContent(): React.ReactElement {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas p-6">
-      <div className="flex w-full max-w-[440px] flex-col items-center gap-3.5 rounded-[18px] border border-line bg-paper px-8 py-10 text-center shadow-[0_4px_24px_rgba(0,0,0,0.05)]">
+      <div className="flex w-full max-w-[440px] flex-col items-center gap-3.5 rounded-[18px] border border-line bg-paper px-8 py-10 text-center shadow-hero">
         <span className="relative block h-16 w-16 shrink-0 overflow-hidden rounded-full bg-coal">
           <Image
             src="/brand/cata-club-logo.jpeg"

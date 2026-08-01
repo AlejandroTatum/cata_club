@@ -230,7 +230,7 @@ function useDockClearance(dockRef: React.RefObject<HTMLElement | null>): DockCle
  */
 const LAUNCHER_CLASSES =
   "fixed bottom-4 right-2 z-40 flex h-11 w-11 items-center justify-center rounded-full " +
-  "bg-coal text-white shadow-[0_10px_28px_rgba(19,19,22,0.30)] " +
+  "bg-coal text-white shadow-float " +
   "transition-[transform,opacity] duration-200 ease-out hover:bg-coal-3 " +
   "lg:bottom-5 lg:right-5 lg:h-[76px] lg:w-[76px]";
 

@@ -2,7 +2,8 @@
 
 El test `frontend/src/lib/__tests__/arbitrary-style-values.test.ts` falla cuando entra al
 código un valor de estilo arbitrario que no estaba en el inventario del día que se instaló.
-No limpia nada: impide que la deuda crezca mientras los issues #29–#32 la bajan.
+No limpió nada: impidió que la deuda creciera mientras los issues #29–#32 la bajaban. Con #32
+cerrado el inventario quedó en cero, así que hoy lo único que hace es no dejarlo volver a subir.
 
 Corre dentro de `pnpm test`, así que ya es un gate del job Frontend del CI.
 
@@ -25,8 +26,8 @@ en `tailwind.config.ts` y deja de ser arbitrario.
 | Peso | `font-medium` | `font-semibold` · `font-bold` · `font-extrabold` |
 | Iconos | `size={21}` en un icono de `lucide-react` | escala `ICON` de `lib/icon-size.ts` |
 | Ritmo | `space-y-4` · `gap-y-2` en una pantalla | escalones `page` · `section` · `field` |
-| Sombras | `shadow-[0_4px_24px_…]` | `shadow-soft` · `shadow-card` · `shadow-elevated` |
-| Breakpoints | `min-[980px]` | prefijo con nombre (`sm:` … `2xl:`) |
+| Sombras | `shadow-[0_4px_24px_…]`, `shadow-md` | una clave de `boxShadow` en `tailwind.config.ts` |
+| Breakpoints | `min-[980px]`, `max-[900px]` | prefijo con nombre (`sm:` · `md:` · `split:` · `lg:` · `xl:` · `2xl:`) |
 
 Los colores arbitrarios (`text-[#B9B9C1]`) quedan fuera a propósito: la paleta la vigila
 `color-contrast.test.ts`, y juntar las dos reglas en un solo candado complica achicar ambas.
@@ -52,6 +53,17 @@ la de iconos: en un módulo que renderiza `<AppShell>`, todo `space-y-…` y `ga
 que nombre un escalón (`page`, `section`, `field`) o sea `0`. `gap-*` a secas queda afuera porque
 sobre una fila es horizontal. Detalle completo en `docs/ux/ritmo-vertical.md`.
 
+**Las sombras terminaron igual al cerrar #32.** `shadow-md` y `shadow-sm` son clases de fábrica
+y estaban en el código: una lista vacía de corchetes las habría dejado pasar, igual que la lista
+vacía de iconos habría dejado pasar `size={iconSize}`. Ahora la regla lee el propio
+`tailwind.config.ts` — cualquier `shadow-…` que no sea una clave de su mapa `boxShadow` (más
+`shadow-none`, que `globals.css` documenta como escape) falla, con corchetes o sin ellos.
+
+**Y el de breakpoints es el más simple de los cuatro invertidos:** un prefijo con nombre no se
+puede escribir entre corchetes, así que no hay nada que eximir y toda coincidencia es una
+violación. `max-[…]` entró al patrón junto con `min-[…]` porque es el mismo número mágico con el
+operador contrario.
+
 ## Cómo se achica la lista blanca
 
 La lista vive en `frontend/src/lib/__tests__/arbitrary-style-values.allowlist.ts`, agrupada
@@ -71,27 +83,33 @@ permiso permanente que nadie recuerda por qué está.
 
 **Nunca se agregan entradas**, salvo en el eje de peso, que por lo dicho arriba no es una
 lista de deuda. Una entrada nueva en cualquiera de los otros seis es exactamente lo que el
-candado existe para impedir. Los ejes de iconos y de ritmo ya no admiten ninguna: no tienen
+candado existe para impedir. Iconos, ritmo, sombras y breakpoints ya no admiten ninguna: no tienen
 lista.
 
 ## Inventario congelado (2026-08-01)
 
 | Eje | Valores distintos |
 |---|---|
-| Tipografía | 24 |
-| Interlineado | 9 |
-| Tracking | 14 |
+| Tipografía | 24 → **0** |
+| Interlineado | 9 → **0** |
+| Tracking | 14 → **0** |
 | Iconos | 14 → **0** |
-| Sombras | 10 |
-| Breakpoints | 1 |
-| **Total** | **72 → 58** |
+| Sombras | 10 → **0** |
+| Breakpoints | 1 → **0** |
+| **Total** | **72 → 0** |
 
 Veinticuatro tamaños de texto donde la escala `text-*` tiene diez, y catorce tamaños de
-icono, eran la medida del problema que #29–#32 resuelven. Los primeros cuatro ejes ya están
-en cero: quedan las sombras y el breakpoint del shell.
+icono, eran la medida del problema que #29–#32 resuelven. El inventario está en cero: la
+lista blanca ya no congela ninguna deuda y lo único que le queda es el conjunto cerrado de
+pesos.
 
 El eje de peso no figura en este inventario y nunca va a figurar: se sumó al cerrar #29, no
 congela deuda, y el mismo día en que se sumó los tres primeros ejes ya estaban en cero.
+
+Cerrar los dos últimos ejes movió cinco valores al tema en vez de borrarlos: los anillos de
+foco `#131316`. Son un requisito de accesibilidad que `focus-ring-usage.test.ts` vigila, así
+que hoy son `shadow-focus-band`, `shadow-focus-band-inset`, `shadow-focus-duo` y
+`shadow-focus-duo-float`, y ese test busca el token además del hex.
 
 ## Detalles de implementación
 
@@ -102,7 +120,9 @@ congela deuda, y el mismo día en que se sumó los tres primeros ejes ya estaban
 | Comentarios | Se eliminan antes de escanear: `tailwind.config.ts` y el propio test citan valores prohibidos para explicarlos. |
 | Granularidad | Por valor, no por archivo. La regla es "no entran valores nuevos al vocabulario"; una lista por archivo tendría cientos de líneas y rompería con cada movimiento de código. |
 | Iconos | Solo se revisa `size={…}` en archivos que importan `lucide-react`, y así la regla no vigila cualquier componente que acepte esa prop. Desde #30 captura la expresión completa, no el número: la exención es nombrar un escalón de `ICON` sin escribir ningún dígito. |
-| Sombras del foco | Los anillos `#131316` de la lista los exige `focus-ring-usage.test.ts`. Retirarlos significa mover ese par al tema, no borrarlo. |
+| Sombras | Desde #32 la regla importa `tailwind.config.ts` y compara contra las claves reales de `boxShadow`, igual que el eje de iconos importa `ICON_STEPS`. Una tabla transcribida empezaría a dar consejos que el tema no cumple. |
+| Sombras del foco | Los anillos `#131316` los exige `focus-ring-usage.test.ts`. #32 los movió al tema en vez de borrarlos, y ese test ahora acepta el token o el hex — más un caso que falla si el token dejara de resolver a la banda coal. |
+| Breakpoints | `screens` se declara, no se extiende: el orden de ese objeto es el orden en que se emiten los media queries, y `split` (980px) tiene que quedar entre `md` y `lg` para no ganarle a `lg:` por llegar después. |
 
 ## Qué NO reemplaza
 

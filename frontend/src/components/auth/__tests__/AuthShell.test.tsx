@@ -68,7 +68,7 @@ describe("AuthShell", () => {
     // headline takes `display` (46px) on desktop and `2xl` (32px) on phones,
     // and keeps `leading-crisp` because it wraps and has to stay one block.
     const headline = screen.getByTestId("auth-headline");
-    expect(headline.className).toContain("min-[980px]:text-display");
+    expect(headline.className).toContain("split:text-display");
     expect(headline.className).toContain("text-2xl");
     expect(headline.className).toContain("leading-crisp");
     expect(headline.className).toContain("font-extrabold");
@@ -78,7 +78,7 @@ describe("AuthShell", () => {
   it("makes the coal panel wider than the form panel, as flex:1.1 vs flex:1", () => {
     renderShell();
 
-    expect(screen.getByTestId("auth-panel-dark").className).toContain("min-[980px]:flex-[1.1_1_0%]");
+    expect(screen.getByTestId("auth-panel-dark").className).toContain("split:flex-[1.1_1_0%]");
   });
 
   it("stacks the coal panel on phones instead of hiding it", () => {
@@ -88,7 +88,7 @@ describe("AuthShell", () => {
     // moves above the form, so it must never carry a `hidden` base class.
     const dark = screen.getByTestId("auth-panel-dark");
     expect(dark.className).not.toMatch(/(^|\s)hidden(\s|$)/);
-    expect(screen.getByTestId("auth-composition").className).toContain("min-[980px]:flex-row");
+    expect(screen.getByTestId("auth-composition").className).toContain("split:flex-row");
   });
 
   it("renders the red eyebrow the form card is headed by", () => {

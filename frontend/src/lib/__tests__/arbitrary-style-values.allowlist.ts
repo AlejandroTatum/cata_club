@@ -23,6 +23,10 @@
  * may write. It is documented on its own entry below. `icon` and `rhythm` are
  * a third kind again: their rules invert, so they read no list at all.
  *
+ * Six of the seven axes are now empty, and three of those six (`icon`,
+ * `shadow`, `breakpoint`) no longer consult this file at all: their rules
+ * inverted, so there is no list for an entry to come back into.
+ *
  * Full protocol: `docs/ux/candado-valores-arbitrarios.md`.
  */
 
@@ -195,26 +199,48 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
   rhythm: [],
 
   /**
-   * `shadow-[…]`. `tailwind.config.ts` already names three elevations
-   * (`soft`, `card`, `elevated`); these ten are what predates them.
+   * `shadow-…`. Empty, and — like `icon` — the axis no longer reads a list.
    *
-   * The `#131316` rings are the focus indicator that `focus-ring-usage.test.ts`
-   * requires — retiring them means moving that pair into the theme, not
-   * dropping it. Read that test before touching these five.
+   * The ten arbitrary elevations are gone. Five were not elevations at all:
+   * they were the focus indicator, drawn with `box-shadow` because an
+   * `outline` cannot be two colours. `focus-ring-usage.test.ts` REQUIRES that
+   * pair on every `outline-ball`, so retiring them meant moving them into the
+   * theme — `shadow-focus-band`, `shadow-focus-band-inset`, `shadow-focus-duo`
+   * and `shadow-focus-duo-float` — and teaching that guard to look for the
+   * token instead of for a hex it can no longer find. Nothing was dropped.
+   *
+   * Of the other five, two were the same card standing alone on the canvas,
+   * one on each side of the `0 8px 34px …/.07` that `_sistema.css` declares
+   * for it (`.authcard`, line 394): both are `shadow-hero` now. The chat panel
+   * collapsed into `shadow-elevated`, which is the rung the config reserves
+   * for things floating over the page — that one DID have prototype backing
+   * (`.chat`, line 417), and it is the cost of the collapse, the same trade
+   * #30 documented. The launcher's resting shadow named itself `shadow-float`,
+   * because a 16% coal shadow under a near-black disc is invisible. And the
+   * disc on the auth panel simply lost its 50%-black pool: neither prototype
+   * ever drew one.
+   *
+   * The rule inverted in the same pass. A bracket was never the only way to
+   * miss the ladder — `shadow-md` is a factory class and it was in the
+   * codebase, so the emptied list would have shrugged at it exactly the way
+   * the emptied icon list would have shrugged at `size={iconSize}`. The rule
+   * now reads `tailwind.config.ts` itself: any `shadow-…` that is not a key of
+   * its `boxShadow` map fails, brackets or not.
    */
-  shadow: [
-    "0_0_0_1px_theme(colors.coal.DEFAULT)",
-    "0_0_0_2px_#FFFFFF,0_0_0_5px_#131316",
-    "0_0_0_2px_#FFFFFF,0_0_0_5px_#131316,0_10px_28px_rgba(19,19,22,0.30)",
-    "0_0_0_4px_#131316",
-    "inset_0_0_0_4px_#131316",
-    "0_4px_24px_rgba(0,0,0,0.05)",
-    "0_10px_28px_rgba(19,19,22,0.30)",
-    "0_12px_40px_rgba(0,0,0,0.5)",
-    "0_12px_44px_rgba(0,0,0,0.07)",
-    "0_14px_40px_rgba(0,0,0,0.12)",
-  ],
+  shadow: [],
 
-  /** `min-[…]`. One off-scale breakpoint, sixteen call sites, all the admin shell. */
-  breakpoint: ["980px"],
+  /**
+   * `min-[…]` / `max-[…]`. Empty, and this axis reads no list either.
+   *
+   * There was exactly one value — `980px`, fifteen call sites, every one of
+   * them in `components/auth/AuthShell.tsx`, not "the admin shell" as this
+   * line used to claim. It is now the `split` screen of `tailwind.config.ts`.
+   *
+   * A named prefix cannot be written between brackets, so there is nothing an
+   * exemption would have to let through: every match of the pattern is a
+   * violation, always. `max-[…]` joined the pattern at the same time — it is
+   * the same magic number wearing the other operator, and an empty `min-[…]`
+   * list would not have said a word about it.
+   */
+  breakpoint: [],
 };
