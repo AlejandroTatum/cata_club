@@ -96,7 +96,11 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-cata-black/40 px-4"
+      // `m-0`: this overlay renders inline, so it is a first-level child of
+      // `<main>` and its `space-y-page` rhythm would reach it. A margin on a
+      // `fixed inset-0` box offsets AND shrinks it, uncovering a strip at the
+      // top. Centring here is flex, never margin, so zero is exact.
+      className="fixed inset-0 z-50 m-0 flex items-center justify-center bg-cata-black/40 px-4"
       onClick={onCancel}
     >
       <div
