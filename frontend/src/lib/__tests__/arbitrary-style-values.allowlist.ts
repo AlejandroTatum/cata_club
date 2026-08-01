@@ -20,18 +20,20 @@
  *
  * `weight` is the one exception, and it is a different kind of list: not debt
  * that shrinks to nothing, but the closed set of `font-*` weights the product
- * may write. It is documented on its own entry below.
+ * may write. It is documented on its own entry below. `icon` and `rhythm` are
+ * a third kind again: their rules invert, so they read no list at all.
  *
  * Full protocol: `docs/ux/candado-valores-arbitrarios.md`.
  */
 
-/** The seven axes the lock watches. */
+/** The eight axes the lock watches. */
 export type Axis =
   | "typography"
   | "leading"
   | "tracking"
   | "weight"
   | "icon"
+  | "rhythm"
   | "shadow"
   | "breakpoint";
 
@@ -170,6 +172,27 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
    * because there is no longer a list for it to come back into.
    */
   icon: [],
+
+  /**
+   * `space-y-…` and `gap-y-…` inside a screen. Empty, and — like `icon` — the
+   * axis does not read this list at all.
+   *
+   * #31 found FIVE idioms for the vertical rhythm of a page (`mb-*` on each
+   * block, `flex flex-col gap-5`, `mt-4 flex flex-col gap-4`,
+   * `w-full space-y-5`, and no wrapper at all) across the same fourteen
+   * screens the same shell draws. The drift was never about which number: it
+   * was that five different forms all produced "some separation".
+   *
+   * So the rule constrains the FORM, the way the icon axis does. In a module
+   * that renders `<AppShell>`, the two families that do nothing but vertical
+   * rhythm must name a step of the scale — `page` (20px), `section` (14px),
+   * `field` (7px) — or `0`, which is an explicit reset. There is no list for
+   * an entry to come back into.
+   *
+   * `gap-*` unqualified is deliberately out: on a row it is horizontal, and
+   * this axis would be guessing. `docs/ux/ritmo-vertical.md` has the argument.
+   */
+  rhythm: [],
 
   /**
    * `shadow-[…]`. `tailwind.config.ts` already names three elevations

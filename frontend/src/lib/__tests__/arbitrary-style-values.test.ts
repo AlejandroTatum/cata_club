@@ -27,10 +27,12 @@
  *
  * ## What counts as a violation
  *
- * The seven axes below, and only those. Six of them catch a value written
- * between brackets; `weight` catches a factory class by name, because the
+ * The eight axes below, and only those. Five of them catch a value written
+ * between brackets. `weight` catches a factory class by name, because the
  * weight scale is the one part of the type system that drifts without ever
- * writing an arbitrary value. Arbitrary COLOURS (`text-[#B9B9C1]`) are
+ * writing an arbitrary value; `icon` and `rhythm` capture a whole expression
+ * and exempt only the correct form, because on those two axes the drift is
+ * the shape of what is written, not the number in it. Arbitrary COLOURS (`text-[#B9B9C1]`) are
  * deliberately out of scope: `color-contrast.test.ts` owns the palette, and
  * folding two rules into one guard makes both harder to shrink.
  */
@@ -174,6 +176,25 @@ export const AXES: Record<Axis, AxisRule> = {
     // that writes one imports lucide. Scoping by import keeps the rule true to
     // its name instead of policing any component that happens to take `size`.
     onlyIn: /from ["']lucide-react["']/,
+  },
+  rhythm: {
+    // The captured value is already the whole class, so it spells itself.
+    spell: (v) => v,
+    // The THIRD axis that does not look for brackets, and the second that
+    // captures an expression rather than a value: `space-y-4` is a factory
+    // utility, so nothing here is arbitrary in the syntactic sense. A closed
+    // palette would not have helped — the drift was five different FORMS of
+    // saying "separate these", not one wrong number — so the rule inverts the
+    // way `icon` does and demands the right form instead.
+    pattern: /\b(?:[a-z0-9]+:)?((?:space-y|gap-y)-[\w.[\]/-]+)/g,
+    // Naming a step of the rhythm, or `0` to undo an inherited one.
+    exempt: (v) => /^(?:space-y|gap-y)-(?:page|section|field|0)$/.test(v),
+    advice:
+      "use a step of the vertical rhythm — `page` (20px), `section` (14px) or `field` (7px)",
+    // Only a screen. A `ui/` primitive spaces its own insides and the page
+    // rhythm is not its business, exactly as the icon axis only reads files
+    // that import lucide.
+    onlyIn: /<AppShell\b/,
   },
   shadow: {
     spell: (v) => `shadow-[${v}]`,
@@ -380,6 +401,34 @@ describe("the detector itself", () => {
     const [opaque] = findViolations("app/x.tsx", `${lucide}<X size={iconSize} />`);
     expect(opaque.value).toBe("iconSize");
     expect(opaque.message).toContain("a step of the `ICON` scale");
+  });
+
+  it("reads vertical rhythm as a form, and only inside a screen", () => {
+    const screen = "<AppShell title=\"x\">\n";
+
+    // The three steps and an explicit reset are the whole legal vocabulary.
+    const written = [
+      '<div className="space-y-page" />',
+      '<div className="space-y-section" />',
+      '<div className="gap-y-field" />',
+      '<div className="space-y-0" />',
+      '<div className="sm:gap-y-section" />',
+    ];
+    expect(written.flatMap((c) => findViolations("x.tsx", screen + c))).toEqual([]);
+
+    // A number is the drift the scale replaces, whichever family writes it.
+    const [step] = findViolations("app/x.tsx", `${screen}<div className="space-y-4" />`);
+    expect(step.value).toBe("space-y-4");
+    expect(step.message).toContain("space-y-4");
+    expect(step.message).toContain("section");
+
+    const [sibling] = findViolations("app/x.tsx", `${screen}<div className="gap-y-1.5" />`);
+    expect(sibling.value).toBe("gap-y-1.5");
+
+    // `gap-*` on a row is horizontal, so it is not this axis's business, and a
+    // component that no screen shell wraps is not policed at all.
+    expect(findViolations("x.tsx", `${screen}<div className="gap-4" />`)).toEqual([]);
+    expect(findViolations("ui/Card.tsx", '<div className="space-y-4" />')).toEqual([]);
   });
 
   it("leaves arbitrary colours to the palette guard", () => {

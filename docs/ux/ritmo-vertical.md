@@ -80,7 +80,7 @@ El ritmo de página **no lo escribe la pantalla**. Lo escribe el shell, una vez:
 
 `AppShell.tsx` ya envolvía `PageHeader` y `<main>` en una columna a `gap-page`. Llevar el mismo
 escalón **adentro** de `<main>` completa la columna de `.canvas`: desde el título de la pantalla
-hasta el último bloque hay una sola distancia, y ninguna pantalla la vuelve a declarar.
+hasta el último bloque hay una sola distancia, y ninguna pantalla tiene que elegirla.
 
 | Trabajo | Idioma | Quién lo escribe |
 |---|---|---|
@@ -89,9 +89,14 @@ hasta el último bloque hay una sola distancia, y ninguna pantalla la vuelve a d
 | Partes de una tarjeta | `space-y-section` | El componente |
 | Etiqueta y valor | `space-y-field` · `gap-y-field` | El componente |
 
-Por eso una pantalla migrada **no tiene envoltorio de ritmo**: sus bloques son hijos directos de
-`<main>` y no llevan margen. Un `space-y-*` de nivel de página en un módulo de pantalla es, desde
-ahora, código que repite lo que el shell ya hizo.
+La mayoría de las pantallas ya tenía sus bloques como hijos directos de `<main>`: esas solo
+sueltan el `mb-*` de primer nivel y el ritmo les llega solo. Las ocho que envuelven su contenido
+en un bloque —porque además le fijan un ancho, como `/profile` o `/ayuda`— **conservan el
+envoltorio pero nombran el escalón**: `w-full space-y-page`, `flex flex-col gap-page`. El
+envoltorio sigue haciendo su trabajo de ancho; lo que ya no hace es inventar una distancia.
+
+Ese es el punto: los cinco idiomas no se reducen a una sola etiqueta JSX, se reducen a **un solo
+valor con un solo nombre**. Y eso es exactamente lo que el candado puede verificar.
 
 ### Por qué `flex flex-col gap` y no `space-y`
 
@@ -184,3 +189,19 @@ de separación". Una regla que exige la forma correcta no tiene lista a la que v
 Lo que el candado todavía no puede ver, dicho de frente: un `mb-*` sobre un bloque de primer nivel
 es estructura, y una expresión regular no ve estructura. El primer criterio lo sostiene la
 ausencia de envoltorio, que sí es visible; el segundo lo sostiene, por ahora, la revisión.
+
+## Estado
+
+Migrado en #31:
+
+- El ritmo de página de las diecisiete pantallas de shell, y sus once márgenes de primer nivel.
+- `STAT_GRID`, la fila de cuatro fichas de `/dashboard`, `/attendance` y `/members`.
+- Las 39 pilas verticales (`space-y-*`, `gap-y-*`) de los módulos que renderizan `<AppShell>`.
+  El desplazamiento máximo fue de 5px, en dos `gap-y-0.5` de listas de definición; el resto se
+  movió 3px o menos.
+
+**Fuera de alcance, y dicho para que no se lea como terminado:** los componentes de `ui/` y los
+módulos que no renderizan `<AppShell>` conservan sus `space-y-*` y `gap-y-*` numéricos, y el
+candado no los mira. Las familias `mt-*`/`mb-*`/`py-*` —unas 500 apariciones— tampoco: dentro de
+una tarjeta un margen sigue siendo legítimo, y una regla que no distingue el primer nivel del
+tercero habría barrido significado junto con la deriva.
