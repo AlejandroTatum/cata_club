@@ -91,7 +91,7 @@
     color: #FFFFFF;
     border-radius: 0.75rem;
     transition: all 0.2s ease;
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /* Single source of truth for the hover state. The `@apply` above used to
@@ -110,7 +110,7 @@
        hairline reads as a table cell, not as something you can press. */
     border: 1px solid #CFCFDA;
     border-radius: 0.75rem;
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-cata-bg disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:bg-cata-bg disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /*
@@ -123,7 +123,7 @@
    * primitive, which is where new code should go.
    */
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-ink-2 transition-colors duration-200 hover:bg-coal/[0.06] hover:text-ink disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-ink-2 transition-colors duration-200 hover:bg-coal/[0.06] hover:text-ink disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /*
@@ -174,28 +174,28 @@
   /* Toast notifications — solid, high-contrast fills (not tinted/soft) so
      they read clearly against any page background. */
   .toast-error {
-    @apply flex items-start gap-2 rounded-lg border px-4 py-3 text-sm font-medium shadow-elevated;
+    @apply flex items-start gap-2 rounded-lg border px-4 py-3 text-sm font-semibold shadow-elevated;
     background-color: #B91C1C;
     border-color: #991B1B;
     color: #FFFFFF;
   }
 
   .toast-success {
-    @apply flex items-start gap-2 rounded-lg border px-4 py-3 text-sm font-medium shadow-elevated;
+    @apply flex items-start gap-2 rounded-lg border px-4 py-3 text-sm font-semibold shadow-elevated;
     background-color: #15803D;
     border-color: #14532D;
     color: #FFFFFF;
   }
 
   .toast-info {
-    @apply flex items-start gap-2 rounded-lg border px-4 py-3 text-sm font-medium shadow-elevated;
+    @apply flex items-start gap-2 rounded-lg border px-4 py-3 text-sm font-semibold shadow-elevated;
     background-color: #1D4ED8;
     border-color: #1E40AF;
     color: #FFFFFF;
   }
 
   .toast-warning {
-    @apply flex items-start gap-2 rounded-lg border px-4 py-3 text-sm font-medium shadow-elevated;
+    @apply flex items-start gap-2 rounded-lg border px-4 py-3 text-sm font-semibold shadow-elevated;
     background-color: #D97706;
     border-color: #B45309;
     color: #FFFFFF;

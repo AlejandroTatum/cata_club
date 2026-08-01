@@ -412,7 +412,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
         </div>
         <div>
           <dt className="text-cata-text/50">Grupo</dt>
-          <dd className="mt-1 font-medium text-cata-text">
+          <dd className="mt-1 font-semibold text-cata-text">
             {nivelDisplay ?? "Sin grupo asignado"}
           </dd>
         </div>
@@ -477,7 +477,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                 type="button"
                 onClick={() => handleCreateMembership()}
                 disabled={!selectedTipoId || membershipLoading}
-                className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
               >
                 {membershipLoading ? (
                   <Loader2 size={11} className="animate-spin" />
@@ -499,7 +499,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
           <button
             type="button"
             onClick={() => handleOpenCreateMembership()}
-            className="mt-2.5 inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-medium text-cata-red transition-colors hover:bg-cata-red/25"
+            className="mt-2.5 inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
           >
             <Plus size={11} strokeWidth={2} aria-hidden="true" />
             Crear membresía
@@ -517,7 +517,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
           ) : showPaymentForm ? (
             <div className="space-y-2 rounded-lg bg-cata-bg/60 p-2.5">
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs font-medium text-cata-text/65">
+                <label className="text-xs font-semibold text-cata-text/65">
                   Monto
                   <input
                     type="number"
@@ -529,7 +529,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                     placeholder="0.00"
                   />
                 </label>
-                <label className="text-xs font-medium text-cata-text/65">
+                <label className="text-xs font-semibold text-cata-text/65">
                   Método
                   <select
                     value={paymentTipoPago}
@@ -544,11 +544,11 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
               <div className="grid grid-cols-2 gap-2 rounded-lg border border-cata-border/50 bg-cata-surface/50 px-2.5 py-2">
                 <div className="text-xs">
                   <span className="text-cata-text/45">Inicio: </span>
-                  <span className="font-medium text-cata-text">{paymentFechaInicio || "—"}</span>
+                  <span className="font-semibold text-cata-text">{paymentFechaInicio || "—"}</span>
                 </div>
                 <div className="text-xs">
                   <span className="text-cata-text/45">Fin: </span>
-                  <span className="font-medium text-cata-text">{paymentFechaFin || "—"}</span>
+                  <span className="font-semibold text-cata-text">{paymentFechaFin || "—"}</span>
                 </div>
               </div>
               {paymentMonthlyPrice > 0 && Number(paymentMonto) > 0 && (
@@ -561,7 +561,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                   una vista previa — el backend congela valores y recalcula. */}
               {descuentosOfrecidos.length > 0 && (
                 <fieldset className="rounded-lg border border-cata-border/50 bg-cata-surface/50 px-2.5 py-2">
-                  <legend className="px-1 text-xs font-medium text-cata-text/65">Descuentos</legend>
+                  <legend className="px-1 text-xs font-semibold text-cata-text/65">Descuentos</legend>
                   <div className="space-y-1">
                     {descuentosOfrecidos.map((descuento) => (
                       <label key={descuento.id} className="flex items-center gap-2 text-xs text-cata-text">
@@ -586,7 +586,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                 </fieldset>
               )}
               {paymentTipoPago === "TRANSFERENCIA" && (
-                <label className="block text-xs font-medium text-cata-text/65">
+                <label className="block text-xs font-semibold text-cata-text/65">
                   Comprobante
                   <div className="mt-0.5 flex items-center gap-2">
                     <input
@@ -622,7 +622,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                   type="button"
                   onClick={() => void handleSubmitPayment()}
                   disabled={paymentLoading || !paymentMonto || !paymentFechaInicio || !paymentFechaFin}
-                  className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
                 >
                   {paymentLoading ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
                   Registrar pago
@@ -640,7 +640,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
             <button
               type="button"
               onClick={handleOpenPaymentForm}
-              className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-medium text-cata-red transition-colors hover:bg-cata-red/25"
+              className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
             >
               <Plus size={11} strokeWidth={2} aria-hidden="true" />
               Registrar pago
@@ -654,7 +654,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
         <button
           type="button"
           onClick={() => setShowMedical((v) => !v)}
-          className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-2xs tracking-flat font-medium text-cata-red transition-colors hover:bg-cata-red/25"
+          className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-2xs tracking-flat font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
         >
           <Stethoscope size={11} strokeWidth={1.5} aria-hidden="true" />
           Ficha médica
@@ -1087,7 +1087,7 @@ function MemberEditDialog({
                   {account.email && (
                     <div className="flex items-center justify-between gap-3">
                       <dt className="text-ink-3">Correo</dt>
-                      <dd className="flex min-w-0 items-center gap-1.5 truncate font-medium text-ink">
+                      <dd className="flex min-w-0 items-center gap-1.5 truncate font-semibold text-ink">
                         <Mail size={11} strokeWidth={1.5} aria-hidden="true" />
                         <span className="truncate">{account.email}</span>
                       </dd>
@@ -1197,7 +1197,7 @@ function MemberEditDialog({
                         // adjacent chips in the `gap-2` grid do not collide.
                         <label
                           key={role}
-                          className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors ${
+                          className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-semibold transition-colors ${
                             "focus-within:outline focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-ball focus-within:shadow-[0_0_0_4px_#131316] "
                           }${
                             selected

@@ -15,19 +15,27 @@ Corre dentro de `pnpm test`, así que ya es un gate del job Frontend del CI.
 Si el valor es de verdad inevitable, **no se agrega a la lista blanca**: se le da un nombre
 en `tailwind.config.ts` y deja de ser arbitrario.
 
-## Los seis ejes
+## Los siete ejes
 
 | Eje | Patrón | Reemplazo |
 |---|---|---|
 | Tipografía | `text-[13px]` | escala `text-*` |
 | Interlineado | `leading-[1.45]` | escala `leading-*` |
 | Tracking | `tracking-[0.13em]` | escala `tracking-*` |
+| Peso | `font-medium` | `font-semibold` · `font-bold` · `font-extrabold` |
 | Iconos | `size={21}` en un icono de `lucide-react` | tamaño ya inventariado, o token nuevo |
 | Sombras | `shadow-[0_4px_24px_…]` | `shadow-soft` · `shadow-card` · `shadow-elevated` |
 | Breakpoints | `min-[980px]` | prefijo con nombre (`sm:` … `2xl:`) |
 
 Los colores arbitrarios (`text-[#B9B9C1]`) quedan fuera a propósito: la paleta la vigila
 `color-contrast.test.ts`, y juntar las dos reglas en un solo candado complica achicar ambas.
+
+**El peso es el eje distinto**, y conviene decirlo antes de leer el resto: no se escribe entre
+corchetes. Los nueve pesos de Tailwind son clases de fábrica, así que la deriva de este eje nunca
+produce un valor arbitrario y los otros seis ejes no la veían — por eso la escala de pesos fue la
+única parte del sistema tipográfico que se dispersó sin que el candado dijera nada. Su entrada en
+la lista blanca tampoco es deuda que se achica hasta desaparecer: es el conjunto cerrado de pesos
+permitidos, y está pensada para quedarse con la longitud que tiene.
 
 ## Cómo se achica la lista blanca
 
@@ -46,8 +54,9 @@ El paso 3 no es opcional. El test verifica en las dos direcciones —que no entr
 nuevos y que no queden entradas muertas— justamente para que la lista no se convierta en un
 permiso permanente que nadie recuerda por qué está.
 
-**Nunca se agregan entradas.** Una entrada nueva es exactamente lo que el candado existe
-para impedir.
+**Nunca se agregan entradas**, salvo en el eje de peso, que por lo dicho arriba no es una
+lista de deuda. Una entrada nueva en cualquiera de los otros seis es exactamente lo que el
+candado existe para impedir.
 
 ## Inventario congelado (2026-08-01)
 
@@ -63,6 +72,9 @@ para impedir.
 
 Veinticuatro tamaños de texto donde la escala `text-*` tiene diez, y catorce tamaños de
 icono, son la medida del problema que #29–#32 resuelven.
+
+El eje de peso no figura en este inventario y nunca va a figurar: se sumó al cerrar #29, no
+congela deuda, y el mismo día en que se sumó los tres primeros ejes ya estaban en cero.
 
 ## Detalles de implementación
 

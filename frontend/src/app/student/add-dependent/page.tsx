@@ -261,7 +261,7 @@ function AddDependentContent(): React.ReactElement {
         {/* School selector */}
         {instituciones.length > 0 && (
           <div className="mt-4">
-            <label htmlFor="add-dependent-tipo-escuela" className="mb-1.5 block text-sm font-medium text-cata-text">
+            <label htmlFor="add-dependent-tipo-escuela" className="mb-1.5 block text-sm font-semibold text-cata-text">
               Tipo de Escuela
             </label>
             <select
@@ -281,7 +281,7 @@ function AddDependentContent(): React.ReactElement {
               <option value="MUNICIPAL">Municipal</option>
             </select>
 
-            <label htmlFor="add-dependent-institucion" className="mb-1.5 mt-3 block text-sm font-medium text-cata-text">
+            <label htmlFor="add-dependent-institucion" className="mb-1.5 mt-3 block text-sm font-semibold text-cata-text">
               Escuela / Institución
             </label>
             <p className="mb-2 text-xs text-cata-text/50">
@@ -344,7 +344,7 @@ function AddDependentContent(): React.ReactElement {
         />
 
         <div className="rounded-ctl border border-line-2 bg-canvas p-3 text-xs text-ink-2">
-          <p className="flex items-center gap-1.5 font-medium">
+          <p className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
             Cuenta de acceso del menor
           </p>
@@ -366,7 +366,7 @@ function AddDependentContent(): React.ReactElement {
         </p>
 
         <div className="mb-4">
-          <label htmlFor="add-dependent-tipo-de-sangre" className="mb-1.5 block text-sm font-medium text-cata-text">
+          <label htmlFor="add-dependent-tipo-de-sangre" className="mb-1.5 block text-sm font-semibold text-cata-text">
             Tipo de Sangre <span className="ml-0.5 text-cata-red">*</span>
           </label>
           <select
@@ -424,7 +424,7 @@ function AddDependentContent(): React.ReactElement {
         />
 
         <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
-          <p className="flex items-center gap-1.5 font-medium">
+          <p className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
           </p>
@@ -565,7 +565,7 @@ function AddDependentContent(): React.ReactElement {
               type="button"
               onClick={() => setReloadToken((n) => n + 1)}
               disabled={loadingRepresentante}
-              className="shrink-0 font-medium underline disabled:cursor-not-allowed disabled:opacity-50"
+              className="shrink-0 font-semibold underline disabled:cursor-not-allowed disabled:opacity-50"
             >
               Reintentar
             </button>

@@ -150,11 +150,11 @@ export default function StudentSearch({
               onClick={() => handleSelect(alumno)}
               className="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm hover:bg-cata-surface transition-colors"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cata-red/15 text-xs font-medium text-cata-red">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cata-red/15 text-xs font-semibold text-cata-red">
                 {alumno.nombres.charAt(0)}{alumno.apellidos.charAt(0)}
               </div>
               <div>
-                <p className="font-medium text-cata-text">{alumno.nombres} {alumno.apellidos}</p>
+                <p className="font-semibold text-cata-text">{alumno.nombres} {alumno.apellidos}</p>
               </div>
             </li>
           ))}

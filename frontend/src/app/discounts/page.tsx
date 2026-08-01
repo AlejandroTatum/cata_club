@@ -158,7 +158,7 @@ export default function DiscountsPage(): React.ReactElement {
           {isEditing ? "Editar descuento" : "Nuevo descuento"}
         </h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <label className="text-xs font-medium text-cata-text/65">
+          <label className="text-xs font-semibold text-cata-text/65">
             Nombre
             <input
               type="text"
@@ -169,7 +169,7 @@ export default function DiscountsPage(): React.ReactElement {
               placeholder="Beca municipal"
             />
           </label>
-          <label className="text-xs font-medium text-cata-text/65">
+          <label className="text-xs font-semibold text-cata-text/65">
             Tipo
             <select
               value={form.modalidad}
@@ -180,7 +180,7 @@ export default function DiscountsPage(): React.ReactElement {
               <option value="MONTO">Monto fijo ($)</option>
             </select>
           </label>
-          <label className="text-xs font-medium text-cata-text/65">
+          <label className="text-xs font-semibold text-cata-text/65">
             Valor
             <input
               type="number"

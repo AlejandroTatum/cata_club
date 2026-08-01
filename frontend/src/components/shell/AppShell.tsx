@@ -187,12 +187,22 @@ function getAreaLabel(role: string | null): string {
   return role === "representante" || role === "estudiante" ? "Mi cuenta" : "Panel de gestión";
 }
 
-/** `.nav-i` — 40px row, 10px radius, 13.5px medium label. */
+/** `.nav-i` — 40px row, 10px radius, 13.5px label. */
 const NAV_ITEM_CLASSES =
-  "relative flex h-ctl items-center gap-2.5 rounded-ctl px-3 text-sm font-medium transition-colors";
+  "relative flex h-ctl items-center gap-2.5 rounded-ctl px-3 text-sm font-semibold transition-colors";
 const NAV_ITEM_IDLE_CLASSES = "text-white/[0.62] hover:bg-white/[0.07] hover:text-white";
-/** `.nav-i.on` — coal highlight, never a red fill: red is reserved for CTA and destructive. */
-const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.08] font-semibold text-white";
+/**
+ * `.nav-i.on` — coal highlight, never a red fill: red is reserved for CTA and
+ * destructive.
+ *
+ * `_sistema.css:140-145` separates the active row from an idle one on five
+ * channels: the `rgba(255,255,255,.08)` fill, full-white text against the
+ * idle 62%, the 3px red bar at the left edge, the `--ball` dot at the right,
+ * and 600 against 500. The fifth channel closed when `medium` retired — both
+ * rows are 600 now — so the weight is no longer declared here. The four that
+ * remain are the loud ones, and each is drawn below.
+ */
+const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.08] text-white";
 
 export default function AppShell({
   title,
@@ -639,7 +649,7 @@ export default function AppShell({
             <button
               type="button"
               onClick={(): void => setSidebarOpen(true)}
-              className="inline-flex h-ctl items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-3 text-xs font-medium text-ink-2 hover:bg-sunken lg:hidden"
+              className="inline-flex h-ctl items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-3 text-xs font-semibold text-ink-2 hover:bg-sunken lg:hidden"
               aria-label="Abrir menú principal"
             >
               <Menu size={17} strokeWidth={2} aria-hidden="true" />

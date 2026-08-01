@@ -116,7 +116,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
         <Stethoscope size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
         Ficha médica
         {state.isNew && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-2xs tracking-flat font-medium text-blue-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-2xs tracking-flat font-semibold text-blue-700">
             <Plus size={10} strokeWidth={2} aria-hidden="true" />
             Nueva
           </span>
@@ -125,7 +125,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
-          <label htmlFor={`tipo-sangre-${personaId}`} className="mb-1 block text-xs font-medium text-cata-text/65">
+          <label htmlFor={`tipo-sangre-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
             Tipo de sangre
           </label>
           <select
@@ -142,7 +142,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           </select>
         </div>
         <div className="sm:col-span-2 lg:col-span-2">
-          <label htmlFor={`enfermedades-${personaId}`} className="mb-1 block text-xs font-medium text-cata-text/65">
+          <label htmlFor={`enfermedades-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
             Enfermedades (separadas por coma)
           </label>
           <input
@@ -158,7 +158,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           </p>
         </div>
         <div>
-          <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-medium text-cata-text/65">
+          <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
             Alergias
           </label>
           <input
@@ -170,7 +170,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           />
         </div>
         <div>
-          <label htmlFor={`contacto-${personaId}`} className="mb-1 block text-xs font-medium text-cata-text/65">
+          <label htmlFor={`contacto-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
             Contacto de emergencia
           </label>
           <input
@@ -182,7 +182,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           />
         </div>
         <div>
-          <label htmlFor={`telefono-${personaId}`} className="mb-1 block text-xs font-medium text-cata-text/65">
+          <label htmlFor={`telefono-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
             Teléfono de emergencia
           </label>
           <input

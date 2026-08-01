@@ -62,7 +62,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
   const hasError = Boolean(opts.error);
   return (
     <div className="mb-4">
-      <label htmlFor={fieldId} className="mb-1.5 block text-sm font-medium text-cata-text">
+      <label htmlFor={fieldId} className="mb-1.5 block text-sm font-semibold text-cata-text">
         {opts.label}
         {opts.required && <span className="ml-0.5 text-cata-red">*</span>}
       </label>
@@ -122,7 +122,7 @@ export function WizardTextarea(opts: WizardTextareaProps): ReactElement {
   const fieldId = `${opts.idPrefix}-${slugifyLabel(opts.label)}`;
   return (
     <div className="mb-4">
-      <label htmlFor={fieldId} className="mb-1.5 block text-sm font-medium text-cata-text">
+      <label htmlFor={fieldId} className="mb-1.5 block text-sm font-semibold text-cata-text">
         {opts.label}
         {opts.required && <span className="ml-0.5 text-cata-red">*</span>}
         {!opts.required && (

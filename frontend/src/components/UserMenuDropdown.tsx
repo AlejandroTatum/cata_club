@@ -40,7 +40,7 @@ const UserMenuDropdown = forwardRef<HTMLDivElement, UserMenuDropdownProps>(
         <Link
           href="/profile"
           onClick={onNavigate}
-          className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white"
+          className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white"
         >
           <User size={15} strokeWidth={1.5} aria-hidden="true" />
           Perfil
@@ -51,7 +51,7 @@ const UserMenuDropdown = forwardRef<HTMLDivElement, UserMenuDropdownProps>(
             onLogout();
             onNavigate();
           }}
-          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-white/65 transition-colors hover:bg-white/[0.08] hover:text-cata-red-light"
+          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-cata-red-light"
         >
           <LogOut size={15} strokeWidth={1.5} aria-hidden="true" />
           Cerrar Sesión
