@@ -622,6 +622,26 @@ describe("AppShell — the page header row", (): void => {
     expect(heading.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("owns the page rhythm, so no screen declares its own", (): void => {
+    // `.canvas` (`_sistema.css:152`) is one flex column at 20px holding the
+    // page title AND every first-level block. The shell already spaced the
+    // header row against `<main>`; carrying the same step INSIDE `<main>`
+    // finishes that column, and is why a migrated screen has no rhythm
+    // wrapper of its own. See `docs/ux/ritmo-vertical.md`.
+    const { container } = render(
+      <AppShell title="Miembros">
+        <p>contenido</p>
+      </AppShell>,
+    );
+
+    const main = container.querySelector("main") as HTMLElement;
+    expect(main).toHaveClass("space-y-page");
+    // `space-y` and not `flex flex-col gap`: the rhythm must not change the
+    // box model of seventeen screens' worth of blocks it does not own.
+    expect(main).not.toHaveClass("flex");
+    expect(main.parentElement).toHaveClass("gap-page");
+  });
+
   it("renders trailing header actions next to the title", (): void => {
     render(
       <AppShell title="Asistencias" actions={<button type="button">Tomar asistencia</button>}>

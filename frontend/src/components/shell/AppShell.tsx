@@ -689,7 +689,7 @@ export default function AppShell({
             12px under a control that already carries 8px of its own bottom
             margin. */}
         <div
-          className={`flex flex-1 flex-col gap-5 px-4 pt-3 sm:px-[26px] ${
+          className={`flex flex-1 flex-col gap-page px-4 pt-3 sm:px-[26px] ${
             showMobileTabs ? "pb-[78px] lg:pb-8" : "pb-8"
           }`}
         >
@@ -700,7 +700,18 @@ export default function AppShell({
               it was, so the next Tab returns to the chrome. -1 keeps it out of
               the sequential tab order (and out of the system focus ring's
               selector, so no box is drawn around the whole page). */}
-          <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 outline-none">
+          {/* `space-y-page` finishes the `.canvas` column. The wrapper above
+              already spaces the header row against `<main>` at the same step;
+              carrying it INSIDE means the title and every first-level block of
+              every screen sit on one 20px rhythm, and no screen writes it
+              again. `space-y` rather than `flex flex-col gap` on purpose: it
+              is a margin on the children, so it cannot change the box model of
+              blocks the shell does not own. See `docs/ux/ritmo-vertical.md`. */}
+          <main
+            id={MAIN_CONTENT_ID}
+            tabIndex={-1}
+            className="min-w-0 flex-1 space-y-page outline-none"
+          >
             {children}
           </main>
         </div>
