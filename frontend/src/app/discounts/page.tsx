@@ -229,7 +229,7 @@ export default function DiscountsPage(): React.ReactElement {
         }
       >
         {loadError && (
-          <ErrorState className="mb-4" message={loadError} onRetry={() => void loadCatalog()} />
+          <ErrorState message={loadError} onRetry={() => void loadCatalog()} />
         )}
 
         {renderForm()}

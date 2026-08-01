@@ -494,7 +494,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           card spans the width it already wanted; below it the page splits into
           the data the reader came to check and the two account controls, which
           are a rail and never needed 820px of their own. */}
-      <div className="w-full space-y-5">
+      <div className="w-full space-y-page">
       {/* 1 — `.idcard`: the identity on the left, the account facts it can
           prove on the right. */}
       <section

@@ -30,7 +30,7 @@ export default function AyudaPage(): React.ReactElement {
     >
       <BackLink href="/" label="Volver al inicio" />
 
-      <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      <div className="mx-auto flex max-w-3xl flex-col gap-page">
         {/*
          * The schedule first, and as a table rather than prose. It is the most
          * asked question in the club and the only answer here that someone

@@ -135,7 +135,6 @@ export default function DashboardPage(): React.ReactElement {
       <AppShell title="Panel de Control">
         {error && (
           <ErrorState
-            className="mb-6"
             title="No se pudieron cargar las estadísticas"
             message={error}
             onRetry={() => void loadStats()}
@@ -143,7 +142,7 @@ export default function DashboardPage(): React.ReactElement {
         )}
 
         {loading && !stats ? (
-          <LoadingState className="mb-8" label="Cargando estadísticas…" />
+          <LoadingState label="Cargando estadísticas…" />
         ) : (
           <>
             {/* Hero — one number, one action. Nothing else belongs here. */}

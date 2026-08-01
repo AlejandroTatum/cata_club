@@ -990,12 +990,12 @@ export default function GroupsPage(): React.ReactElement {
         }
       >
         {loadError && (
-          <ErrorState className="mb-4" message={loadError} onRetry={() => void loadData()} />
+          <ErrorState message={loadError} onRetry={() => void loadData()} />
         )}
 
         {notification && (
           <div
-            className={`mb-4 flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${
+            className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${
               notification.type === "success"
                 ? "border border-cata-state-ok/30 bg-cata-state-ok/10 text-cata-state-ok"
                 : "border border-cata-red/30 bg-cata-red/10 text-cata-red"
@@ -1012,7 +1012,7 @@ export default function GroupsPage(): React.ReactElement {
         )}
 
         {expandedGroup?.key === NEW_GROUP_KEY && (
-          <div className="card mb-6 p-5">
+          <div className="card p-5">
             {renderHorarioForm()}
           </div>
         )}
