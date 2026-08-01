@@ -11,6 +11,7 @@
 
 import { useCallback, useId, useRef, useState } from "react";
 import { Bell, CheckCheck } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import type { Notificacion, TipoNotificacion } from "@/types/domain";
 import { formatDateTime } from "@/lib/format-utils";
 import { useDismissablePopup } from "@/lib/useDismissablePopup";
@@ -70,7 +71,7 @@ export default function NotificationBell({
         aria-expanded={open}
         aria-label={unreadCount > 0 ? `Notificaciones — ${unreadCount} sin leer` : "Notificaciones"}
       >
-        <Bell size={16} strokeWidth={1.5} aria-hidden="true" />
+        <Bell size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         {unreadCount > 0 && (
           <span
             className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cata-red px-1 text-2xs tracking-flat font-bold text-white"
@@ -93,7 +94,7 @@ export default function NotificationBell({
             <p className="text-xs font-bold uppercase tracking-wider text-cata-text/45">Notificaciones</p>
             {unreadCount > 0 && (
               <span className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-red">
-                <CheckCheck size={11} strokeWidth={1.5} aria-hidden="true" />
+                <CheckCheck size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                 {unreadCount} sin leer
               </span>
             )}

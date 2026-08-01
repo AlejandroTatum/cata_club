@@ -92,6 +92,7 @@ import {
   type PagoStatusFilter,
 } from "./payments-utils";
 import { CreditCard, Loader2, Paperclip, Plus, Upload, X } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -574,7 +575,7 @@ function RenewPaymentForm({
   if (!showForm) {
     return (
       <Button variant="primary" onClick={openForm}>
-        <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
+        <Plus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         {studentName ? `Registrar un pago de ${studentName}` : "Registrar un pago"}
       </Button>
     );
@@ -650,12 +651,12 @@ function RenewPaymentForm({
               data-testid="renew-voucher-input"
             />
             <Button onClick={() => fileInputRef.current?.click()}>
-              <Upload size={16} strokeWidth={1.5} aria-hidden="true" />
+              <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               {voucherFile ? "Cambiar archivo" : "Seleccionar archivo"}
             </Button>
             {voucherFile && (
               <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink-2">
-                <Paperclip size={14} strokeWidth={1.5} aria-hidden="true" />
+                <Paperclip size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                 <span className="truncate">{voucherFile.name}</span>
                 {/* The only way back from attaching the wrong file, and it
                     shipped as a bare 14px glyph in an unpadded button — a
@@ -668,7 +669,7 @@ function RenewPaymentForm({
                   aria-label="Quitar el comprobante seleccionado"
                   className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-3 hover:text-state-bad"
                 >
-                  <X size={14} strokeWidth={2} aria-hidden="true" />
+                  <X size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                 </button>
               </span>
             )}
@@ -717,9 +718,9 @@ function RenewPaymentForm({
               aria-describedby="renew-confirm-summary"
             >
               {loading ? (
-                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
               ) : (
-                <CreditCard size={16} strokeWidth={1.5} aria-hidden="true" />
+                <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               )}
               {loading ? "Registrando…" : "Confirmar y registrar"}
             </Button>
@@ -736,7 +737,7 @@ function RenewPaymentForm({
             onClick={handleRequestConfirm}
             disabled={!monto || !fechaInicio || !fechaFin}
           >
-            <CreditCard size={16} strokeWidth={1.5} aria-hidden="true" />
+            <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             Registrar pago
           </Button>
           <Button variant="ghost" onClick={handleCancel}>
@@ -786,7 +787,7 @@ function PagoRow({
             rel="noopener noreferrer"
             className="mt-1.5 inline-flex min-h-[24px] items-center gap-1.5 rounded text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
           >
-            <Paperclip size={13} strokeWidth={1.5} aria-hidden="true" />
+            <Paperclip size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             Ver el comprobante
           </a>
         )}
@@ -807,9 +808,9 @@ function PagoRow({
       {canUpload && (
         <Button size="sm" onClick={() => onUploadFile(pago.id)} disabled={uploadingId === pago.id}>
           {uploadingId === pago.id ? (
-            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
           ) : (
-            <Upload size={14} strokeWidth={1.5} aria-hidden="true" />
+            <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           )}
           {uploadingId === pago.id ? "Subiendo…" : "Subir comprobante"}
         </Button>
@@ -977,7 +978,7 @@ function PaymentsContent({
       <div className="w-full">
         <div className="card">
           <EmptyState
-            icon={<CreditCard size={21} strokeWidth={1.5} aria-hidden="true" />}
+            icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="No se encontraron estudiantes asociados a esta cuenta"
             description="Inscríbase como jugador o agregue un hijo o dependiente para registrar pagos."
             action={
@@ -1112,7 +1113,7 @@ function PaymentsContent({
               </div>
               {filteredPagos.length === 0 ? (
                 <EmptyState
-                  icon={<CreditCard size={21} strokeWidth={1.5} aria-hidden="true" />}
+                  icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                   title={getEmptyStateMessage(filter)}
                   description={
                     filter !== "TODOS"

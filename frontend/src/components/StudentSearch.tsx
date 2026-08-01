@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { searchStudents } from "@/services/api";
 import type { PersonaBusqueda } from "@/types/domain";
 
@@ -100,7 +101,7 @@ export default function StudentSearch({
     <div ref={wrapperRef} className="relative">
       <div className="relative">
         <Search
-          size={16}
+          size={ICON.sm}
           strokeWidth={1.5}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-cata-text/40"
           aria-hidden="true"
@@ -129,9 +130,9 @@ export default function StudentSearch({
             {/* `Loader2`, not a hand-rolled bordered circle: one spinner in
                 the product, the same one `LoadingState` renders. */}
             {loading ? (
-              <Loader2 size={14} strokeWidth={2} className="animate-spin" aria-hidden="true" />
+              <Loader2 size={ICON.sm} strokeWidth={2} className="animate-spin" aria-hidden="true" />
             ) : (
-              <X size={14} strokeWidth={2} />
+              <X size={ICON.sm} strokeWidth={2} />
             )}
           </button>
         )}

@@ -84,6 +84,7 @@ import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/
 import { MEMBERSHIP_STATUS_BY_ESTADO } from "@/lib/membership-status";
 import { backendRoleForUserRole, getBackendRoleLabel, getRoleLabel } from "@/lib/auth-utils";
 import { Loader2, Save, X, Camera, ArrowRight } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
@@ -464,19 +465,19 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     props.kind === "student" ? (
       <Link href="/student" className={buttonClasses("secondary")}>
         Ver portal completo
-        <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+        <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       </Link>
     ) : editing ? (
       <>
         <Button variant="ghost" onClick={cancelEditing} disabled={saving}>
-          <X size={14} strokeWidth={1.5} aria-hidden="true" />
+          <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Cancelar
         </Button>
         <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
           {saving ? (
-            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
           ) : (
-            <Save size={14} strokeWidth={1.5} aria-hidden="true" />
+            <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           )}
           {saving ? "Guardando…" : "Guardar"}
         </Button>
@@ -522,9 +523,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             className="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-paper bg-coal text-white disabled:opacity-45"
           >
             {uploadingFoto ? (
-              <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
             ) : (
-              <Camera size={12} strokeWidth={2} aria-hidden="true" />
+              <Camera size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             )}
           </button>
           <input

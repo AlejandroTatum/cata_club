@@ -20,6 +20,7 @@
 
 import type { ReactElement } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import Button from "./Button";
 import { cn } from "./cn";
 
@@ -89,7 +90,7 @@ export default function Pagination({
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page <= 1}
         >
-          <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+          <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Anterior
         </Button>
         <Button
@@ -99,7 +100,7 @@ export default function Pagination({
           disabled={page >= totalPages}
         >
           Siguiente
-          <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
+          <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         </Button>
       </div>
     </div>

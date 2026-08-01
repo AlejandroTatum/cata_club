@@ -20,6 +20,7 @@
 
 import type { ReactElement } from "react";
 import { Loader2 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { cn } from "./cn";
 
 export interface LoadingStateProps {
@@ -42,7 +43,7 @@ export default function LoadingState({ label, className }: LoadingStateProps): R
         aria-hidden="true"
         className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-state-neutral-bg text-ink-3"
       >
-        <Loader2 size={21} strokeWidth={1.5} className="animate-spin" />
+        <Loader2 size={ICON.lg} strokeWidth={1.5} className="animate-spin" />
       </span>
       <p className="text-sm text-ink-3">{label}</p>
     </div>

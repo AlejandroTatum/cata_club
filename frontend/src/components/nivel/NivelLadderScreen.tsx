@@ -135,6 +135,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Trophy, Users } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
@@ -671,7 +672,7 @@ function LadderContent({
                       ) : (
                         <>
                           Asignar
-                          <ArrowRight size={12} strokeWidth={2} aria-hidden="true" />
+                          <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                         </>
                       )}
                     </Button>
@@ -763,7 +764,7 @@ function LadderContent({
           </h2>
           {resultados.length === 0 ? (
             <EmptyState
-              icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+              icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title="Ningún estudiante coincide"
               description="Revise el nombre o borre la búsqueda para ver toda la escalera."
             />
@@ -785,7 +786,7 @@ function LadderContent({
           it are the ones already placed. */}
       <section className="mb-5 overflow-hidden rounded-card border border-line bg-paper">
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
-          <Trophy size={16} strokeWidth={1.5} className="flex-none text-ink-2" aria-hidden="true" />
+          <Trophy size={ICON.sm} strokeWidth={1.5} className="flex-none text-ink-2" aria-hidden="true" />
           <h2 className="flex-1 text-sm font-bold text-ink">
             La escalera ({assignedCount} asignado{assignedCount === 1 ? "" : "s"})
           </h2>
@@ -794,7 +795,7 @@ function LadderContent({
           <LoadingState label="Cargando niveles…" />
         ) : niveles.length === 0 ? (
           <EmptyState
-            icon={<Trophy size={21} strokeWidth={1.5} aria-hidden="true" />}
+            icon={<Trophy size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="Todavía no hay niveles"
             description="Cuando el club cree su primer nivel, la escalera aparecerá aquí."
           />

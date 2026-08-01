@@ -12,6 +12,7 @@
 import { forwardRef } from "react";
 import Link from "next/link";
 import { User, LogOut } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 
 interface UserMenuDropdownProps {
   /** Called after the logout item is clicked. */
@@ -42,7 +43,7 @@ const UserMenuDropdown = forwardRef<HTMLDivElement, UserMenuDropdownProps>(
           onClick={onNavigate}
           className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white"
         >
-          <User size={15} strokeWidth={1.5} aria-hidden="true" />
+          <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Perfil
         </Link>
         <button
@@ -53,7 +54,7 @@ const UserMenuDropdown = forwardRef<HTMLDivElement, UserMenuDropdownProps>(
           }}
           className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-cata-red-light"
         >
-          <LogOut size={15} strokeWidth={1.5} aria-hidden="true" />
+          <LogOut size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Cerrar Sesión
         </button>
       </div>

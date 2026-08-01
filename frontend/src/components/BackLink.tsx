@@ -8,6 +8,7 @@
 
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 
 interface BackLinkProps {
   href: string;
@@ -36,7 +37,7 @@ export default function BackLink({ href, label, className, onClick }: BackLinkPr
         "btn-ghost mb-6 -ml-2 inline-flex items-center gap-1 text-xs"
       }
     >
-      <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+      <ArrowLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       {label}
     </Link>
   );

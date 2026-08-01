@@ -63,6 +63,7 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import {
@@ -487,15 +488,15 @@ function ReportsContent(): React.ReactElement {
             disabled={exportingPdf || !canQuery || resultCount === 0}
           >
             {exportingPdf ? (
-              <Loader2 size={14} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+              <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
             ) : (
-              <Download size={14} strokeWidth={1.5} aria-hidden="true" />
+              <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             )}
             {exportingPdf ? "Generando…" : "Generar PDF"}
           </Button>
 
           <Button onClick={handleDownloadCsv} disabled={!canQuery || resultCount === 0}>
-            <Table2 size={14} strokeWidth={1.5} aria-hidden="true" />
+            <Table2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             Descargar CSV
           </Button>
         </div>
@@ -503,14 +504,14 @@ function ReportsContent(): React.ReactElement {
 
       {rangeInverted && (
         <div className="alert-error mb-3.5" role="alert">
-          <AlertCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <AlertCircle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
           <span>La fecha de inicio debe ser anterior a la fecha de fin.</span>
         </div>
       )}
 
       {error && (
         <div className="alert-error mb-3.5" role="alert">
-          <AlertCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <AlertCircle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
@@ -531,7 +532,7 @@ function ReportsContent(): React.ReactElement {
 
         {!canQuery ? (
           <EmptyState
-            icon={<FileText size={21} strokeWidth={1.5} aria-hidden="true" />}
+            icon={<FileText size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="Elija un rango de fechas"
             description={
               preset === "periodo"
@@ -593,7 +594,7 @@ function PersonaPreview({
   if (total === 0) {
     return (
       <EmptyState
-        icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+        icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron personas"
         description="Ninguna persona se registró en este rango. Pruebe con un rango de fechas más amplio."
       />
@@ -641,7 +642,7 @@ function AsistenciaPreview({
   if (total === 0) {
     return (
       <EmptyState
-        icon={<CheckCircle size={21} strokeWidth={1.5} aria-hidden="true" />}
+        icon={<CheckCircle size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron registros de asistencia"
         description="Ningún registro coincide con los filtros. Amplíe el rango de fechas o quite el filtro de horario."
       />
@@ -689,7 +690,7 @@ function PagosPreview({
   if (total === 0) {
     return (
       <EmptyState
-        icon={<Wallet size={21} strokeWidth={1.5} aria-hidden="true" />}
+        icon={<Wallet size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron pagos"
         description="Ningún pago coincide con los filtros. Amplíe el rango de fechas o elija otro estado."
       />

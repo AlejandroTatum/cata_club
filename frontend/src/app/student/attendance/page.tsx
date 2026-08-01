@@ -57,6 +57,7 @@ import { breakdownAttendance, firstNameOf, summarizeRecentAttendance } from "../
 import type { AttendanceBreakdown } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
 import { CalendarCheck, User } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 
 /**
  * Mirrors `RECENT_SESSIONS_LIMIT` in src/lib/server/student-adapter.ts.
@@ -214,7 +215,7 @@ function SessionList({
 
       {sessions.length === 0 ? (
         <EmptyState
-          icon={<CalendarCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
           title={
             studentName
               ? `Aún no hay asistencias registradas de ${studentName}`
@@ -339,7 +340,7 @@ function AttendanceView({
       {selectedProfile === null ? (
         <div className="card">
           <EmptyState
-            icon={<User size={21} strokeWidth={1.5} aria-hidden="true" />}
+            icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="No se encontraron estudiantes asociados a esta cuenta"
             description="Inscríbase como jugador o agregue un hijo o dependiente para empezar a ver asistencias."
             action={

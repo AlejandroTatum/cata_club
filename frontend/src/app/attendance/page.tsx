@@ -26,6 +26,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
 import { ArrowRight, UserCheck } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { fetchTrainingSchedules, fetchAttendanceRecords } from "@/services/api";
 import {
   Badge,
@@ -126,7 +127,7 @@ export default function AttendancePage(): React.ReactElement {
         actions={
           <Link href="/trainer/attendance" className={buttonClasses("primary")}>
             Tomar asistencia
-            <ArrowRight size={15} strokeWidth={2} aria-hidden="true" />
+            <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           </Link>
         }
       >
@@ -155,7 +156,7 @@ export default function AttendancePage(): React.ReactElement {
         {!loading && !error && records.length === 0 && (
           <div className="rounded-card border border-line bg-paper">
             <EmptyState
-              icon={<UserCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
+              icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title="No hay registros en este rango"
               description="Cambie el rango o los filtros, o registre una sesión de entrenamiento."
               action={

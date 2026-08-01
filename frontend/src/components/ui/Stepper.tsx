@@ -14,6 +14,7 @@
 
 import type { ReactElement } from "react";
 import { Check } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { cn } from "./cn";
 
 export interface StepperProps {
@@ -68,7 +69,7 @@ export default function Stepper({
                   !done && !active && "bg-state-neutral-bg text-ink-3",
                 )}
               >
-                {done ? <Check size={10} strokeWidth={3} /> : position}
+                {done ? <Check size={ICON.sm} strokeWidth={3} /> : position}
               </span>
               {step}
             </span>

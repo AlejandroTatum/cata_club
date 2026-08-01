@@ -15,6 +15,7 @@
 
 import Link from "next/link";
 import { HelpCircle } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
 import { Button } from "@/components/ui";
@@ -112,7 +113,7 @@ export default function AyudaPage(): React.ReactElement {
          * moment to offer a person.
          */}
         <section className="rounded-card border border-line-2 bg-sunken p-5 text-center sm:p-6">
-          <HelpCircle size={20} strokeWidth={1.5} aria-hidden="true" className="mx-auto mb-2 text-ink-3" />
+          <HelpCircle size={ICON.base} strokeWidth={1.5} aria-hidden="true" className="mx-auto mb-2 text-ink-3" />
           <h2 className="text-sm font-extrabold text-ink">¿No encontró lo que buscaba?</h2>
           <p className="mx-auto mt-1 max-w-md text-xs text-ink-2">
             Pregúntele al asistente con sus propias palabras, o escríbale al club directamente.

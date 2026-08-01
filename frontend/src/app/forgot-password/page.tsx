@@ -19,6 +19,7 @@
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui";
 import { solicitarRecuperacion, ApiClientError } from "@/services/api";
@@ -69,7 +70,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
          * contract). No nested card: the shell already IS the card. */
         <div className="flex flex-col items-center gap-2.5 py-2 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
-            <CheckCircle2 size={24} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
+            <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
             Si <strong className="font-semibold text-ink">{correo.trim()}</strong> está
@@ -84,7 +85,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
             </label>
             <div className="relative">
               <Mail
-                size={15}
+                size={ICON.sm}
                 strokeWidth={1.5}
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
                 aria-hidden="true"
@@ -115,7 +116,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
           href="/login"
           className="inline-flex items-center gap-1.5 font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
         >
-          <ArrowLeft size={13} strokeWidth={2} aria-hidden="true" />
+          <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Volver a Iniciar Sesión
         </Link>
       </p>

@@ -41,6 +41,7 @@ import {
   type UpcomingTraining,
 } from "./student-utils";
 import { CalendarDays, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -240,7 +241,7 @@ function SituationLink({ href, children }: { href: string; children: React.React
       className="inline-flex min-h-[24px] items-center gap-1.5 rounded text-sm font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 transition-colors hover:decoration-ink"
     >
       {children}
-      <ArrowRight size={14} strokeWidth={1.75} aria-hidden="true" />
+      <ArrowRight size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
     </Link>
   );
 }
@@ -360,7 +361,7 @@ function TrainingPanel({
         ) : (
           <div className="flex-1 border-t border-line">
             <EmptyState
-              icon={<CalendarDays size={21} strokeWidth={1.5} aria-hidden="true" />}
+              icon={<CalendarDays size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title={
                 viewingOwnProfile
                   ? "Todavía no tiene un horario asignado"
@@ -409,7 +410,7 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
     return (
       <div className="card">
         <EmptyState
-          icon={<ShieldCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
           title="No hay planes de membresía disponibles"
           description="El catálogo de planes está vacío en este momento. Consulte con administración."
         />
@@ -454,14 +455,14 @@ function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.
 
       <div className="flex flex-wrap gap-3">
         <Link href="/student/enroll?type=self" className={buttonClasses("primary")}>
-          <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />
+          <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Inscribirme como jugador
-          <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+          <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         </Link>
         <Link href="/student/enroll?type=child" className={buttonClasses("secondary")}>
-          <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />
+          <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Inscribir a un hijo o dependiente
-          <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+          <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         </Link>
       </div>
     </div>
@@ -623,7 +624,7 @@ function ActivePortalView({
       {selectedProfile === null || paymentSituation === null ? (
         <div className="card">
           <EmptyState
-            icon={<User size={21} strokeWidth={1.5} aria-hidden="true" />}
+            icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="No se encontraron estudiantes asociados a esta cuenta"
             description="Inscríbase como jugador o agregue un hijo o dependiente para empezar."
           />
@@ -675,7 +676,7 @@ function ActivePortalView({
               {selectedIsMinor && viewingOwnProfile && selectedProfile.representante && (
                 <section className="card flex items-center gap-3 p-5" aria-label="Su representante">
                   <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-canvas">
-                    <User size={18} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+                    <User size={ICON.base} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-2xs font-bold uppercase text-ink-3">
@@ -711,21 +712,21 @@ function ActivePortalView({
         <div className="flex flex-wrap gap-3 pt-1">
           {representative && (
             <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
-              <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />
+              <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Agregar hijo o dependiente
-              <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+              <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             </Link>
           )}
           {!hasAlumnoRole && (
             <Link href="/student/enroll?type=self" className={buttonClasses("secondary")}>
-              <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />
+              <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Unirme como jugador
-              <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+              <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             </Link>
           )}
           {data.self?.representanteId != null && (
             <button type="button" onClick={onIndependizar} className={buttonClasses("secondary")}>
-              <UserMinus size={16} strokeWidth={1.5} aria-hidden="true" />
+              <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Independizarse del representante
             </button>
           )}

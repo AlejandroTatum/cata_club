@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 
 export interface AgeUpConfirmationProps {
   open: boolean;
@@ -92,7 +93,7 @@ export default function AgeUpConfirmation({
         className="card w-full max-w-sm p-6"
       >
         <div className="mb-3 flex items-center gap-2">
-          <AlertTriangle size={18} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+          <AlertTriangle size={ICON.base} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
           <h2 id="age-up-dialog-title" className="text-base font-semibold text-cata-red">
             Independizarse del representante
           </h2>

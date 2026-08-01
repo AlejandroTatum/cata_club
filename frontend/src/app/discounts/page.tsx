@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Pencil, Percent, Plus, Power } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { Badge, Button, EmptyState, ErrorState, LoadingState } from "@/components/ui";
@@ -202,9 +203,9 @@ export default function DiscountsPage(): React.ReactElement {
         <div className="mt-4 flex gap-2">
           <Button variant="dark" onClick={() => void handleSubmit()} disabled={saving}>
             {saving ? (
-              <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
             ) : (
-              <Plus size={14} strokeWidth={2} aria-hidden="true" />
+              <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             )}
             {isEditing ? "Guardar" : "Crear"}
           </Button>
@@ -222,7 +223,7 @@ export default function DiscountsPage(): React.ReactElement {
         title="Descuentos"
         actions={
           <Button variant="dark" onClick={openCreateForm}>
-            <Plus size={14} strokeWidth={2} aria-hidden="true" />
+            <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Nuevo descuento
           </Button>
         }
@@ -240,12 +241,12 @@ export default function DiscountsPage(): React.ReactElement {
         ) : !loadError && descuentos.length === 0 ? (
           <div className="card">
             <EmptyState
-              icon={<Percent size={21} strokeWidth={1.5} aria-hidden="true" />}
+              icon={<Percent size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title="Sin descuentos en el catálogo"
               description="Cree el primer descuento para poder aplicarlo al registrar pagos."
               action={
                 <Button variant="dark" onClick={openCreateForm}>
-                  <Plus size={14} strokeWidth={2} aria-hidden="true" />
+                  <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                   Nuevo descuento
                 </Button>
               }
@@ -273,7 +274,7 @@ export default function DiscountsPage(): React.ReactElement {
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" onClick={() => openEditForm(descuento)}>
-                        <Pencil size={13} strokeWidth={2} aria-hidden="true" />
+                        <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                         Editar
                       </Button>
                       <Button
@@ -282,9 +283,9 @@ export default function DiscountsPage(): React.ReactElement {
                         disabled={isToggling}
                       >
                         {isToggling ? (
-                          <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+                          <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
                         ) : (
-                          <Power size={13} strokeWidth={2} aria-hidden="true" />
+                          <Power size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                         )}
                         {descuento.activo ? "Desactivar" : "Reactivar"}
                       </Button>

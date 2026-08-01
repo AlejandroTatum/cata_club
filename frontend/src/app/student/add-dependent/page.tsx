@@ -39,6 +39,7 @@ import {
   Mail,
   Lock,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import {
   ADD_DEPENDENT_STEP_ORDER,
   isAddDependentStepComplete,
@@ -325,7 +326,7 @@ function AddDependentContent(): React.ReactElement {
           type="email"
           placeholder="correo@ejemplo.com"
           disabled={submitting}
-          icon={<Mail size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           error={shownError("correo")}
           onBlur={() => markTouched("correo")}
         />
@@ -338,14 +339,14 @@ function AddDependentContent(): React.ReactElement {
           type="password"
           placeholder="Mínimo 8 caracteres"
           disabled={submitting}
-          icon={<Lock size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<Lock size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           error={shownError("contrasenia")}
           onBlur={() => markTouched("contrasenia")}
         />
 
         <div className="rounded-ctl border border-line-2 bg-canvas p-3 text-xs text-ink-2">
           <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
+            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Cuenta de acceso del menor
           </p>
           <p className="mt-1 text-blue-700/80">
@@ -388,7 +389,7 @@ function AddDependentContent(): React.ReactElement {
           </select>
           {shownError("tipoSangre") && (
             <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
-              <AlertTriangle size={13} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+              <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
               {shownError("tipoSangre")}
             </p>
           )}
@@ -399,7 +400,7 @@ function AddDependentContent(): React.ReactElement {
           value: formData.enfermedades,
           onChange: (v) => updateField("enfermedades", v),
           placeholder: "p. ej. Asma, diabetes (separadas por comas)",
-          icon: <Heart size={16} strokeWidth={1.5} aria-hidden="true" />,
+          icon: <Heart size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
         {renderTextarea({
@@ -407,7 +408,7 @@ function AddDependentContent(): React.ReactElement {
           value: formData.alergias,
           onChange: (v) => updateField("alergias", v),
           placeholder: "p. ej. Alergia al polvo, al látex, a picaduras de insectos…",
-          icon: <AlertTriangle size={16} strokeWidth={1.5} aria-hidden="true" />,
+          icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
         <EmergencyContactFields
@@ -425,7 +426,7 @@ function AddDependentContent(): React.ReactElement {
 
         <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
           <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
+            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
           </p>
           <p className="mt-1 text-amber-700/80">
@@ -559,7 +560,7 @@ function AddDependentContent(): React.ReactElement {
 
         {representanteLoadError && (
           <div className="alert-error mb-6 items-start" role="alert">
-            <AlertTriangle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
             <span className="flex-1">{representanteLoadError}</span>
             <button
               type="button"
@@ -599,7 +600,7 @@ function AddDependentContent(): React.ReactElement {
                   "Agregando…"
                 ) : (
                   <>
-                    <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
+                    <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                     Agregar dependiente
                   </>
                 )}

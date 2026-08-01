@@ -90,6 +90,7 @@ import {
   ChevronDown,
   AlertTriangle,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import {
   ATTENDANCE_LABELS,
   ATTENDANCE_STATES,
@@ -183,10 +184,10 @@ const STEP_LABELS: Record<WizardStep, string> = {
 const WIZARD_PAGE_SIZE = 10;
 
 const ATTENDANCE_ICONS: Record<EstadoAsistencia, React.ReactNode> = {
-  present: <UserCheck size={16} strokeWidth={2} aria-hidden="true" />,
-  absent: <UserX size={16} strokeWidth={2} aria-hidden="true" />,
-  late: <Timer size={16} strokeWidth={2} aria-hidden="true" />,
-  justified: <FileText size={16} strokeWidth={2} aria-hidden="true" />,
+  present: <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
+  absent: <UserX size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
+  late: <Timer size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
+  justified: <FileText size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
 };
 
 /** Plural labels for the save bar's running totals. */
@@ -822,7 +823,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                     disabled={rosterLoading}
                   >
                     Retomar la lista
-                    <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+                    <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                   </Button>
                   <Button
                     type="button"
@@ -870,7 +871,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
           )}
           {schedules.length === 0 ? (
             <EmptyState
-              icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
+              icon={<Calendar size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title="No hay horarios registrados"
               description="Sin un horario no se puede tomar lista. Pida a administración que registre uno."
             />
@@ -896,7 +897,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                         </span>
                       </span>
                       <ChevronDown
-                        size={16}
+                        size={ICON.sm}
                         strokeWidth={2}
                         className={`shrink-0 text-ink-3 transition-transform duration-150 ${
                           isExpanded ? "rotate-180" : ""
@@ -923,7 +924,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               }`}
                             >
                               <span className="flex items-center gap-2 text-sm font-semibold text-ink">
-                                <Clock size={14} strokeWidth={2} className="text-ink-3" aria-hidden="true" />
+                                <Clock size={ICON.sm} strokeWidth={2} className="text-ink-3" aria-hidden="true" />
                                 {sched.horaInicio} — {sched.horaFin}
                                 {isActive && (
                                   <span
@@ -958,7 +959,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
           className="w-full"
         >
           {rosterLoading ? "Cargando estudiantes…" : "Continuar"}
-          <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+          <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Button>
       </div>
     );
@@ -997,7 +998,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 anybody has actually looked at. */}
             {unreviewedCount > 0 && (
               <span className="flex items-center gap-1.5 text-xs font-bold text-ball">
-                <AlertTriangle size={12} strokeWidth={2.5} aria-hidden="true" />
+                <AlertTriangle size={ICON.sm} strokeWidth={2.5} aria-hidden="true" />
                 {unreviewedCount === 1
                   ? "1 alumno sin revisar"
                   : `${unreviewedCount} alumnos sin revisar`}
@@ -1010,7 +1011,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
               onClick={handleMarkRemainingPresent}
               className="inline-flex h-ctl items-center gap-2 rounded-ctl border border-white/25 px-4 text-sm font-semibold text-white transition-colors hover:bg-white/10"
             >
-              <UserCheck size={14} strokeWidth={2} aria-hidden="true" />
+              <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               Marcar restantes presentes
             </button>
           )}
@@ -1024,7 +1025,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
         {students.length === 0 ? (
           <EmptyState
-            icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+            icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="Este horario no tiene alumnos asignados."
             description="Pida a administración que asigne alumnos a este horario para poder tomar lista."
           />
@@ -1077,7 +1078,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
             {filteredStudents.length === 0 ? (
               <EmptyState
-                icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+                icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                 title={
                   onlyUnreviewed && unreviewedCount === 0
                     ? "Ya revisó a todos los alumnos de este horario."
@@ -1288,7 +1289,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
           >
             <p className="flex items-start gap-2 text-sm font-semibold text-state-warn">
               <AlertTriangle
-                size={14}
+                size={ICON.sm}
                 strokeWidth={2}
                 className="mt-0.5 flex-none"
                 aria-hidden="true"
@@ -1312,7 +1313,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 {unreviewedCount === 1 ? "Revisar a ese alumno" : `Revisar a esos ${unreviewedCount}`}
               </Button>
               <Button type="button" variant="ghost" onClick={handleMarkRemainingPresent}>
-                <UserCheck size={14} strokeWidth={2} aria-hidden="true" />
+                <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                 Confirmar que están presentes
               </Button>
             </div>
@@ -1390,8 +1391,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
       {confirmed ? (
         <div className="flex min-h-[50vh] items-center justify-center py-8">
           <div className="w-full max-w-lg text-center">
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-state-ok-bg">
-              <CheckCircle size={32} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
+            <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
+              <CheckCircle size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
             </div>
             <h2 className="mb-3 text-xl font-bold tracking-tight text-ink">
               Asistencia Registrada
@@ -1424,7 +1425,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 className="mb-8 rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3.5 text-left text-xs text-state-warn"
               >
                 <p className="flex items-center gap-1.5 font-bold">
-                  <AlertTriangle size={13} strokeWidth={2} aria-hidden="true" />
+                  <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                   {result.failed.length === 1
                     ? "No se pudo guardar 1 registro"
                     : `No se pudieron guardar ${result.failed.length} registros`}
@@ -1488,7 +1489,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                       <div className="sticky bottom-0 -mx-5 mt-5 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-5 py-3.5 backdrop-blur sm:-mx-6 sm:px-6">
                         {!isFirst && (
                           <Button type="button" variant="ghost" onClick={handleBack} disabled={submitting}>
-                            <ChevronLeft size={14} strokeWidth={2} aria-hidden="true" />
+                            <ChevronLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                             Atrás
                           </Button>
                         )}
@@ -1514,7 +1515,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                 : "Deshacer — no hay nada que deshacer"
                             }
                           >
-                            <Undo2 size={14} strokeWidth={2} aria-hidden="true" />
+                            <Undo2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                             Deshacer
                           </Button>
                         )}
@@ -1564,7 +1565,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               aria-describedby={unmarkedCount > 0 ? unmarkedReasonId : undefined}
                             >
                               Siguiente
-                              <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+                              <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                             </Button>
                           ) : (
                             <Button
@@ -1582,7 +1583,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                 "Registrando…"
                               ) : (
                                 <>
-                                  <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
+                                  <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                                   Confirmar Asistencia
                                 </>
                               )}

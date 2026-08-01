@@ -35,6 +35,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Info, X, XCircle, type LucideIcon } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { useToastState, type ToastItem } from "@/contexts/ToastContext";
 
 const VARIANT_CLASSES: Record<ToastItem["variant"], string> = {
@@ -80,7 +81,7 @@ export default function ToastContainer(): React.ReactElement | null {
             className={`${VARIANT_CLASSES[toast.variant]} pointer-events-auto animate-toast-in`}
           >
             <Icon
-              size={18}
+              size={ICON.base}
               strokeWidth={2}
               aria-hidden="true"
               className="mt-px shrink-0 text-current"

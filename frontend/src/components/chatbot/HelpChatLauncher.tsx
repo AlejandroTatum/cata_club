@@ -36,6 +36,7 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { openHelpChat, useHelpChatOpen } from "./help-chat-store";
 
 export interface HelpChatLauncherProps {
@@ -85,7 +86,7 @@ export default function HelpChatLauncher({
           footnote. Deliberately NOT scaled to match the floating launcher: this
           glyph sits inline with an 11.5px label, and an icon that outgrows its
           own text stops looking like part of the sentence. */}
-      <MessageCircle size={variant === "landing" ? 20 : 16} strokeWidth={2} aria-hidden="true" />
+      <MessageCircle size={variant === "landing" ? ICON.base : ICON.sm} strokeWidth={2} aria-hidden="true" />
       {label}
     </button>
   );

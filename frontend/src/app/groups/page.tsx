@@ -71,6 +71,7 @@ import {
   UserPlus,
   UserMinus,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { Badge, Button, EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
@@ -767,7 +768,7 @@ export default function GroupsPage(): React.ReactElement {
           </div>
           <div className="sm:col-span-2 lg:col-span-4 flex gap-2">
             <Button type="submit" variant="primary" size="sm" disabled={formSubmitting}>
-              {formSubmitting && <Loader2 size={12} className="animate-spin" aria-hidden="true" />}
+              {formSubmitting && <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />}
               {editingGroup !== null ? "Guardar cambios" : "Crear horario"}
             </Button>
             <Button size="sm" onClick={closeExpanded}>
@@ -794,9 +795,9 @@ export default function GroupsPage(): React.ReactElement {
               disabled={deletingId !== null}
             >
               {deletingId !== null ? (
-                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
               ) : (
-                <Trash2 size={12} strokeWidth={1.5} aria-hidden="true" />
+                <Trash2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               )}
               Eliminar…
             </Button>
@@ -890,7 +891,7 @@ export default function GroupsPage(): React.ReactElement {
       <>
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <UserPlus size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+            <UserPlus size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
             <h3 className="text-sm font-bold text-cata-text">
               Alumnos de {categoriaLabel(card.categoria)}
             </h3>
@@ -929,9 +930,9 @@ export default function GroupsPage(): React.ReactElement {
             className="btn-primary inline-flex items-center gap-1.5 text-xs"
           >
             {asignandoAlumno ? (
-              <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
             ) : (
-              <UserPlus size={12} strokeWidth={2} aria-hidden="true" />
+              <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             )}
             Asignar
           </button>
@@ -955,7 +956,7 @@ export default function GroupsPage(): React.ReactElement {
                       className="rounded-lg border border-cata-border p-1 text-cata-text/50 transition-colors hover:bg-red-50 hover:text-cata-red"
                       title="Desasignar alumno"
                     >
-                      <UserMinus size={12} strokeWidth={1.5} aria-hidden="true" />
+                      <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                     </button>
                   </div>
                 ))}
@@ -983,7 +984,7 @@ export default function GroupsPage(): React.ReactElement {
         title="Horarios"
         actions={
           <Button variant="dark" onClick={openCreateForm}>
-            <Plus size={14} strokeWidth={2} aria-hidden="true" />
+            <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Nuevo horario
           </Button>
         }
@@ -1002,9 +1003,9 @@ export default function GroupsPage(): React.ReactElement {
             role="alert"
           >
             {notification.type === "success" ? (
-              <CheckCircle2 size={14} strokeWidth={2} aria-hidden="true" />
+              <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             ) : (
-              <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
+              <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             )}
             {notification.message}
           </div>
@@ -1149,12 +1150,12 @@ export default function GroupsPage(): React.ReactElement {
         {!loading && horarios.length === 0 && (
           <div className="card">
             <EmptyState
-              icon={<Calendar size={21} strokeWidth={1.5} aria-hidden="true" />}
+              icon={<Calendar size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title="No hay horarios configurados"
               description="Cree un horario de entrenamiento para empezar a asignarle alumnos."
               action={
                 <Button variant="primary" onClick={openCreateForm}>
-                  <Plus size={14} strokeWidth={2} aria-hidden="true" />
+                  <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                   Crear primer horario
                 </Button>
               }

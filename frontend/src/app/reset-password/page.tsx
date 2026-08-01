@@ -28,6 +28,7 @@ import { type FormEvent, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Lock, Eye, EyeOff, ArrowLeft, AlertCircle, Check, X, CheckCircle2 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { restablecerContrasenia } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
@@ -73,7 +74,7 @@ function ResetPasswordContent(): React.ReactElement {
       <AuthShell title="Enlace no válido" note={EXPIRED_LINK_NOTE}>
         <div className="flex flex-col items-center gap-2.5 py-2 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">
-            <AlertCircle size={24} className="text-cata-red" strokeWidth={1.5} aria-hidden="true" />
+            <AlertCircle size={ICON.lg} className="text-cata-red" strokeWidth={1.5} aria-hidden="true" />
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
             El enlace de recuperación no contiene un token válido. Solicite uno nuevo y
@@ -84,7 +85,7 @@ function ResetPasswordContent(): React.ReactElement {
           href="/forgot-password"
           className="inline-flex h-ctl w-full items-center justify-center gap-2 rounded-ctl border border-cata-red bg-cata-red text-sm font-semibold text-white transition-colors hover:border-cata-red-dark hover:bg-cata-red-dark"
         >
-          <ArrowLeft size={14} strokeWidth={2} aria-hidden="true" />
+          <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Solicitar nuevo enlace
         </Link>
       </AuthShell>
@@ -114,7 +115,7 @@ function ResetPasswordContent(): React.ReactElement {
       <AuthShell title="Contraseña actualizada">
         <div className="flex flex-col items-center gap-2.5 py-2 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
-            <CheckCircle2 size={24} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
+            <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
             Su contraseña ha sido restablecida correctamente. Ya puede iniciar sesión con
@@ -144,7 +145,7 @@ function ResetPasswordContent(): React.ReactElement {
           </label>
           <div className="relative">
             <Lock
-              size={15}
+              size={ICON.sm}
               strokeWidth={1.5}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
               aria-hidden="true"
@@ -167,9 +168,9 @@ function ResetPasswordContent(): React.ReactElement {
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
             >
               {showPassword ? (
-                <EyeOff size={16} strokeWidth={1.5} aria-hidden="true" />
+                <EyeOff size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               ) : (
-                <Eye size={16} strokeWidth={1.5} aria-hidden="true" />
+                <Eye size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               )}
             </button>
           </div>
@@ -190,9 +191,9 @@ function ResetPasswordContent(): React.ReactElement {
               }`}
             >
               {rule.met ? (
-                <Check size={13} strokeWidth={3} aria-hidden="true" />
+                <Check size={ICON.sm} strokeWidth={3} aria-hidden="true" />
               ) : (
-                <X size={13} strokeWidth={2} aria-hidden="true" />
+                <X size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               )}
               {rule.label}
             </li>
@@ -205,7 +206,7 @@ function ResetPasswordContent(): React.ReactElement {
           </label>
           <div className="relative">
             <Lock
-              size={15}
+              size={ICON.sm}
               strokeWidth={1.5}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
               aria-hidden="true"
@@ -232,7 +233,7 @@ function ResetPasswordContent(): React.ReactElement {
               role="alert"
               className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red"
             >
-              <AlertCircle size={13} strokeWidth={2} aria-hidden="true" />
+              <AlertCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               No coincide con la anterior.
             </p>
           )}
@@ -254,7 +255,7 @@ function ResetPasswordContent(): React.ReactElement {
           href="/login"
           className="inline-flex items-center gap-1.5 font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
         >
-          <ArrowLeft size={13} strokeWidth={2} aria-hidden="true" />
+          <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Volver a Iniciar Sesión
         </Link>
       </p>

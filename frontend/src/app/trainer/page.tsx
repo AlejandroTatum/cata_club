@@ -34,6 +34,7 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell, { openHelpChat } from "@/components/shell/AppShell";
 import { ArrowRight, CalendarCheck, ClipboardList, Megaphone } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchTrainingSchedules,
@@ -188,13 +189,13 @@ export default function TrainerPage(): React.ReactElement {
                 </div>
                 <Link href="/trainer/attendance" className={XL_CTA}>
                   Pasar lista
-                  <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
+                  <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                 </Link>
               </div>
             ) : (
               <div className="rounded-card border border-line bg-paper">
                 <EmptyState
-                  icon={<CalendarCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
+                  icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                   title={
                     todaySchedules.length > 0
                       ? "Ya no quedan sesiones hoy"
@@ -267,7 +268,7 @@ export default function TrainerPage(): React.ReactElement {
                         aria-describedby={ABSENCE_NOTICE_HINT_ID}
                         onClick={(): void => openHelpChat(buildAbsenceNotice(absenceAlert))}
                       >
-                        <Megaphone size={14} strokeWidth={2} aria-hidden="true" />
+                        <Megaphone size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                         Avisar al club
                       </Button>
                       {/*
@@ -287,7 +288,7 @@ export default function TrainerPage(): React.ReactElement {
                 </div>
               ) : (
                 <EmptyState
-                  icon={<ClipboardList size={21} strokeWidth={1.5} aria-hidden="true" />}
+                  icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                   title="Todavía no registraste ninguna lista este mes"
                   description="En cuanto pases lista, el resumen de la sesión aparece aquí."
                 />

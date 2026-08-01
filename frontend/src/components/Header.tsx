@@ -33,6 +33,7 @@ import {
   Trophy,
   FileText,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNavLinksForRole, type NavLinkDef } from "@/lib/auth-utils";
 import { hidesTopHeader } from "@/lib/shell-routes";
@@ -165,7 +166,7 @@ function InstitutionalHeader({ pathname }: InstitutionalHeaderProps): React.Reac
             href="/login"
             className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white/65 transition-all duration-200 hover:text-white"
           >
-            <User size={15} strokeWidth={1.5} aria-hidden="true" />
+            <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             Iniciar sesión
           </Link>
         </div>
@@ -177,7 +178,7 @@ function InstitutionalHeader({ pathname }: InstitutionalHeaderProps): React.Reac
           className="rounded-xl p-2.5 text-white/65 hover:bg-white/[0.08] hover:text-cata-fuchsia md:hidden"
           aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
         >
-          {menuOpen ? <X size={20} strokeWidth={1.5} /> : <Menu size={20} strokeWidth={1.5} />}
+          {menuOpen ? <X size={ICON.base} strokeWidth={1.5} /> : <Menu size={ICON.base} strokeWidth={1.5} />}
         </button>
       </nav>
 
@@ -202,7 +203,7 @@ function InstitutionalHeader({ pathname }: InstitutionalHeaderProps): React.Reac
                 onClick={() => setMenuOpen(false)}
                 className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white"
               >
-                <LogIn size={17} strokeWidth={1.5} aria-hidden="true" />
+                <LogIn size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
                 Iniciar sesión
               </Link>
             </li>
@@ -316,7 +317,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                       : "text-white/65 hover:bg-white/[0.08] hover:text-white"
                   }`}
                 >
-                  <link.icon size={15} strokeWidth={1.5} aria-hidden="true" />
+                  <link.icon size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                   {link.label}
                 </Link>
               </li>
@@ -339,7 +340,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                 aria-label={`Menú de cuenta de ${session.user.name}`}
                 className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white"
               >
-                <User size={13} strokeWidth={1.5} aria-hidden="true" />
+                <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                 <span className="max-w-[120px] truncate">{session.user.name}</span>
               </button>
               {userMenuOpen && (
@@ -363,7 +364,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
           aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
           aria-expanded={menuOpen}
         >
-          {menuOpen ? <X size={20} strokeWidth={1.5} /> : <Menu size={20} strokeWidth={1.5} />}
+          {menuOpen ? <X size={ICON.base} strokeWidth={1.5} /> : <Menu size={ICON.base} strokeWidth={1.5} />}
         </button>
       </nav>
 
@@ -385,7 +386,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                         : "text-white/65 hover:bg-white/[0.08] hover:text-white"
                     }`}
                   >
-                    <link.icon size={17} strokeWidth={1.5} aria-hidden="true" />
+                    <link.icon size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
                     {link.label}
                   </Link>
                 </li>
@@ -397,7 +398,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
               <li className="border-t border-white/10 pt-3 mt-3">
                 <div className="flex items-center justify-between gap-2 px-3.5 py-2 text-xs text-white/65">
                   <span className="flex items-center gap-2 truncate">
-                    <User size={14} strokeWidth={1.5} aria-hidden="true" />
+                    <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                     <span className="truncate">{session.user.name}</span>
                   </span>
                   <NotificationBell notificaciones={notificaciones} loadError={loadError} onMarkRead={markRead} />
@@ -407,7 +408,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                   onClick={(): void => setMenuOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white"
                 >
-                  <User size={17} strokeWidth={1.5} aria-hidden="true" />
+                  <User size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
                   Perfil
                 </Link>
                 <button
@@ -418,7 +419,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                   }}
                   className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white/65 transition-colors hover:bg-white/[0.08] hover:text-cata-red"
                 >
-                  <LogOut size={17} strokeWidth={1.5} aria-hidden="true" />
+                  <LogOut size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
                   Cerrar Sesión
                 </button>
               </li>

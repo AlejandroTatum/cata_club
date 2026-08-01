@@ -64,6 +64,7 @@ import {
   Upload,
   UserPlus,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { fetchMembers, obtenerRolesDePersona, asignarRol, quitarRol, cambiarEstadoCuenta, actualizarPersona, fetchFichaMedica, actualizarFichaMedica, fetchTiposMembresia, crearMembresia, registrarPago, fetchDescuentos } from "@/services/api";
 import type { TipoMembresiaCatalogo, RegistrarPagoInput, DescuentoCatalogo } from "@/services/api";
 import { computeMontoFinal, descuentosActivos, descuentoValorLabel } from "@/app/discounts/discounts-utils";
@@ -454,7 +455,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
       {!student.membresia &&
         (membershipSuccess ? (
           <p className="mt-2 flex items-center gap-1 text-xs text-cata-state-ok">
-            <CheckCircle2 size={11} strokeWidth={2} aria-hidden="true" />
+            <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Membresía creada.
           </p>
         ) : showCreateMembership ? (
@@ -480,9 +481,9 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                 className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
               >
                 {membershipLoading ? (
-                  <Loader2 size={11} className="animate-spin" />
+                  <Loader2 size={ICON.sm} className="animate-spin" />
                 ) : (
-                  <Plus size={11} />
+                  <Plus size={ICON.sm} />
                 )}
                 Crear
               </button>
@@ -501,7 +502,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
             onClick={() => handleOpenCreateMembership()}
             className="mt-2.5 inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
           >
-            <Plus size={11} strokeWidth={2} aria-hidden="true" />
+            <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Crear membresía
           </button>
         ))}
@@ -511,7 +512,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
         <div className="mt-2.5">
           {paymentSuccess ? (
             <p className="flex items-center gap-1 text-xs text-cata-state-ok">
-              <CheckCircle2 size={11} strokeWidth={2} aria-hidden="true" />
+              <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               Pago registrado. Recarga para verlo.
             </p>
           ) : showPaymentForm ? (
@@ -601,7 +602,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                       onClick={() => paymentFileInputRef.current?.click()}
                       className="flex items-center gap-1.5 rounded-lg border border-dashed border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text/65 transition-colors hover:border-cata-red/30 hover:text-cata-text"
                     >
-                      <Upload size={12} strokeWidth={1.5} aria-hidden="true" />
+                      <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                       {paymentVoucherFile ? paymentVoucherFile.name : "Seleccionar archivo"}
                     </button>
                     {paymentVoucherFile && (
@@ -624,7 +625,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                   disabled={paymentLoading || !paymentMonto || !paymentFechaInicio || !paymentFechaFin}
                   className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
                 >
-                  {paymentLoading ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                  {paymentLoading ? <Loader2 size={ICON.sm} className="animate-spin" /> : <Plus size={ICON.sm} />}
                   Registrar pago
                 </button>
                 <button
@@ -642,7 +643,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
               onClick={handleOpenPaymentForm}
               className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
             >
-              <Plus size={11} strokeWidth={2} aria-hidden="true" />
+              <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               Registrar pago
             </button>
           )}
@@ -656,7 +657,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
           onClick={() => setShowMedical((v) => !v)}
           className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-2xs tracking-flat font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
         >
-          <Stethoscope size={11} strokeWidth={1.5} aria-hidden="true" />
+          <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Ficha médica
         </button>
       </div>
@@ -772,19 +773,19 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
       <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-2">
         <div className="flex items-center gap-1.5">
           <dt className="sr-only">Teléfono</dt>
-          <Phone size={11} strokeWidth={1.5} aria-hidden="true" />
+          <Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           <dd>{account.telefono}</dd>
         </div>
         {account.email ? (
           <div className="flex min-w-0 items-center gap-1.5">
             <dt className="sr-only">Correo</dt>
-            <Mail size={11} strokeWidth={1.5} className="flex-none" aria-hidden="true" />
+            <Mail size={ICON.sm} strokeWidth={1.5} className="flex-none" aria-hidden="true" />
             <dd className="truncate">{account.email}</dd>
           </div>
         ) : null}
         <div className="flex items-center gap-1.5">
           <dt className="sr-only">Estudiantes</dt>
-          <GraduationCap size={11} strokeWidth={1.5} aria-hidden="true" />
+          <GraduationCap size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           <dd className="tabular-nums">{account.estudiantes.length}</dd>
         </div>
       </dl>
@@ -1034,7 +1035,7 @@ function MemberEditDialog({
                   aria-label="Cerrar ventana"
                   className="rounded-lg p-1.5 text-cata-text/50 transition-colors hover:bg-cata-bg hover:text-cata-text"
                 >
-                  <X size={16} strokeWidth={1.5} aria-hidden="true" />
+                  <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -1088,7 +1089,7 @@ function MemberEditDialog({
                     <div className="flex items-center justify-between gap-3">
                       <dt className="text-ink-3">Correo</dt>
                       <dd className="flex min-w-0 items-center gap-1.5 truncate font-semibold text-ink">
-                        <Mail size={11} strokeWidth={1.5} aria-hidden="true" />
+                        <Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                         <span className="truncate">{account.email}</span>
                       </dd>
                     </div>
@@ -1102,9 +1103,9 @@ function MemberEditDialog({
                     className={buttonClasses("primary", "sm")}
                   >
                     {infoSaving ? (
-                      <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                      <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
                     ) : (
-                      <Save size={12} strokeWidth={1.5} aria-hidden="true" />
+                      <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                     )}
                     {/* Explicit scope: this button only PATCHes
                         nombres/apellidos/teléfono. Roles, estado, ficha
@@ -1113,7 +1114,7 @@ function MemberEditDialog({
                   </button>
                   {infoSuccess && (
                     <p className="flex items-center gap-1 text-xs text-state-ok" role="status">
-                      <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />
+                      <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                       Guardado.
                     </p>
                   )}
@@ -1137,11 +1138,11 @@ function MemberEditDialog({
                     aria-pressed={activo}
                   >
                     {stateLoading || rolesLoading ? (
-                      <Loader2 size={11} className="animate-spin" aria-hidden="true" />
+                      <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
                     ) : activo ? (
-                      <ToggleRight size={12} aria-hidden="true" />
+                      <ToggleRight size={ICON.sm} aria-hidden="true" />
                     ) : (
-                      <ToggleLeft size={12} aria-hidden="true" />
+                      <ToggleLeft size={ICON.sm} aria-hidden="true" />
                     )}
                     {stateLoading ? "Actualizando…" : rolesLoading ? "Cargando…" : activo ? "Activa" : "Inactiva"}
                   </button>
@@ -1160,13 +1161,13 @@ function MemberEditDialog({
                 title="Roles"
                 saveMode="instant"
                 icon={
-                  <ShieldCheck size={14} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+                  <ShieldCheck size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
                 }
               >
                 <>
                   {rolesLoading && (
                     <p className="mb-2 flex items-center gap-1.5 text-xs text-ink-3" role="status">
-                      <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                      <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
                       Cargando roles actuales…
                     </p>
                   )}
@@ -1205,10 +1206,10 @@ function MemberEditDialog({
                               : "border-line-2 bg-paper text-ink-2 hover:bg-canvas"
                           }`}
                         >
-                          <RoleIcon size={14} strokeWidth={1.5} className="shrink-0" aria-hidden="true" />
+                          <RoleIcon size={ICON.sm} strokeWidth={1.5} className="shrink-0" aria-hidden="true" />
                           <span className="flex-1 truncate">{ROLE_LABELS[role]}</span>
                           {isLoading && (
-                            <Loader2 size={12} className="shrink-0 animate-spin" aria-hidden="true" />
+                            <Loader2 size={ICON.sm} className="shrink-0 animate-spin" aria-hidden="true" />
                           )}
                           <input
                             type="checkbox"
@@ -1418,7 +1419,7 @@ export default function MembersPage(): React.ReactElement {
             />
           </div>
           <Link href="/admin/crear-cuenta" className={buttonClasses("primary", "sm")}>
-            <UserPlus size={14} strokeWidth={2} aria-hidden="true" />
+            <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Crear cuenta
           </Link>
         </div>
@@ -1512,7 +1513,7 @@ export default function MembersPage(): React.ReactElement {
         {!loading && filteredAccounts.length === 0 && (
           <div className="card">
             <EmptyState
-              icon={<Users size={21} strokeWidth={1.5} aria-hidden="true" />}
+              icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title={
                 searchTerm || activeFlag !== "all"
                   ? "No se encontraron miembros"

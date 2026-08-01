@@ -70,6 +70,7 @@ import {
   ChevronRight,
   Clock,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import type {
   PaymentValidationRequest,
   ValidationStatus,
@@ -255,9 +256,9 @@ function ProofViewer({
           </div>
         ) : (
           <div className="space-y-3 text-center">
-            <FileText size={32} strokeWidth={1.5} className="mx-auto text-ink-3" aria-hidden="true" />
+            <FileText size={ICON.lg} strokeWidth={1.5} className="mx-auto text-ink-3" aria-hidden="true" />
             <p className="text-xs text-ink-3">
-              <Eye size={12} strokeWidth={1.5} className="mr-1 inline-block -mt-0.5" aria-hidden="true" />
+              <Eye size={ICON.sm} strokeWidth={1.5} className="mr-1 inline-block -mt-0.5" aria-hidden="true" />
               Vista previa no disponible para este tipo de comprobante.
             </p>
           </div>
@@ -785,7 +786,7 @@ export default function PaymentsPage(): React.ReactElement {
             role="status"
             className="mb-4 flex flex-wrap items-center gap-3 rounded-ctl border border-line-2 bg-sunken px-4 py-2.5 text-xs font-semibold text-ink-2"
           >
-            <Clock size={14} strokeWidth={2} aria-hidden="true" className="shrink-0 text-ink-3" />
+            <Clock size={ICON.sm} strokeWidth={2} aria-hidden="true" className="shrink-0 text-ink-3" />
             <span>{deferredDecision.pendingLabel} — se envía en unos segundos.</span>
             <button
               type="button"
@@ -826,7 +827,7 @@ export default function PaymentsPage(): React.ReactElement {
             className="mb-4 rounded-card border border-state-bad/25 bg-state-bad-bg p-4"
           >
             <div className="mb-2 flex items-center gap-2">
-              <XCircle size={15} strokeWidth={2} className="text-state-bad" aria-hidden="true" />
+              <XCircle size={ICON.sm} strokeWidth={2} className="text-state-bad" aria-hidden="true" />
               <h2 id="lote-resultado" className="text-sm font-bold text-state-bad">
                 El lote quedó a medias
               </h2>
@@ -915,7 +916,7 @@ export default function PaymentsPage(): React.ReactElement {
         {!loading && !error && filtered.length === 0 && (
           <div className="rounded-card border border-line bg-paper">
             <EmptyState
-              icon={<ShieldCheck size={21} strokeWidth={1.5} aria-hidden="true" />}
+              icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title={
                 normalizedQuery
                   ? "Ningún estudiante coincide con la búsqueda"
@@ -1071,7 +1072,7 @@ export default function PaymentsPage(): React.ReactElement {
       <div>
         <div className="mb-5 flex flex-wrap items-center gap-2">
           <Button variant="ghost" className="-ml-2" onClick={() => setSelectedId(null)}>
-            <ArrowLeft size={15} strokeWidth={2} aria-hidden="true" />
+            <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Volver a la cola
           </Button>
           <span className="flex-1" />
@@ -1086,7 +1087,7 @@ export default function PaymentsPage(): React.ReactElement {
                 disabled={queue.previousId === null}
                 onClick={() => setSelectedId(queue.previousId)}
               >
-                <ChevronLeft size={14} strokeWidth={2} aria-hidden="true" />
+                <ChevronLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                 Anterior
               </Button>
               <Button
@@ -1096,7 +1097,7 @@ export default function PaymentsPage(): React.ReactElement {
                 onClick={() => setSelectedId(queue.nextId)}
               >
                 Siguiente
-                <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+                <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               </Button>
             </>
           )}
@@ -1380,7 +1381,7 @@ export default function PaymentsPage(): React.ReactElement {
             {request.validationStatus === "rechazado" && request.rejectionReason && (
               <section className="rounded-card border border-state-bad/25 bg-state-bad-bg p-[18px]">
                 <div className="mb-2 flex items-center gap-2">
-                  <XCircle size={15} strokeWidth={2} className="text-state-bad" aria-hidden="true" />
+                  <XCircle size={ICON.sm} strokeWidth={2} className="text-state-bad" aria-hidden="true" />
                   <h2 className="text-sm font-bold text-state-bad">Motivo del rechazo</h2>
                 </div>
                 <p className="text-sm text-ink-2">{request.rejectionReason}</p>
@@ -1469,7 +1470,7 @@ export default function PaymentsPage(): React.ReactElement {
                     aria-label="Cerrar"
                     className="rounded-ctl p-1.5 text-ink-3 transition-colors hover:bg-canvas hover:text-ink"
                   >
-                    <X size={16} strokeWidth={1.5} aria-hidden="true" />
+                    <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                   </button>
                 </div>
                 <div className="flex-1 overflow-auto bg-canvas p-2">

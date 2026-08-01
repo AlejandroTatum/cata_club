@@ -149,23 +149,27 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
    */
   weight: ["normal", "semibold", "bold", "extrabold"],
 
-  /** `size={…}` on a lucide icon. Fourteen sizes, ten of them between 10 and 21. */
-  icon: [
-    "10",
-    "11",
-    "12",
-    "13",
-    "14",
-    "15",
-    "16",
-    "17",
-    "18",
-    "19",
-    "20",
-    "21",
-    "24",
-    "32",
-  ],
+  /**
+   * `size={…}` on a lucide icon. Empty. An icon size is a step of the `ICON`
+   * scale in `lib/icon-size.ts`, and nothing else.
+   *
+   * The fourteen sizes — 10 · 11 · 12 · 13 · 14 · 15 · 16 · 17 · 18 · 19 · 20
+   * · 21 · 24 · 32 — collapsed into three across 262 call sites in 43 files.
+   * Ten of the fourteen lived between 10 and 21: eleven pixels of range cut
+   * into ten steps, which is the same half-pixel clustering the type scale
+   * found, on the axis that sits right next to the text.
+   *
+   * The three that replace them are `text-xs`, `text-base` and `text-lg`
+   * multiplied by 1.2 — the ratio `_sistema.css` already spends on `.srch`
+   * (12.5px text, 15px icon), `.btn` (13/15) and `.nav-i` (13.5/17).
+   *
+   * This entry is empty AND the axis no longer reads an allowlist: the rule
+   * inverted in the same pass, so `size={16}` and `size={anythingElse}` both
+   * fail on any file that imports `lucide-react`. It is the icon equivalent of
+   * what the weight axis did for `font-medium` — the entry cannot come back,
+   * because there is no longer a list for it to come back into.
+   */
+  icon: [],
 
   /**
    * `shadow-[…]`. `tailwind.config.ts` already names three elevations
