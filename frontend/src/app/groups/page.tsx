@@ -784,7 +784,7 @@ export default function GroupsPage(): React.ReactElement {
           <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
             <div className="min-w-[220px] flex-1">
               <p className="text-sm font-semibold text-state-bad">Eliminar este horario</p>
-              <p className="text-[12px] text-ink-3">
+              <p className="text-xs text-ink-3">
                 Se eliminan todos sus días y los alumnos quedan sin horario asignado.
               </p>
             </div>
@@ -826,7 +826,7 @@ export default function GroupsPage(): React.ReactElement {
               Cerrar
             </Button>
           </div>
-          <p className="mb-3 text-[12.5px] text-ink-3">
+          <p className="mb-3 text-xs text-ink-3">
             Los días de esta categoría no comparten la misma configuración, así que se
             configuran por separado. Elija cuál editar.
           </p>
@@ -1119,7 +1119,7 @@ export default function GroupsPage(): React.ReactElement {
                         to sit inside a column without wrapping to three lines, and
                         it qualifies the headcount rather than replacing it. */}
                     {parciales > 0 && (
-                      <p className="mt-3 flex items-center gap-2 text-[12px] text-ink-3">
+                      <p className="mt-3 flex items-center gap-2 text-xs text-ink-3">
                         <span
                           aria-hidden="true"
                           className="h-1.5 w-1.5 flex-none rounded-full bg-state-warn"

@@ -278,7 +278,7 @@ export default function TrainerPage(): React.ReactElement {
                       */}
                       <p
                         id={ABSENCE_NOTICE_HINT_ID}
-                        className="m-0 w-full text-[12.5px] text-ink-3"
+                        className="m-0 w-full text-xs text-ink-3"
                       >
                         Abre el asistente con el mensaje ya escrito. Usted lo revisa y lo envía.
                       </p>

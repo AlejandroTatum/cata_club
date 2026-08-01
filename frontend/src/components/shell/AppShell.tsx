@@ -574,7 +574,7 @@ export default function AppShell({
                   {getUserInitials(session.user.name)}
                 </span>
                 <span className={`min-w-0 flex-1 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
-                  <span className="block truncate text-[12.5px] font-semibold">
+                  <span className="block truncate text-xs font-semibold">
                     {session.user.name}
                   </span>
                   {/* Same correction as the brand's area label: the user card
@@ -639,7 +639,7 @@ export default function AppShell({
             <button
               type="button"
               onClick={(): void => setSidebarOpen(true)}
-              className="inline-flex h-ctl items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-3 text-[12.5px] font-medium text-ink-2 hover:bg-sunken lg:hidden"
+              className="inline-flex h-ctl items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-3 text-xs font-medium text-ink-2 hover:bg-sunken lg:hidden"
               aria-label="Abrir menú principal"
             >
               <Menu size={17} strokeWidth={2} aria-hidden="true" />
@@ -651,7 +651,7 @@ export default function AppShell({
             type="button"
             onClick={(): void => setPaletteOpen(true)}
             aria-label="Buscar secciones"
-            className="flex h-ctl items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3 text-[12.5px] text-ink-3 transition-colors hover:border-ink-3"
+            className="flex h-ctl items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3 text-xs text-ink-3 transition-colors hover:border-ink-3"
           >
             <Search size={15} strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Buscar una sección…</span>

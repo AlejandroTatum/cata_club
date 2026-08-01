@@ -626,12 +626,12 @@ function RenewPaymentForm({
           {fechaInicio && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
         </p>
         {months !== null && (
-          <p className="mt-0.5 text-[12.5px] text-ink-3-strong">
+          <p className="mt-0.5 text-xs text-ink-3-strong">
             {months === 1 ? "1 mes" : `${months} meses`} a {formatCurrency(monthlyPrice)} por mes.
           </p>
         )}
         {months === null && monthlyPrice > 0 && amount > 0 && (
-          <p className="mt-0.5 text-[12.5px] text-state-bad">
+          <p className="mt-0.5 text-xs text-state-bad">
             El monto debe ser un múltiplo de {formatCurrency(monthlyPrice)}.
           </p>
         )}
@@ -673,7 +673,7 @@ function RenewPaymentForm({
               </span>
             )}
           </div>
-          <span className="text-[12.5px] text-ink-3-strong">PDF, JPG o PNG — máximo 5 MB.</span>
+          <span className="text-xs text-ink-3-strong">PDF, JPG o PNG — máximo 5 MB.</span>
         </div>
       )}
 
@@ -704,7 +704,7 @@ function RenewPaymentForm({
             , {tipoPago === "TRANSFERENCIA" ? "por transferencia" : "en efectivo"}, para el período{" "}
             <b className="font-bold tabular-nums">{formatDateRange(fechaInicio, fechaFin)}</b>.
           </p>
-          <p className="mt-2 max-w-[68ch] text-[12.5px] leading-relaxed text-ink-3-strong">
+          <p className="mt-2 max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
             Una vez registrado no puede eliminarlo desde el portal. El club revisa cada pago: si
             algo está mal lo rechaza indicando el motivo y usted registra el correcto.
           </p>
@@ -773,7 +773,7 @@ function PagoRow({
           </span>
           <Badge tone={estado.tone}>{estado.label}</Badge>
         </div>
-        <p className="mt-1 text-[12.5px] text-ink-3-strong">
+        <p className="mt-1 text-xs text-ink-3-strong">
           {TIPO_PAGO_LABEL[pago.tipoPago]} · Registrado el{" "}
           <span className="tabular-nums">{formatDate(pago.fechaRegistro)}</span> · Cubre{" "}
           <span className="tabular-nums">{formatDateRange(pago.fechaInicio, pago.fechaFin)}</span>
@@ -784,7 +784,7 @@ function PagoRow({
             href={pago.voucherUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-1.5 inline-flex min-h-[24px] items-center gap-1.5 rounded text-[12.5px] font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+            className="mt-1.5 inline-flex min-h-[24px] items-center gap-1.5 rounded text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
           >
             <Paperclip size={13} strokeWidth={1.5} aria-hidden="true" />
             Ver el comprobante
@@ -1105,7 +1105,7 @@ function PaymentsContent({
                   Historial de pagos
                 </h2>
                 {filteredPagos.length > 0 && (
-                  <span className="text-[12.5px] font-semibold tabular-nums text-ink-3">
+                  <span className="text-xs font-semibold tabular-nums text-ink-3">
                     {filteredPagos.length}
                   </span>
                 )}

@@ -639,7 +639,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             below the rows instead of occupying a 56px `.drow` with an empty
             label column, which is what it did before. */}
         {props.kind === "student" && (
-          <p className="border-t border-line bg-sunken px-5 py-3 text-[12.5px] text-ink-3-strong">
+          <p className="border-t border-line bg-sunken px-5 py-3 text-xs text-ink-3-strong">
             Esta información no se puede editar desde aquí. Escriba al club para corregirla.
           </p>
         )}

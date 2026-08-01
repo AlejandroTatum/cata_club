@@ -147,7 +147,7 @@ function Carnet({
           <Image src="/brand/cata-club-logo.jpeg" alt="" width={30} height={30} className="h-[30px] w-[30px] object-cover" />
         </span>
         <div>
-          <b className="block text-[12.5px] font-bold leading-[1.25]">Cata Club</b>
+          <b className="block text-xs font-bold leading-tight">Cata Club</b>
           <span className="block text-[10px] uppercase leading-[1.3] tracking-[0.12em] text-white/60">Tenis de mesa</span>
         </div>
       </div>
@@ -266,7 +266,7 @@ function TrainingRow({ session, first }: { session: UpcomingTraining; first: boo
             </span>
           )}
         </p>
-        <p className="mt-0.5 text-[12.5px] tabular-nums text-ink-3-strong">
+        <p className="mt-0.5 text-xs tabular-nums text-ink-3-strong">
           {formatDate(session.fecha)}
         </p>
       </div>
@@ -324,7 +324,7 @@ function TrainingPanel({
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 pb-3.5 pt-[18px]">
         <h2 className="text-base font-bold tracking-tight text-ink">Próximos entrenamientos</h2>
-        <p className="text-[12.5px] text-ink-3-strong">
+        <p className="text-xs text-ink-3-strong">
           {viewingOwnProfile
             ? "El horario semanal que el club le asignó."
             : `El horario semanal que el club le asignó a ${studentName}.`}
@@ -375,7 +375,7 @@ function TrainingPanel({
           and it is the fact a family checks right after "when is the next
           one". The record itself lives on `/student/attendance`. */}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-x-5 gap-y-2 border-t border-line bg-sunken px-5 py-3.5">
-        <p className="text-[12.5px] leading-relaxed text-ink-3-strong">
+        <p className="text-xs leading-relaxed text-ink-3-strong">
           {recap ? (
             <>
               De {scope} asistió a{" "}

@@ -55,7 +55,7 @@ export default function SearchInput({
         value={value}
         placeholder={placeholder}
         onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
-        className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink outline-none placeholder:text-ink-3"
+        className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-ink-3"
       />
       {shortcut ? (
         <kbd className="flex-none rounded-[5px] border border-line-2 px-[5px] py-[2px] text-[10px] font-bold text-ink-3">

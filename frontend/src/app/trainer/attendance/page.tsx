@@ -856,14 +856,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
               <button
                 type="button"
                 onClick={() => setShowAllDays((prev) => !prev)}
-                className="text-[12.5px] font-semibold text-ink-2 underline underline-offset-2 transition-colors hover:text-ink"
+                className="text-xs font-semibold text-ink-2 underline underline-offset-2 transition-colors hover:text-ink"
               >
                 {showAllDays ? "Ver solo hoy" : "Ver todos los días"}
               </button>
             )}
           </div>
           {visible.emptyToday && (
-            <p className="mb-3 text-[12.5px] text-ink-3">
+            <p className="mb-3 text-xs text-ink-3">
               No hay entrenamientos hoy ({formatDay(today).toLowerCase()}). Mostrando la semana
               completa.
             </p>
@@ -996,7 +996,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 45/45 from the first second, and this says how much of it
                 anybody has actually looked at. */}
             {unreviewedCount > 0 && (
-              <span className="flex items-center gap-1.5 text-[12.5px] font-bold text-ball">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-ball">
                 <AlertTriangle size={12} strokeWidth={2.5} aria-hidden="true" />
                 {unreviewedCount === 1
                   ? "1 alumno sin revisar"

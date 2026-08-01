@@ -141,6 +141,34 @@ el tamaño, que es el punto de la escala.
   —mismo valor, escalón de fábrica— y el `leading-[1.35]` del toast cedió al 1,5 de `sm`, que le
   agranda la caja de línea 2,03px por renglón. Es el único cambio de altura de la banda.
 
+## Lo que costó la banda densa
+
+74 líneas, dos tamaños retirados de la lista blanca. Es el grupo más grande del inventario y,
+a la vez, el más barato: `text-[12.5px]` cae **exacto** sobre `xs`, así que 69 de sus 74 usos no
+mueven un píxel de tamaño. Los otros cinco eran `text-[12px]` y suben 0,5px.
+
+Lo que sí se mueve en esos 69 usos es sutil y conviene decirlo: la clase arbitraria emitía
+`font-size` y nada más, así que su interlineado venía del `1.5` del preflight y su tracking era
+`normal`. `xs` trae 1,5 y 0em. Son los mismos valores, ahora declarados en un solo lugar.
+
+Cuatro decisiones sobre los overrides que viajaban en esas líneas:
+
+- **`leading-[1.5]` del cierre de `ayuda`** se borró: es el mismo 1,5 que trae `xs`. Cambio nulo.
+- **`leading-[1.45]` del hint de primera vez y del cuerpo del toast** se borraron. A 12,5px la
+  diferencia contra 1,5 es 0,625px por renglón, la misma clase de override que la banda de cuerpo
+  ya había retirado.
+- **`leading-[1.55]` de la respuesta del FAQ** se conservó como `leading-prose`. No por la
+  distancia —también es 0,625px— sino porque ese escalón existe justamente para "ayuda, textos
+  legales, prosa de estado vacío", y la respuesta del FAQ es el caso que lo nombra.
+- **`leading-[1.25]` de la marca en `student`** pasó a `leading-tight`, escalón de fábrica de
+  valor idéntico. A 3,1px de su escalón, ahí sí hay una decisión que sostener.
+- **`tracking-[0.06em]` de la acción del toast** pasó a `tracking-wider` (0,05em). Es una palabra
+  en mayúsculas: dejarla en el 0em de `xs` la habría cerrado. La diferencia es 0,125px por letra.
+
+No hubo ninguna línea responsive en esta banda: `rg` sobre clases con prefijo de breakpoint y
+tamaño arbitrario no devuelve nada en todo `frontend/src`. La única pareja responsive viva sigue
+siendo el `min-[980px]:text-display` + `min-[980px]:leading-crisp` de `AuthShell`.
+
 ## Anclas que no se mueven
 
 Son las dos reglas duras de "La Paleta" y sirven de control negativo de cualquier verificación

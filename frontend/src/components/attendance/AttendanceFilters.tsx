@@ -163,7 +163,7 @@ export default function AttendanceFilters({
         )}
 
         {filters.rangeError && (
-          <p role="alert" className="mt-2 text-[12.5px] text-cata-red">
+          <p role="alert" className="mt-2 text-xs text-cata-red">
             {filters.rangeError}
           </p>
         )}

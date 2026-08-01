@@ -117,7 +117,7 @@ export const AUTH_INPUT_CLASSES =
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 /** `.field label` (line 239) — 12.5px/600, 6px below the control. */
-export const AUTH_LABEL_CLASSES = "mb-1.5 block text-[12.5px] font-semibold text-ink";
+export const AUTH_LABEL_CLASSES = "mb-1.5 block text-xs font-semibold text-ink";
 
 /**
  * The muted ink used on coal (`#8B8B93`) and the brighter supporting line
@@ -266,13 +266,14 @@ export default function AuthShell({
             <b data-testid="auth-figure" className="text-xl font-extrabold tabular-nums">
               {years}
             </b>
-            <small className={`text-[12.5px] ${ON_COAL_MUTED}`}>años formando deportistas</small>
+            <small className={`text-xs ${ON_COAL_MUTED}`}>años formando deportistas</small>
           </p>
         </div>
 
-        {/* `.copy` — 12px, alone at the foot so it weighs the same as the
-            exit link above and the middle row stays on the page's axis. */}
-        <p className={`relative z-[1] self-end text-[12px] ${ON_COAL_MUTED}`}>
+        {/* `.copy` — the prototype says 12px; `xs` renders it at 12.5px, the
+            nearest step. Alone at the foot so it weighs the same as the exit
+            link above and the middle row stays on the page's axis. */}
+        <p className={`relative z-[1] self-end text-xs ${ON_COAL_MUTED}`}>
           © 2026 Cata Club — Tenis de Mesa
         </p>
       </div>

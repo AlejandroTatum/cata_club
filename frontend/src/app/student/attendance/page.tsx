@@ -206,7 +206,7 @@ function SessionList({
           {studentName ? `Sesiones registradas de ${studentName}` : "Sesiones registradas"}
         </h2>
         {sessions.length > 0 && (
-          <span className="text-[12.5px] font-semibold tabular-nums text-ink-3">
+          <span className="text-xs font-semibold tabular-nums text-ink-3">
             {sessions.length}
           </span>
         )}
@@ -356,7 +356,7 @@ function AttendanceView({
 
             {/* The scope, stated. Rows presented without this line read as
                 "this is the whole record". */}
-            <p className="max-w-[68ch] text-[12.5px] leading-relaxed text-ink-3-strong">
+            <p className="max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
               Su portal recibe las {PORTAL_SESSION_WINDOW} sesiones más recientes que el club
               registró. Si necesita un período anterior, pídalo al club.
             </p>

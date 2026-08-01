@@ -140,7 +140,7 @@ describe("LoginPage", () => {
 
       const recovery = screen.getByRole("link", { name: /olvidó su contraseña/i });
       expect(recovery.className).toContain("min-h-[24px]");
-      expect(recovery.className).toContain("text-[12.5px]");
+      expect(recovery.className).toContain("text-xs");
     });
 
     it("leaves the inline enrolment link alone — SC 2.5.8 exempts it", () => {

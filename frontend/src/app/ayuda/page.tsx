@@ -43,7 +43,7 @@ export default function AyudaPage(): React.ReactElement {
           <h2 id="horarios-heading" className="mb-1 text-base font-extrabold text-ink">
             Horarios de entrenamiento
           </h2>
-          <p className="mb-4 text-[12.5px] text-ink-2">
+          <p className="mb-4 text-xs text-ink-2">
             Días y horas fijos del club, por categoría.
           </p>
 
@@ -71,9 +71,9 @@ export default function AyudaPage(): React.ReactElement {
                     <th scope="row" className="py-2.5 pr-4 text-sm font-bold text-ink">
                       {schedule.category}
                     </th>
-                    <td className="py-2.5 pr-4 text-[12.5px] text-ink-2">{schedule.ages}</td>
-                    <td className="py-2.5 pr-4 text-[12.5px] text-ink-2">{schedule.days}</td>
-                    <td className="py-2.5 text-[12.5px] font-semibold tabular-nums text-ink">
+                    <td className="py-2.5 pr-4 text-xs text-ink-2">{schedule.ages}</td>
+                    <td className="py-2.5 pr-4 text-xs text-ink-2">{schedule.days}</td>
+                    <td className="py-2.5 text-xs font-semibold tabular-nums text-ink">
                       {schedule.hours}
                     </td>
                   </tr>
@@ -98,7 +98,7 @@ export default function AyudaPage(): React.ReactElement {
                 {section.entries.map((entry) => (
                   <div key={entry.question}>
                     <dt className="text-sm font-bold text-ink">{entry.question}</dt>
-                    <dd className="mt-1 text-[12.5px] leading-[1.55] text-ink-2">{entry.answer}</dd>
+                    <dd className="mt-1 text-xs leading-prose text-ink-2">{entry.answer}</dd>
                   </div>
                 ))}
               </dl>
@@ -114,7 +114,7 @@ export default function AyudaPage(): React.ReactElement {
         <section className="rounded-card border border-line-2 bg-sunken p-5 text-center sm:p-6">
           <HelpCircle size={20} strokeWidth={1.5} aria-hidden="true" className="mx-auto mb-2 text-ink-3" />
           <h2 className="text-sm font-extrabold text-ink">¿No encontró lo que buscaba?</h2>
-          <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-[1.5] text-ink-2">
+          <p className="mx-auto mt-1 max-w-md text-xs text-ink-2">
             Pregúntele al asistente con sus propias palabras, o escríbale al club directamente.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-3">

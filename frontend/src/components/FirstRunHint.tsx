@@ -79,7 +79,7 @@ export default function FirstRunHint({
 
   return (
     <div
-      className={`flex items-start gap-2.5 rounded-ctl border border-line-2 bg-sunken px-3.5 py-2.5 text-[12.5px] leading-[1.45] text-ink-2 ${className}`}
+      className={`flex items-start gap-2.5 rounded-ctl border border-line-2 bg-sunken px-3.5 py-2.5 text-xs text-ink-2 ${className}`}
     >
       <Lightbulb size={15} strokeWidth={2} aria-hidden="true" className="mt-px shrink-0 text-ink-3" />
       <p className="min-w-0 flex-1">{children}</p>

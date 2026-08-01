@@ -213,7 +213,7 @@ export default function NivelLadder({
                   <span
                     key={student.id}
                     title={student.nombre}
-                    className="rounded-[6px] bg-ball px-1.5 py-0.5 text-[12.5px] font-bold text-ball-ink"
+                    className="rounded-[6px] bg-ball px-1.5 py-0.5 text-xs font-bold text-ball-ink"
                   >
                     {student.nombre}
                   </span>

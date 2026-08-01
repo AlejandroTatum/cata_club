@@ -34,7 +34,7 @@ export type Axis = "typography" | "leading" | "tracking" | "icon" | "shadow" | "
  */
 export const ALLOWLIST: Record<Axis, readonly string[]> = {
   /**
-   * `text-[…]`. Eight hand-picked sizes left of the original twenty-five.
+   * `text-[…]`. Six hand-picked sizes left of the original twenty-five.
    *
    * The display band — 18 · 20 · 24 · 26 · 27 · 30 · 32 · 40 · 42 · 46 · 56 —
    * went first: every call site at 18px and above names a step.
@@ -43,21 +43,34 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
    * (13.5px), and `14.5`, `15` and `17` into `base` (15px): six sizes, 145
    * call sites, one half-pixel cluster less.
    *
-   * What remains is the 9–12.5px range, which is the dense and micro bands
-   * of the same migration issue.
+   * The dense band followed: `12` and `12.5` collapsed into `xs` (12.5px)
+   * across 74 call sites — the single largest cluster of the inventory.
+   *
+   * What remains is the 9–11.5px range, which is the micro band of the same
+   * migration issue.
    */
-  typography: ["9px", "9.5px", "10px", "10.5px", "11px", "11.5px", "12px", "12.5px"],
+  typography: ["9px", "9.5px", "10px", "10.5px", "11px", "11.5px"],
 
   /**
-   * `leading-[…]`. Six ratios, none of which is a `leading-*` step.
+   * `leading-[…]`. Three ratios, none of which is a `leading-*` step.
    *
    * `1.12` and `1.15` retired with the display band: both were headline
    * line-heights, and `leading-crisp` (1.15) is the step that names them.
    *
    * `1.35` retired with the body band. Its single call site was the toast
    * message, which now takes the 1.5 that `sm` brings.
+   *
+   * `1.45` retired with the dense band, and so did one of the two `1.5` call
+   * sites: the hint box, the toast body and the help escape hatch sit within
+   * 0.05 of the 1.5 that `xs` already carries — under a pixel at 12.5px — so
+   * they were dropped instead of renamed. The other two kept their value
+   * under a name, because a step exists for each case: `1.55` on the FAQ
+   * answer is `leading-prose`, and `1.25` on the brand label is
+   * `leading-tight`, a factory step that is exactly 1.25.
+   *
+   * The three left all sit on micro-band call sites, `1.5` included.
    */
-  leading: ["1.2", "1.25", "1.3", "1.45", "1.5", "1.55"],
+  leading: ["1.2", "1.3", "1.5"],
 
   /**
    * `tracking-[…]`. Six values, all in `em`.
@@ -75,8 +88,12 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
    * call sites sat 0.005em from the tracking `base` already carries and were
    * dropped; the single `-0.02em` had to keep tightening a tabular figure, so
    * it names `tracking-dense` instead.
+   *
+   * `0.06em` retired with the dense band. Its single call site is the toast
+   * action label, an uppercase run that would close up on the 0em `xs`
+   * carries, so it names `tracking-wider` (0.05em) instead of being dropped.
    */
-  tracking: ["-0.01em", "0.06em", "0.1em", "0.12em", "0.13em", "0.2em"],
+  tracking: ["-0.01em", "0.1em", "0.12em", "0.13em", "0.2em"],
 
   /** `size={…}` on a lucide icon. Fourteen sizes, ten of them between 10 and 21. */
   icon: [
