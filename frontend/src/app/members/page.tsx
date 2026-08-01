@@ -1496,19 +1496,24 @@ export default function MembersPage(): React.ReactElement {
                 </TableBody>
               </Table>
             </div>
+            {/* INSIDE the card, not after it. This pager used to be a sibling
+                of the card it paginates, so it floated on the canvas while
+                every other list in the product carried its pager welded to the
+                foot of the card. The `footer` variant owns that placement now,
+                so the move is a nesting change and no classes travel with it. */}
+            {totalPages > 1 && (
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                totalItems={filteredAccounts.length}
+                pageSize={MEMBERS_PAGE_SIZE}
+                itemNoun="miembro"
+                variant="footer"
+              />
+            )}
           </div>
         ) : null}
-
-        {!loading && filteredAccounts.length > 0 && totalPages > 1 && (
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            totalItems={filteredAccounts.length}
-            pageSize={MEMBERS_PAGE_SIZE}
-            itemNoun="miembro"
-          />
-        )}
 
         {!loading && filteredAccounts.length === 0 && (
           <div className="card">

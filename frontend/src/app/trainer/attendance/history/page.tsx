@@ -219,7 +219,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
 
                   {totalPages > 1 && (
                     <Pagination
-                      className="mt-0 border-t border-line bg-canvas px-5 py-3.5"
+                      variant="footer"
                       page={page}
                       totalPages={totalPages}
                       onPageChange={setPage}

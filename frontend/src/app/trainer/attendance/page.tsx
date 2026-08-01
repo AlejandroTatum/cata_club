@@ -1220,7 +1220,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
                 {filteredStudents.length > WIZARD_PAGE_SIZE && (
                   <Pagination
-                    className="mt-0 rounded-ctl border border-line bg-canvas px-4 py-3"
+                    variant="footer"
                     page={studentPage}
                     totalPages={totalStudentPages}
                     onPageChange={setStudentPage}
