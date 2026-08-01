@@ -24,9 +24,20 @@ vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+// Renders `actions` as well as `children`. The double used to take only
+// `children`, so it silently swallowed a whole slot of the real component's
+// contract: a screen could move its primary action into the header and every
+// assertion about that action would go red for a reason that had nothing to do
+// with the screen. A stub may be smaller than the thing it stands in for; it
+// may not answer differently.
 vi.mock("@/components/shell/AppShell", () => ({
   __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  default: ({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) => (
+    <div>
+      {actions}
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock("../AttendanceStatusChart", () => ({
