@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Save, CheckCircle2, Stethoscope, Plus } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import { ErrorState, LoadingState } from "@/components/ui";
@@ -113,11 +114,11 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
   return (
     <div className="mt-3 rounded-2xl border border-cata-border bg-cata-surface p-3 sm:p-4">
       <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-cata-text">
-        <Stethoscope size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+        <Stethoscope size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
         Ficha médica
         {state.isNew && (
           <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-2xs tracking-flat font-semibold text-blue-700">
-            <Plus size={10} strokeWidth={2} aria-hidden="true" />
+            <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Nueva
           </span>
         )}
@@ -203,9 +204,9 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
         >
           {saving ? (
-            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
           ) : (
-            <Save size={14} strokeWidth={1.5} aria-hidden="true" />
+            <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           )}
           {saving ? "Guardando…" : "Guardar ficha médica"}
         </button>
@@ -216,7 +217,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
         )}
         {saveSuccess && (
           <p className="flex items-center gap-1 text-sm text-cata-state-ok" role="status">
-            <CheckCircle2 size={14} strokeWidth={2} aria-hidden="true" />
+            <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Ficha médica guardada.
           </p>
         )}

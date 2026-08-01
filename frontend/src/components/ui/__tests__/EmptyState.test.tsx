@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Calendar } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 
@@ -59,7 +60,7 @@ describe("EmptyState — content", () => {
 describe("EmptyState — icon", () => {
   it("puts the icon in a neutral disc", () => {
     const { container } = render(
-      <EmptyState icon={<Calendar size={21} />} title="Sin registros" />,
+      <EmptyState icon={<Calendar size={ICON.lg} />} title="Sin registros" />,
     );
     const disc = container.querySelector("span[aria-hidden='true']");
     expect(disc).toHaveClass("bg-state-neutral-bg", "rounded-full");
@@ -67,7 +68,7 @@ describe("EmptyState — icon", () => {
 
   it("keeps the icon out of the accessibility tree", () => {
     const { container } = render(
-      <EmptyState icon={<Calendar size={21} />} title="Sin registros" />,
+      <EmptyState icon={<Calendar size={ICON.lg} />} title="Sin registros" />,
     );
     expect(container.querySelector("svg")?.closest("span")).toHaveAttribute(
       "aria-hidden",

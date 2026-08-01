@@ -39,6 +39,7 @@ import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ALLOWLIST, type Axis } from "./arbitrary-style-values.allowlist";
+import { ICON_STEPS } from "../icon-size";
 
 const SRC = join(__dirname, "..", "..");
 
@@ -59,6 +60,8 @@ interface AxisRule {
   readonly advice: string;
   /** Only scan files that match. Absent means every source file. */
   readonly onlyIn?: RegExp;
+  /** A captured value this axis accepts outright, whatever the allowlist says. */
+  readonly exempt?: (value: string) => boolean;
 }
 
 /**
@@ -105,6 +108,13 @@ const TRACKING_SCALE: readonly Step[] = [
   { token: "tracking-widest", value: 0.1 },
 ];
 
+/**
+ * The icon scale, imported rather than transcribed: `icon-size.ts` declares
+ * the three steps and this table only borrows them, so the lock can never
+ * suggest a size the product does not export.
+ */
+const ICON_SCALE: readonly Step[] = ICON_STEPS;
+
 const BREAKPOINT_SCALE: readonly Step[] = [
   { token: "sm:", value: 640 },
   { token: "md:", value: 768 },
@@ -147,11 +157,19 @@ export const AXES: Record<Axis, AxisRule> = {
   },
   icon: {
     spell: (v) => `size={${v}}`,
-    pattern: /\bsize=\{(\d+(?:\.\d+)?)\}/g,
-    // No icon scale exists in `tailwind.config.ts` yet, so there is no token
-    // to name. Until #29–#32 define one, the honest advice is to reuse a size
-    // the product already speaks rather than to invent a thirteenth.
-    advice: "reuse an icon size already in the inventory, or add a token first",
+    // The SECOND axis that does not look for brackets, and the only one that
+    // captures an expression rather than a value. `#30` emptied the icon
+    // allowlist, so a numeric literal already failed — but a literal escapes
+    // through any name (`size={iconSize}`, `size={big ? 24 : 16}`), and a
+    // fourteen-size inventory is exactly what one such name grows back into.
+    // So the rule inverts, the way the weight axis does: everything is a
+    // violation except an expression built out of `ICON` steps.
+    pattern: /\bsize=\{([^{}]*)\}/g,
+    // Free of digits AND naming a step: `ICON.base` passes, and so does a
+    // ternary between two steps, because neither can smuggle a size in.
+    exempt: (v) => /\bICON\.(sm|base|lg)\b/.test(v) && !/\d/.test(v),
+    advice: "use a step of the `ICON` scale from `@/lib/icon-size`",
+    scale: ICON_SCALE,
     // Every `size={n}` in the product today is a lucide icon, and every file
     // that writes one imports lucide. Scoping by import keeps the rule true to
     // its name instead of policing any component that happens to take `size`.
@@ -221,6 +239,7 @@ export function findViolations(file: string, code: string): Violation[] {
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(code)) !== null) {
       const value = match[1];
+      if (rule.exempt?.(value)) continue;
       if (ALLOWLIST[axis].includes(value)) continue;
       found.push({
         axis,
@@ -340,6 +359,29 @@ describe("the detector itself", () => {
     expect(findViolations("x.tsx", "<Avatar size={99} />")).toEqual([]);
   });
 
+  it("accepts a step of the icon scale and nothing else that is numeric", () => {
+    const lucide = 'import { X } from "lucide-react";\n';
+
+    // The three steps, alone or inside an expression built only out of them.
+    const written = [
+      "<X size={ICON.sm} />",
+      "<X size={ICON.base} />",
+      "<X size={ICON.lg} />",
+      '<X size={variant === "landing" ? ICON.base : ICON.sm} />',
+    ];
+    expect(written.flatMap((code) => findViolations("x.tsx", lucide + code))).toEqual([]);
+
+    // A literal is the drift the scale replaces, and an opaque expression is
+    // the loophole a literal escapes through. Both fail.
+    const [literal] = findViolations("app/x.tsx", `${lucide}<X size={16} />`);
+    expect(literal.value).toBe("16");
+    expect(literal.message).toContain("ICON.sm");
+
+    const [opaque] = findViolations("app/x.tsx", `${lucide}<X size={iconSize} />`);
+    expect(opaque.value).toBe("iconSize");
+    expect(opaque.message).toContain("a step of the `ICON` scale");
+  });
+
   it("leaves arbitrary colours to the palette guard", () => {
     expect(findViolations("x.tsx", 'className="text-[#B9B9C1]"')).toEqual([]);
   });
@@ -357,7 +399,9 @@ describe("the detector itself", () => {
     expect(suggestionFor("leading", "1.24")).toContain("leading-tight");
     expect(suggestionFor("tracking", "-0.048em")).toContain("tracking-tighter");
     expect(suggestionFor("breakpoint", "980px")).toContain("lg:");
-    // No scale exists for icons yet, so it advises instead of inventing one.
-    expect(suggestionFor("icon", "99")).toBe(AXES.icon.advice);
+    // 20px snaps to `ICON.base` (18px), two away, not to `ICON.lg` (24px).
+    expect(suggestionFor("icon", "20")).toContain("ICON.base");
+    // An expression carries no number, so the advice stands on its own.
+    expect(suggestionFor("icon", "iconSize")).toBe(AXES.icon.advice);
   });
 });

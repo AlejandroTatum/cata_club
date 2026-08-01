@@ -116,13 +116,13 @@ describe("LoginPage", () => {
    * the password toggle at 16x16 (a bare 16px icon in an unpadded button) and
    * the recovery link at 141.5x18.8 (a bare 12.5px line of type).
    *
-   * The fix is hit area only — the icon is still 16px and the type is still
+   * The fix is hit area only — the icon still rides its step and the type is still
    * 12.5px/600. "Inscríbase" is deliberately left alone: it sits inside the
    * sentence "¿No tiene una cuenta? Inscríbase" and is covered by the
    * criterion's own Inline exception.
    */
   describe("targets big enough to hit — SC 2.5.8", () => {
-    it("gives the password toggle a 24x24 target around its 16px icon", () => {
+    it("gives the password toggle a 24x24 target around its icon", () => {
       mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
 
       render(<LoginPage />);

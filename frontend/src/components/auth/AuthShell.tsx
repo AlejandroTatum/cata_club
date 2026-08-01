@@ -96,6 +96,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { yearsSinceFounding } from "@/app/landing/landing-config";
 
@@ -200,7 +201,7 @@ export default function AuthShell({
              extra 4.5px is split around them by `items-center`. */
           className={`relative z-[1] inline-flex min-h-[24px] items-center gap-1.5 self-start justify-self-start text-sm transition-colors hover:text-white ${ON_COAL_MUTED}`}
         >
-          <ArrowLeft size={14} strokeWidth={2} aria-hidden="true" />
+          <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Volver al sitio
         </Link>
 

@@ -6,6 +6,7 @@
 
 import type { InputHTMLAttributes, ReactElement, ReactNode } from "react";
 import { User, Calendar, Hash, Phone, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { calculateAge } from "@/app/student/enroll/enroll-utils";
 import { Button } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
@@ -94,7 +95,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
       </div>
       {hasError ? (
         <p id={messageId} className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
-          <AlertTriangle size={13} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+          <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
           {opts.error}
         </p>
       ) : opts.hint ? (
@@ -199,14 +200,14 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
       <WizardInput
         idPrefix={idPrefix} disabled={disabled} label="Nombres" value={props.nombres}
         onChange={props.onNombresChange} placeholder="p. ej. Juan Carlos" required
-        icon={<User size={16} strokeWidth={1.5} aria-hidden="true" />}
+        icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         error={errors.nombres} onBlur={() => props.onFieldBlur?.("nombres")}
         pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <WizardInput
         idPrefix={idPrefix} disabled={disabled} label="Apellidos" value={props.apellidos}
         onChange={props.onApellidosChange} placeholder="p. ej. Rodríguez López" required
-        icon={<User size={16} strokeWidth={1.5} aria-hidden="true" />}
+        icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         error={errors.apellidos} onBlur={() => props.onFieldBlur?.("apellidos")}
         pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
@@ -214,13 +215,13 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         <WizardInput
           idPrefix={idPrefix} disabled={disabled} label="Fecha de Nacimiento" value={props.fechaNacimiento}
           onChange={props.onFechaNacimientoChange} type="date" required
-          icon={<Calendar size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<Calendar size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           error={errors.fechaNacimiento} onBlur={() => props.onFieldBlur?.("fechaNacimiento")}
         />
         <WizardInput
           idPrefix={idPrefix} disabled={disabled} label="Cédula de Identidad" value={props.cedula}
           onChange={props.onCedulaChange} placeholder="p. ej. 1712345678" required
-          icon={<Hash size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           pattern="[0-9]{10}" maxLength={CEDULA_DIGITS} inputMode="numeric"
           error={errors.cedula} onBlur={() => props.onFieldBlur?.("cedula")}
           hint={
@@ -233,7 +234,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
       <WizardInput
         idPrefix={idPrefix} disabled={disabled} label="Teléfono" value={props.telefono}
         onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
-        icon={<Phone size={16} strokeWidth={1.5} aria-hidden="true" />}
+        icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         pattern="[0-9]+" maxLength={10} minLength={7} inputMode="tel"
         error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
         hint="Entre siete y diez dígitos, con o sin espacios."
@@ -271,7 +272,7 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
     <>
       <div className="my-8 h-px bg-line" />
       <div className="mb-3 flex items-center gap-2">
-        <Phone size={14} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+        <Phone size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
         <p className="text-2xs font-bold uppercase text-ink-3">
           Contacto de Emergencia
         </p>
@@ -280,14 +281,14 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
         <WizardInput
           idPrefix={idPrefix} disabled={disabled} label="Nombre del Contacto" value={props.contacto}
           onChange={props.onContactoChange} placeholder="p. ej. María Rodríguez" required
-          icon={<UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           error={props.contactoError} onBlur={props.onContactoBlur}
           pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={150} minLength={3}
         />
         <WizardInput
           idPrefix={idPrefix} disabled={disabled} label="Teléfono de Emergencia" value={props.telefono}
           onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
-          icon={<Phone size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           pattern="[0-9]+" maxLength={10} minLength={7} inputMode="tel"
           error={props.telefonoError} onBlur={props.onTelefonoBlur}
           hint="Entre siete y diez dígitos, con o sin espacios."
@@ -329,7 +330,7 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
     <>
       {props.formErrors.length > 0 && (
         <div className="alert-error mt-4 items-start" role="alert">
-          <AlertTriangle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
           <div className="space-y-2">
             <ul className="list-inside list-disc space-y-1">
               {props.formErrors.map((err, i) => (
@@ -345,7 +346,7 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
         <div>
           {!props.isFirst && (
             <Button variant="ghost" onClick={props.onBack} disabled={props.submitting}>
-              <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+              <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Atrás
             </Button>
           )}
@@ -356,7 +357,7 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
             <>
               <Button variant="primary" onClick={props.onNext} disabled={props.nextDisabled}>
                 Siguiente
-                <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
+                <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               </Button>
               {props.nextDisabled && props.nextBlockedReason && (
                 <p className="max-w-xs text-right text-xs text-ink-3">{props.nextBlockedReason}</p>

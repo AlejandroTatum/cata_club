@@ -11,6 +11,7 @@
 
 import type { ChangeEvent, ReactElement } from "react";
 import { Search } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { cn } from "./cn";
 
 export interface SearchInputProps {
@@ -44,7 +45,7 @@ export default function SearchInput({
     >
       <span className="sr-only">{label}</span>
       <Search
-        size={15}
+        size={ICON.sm}
         strokeWidth={2}
         aria-hidden="true"
         className="flex-none text-ink-3"

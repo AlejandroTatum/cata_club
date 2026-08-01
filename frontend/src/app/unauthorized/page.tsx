@@ -36,6 +36,7 @@
 
 import Image from "next/image";
 import { LogOut, MessageCircle } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { openHelpChat, useHelpChatOpen } from "@/components/chatbot/help-chat-store";
 import { useAuth } from "@/contexts/AuthContext";
@@ -73,11 +74,11 @@ function UnauthorizedContent(): React.ReactElement {
           {/* Coal, not red: red is the primary CTA and the destructive colour,
               and "contactar al club" is neither. */}
           <Button variant="dark" onClick={(): void => openHelpChat()} aria-expanded={chatOpen}>
-            <MessageCircle size={15} strokeWidth={2} aria-hidden="true" />
+            <MessageCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Contactar al club
           </Button>
           <Button variant="secondary" onClick={(): void => void logout()}>
-            <LogOut size={15} strokeWidth={2} aria-hidden="true" />
+            <LogOut size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Cerrar sesión
           </Button>
         </div>

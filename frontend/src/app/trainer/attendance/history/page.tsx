@@ -42,6 +42,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
 import { ClipboardList } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
 import {
@@ -154,7 +155,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
             <div className="overflow-hidden rounded-card border border-line bg-paper">
               {sessions.length === 0 ? (
                 <EmptyState
-                  icon={<ClipboardList size={21} strokeWidth={1.5} aria-hidden="true" />}
+                  icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                   title="No hay listas en este período"
                   description={
                     query === null

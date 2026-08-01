@@ -18,6 +18,7 @@ import { type FormEvent, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getDefaultRoute } from "@/lib/auth-utils";
@@ -176,7 +177,7 @@ export default function LoginPage(): React.ReactElement {
           </label>
           <div className="relative">
             <Mail
-              size={15}
+              size={ICON.sm}
               strokeWidth={1.5}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
               aria-hidden="true"
@@ -208,7 +209,7 @@ export default function LoginPage(): React.ReactElement {
           </label>
           <div className="relative">
             <Lock
-              size={15}
+              size={ICON.sm}
               strokeWidth={1.5}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
               aria-hidden="true"
@@ -226,7 +227,7 @@ export default function LoginPage(): React.ReactElement {
               disabled={submitting}
               className={`${AUTH_INPUT_CLASSES} pl-9 pr-10`}
             />
-            {/* The 16px icon used to BE the button: no padding, so the target
+            {/* The icon used to BE the button: no padding, so the target
                 measured 16x16 — the smallest in the product, against the 24x24
                 WCAG 2.2 SC 2.5.8 asks for. `h-6 w-6` with the glyph centred
                 buys the hit area without touching the icon, and pulling the
@@ -240,9 +241,9 @@ export default function LoginPage(): React.ReactElement {
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
             >
               {showPassword ? (
-                <EyeOff size={16} strokeWidth={1.5} aria-hidden="true" />
+                <EyeOff size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               ) : (
-                <Eye size={16} strokeWidth={1.5} aria-hidden="true" />
+                <Eye size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               )}
             </button>
           </div>

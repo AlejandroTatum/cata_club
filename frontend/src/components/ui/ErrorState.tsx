@@ -24,6 +24,7 @@
 
 import type { ReactElement } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import Button from "./Button";
 import { cn } from "./cn";
 
@@ -58,14 +59,14 @@ export default function ErrorState({
         aria-hidden="true"
         className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-paper text-state-bad"
       >
-        <AlertTriangle size={21} strokeWidth={1.5} />
+        <AlertTriangle size={ICON.lg} strokeWidth={1.5} />
       </span>
       <b className="text-base font-bold text-ink">{title}</b>
       {message ? <p className="max-w-[44ch] text-sm text-ink-2">{message}</p> : null}
       {onRetry ? (
         <div className="mt-1">
           <Button size="sm" onClick={onRetry}>
-            <RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />
+            <RefreshCw size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             {retryLabel}
           </Button>
         </div>

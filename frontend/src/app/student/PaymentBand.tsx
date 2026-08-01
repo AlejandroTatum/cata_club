@@ -30,6 +30,7 @@
 
 import Link from "next/link";
 import { ArrowRight, CreditCard } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { buttonClasses } from "@/components/ui";
 import type { PaymentSituation } from "./student-utils";
 
@@ -95,10 +96,10 @@ export default function PaymentBand({ situation, action }: PaymentBandProps): Re
           )}
         >
           {urgent ? (
-            <CreditCard size={16} strokeWidth={1.5} aria-hidden="true" />
+            <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           ) : null}
           {action.label}
-          <ArrowRight size={15} strokeWidth={2} aria-hidden="true" />
+          <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>
       )}
     </section>

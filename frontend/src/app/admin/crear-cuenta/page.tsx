@@ -41,6 +41,7 @@ import {
   Heart,
   Dumbbell,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import {
   CREAR_CUENTA_STEP_ORDER,
   CREAR_CUENTA_STEP_LABELS,
@@ -244,7 +245,7 @@ function CrearCuentaContent(): React.ReactElement {
             }`}
           >
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cata-red/15">
-              <GraduationCap size={20} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+              <GraduationCap size={ICON.base} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Jugador</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
@@ -262,7 +263,7 @@ function CrearCuentaContent(): React.ReactElement {
             }`}
           >
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-              <Building2 size={20} strokeWidth={1.5} className="text-blue-700" aria-hidden="true" />
+              <Building2 size={ICON.base} strokeWidth={1.5} className="text-blue-700" aria-hidden="true" />
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Representante</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
@@ -280,7 +281,7 @@ function CrearCuentaContent(): React.ReactElement {
             }`}
           >
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50">
-              <Baby size={20} strokeWidth={1.5} className="text-purple-700" aria-hidden="true" />
+              <Baby size={ICON.base} strokeWidth={1.5} className="text-purple-700" aria-hidden="true" />
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Menor / Dependiente</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
@@ -298,7 +299,7 @@ function CrearCuentaContent(): React.ReactElement {
             }`}
           >
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
-              <Dumbbell size={20} strokeWidth={1.5} className="text-emerald-700" aria-hidden="true" />
+              <Dumbbell size={ICON.base} strokeWidth={1.5} className="text-emerald-700" aria-hidden="true" />
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Entrenador</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
@@ -310,7 +311,7 @@ function CrearCuentaContent(): React.ReactElement {
         {formData.accountType === "MENOR" && age !== null && !isNaN(age) && age >= 18 && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             <p className="flex items-center gap-1.5 font-semibold">
-              <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
+              <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               La fecha de nacimiento indica una persona mayor de edad ({age} años). Seleccione Jugador o Representante.
             </p>
           </div>
@@ -336,7 +337,7 @@ function CrearCuentaContent(): React.ReactElement {
           pattern="[A-Za-z\u00C0-\u024F\s]+"
           maxLength={100}
           minLength={3}
-          icon={<User size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         />
 
         <WizardInput
@@ -349,7 +350,7 @@ function CrearCuentaContent(): React.ReactElement {
           pattern="[A-Za-z\u00C0-\u024F\s]+"
           maxLength={100}
           minLength={3}
-          icon={<User size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         />
 
         <WizardInput
@@ -445,7 +446,7 @@ function CrearCuentaContent(): React.ReactElement {
             </p>
             <div className="relative">
               <Search
-                size={14}
+                size={ICON.sm}
                 strokeWidth={1.5}
                 className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-cata-text/65"
                 aria-hidden="true"
@@ -573,7 +574,7 @@ function CrearCuentaContent(): React.ReactElement {
           type="email"
           disabled={submitting}
           required
-          icon={<Mail size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         />
 
         <WizardInput
@@ -584,7 +585,7 @@ function CrearCuentaContent(): React.ReactElement {
           type="password"
           disabled={submitting}
           required
-          icon={<Lock size={16} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<Lock size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         />
       </div>
     );
@@ -606,7 +607,7 @@ function CrearCuentaContent(): React.ReactElement {
 
         <div className="card-hover p-4">
           <div className="mb-3 flex items-center gap-2">
-            <FileText size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+            <FileText size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
             <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
               Tipo de Cuenta
             </h3>
@@ -618,7 +619,7 @@ function CrearCuentaContent(): React.ReactElement {
 
         <div className="card-hover p-4">
           <div className="mb-3 flex items-center gap-2">
-            <User size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+            <User size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
             <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
               Datos Personales
             </h3>
@@ -660,7 +661,7 @@ function CrearCuentaContent(): React.ReactElement {
 
         <div className="card-hover p-4">
           <div className="mb-3 flex items-center gap-2">
-            <Mail size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+            <Mail size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
             <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
               Credenciales de Acceso
             </h3>
@@ -676,7 +677,7 @@ function CrearCuentaContent(): React.ReactElement {
         {formData.tipoSangre && (
           <div className="card-hover p-4">
             <div className="mb-3 flex items-center gap-2">
-              <FileText size={14} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+              <FileText size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
               <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
                 Ficha Medica
               </h3>
@@ -740,8 +741,8 @@ function CrearCuentaContent(): React.ReactElement {
       {confirmed ? (
         <div className="flex min-h-[75vh] items-center justify-center py-12">
           <div className="w-full max-w-lg text-center">
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-cata-state-ok/10">
-              <CheckCircle size={32} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
+            <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-cata-state-ok/10">
+              <CheckCircle size={ICON.lg} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
             </div>
             <h1 className="mb-3 text-xl font-bold tracking-tight text-cata-text">
               Cuenta Creada
@@ -801,11 +802,11 @@ function CrearCuentaContent(): React.ReactElement {
           {/* Form card */}
           <div className="card mx-auto max-w-2xl p-6 sm:p-8">
             <div className="mb-6 flex items-center gap-2">
-              {step === "type" && <GraduationCap size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "personal" && <User size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "health" && <Heart size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "credentials" && <Lock size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "summary" && <FileText size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
+              {step === "type" && <GraduationCap size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
+              {step === "personal" && <User size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
+              {step === "health" && <Heart size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
+              {step === "credentials" && <Lock size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
+              {step === "summary" && <FileText size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
               <h2 className="text-lg font-semibold text-cata-text">
                 {CREAR_CUENTA_STEP_LABELS[step]}
               </h2>
@@ -836,7 +837,7 @@ function CrearCuentaContent(): React.ReactElement {
                       "Creando cuenta..."
                     ) : (
                       <>
-                        <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
+                        <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                         Crear Cuenta
                       </>
                     )}

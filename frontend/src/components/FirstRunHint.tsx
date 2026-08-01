@@ -31,6 +31,7 @@
 
 import { useEffect, useState } from "react";
 import { Lightbulb, X } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 
 /** Namespaced alongside the other remembered preferences. */
 export function hintKey(id: string): string {
@@ -81,7 +82,7 @@ export default function FirstRunHint({
     <div
       className={`flex items-start gap-2.5 rounded-ctl border border-line-2 bg-sunken px-3.5 py-2.5 text-xs text-ink-2 ${className}`}
     >
-      <Lightbulb size={15} strokeWidth={2} aria-hidden="true" className="mt-px shrink-0 text-ink-3" />
+      <Lightbulb size={ICON.sm} strokeWidth={2} aria-hidden="true" className="mt-px shrink-0 text-ink-3" />
       <p className="min-w-0 flex-1">{children}</p>
       <button
         type="button"

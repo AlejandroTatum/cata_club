@@ -36,6 +36,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api";
 
 /** The query parameter that names the profile a family screen is about. */
@@ -228,7 +229,7 @@ export default function ManagedStudentPicker({
           ))}
         </select>
         <ChevronDown
-          size={14}
+          size={ICON.sm}
           strokeWidth={1.5}
           className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-3"
           aria-hidden="true"

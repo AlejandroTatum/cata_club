@@ -40,6 +40,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { X, Send, AlertTriangle } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { consultarChatbot, ApiClientError, type ChatbotTurno } from "@/services/api";
 import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 import { getQuickReplies, TALK_TO_CLUB_LABEL } from "./chat-quick-replies";
@@ -230,7 +231,7 @@ export default function ChatWidget({
           aria-label={`Cerrar ${BOT_NAME}`}
           className={`shrink-0 rounded-lg p-1 text-white/55 transition-colors hover:bg-white/10 hover:text-white ${ASSISTANT_FOCUS_RING}`}
         >
-          <X size={16} strokeWidth={2} aria-hidden="true" />
+          <X size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </button>
       </header>
 
@@ -301,7 +302,7 @@ export default function ChatWidget({
             role="alert"
             className="flex items-start gap-2 rounded-ctl border border-state-bad/25 bg-state-bad-bg px-3 py-2.5 text-xs text-state-bad"
           >
-            <AlertTriangle size={14} strokeWidth={2} className="mt-px shrink-0" aria-hidden="true" />
+            <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-px shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
@@ -359,7 +360,7 @@ export default function ChatWidget({
              factor of two. See `chat-focus-ring.ts`. */
           className={`flex h-ctl w-10 flex-none items-center justify-center rounded-ctl bg-cata-red text-white transition-colors hover:bg-cata-red-dark ${ASSISTANT_FOCUS_RING} disabled:cursor-not-allowed disabled:opacity-45`}
         >
-          <Send size={16} strokeWidth={2} aria-hidden="true" />
+          <Send size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </button>
       </form>
     </div>

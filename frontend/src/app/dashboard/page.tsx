@@ -33,6 +33,7 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { ArrowRight } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { buttonClasses, ErrorState, LoadingState, StatCard } from "@/components/ui";
 import {
   fetchDashboardStats,
@@ -168,7 +169,7 @@ export default function DashboardPage(): React.ReactElement {
               </span>
               <Link href="/payments" className={buttonClasses("primary")}>
                 {pendingPayments > 0 ? "Revisar ahora" : "Ver pagos"}
-                <ArrowRight size={15} strokeWidth={2} aria-hidden="true" />
+                <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               </Link>
             </section>
 

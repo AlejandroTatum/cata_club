@@ -37,6 +37,7 @@ import {
   FileText,
   Mail,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import {
   calculateAge,
   buildEnrollmentRequest,
@@ -479,7 +480,7 @@ function EnrollWizard(): React.ReactElement {
         <div className="my-4 h-px bg-cata-border" />
         <div>
           <div className="mb-4 flex items-center gap-2">
-            <Mail size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+            <Mail size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
             <h3 className="text-sm font-semibold text-cata-text">
               {isSelf ? "Credenciales de Acceso" : "Cuenta del Estudiante (Opcional)"}
             </h3>
@@ -524,7 +525,7 @@ function EnrollWizard(): React.ReactElement {
           onChange: (v) => updateField("nombreRepresentante", v),
           placeholder: "p. ej. María Fernanda",
           required: true,
-          icon: <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" />,
+          icon: <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
         {renderField("apellidosRepresentante", {
@@ -540,7 +541,7 @@ function EnrollWizard(): React.ReactElement {
           onChange: (v) => updateField("cedulaRepresentante", v),
           placeholder: "p. ej. 1712345678",
           required: true,
-          icon: <Hash size={16} strokeWidth={1.5} aria-hidden="true" />,
+          icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           pattern: "[0-9]{10}",
           maxLength: 10,
           inputMode: "numeric",
@@ -585,7 +586,7 @@ function EnrollWizard(): React.ReactElement {
 
         <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
           <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
+            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Representante mayor de edad
           </p>
           <p className="mt-1">
@@ -623,7 +624,7 @@ function EnrollWizard(): React.ReactElement {
           </select>
           {shownError("tipoSangre") && (
             <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
-              <AlertTriangle size={13} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+              <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
               {shownError("tipoSangre")}
             </p>
           )}
@@ -635,7 +636,7 @@ function EnrollWizard(): React.ReactElement {
           onChange: (v) => updateField("condicionesSalud", v),
           placeholder:
             "p. ej. Asma, diabetes, problemas cardíacos, lesiones previas…",
-          icon: <Heart size={16} strokeWidth={1.5} aria-hidden="true" />,
+          icon: <Heart size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
 
@@ -645,7 +646,7 @@ function EnrollWizard(): React.ReactElement {
           onChange: (v) => updateField("alergias", v),
           placeholder:
             "p. ej. Alergia al polvo, al látex, a picaduras de insectos…",
-          icon: <AlertTriangle size={16} strokeWidth={1.5} aria-hidden="true" />,
+          icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
 
@@ -668,13 +669,13 @@ function EnrollWizard(): React.ReactElement {
           onChange: (v) => updateField("observaciones", v),
           placeholder:
             "Cualquier otra información relevante que el club deba conocer…",
-          icon: <FileText size={16} strokeWidth={1.5} aria-hidden="true" />,
+          icon: <FileText size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
 
         <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
           <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
+            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
           </p>
           <p className="mt-1 text-blue-700">
@@ -808,8 +809,8 @@ function EnrollWizard(): React.ReactElement {
       {confirmed ? (
         <div className="flex min-h-[75vh] items-center justify-center py-12">
           <div className="w-full max-w-lg text-center">
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-cata-state-ok/10">
-              <CheckCircle size={32} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
+            <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-cata-state-ok/10">
+              <CheckCircle size={ICON.lg} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
             </div>
             <h1 className="mb-3 text-xl font-bold tracking-tight text-cata-text">
               Inscripción Completada
@@ -911,7 +912,7 @@ function EnrollWizard(): React.ReactElement {
           {demoQuickFillEnabled && (
             <div className="mb-6 rounded-xl border border-dashed border-cata-border bg-cata-bg p-3">
               <div className="mb-2 flex items-center gap-2">
-                <AlertTriangle size={14} strokeWidth={1.5} className="text-amber-700" aria-hidden="true" />
+                <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="text-amber-700" aria-hidden="true" />
                 {/* Both lines were translucent ink over the `sunken` panel:
                     `/45` composited to #9499A1 (2.61:1) and `/40` to #9FA3AA
                     (2.31:1), the two worst pairs in the product. The panel is
@@ -976,7 +977,7 @@ function EnrollWizard(): React.ReactElement {
                       "Inscribiendo…"
                     ) : (
                       <>
-                        <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
+                        <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                         Confirmar inscripción
                       </>
                     )}

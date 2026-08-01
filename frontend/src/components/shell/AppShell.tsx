@@ -42,6 +42,7 @@ import {
   CircleHelp,
   MoreHorizontal,
 } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNavLinksForRole, getRoleLabel, getUserInitials, type NavLinkDef } from "@/lib/auth-utils";
 import { normalizeText } from "@/app/members/members-utils";
@@ -421,7 +422,7 @@ export default function AppShell({
             className="rounded-lg p-1.5 text-white/55 hover:bg-white/10 hover:text-white lg:hidden"
             aria-label="Cerrar menú"
           >
-            <X size={18} strokeWidth={1.5} aria-hidden="true" />
+            <X size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
           </button>
         </div>
 
@@ -441,9 +442,9 @@ export default function AppShell({
           aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
         >
           {collapsed ? (
-            <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
+            <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           ) : (
-            <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+            <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           )}
         </button>
 
@@ -478,7 +479,7 @@ export default function AppShell({
                     aria-hidden="true"
                   />
                 )}
-                <Icon size={17} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+                <Icon size={ICON.base} strokeWidth={2} className="shrink-0" aria-hidden="true" />
                 <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>{link.label}</span>
                 {showBadge && (
                   // `.nav-i .cnt` — count is already in the accessible name above.
@@ -536,7 +537,7 @@ export default function AppShell({
               className="flex h-[17px] w-[17px] shrink-0 items-center justify-center"
               aria-hidden="true"
             >
-              <CircleHelp size={18} strokeWidth={1.75} />
+              <CircleHelp size={ICON.base} strokeWidth={1.75} />
             </span>
             <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda y soporte</span>
           </button>
@@ -557,7 +558,7 @@ export default function AppShell({
               className="flex h-[17px] w-[17px] shrink-0 items-center justify-center"
               aria-hidden="true"
             >
-              <BookOpen size={17} strokeWidth={1.75} />
+              <BookOpen size={ICON.base} strokeWidth={1.75} />
             </span>
             <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>
               Preguntas frecuentes
@@ -652,7 +653,7 @@ export default function AppShell({
               className="inline-flex h-ctl items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-3 text-xs font-semibold text-ink-2 hover:bg-sunken lg:hidden"
               aria-label="Abrir menú principal"
             >
-              <Menu size={17} strokeWidth={2} aria-hidden="true" />
+              <Menu size={ICON.base} strokeWidth={2} aria-hidden="true" />
               <span>Menú</span>
             </button>
           )}
@@ -663,7 +664,7 @@ export default function AppShell({
             aria-label="Buscar secciones"
             className="flex h-ctl items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3 text-xs text-ink-3 transition-colors hover:border-ink-3"
           >
-            <Search size={15} strokeWidth={2} aria-hidden="true" />
+            <Search size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Buscar una sección…</span>
             <kbd className="ml-1 hidden rounded-[5px] border border-line-2 px-[5px] py-0.5 text-2xs tracking-flat font-bold text-ink-3 sm:inline">
               Ctrl K
@@ -725,7 +726,7 @@ export default function AppShell({
                 >
                   <span className="relative">
                     <Icon
-                      size={19}
+                      size={ICON.base}
                       strokeWidth={2}
                       className={isActive ? "text-cata-red" : ""}
                       aria-hidden="true"
@@ -754,7 +755,7 @@ export default function AppShell({
               className={`${TAB_CLASSES} ${activeTab ? "text-ink-3" : "text-ink"}`}
             >
               <MoreHorizontal
-                size={19}
+                size={ICON.base}
                 strokeWidth={2}
                 className={activeTab ? "" : "text-cata-red"}
                 aria-hidden="true"
@@ -780,7 +781,7 @@ export default function AppShell({
             className="w-full max-w-md overflow-hidden rounded-card bg-paper shadow-elevated"
           >
             <div className="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
-              <Search size={16} strokeWidth={2} className="shrink-0 text-ink-3" aria-hidden="true" />
+              <Search size={ICON.sm} strokeWidth={2} className="shrink-0 text-ink-3" aria-hidden="true" />
               <input
                 ref={paletteInputRef}
                 type="text"
@@ -837,7 +838,7 @@ export default function AppShell({
                       isHighlighted ? "bg-coal text-white" : "text-ink hover:bg-canvas"
                     }`}
                   >
-                    <Icon size={15} strokeWidth={2} aria-hidden="true" />
+                    <Icon size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                     {link.label}
                     {isHighlighted && (
                       <span
