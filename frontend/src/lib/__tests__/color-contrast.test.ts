@@ -7,9 +7,17 @@
  * 4.5:1. Each pair below is a real foreground/background combination that
  * ships in the UI, including the alpha compositing Tailwind's `/nn` opacity
  * modifiers perform against the surface underneath.
+ *
+ * The last block is the one that reads SOURCE rather than tokens: proving a
+ * token meets AA is worth nothing on a screen that hand-writes a hex instead of
+ * naming it. The arbitrary-value lock deliberately leaves colours alone
+ * (`arbitrary-style-values.test.ts:44-46` — "the palette guard owns them"), so
+ * that half of the rule lives here, where the palette does.
  */
 
 import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import tailwindConfig from "../../../tailwind.config";
 
 // ---------------------------------------------------------------------------
@@ -435,5 +443,62 @@ describe("/trainer — fuchsia quick-action cards", () => {
   it("keeps the original brand pink readable on the dark header, so the shared token must not be darkened", () => {
     expect(contrastRatio(cata.fuchsia, cata.black)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
     expect(contrastRatio(cata["fuchsia-ink"], cata.black)).toBeLessThan(AA_NORMAL_TEXT);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The palette on the screens — every surface fill must be a NAMED colour
+// ---------------------------------------------------------------------------
+
+const SRC = join(__dirname, "..", "..");
+
+function sourceFiles(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      if (entry === "__tests__") continue;
+      found.push(...sourceFiles(full));
+      continue;
+    }
+    if (/\.(ts|tsx|css)$/.test(entry) && !/\.test\.tsx?$/.test(entry)) found.push(full);
+  }
+  return found;
+}
+
+/**
+ * Prose is not code. `Table.tsx` explains at length why the head fill stopped
+ * being the literal `#FAFAFB`, and a guard that fires on the explanation of its
+ * own rule teaches people to delete the explanation.
+ */
+function stripComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+describe("every surface fill on a screen comes from the palette", () => {
+  const offenders = sourceFiles(SRC)
+    .map((path) => ({
+      path: path.slice(SRC.length + 1),
+      code: stripComments(readFileSync(path, "utf8")),
+    }))
+    .flatMap(({ path, code }) =>
+      (code.match(/\bbg-\[#[0-9A-Fa-f]{3,8}\]/g) ?? []).map((value) => `${path}: ${value}`),
+    );
+
+  // The specific value that made this rule necessary. `#FAFAFB` is the fill the
+  // spec spelled as a literal in `.tbl thead th`; at 1.043:1 on white it was a
+  // fill you could not see, so the primitive replaced it with the `sunken`
+  // token. Three screens had copied the literal before that happened, and one
+  // of them — `/reports` — also copied `text-ink-3` and so shipped a table head
+  // at 4.21:1 while every other table in the product was at AA.
+  it("no longer carries the retired #FAFAFB head fill anywhere", () => {
+    expect(offenders.filter((line) => /#FAFAFB/i.test(line))).toEqual([]);
+  });
+
+  // Written as a rule rather than as that one value: a hand-written hex bypasses
+  // the whole ladder this file proves. Whatever the next literal is, it is
+  // already wrong before anyone measures it.
+  it("names every background it paints, so the ladder above actually applies", () => {
+    expect(offenders).toEqual([]);
   });
 });

@@ -209,7 +209,7 @@ function ProofViewer({
 }): React.ReactElement {
   return (
     <div className="overflow-hidden rounded-card border border-line bg-paper lg:sticky lg:top-6">
-      <div className="flex items-center gap-2 border-b border-line bg-[#FAFAFB] px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-line bg-sunken px-4 py-3">
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
           {request.proofFileName}
         </span>

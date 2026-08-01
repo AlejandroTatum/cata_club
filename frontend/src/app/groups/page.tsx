@@ -1027,7 +1027,7 @@ export default function GroupsPage(): React.ReactElement {
                 micro-label inside each of the five rows. Hidden below `xl`,
                 where the rows stack and carry their own labels. */}
             <div
-              className={`hidden h-thead border-b border-line bg-[#FAFAFB] px-5 ${CELL_LABEL} ${ROW_COLUMNS}`}
+              className={`hidden h-thead border-b border-line bg-sunken px-5 ${CELL_LABEL} ${ROW_COLUMNS}`}
               aria-hidden="true"
             >
               <span>Grupo</span>

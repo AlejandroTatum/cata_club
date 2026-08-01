@@ -98,7 +98,21 @@ import {
   PAGOS_REPORT_PAGE_SIZE,
 } from "@/app/reports/reports-utils";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
-import { Badge, Button, EmptyState, LoadingState, Pagination, cn } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  LoadingState,
+  Pagination,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableNameCell,
+  TableRow,
+  cn,
+} from "@/components/ui";
 import {
   PAGOS_ESTADO_OPTIONS,
   VALIDATION_STATUS_LABELS,
@@ -581,8 +595,6 @@ function calcAge(fechaNacimiento: string): number {
   return age;
 }
 
-const TH = "h-thead whitespace-nowrap border-b border-line bg-[#FAFAFB] px-5 text-left text-2xs font-bold uppercase text-ink-3";
-const TD = "border-b border-line px-5 py-3 text-sm text-ink-2";
 
 function PersonaPreview({
   results,
@@ -602,32 +614,28 @@ function PersonaPreview({
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left">
-        <thead>
+      <Table>
+        <TableHead>
           <tr>
-            <th scope="col" className={TH}>Nombre</th>
-            <th scope="col" className={TH}>Cédula</th>
-            <th scope="col" className={TH}>Fecha Nac.</th>
-            <th scope="col" className={TH}>Edad</th>
-            <th scope="col" className={TH}>Teléfono</th>
+            <TableHeaderCell>Nombre</TableHeaderCell>
+            <TableHeaderCell>Cédula</TableHeaderCell>
+            <TableHeaderCell>Fecha Nac.</TableHeaderCell>
+            <TableHeaderCell>Edad</TableHeaderCell>
+            <TableHeaderCell>Teléfono</TableHeaderCell>
           </tr>
-        </thead>
-        <tbody>
+        </TableHead>
+        <TableBody>
           {results.map((persona) => (
-            <tr key={persona.id}>
-              <td className={TD}>
-                <span className="font-semibold text-ink">
-                  {persona.nombres} {persona.apellidos}
-                </span>
-              </td>
-              <td className={TD}>{persona.cedula}</td>
-              <td className={`${TD} tabular-nums`}>{formatDate(persona.fechaNacimiento)}</td>
-              <td className={TD}>{calcAge(persona.fechaNacimiento)} años</td>
-              <td className={TD}>{persona.telefono}</td>
-            </tr>
+            <TableRow key={persona.id}>
+              <TableNameCell name={`${persona.nombres} ${persona.apellidos}`} />
+              <TableCell>{persona.cedula}</TableCell>
+              <TableCell className="tabular-nums">{formatDate(persona.fechaNacimiento)}</TableCell>
+              <TableCell>{calcAge(persona.fechaNacimiento)} años</TableCell>
+              <TableCell>{persona.telefono}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -650,32 +658,30 @@ function AsistenciaPreview({
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left">
-        <thead>
+      <Table>
+        <TableHead>
           <tr>
-            <th scope="col" className={TH}>Fecha</th>
-            <th scope="col" className={TH}>Horario</th>
-            <th scope="col" className={TH}>Estudiante</th>
-            <th scope="col" className={TH}>Estado</th>
+            <TableHeaderCell>Fecha</TableHeaderCell>
+            <TableHeaderCell>Horario</TableHeaderCell>
+            <TableHeaderCell>Estudiante</TableHeaderCell>
+            <TableHeaderCell>Estado</TableHeaderCell>
           </tr>
-        </thead>
-        <tbody>
+        </TableHead>
+        <TableBody>
           {results.map((record) => (
-            <tr key={record.id}>
-              <td className={`${TD} tabular-nums`}>{formatDate(record.fecha)}</td>
-              <td className={TD}>{record.horario}</td>
-              <td className={TD}>
-                <span className="font-semibold text-ink">{record.estudiante}</span>
-              </td>
-              <td className={TD}>
+            <TableRow key={record.id}>
+              <TableCell className="tabular-nums">{formatDate(record.fecha)}</TableCell>
+              <TableCell>{record.horario}</TableCell>
+              <TableNameCell name={record.estudiante} />
+              <TableCell>
                 <Badge tone={getAttendanceBadgeTone(record.estado)}>
                   {getAttendanceLabel(record.estado)}
                 </Badge>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -698,38 +704,36 @@ function PagosPreview({
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left">
-        <thead>
+      <Table>
+        <TableHead>
           <tr>
-            <th scope="col" className={TH}>Estudiante</th>
-            <th scope="col" className={TH}>Responsable de Pago</th>
-            <th scope="col" className={TH}>Período</th>
-            <th scope="col" className={TH}>Monto</th>
-            <th scope="col" className={TH}>Método</th>
-            <th scope="col" className={TH}>Subido</th>
-            <th scope="col" className={TH}>Estado</th>
+            <TableHeaderCell>Estudiante</TableHeaderCell>
+            <TableHeaderCell>Responsable de Pago</TableHeaderCell>
+            <TableHeaderCell>Período</TableHeaderCell>
+            <TableHeaderCell>Monto</TableHeaderCell>
+            <TableHeaderCell>Método</TableHeaderCell>
+            <TableHeaderCell>Subido</TableHeaderCell>
+            <TableHeaderCell>Estado</TableHeaderCell>
           </tr>
-        </thead>
-        <tbody>
+        </TableHead>
+        <TableBody>
           {results.map((pago) => (
-            <tr key={pago.id}>
-              <td className={TD}>
-                <span className="font-semibold text-ink">{pago.studentName}</span>
-              </td>
-              <td className={TD}>{pago.responsablePagoName ?? "-"}</td>
-              <td className={TD}>{pago.membershipPeriod}</td>
-              <td className={`${TD} tabular-nums`}>{formatCurrency(pago.expectedAmount)}</td>
-              <td className={TD}>{pago.paymentMethod}</td>
-              <td className={`${TD} tabular-nums`}>{formatDateTime(pago.uploadedAt)}</td>
-              <td className={TD}>
+            <TableRow key={pago.id}>
+              <TableNameCell name={pago.studentName} />
+              <TableCell>{pago.responsablePagoName ?? "-"}</TableCell>
+              <TableCell>{pago.membershipPeriod}</TableCell>
+              <TableCell className="tabular-nums">{formatCurrency(pago.expectedAmount)}</TableCell>
+              <TableCell>{pago.paymentMethod}</TableCell>
+              <TableCell className="tabular-nums">{formatDateTime(pago.uploadedAt)}</TableCell>
+              <TableCell>
                 <Badge tone={VALIDATION_STATUS_TONES[pago.validationStatus]}>
                   {VALIDATION_STATUS_LABELS[pago.validationStatus]}
                 </Badge>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
