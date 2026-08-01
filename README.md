@@ -116,6 +116,60 @@ frontend/src/
 
 Ver `frontend/README.md` para documentación completa.
 
+## Entorno de QA
+
+Stack desechable, sembrado y reproducible para QA manual y para los E2E que
+atraviesan un backend real. Un solo comando lo levanta desde cero:
+
+```bash
+make qa-up
+```
+
+Cuando el comando vuelve, el stack ya responde: construye las imágenes con el
+código actual, aplica las migraciones, corre `seed_dev_base.py` y después
+`seed_dev_bulk.py`, y espera a que pasen los healthchecks.
+
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- Backend API: [http://localhost:8000/docs](http://localhost:8000/docs)
+- Correos capturados: [http://localhost:8025](http://localhost:8025)
+
+Credenciales sembradas:
+
+| Rol | Correo | Contraseña |
+|-----|--------|------------|
+| Administrador | `admin@cataclub.com` | `admin12345` |
+| Entrenador | `entrenador@cataclub.com` | `trainer12345` |
+| Alumnos y representantes del dataset grande | ver `/members` | `alumno123` |
+
+Después de sembrar hay ~55-65 alumnos repartidos en los 11 niveles de ranking,
+membresías en los tres estados, pagos con cola de validación y asistencias
+cargadas, así que las pantallas se pueden evaluar con densidad realista en vez
+de con estados vacíos. No hace falta `.env`: `make qa-up` inyecta una
+`JWT_SECRET_KEY` aleatoria por corrida y `docker-compose.qa.yml` fija
+`AMBIENTE=development`.
+
+### Aislamiento
+
+El entorno usa su propio nombre de proyecto de Compose (`cataclub-qa`), así que
+tiene contenedores, red y volúmenes separados del stack de desarrollo. Su
+Postgres vive en `tmpfs`: no existe volumen donde sobrevivan datos, de modo que
+un error durante las pruebas no puede tocar datos reales.
+
+Publica los mismos puertos que `make dev`, así que los dos son alternativas:
+pará el stack de desarrollo (`make docker-down`) antes de levantar el de QA.
+
+### Resetear y destruir
+
+```bash
+make qa-reset   # Volver al estado recien sembrado, sin reconstruir imagenes
+make qa-seed    # Re-sembrar solo el dataset grande
+make qa-logs    # Seguir los logs
+make qa-down    # Destruir contenedores, red y datos
+```
+
+`make qa-reset` usa `backend/scripts/reset_dev_db.py`; el detalle de sus guards
+está en `backend/scripts/RUNBOOK_reset_db.md`.
+
 ## Testing
 
 ```bash
@@ -126,6 +180,22 @@ cd backend && uv run pytest tests/ -v
 cd frontend && pnpm test
 cd frontend && pnpm exec playwright test
 ```
+
+### E2E contra el backend real
+
+`pnpm exec playwright test` corre la suite que mockea la API con `page.route`:
+no necesita Docker y prueba el render del cliente. Los specs `*.live.spec.ts`
+son los que atraviesan un backend de verdad y verifican lo que pasa *después*
+de un envío (toast de éxito y estado persistido tras recargar). Requieren el
+entorno de QA levantado:
+
+```bash
+make qa-up
+make qa-live
+```
+
+Quedan fuera de la suite por defecto a propósito: `playwright.config.ts` solo
+declara el proyecto `e2e-live` cuando `E2E_LIVE=1`.
 
 ## Modelo de Dominio
 
