@@ -10,13 +10,23 @@
 #      punto de entrada (PR-14 continuación) y `db`/`redis` nunca deben ser
 #      alcanzables desde fuera del droplet.
 #
+# Todos los puertos de acá se publican en `127.0.0.1` y no en `0.0.0.0`.
+# Sin el prefijo, Docker los expone en TODAS las interfaces: en una laptop
+# que se conecta a redes ajenas eso deja Postgres, Redis y la UI de mailpit
+# (que no pide credenciales) alcanzables desde el resto de la red. Activar
+# un firewall de host no alcanza: Docker escribe sus cadenas `nat`/`DOCKER`
+# y esas se evalúan antes que INPUT, donde ufw pone sus reglas. El binding
+# a loopback es lo único que cierra el puerto de verdad, y no cambia el
+# flujo local -- `localhost:3000`, `localhost:5436` y `make test-backend`
+# siguen funcionando igual.
+#
 # NUNCA se aplica junto con `docker-compose.prod.yml`. El overlay de
 # producción se invoca explícito: `docker compose -f docker-compose.yml
 # -f docker-compose.prod.yml <comando>`.
 services:
   db:
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
 
   # Postgres efímero de la suite del backend (perfil "test", ver
   # docker-compose.yml). El puerto vive acá y no en la base porque
@@ -27,11 +37,11 @@ services:
   # que `make test-backend` sigue llegando a localhost:5436.
   db-test:
     ports:
-      - "5436:5432"
+      - "127.0.0.1:5436:5432"
 
   redis:
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
   # mailpit es una herramienta de DESARROLLO y su UI web no pide
   # credenciales: publicar 8025 (y 1025 SMTP) solo puede pasar acá. En la
@@ -39,8 +49,8 @@ services:
   # podía quitarlos (los overlays de Compose solo fusionan).
   mailpit:
     ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # UI web para ver correos capturados
+      - "127.0.0.1:1025:1025"  # SMTP
+      - "127.0.0.1:8025:8025"  # UI web para ver correos capturados
 
   backend:
     build:
@@ -51,7 +61,7 @@ services:
       # afecta al build, no al contenedor en ejecución.
       network: host
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
 
   celery-worker:
     build:
@@ -74,4 +84,4 @@ services:
         NEXT_PUBLIC_APP_NAME: Cata Club Admin
         NEXT_PUBLIC_USE_MOCKS: "false"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
