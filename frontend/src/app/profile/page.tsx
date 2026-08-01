@@ -175,7 +175,7 @@ function DetailRow({
 }
 
 /**
- * The shell every state of this page shares. Keeping the eyebrow/title/
+ * The shell every state of this page shares. Keeping the title and
  * subtitle in ONE place stops loading, error and the loaded layout from
  * drifting apart now that the loaded layout owns its own `AppShell` (it has
  * to, because the header's action depends on the layout's edit state).
@@ -192,7 +192,6 @@ function ProfileShell({
 }): React.ReactElement {
   return (
     <AppShell
-      eyebrow="Su cuenta"
       title="Perfil"
       subtitle="Gestione su información y consulte su estado en el club."
       actions={actions}

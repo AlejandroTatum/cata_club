@@ -24,7 +24,6 @@ import { FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
 export default function AyudaPage(): React.ReactElement {
   return (
     <AppShell
-      eyebrow="Ayuda"
       title="Preguntas frecuentes"
       subtitle="Cómo funciona la app del club, sección por sección."
     >

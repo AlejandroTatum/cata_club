@@ -18,7 +18,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Pencil, Percent, Plus, Power } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import BackLink from "@/components/BackLink";
 import { Badge, Button, EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchDescuentos, crearDescuento, actualizarDescuento } from "@/services/api";
@@ -220,9 +219,7 @@ export default function DiscountsPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
-        eyebrow="Catálogo del club"
         title="Descuentos"
-        subtitle="Los descuentos se aplican al registrar un pago; las ediciones nunca cambian pagos ya registrados."
         actions={
           <Button variant="dark" onClick={openCreateForm}>
             <Plus size={14} strokeWidth={2} aria-hidden="true" />
@@ -230,8 +227,6 @@ export default function DiscountsPage(): React.ReactElement {
           </Button>
         }
       >
-        <BackLink href="/dashboard" label="Volver al Panel" />
-
         {loadError && (
           <ErrorState className="mb-4" message={loadError} onRetry={() => void loadCatalog()} />
         )}

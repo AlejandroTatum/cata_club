@@ -928,7 +928,7 @@ export default function PaymentsPage(): React.ReactElement {
                   ? "Revise el nombre o limpie la búsqueda para ver toda la cola."
                   : activeFilter === "all"
                     ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
-                    : "Pruebe con otro estado para ver el resto de la cola."
+                    : "La cola está al día."
               }
               action={
                 activeFilter === "all" && !normalizedQuery ? undefined : (
@@ -1412,7 +1412,7 @@ export default function PaymentsPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell eyebrow="Cola de validación" title="Membresías y Pagos">
+      <AppShell title="Membresías y Pagos">
         {selectedRequest ? renderDetail(selectedRequest) : renderQueue()}
 
         <ConfirmDialog

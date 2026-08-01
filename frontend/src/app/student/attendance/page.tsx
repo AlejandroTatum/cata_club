@@ -279,7 +279,6 @@ function StudentAttendanceContent(): React.ReactElement {
 
   return (
     <AppShell
-      eyebrow="Área de estudiantes"
       // "Asistencias" — the sidebar row's own label, and true for a guardian
       // reading a dependent's record. See the same change on `/student/payments`.
       title="Asistencias"

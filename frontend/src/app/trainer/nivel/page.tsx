@@ -3,9 +3,9 @@
  *
  * *"la pantalla de nivel tiene que ser la misma en entrenador que la de
  * admin."* It is: this route renders the very same `NivelLadderScreen` the
- * admin's `/ranking` renders, with the same eyebrow and the same title. Only
- * the back link ("Volver a Entrenador") and the role this route admits differ,
- * which is the whole reason the two routes still exist instead of one.
+ * admin's `/ranking` renders, with the same title. Only the back link
+ * ("Volver a Entrenador") and the role this route admits differ, which is the
+ * whole reason the two routes still exist instead of one.
  *
  * The trainer is not a lesser actor here — the backend grants ENTRENADOR the
  * same `PATCH /personas/{id}/nivel` it grants ADMINISTRADOR, so every control
@@ -19,7 +19,6 @@ import NivelLadderScreen from "@/components/nivel/NivelLadderScreen";
 export default function NivelPage(): React.ReactElement {
   return (
     <NivelLadderScreen
-      eyebrow="Escalera de entrenamiento"
       title="Niveles"
       allowedRoles={["trainer"]}
       backHref="/trainer"

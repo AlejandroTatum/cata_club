@@ -136,7 +136,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
-      <AppShell eyebrow="Área de entrenadores" title="Historial de asistencias">
+      <AppShell title="Historial de asistencias">
         <BackLink href="/trainer" label="Volver a Mi día" />
 
         <div className="mt-4 flex flex-col gap-4">

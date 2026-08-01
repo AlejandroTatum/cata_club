@@ -29,9 +29,10 @@ describe("PageHeader — the title", () => {
 });
 
 describe("PageHeader — optional parts", () => {
-  it("renders the eyebrow above the title", () => {
-    render(<PageHeader eyebrow="Comunidad del club" title="Miembros" />);
-    expect(screen.getByText("Comunidad del club")).toBeInTheDocument();
+  it("renders no eyebrow element above the title", () => {
+    render(<PageHeader title="Miembros" />);
+    const heading = screen.getByRole("heading", { level: 1, name: "Miembros" });
+    expect(heading.parentElement?.firstElementChild).toBe(heading);
   });
 
   it("renders the subtitle", () => {
@@ -46,7 +47,7 @@ describe("PageHeader — optional parts", () => {
     ).toBeInTheDocument();
   });
 
-  it("omits eyebrow and subtitle when not supplied", () => {
+  it("omits the subtitle when not supplied", () => {
     const { container } = render(<PageHeader title="Panel" />);
     expect(container.querySelectorAll("p")).toHaveLength(0);
   });

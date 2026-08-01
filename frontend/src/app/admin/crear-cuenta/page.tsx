@@ -736,7 +736,7 @@ function CrearCuentaContent(): React.ReactElement {
   // ---- Render ----
 
   return (
-    <AppShell eyebrow="Administración" title="Crear Cuenta">
+    <AppShell title="Crear Cuenta">
       {confirmed ? (
         <div className="flex min-h-[75vh] items-center justify-center py-12">
           <div className="w-full max-w-lg text-center">

@@ -122,7 +122,6 @@ export default function AttendancePage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
-        eyebrow="Horarios y registros"
         title="Asistencias"
         actions={
           <Link href="/trainer/attendance" className={buttonClasses("primary")}>

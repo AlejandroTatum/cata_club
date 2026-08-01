@@ -161,7 +161,6 @@ export default function TrainerPage(): React.ReactElement {
        * and the browser tab use — instead of overwriting the welcome.
        */}
       <AppShell
-        eyebrow="Área de entrenadores"
         title={`Hola, ${firstNameOf(session?.user?.name)}`}
         subtitle="Mi día — tu próxima sesión y el resumen de la última lista."
       >

@@ -118,16 +118,15 @@ describe("AppShell", (): void => {
     vi.stubGlobal("localStorage", createMemoryStorage());
   });
 
-  it("renders the title, subtitle, and eyebrow", (): void => {
+  it("renders the title and subtitle", (): void => {
     render(
-      <AppShell title="Dashboard" subtitle="Resumen diario" eyebrow="Área administrativa">
+      <AppShell title="Dashboard" subtitle="Resumen diario">
         <p>contenido</p>
       </AppShell>,
     );
 
     expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Resumen diario")).toBeInTheDocument();
-    expect(screen.getByText("Área administrativa")).toBeInTheDocument();
   });
 
   // --- Skip link ---
@@ -580,7 +579,7 @@ describe("AppShell — closed mobile drawer leaves the tab order", (): void => {
 // ---------------------------------------------------------------------------
 // Phase 3a — the shell must show the screen its own name.
 //
-// `AppShell` used to render `eyebrow`/`title`/`subtitle` as `sr-only`. Every
+// `AppShell` used to render `title`/`subtitle` as `sr-only`. Every
 // caller passed a title and none of them rendered, so below `lg` — where the
 // sidebar is a closed drawer — a trainer on a phone had Menú, a bell and a
 // search box, and no way to know which screen they were on.
@@ -597,7 +596,7 @@ describe("AppShell — the page header row", (): void => {
 
   it("renders the page title as a VISIBLE h1, not a screen-reader-only one", (): void => {
     render(
-      <AppShell eyebrow="Comunidad del club" title="Miembros" subtitle="Todo el club">
+      <AppShell title="Miembros" subtitle="Todo el club">
         {null}
       </AppShell>,
     );
@@ -605,8 +604,9 @@ describe("AppShell — the page header row", (): void => {
     const heading = screen.getByRole("heading", { level: 1, name: "Miembros" });
     expect(heading).toBeInTheDocument();
     expect(heading).not.toHaveClass("sr-only");
-    expect(screen.getByText("Comunidad del club")).not.toHaveClass("sr-only");
     expect(screen.getByText("Todo el club")).not.toHaveClass("sr-only");
+    // No eyebrow/kicker above the title — the h1 opens its block.
+    expect(heading.parentElement?.firstElementChild).toBe(heading);
   });
 
   it("places the header row above <main>, so the heading precedes the content", (): void => {

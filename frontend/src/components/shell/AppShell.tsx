@@ -68,8 +68,6 @@ export {
 } from "@/components/chatbot/help-chat-store";
 
 export interface AppShellProps {
-  /** Small uppercase label above the page title (defaults to "Panel de gestión"). */
-  eyebrow?: string;
   /** Main page heading — rendered as the visible `<h1>` of the screen. */
   title: string;
   /** Optional supporting line below the title. */
@@ -183,8 +181,7 @@ export function resolveActiveHref(navLinks: NavLinkDef[], pathname: string): str
 /**
  * The brand block's second line. Prototype `_nav-admin.html` uses a fixed
  * per-area label ("Panel de gestión" for staff, "Mi cuenta" for the family
- * portal) — it names the AREA, so it must not be confused with the page's own
- * eyebrow.
+ * portal) — it names the AREA, not the current page.
  */
 function getAreaLabel(role: string | null): string {
   return role === "representante" || role === "estudiante" ? "Mi cuenta" : "Panel de gestión";
@@ -198,7 +195,6 @@ const NAV_ITEM_IDLE_CLASSES = "text-white/[0.62] hover:bg-white/[0.07] hover:tex
 const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.08] font-semibold text-white";
 
 export default function AppShell({
-  eyebrow = "Panel de gestión",
   title,
   subtitle,
   actions,
@@ -680,15 +676,13 @@ export default function AppShell({
             `pt-3`, was `pt-6`: with the divider removed the title no longer
             opens a second slab, so it only needs to clear the utility row —
             12px under a control that already carries 8px of its own bottom
-            margin. Measured at 1440×900: the eyebrow now starts 20px below
-            the search box (it was 32.5px below the box and 24px below the
-            rule), and the h1 rises from y=98.8 to y=86.8. */}
+            margin. */}
         <div
           className={`flex flex-1 flex-col gap-5 px-4 pt-3 sm:px-[26px] ${
             showMobileTabs ? "pb-[78px] lg:pb-8" : "pb-8"
           }`}
         >
-          <PageHeader eyebrow={eyebrow} title={title} subtitle={subtitle} actions={actions} />
+          <PageHeader title={title} subtitle={subtitle} actions={actions} />
           {/* `tabIndex={-1}` so the skip link actually MOVES focus here rather
               than only scrolling: a `<main>` is not focusable by default, and
               a fragment jump to a non-focusable target leaves the caret where

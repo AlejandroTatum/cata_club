@@ -20,7 +20,6 @@ import { createPortal } from "react-dom";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ContextualHelp from "@/components/ContextualHelp";
-import BackLink from "@/components/BackLink";
 import {
   Badge,
   Button,
@@ -1366,12 +1365,7 @@ export default function MembersPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell
-        eyebrow="Comunidad del club"
-        title="Miembros"
-      >
-        <BackLink href="/dashboard" label="Volver al Panel" />
-
+      <AppShell title="Miembros">
         {error && (
           <ErrorState
             className="mb-6"

@@ -1205,7 +1205,6 @@ function PaymentsPageContent(): React.ReactElement {
 
   return (
     <AppShell
-      eyebrow="Área de estudiantes"
       // "Pagos", not "Mis pagos": the codebase's own rule is that a nav label
       // IS the destination's page title (see `getNavLinksForRole`), and the
       // sidebar row has always said "Pagos". "Mis" was also a lie to the

@@ -207,7 +207,7 @@ describe("DashboardPage — the three-stat pulse", () => {
     // caption line — and the caption says what the widget only gestured at.
     expect(screen.queryByRole("img", { name: /asistencia por semana/i })).toBeNull();
     expect(screen.getByText("personas registradas")).toBeInTheDocument();
-    expect(screen.getByText("39% de las personas registradas")).toBeInTheDocument();
+    expect(screen.getByText("39% del total")).toBeInTheDocument();
     expect(screen.getByText("2 de 2 presentes")).toBeInTheDocument();
   });
 });

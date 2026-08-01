@@ -61,7 +61,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import BackLink from "@/components/BackLink";
 import {
   Calendar,
   Plus,
@@ -981,7 +980,6 @@ export default function GroupsPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
-        eyebrow="Grupos de entrenamiento"
         title="Horarios"
         actions={
           <Button variant="dark" onClick={openCreateForm}>
@@ -990,8 +988,6 @@ export default function GroupsPage(): React.ReactElement {
           </Button>
         }
       >
-        <BackLink href="/dashboard" label="Volver al Panel" />
-
         {loadError && (
           <ErrorState className="mb-4" message={loadError} onRetry={() => void loadData()} />
         )}
