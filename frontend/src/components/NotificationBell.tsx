@@ -92,7 +92,7 @@ export default function NotificationBell({
           <div className="flex items-center justify-between px-2 py-1.5">
             <p className="text-xs font-bold uppercase tracking-wider text-cata-text/45">Notificaciones</p>
             {unreadCount > 0 && (
-              <span className="flex items-center gap-1 text-2xs tracking-flat font-medium text-cata-red">
+              <span className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-red">
                 <CheckCheck size={11} strokeWidth={1.5} aria-hidden="true" />
                 {unreadCount} sin leer
               </span>
@@ -124,7 +124,7 @@ export default function NotificationBell({
                       {!n.leida && (
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cata-red" aria-hidden="true" />
                       )}
-                      <p className="text-xs font-medium text-cata-text">{TIPO_LABELS[n.tipo]}</p>
+                      <p className="text-xs font-semibold text-cata-text">{TIPO_LABELS[n.tipo]}</p>
                     </div>
                     <p className="mt-0.5 text-xs text-cata-text/65">{n.mensaje}</p>
                     <p className="mt-1 text-2xs tracking-flat text-cata-text/40">{formatDateTime(n.fechaCreacion)}</p>

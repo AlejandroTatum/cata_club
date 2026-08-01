@@ -309,7 +309,7 @@ function CrearCuentaContent(): React.ReactElement {
 
         {formData.accountType === "MENOR" && age !== null && !isNaN(age) && age >= 18 && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            <p className="flex items-center gap-1.5 font-medium">
+            <p className="flex items-center gap-1.5 font-semibold">
               <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
               La fecha de nacimiento indica una persona mayor de edad ({age} años). Seleccione Jugador o Representante.
             </p>
@@ -390,7 +390,7 @@ function CrearCuentaContent(): React.ReactElement {
         {/* School selector — only for MENOR type */}
         {formData.accountType === "MENOR" && instituciones.length > 0 && (
           <div className="mt-4">
-            <label htmlFor="crear-cuenta-tipo-escuela" className="mb-1.5 block text-sm font-medium text-cata-text">
+            <label htmlFor="crear-cuenta-tipo-escuela" className="mb-1.5 block text-sm font-semibold text-cata-text">
               Tipo de Escuela
             </label>
             <select
@@ -410,7 +410,7 @@ function CrearCuentaContent(): React.ReactElement {
               <option value="MUNICIPAL">Municipal</option>
             </select>
 
-            <label htmlFor="crear-cuenta-institucion" className="mb-1.5 mt-3 block text-sm font-medium text-cata-text">
+            <label htmlFor="crear-cuenta-institucion" className="mb-1.5 mt-3 block text-sm font-semibold text-cata-text">
               Escuela / Institución
             </label>
             <p className="mb-2 text-xs text-cata-text/50">
@@ -498,7 +498,7 @@ function CrearCuentaContent(): React.ReactElement {
 
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <div className="mb-3">
-            <label htmlFor="crear-cuenta-tipo-sangre" className="mb-1.5 block text-sm font-medium text-cata-text">
+            <label htmlFor="crear-cuenta-tipo-sangre" className="mb-1.5 block text-sm font-semibold text-cata-text">
               Tipo de Sangre
             </label>
             <select
@@ -611,7 +611,7 @@ function CrearCuentaContent(): React.ReactElement {
               Tipo de Cuenta
             </h3>
           </div>
-          <p className="text-sm font-medium text-cata-text">
+          <p className="text-sm font-semibold text-cata-text">
             {typeLabels[formData.accountType as AccountType]}
           </p>
         </div>
@@ -625,24 +625,24 @@ function CrearCuentaContent(): React.ReactElement {
           </div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-cata-text/65">Nombres</dt>
-            <dd className="font-medium text-cata-text">{formData.nombres}</dd>
+            <dd className="font-semibold text-cata-text">{formData.nombres}</dd>
             <dt className="text-cata-text/65">Apellidos</dt>
-            <dd className="font-medium text-cata-text">{formData.apellidos}</dd>
+            <dd className="font-semibold text-cata-text">{formData.apellidos}</dd>
             <dt className="text-cata-text/65">Cédula</dt>
-            <dd className="font-medium text-cata-text">{formData.cedula}</dd>
+            <dd className="font-semibold text-cata-text">{formData.cedula}</dd>
             <dt className="text-cata-text/65">Fecha de Nacimiento</dt>
-            <dd className="font-medium text-cata-text">
+            <dd className="font-semibold text-cata-text">
               {formData.fechaNacimiento}
               {age !== null && !isNaN(age) && (
                 <span className="ml-2 text-cata-text/45">({age} años)</span>
               )}
             </dd>
             <dt className="text-cata-text/65">Teléfono</dt>
-            <dd className="font-medium text-cata-text">{formData.telefono}</dd>
+            <dd className="font-semibold text-cata-text">{formData.telefono}</dd>
             {formData.accountType === "MENOR" && representanteSelected && (
               <>
                 <dt className="text-cata-text/65">Representante</dt>
-                <dd className="font-medium text-cata-text">
+                <dd className="font-semibold text-cata-text">
                   {representanteSelected.nombre}
                 </dd>
               </>
@@ -650,7 +650,7 @@ function CrearCuentaContent(): React.ReactElement {
             {formData.institucionId && (
               <>
                 <dt className="text-cata-text/65">Institución</dt>
-                <dd className="font-medium text-cata-text">
+                <dd className="font-semibold text-cata-text">
                   {instituciones.find((i) => String(i.id) === formData.institucionId)?.nombre || "—"}
                 </dd>
               </>
@@ -667,9 +667,9 @@ function CrearCuentaContent(): React.ReactElement {
           </div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-cata-text/65">Correo</dt>
-            <dd className="font-medium text-cata-text">{formData.correo}</dd>
+            <dd className="font-semibold text-cata-text">{formData.correo}</dd>
             <dt className="text-cata-text/65">Contraseña</dt>
-            <dd className="font-medium text-cata-text">••••••••</dd>
+            <dd className="font-semibold text-cata-text">••••••••</dd>
           </dl>
         </div>
 
@@ -683,29 +683,29 @@ function CrearCuentaContent(): React.ReactElement {
             </div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <dt className="text-cata-text/65">Tipo de Sangre</dt>
-              <dd className="font-medium text-cata-text">{formData.tipoSangre.replace(/_/g, " ")}</dd>
+              <dd className="font-semibold text-cata-text">{formData.tipoSangre.replace(/_/g, " ")}</dd>
               {formData.condicionesSalud.trim() && (
                 <>
                   <dt className="text-cata-text/65">Condiciones</dt>
-                  <dd className="font-medium text-cata-text">{formData.condicionesSalud}</dd>
+                  <dd className="font-semibold text-cata-text">{formData.condicionesSalud}</dd>
                 </>
               )}
               {formData.alergias.trim() && (
                 <>
                   <dt className="text-cata-text/65">Alergias</dt>
-                  <dd className="font-medium text-cata-text">{formData.alergias}</dd>
+                  <dd className="font-semibold text-cata-text">{formData.alergias}</dd>
                 </>
               )}
               {formData.contactoEmergencia.trim() && (
                 <>
                   <dt className="text-cata-text/65">Contacto Emergencia</dt>
-                  <dd className="font-medium text-cata-text">{formData.contactoEmergencia}</dd>
+                  <dd className="font-semibold text-cata-text">{formData.contactoEmergencia}</dd>
                 </>
               )}
               {formData.telefonoEmergencia.trim() && (
                 <>
                   <dt className="text-cata-text/65">Telefono Emergencia</dt>
-                  <dd className="font-medium text-cata-text">{formData.telefonoEmergencia}</dd>
+                  <dd className="font-semibold text-cata-text">{formData.telefonoEmergencia}</dd>
                 </>
               )}
             </dl>

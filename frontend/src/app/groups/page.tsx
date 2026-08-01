@@ -715,7 +715,7 @@ export default function GroupsPage(): React.ReactElement {
         )}
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label htmlFor="horario-categoria" className="mb-1 block text-xs font-medium text-cata-text/65">
+            <label htmlFor="horario-categoria" className="mb-1 block text-xs font-semibold text-cata-text/65">
               Categoría
             </label>
             <select
@@ -738,7 +738,7 @@ export default function GroupsPage(): React.ReactElement {
             </select>
           </div>
           <div>
-            <span className="mb-1 block text-xs font-medium text-cata-text/65">
+            <span className="mb-1 block text-xs font-semibold text-cata-text/65">
               Horario (fijo según categoría)
             </span>
             <p
@@ -749,7 +749,7 @@ export default function GroupsPage(): React.ReactElement {
             </p>
           </div>
           <div className="sm:col-span-2 lg:col-span-4">
-            <span className="mb-1 block text-xs font-medium text-cata-text/65">
+            <span className="mb-1 block text-xs font-semibold text-cata-text/65">
               Días de la semana
             </span>
             <div className="flex flex-wrap gap-3">
@@ -903,7 +903,7 @@ export default function GroupsPage(): React.ReactElement {
         {/* Asignar first — before the roster, not after it. */}
         <div className="mb-4 flex items-end gap-3">
           <div className="flex-1">
-            <label htmlFor="alumno-select" className="mb-1 block text-xs font-medium text-cata-text/65">
+            <label htmlFor="alumno-select" className="mb-1 block text-xs font-semibold text-cata-text/65">
               Seleccionar alumno
             </label>
             <select
@@ -942,7 +942,7 @@ export default function GroupsPage(): React.ReactElement {
         ) : (
           alumnosPorHorario.length > 0 && (
             <div className="border-t border-line pt-4">
-              <p className="mb-2 text-2xs font-medium uppercase tracking-wider text-cata-text/40">
+              <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-cata-text/40">
                 Alumnos asignados ({alumnosPorHorario.length})
               </p>
               <div className="space-y-2">

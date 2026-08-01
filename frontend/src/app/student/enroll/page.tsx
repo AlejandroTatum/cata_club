@@ -430,7 +430,7 @@ function EnrollWizard(): React.ReactElement {
         {/* School selector — only for minors (child enrollment) */}
         {!isSelf && instituciones.length > 0 && (
           <div className="mt-4">
-            <label htmlFor="enroll-tipo-escuela" className="mb-1.5 block text-sm font-medium text-cata-text">
+            <label htmlFor="enroll-tipo-escuela" className="mb-1.5 block text-sm font-semibold text-cata-text">
               Tipo de Escuela
             </label>
             <select
@@ -450,7 +450,7 @@ function EnrollWizard(): React.ReactElement {
               <option value="MUNICIPAL">Municipal</option>
             </select>
 
-            <label htmlFor="enroll-institucion" className="mb-1.5 mt-3 block text-sm font-medium text-cata-text">
+            <label htmlFor="enroll-institucion" className="mb-1.5 mt-3 block text-sm font-semibold text-cata-text">
               Escuela / Institución
             </label>
             <p className="mb-2 text-xs text-cata-text/50">
@@ -605,7 +605,7 @@ function EnrollWizard(): React.ReactElement {
         </p>
 
         <div className="mb-4">
-          <label htmlFor="enroll-tipo-de-sangre" className="mb-1.5 block text-sm font-medium text-cata-text">
+          <label htmlFor="enroll-tipo-de-sangre" className="mb-1.5 block text-sm font-semibold text-cata-text">
             Tipo de Sangre <span className="ml-0.5 text-cata-red">*</span>
           </label>
           <select
@@ -673,7 +673,7 @@ function EnrollWizard(): React.ReactElement {
         })}
 
         <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
-          <p className="flex items-center gap-1.5 font-medium">
+          <p className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
           </p>
@@ -929,14 +929,14 @@ function EnrollWizard(): React.ReactElement {
                 <button
                   type="button"
                   onClick={() => fillDemoData("self")}
-                  className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-medium text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
+                  className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-semibold text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
                 >
                   Jugador
                 </button>
                 <button
                   type="button"
                   onClick={() => fillDemoData("child")}
-                  className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-medium text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
+                  className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-semibold text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
                 >
                   Representante
                 </button>

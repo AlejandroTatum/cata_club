@@ -102,10 +102,10 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
 
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-line text-xs font-medium uppercase tracking-wider text-ink-3-strong">
-            <th className="py-2 font-medium">Estado</th>
-            <th className="py-2 text-right font-medium">Registros</th>
-            <th className="py-2 text-right font-medium">Porcentaje</th>
+          <tr className="border-b border-line text-xs font-semibold uppercase tracking-wider text-ink-3-strong">
+            <th className="py-2 font-semibold">Estado</th>
+            <th className="py-2 text-right font-semibold">Registros</th>
+            <th className="py-2 text-right font-semibold">Porcentaje</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line">

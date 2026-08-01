@@ -24,7 +24,7 @@ export default function ContextualHelp({ title, children }: ContextualHelpProps)
         // field (it was 4.59:1 on the old near-white canvas, i.e. always
         // marginal). Ink plus an underline says "control" without spending
         // the CTA colour on a disclosure toggle: 7.16:1 on canvas.
-        className="text-xs font-medium text-ink-2 underline underline-offset-2 hover:text-ink"
+        className="text-xs font-semibold text-ink-2 underline underline-offset-2 hover:text-ink"
       >
         {isOpen ? "Ocultar ayuda" : "Ver ayuda"}
       </button>
