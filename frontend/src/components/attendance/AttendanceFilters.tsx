@@ -22,7 +22,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import StudentSearch from "@/components/StudentSearch";
-import { Button, FilterPill } from "@/components/ui";
+import { Button, cn, FilterPill } from "@/components/ui";
 import { formatDay, type TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DateRangePreset } from "@/lib/club-date";
 import type { PersonaBusqueda } from "@/types/domain";
@@ -106,6 +106,18 @@ export interface AttendanceFiltersProps {
   className?: string;
 }
 
+/**
+ * What makes the panel read as a panel. It carries NO margin of its own: the
+ * shell's `<main>` is a `flex flex-col gap-page` column, so a margin here would
+ * be added on top of the 20px step instead of replacing it. It used to carry
+ * `mb-5`, and the trainer's history re-declared this entire string through
+ * `className` for the sole purpose of dropping it. With the margin gone that
+ * caller needs no `className` at all, and the prop can now MERGE (see `cn`
+ * below) instead of replacing — a caller that names one detail keeps the rest.
+ */
+const PANEL =
+  "flex flex-col gap-4 rounded-card border border-line bg-paper p-[18px]";
+
 const FIELD_LABEL =
   "text-2xs font-bold uppercase text-ink-3";
 const FIELD_CONTROL =
@@ -119,10 +131,7 @@ export default function AttendanceFilters({
   return (
     <section
       aria-label="Filtros de registros"
-      className={
-        className ??
-        "mb-5 flex flex-col gap-4 rounded-card border border-line bg-paper p-[18px]"
-      }
+      className={cn(PANEL, className)}
     >
       <div>
         <span className={`mb-2 block ${FIELD_LABEL}`}>Rango de fechas</span>
