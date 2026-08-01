@@ -225,6 +225,83 @@ const config: Config = {
           "sans-serif",
         ],
       },
+      // ---------------------------------------------------------------------
+      // The type scale. Eight steps, in Tailwind's tuple form
+      // `[size, { lineHeight, letterSpacing }]`, so picking a step resolves
+      // size + leading + tracking in one decision instead of three.
+      //
+      // The steps are the ones "La Paleta" already uses in practice: `xl` is
+      // the 26px page title of `PageHeader`, `2xl` is the 32px stat number of
+      // `StatCard`, `display` is the 46px login headline. They are transcribed
+      // from the shipped components, not invented, so migrating an existing
+      // `text-[26px]` onto `text-xl` moves nothing.
+      //
+      // Ratio between steps grows on purpose: 1.19 / 1.08 / 1.11 / 1.33 /
+      // 1.30 / 1.23 / 1.44. The bottom of the scale is dense because 10-15px
+      // is where labels, values and body text have to be TELLABLE APART at a
+      // glance; the top is airy because a headline only competes with itself.
+      //
+      // Tracking follows size, as it must: at 46px a normal tracking reads as
+      // a gap between letters, and at 10.5px a normal tracking reads as a
+      // smudge. Hence -0.05em at the top and +0.12em at the bottom.
+      //
+      // NOTE — these six names (`xs`…`2xl`) REDEFINE Tailwind's stock steps,
+      // so every existing `text-sm` resolves here from now on. The three that
+      // moved visibly (`lg` +2px, `xl` +6px, `2xl` +8px) were repointed by
+      // hand in the same commit that introduced this block; `xs`, `sm` and
+      // `base` drift by at most 1px and were folded in as-is.
+      //
+      // Full rationale: `docs/ux/escala-tipografica.md`.
+      // ---------------------------------------------------------------------
+      fontSize: {
+        /** Uppercase micro-label: table head, kicker, badge text. */
+        "2xs": ["10.5px", { lineHeight: "1.4", letterSpacing: "0.12em" }],
+        /** Secondary metadata: helper text, timestamps, chip text. */
+        xs: ["12.5px", { lineHeight: "1.5", letterSpacing: "0em" }],
+        /** Dense interface text: table cells, form labels, list rows. */
+        sm: ["13.5px", { lineHeight: "1.5", letterSpacing: "-0.005em" }],
+        /** Body copy and the default reading size of the product. */
+        base: ["15px", { lineHeight: "1.45", letterSpacing: "-0.01em" }],
+        /** Card title, dialog title, a name that leads a row. */
+        lg: ["20px", { lineHeight: "1.2", letterSpacing: "-0.02em" }],
+        /** Page title. The size `PageHeader` already ships. */
+        xl: ["26px", { lineHeight: "1.15", letterSpacing: "-0.03em" }],
+        /** Stat number. The size `StatCard` already ships. */
+        "2xl": ["32px", { lineHeight: "1.05", letterSpacing: "-0.04em" }],
+        /** Hero headline. Auth panel, landing, trainer "next session". */
+        display: ["46px", { lineHeight: "0.95", letterSpacing: "-0.05em" }],
+      },
+      // Four tracking steps for the cases where a value has to CONTRADICT the
+      // default its size step carries — an uppercase run at body size, or a
+      // heading that must not inherit its step's tightening.
+      //
+      // The names are deliberately outside Tailwind's own vocabulary
+      // (`tighter`/`tight`/`normal`/`wide`/`wider`/`widest`): `tracking-tight`
+      // has 14 call sites and `tracking-wider` 8, none of them in scope here,
+      // and redefining a key underneath them would move type nobody is
+      // reviewing. Same rule applies to the `leading-*` steps below.
+      letterSpacing: {
+        /** Tighten at a size whose step does not tighten enough. */
+        dense: "-0.02em",
+        /** Cancel an inherited negative tracking (tabular data, code, IDs). */
+        flat: "0em",
+        /** Uppercase at small size. The `2xs` default, reusable elsewhere. */
+        caps: "0.12em",
+        /** Uppercase that has to read as a rule, not as a word. */
+        "caps-wide": "0.2em",
+      },
+      // Three leading steps, same contract as the tracking ones: they exist to
+      // override a step's default, not to replace it. `leading-relaxed` (47
+      // call sites), `leading-tight` (7) and `leading-none` (7) keep their
+      // stock values.
+      lineHeight: {
+        /** A headline that wraps and must stay one block. */
+        crisp: "1.15",
+        /** The `base` default, applied at another size. */
+        body: "1.45",
+        /** Long-form paragraph: help text, legal copy, empty-state prose. */
+        prose: "1.55",
+      },
       spacing: {
         "18": "4.5rem",
         "22": "5.5rem",

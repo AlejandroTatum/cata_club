@@ -33,7 +33,17 @@ export type Axis = "typography" | "leading" | "tracking" | "icon" | "shadow" | "
  * live ones anyway.
  */
 export const ALLOWLIST: Record<Axis, readonly string[]> = {
-  /** `text-[…]`. Twenty-four hand-picked sizes where the `text-*` scale has ten. */
+  /**
+   * `text-[…]`. Twenty-four hand-picked sizes where the `text-*` scale has ten.
+   *
+   * `18px` is the one entry that was NOT in the frozen inventory, and it is the
+   * only exception this list will ever carry. Defining `fontSize` in
+   * `tailwind.config.ts` redefined `text-lg` from 18px to 20px, so the five
+   * call sites that read 18px had to spell it literally or silently grow by
+   * 2px. Choosing 15px or 20px for each of them is a design decision, not a
+   * mechanical one, so it belongs to the migration issue — which deletes this
+   * entry along with the rest.
+   */
   typography: [
     "9px",
     "9.5px",
@@ -49,6 +59,7 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
     "14.5px",
     "15px",
     "17px",
+    "18px",
     "20px",
     "24px",
     "26px",

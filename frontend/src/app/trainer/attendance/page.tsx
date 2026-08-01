@@ -1393,7 +1393,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-state-ok-bg">
               <CheckCircle size={32} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
             </div>
-            <h2 className="mb-3 text-2xl font-bold tracking-tight text-ink">
+            <h2 className="mb-3 text-[24px] leading-8 font-bold tracking-tight text-ink">
               Asistencia Registrada
             </h2>
             <p className="mb-2 text-sm leading-relaxed text-ink-2">
