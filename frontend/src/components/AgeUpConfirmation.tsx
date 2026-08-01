@@ -82,10 +82,7 @@ export default function AgeUpConfirmation({
 
   return (
     <div
-      // `m-0` for the same reason as `ConfirmDialog`: rendered inline, so the
-      // `space-y-page` on `<main>` would otherwise put a margin on a
-      // `fixed inset-0` overlay. See `docs/ux/ritmo-vertical.md`.
-      className="fixed inset-0 z-50 m-0 flex items-center justify-center bg-cata-black/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-cata-black/40 px-4"
       onClick={onCancel}
     >
       <div

@@ -105,17 +105,4 @@ describe("ConfirmDialog", () => {
     expect(dialog).toHaveAttribute("aria-labelledby");
     expect(dialog).toHaveAttribute("aria-describedby");
   });
-
-  it("keeps the page rhythm off its overlay", () => {
-    // This dialog renders INLINE (no portal), so on every screen that mounts
-    // it, it is a first-level child of `<main>` — which now carries
-    // `space-y-page`. A `margin-top` on a `fixed inset-0` box both offsets it
-    // and shrinks it, so the scrim would leave a 20px strip uncovered at the
-    // top. The overlay centres with flex, never with margin, so pinning the
-    // margin to zero is exact. See `docs/ux/ritmo-vertical.md`.
-    fireEvent.click(trigger);
-
-    const overlay = screen.getByRole("dialog").parentElement as HTMLElement;
-    expect(overlay).toHaveClass("fixed", "inset-0", "m-0");
-  });
 });

@@ -700,17 +700,22 @@ export default function AppShell({
               it was, so the next Tab returns to the chrome. -1 keeps it out of
               the sequential tab order (and out of the system focus ring's
               selector, so no box is drawn around the whole page). */}
-          {/* `space-y-page` finishes the `.canvas` column. The wrapper above
-              already spaces the header row against `<main>` at the same step;
-              carrying it INSIDE means the title and every first-level block of
-              every screen sit on one 20px rhythm, and no screen writes it
-              again. `space-y` rather than `flex flex-col gap` on purpose: it
-              is a margin on the children, so it cannot change the box model of
-              blocks the shell does not own. See `docs/ux/ritmo-vertical.md`. */}
+          {/* `flex flex-col gap-page` finishes the `.canvas` column, and is
+              `.canvas` transcribed: `_sistema.css:152` is itself a flex column
+              at 20px. The wrapper above already spaces the header row against
+              `<main>` at the same step; carrying it INSIDE means the title and
+              every first-level block of every screen sit on one 20px rhythm.
+
+              A `space-y-*` margin was tried first and measured wrong: several
+              screens render a modal as a sibling of their content, and a
+              margin lands on a `fixed inset-0` overlay, offsetting it 20px and
+              shrinking it by 20px. Flex `gap` never applies to an out-of-flow
+              child, so the overlay is immune by construction rather than by a
+              guard. See `docs/ux/ritmo-vertical.md`. */}
           <main
             id={MAIN_CONTENT_ID}
             tabIndex={-1}
-            className="min-w-0 flex-1 space-y-page outline-none"
+            className="flex min-w-0 flex-1 flex-col gap-page outline-none"
           >
             {children}
           </main>

@@ -635,10 +635,12 @@ describe("AppShell — the page header row", (): void => {
     );
 
     const main = container.querySelector("main") as HTMLElement;
-    expect(main).toHaveClass("space-y-page");
-    // `space-y` and not `flex flex-col gap`: the rhythm must not change the
-    // box model of seventeen screens' worth of blocks it does not own.
-    expect(main).not.toHaveClass("flex");
+    expect(main).toHaveClass("flex", "flex-col", "gap-page");
+    // Flex `gap` and not a `space-y-*` margin. Several screens render a modal
+    // as a sibling of their content, and a margin lands on a `fixed inset-0`
+    // overlay — measured at 20px of offset and 20px of lost height. A gap
+    // never applies to an out-of-flow child.
+    expect(main.className).not.toMatch(/\bspace-y-/);
     expect(main.parentElement).toHaveClass("gap-page");
   });
 

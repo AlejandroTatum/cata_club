@@ -75,7 +75,7 @@ como `gap` sobre una columna. El segundo criterio de aceptación de #31 —"ning
 El ritmo de página **no lo escribe la pantalla**. Lo escribe el shell, una vez:
 
 ```tsx
-<main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 space-y-page outline-none">
+<main id={MAIN_CONTENT_ID} tabIndex={-1} className="flex min-w-0 flex-1 flex-col gap-page outline-none">
 ```
 
 `AppShell.tsx` ya envolvía `PageHeader` y `<main>` en una columna a `gap-page`. Llevar el mismo
@@ -93,15 +93,37 @@ Por eso una pantalla migrada **no tiene envoltorio de ritmo**: sus bloques son h
 `<main>` y no llevan margen. Un `space-y-*` de nivel de página en un módulo de pantalla es, desde
 ahora, código que repite lo que el shell ya hizo.
 
-### Por qué `space-y` y no `flex flex-col gap`
+### Por qué `flex flex-col gap` y no `space-y`
 
-Las dos escriben la misma distancia, pero `space-y` es un margen sobre los hijos y `flex-col gap`
-cambia el modelo de caja del contenedor. Poner `flex` sobre `<main>` habría hecho que cada bloque
-de las diecisiete pantallas pase a ser un ítem flex —fin del colapso de márgenes, otro
-comportamiento de `height: 100%`, otro mínimo intrínseco— por una razón que no es el ritmo.
+Las dos escriben la misma distancia, así que la primera versión de este trabajo usó `space-y-page`
+por ser el cambio más conservador: un margen sobre los hijos no toca el modelo de caja del
+contenedor. **Medirlo lo desmintió, y vale la pena dejar escrito por qué.**
 
-`/login` es hoy la única pantalla que un navegador alcanza, y no es una pantalla de shell. Con la
-verificación visual limitada a eso, el idioma correcto es el que no puede mover nada más.
+Varias pantallas montan su modal como hermano de su contenido —`ConfirmDialog` y
+`AgeUpConfirmation` se renderizan en línea, sin portal— así que el modal es un hijo de primer
+nivel de `<main>`. `space-y-*` le pone `margin-top` a todo hermano posterior, **incluido uno que
+está fuera de flujo**. Sobre una caja `fixed inset-0` con `top` y `bottom` fijados, ese margen no
+se ignora: desplaza la caja y le resta altura.
+
+Medido contra el CSS emitido, a 1440×900:
+
+| | `space-y-page` en `<main>` | `flex flex-col gap-page` |
+|---|---|---|
+| velo `fixed inset-0` | `margin-top: 20px`, caja **1440×880 @top 20** | `margin-top: 0`, caja **1440×900 @top 0** |
+
+Veinte píxeles de pantalla sin cubrir arriba del velo, en cada diálogo de confirmación del
+producto. Se intentó blindarlo con `m-0` sobre el velo y **no alcanza**: Tailwind emite las reglas
+de `space-*` después de las de `margin`, con la misma especificidad, así que gana `space-y`.
+Verificado en el bundle: `.m-auto` está en el byte 11227 y `.space-y-5` en el 21417.
+
+`gap` de flex, en cambio, no se aplica nunca a un hijo fuera de flujo: el velo queda inmune por
+construcción y no por un parche que la cascada puede revertir. Y es, además, lo que la autoridad
+dice — `.canvas` (`_sistema.css:152`) **es** un `display: flex; flex-direction: column`.
+
+El riesgo que se quería evitar quedó descartado por medición aparte: ningún hijo de primer nivel
+de las diecisiete pantallas usa `h-full`, `flex-1`, `absolute` ni `min-h-screen`, así que ninguno
+cambia de comportamiento al pasar a ítem flex. Y el colapso de márgenes ya no aplica porque este
+mismo trabajo retiró los márgenes de primer nivel.
 
 ## Lo que no se hizo, y por qué
 
