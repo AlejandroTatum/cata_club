@@ -689,7 +689,7 @@ export default function AppShell({
             12px under a control that already carries 8px of its own bottom
             margin. */}
         <div
-          className={`flex flex-1 flex-col gap-5 px-4 pt-3 sm:px-[26px] ${
+          className={`flex flex-1 flex-col gap-page px-4 pt-3 sm:px-[26px] ${
             showMobileTabs ? "pb-[78px] lg:pb-8" : "pb-8"
           }`}
         >
@@ -700,7 +700,23 @@ export default function AppShell({
               it was, so the next Tab returns to the chrome. -1 keeps it out of
               the sequential tab order (and out of the system focus ring's
               selector, so no box is drawn around the whole page). */}
-          <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 outline-none">
+          {/* `flex flex-col gap-page` finishes the `.canvas` column, and is
+              `.canvas` transcribed: `_sistema.css:152` is itself a flex column
+              at 20px. The wrapper above already spaces the header row against
+              `<main>` at the same step; carrying it INSIDE means the title and
+              every first-level block of every screen sit on one 20px rhythm.
+
+              A `space-y-*` margin was tried first and measured wrong: several
+              screens render a modal as a sibling of their content, and a
+              margin lands on a `fixed inset-0` overlay, offsetting it 20px and
+              shrinking it by 20px. Flex `gap` never applies to an out-of-flow
+              child, so the overlay is immune by construction rather than by a
+              guard. See `docs/ux/ritmo-vertical.md`. */}
+          <main
+            id={MAIN_CONTENT_ID}
+            tabIndex={-1}
+            className="flex min-w-0 flex-1 flex-col gap-page outline-none"
+          >
             {children}
           </main>
         </div>

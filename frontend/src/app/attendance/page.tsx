@@ -35,6 +35,7 @@ import {
   ErrorState,
   LoadingState,
   Pagination,
+  STAT_GRID,
   StatCard,
   Table,
   TableBody,
@@ -131,7 +132,7 @@ export default function AttendancePage(): React.ReactElement {
           </Link>
         }
       >
-        <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={STAT_GRID}>
           <StatCard label="Horarios" value={schedules.length} hint="sesiones semanales" />
           <StatCard label="Registros" value={stats.totalStudents} hint="en el rango elegido" />
           <StatCard

@@ -307,6 +307,19 @@ const config: Config = {
         "22": "5.5rem",
         "30": "7.5rem",
         "88": "22rem",
+        // The vertical rhythm: three steps, one per job, each derived from a
+        // metric the design already committed to rather than picked by eye.
+        // Full argument in `docs/ux/ritmo-vertical.md`.
+        //
+        // These are NAMES, not a replacement for the numeric scale. Tailwind's
+        // own steps stay: the rhythm is about the three jobs below, and a
+        // one-off distance inside a component is not one of them.
+        /** Between first-level blocks of a page. `.canvas` (:152). h-ctl / 2. */
+        page: "20px",
+        /** Between sibling cards, and between the parts of one. `.stats` (:222). = r-card. */
+        section: "14px",
+        /** Between a label and what it labels. `.note` (:104). r-card / 2. */
+        field: "7px",
       },
       // Committed control metrics from `_sistema.css`. These are the reason
       // the UI primitives exist: a button is 40px because `h-ctl` is 40px,

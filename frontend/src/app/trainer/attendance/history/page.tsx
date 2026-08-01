@@ -140,7 +140,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
       <AppShell title="Historial de asistencias">
         <BackLink href="/trainer" label="Volver a Mi día" />
 
-        <div className="mt-4 flex flex-col gap-4">
+        <div className="flex flex-col gap-page">
           <AttendanceFilters
             filters={filters}
             schedules={schedules}

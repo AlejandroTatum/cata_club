@@ -535,18 +535,17 @@ function AddDependentContent(): React.ReactElement {
       title="Agregar dependiente"
       subtitle="Complete los pasos para agregar un nuevo dependiente a su cuenta de representante."
     >
-      <div className="w-full max-w-[760px]">
+      <div className="w-full max-w-[760px] space-y-page">
       <BackLink href="/student" label="Volver" />
 
       {/* Named stepper — the same contract as the public wizard. */}
-      <div className="mb-6">
+      <div>
         <p className="text-2xs font-bold uppercase text-ink-3">
           Paso {currentIndex + 1} de {ADD_DEPENDENT_STEP_ORDER.length}
         </p>
       </div>
 
       <Stepper
-        className="mb-8"
         label="Pasos para agregar un dependiente"
         current={currentIndex + 1}
         steps={ADD_DEPENDENT_STEP_ORDER.map((s) => ADD_DEPENDENT_SHORT_LABELS[s])}

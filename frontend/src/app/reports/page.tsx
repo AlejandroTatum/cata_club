@@ -371,7 +371,7 @@ function ReportsContent(): React.ReactElement {
       <div
         role="radiogroup"
         aria-label="Tipo de reporte"
-        className="mb-3.5 grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] items-stretch gap-3.5"
+        className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] items-stretch gap-section"
       >
         {PRESETS.map((item) => {
           const selected = preset === item.key;
@@ -405,7 +405,7 @@ function ReportsContent(): React.ReactElement {
       </div>
 
       {/* Range + the single preset-specific filter + Generar PDF. */}
-      <div className="card mb-3.5 flex flex-wrap items-end gap-3.5 p-[17px_18px]">
+      <div className="card flex flex-wrap items-end gap-section p-[17px_18px]">
         <div className="flex min-w-[150px] flex-col gap-1.5">
           <label htmlFor="fechaInicio" className="text-2xs font-bold uppercase text-ink-3">
             Desde
@@ -503,14 +503,14 @@ function ReportsContent(): React.ReactElement {
       </div>
 
       {rangeInverted && (
-        <div className="alert-error mb-3.5" role="alert">
+        <div className="alert-error" role="alert">
           <AlertCircle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
           <span>La fecha de inicio debe ser anterior a la fecha de fin.</span>
         </div>
       )}
 
       {error && (
-        <div className="alert-error mb-3.5" role="alert">
+        <div className="alert-error" role="alert">
           <AlertCircle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>

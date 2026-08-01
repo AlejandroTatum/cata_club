@@ -997,7 +997,7 @@ function PaymentsContent({
     // 760px cap left the right half of the column empty at 1440; the width now
     // buys a rail that says HOW a payment is made, which is the thing this
     // screen was missing rather than a thing it was too narrow for.
-    <div className="w-full space-y-5">
+    <div className="w-full space-y-page">
       <ManagedStudentPicker
         id="student-select-payments"
         profiles={managedProfiles}

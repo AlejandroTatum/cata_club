@@ -30,6 +30,7 @@ import {
   LoadingState,
   Pagination,
   SearchInput,
+  STAT_GRID,
   StatCard,
   Table,
   TableBody,
@@ -1369,7 +1370,6 @@ export default function MembersPage(): React.ReactElement {
       <AppShell title="Miembros">
         {error && (
           <ErrorState
-            className="mb-6"
             title="No se pudieron cargar los miembros"
             message={error}
             onRetry={() => void loadMembers()}
@@ -1379,7 +1379,7 @@ export default function MembersPage(): React.ReactElement {
         {/* Stats row — `07-miembros.html`'s four tiles. Figures are ink; the
             old version put a red icon disc beside every one of them, which
             made four neutral counts read as four alerts. */}
-        <div className="mb-6 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={STAT_GRID}>
           <StatCard label="Cuentas" value={stats.totalAccounts} hint="responsables de pago" />
           <StatCard label="Estudiantes" value={stats.totalStudents} hint="perfiles registrados" />
           {/*
@@ -1409,7 +1409,7 @@ export default function MembersPage(): React.ReactElement {
         </div>
 
         {/* Search + filter chips */}
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="max-w-xs flex-1">
             <SearchInput
               label="Buscar miembros"
@@ -1423,7 +1423,7 @@ export default function MembersPage(): React.ReactElement {
             Crear cuenta
           </Link>
         </div>
-        <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
           {FILTER_CHIPS.map((chip) => (
             <FilterPill
               key={chip.flag}

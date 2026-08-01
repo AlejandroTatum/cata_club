@@ -21,6 +21,20 @@
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "./cn";
 
+/**
+ * The stat row itself, not the tile: the grid every screen that draws four
+ * pulse tiles reaches for.
+ *
+ * `_sistema.css` `.stats` (:222) is `display: grid; gap: 14px` with `.c2` and
+ * `.c4` as column modifiers, so the gutter is a property of the ROW and the
+ * column count is the variation on top. `gap-section` IS that 14px — the
+ * vertical rhythm's middle step, which is the card radius.
+ *
+ * It carries no margin: the distance to the next block belongs to the page
+ * rhythm on `<main>`. See `docs/ux/ritmo-vertical.md`.
+ */
+export const STAT_GRID = "grid gap-section sm:grid-cols-2 lg:grid-cols-4";
+
 export type StatCardVariant = "default" | "hot";
 
 export interface StatCardProps {
