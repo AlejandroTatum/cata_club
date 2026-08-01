@@ -16,7 +16,7 @@
  * `AlumnoHorario` rows (who is ENROLLED), and no DTO says who turned up. And
  * no level anywhere on THIS screen — neither the hero nor a Niveles section —
  * because "Mi día" has one decision on it. Levels are their own destination:
- * `/trainer/nivel` renders the same ladder the admin's `/ranking` renders (see
+ * `/trainer/nivel` renders the same ladder the admin's `/nivel` renders (see
  * `NivelLadderScreen`), and the sidebar links to it.
  *
  * "Avisar al club" has no endpoint behind it: nothing in the API notifies the

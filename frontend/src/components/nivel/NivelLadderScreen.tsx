@@ -14,13 +14,13 @@
  *
  * *"la pantalla de nivel tiene que ser la misma en entrenador que la de
  * admin."* Until now the club shipped two different screens for the same job:
- * this ladder at `/ranking` (admin) and `NivelAsignacionPanel`, an upstream
+ * this ladder at `/nivel` (admin) and `NivelAsignacionPanel`, an upstream
  * table, at `/trainer/nivel`. Both read `GET /ranking/alumnos-con-nivel`, and
  * the backend grants ENTRENADOR the same `PATCH /personas/{id}/nivel` it
  * grants ADMINISTRADOR — the two roles do exactly the same work, so they get
  * exactly the same screen.
  *
- * This component IS that screen. `/ranking` and `/trainer/nivel` are both
+ * This component IS that screen. `/nivel` and `/trainer/nivel` are both
  * three-line wrappers over it; all that differs is the back link and the role
  * the route admits. Keeping two routes rather than collapsing to one is what
  * lets each role keep a back link that goes where they came from ("Volver al
@@ -167,7 +167,7 @@ import {
   studentFullName,
   studentsOnNivel,
   unassignedStudents,
-} from "@/app/ranking/ranking-page-utils";
+} from "@/app/nivel/nivel-page-utils";
 import type { UserRole } from "@/types/domain";
 
 /** How long a row shows its success label before reverting to the verb. */

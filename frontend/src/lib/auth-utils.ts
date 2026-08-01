@@ -47,7 +47,7 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
       links.push(
         { href: "/dashboard", label: "Panel de Control" },
         { href: "/members", label: "Miembros" },
-        { href: "/ranking", label: "Niveles" },
+        { href: "/nivel", label: "Niveles" },
         { href: "/groups", label: "Horarios" },
         { href: "/payments", label: "Membresías y Pagos" },
         { href: "/discounts", label: "Descuentos" },
@@ -70,7 +70,7 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
         // the screen now reads `GET /ranking/alumnos-con-nivel`.
         //
         // "Niveles", not "Nivel": `/trainer/nivel` renders the very same
-        // `NivelLadderScreen` the admin's `/ranking` renders, under the same
+        // `NivelLadderScreen` the admin's `/nivel` renders, under the same
         // title. One screen, one name, whoever is reading the sidebar.
         { href: "/trainer/nivel", label: "Niveles" },
       );

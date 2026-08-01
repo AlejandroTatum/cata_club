@@ -4,9 +4,9 @@
  * The point of this file is ONE requirement — *"la pantalla de nivel tiene que
  * ser la misma en entrenador que la de admin."* The trainer used to get an
  * upstream table (`NivelAsignacionPanel`) while the admin got the ladder; the
- * route now renders the very same `NivelLadderScreen` `/ranking` renders, so
+ * route now renders the very same `NivelLadderScreen` `/nivel` renders, so
  * these tests assert sameness rather than re-testing the ladder's own
- * behaviour (that lives in `src/app/ranking/__tests__/RankingPage.test.tsx`).
+ * behaviour (that lives in `src/app/nivel/__tests__/NivelPage.test.tsx`).
  *
  * What is checked here: the trainer sees the ladder and not the table, with
  * the trainer's own back link and the shared title; a trainer can actually
@@ -19,7 +19,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import NivelPage from "@/app/trainer/nivel/page";
-import RankingPage from "@/app/ranking/page";
+import AdminNivelPage from "@/app/nivel/page";
 import type { AlumnoConNivel, NivelConOcupacion } from "@/services/api";
 import type { UserRole } from "@/types/domain";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
@@ -284,7 +284,7 @@ describe("NivelPage — the trainer gets the admin's screen", () => {
     expect(screen.getByRole("heading", { name: "Sin nivel asignado (2)" })).toBeInTheDocument();
   });
 
-  it("renders the same content the admin's /ranking renders", async () => {
+  it("renders the same content the admin's /nivel renders", async () => {
     // The requirement in one assertion. Everything inside the ladder card —
     // rungs, names, headcounts, actions — has to be identical; only the route
     // chrome (back link, allowed role) is allowed to differ.
@@ -295,9 +295,9 @@ describe("NivelPage — the trainer gets the admin's screen", () => {
       ?.parentElement?.textContent;
     trainer.unmount();
 
-    mockPathname.mockReturnValue("/ranking");
+    mockPathname.mockReturnValue("/nivel");
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Ana Admin"));
-    const admin = render(<RankingPage />);
+    const admin = render(<AdminNivelPage />);
     await waitForLadder();
     const escaleraAdmin = admin.container.querySelector("ol")?.textContent;
     const estadisticasAdmin = screen.getByText("Estudiantes asignados").closest("div")

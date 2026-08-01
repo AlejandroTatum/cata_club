@@ -136,7 +136,7 @@ describe("getNavLinksForRole", () => {
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
     expect(links[1]).toEqual({ href: "/dashboard", label: "Panel de Control" });
     expect(links[2]).toEqual({ href: "/members", label: "Miembros" });
-    expect(links[3]).toEqual({ href: "/ranking", label: "Niveles" });
+    expect(links[3]).toEqual({ href: "/nivel", label: "Niveles" });
     expect(links[4]).toEqual({ href: "/groups", label: "Horarios" });
     expect(links[5]).toEqual({ href: "/payments", label: "Membresías y Pagos" });
     expect(links[6]).toEqual({ href: "/discounts", label: "Descuentos" });
@@ -156,10 +156,10 @@ describe("getNavLinksForRole", () => {
   });
 
   it("gives the trainer's ladder the same nav label the admin's has", () => {
-    // `/trainer/nivel` and `/ranking` render the SAME screen under the SAME
+    // `/trainer/nivel` and `/nivel` render the SAME screen under the SAME
     // title, so the sidebar must not call it two different things depending on
     // who is signed in.
-    const adminLabel = getNavLinksForRole("admin").find((l) => l.href === "/ranking")?.label;
+    const adminLabel = getNavLinksForRole("admin").find((l) => l.href === "/nivel")?.label;
     const trainerLabel = getNavLinksForRole("trainer").find(
       (l) => l.href === "/trainer/nivel",
     )?.label;

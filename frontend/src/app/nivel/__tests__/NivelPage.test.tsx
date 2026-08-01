@@ -1,5 +1,5 @@
 /**
- * Component tests for RankingPage (admin) — "la escalera".
+ * Component tests for NivelPage (admin) — "la escalera".
  *
  * The screen used to be a per-student table with a nivel `<select>` per row.
  * It is now the ladder itself: one rung per nivel, ordered by rank, each
@@ -18,7 +18,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
-import RankingPage from "@/app/ranking/page";
+import NivelPage from "@/app/nivel/page";
 import type { AlumnoConNivel, NivelConOcupacion } from "@/services/api";
 
 vi.mock("@/components/ProtectedRoute", () => ({
@@ -26,7 +26,7 @@ vi.mock("@/components/ProtectedRoute", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/ranking",
+  usePathname: () => "/nivel",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
@@ -155,7 +155,7 @@ async function waitForLadder(): Promise<void> {
   await screen.findByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" });
 }
 
-describe("RankingPage — la escalera", () => {
+describe("NivelPage — la escalera", () => {
   beforeEach(() => {
     mockFetchAlumnosConNivel.mockReset().mockResolvedValue(ROSTER);
     mockFetchNivelesConOcupacion.mockReset().mockResolvedValue(NIVELES);
@@ -169,7 +169,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("renders one rung per nivel, ordered with 1 at the top", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     expect(rungs()).toHaveLength(3);
@@ -179,7 +179,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("labels each rung with its rank chip", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     expect(within(rungs()[0]).getByTitle("Puesto 1 de la escalera")).toBeInTheDocument();
@@ -188,7 +188,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("states exactly how many students hold each level", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     // Pedro Ramírez sits on nivel 1, Carla Vera on nivel 3, nobody on nivel 2.
@@ -201,7 +201,7 @@ describe("RankingPage — la escalera", () => {
     // The two backend sources disagree in live data. `personasActuales` says
     // 2 for "Nivel Base"; the roster names exactly one student on it, and the
     // roster is what the panel prints — so the roster is what the rung counts.
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     expect(within(rungs()[2]).getByText("1 estudiante")).toBeInTheDocument();
@@ -209,7 +209,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("keeps the roster off the rung itself — names live in the panel", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     expect(within(rungs()[0]).queryByText("Pedro Ramírez")).not.toBeInTheDocument();
@@ -217,7 +217,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("renders ONE number per rung — the club's name, never the rank beside it", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     // The rank is announceable but never rendered as a digit next to the
@@ -231,7 +231,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("shows exactly two stats — Estudiantes asignados and Niveles — and no judgement", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     expect(screen.getByText("Estudiantes asignados")).toBeInTheDocument();
@@ -245,7 +245,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("renders no occupancy indicator anywhere — no fraction, no cupos, no 'Bajo mínimo'", async () => {
-    const { container } = render(<RankingPage />);
+    const { container } = render(<NivelPage />);
     await waitForLadder();
 
     const text = container.textContent ?? "";
@@ -260,7 +260,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("offers 'Ver y asignar' as the only rung control — never 'Promover'", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     expect(
@@ -270,7 +270,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("opens an assignment panel scoped to the rung that was clicked", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
@@ -282,7 +282,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("assigns an unassigned student to the rung's nivel", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
@@ -299,7 +299,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("splits the open rung into unassigned LEFT and this level's roster RIGHT", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" }));
@@ -322,7 +322,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("offers no assign action for a student already on the open rung", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Cima" }));
@@ -339,7 +339,7 @@ describe("RankingPage — la escalera", () => {
   it("never offers an already-assigned student in another rung's left column", async () => {
     // The left column is the unassigned, and only them: moving somebody who
     // already holds a level is the page finder's job, not the rung panel's.
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
@@ -352,7 +352,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("filters the assignment panel by name", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
@@ -369,7 +369,7 @@ describe("RankingPage — la escalera", () => {
   });
 
   it("moves the student from the left column to the right one, and the rung's count with her", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
@@ -389,7 +389,7 @@ describe("RankingPage — la escalera", () => {
 
   it("surfaces a real backend failure instead of a false success", async () => {
     mockSetStudentNivel.mockRejectedValue(new Error("boom"));
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
@@ -403,7 +403,7 @@ describe("RankingPage — la escalera", () => {
 
   it("clears the pending 'Asignado' reset timer on unmount", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const { unmount } = render(<RankingPage />);
+    const { unmount } = render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Medio" }));
@@ -423,7 +423,7 @@ describe("RankingPage — la escalera", () => {
 
   it("shows a retryable error state when the ladder cannot be loaded", async () => {
     mockFetchNivelesConOcupacion.mockRejectedValue(new Error("network"));
-    render(<RankingPage />);
+    render(<NivelPage />);
 
     expect(
       await screen.findByText("No se pudieron cargar los niveles. Intente nuevamente."),
@@ -431,7 +431,7 @@ describe("RankingPage — la escalera", () => {
   });
 });
 
-describe("RankingPage — finding a student and placing the unassigned", () => {
+describe("NivelPage — finding a student and placing the unassigned", () => {
   beforeEach(() => {
     mockFetchAlumnosConNivel.mockReset().mockResolvedValue(ROSTER);
     mockFetchNivelesConOcupacion.mockReset().mockResolvedValue(NIVELES);
@@ -447,7 +447,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
   }
 
   it("lists the students who have no level inside every rung's panel", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.click(screen.getByRole("button", { name: "Ver y asignar estudiantes del nivel Nivel Base" }));
@@ -462,7 +462,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
     // beside a level picker at the foot of the page, once beside the level
     // itself. One of the two had to go, and the one attached to the
     // destination is the one that survives.
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     expect(
@@ -476,7 +476,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
   });
 
   it("announces the unassigned count at the top, as a figure and not as a jump link", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     expect(screen.getByText("de 3 estudiantes · 1 sin asignar")).toBeInTheDocument();
@@ -484,7 +484,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
   });
 
   it("keeps the unassigned count stable while searching", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     search("Sofía");
 
@@ -492,7 +492,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
   });
 
   it("places an unassigned student on the level picked in their search-result row", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     search("Sofía");
@@ -508,7 +508,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
   });
 
   it("will not act until a destination level is chosen", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     search("Sofía");
@@ -516,7 +516,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
   });
 
   it("finds a student by name and points at the rung they are on", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     search("ramirez");
@@ -531,7 +531,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
   });
 
   it("re-levels the student found by the search, under the same verb as any other row", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     search("ramirez");
@@ -549,7 +549,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
   });
 
   it("says so when nobody matches, instead of showing an empty list", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     search("zzz");
@@ -558,7 +558,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
   });
 
   it("never offers a student their current level as a destination", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     search("ramirez");
@@ -581,7 +581,7 @@ describe("RankingPage — finding a student and placing the unassigned", () => {
  * `NivelLadderScreen`'s header). Both are about a student you are LOOKING at
  * rather than one whose name you can already spell into the page search.
  */
-describe("RankingPage — what the old table could do", () => {
+describe("NivelPage — what the old table could do", () => {
   beforeEach(() => {
     mockFetchAlumnosConNivel.mockReset().mockResolvedValue(ROSTER);
     mockFetchNivelesConOcupacion.mockReset().mockResolvedValue(NIVELES);
@@ -598,7 +598,7 @@ describe("RankingPage — what the old table could do", () => {
     // The table's "Nuevo nivel" picker sat on every row. Losing it would have
     // left the roster column inert: the only way to move Pedro would be to
     // type "Pedro" into a search while already reading his name on screen.
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     openCima();
 
@@ -617,7 +617,7 @@ describe("RankingPage — what the old table could do", () => {
   });
 
   it("will not move a resident until a destination is chosen", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     openCima();
 
@@ -627,7 +627,7 @@ describe("RankingPage — what the old table could do", () => {
   });
 
   it("never offers a resident the level they are already on", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     openCima();
 
@@ -644,7 +644,7 @@ describe("RankingPage — what the old table could do", () => {
   });
 
   it("takes the moved student off the rung and off its headcount", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     openCima();
 
@@ -676,7 +676,7 @@ describe("RankingPage — what the old table could do", () => {
     }));
     mockFetchAlumnosConNivel.mockResolvedValue(many);
 
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     openCima();
 
@@ -704,7 +704,7 @@ describe("RankingPage — what the old table could do", () => {
  * and the page finder), because every other test on this screen passes a
  * numeric level id and would stay green if the null path were broken.
  */
-describe("RankingPage — quitar el nivel", () => {
+describe("NivelPage — quitar el nivel", () => {
   beforeEach(() => {
     mockFetchAlumnosConNivel.mockReset().mockResolvedValue(ROSTER);
     mockFetchNivelesConOcupacion.mockReset().mockResolvedValue(NIVELES);
@@ -718,7 +718,7 @@ describe("RankingPage — quitar el nivel", () => {
   }
 
   it("sends null — not the level the student is on — from the rung's roster", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     openCima();
 
@@ -736,7 +736,7 @@ describe("RankingPage — quitar el nivel", () => {
   });
 
   it("says 'Quitar' for that destination and 'Asignar' for a real level", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     openCima();
 
@@ -759,7 +759,7 @@ describe("RankingPage — quitar el nivel", () => {
   });
 
   it("confirms the un-assign in its own words, not as an assignment", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     openCima();
 
@@ -778,7 +778,7 @@ describe("RankingPage — quitar el nivel", () => {
   });
 
   it("leaves the student in the unassigned column and off the rung's headcount", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
     openCima();
 
@@ -803,7 +803,7 @@ describe("RankingPage — quitar el nivel", () => {
   });
 
   it("un-assigns from the page finder too, under the same word", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.change(screen.getByLabelText("Buscar un estudiante en toda la escalera"), {
@@ -825,7 +825,7 @@ describe("RankingPage — quitar el nivel", () => {
   });
 
   it("offers no un-assign to a student who has no level to lose", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     await waitForLadder();
 
     fireEvent.change(screen.getByLabelText("Buscar un estudiante en toda la escalera"), {
@@ -838,14 +838,14 @@ describe("RankingPage — quitar el nivel", () => {
   });
 });
 
-describe("RankingPage — empty ladder", () => {
+describe("NivelPage — empty ladder", () => {
   beforeEach(() => {
     mockFetchAlumnosConNivel.mockReset().mockResolvedValue([]);
     mockFetchNivelesConOcupacion.mockReset().mockResolvedValue([]);
   });
 
   it("explains the empty state instead of rendering an empty card", async () => {
-    render(<RankingPage />);
+    render(<NivelPage />);
     expect(await screen.findByText("Todavía no hay niveles")).toBeInTheDocument();
   });
 });

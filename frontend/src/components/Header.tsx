@@ -71,7 +71,7 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   "/login": LogIn,
   "/dashboard": LayoutGrid,
   "/members": Users,
-  "/ranking": Trophy,
+  "/nivel": Trophy,
   "/groups": Calendar,
   "/payments": CreditCard,
   "/discounts": Percent,

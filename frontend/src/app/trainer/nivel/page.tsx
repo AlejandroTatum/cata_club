@@ -3,7 +3,7 @@
  *
  * *"la pantalla de nivel tiene que ser la misma en entrenador que la de
  * admin."* It is: this route renders the very same `NivelLadderScreen` the
- * admin's `/ranking` renders, with the same title. Only the back link
+ * admin's `/nivel` renders, with the same title. Only the back link
  * ("Volver a Entrenador") and the role this route admits differ, which is the
  * whole reason the two routes still exist instead of one.
  *
