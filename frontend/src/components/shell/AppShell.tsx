@@ -189,7 +189,7 @@ function getAreaLabel(role: string | null): string {
 
 /** `.nav-i` — 40px row, 10px radius, 13.5px medium label. */
 const NAV_ITEM_CLASSES =
-  "relative flex h-ctl items-center gap-2.5 rounded-ctl px-3 text-[13.5px] font-medium transition-colors";
+  "relative flex h-ctl items-center gap-2.5 rounded-ctl px-3 text-sm font-medium transition-colors";
 const NAV_ITEM_IDLE_CLASSES = "text-white/[0.62] hover:bg-white/[0.07] hover:text-white";
 /** `.nav-i.on` — coal highlight, never a red fill: red is reserved for CTA and destructive. */
 const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.08] font-semibold text-white";
@@ -394,7 +394,7 @@ export default function AppShell({
               />
             </span>
             <span className={`min-w-0 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
-              <span className="block truncate text-[13.5px] font-bold tracking-[-0.01em]">
+              <span className="block truncate text-sm font-bold">
                 Cata Club
               </span>
               {/* 50%, not the spec's 42%: white at 0.42 over `coal` composites

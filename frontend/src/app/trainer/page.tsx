@@ -77,7 +77,7 @@ const ABSENCE_NOTICE_HINT_ID = "trainer-absence-notice-hint";
  */
 const XL_CTA =
   "inline-flex h-[52px] items-center justify-center gap-2 rounded-xl bg-cata-red px-[22px] " +
-  "text-[15px] font-semibold text-white transition-colors hover:bg-cata-red-dark";
+  "text-base font-semibold text-white transition-colors hover:bg-cata-red-dark";
 
 /** First name only — "Hola, Carlos Mendoza" is a greeting nobody says out loud. */
 function firstNameOf(fullName: string | undefined): string {
@@ -177,10 +177,10 @@ export default function TrainerPage(): React.ReactElement {
                   {next.horaInicio}
                 </span>
                 <div className="flex min-w-[200px] flex-1 flex-col gap-1.5">
-                  <b className="text-[17px] font-bold tracking-[-0.015em]">
+                  <b className="text-base font-bold">
                     {formatDay(next.diaSemana)} {next.horaInicio} — {next.horaFin}
                   </b>
-                  <span className="flex items-center gap-2 text-[13px] text-white/60">
+                  <span className="flex items-center gap-2 text-sm text-white/60">
                     <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
                     {formatSessionCountdown(minutesUntilStart(next))}
                     {enrolledLabel ? ` · ${enrolledLabel}` : ""}
@@ -212,7 +212,7 @@ export default function TrainerPage(): React.ReactElement {
 
             {/* --- What comes after it. One line, not a second list. --- */}
             {later.length > 0 && (
-              <p className="text-[13px] text-ink-3">
+              <p className="text-sm text-ink-3">
                 Después:{" "}
                 {later.map((s, index) => (
                   <span key={s.id}>
@@ -229,7 +229,7 @@ export default function TrainerPage(): React.ReactElement {
               className="overflow-hidden rounded-card border border-line bg-paper"
             >
               <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-                <h2 id="ultima-lista-title" className="flex-1 text-[13px] font-bold text-ink">
+                <h2 id="ultima-lista-title" className="flex-1 text-sm font-bold text-ink">
                   {lastSession
                     ? `Última lista — ${formatDate(lastSession.fecha)} · ${lastSession.horario}`
                     : "Última lista"}
@@ -254,7 +254,7 @@ export default function TrainerPage(): React.ReactElement {
 
                   {absenceAlert && (
                     <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3.5">
-                      <p className="m-0 min-w-[230px] flex-1 text-[13.5px] text-ink-2">
+                      <p className="m-0 min-w-[230px] flex-1 text-sm text-ink-2">
                         <b className="font-semibold text-ink">{absenceAlert.estudiante}</b> suma{" "}
                         <b className="font-semibold text-ink">
                           {formatAbsenceCount(absenceAlert.ausencias)}

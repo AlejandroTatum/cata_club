@@ -34,43 +34,33 @@ export type Axis = "typography" | "leading" | "tracking" | "icon" | "shadow" | "
  */
 export const ALLOWLIST: Record<Axis, readonly string[]> = {
   /**
-   * `text-[…]`. Fourteen hand-picked sizes left of the original twenty-five.
+   * `text-[…]`. Eight hand-picked sizes left of the original twenty-five.
    *
    * The display band — 18 · 20 · 24 · 26 · 27 · 30 · 32 · 40 · 42 · 46 · 56 —
-   * is gone: every call site at 18px and above now names a step. `18px` was
-   * the one entry that had ever been added to this list, and it is retired
-   * here as its five call sites promised.
+   * went first: every call site at 18px and above names a step.
    *
-   * What remains is the 9–17px range, which is the body, dense and micro
-   * bands of the same migration issue.
+   * The body band went next. `13`, `13.5` and `14` collapsed into `sm`
+   * (13.5px), and `14.5`, `15` and `17` into `base` (15px): six sizes, 145
+   * call sites, one half-pixel cluster less.
+   *
+   * What remains is the 9–12.5px range, which is the dense and micro bands
+   * of the same migration issue.
    */
-  typography: [
-    "9px",
-    "9.5px",
-    "10px",
-    "10.5px",
-    "11px",
-    "11.5px",
-    "12px",
-    "12.5px",
-    "13px",
-    "13.5px",
-    "14px",
-    "14.5px",
-    "15px",
-    "17px",
-  ],
+  typography: ["9px", "9.5px", "10px", "10.5px", "11px", "11.5px", "12px", "12.5px"],
 
   /**
-   * `leading-[…]`. Seven ratios, none of which is a `leading-*` step.
+   * `leading-[…]`. Six ratios, none of which is a `leading-*` step.
    *
    * `1.12` and `1.15` retired with the display band: both were headline
    * line-heights, and `leading-crisp` (1.15) is the step that names them.
+   *
+   * `1.35` retired with the body band. Its single call site was the toast
+   * message, which now takes the 1.5 that `sm` brings.
    */
-  leading: ["1.2", "1.25", "1.3", "1.35", "1.45", "1.5", "1.55"],
+  leading: ["1.2", "1.25", "1.3", "1.45", "1.5", "1.55"],
 
   /**
-   * `tracking-[…]`. Eight values, all in `em`.
+   * `tracking-[…]`. Six values, all in `em`.
    *
    * The three `px` trackings are gone — they were the ones that could not
    * scale with the type, and all three lived in `AuthShell.tsx`. Two were
@@ -80,17 +70,13 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
    * `-0.05em`, `-0.04em` and `-0.03em` retired the same way: they are the
    * defaults of `display`, `2xl` and `xl`, and every call site that spelled
    * them out now sits on the step that brings them.
+   *
+   * `-0.015em` and `-0.02em` retired with the body band. The four `-0.015em`
+   * call sites sat 0.005em from the tracking `base` already carries and were
+   * dropped; the single `-0.02em` had to keep tightening a tabular figure, so
+   * it names `tracking-dense` instead.
    */
-  tracking: [
-    "-0.02em",
-    "-0.015em",
-    "-0.01em",
-    "0.06em",
-    "0.1em",
-    "0.12em",
-    "0.13em",
-    "0.2em",
-  ],
+  tracking: ["-0.01em", "0.06em", "0.1em", "0.12em", "0.13em", "0.2em"],
 
   /** `size={…}` on a lucide icon. Fourteen sizes, ten of them between 10 and 21. */
   icon: [

@@ -188,7 +188,7 @@ function DetailCell({ label, children }: { label: string; children: React.ReactN
       <dt>
         <DetailLabel>{label}</DetailLabel>
       </dt>
-      <dd className="text-[13.5px] font-semibold text-ink">{children}</dd>
+      <dd className="text-sm font-semibold text-ink">{children}</dd>
     </div>
   );
 }
@@ -236,7 +236,7 @@ function ProofViewer({
             />
           )
         ) : request.proofPreviewUrl ? (
-          <div role="status" className="space-y-3 text-center text-[13px] text-ink-2">
+          <div role="status" className="space-y-3 text-center text-sm text-ink-2">
             <p>Comprobante no disponible</p>
             <a
               href={request.proofPreviewUrl}
@@ -827,16 +827,16 @@ export default function PaymentsPage(): React.ReactElement {
           >
             <div className="mb-2 flex items-center gap-2">
               <XCircle size={15} strokeWidth={2} className="text-state-bad" aria-hidden="true" />
-              <h2 id="lote-resultado" className="text-[13.5px] font-bold text-state-bad">
+              <h2 id="lote-resultado" className="text-sm font-bold text-state-bad">
                 El lote quedó a medias
               </h2>
             </div>
             {batchOutcome.approved.length > 0 && (
-              <p className="text-[13px] text-ink-2">
+              <p className="text-sm text-ink-2">
                 Se aprobaron {batchOutcome.approved.length}: {batchOutcome.approved.join(", ")}.
               </p>
             )}
-            <p className="mt-1 text-[13px] text-ink-2">
+            <p className="mt-1 text-sm text-ink-2">
               No se pudo aprobar {batchOutcome.failed.length === 1 ? "1 pago" : `${batchOutcome.failed.length} pagos`}:{" "}
               {batchOutcome.failed.join(", ")}. {batchOutcome.failed.length === 1 ? "Sigue" : "Siguen"} pendiente
               {batchOutcome.failed.length === 1 ? "" : "s"} y con la revisión hecha.
@@ -1125,7 +1125,7 @@ export default function PaymentsPage(): React.ReactElement {
               <h2
                 ref={detailHeadingRef}
                 tabIndex={-1}
-                className="border-b border-line px-[18px] py-4 text-[15px] font-bold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ball focus-visible:shadow-[inset_0_0_0_4px_#131316]"
+                className="border-b border-line px-[18px] py-4 text-base font-bold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ball focus-visible:shadow-[inset_0_0_0_4px_#131316]"
               >
                 Detalle de la solicitud
               </h2>
@@ -1142,7 +1142,7 @@ export default function PaymentsPage(): React.ReactElement {
                 </div>
                 <div className="flex min-h-drow flex-col justify-center gap-1.5 bg-canvas px-[18px] py-3">
                   <DetailLabel>Período</DetailLabel>
-                  <span className="text-[15px] font-bold leading-tight text-ink sm:text-[17px]">
+                  <span className="text-base font-bold leading-tight text-ink">
                     {humanizePaymentPeriod(request.membershipPeriod)}
                   </span>
                 </div>
@@ -1170,7 +1170,7 @@ export default function PaymentsPage(): React.ReactElement {
                 aria-labelledby="antes-de-aprobar"
               >
                 <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
-                  <h2 id="antes-de-aprobar" className="flex-1 text-[15px] font-bold text-ink">
+                  <h2 id="antes-de-aprobar" className="flex-1 text-base font-bold text-ink">
                     Antes de aprobar
                   </h2>
                   <Badge tone={checklistComplete ? "ok" : "warn"}>
@@ -1193,7 +1193,7 @@ export default function PaymentsPage(): React.ReactElement {
                   {checklist.items.map((item) => (
                     <label
                       key={item.key}
-                      className="flex cursor-pointer items-center gap-3 py-2.5 text-[13.5px] text-ink-2"
+                      className="flex cursor-pointer items-center gap-3 py-2.5 text-sm text-ink-2"
                     >
                       <input
                         type="checkbox"
@@ -1212,7 +1212,7 @@ export default function PaymentsPage(): React.ReactElement {
 
             {isPending && (
               <section className="flex flex-col gap-3 rounded-card border border-line bg-paper p-[18px]">
-                <h2 className="text-[15px] font-bold text-ink">Decisión</h2>
+                <h2 className="text-base font-bold text-ink">Decisión</h2>
 
                 {!showRejectForm ? (
                   <>
@@ -1231,7 +1231,7 @@ export default function PaymentsPage(): React.ReactElement {
                             type="date"
                             value={editStartDate}
                             onChange={(e) => setEditStartDate(e.target.value)}
-                            className="rounded-ctl border border-line bg-paper px-3 py-2 text-[13.5px] text-ink"
+                            className="rounded-ctl border border-line bg-paper px-3 py-2 text-sm text-ink"
                           />
                         </label>
                         <label className="flex flex-col gap-1 text-[12.5px] text-ink-2">
@@ -1245,7 +1245,7 @@ export default function PaymentsPage(): React.ReactElement {
                               const parsed = parseInt(e.target.value, 10);
                               setEditMonths(Number.isNaN(parsed) || parsed < 1 ? 1 : parsed);
                             }}
-                            className="rounded-ctl border border-line bg-paper px-3 py-2 text-[13.5px] tabular-nums text-ink"
+                            className="rounded-ctl border border-line bg-paper px-3 py-2 text-sm tabular-nums text-ink"
                           />
                         </label>
                       </div>
@@ -1326,7 +1326,7 @@ export default function PaymentsPage(): React.ReactElement {
                             className="mt-0.5 h-4 w-4 flex-none accent-coal"
                           />
                           <span className="min-w-0">
-                            <span className="block text-[13.5px] font-semibold text-ink">
+                            <span className="block text-sm font-semibold text-ink">
                               {reason.label}
                             </span>
                             {reason.description && (
@@ -1348,7 +1348,7 @@ export default function PaymentsPage(): React.ReactElement {
                         value={rejectionNote}
                         onChange={(e) => setRejectionNote(e.target.value)}
                         placeholder="Ej.: El comprobante dice $20,00 y la mensualidad es de $25,00."
-                        className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
+                        className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
                         disabled={actionLoading !== null}
                       />
                     </label>
@@ -1381,9 +1381,9 @@ export default function PaymentsPage(): React.ReactElement {
               <section className="rounded-card border border-state-bad/25 bg-state-bad-bg p-[18px]">
                 <div className="mb-2 flex items-center gap-2">
                   <XCircle size={15} strokeWidth={2} className="text-state-bad" aria-hidden="true" />
-                  <h2 className="text-[13.5px] font-bold text-state-bad">Motivo del rechazo</h2>
+                  <h2 className="text-sm font-bold text-state-bad">Motivo del rechazo</h2>
                 </div>
-                <p className="text-[13px] text-ink-2">{request.rejectionReason}</p>
+                <p className="text-sm text-ink-2">{request.rejectionReason}</p>
               </section>
             )}
 
@@ -1460,7 +1460,7 @@ export default function PaymentsPage(): React.ReactElement {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
-                  <p className="truncate text-[13.5px] font-semibold text-ink">
+                  <p className="truncate text-sm font-semibold text-ink">
                     {selectedRequest.proofFileName}
                   </p>
                   <button

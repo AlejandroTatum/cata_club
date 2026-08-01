@@ -87,7 +87,7 @@ export default function ToastContainer(): React.ReactElement | null {
             />
 
             <div className="min-w-0 flex-1">
-              <p className="text-[13.5px] font-semibold leading-[1.35]">{toast.message}</p>
+              <p className="text-sm font-semibold">{toast.message}</p>
               {toast.description && (
                 <p className="mt-1 text-[12.5px] font-normal leading-[1.45]">{toast.description}</p>
               )}

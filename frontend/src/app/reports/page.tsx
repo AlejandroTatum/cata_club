@@ -386,8 +386,8 @@ function ReportsContent(): React.ReactElement {
                 selected ? "border-coal ring-1 ring-coal" : "border-line-2 hover:bg-canvas",
               )}
             >
-              <b className="text-[14.5px] text-ink">{item.title}</b>
-              <p className="text-[13px] text-ink-3">{item.description}</p>
+              <b className="text-base text-ink">{item.title}</b>
+              <p className="text-sm text-ink-3">{item.description}</p>
               {selected ? (
                 <span className="h-badge mt-1 inline-flex items-center gap-1.5 rounded-full bg-coal px-[11px] text-[11.5px] font-bold text-white">
                   <span
@@ -518,7 +518,7 @@ function ReportsContent(): React.ReactElement {
       {/* Preview — the canvas that used to sit empty until you pressed Buscar. */}
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-[15px]">
-          <h2 className="flex-1 text-[13px] font-bold text-ink">
+          <h2 className="flex-1 text-sm font-bold text-ink">
             Vista previa — {activePreset.title}
           </h2>
           {canQuery && !loading && (
@@ -581,7 +581,7 @@ function calcAge(fechaNacimiento: string): number {
 }
 
 const TH = "h-thead whitespace-nowrap border-b border-line bg-[#FAFAFB] px-5 text-left text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3";
-const TD = "border-b border-line px-5 py-3 text-[13.5px] text-ink-2";
+const TD = "border-b border-line px-5 py-3 text-sm text-ink-2";
 
 function PersonaPreview({
   results,

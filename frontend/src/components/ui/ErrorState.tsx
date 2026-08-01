@@ -60,8 +60,8 @@ export default function ErrorState({
       >
         <AlertTriangle size={21} strokeWidth={1.5} />
       </span>
-      <b className="text-[15px] font-bold text-ink">{title}</b>
-      {message ? <p className="max-w-[44ch] text-[13px] text-ink-2">{message}</p> : null}
+      <b className="text-base font-bold text-ink">{title}</b>
+      {message ? <p className="max-w-[44ch] text-sm text-ink-2">{message}</p> : null}
       {onRetry ? (
         <div className="mt-1">
           <Button size="sm" onClick={onRetry}>

@@ -120,7 +120,7 @@ function AttendanceRecap({
         <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
           {studentName ? `Asistencia de ${studentName}` : "Su asistencia"}
         </p>
-        <h2 id="attendance-recap-title" className="text-[17px] font-bold tracking-tight text-ink">
+        <h2 id="attendance-recap-title" className="text-base font-bold tracking-tight text-ink">
           {recap ? (
             <>
               Asistió a{" "}
@@ -133,7 +133,7 @@ function AttendanceRecap({
             "Todavía no hay sesiones registradas"
           )}
         </h2>
-        <p className="mt-1.5 text-[13px] text-ink-3">
+        <p className="mt-1.5 text-sm text-ink-3">
           {recap
             ? "Una tardanza cuenta como asistencia; una falta justificada, no."
             : studentName
@@ -202,7 +202,7 @@ function SessionList({
         {/* The record is the main column, and it names its subject: a guardian
             reading two children's histories one click apart must never have to
             infer which one is on screen from the dates. */}
-        <h2 id="sessions-title" className="flex-1 text-[13px] font-bold text-ink">
+        <h2 id="sessions-title" className="flex-1 text-sm font-bold text-ink">
           {studentName ? `Sesiones registradas de ${studentName}` : "Sesiones registradas"}
         </h2>
         {sessions.length > 0 && (

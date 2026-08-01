@@ -284,7 +284,7 @@ describe("the detector itself", () => {
   });
 
   it("stays quiet on a value the inventory covers", () => {
-    expect(findViolations("x.tsx", 'className="text-[13px]"')).toEqual([]);
+    expect(findViolations("x.tsx", 'className="text-[12.5px]"')).toEqual([]);
   });
 
   it("catches every axis, not only typography", () => {

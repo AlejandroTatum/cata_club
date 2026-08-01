@@ -139,7 +139,7 @@ function ModalSection({
   return (
     <section className="rounded-ctl border border-line bg-paper">
       <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
-        <h3 className="flex flex-1 items-center gap-1.5 text-[13px] font-bold text-ink">
+        <h3 className="flex flex-1 items-center gap-1.5 text-sm font-bold text-ink">
           {icon}
           {title}
         </h3>

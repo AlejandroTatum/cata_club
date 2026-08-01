@@ -71,7 +71,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
             <CheckCircle2 size={24} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
-          <p className="text-[13px] leading-relaxed text-ink-2">
+          <p className="text-sm leading-relaxed text-ink-2">
             Si <strong className="font-semibold text-ink">{correo.trim()}</strong> está
             registrado, recibirá un enlace para restablecer su contraseña en unos minutos.
           </p>

@@ -800,7 +800,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
          */}
         {resumableDrafts.length > 0 && (
           <div className="flex flex-col gap-3 rounded-ctl border border-line bg-canvas p-4">
-            <p className="text-[13px] font-bold text-ink">
+            <p className="text-sm font-bold text-ink">
               {resumableDrafts.length === 1
                 ? "Tiene una lista sin terminar"
                 : `Tiene ${resumableDrafts.length} listas sin terminar`}
@@ -808,7 +808,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             <ul className="flex flex-col gap-3">
               {resumableDrafts.map((draft) => (
                 <li key={draft.key} className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <span className="min-w-[180px] flex-1 text-[13px] text-ink-2">
+                  <span className="min-w-[180px] flex-1 text-sm text-ink-2">
                     <b className="font-semibold text-ink">{describeSchedule(draft.horarioId)}</b>
                     <span aria-hidden="true"> · </span>
                     {draft.markCount === 1
@@ -845,7 +845,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
         )}
         <div>
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <p className="text-[13px] text-ink-3">
+            <p className="text-sm text-ink-3">
               {visible.narrowedToToday
                 ? `Horarios de hoy · ${formatDay(today)}`
                 : "Seleccione el horario de entrenamiento:"}
@@ -922,7 +922,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                   : "border-line-2 bg-paper hover:border-ink-3"
                               }`}
                             >
-                              <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ink">
+                              <span className="flex items-center gap-2 text-sm font-semibold text-ink">
                                 <Clock size={14} strokeWidth={2} className="text-ink-3" aria-hidden="true" />
                                 {sched.horaInicio} — {sched.horaFin}
                                 {isActive && (
@@ -982,8 +982,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
             <span className="text-lg text-white/50">/{students.length}</span>
           </span>
           <span className="flex min-w-[170px] flex-1 flex-col gap-1">
-            <b className="text-[15px] font-bold">presentes</b>
-            <span className="flex flex-wrap items-center gap-1.5 text-[13px] text-white/60">
+            <b className="text-base font-bold">presentes</b>
+            <span className="flex flex-wrap items-center gap-1.5 text-sm text-white/60">
               {/* Kept as its own node: "Lunes" is the day, the range is the
                   time, and they are two different facts. */}
               <span>{formatDay(selectedSchedule.diaSemana)}</span>
@@ -1008,7 +1008,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             <button
               type="button"
               onClick={handleMarkRemainingPresent}
-              className="inline-flex h-ctl items-center gap-2 rounded-ctl border border-white/25 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-white/10"
+              className="inline-flex h-ctl items-center gap-2 rounded-ctl border border-white/25 px-4 text-sm font-semibold text-white transition-colors hover:bg-white/10"
             >
               <UserCheck size={14} strokeWidth={2} aria-hidden="true" />
               Marcar restantes presentes
@@ -1053,7 +1053,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                    specificity (0,3,0 vs Tailwind's 0,2,0), so the
                    `focus:ring-[3px] focus:ring-cata-red/10` this field used to
                    declare never rendered. The border still darkens on focus. */
-                className="h-ctl min-w-[180px] flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-[13.5px] text-ink placeholder:text-ink-3 focus:border-cata-red focus:outline-none"
+                className="h-ctl min-w-[180px] flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-sm text-ink placeholder:text-ink-3 focus:border-cata-red focus:outline-none"
               />
               {/* Turns the count into something the trainer can act on: the
                   point of knowing 12 are unreviewed is being able to go
@@ -1063,7 +1063,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   type="button"
                   onClick={() => setOnlyUnreviewed((prev) => !prev)}
                   aria-pressed={onlyUnreviewed}
-                  className={`inline-flex h-ctl shrink-0 items-center gap-2 rounded-ctl border px-4 text-[13px] font-semibold transition-colors ${
+                  className={`inline-flex h-ctl shrink-0 items-center gap-2 rounded-ctl border px-4 text-sm font-semibold transition-colors ${
                     onlyUnreviewed
                       ? "border-coal bg-coal text-white"
                       : "border-line-2 bg-paper text-ink-2 hover:border-ink-3 hover:text-ink"
@@ -1149,7 +1149,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                           </span>
                           <span
                             id={nameId}
-                            className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink"
+                            className="min-w-0 flex-1 truncate text-sm font-semibold text-ink"
                           >
                             {student.name}
                           </span>
@@ -1242,7 +1242,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-[13px] text-ink-3">
+        <p className="text-sm text-ink-3">
           Revise el resumen antes de confirmar el registro de asistencia:
         </p>
 
@@ -1286,7 +1286,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             role="status"
             className="flex flex-col gap-3 rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3.5"
           >
-            <p className="flex items-start gap-2 text-[13px] font-semibold text-state-warn">
+            <p className="flex items-start gap-2 text-sm font-semibold text-state-warn">
               <AlertTriangle
                 size={14}
                 strokeWidth={2}
@@ -1471,7 +1471,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
               <div className="mx-auto max-w-3xl">
                 <div className="rounded-card border border-line bg-paper p-5 sm:p-6">
-                  <h2 className="mb-4 text-[13px] font-bold text-ink">{STEP_LABELS[step]}</h2>
+                  <h2 className="mb-4 text-sm font-bold text-ink">{STEP_LABELS[step]}</h2>
 
                   <form onSubmit={handleConfirm}>
                     {step === "select-session" && renderSessionSelection()}

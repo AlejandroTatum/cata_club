@@ -82,7 +82,7 @@ function CarnetFact({ label, value }: { label: string; value: string }): React.R
       <span className="mb-[3px] block text-[10px] font-semibold uppercase leading-[1.2] tracking-[0.1em] text-white/60">
         {label}
       </span>
-      <b className="block text-[13px] font-bold leading-[1.25] tabular-nums">{value}</b>
+      <b className="block text-sm font-bold leading-tight tabular-nums">{value}</b>
     </div>
   );
 }
@@ -237,7 +237,7 @@ function SituationLink({ href, children }: { href: string; children: React.React
   return (
     <Link
       href={href}
-      className="inline-flex min-h-[24px] items-center gap-1.5 rounded text-[13px] font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 transition-colors hover:decoration-ink"
+      className="inline-flex min-h-[24px] items-center gap-1.5 rounded text-sm font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 transition-colors hover:decoration-ink"
     >
       {children}
       <ArrowRight size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -257,7 +257,7 @@ function TrainingRow({ session, first }: { session: UpcomingTraining; first: boo
      */
     <li className="flex min-h-drow flex-1 flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-5 py-3 last:border-b-0">
       <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-2 text-[15px] font-bold tracking-tight text-ink">
+        <p className="flex flex-wrap items-center gap-2 text-base font-bold tracking-tight text-ink">
           {session.diaLabel}
           {session.isToday && (
             <span className="h-badge inline-flex items-center gap-1.5 rounded-full bg-coal px-[11px] text-[11.5px] font-bold text-white">
@@ -273,8 +273,8 @@ function TrainingRow({ session, first }: { session: UpcomingTraining; first: boo
       <span
         className={
           first
-            ? "flex-none text-[17px] font-extrabold tabular-nums tracking-[-0.02em] text-ink"
-            : "flex-none text-[15px] font-bold tabular-nums text-ink-2"
+            ? "flex-none text-base font-extrabold tabular-nums tracking-dense text-ink"
+            : "flex-none text-base font-bold tabular-nums text-ink-2"
         }
       >
         {session.horaInicio} — {session.horaFin}
@@ -323,7 +323,7 @@ function TrainingPanel({
       className="card flex h-full flex-col overflow-hidden"
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 pb-3.5 pt-[18px]">
-        <h2 className="text-[17px] font-bold tracking-tight text-ink">Próximos entrenamientos</h2>
+        <h2 className="text-base font-bold tracking-tight text-ink">Próximos entrenamientos</h2>
         <p className="text-[12.5px] text-ink-3-strong">
           {viewingOwnProfile
             ? "El horario semanal que el club le asignó."
@@ -339,7 +339,7 @@ function TrainingPanel({
 
       {horariosState.status === "error" && (
         <div className="border-t border-line px-5 py-4">
-          <p className="text-[13px] leading-relaxed text-ink-3">
+          <p className="text-sm leading-relaxed text-ink-3">
             No se pudo consultar el horario en este momento. Vuelva a cargar la página o consulte
             en administración del club.
           </p>
@@ -441,10 +441,10 @@ function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.
   return (
     <div className="w-full space-y-5">
       <section className="card p-6">
-        <h2 className="text-[17px] font-bold tracking-tight text-ink">Bienvenido a Cata Club</h2>
+        <h2 className="text-base font-bold tracking-tight text-ink">Bienvenido a Cata Club</h2>
         {/* Capped at a readable measure inside a full-width card, rather than
             capping the card: a 110-character line is not a paragraph. */}
-        <p className="mt-2 max-w-[68ch] text-[13px] leading-relaxed text-ink-3">
+        <p className="mt-2 max-w-[68ch] text-sm leading-relaxed text-ink-3">
           Su cuenta está creada pero todavía no tiene una matrícula activa. Complete su inscripción para
           empezar a entrenar.
         </p>
@@ -681,7 +681,7 @@ function ActivePortalView({
                     <span className="block text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
                       Su representante
                     </span>
-                    <span className="block text-[13.5px] font-semibold text-ink">
+                    <span className="block text-sm font-semibold text-ink">
                       {selectedProfile.representante.nombres}{" "}
                       {selectedProfile.representante.apellidos}
                     </span>
