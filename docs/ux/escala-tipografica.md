@@ -103,17 +103,19 @@ heredan el interlineado y el tracking del escalón. Los 13 que se movían de for
 reescribieron a mano en el mismo commit, para que la rama nunca aterrice en `main` con un cambio de
 tamaño que nadie decidió.
 
-Dos de esas reescrituras dejan deuda a propósito:
+Dos de esas reescrituras dejaron deuda a propósito, y la migración de la banda display ya la saldó:
 
-- **`text-[18px]`** es la única entrada que se agregó jamás a la lista blanca del candado. No hay
-  escalón de 18px, y elegir entre 15 y 20 para cada uno de los cinco usos es una decisión de
-  diseño, no mecánica. La toma el PR de migración, que después borra la entrada.
-- **`text-[24px]`** ya estaba en el inventario congelado, así que no agrega nada. Mismo criterio:
-  24px queda entre `lg` (20) y `xl` (26) y hay que decidir caso por caso.
+- **`text-[18px]`** fue la única entrada que se agregó jamás a la lista blanca del candado. Sus
+  cinco usos —el wordmark del header, la portada de la card de cuenta creada y el título del
+  diálogo de miembro— son todos encabezados, así que subieron a `lg` (20px). Bajarlos a `base`
+  los habría dejado del tamaño del cuerpo que encabezan. La entrada está borrada.
+- **`text-[24px]`** cayó entero en `xl` (26px), que es el escalón que la tabla de absorción ya le
+  asignaba y el que el candado sugiere: 24 está a 2px de `xl` y a 4px de `lg`.
 
-Donde el interlineado venía del propio `text-*` y el cambio superaba 1px, la reescritura lo fija con
+Donde el interlineado venía del propio `text-*` y el cambio superaba 1px, la reescritura lo fijó con
 el escalón numérico de Tailwind que lo reproduce exacto (`leading-7` = 28px, `leading-8` = 32px).
-Son andamios: el PR de migración los quita al elegir el escalón definitivo.
+Eran andamios y ya no están: al elegir el escalón definitivo, el interlineado vuelve a viajar con
+el tamaño, que es el punto de la escala.
 
 ## Anclas que no se mueven
 
@@ -125,8 +127,13 @@ visual de este eje:
 | `components/ui/PageHeader.tsx` | título de página | 26px — cae exacto en `xl` |
 | `components/ui/StatCard.tsx` | número de stat | 32px — cae exacto en `2xl` |
 
-Ambas siguen escritas como `text-[26px]` y `text-[32px]` hasta que el PR de migración las
-convierta. Que el escalón mida lo mismo es lo que hace que esa conversión sea gratuita.
+Ya están escritas como `text-xl` y `text-2xl`. El tamaño y el tracking renderizados no se movieron
+—`text-xl` es 26px/−0,03em y `text-2xl` es 32px/−0,04em, exactamente lo que decían las clases
+arbitrarias—. `StatCard` además lleva `leading-none`, así que su caja de línea tampoco cambió;
+el título de `PageHeader` no declaraba interlineado y por lo tanto heredaba el 1,5 del `html`, y
+ahora toma el 1,15 de su escalón: la caja pasa de 39px a 29,9px. Es el cambio que la escala
+existe para hacer —un titular de página con interlineado de cuerpo es el defecto, no la
+referencia— y es el único que estas dos anclas registran.
 
 ## Cómo se usa
 
