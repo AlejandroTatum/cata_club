@@ -30,6 +30,7 @@ import {
   LoadingState,
   Pagination,
   SearchInput,
+  STAT_GRID,
   StatCard,
   Table,
   TableBody,
@@ -1378,7 +1379,7 @@ export default function MembersPage(): React.ReactElement {
         {/* Stats row — `07-miembros.html`'s four tiles. Figures are ink; the
             old version put a red icon disc beside every one of them, which
             made four neutral counts read as four alerts. */}
-        <div className="mb-6 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={STAT_GRID}>
           <StatCard label="Cuentas" value={stats.totalAccounts} hint="responsables de pago" />
           <StatCard label="Estudiantes" value={stats.totalStudents} hint="perfiles registrados" />
           {/*

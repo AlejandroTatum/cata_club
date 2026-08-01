@@ -7,7 +7,9 @@
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import StatCard from "@/components/ui/StatCard";
+import StatCard, { STAT_GRID } from "@/components/ui/StatCard";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { committedHeight, committedRadius } from "./ui-test-utils";
 
 function card(): HTMLElement {
@@ -83,5 +85,42 @@ describe("StatCard — hot variant dot", () => {
   it("does not show the dot on the default variant", () => {
     render(<StatCard label="Miembros" value={86} hint="en 44 cuentas" />);
     expect(screen.queryByTestId("statcard-ball-dot")).not.toBeInTheDocument();
+  });
+});
+
+describe("STAT_GRID — the shared stat row", () => {
+  it("spends the section step on its gutter, like `.stats` (_sistema.css:222)", () => {
+    // `.stats` declares `gap: 14px`, which is exactly `gap-section`. Before
+    // this constant the same four-tile row was `gap-4 mb-5` on /dashboard and
+    // /attendance but `gap-3.5 mb-6` on /members — one component, two gutters,
+    // so the tiles visibly moved when an admin walked between the screens.
+    expect(STAT_GRID).toContain("gap-section");
+  });
+
+  it("carries no margin, because the page rhythm is the shell's", () => {
+    expect(STAT_GRID).not.toMatch(/\bm[btyx]?-/);
+  });
+
+  it("is the four-up arrangement, collapsing to two and then one", () => {
+    expect(STAT_GRID).toBe("grid gap-section sm:grid-cols-2 lg:grid-cols-4");
+  });
+
+  it("is the only spelling the four-tile screens use", () => {
+    // The acceptance criterion, asserted on the sources: a screen that draws
+    // the row must reference the constant, never retype the classes.
+    // /admin/crear-cuenta draws the same four-column shape but its cells are
+    // account-type buttons, not tiles. Same grid, different job — it keeps its
+    // own classes on purpose.
+    const screens = [
+      "src/app/dashboard/page.tsx",
+      "src/app/attendance/page.tsx",
+      "src/app/members/page.tsx",
+    ];
+
+    for (const path of screens) {
+      const code = readFileSync(join(__dirname, "..", "..", "..", "..", path), "utf8");
+      expect(code, path).toContain("STAT_GRID");
+      expect(code, path).not.toMatch(/sm:grid-cols-2 lg:grid-cols-4/);
+    }
   });
 });

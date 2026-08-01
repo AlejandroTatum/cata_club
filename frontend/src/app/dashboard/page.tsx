@@ -34,7 +34,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { buttonClasses, ErrorState, LoadingState, StatCard } from "@/components/ui";
+import { buttonClasses, ErrorState, LoadingState, STAT_GRID, StatCard } from "@/components/ui";
 import {
   fetchDashboardStats,
   fetchAttendanceRecords,
@@ -183,7 +183,7 @@ export default function DashboardPage(): React.ReactElement {
               the numbers the widgets only gestured at, which is what the
               sparkbars' own aria-label already conceded they could not.
             */}
-            <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className={STAT_GRID}>
               <StatCard label="Miembros" value={totalPersonas} hint="personas registradas" />
               {/*
                   "de N personas", not a bare "de N": this counts membresía

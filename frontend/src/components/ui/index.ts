@@ -39,6 +39,7 @@ export { default as SearchInput } from "./SearchInput";
 export type { SearchInputProps } from "./SearchInput";
 
 export { default as StatCard } from "./StatCard";
+export { STAT_GRID } from "./StatCard";
 export type { StatCardProps, StatCardVariant } from "./StatCard";
 
 export { default as Stepper } from "./Stepper";
