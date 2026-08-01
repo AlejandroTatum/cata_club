@@ -173,7 +173,7 @@ export default function TrainerPage(): React.ReactElement {
             {/* --- The hero: the one thing to do next. --- */}
             {next ? (
               <div className="flex flex-wrap items-end gap-6 rounded-card bg-coal px-7 py-6 text-white">
-                <span className="text-[46px] font-extrabold leading-none tracking-[-0.05em] tabular-nums">
+                <span className="text-display font-extrabold leading-none tabular-nums">
                   {next.horaInicio}
                 </span>
                 <div className="flex min-w-[200px] flex-1 flex-col gap-1.5">

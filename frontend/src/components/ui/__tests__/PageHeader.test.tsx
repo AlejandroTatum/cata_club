@@ -24,7 +24,9 @@ describe("PageHeader — the title", () => {
 
   it("gives the title the 26px page-title treatment", () => {
     render(<PageHeader title="Miembros" />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveClass("text-[26px]", "text-ink");
+    // `text-xl` IS 26px: the scale step was transcribed from this component,
+    // so the class changed name without the title changing size.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveClass("text-xl", "text-ink");
   });
 });
 

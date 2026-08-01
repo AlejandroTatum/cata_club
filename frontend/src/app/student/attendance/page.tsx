@@ -172,7 +172,7 @@ function AttendanceRecap({
             {/* Ink, always. `_sistema.css` allows colour in badges and dots,
                 never in a figure — a green "4" beside a red "1" turns a tally
                 into a verdict. */}
-            <p className="mt-1 text-[26px] font-extrabold tabular-nums leading-none tracking-[-0.03em] text-ink">
+            <p className="mt-1 text-xl font-extrabold tabular-nums leading-none text-ink">
               {breakdown[key]}
             </p>
           </div>

@@ -811,7 +811,7 @@ function EnrollWizard(): React.ReactElement {
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-cata-state-ok/10">
               <CheckCircle size={32} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
             </div>
-            <h1 className="mb-3 text-[24px] leading-8 font-bold tracking-tight text-cata-text">
+            <h1 className="mb-3 text-xl font-bold tracking-tight text-cata-text">
               Inscripción Completada
             </h1>
             <p className="mb-2 text-sm leading-relaxed text-cata-text/65">
@@ -883,7 +883,7 @@ function EnrollWizard(): React.ReactElement {
             <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong">
               Paso {currentIndex + 1} de {effectiveSteps.length}
             </p>
-            <h1 className="mt-1 text-[26px] font-extrabold tracking-[-0.03em] text-ink">
+            <h1 className="mt-1 text-xl font-extrabold text-ink">
               Inscripción de estudiante
             </h1>
             {/* The count is read from `effectiveSteps`, not written out: this

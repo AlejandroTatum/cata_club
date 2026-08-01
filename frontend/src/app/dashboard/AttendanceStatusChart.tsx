@@ -93,7 +93,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
           y={SIZE / 2}
           textAnchor="middle"
           dominantBaseline="middle"
-          className="rotate-90 fill-ink text-[24px] font-bold"
+          className="rotate-90 fill-ink text-xl font-bold"
           style={{ transformOrigin: "center", transformBox: "fill-box" }}
         >
           {stats.totalStudents}

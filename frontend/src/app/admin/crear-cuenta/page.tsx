@@ -743,7 +743,7 @@ function CrearCuentaContent(): React.ReactElement {
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-cata-state-ok/10">
               <CheckCircle size={32} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
             </div>
-            <h1 className="mb-3 text-[24px] leading-8 font-bold tracking-tight text-cata-text">
+            <h1 className="mb-3 text-xl font-bold tracking-tight text-cata-text">
               Cuenta Creada
             </h1>
             <p className="mb-2 text-sm leading-relaxed text-cata-text/65">
@@ -806,7 +806,7 @@ function CrearCuentaContent(): React.ReactElement {
               {step === "health" && <Heart size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
               {step === "credentials" && <Lock size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
               {step === "summary" && <FileText size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              <h2 className="text-[18px] font-semibold text-cata-text">
+              <h2 className="text-lg font-semibold text-cata-text">
                 {CREAR_CUENTA_STEP_LABELS[step]}
               </h2>
             </div>

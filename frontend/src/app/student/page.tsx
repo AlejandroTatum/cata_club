@@ -157,7 +157,7 @@ function Carnet({
           fact grid below are separated by 18px. The card used to space all
           four blocks by an identical 14px, which read as four unrelated rows
           rather than as header / identity / record. */}
-      <p className="relative z-10 mt-[18px] text-balance text-[24px] font-extrabold leading-[1.15] tracking-[-0.03em]">
+      <p className="relative z-10 mt-[18px] text-balance text-xl font-extrabold">
         {fullName}
       </p>
 
@@ -421,7 +421,7 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
       {data.membershipPlans.map((plan) => (
         <div key={plan.id} className="card flex flex-col p-5">
           <h3 className="text-base font-bold text-ink">{plan.nombre}</h3>
-          <span className="mt-2 text-[24px] leading-8 font-extrabold tabular-nums text-ink">
+          <span className="mt-2 text-xl font-extrabold tabular-nums text-ink">
             {formatCurrency(plan.precio)}
           </span>
           <p className="mt-1 text-xs text-ink-3">{plan.franjaHoraria}</p>

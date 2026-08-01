@@ -147,7 +147,7 @@ export default function DashboardPage(): React.ReactElement {
           <>
             {/* Hero — one number, one action. Nothing else belongs here. */}
             <section className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-4 rounded-card bg-coal px-6 py-6">
-              <span className="text-[56px] font-extrabold leading-none tracking-[-0.05em] tabular-nums text-white">
+              <span className="text-display font-extrabold leading-none tabular-nums text-white">
                 {pendingPayments}
               </span>
               <span className="min-w-0 flex-1">
