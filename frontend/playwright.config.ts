@@ -17,6 +17,19 @@
 import { defineConfig, devices } from "@playwright/test";
 import { E2E_BASE_URL, E2E_PORT, E2E_SERVER_IS_MANAGED } from "./tests/e2e/e2e-target";
 
+/**
+ * Habilita el proyecto `e2e-live`, que recoge los `*.live.spec.ts`: los specs
+ * que atraviesan un backend real, sin `page.route`, contra el entorno de QA
+ * (`make qa-up`).
+ *
+ * Es opt-in, y no una detección automática, a propósito. Un proyecto que se
+ * activa solo fallaría en todo checkout sin Docker, y una suite que a veces
+ * corre esos specs y a veces no es peor que una que nunca los corre: nadie
+ * sabría si la corrida verde probó la mutación real o simplemente la saltó.
+ * `make qa-live` lo enciende explícitamente.
+ */
+const LIVE_ENABLED = process.env.E2E_LIVE === "1";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
@@ -68,6 +81,19 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      /* Los `*.live.spec.ts` necesitan el backend real del entorno de QA
+         (`make qa-up`). Excluirlos acá mantiene la suite por defecto
+         ejecutable en cualquier checkout, sin Docker y sin base sembrada. */
+      testIgnore: /\.live\.spec\.ts$/,
     },
+    ...(LIVE_ENABLED
+      ? [
+          {
+            name: "e2e-live",
+            use: { ...devices["Desktop Chrome"] },
+            testMatch: /\.live\.spec\.ts$/,
+          },
+        ]
+      : []),
   ],
 });

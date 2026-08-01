@@ -1,0 +1,74 @@
+# Overlay de QA: un stack desechable, sembrado y reproducible (issue #33).
+#
+# Se aplica SIEMPRE sobre la base y el overlay de desarrollo, y nunca junto
+# con `docker-compose.prod.yml`. En la práctica no hace falta invocarlo a
+# mano: `make qa-up` lo arma y `make qa-down` lo destruye (ver la sección
+# "Entorno de QA" del README).
+#
+# Reutiliza `docker-compose.override.yml` en lugar de redeclarar `build:` y
+# los puertos publicados: son exactamente los mismos, y duplicarlos crearía
+# dos definiciones que se desincronizan en silencio. La consecuencia es que
+# QA ocupa los mismos puertos que desarrollo, así que los dos son
+# alternativas -- si `make dev` está corriendo, `make qa-up` falla con "port
+# is already allocated", un error inmediato y legible.
+
+# Nombre de proyecto propio: es LO que aísla este entorno, dándole su propia
+# red, sus contenedores y su namespace de volúmenes. Vive en el archivo y no
+# en un `-p` del Makefile porque un `-p` se puede olvidar al invocar compose
+# a mano, y sin él `down -v` destruiría los datos de desarrollo del mismo
+# checkout.
+name: cataclub-qa
+
+services:
+  # Postgres efímero, mismo patrón que el `db-test` del perfil "test" (ver
+  # docker-compose.yml): el criterio de aceptación del issue #33 pide que un
+  # error durante las pruebas no pueda tocar datos reales. Con `tmpfs` no
+  # existe volumen donde sobrevivan datos entre corridas, así que cada
+  # `make qa-up` arranca de un esquema vacío y siembra igual que el anterior.
+  #
+  # El montaje usa la sintaxis larga con el mismo `target` que el volumen
+  # nombrado de la base: los overlays de Compose fusionan `volumes:` usando
+  # la ruta de montaje como clave, así que esto REEMPLAZA
+  # `cataclub_db_data:/var/lib/postgresql/data` en vez de sumarse a él
+  # (verificado con `docker compose config`, y fijado por
+  # `tests/test_docker_compose_config.py`).
+  db:
+    volumes:
+      - type: tmpfs
+        target: /var/lib/postgresql/data
+    # Sin durabilidad: los datos se destruyen al bajar el contenedor, y
+    # apagar fsync acelera notablemente `alembic upgrade head` + los dos
+    # seeds, que es todo lo que se ejecuta contra esta base al arrancar.
+    command: >
+      postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+
+  # `AMBIENTE` literal, no `${AMBIENTE:-production}`: el entorno tiene que
+  # comportarse igual sin importar qué diga el `.env` de quien lo levanta. En
+  # `development` pasan dos cosas de las que depende todo lo demás:
+  #
+  #   1. `scripts/entrypoint.sh` corre `scripts/seed_dev_base.py` al
+  #      arrancar, así que el stack queda con admin, entrenador, alumnos,
+  #      horarios y niveles de ranking sin ningún paso manual.
+  #   2. `_exigir_config_de_produccion`
+  #      (app/soporte_transversal/configuracion.py) no dispara. Con
+  #      `AMBIENTE=production` -- el default de la base -- el backend se
+  #      niega a arrancar con configuración de desarrollo.
+  #
+  # `JWT_SECRET_KEY` NO se puede fijar acá: `docker-compose.yml` lo declara
+  # como `${JWT_SECRET_KEY:?...}` y esa interpolación ocurre al cargar cada
+  # archivo, antes de la fusión. La inyecta `make qa-up`.
+  backend:
+    environment:
+      AMBIENTE: development
+
+  # `make qa-up` no los arranca (QA no necesita tareas programadas y cada
+  # worker cuesta memoria), pero comparten el `environment` de `backend` vía
+  # ancla YAML: sin esto, un `docker compose ... up` a mano sobre este
+  # overlay los levantaría en modo producción y entrarían en crash-loop.
+  celery-worker:
+    environment:
+      AMBIENTE: development
+
+  celery-beat:
+    environment:
+      AMBIENTE: development
