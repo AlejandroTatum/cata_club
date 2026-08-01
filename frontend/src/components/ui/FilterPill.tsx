@@ -39,7 +39,7 @@ export default function FilterPill({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "h-ctl inline-flex items-center gap-2 rounded-full border px-[15px] text-[12.5px] font-semibold",
+        "h-ctl inline-flex items-center gap-2 rounded-full border px-[15px] text-xs font-semibold",
         "transition-colors duration-150",
         // No focus ring here — see `Button`: the shared system ring in
         // `globals.css` carries it, because the bare ball fails on the light

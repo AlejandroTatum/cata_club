@@ -89,7 +89,7 @@ export default function ToastContainer(): React.ReactElement | null {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">{toast.message}</p>
               {toast.description && (
-                <p className="mt-1 text-[12.5px] font-normal leading-[1.45]">{toast.description}</p>
+                <p className="mt-1 text-xs font-normal">{toast.description}</p>
               )}
             </div>
 
@@ -113,7 +113,7 @@ export default function ToastContainer(): React.ReactElement | null {
                   toast.action?.onAction();
                   removeToast(toast.id);
                 }}
-                className="shrink-0 self-center rounded px-2 py-1 text-[12.5px] font-bold uppercase tracking-[0.06em] text-current underline underline-offset-2 transition-colors hover:bg-white/15"
+                className="shrink-0 self-center rounded px-2 py-1 text-xs font-bold uppercase tracking-wider text-current underline underline-offset-2 transition-colors hover:bg-white/15"
               >
                 {toast.action.label}
               </button>

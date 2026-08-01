@@ -769,7 +769,7 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
           Editar
         </Button>
       </div>
-      <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-ink-2">
+      <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-2">
         <div className="flex items-center gap-1.5">
           <dt className="sr-only">Teléfono</dt>
           <Phone size={11} strokeWidth={1.5} aria-hidden="true" />

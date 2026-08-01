@@ -459,7 +459,7 @@ function LadderContent({
 
         {/* Where they are now — the half of "move Juan up" the admin has to
             know before picking a destination. */}
-        <span className="flex-none text-[12.5px] text-ink-3">
+        <span className="flex-none text-xs text-ink-3">
           {actual ? `Nivel ${nivelNombre(actual)}` : "Sin nivel"}
         </span>
 
@@ -544,7 +544,7 @@ function LadderContent({
             button beside it uses. */}
         <select
           id={selectId}
-          className="input-field h-ctl-sm min-h-ctl-sm w-28 flex-none px-3 py-0 text-[12.5px]"
+          className="input-field h-ctl-sm min-h-ctl-sm w-28 flex-none px-3 py-0 text-xs"
           value={selectValue(destino)}
           onChange={(event) => pickTargetNivel(student.id, event.target.value)}
         >
@@ -625,7 +625,7 @@ function LadderContent({
         />
 
         {assignError ? (
-          <p className="mb-3 text-[12.5px] text-state-bad" role="alert">
+          <p className="mb-3 text-xs text-state-bad" role="alert">
             {assignError}
           </p>
         ) : null}
@@ -635,12 +635,12 @@ function LadderContent({
           <section aria-labelledby={`panel-sin-nivel-${openNivel.id}`}>
             <h4
               id={`panel-sin-nivel-${openNivel.id}`}
-              className="mb-2 text-[12.5px] font-bold text-ink"
+              className="mb-2 text-xs font-bold text-ink"
             >
               Sin nivel asignado ({sinNivelFiltrados.length})
             </h4>
             {sinNivelFiltrados.length === 0 ? (
-              <p className="rounded-ctl border border-dashed border-line-2 px-4 py-3 text-[12.5px] text-ink-3">
+              <p className="rounded-ctl border border-dashed border-line-2 px-4 py-3 text-xs text-ink-3">
                 {sinNivel.length === 0
                   ? "Todos los estudiantes tienen un nivel."
                   : "Ningún estudiante sin nivel coincide con la búsqueda."}
@@ -685,12 +685,12 @@ function LadderContent({
           <section aria-labelledby={`panel-en-nivel-${openNivel.id}`}>
             <h4
               id={`panel-en-nivel-${openNivel.id}`}
-              className="mb-2 text-[12.5px] font-bold text-ink"
+              className="mb-2 text-xs font-bold text-ink"
             >
               En el nivel {nombre} ({enElNivel.length})
             </h4>
             {enElNivel.length === 0 ? (
-              <p className="rounded-ctl border border-dashed border-line-2 px-4 py-3 text-[12.5px] text-ink-3">
+              <p className="rounded-ctl border border-dashed border-line-2 px-4 py-3 text-xs text-ink-3">
                 {studentsOnNivel(students, openNivel.id).length === 0
                   ? "Todavía no hay estudiantes en este nivel."
                   : "Ningún estudiante de este nivel coincide con la búsqueda."}
@@ -776,7 +776,7 @@ function LadderContent({
       ) : null}
 
       {assignError && openNivel === null ? (
-        <p className="mb-4 text-[12.5px] text-state-bad" role="alert">
+        <p className="mb-4 text-xs text-state-bad" role="alert">
           {assignError}
         </p>
       ) : null}

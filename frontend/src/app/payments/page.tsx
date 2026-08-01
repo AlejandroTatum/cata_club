@@ -209,7 +209,7 @@ function ProofViewer({
   return (
     <div className="overflow-hidden rounded-card border border-line bg-paper lg:sticky lg:top-6">
       <div className="flex items-center gap-2 border-b border-line bg-[#FAFAFB] px-4 py-3">
-        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
           {request.proofFileName}
         </span>
         <span className="shrink-0 text-[11.5px] text-ink-3">
@@ -248,7 +248,7 @@ function ProofViewer({
             <button
               type="button"
               onClick={onRetryPreview}
-              className="mx-auto block text-[12.5px] font-semibold text-ink-2 hover:text-ink"
+              className="mx-auto block text-xs font-semibold text-ink-2 hover:text-ink"
             >
               Reintentar vista previa
             </button>
@@ -256,7 +256,7 @@ function ProofViewer({
         ) : (
           <div className="space-y-3 text-center">
             <FileText size={32} strokeWidth={1.5} className="mx-auto text-ink-3" aria-hidden="true" />
-            <p className="text-[12.5px] text-ink-3">
+            <p className="text-xs text-ink-3">
               <Eye size={12} strokeWidth={1.5} className="mr-1 inline-block -mt-0.5" aria-hidden="true" />
               Vista previa no disponible para este tipo de comprobante.
             </p>
@@ -269,14 +269,14 @@ function ProofViewer({
           <button
             type="button"
             onClick={onExpand}
-            className="text-[12.5px] font-semibold text-ink-2 hover:text-ink"
+            className="text-xs font-semibold text-ink-2 hover:text-ink"
           >
             Ampliar
           </button>
           <a
             href={request.proofPreviewUrl}
             download
-            className="text-[12.5px] font-semibold text-ink-2 hover:text-ink"
+            className="text-xs font-semibold text-ink-2 hover:text-ink"
           >
             Descargar
           </a>
@@ -783,7 +783,7 @@ export default function PaymentsPage(): React.ReactElement {
         {deferredDecision.pendingLabel && (
           <div
             role="status"
-            className="mb-4 flex flex-wrap items-center gap-3 rounded-ctl border border-line-2 bg-sunken px-4 py-2.5 text-[12.5px] font-semibold text-ink-2"
+            className="mb-4 flex flex-wrap items-center gap-3 rounded-ctl border border-line-2 bg-sunken px-4 py-2.5 text-xs font-semibold text-ink-2"
           >
             <Clock size={14} strokeWidth={2} aria-hidden="true" className="shrink-0 text-ink-3" />
             <span>{deferredDecision.pendingLabel} — se envía en unos segundos.</span>
@@ -866,7 +866,7 @@ export default function PaymentsPage(): React.ReactElement {
             aria-label="Aprobación por lote"
             className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-line bg-canvas px-4 py-3"
           >
-            <p className="min-w-[240px] flex-1 text-[12.5px] text-ink-2">
+            <p className="min-w-[240px] flex-1 text-xs text-ink-2">
               {batchTargets.length > 0 ? (
                 <>
                   <span className="font-bold text-ink">{batchTargets.length}</span> de{" "}
@@ -1020,7 +1020,7 @@ export default function PaymentsPage(): React.ReactElement {
                       {reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
                     </div>
                   </div>
-                  <p className="text-[12.5px] text-ink-2">
+                  <p className="text-xs text-ink-2">
                     {humanizePaymentPeriod(req.membershipPeriod)} · {req.paymentMethod}
                   </p>
                   <div className="flex items-center justify-between gap-3">
@@ -1077,7 +1077,7 @@ export default function PaymentsPage(): React.ReactElement {
           <span className="flex-1" />
           {queue.position > 0 && (
             <>
-              <span className="text-[12.5px] font-semibold tabular-nums text-ink-3">
+              <span className="text-xs font-semibold tabular-nums text-ink-3">
                 Pendiente {queue.position} de {queue.total}
               </span>
               <Button
@@ -1181,7 +1181,7 @@ export default function PaymentsPage(): React.ReactElement {
                     an admin who saw three transfer questions yesterday is owed
                     the reason they are seeing two today. */}
                 {checklist.note && (
-                  <p className="border-b border-line bg-canvas px-[18px] py-2.5 text-[12.5px] text-ink-2">
+                  <p className="border-b border-line bg-canvas px-[18px] py-2.5 text-xs text-ink-2">
                     {checklist.note}
                   </p>
                 )}
@@ -1225,7 +1225,7 @@ export default function PaymentsPage(): React.ReactElement {
                         Período de vigencia
                       </legend>
                       <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
-                        <label className="flex flex-col gap-1 text-[12.5px] text-ink-2">
+                        <label className="flex flex-col gap-1 text-xs text-ink-2">
                           Fecha de inicio
                           <input
                             type="date"
@@ -1234,7 +1234,7 @@ export default function PaymentsPage(): React.ReactElement {
                             className="rounded-ctl border border-line bg-paper px-3 py-2 text-sm text-ink"
                           />
                         </label>
-                        <label className="flex flex-col gap-1 text-[12.5px] text-ink-2">
+                        <label className="flex flex-col gap-1 text-xs text-ink-2">
                           Meses
                           <input
                             type="number"
@@ -1250,7 +1250,7 @@ export default function PaymentsPage(): React.ReactElement {
                         </label>
                       </div>
                       {editStartDate && editMonths > 0 && (
-                        <p className="mt-2 text-[12.5px] text-ink-3">
+                        <p className="mt-2 text-xs text-ink-3">
                           Vence el {formatDate(calcEditEndDate(editStartDate, editMonths))}
                         </p>
                       )}
@@ -1282,14 +1282,14 @@ export default function PaymentsPage(): React.ReactElement {
                       </Button>
                     </div>
                     {!checklistComplete && (
-                      <p className="text-[12.5px] text-ink-3">
+                      <p className="text-xs text-ink-3">
                         {remainingChecks === 1
                           ? "Falta confirmar 1 punto de la lista para poder aprobar."
                           : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`}
                       </p>
                     )}
                     {reviewed[request.id] && (
-                      <p className="text-[12.5px] text-ink-3">
+                      <p className="text-xs text-ink-3">
                         Este pago ya está marcado como revisado y espera en la cola para aprobarse
                         en lote.
                       </p>
@@ -1299,7 +1299,7 @@ export default function PaymentsPage(): React.ReactElement {
                   <div className="flex flex-col gap-4">
                     {/* Rejection is destructive for the payer — it stops their
                         enrolment — so the warning names them (prototype 11). */}
-                    <p className="rounded-ctl border border-line bg-canvas px-3 py-2.5 text-[12.5px] text-ink-2">
+                    <p className="rounded-ctl border border-line bg-canvas px-3 py-2.5 text-xs text-ink-2">
                       {payer} va a recibir este motivo tal cual y va a tener que subir un comprobante
                       nuevo. La membresía de {request.studentName} sigue sin activarse hasta entonces.
                     </p>
@@ -1330,7 +1330,7 @@ export default function PaymentsPage(): React.ReactElement {
                               {reason.label}
                             </span>
                             {reason.description && (
-                              <span className="mt-0.5 block text-[12px] text-ink-3">
+                              <span className="mt-0.5 block text-xs text-ink-3">
                                 {reason.description}
                               </span>
                             )}
@@ -1388,7 +1388,7 @@ export default function PaymentsPage(): React.ReactElement {
             )}
 
             {!isPending && (request.validatedBy || request.validatedAt) && (
-              <p className="text-[12px] text-ink-3">
+              <p className="text-xs text-ink-3">
                 {request.validationStatus === "validado" ? "Validado" : "Rechazado"}
                 {request.validatedBy ? ` por ${request.validatedBy}` : ""}
                 {request.validatedAt ? ` el ${formatDate(request.validatedAt)}` : ""}.

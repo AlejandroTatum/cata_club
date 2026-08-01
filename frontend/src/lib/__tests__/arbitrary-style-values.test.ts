@@ -1,7 +1,7 @@
 /**
  * No new arbitrary style values.
  *
- * The redesign shipped hundreds of hand-picked values — `text-[12.5px]`,
+ * The redesign shipped hundreds of hand-picked values — `text-[10.5px]`,
  * `tracking-[0.13em]`, `size={21}` — because the type and metric scale was
  * transcribed by eye instead of being read off a token. The migration issues
  * (#29–#32) undo that. The problem is arithmetic: while three hundred uses are
@@ -284,7 +284,11 @@ describe("the detector itself", () => {
   });
 
   it("stays quiet on a value the inventory covers", () => {
-    expect(findViolations("x.tsx", 'className="text-[12.5px]"')).toEqual([]);
+    // Deliberately NOT a text size. Every migration link deletes typography
+    // entries, so a `text-[…]` fixture has to be rewritten each time the band
+    // it cites retires. `min-[980px]` is the admin shell breakpoint, which
+    // #29 never touches, so this fixture stops churning.
+    expect(findViolations("x.tsx", 'className="min-[980px]:flex"')).toEqual([]);
   });
 
   it("catches every axis, not only typography", () => {

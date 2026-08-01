@@ -234,7 +234,7 @@ export default function ManagedStudentPicker({
           aria-hidden="true"
         />
       </div>
-      <p className="text-[12.5px] text-ink-3-strong">
+      <p className="text-xs text-ink-3-strong">
         Se mantiene en Mi cuenta, Pagos y Asistencias hasta que usted lo cambie.
       </p>
     </div>

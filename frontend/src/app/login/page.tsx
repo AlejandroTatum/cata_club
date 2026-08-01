@@ -262,7 +262,7 @@ export default function LoginPage(): React.ReactElement {
           href="/forgot-password"
           /* `min-h-[24px]` is hit area only — SC 2.5.8 wants 24x24 and a bare
              12.5px line measured 141.5 x 18.8. The type is untouched. */
-          className="inline-flex min-h-[24px] items-center self-end text-[12.5px] font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
+          className="inline-flex min-h-[24px] items-center self-end text-xs font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
         >
           ¿Olvidó su contraseña?
         </Link>
@@ -273,7 +273,7 @@ export default function LoginPage(): React.ReactElement {
       </form>
 
       {/* `.fcard` footer (line 812) — 12.5px muted, with the action in red. */}
-      <p className="text-center text-[12.5px] text-ink-3">
+      <p className="text-center text-xs text-ink-3">
         ¿No tiene una cuenta?{" "}
         <Link
           href="/student/enroll"
