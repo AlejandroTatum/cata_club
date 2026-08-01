@@ -44,6 +44,19 @@
  * Arbitrary COLOURS (`text-[#B9B9C1]`) are
  * deliberately out of scope: `color-contrast.test.ts` owns the palette, and
  * folding two rules into one guard makes both harder to shrink.
+ *
+ * An icon's CONTAINER is out of scope too, and that one cost a defect to
+ * decide. Two sidebar icons declared `ICON.base` and rendered at 17px, because
+ * a `h-[17px] w-[17px] shrink-0` span cut them — so an icon CAN fall off the
+ * scale with a call site the `icon` axis reads as perfect. The tempting fix is
+ * a ninth axis over `h-[Npx] w-[Npx]`. It was measured instead: of the sixteen
+ * such boxes in `src/`, exactly two wrapped an icon, and the other fourteen are
+ * avatars, state circles and form controls where an arbitrary square is the
+ * right answer. An axis that shouts at fourteen correct usages to catch two is
+ * an axis people learn to skip — the same argument the `shadow` and `rhythm`
+ * axes make for capturing a whole expression. The guard is structural instead
+ * and lives with the shell: `components/shell/__tests__/AppShell.test.tsx`
+ * fails if any box in the sidebar is smaller than the icon inside it.
  */
 
 import { describe, it, expect } from "vitest";

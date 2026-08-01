@@ -178,6 +178,37 @@ describe("AppShell", (): void => {
     expect(screen.getByText("contenido de la página")).toBeInTheDocument();
   });
 
+  it("never wraps an icon in a box smaller than the icon", (): void => {
+    // Two sidebar icons declared 18 and RENDERED 17, measured in the browser:
+    // `h-[17px] w-[17px] shrink-0` around an `ICON.base` glyph. The box does not
+    // yield, so the icon is what gets cut.
+    //
+    // The arbitrary-value lock could not see it and should not be asked to: it
+    // watches `size={…}`, and every call site here says `ICON.base`, which is
+    // exactly right. What set the real size was the CONTAINER. An icon can fall
+    // off the scale without its `size` being wrong — this is the guard for that.
+    //
+    // Written against the box rather than against those two rows: whichever
+    // icon someone wraps next, the failure mode is the same one.
+    const { container } = render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    const clipped: string[] = [];
+    container.querySelectorAll("svg").forEach((svg): void => {
+      const declared = Number(svg.getAttribute("width"));
+      if (!declared) return;
+
+      for (let el = svg.parentElement; el && el !== container; el = el.parentElement) {
+        const box = /\bh-\[(\d+(?:\.\d+)?)px\]/.exec(el.className?.toString() ?? "");
+        if (box && Number(box[1]) < declared) {
+          clipped.push(`${svg.getAttribute("class")}: ${declared}px inside ${box[1]}px`);
+          break;
+        }
+      }
+    });
+
+    expect(clipped).toEqual([]);
+  });
+
   it("derives nav links from the admin role and excludes Inicio", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 

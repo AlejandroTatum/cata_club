@@ -525,20 +525,26 @@ export default function AppShell({
               * a smudge on the dark rail, while a question mark stays a
               * question mark. Legibility at 17-20px wins.
               *
-              * The glyph is drawn at 18px inside a 17px box. Every nav icon
-              * above is a 17px square-ish outline; a ring at the same nominal
-              * size reads visibly smaller because a circle only fills ~79% of
-              * its box, so it gets one point back optically while the box —
-              * and therefore the label column, measured at x=49 on both —
-              * stays on the nav grid. The lighter stroke compensates for the
-              * extra point of size.
+              * No sizing box. There used to be one — `h-[17px] w-[17px]` —
+              * back when every nav icon above was a 17px outline and this ring
+              * was drawn at 18 to win back the point a circle loses by only
+              * filling ~79% of its box; the box held the label column on the
+              * nav grid at x=49 while the glyph overflowed it.
+              *
+              * The scale of #30 moved the nav icons to `ICON.base` (18px) and
+              * dropped their boxes, which retired both halves of that reasoning
+              * at once. What was left was a 17px box with `shrink-0` clipping an
+              * 18px glyph to 17 — measured in the browser — and a label column
+              * one pixel off the nav's, which is the opposite of what the box
+              * was for. The row now renders exactly like every nav item above.
+              * The lighter stroke stays: it is weight, not size.
               */}
-            <span
-              className="flex h-[17px] w-[17px] shrink-0 items-center justify-center"
+            <CircleHelp
+              size={ICON.base}
+              strokeWidth={1.75}
+              className="shrink-0"
               aria-hidden="true"
-            >
-              <CircleHelp size={ICON.base} strokeWidth={1.75} />
-            </span>
+            />
             <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda y soporte</span>
           </button>
 
@@ -554,12 +560,12 @@ export default function AppShell({
             aria-label="Preguntas frecuentes"
             className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}
           >
-            <span
-              className="flex h-[17px] w-[17px] shrink-0 items-center justify-center"
+            <BookOpen
+              size={ICON.base}
+              strokeWidth={1.75}
+              className="shrink-0"
               aria-hidden="true"
-            >
-              <BookOpen size={ICON.base} strokeWidth={1.75} />
-            </span>
+            />
             <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>
               Preguntas frecuentes
             </span>
