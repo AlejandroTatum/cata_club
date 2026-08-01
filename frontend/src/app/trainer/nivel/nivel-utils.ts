@@ -54,7 +54,7 @@ export interface NivelStudentRef {
  * endpoint (`fetchAlumnosConNivel`), accessible to both admin and trainer.
  *
  * This is the single roster source for both nivel screens: the trainer panel
- * (`/trainer/nivel`) and the admin ladder (`/ranking`). It replaced
+ * (`/trainer/nivel`) and the admin ladder (`/nivel`). It replaced
  * `fetchMembers()`, whose route depends on the ADMINISTRADOR-only
  * `GET /personas/` — a trainer opening `/trainer/nivel` got a real 403.
  *

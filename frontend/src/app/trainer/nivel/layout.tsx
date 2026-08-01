@@ -7,7 +7,7 @@
  * `src/app/trainer/layout.tsx`.
  *
  * "Niveles" is the name the sidebar gives this route and the title the screen
- * prints, and it is the SAME screen the admin opens at `/ranking`, so all
+ * prints, and it is the SAME screen the admin opens at `/nivel`, so all
  * three say the one word.
  */
 

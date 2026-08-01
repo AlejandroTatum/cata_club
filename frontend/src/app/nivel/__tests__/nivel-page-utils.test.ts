@@ -11,7 +11,7 @@ import {
   studentFullName,
   studentsOnNivel,
   unassignedStudents,
-} from "../ranking-page-utils";
+} from "../nivel-page-utils";
 
 function student(
   id: string,

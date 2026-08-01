@@ -120,13 +120,29 @@ test.describe("Back navigation + toasts", () => {
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 
-  test("ranking (admin): the way back to /dashboard is a real sidebar link", async ({ page }) => {
+  test("nivel (admin): /ranking still answers, and lands on the route that names it", async ({
+    page,
+  }) => {
+    // The route was renamed when the competitive feature was retired. The old
+    // name is in bookmarks and shared messages, so it redirects permanently
+    // rather than 404ing — this is the assertion that the redirect is wired,
+    // not just declared in `next.config.js`.
     await loginAsAdmin(page);
     await page.route("**/api/members", (route) =>
       fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
     );
 
     await page.goto("/ranking");
+    await expect(page).toHaveURL(/\/nivel$/);
+  });
+
+  test("nivel (admin): the way back to /dashboard is a real sidebar link", async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.route("**/api/members", (route) =>
+      fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
+    );
+
+    await page.goto("/nivel");
     const home = page
       .getByRole("navigation", { name: "Navegación principal" })
       .getByRole("link", { name: "Panel de Control", exact: true });

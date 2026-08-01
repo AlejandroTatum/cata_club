@@ -304,9 +304,9 @@ describe("muted small print that sits OUTSIDE a card", () => {
   });
 });
 
-describe("/ranking — the unassigned-level chip", () => {
+describe("/nivel — the unassigned-level chip", () => {
   // This used to guard a `Badge` reading "Sin asignar" in Tailwind greys. That
-  // badge is gone: the unassigned rung on /ranking is now the `—` chip
+  // badge is gone: the unassigned rung on /nivel is now the `—` chip
   // (page.tsx:283-289), which wears the system's own neutral state pair. The
   // coverage follows the shipping markup rather than the retired one.
   it("meets AA for the em-dash chip on the neutral tint", () => {
