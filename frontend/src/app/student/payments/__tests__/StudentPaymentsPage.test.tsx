@@ -11,7 +11,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import StudentPaymentsPage from "@/app/student/payments/page";
 import type { PagoPersona, StudentPortalSummary, StudentProfileSummary } from "@/services/api";
@@ -104,11 +104,58 @@ function authSession(role: "estudiante" | "representante" = "estudiante") {
   };
 }
 
+// ---------------------------------------------------------------------------
+// El reloj congelado y las fechas que se derivan de él
+// ---------------------------------------------------------------------------
+
+/**
+ * El reloj de este archivo.
+ *
+ * La pantalla siembra el inicio del período de renovación con el mayor entre
+ * hoy y la cobertura ya pagada, y decide el bloqueo por minoría de edad
+ * comparando la fecha de nacimiento contra hoy. La fecha del sistema es
+ * entonces un dato de entrada del test, igual que los mocks: si no se congela,
+ * cada aserción de período queda atada al día en que corrió la suite y se
+ * rompe sola al pasar esa fecha, sin que cambie una línea de producto.
+ *
+ * Se congela antes de `COVERAGE_END` para que la cobertura ya pagada gane la
+ * comparación contra hoy, que es justamente el comportamiento bajo prueba.
+ */
+const NOW = new Date("2026-07-15T09:00:00-05:00");
+
+/** Inicio del período del pago que siembra `makePago` por defecto. */
+const PAGO_START = "2026-07-01";
+/** Cobertura sembrada por defecto: posterior al reloj congelado. */
+const COVERAGE_END = "2026-07-31";
+/** Un mes desde `COVERAGE_END`, el período que propone la renovación. */
+const RENEWAL_END = "2026-08-31";
+
+/** Cobertura de los casos que pagan por adelantado. */
+const COVERAGE_END_AHEAD = "2026-08-31";
+/** Un mes desde `COVERAGE_END_AHEAD`; septiembre no tiene 31, y se recorta. */
+const RENEWAL_END_AHEAD = "2026-09-30";
+
+/** Fecha de nacimiento mayor de edad respecto del reloj congelado. */
+const ADULT_BIRTH_DATE = "2000-05-14";
+/** Fecha de nacimiento menor de edad respecto del reloj congelado. */
+const MINOR_BIRTH_DATE = "2014-03-10";
+
+/** Un `YYYY-MM-DD` en la gramática de fecha del producto. */
+function shown(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+/** Un período tal como lo escribe la pantalla, con raya y no con guion. */
+function shownRange(startIso: string, endIso: string): string {
+  return `${shown(startIso)} – ${shown(endIso)}`;
+}
+
 const SELF: StudentProfileSummary = {
   personaId: "9",
   nombres: "Alumno",
   apellidos: "Test",
-  fechaNacimiento: "2000-05-14",
+  fechaNacimiento: ADULT_BIRTH_DATE,
   ranking: { status: "unavailable", reason: "error" },
   recentSessions: [],
   membership: {
@@ -140,8 +187,8 @@ function makePago(overrides: Partial<PagoPersona> = {}): PagoPersona {
     tipoPago: "TRANSFERENCIA",
     fechaRegistro: "2026-07-01T10:00:00",
     fechaValidacion: "2026-07-02T10:00:00",
-    fechaInicio: "2026-07-01",
-    fechaFin: "2026-07-31",
+    fechaInicio: PAGO_START,
+    fechaFin: COVERAGE_END,
     personaId: 9,
     membresiaId: 3,
     voucherUrl: null,
@@ -151,6 +198,10 @@ function makePago(overrides: Partial<PagoPersona> = {}): PagoPersona {
 }
 
 beforeEach(() => {
+  // Solo `Date`: la pantalla no depende de temporizadores, y falsear también
+  // `setTimeout` colgaría las consultas `findBy*`, que sondean con timers.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   searchParams = new URLSearchParams();
   mockReplace.mockReset();
   mockShowSuccess.mockReset();
@@ -160,6 +211,10 @@ beforeEach(() => {
   mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago()]);
   mockSubirVoucherPago.mockReset().mockResolvedValue(undefined);
   mockRegistrarPago.mockReset().mockResolvedValue({ id: 99 });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 /**
@@ -218,23 +273,25 @@ describe("StudentPaymentsPage — arriving from the home band", () => {
 
   it("waits for the payment history before opening, so the period starts where coverage ends", async () => {
     searchParams = new URLSearchParams("registrar=1");
-    mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago({ fechaFin: "2026-08-31" })]);
+    mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago({ fechaFin: COVERAGE_END_AHEAD })]);
 
     render(<StudentPaymentsPage />);
 
-    // The period starts at the furthest approved `fechaFin` (31/08/2026), not
-    // at today — a family paying early must not lose the days they paid for.
-    // (The same date also appears in the card's "Pagado hasta", hence the
-    // scoped lookup inside the form's own period block.)
+    // The period starts at the furthest approved `fechaFin`, not at today — a
+    // family paying early must not lose the days they paid for. (The same date
+    // also appears in the card's "Pagado hasta", hence the scoped lookup
+    // inside the form's own period block.)
     const period = (await screen.findByText("Período que cubre")).parentElement!;
-    expect(within(period).getByText(/^31\/08\/2026/)).toBeInTheDocument();
+    expect(
+      within(period).getByText(shownRange(COVERAGE_END_AHEAD, RENEWAL_END_AHEAD)),
+    ).toBeInTheDocument();
   });
 
   it("does not force the form open on a minor's own account", async () => {
     searchParams = new URLSearchParams("registrar=1");
     mockFetchStudentPortal.mockReset().mockResolvedValue({
       ...PORTAL,
-      self: { ...SELF, fechaNacimiento: "2014-03-10" },
+      self: { ...SELF, fechaNacimiento: MINOR_BIRTH_DATE },
     });
 
     render(<StudentPaymentsPage />);
@@ -249,15 +306,15 @@ describe("StudentPaymentsPage — arriving from the home band", () => {
 describe("StudentPaymentsPage — the membership card", () => {
   it("derives coverage from the furthest approved payment, not from the unpopulated membership.fechaFin", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
-      makePago({ id: 1, fechaFin: "2026-07-31" }),
-      makePago({ id: 2, fechaFin: "2026-08-31" }),
+      makePago({ id: 1, fechaFin: COVERAGE_END }),
+      makePago({ id: 2, fechaFin: COVERAGE_END_AHEAD }),
     ]);
 
     render(<StudentPaymentsPage />);
 
     const card = await screen.findByTestId("membership-status");
     await waitFor(() => {
-      expect(within(card).getByText("31/08/2026")).toBeInTheDocument();
+      expect(within(card).getByText(shown(COVERAGE_END_AHEAD))).toBeInTheDocument();
     });
     expect(within(card).queryByText(/2099/)).not.toBeInTheDocument();
   });
@@ -291,9 +348,9 @@ describe("StudentPaymentsPage — the history", () => {
     // The period is unique to the payment row; the amount is not (the
     // membership card states the same monthly price), so the row is anchored
     // on the period and the amount is asserted across both.
-    expect(await screen.findByText(/01\/07\/2026 – 31\/07\/2026/)).toBeInTheDocument();
+    expect(await screen.findByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
     expect(screen.getAllByText("$25,00").length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByText(/2026-07-01/)).not.toBeInTheDocument();
+    expect(screen.queryByText(PAGO_START, { exact: false })).not.toBeInTheDocument();
   });
 
   it("states the rejection reason in full — it is the only row that asks the reader to act", async () => {
@@ -332,7 +389,7 @@ describe("StudentPaymentsPage — the history", () => {
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText(/01\/07\/2026 – 31\/07\/2026/)).toBeInTheDocument();
+    expect(await screen.findByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Rechazados/ }));
 
     expect(await screen.findByText("No hay pagos rechazados.")).toBeInTheDocument();
@@ -342,7 +399,7 @@ describe("StudentPaymentsPage — the history", () => {
 
 describe("StudentPaymentsPage — registering a payment", () => {
   it("starts the new period where the paid one ends, so paying early loses no days", async () => {
-    mockFetchPagosDePersona.mockResolvedValueOnce([makePago({ fechaFin: "2026-08-31" })]);
+    mockFetchPagosDePersona.mockResolvedValueOnce([makePago({ fechaFin: COVERAGE_END_AHEAD })]);
 
     render(<StudentPaymentsPage />);
 
@@ -350,7 +407,9 @@ describe("StudentPaymentsPage — registering a payment", () => {
 
     // $25,00 at a $25 monthly price = one month, starting at the end of the
     // approved coverage.
-    expect(await screen.findByText(/31\/08\/2026 – 30\/09\/2026/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(shownRange(COVERAGE_END_AHEAD, RENEWAL_END_AHEAD)),
+    ).toBeInTheDocument();
     expect(screen.getByText(/1 mes a \$25,00 por mes/i)).toBeInTheDocument();
   });
 
@@ -378,7 +437,7 @@ describe("StudentPaymentsPage — registering a payment", () => {
   it("does not offer a minor a renewal form on their own account, and says who can register it", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue({
       ...PORTAL,
-      self: { ...SELF, fechaNacimiento: "2014-03-10" },
+      self: { ...SELF, fechaNacimiento: MINOR_BIRTH_DATE },
     });
 
     render(<StudentPaymentsPage />);
@@ -397,7 +456,7 @@ describe("StudentPaymentsPage — registering a payment", () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue({
       self: null,
       representados: [
-        { ...SELF, personaId: "4", nombres: "Sofia", apellidos: "Vera", fechaNacimiento: "2016-07-22" },
+        { ...SELF, personaId: "4", nombres: "Sofia", apellidos: "Vera", fechaNacimiento: MINOR_BIRTH_DATE },
       ],
       membershipPlans: [],
     });
@@ -464,7 +523,7 @@ describe("StudentPaymentsPage — the checkpoint before the money moves", () => 
 
     const confirm = await screen.findByTestId("renew-confirm");
     expect(within(confirm).getByText("$25,00")).toBeInTheDocument();
-    expect(within(confirm).getByText("31/07/2026 – 31/08/2026")).toBeInTheDocument();
+    expect(within(confirm).getByText(shownRange(COVERAGE_END, RENEWAL_END))).toBeInTheDocument();
     expect(mockRegistrarPago).not.toHaveBeenCalled();
   });
 
