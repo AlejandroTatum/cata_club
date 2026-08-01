@@ -4,9 +4,7 @@
  * The redesign shipped hundreds of hand-picked values — `size={21}`, an
  * off-scale `min-[980px]` breakpoint, ten one-off elevations — because the
  * type and metric scale was transcribed by eye instead of being read off a
- * token. Every example here is deliberately drawn from an axis #29 does NOT
- * retire: the typography examples this comment used to carry had to be
- * rewritten by every link of the chain. The migration issues
+ * token. The migration issues
  * (#29–#32) undo that. The problem is arithmetic: while three hundred uses are
  * being rewritten, use number three hundred and one lands in a PR the same
  * week and the count never falls.
@@ -27,12 +25,23 @@
  *
  * ## What counts as a violation
  *
- * The eight axes below, and only those. Five of them catch a value written
- * between brackets. `weight` catches a factory class by name, because the
- * weight scale is the one part of the type system that drifts without ever
- * writing an arbitrary value; `icon` and `rhythm` capture a whole expression
- * and exempt only the correct form, because on those two axes the drift is
- * the shape of what is written, not the number in it. Arbitrary COLOURS (`text-[#B9B9C1]`) are
+ * The eight axes below, and only those, and they no longer work the same way.
+ *
+ * `typography`, `leading` and `tracking` catch a value written between
+ * brackets and read the frozen inventory. `weight` matches a factory class by
+ * name against a closed palette, because the weight scale is the one part of
+ * the type system that drifts without ever writing an arbitrary value —
+ * `font-medium` had 91 call sites and the bracket rule never saw one of them.
+ *
+ * `icon`, `rhythm` and `shadow` read no inventory at all: they capture a whole
+ * expression and exempt only the correct form, because on those axes the drift
+ * is the shape of what is written rather than the number in it. `size={iconSize}`
+ * smuggles any number through a name, five different idioms all produced "some
+ * separation", and `shadow-md` walks straight past the elevation ladder.
+ * `breakpoint` reads no inventory either, for the opposite reason: it has no
+ * exemption, because nothing it can match is ever correct.
+ *
+ * Arbitrary COLOURS (`text-[#B9B9C1]`) are
  * deliberately out of scope: `color-contrast.test.ts` owns the palette, and
  * folding two rules into one guard makes both harder to shrink.
  */
@@ -42,6 +51,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ALLOWLIST, type Axis } from "./arbitrary-style-values.allowlist";
 import { ICON_STEPS } from "../icon-size";
+import tailwindConfig from "../../../tailwind.config";
 
 const SRC = join(__dirname, "..", "..");
 
@@ -64,6 +74,13 @@ interface AxisRule {
   readonly onlyIn?: RegExp;
   /** A captured value this axis accepts outright, whatever the allowlist says. */
   readonly exempt?: (value: string) => boolean;
+  /**
+   * Pulls the measurable number out of a captured value. Only the breakpoint
+   * axis needs it: it captures the whole prefix (`min-[980px]`) rather than
+   * the width, because the failure message has to name the operator the
+   * developer actually wrote.
+   */
+  readonly measure?: (value: string) => number | null;
 }
 
 /**
@@ -117,13 +134,30 @@ const TRACKING_SCALE: readonly Step[] = [
  */
 const ICON_SCALE: readonly Step[] = ICON_STEPS;
 
-const BREAKPOINT_SCALE: readonly Step[] = [
-  { token: "sm:", value: 640 },
-  { token: "md:", value: 768 },
-  { token: "lg:", value: 1024 },
-  { token: "xl:", value: 1280 },
-  { token: "2xl:", value: 1536 },
-];
+/**
+ * The screen map and the elevation map, read off `tailwind.config.ts` for the
+ * same reason `ICON_SCALE` is read off `icon-size.ts`: a table transcribed
+ * here would start handing out advice the theme does not honour the first time
+ * either map changes. `screens` is declared rather than extended in that file,
+ * so its keys ARE the product's breakpoints.
+ */
+const THEME = tailwindConfig.theme as {
+  screens: Record<string, string>;
+  extend: { boxShadow: Record<string, string> };
+};
+
+const BREAKPOINT_SCALE: readonly Step[] = Object.entries(THEME.screens).map(([name, width]) => ({
+  token: `${name}:`,
+  value: Number.parseFloat(width),
+}));
+
+/**
+ * The elevations and rings the product may name. `none` is Tailwind's own and
+ * is deliberately kept: `globals.css` gives every paper surface `shadow-card`
+ * from a shared rule, so switching it off on an inset panel is a documented
+ * escape, not drift.
+ */
+const SHADOW_TOKENS: readonly string[] = [...Object.keys(THEME.extend.boxShadow), "none"];
 
 export const AXES: Record<Axis, AxisRule> = {
   typography: {
@@ -197,14 +231,27 @@ export const AXES: Record<Axis, AxisRule> = {
     onlyIn: /<AppShell\b/,
   },
   shadow: {
-    spell: (v) => `shadow-[${v}]`,
-    pattern: /\bshadow-\[([^\]\s]+)\]/g,
-    advice: "use `shadow-soft`, `shadow-card` or `shadow-elevated`",
+    spell: (v) => `shadow-${v}`,
+    // The THIRD inverted axis. A bracket was never the only way to miss the
+    // elevation ladder: `shadow-md` and `shadow-sm` are factory utilities, and
+    // both were in the codebase — the same blind spot `font-medium` sat in
+    // before the weight axis started matching by name. So the pattern captures
+    // the whole tail, bracket or name, and the exemption is naming a key of
+    // the theme's own `boxShadow` map.
+    pattern: /\bshadow-(\[[^\]\s]+\]|[a-z0-9][a-z0-9-]*)/g,
+    exempt: (v) => SHADOW_TOKENS.includes(v),
+    advice: `use one of \`shadow-${SHADOW_TOKENS.join("`, `shadow-")}\``,
   },
   breakpoint: {
-    spell: (v) => `min-[${v}]`,
-    pattern: /\bmin-\[([^\]\s]+)\]/g,
+    spell: (v) => v,
+    // The FOURTH, and the easiest of them: a named prefix cannot be written
+    // between brackets, so every match is a violation and there is nothing to
+    // exempt. `max-[…]` is in the pattern because it is the same magic number
+    // wearing the other operator — `min-[980px]` was the value this axis
+    // froze, and closing only that spelling would have left the door ajar.
+    pattern: /\b((?:min|max)-\[[^\]\s]+\])/g,
     scale: BREAKPOINT_SCALE,
+    measure: (v) => numericValue(v.replace(/^(?:min|max)-\[/, "").replace(/\]$/, "")),
     advice: "use a named breakpoint prefix",
   },
 };
@@ -224,7 +271,7 @@ export function numericValue(raw: string): number | null {
 /** The token a raw value should have been, named whenever a scale can name it. */
 export function suggestionFor(axis: Axis, raw: string): string {
   const rule = AXES[axis];
-  const n = numericValue(raw);
+  const n = (rule.measure ?? numericValue)(raw);
   if (rule.scale && n !== null) {
     const nearest = rule.scale.reduce((best, step) =>
       Math.abs(step.value - n) < Math.abs(best.value - n) ? step : best,
@@ -341,12 +388,11 @@ describe("the detector itself", () => {
     expect(violation.message).toContain("text-lg");
   });
 
-  it("stays quiet on a value the inventory covers", () => {
-    // Deliberately NOT a text size. Every migration link deletes typography
-    // entries, so a `text-[…]` fixture has to be rewritten each time the band
-    // it cites retires. `min-[980px]` is the admin shell breakpoint, which
-    // #29 never touches, so this fixture stops churning.
-    expect(findViolations("x.tsx", 'className="min-[980px]:flex"')).toEqual([]);
+  it("stays quiet on the one value the inventory still covers", () => {
+    // `weight` is the last axis with entries, and by design: the other six are
+    // empty, and three of them read no list at all. So the only fixture that
+    // can still prove "the allowlist is consulted" is a weight.
+    expect(findViolations("x.tsx", 'className="font-extrabold"')).toEqual([]);
   });
 
   it("catches every axis, not only typography", () => {
@@ -360,6 +406,38 @@ describe("the detector itself", () => {
     ];
 
     expect(axes.map((code) => findViolations("x.tsx", code).length)).toEqual([1, 1, 1, 1, 1, 1]);
+  });
+
+  it("reads the elevation ladder as a closed set, brackets or not", () => {
+    // Every key of the theme's `boxShadow`, plus `shadow-none`.
+    const named = SHADOW_TOKENS.map((t) => `className="shadow-${t}"`);
+    expect(named.flatMap((code) => findViolations("x.tsx", code))).toEqual([]);
+
+    // A factory class is the drift a bracket-only rule could not see:
+    // `shadow-md` was in the codebase and the emptied list would have let it
+    // stay. It fails now, and the message names the ladder.
+    const [factory] = findViolations("app/x.tsx", 'className="shadow-md"');
+    expect(factory.value).toBe("md");
+    expect(factory.message).toContain("shadow-md is not an allowed shadow value");
+    expect(factory.message).toContain("shadow-elevated");
+
+    // And the ring tokens are reachable through a variant prefix, which is the
+    // only way the two hand-painted focus rings are ever written.
+    expect(findViolations("x.tsx", 'className="focus-within:shadow-focus-band"')).toEqual([]);
+  });
+
+  it("catches an off-scale breakpoint under either operator", () => {
+    const [min] = findViolations("app/x.tsx", 'className="min-[977px]:flex"');
+    expect(min.value).toBe("min-[977px]");
+    expect(min.message).toContain("min-[977px] is not an allowed breakpoint value");
+
+    // `max-[…]` is the same magic number wearing the other operator.
+    const [max] = findViolations("app/x.tsx", 'className="max-[979px]:hidden"');
+    expect(max.value).toBe("max-[979px]");
+    expect(max.message).toContain("max-[979px]");
+
+    // A named prefix cannot be spelled between brackets, so nothing to exempt.
+    expect(findViolations("x.tsx", 'className="split:flex-row lg:px-14"')).toEqual([]);
   });
 
   it("reads the weight scale as a closed set, not as a bracket", () => {
@@ -447,7 +525,10 @@ describe("the detector itself", () => {
     expect(suggestionFor("typography", "1.5rem")).toContain("text-xl");
     expect(suggestionFor("leading", "1.24")).toContain("leading-tight");
     expect(suggestionFor("tracking", "-0.048em")).toContain("tracking-tighter");
-    expect(suggestionFor("breakpoint", "980px")).toContain("lg:");
+    // 980px used to snap to `lg:` (1024px) because the scale had no rung
+    // nearer. It has one now, and it is exact.
+    expect(suggestionFor("breakpoint", "min-[980px]")).toContain("split:");
+    expect(suggestionFor("breakpoint", "max-[1010px]")).toContain("lg:");
     // 20px snaps to `ICON.base` (18px), two away, not to `ICON.lg` (24px).
     expect(suggestionFor("icon", "20")).toContain("ICON.base");
     // An expression carries no number, so the advice stands on its own.

@@ -76,6 +76,10 @@
  * moves ABOVE the form, it is not removed. (The other prototype hid it; this
  * one is the authority here.) So there is no separate compact brand block.
  *
+ * That 980px is the `split` breakpoint of `tailwind.config.ts`, and this file
+ * is the only one that reads it so far: `split:` is where the composition
+ * stops being a stack and becomes two panes.
+ *
  * ## The single figure is the club's age, not a student count
  *
  * The prototype draws "67 estudiantes inscritos". That exact figure CANNOT be
@@ -161,7 +165,7 @@ export default function AuthShell({
      */
     <div
       data-testid="auth-composition"
-      className="auth-shell flex min-h-screen w-full flex-col bg-canvas min-[980px]:flex-row"
+      className="auth-shell flex min-h-screen w-full flex-col bg-canvas split:flex-row"
     >
       {/*
        * `.auth .dark` — `flex:1.1`, i.e. WIDER than the form panel. Laid out
@@ -172,12 +176,12 @@ export default function AuthShell({
        */}
       <div
         data-testid="auth-panel-dark"
-        className="relative grid grid-rows-[1fr_auto_1fr] gap-8 overflow-hidden bg-coal px-6 py-8 text-center text-white min-[980px]:flex-[1.1_1_0%] min-[980px]:gap-10 min-[980px]:px-14 min-[980px]:py-12"
+        className="relative grid grid-rows-[1fr_auto_1fr] gap-8 overflow-hidden bg-coal px-6 py-8 text-center text-white split:flex-[1.1_1_0%] split:gap-10 split:px-14 split:py-12"
       >
         {/*
          * The lit stage. One soft radial centred on the brand mark so the dark
          * field has depth instead of being unpainted space. Phones have no air
-         * to light, so it only exists from 980px up.
+         * to light, so it only exists from `split` up.
          *
          * Contrast, measured rather than assumed: the gradient fades out at 68%
          * of its 340px radius, i.e. ~231px from centre, and every muted line on
@@ -190,7 +194,7 @@ export default function AuthShell({
          */}
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 hidden h-[680px] w-[680px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.075),rgba(255,255,255,0)_68%)] min-[980px]:block"
+          className="pointer-events-none absolute left-1/2 top-1/2 hidden h-[680px] w-[680px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.075),rgba(255,255,255,0)_68%)] split:block"
         />
 
         <Link
@@ -210,8 +214,16 @@ export default function AuthShell({
           data-testid="auth-brand-cluster"
           className="relative z-[1] flex flex-col items-center justify-center gap-[22px] self-center justify-self-center [max-width:44ch]"
         >
-          {/* 104px, `border:4px solid rgba(255,255,255,.12)` + drop shadow. */}
-          <span className="relative block h-[104px] w-[104px] shrink-0 overflow-hidden rounded-full border-4 border-white/[0.12] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
+          {/*
+           * 104px, `border:4px solid rgba(255,255,255,.12)`. The 50%-black
+           * drop shadow that shipped with it is gone: NEITHER prototype draws
+           * one — `_sistema.css`'s `.auth .left .disc` (line 385) declares
+           * only a size, and the 14-view file's `.authlogo` (line 247) only a
+           * size and a border. What separates the disc from the coal field is
+           * that white hairline, plus the radial behind it, and both are
+           * specified. A shadow half the depth of pure black was not.
+           */}
+          <span className="relative block h-[104px] w-[104px] shrink-0 overflow-hidden rounded-full border-4 border-white/[0.12]">
             <Image
               src="/brand/cata-club-logo.jpeg"
               alt="Cata Club"
@@ -228,7 +240,7 @@ export default function AuthShell({
            * (46px) and `2xl` (32px), and keeps `leading-crisp` because the
            * motto wraps across three lines and has to read as one block
            * rather than as three. `leading-crisp` is repeated at the
-           * breakpoint on purpose: `min-[980px]:text-display` is emitted
+           * breakpoint on purpose: `split:text-display` is emitted
            * inside a media query, so it outranks an unmediated `leading-*`
            * and the desktop headline would silently take the step's own
            * 0.95. Kept as a <p>: the page's single <h1> is
@@ -245,7 +257,7 @@ export default function AuthShell({
            */}
           <p
             data-testid="auth-headline"
-            className="my-5 max-w-[15ch] text-2xl font-extrabold leading-crisp [text-wrap:balance] min-[980px]:my-0 min-[980px]:text-display min-[980px]:leading-crisp"
+            className="my-5 max-w-[15ch] text-2xl font-extrabold leading-crisp [text-wrap:balance] split:my-0 split:text-display split:leading-crisp"
           >
             “Formando <em className="not-italic text-ball">campeones</em> para la vida”
           </p>
@@ -287,7 +299,7 @@ export default function AuthShell({
        * lower rail puts both halves on one axis. No row gap here: the card's
        * distance from its footnotes is the 16px margin below, not a grid gap.
        *
-       * Only from 980px up, where this panel is a full-height column with an
+       * Only from `split` up, where this panel is a full-height column with an
        * axis to share. Below that the two panels are stacked and the page
        * scrolls anyway, so the same rails would just push the form further
        * under the fold — measured at 390x844, 144px of dead air above a card
@@ -297,12 +309,14 @@ export default function AuthShell({
        */}
       <div
         data-testid="auth-panel-light"
-        className="flex flex-1 flex-col justify-center bg-canvas px-6 py-10 text-ink min-[980px]:grid min-[980px]:flex-1 min-[980px]:grid-rows-[1fr_auto_1fr] min-[980px]:px-14 min-[980px]:py-12"
+        className="flex flex-1 flex-col justify-center bg-canvas px-6 py-10 text-ink split:grid split:flex-1 split:grid-rows-[1fr_auto_1fr] split:px-14 split:py-12"
       >
-        {/* `.fcard` — 360px, 18px radius, `padding:30px 28px`, elevated. */}
+        {/* `.fcard` — 360px, 18px radius, `padding:30px 28px`, `shadow-hero`:
+            the elevation of a card that stands alone on the canvas with no
+            page chrome around it. */}
         <div
           data-testid="auth-card"
-          className={`row-start-2 mx-auto flex w-full flex-col gap-3.5 rounded-[18px] border border-line bg-paper px-7 py-[30px] shadow-[0_12px_44px_rgba(0,0,0,0.07)] ${CARD_WIDTH}`}
+          className={`row-start-2 mx-auto flex w-full flex-col gap-3.5 rounded-[18px] border border-line bg-paper px-7 py-[30px] shadow-hero ${CARD_WIDTH}`}
         >
           {/* The red eyebrow — 10px/700, `letter-spacing:2px`, uppercase. */}
           <p className="text-2xs font-bold uppercase tracking-caps-wide text-cata-red">

@@ -31,11 +31,18 @@
  *
  * `box-shadow` rather than `outline`: an outline cannot be two colours, and a
  * shadow ring follows the launcher's `rounded-full` geometry for free.
+ *
+ * ## Where the values live
+ *
+ * In `tailwind.config.ts`, as `shadow-focus-duo` and `shadow-focus-duo-float`.
+ * They were spelled out here as arbitrary values, which meant the ring the
+ * accessibility argument above is about was invisible to the theme and to
+ * anyone reading it. This file keeps the argument; the theme keeps the numbers.
  */
 
 /** Two-tone ring for a control that keeps no resting shadow of its own. */
 export const ASSISTANT_FOCUS_RING =
-  "focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_#FFFFFF,0_0_0_5px_#131316]";
+  "focus-visible:outline-none focus-visible:shadow-focus-duo";
 
 /**
  * The same ring for the floating launcher, which must keep its drop shadow
@@ -43,5 +50,4 @@ export const ASSISTANT_FOCUS_RING =
  * be restated inside the focus value or it disappears on focus.
  */
 export const LAUNCHER_FOCUS_RING =
-  "focus-visible:outline-none " +
-  "focus-visible:shadow-[0_0_0_2px_#FFFFFF,0_0_0_5px_#131316,0_10px_28px_rgba(19,19,22,0.30)]";
+  "focus-visible:outline-none focus-visible:shadow-focus-duo-float";

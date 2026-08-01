@@ -1,9 +1,53 @@
 import type { Config } from "tailwindcss";
 
+/**
+ * The resting shadow of the assistant launcher, named once because it is
+ * written twice: `box-shadow` is a single property, so a control that keeps a
+ * drop shadow while focused has to restate it inside the focus value or it
+ * disappears the moment the ring appears.
+ */
+const FLOAT_SHADOW = "0 10px 28px rgba(19, 19, 22, 0.30)";
+
+/**
+ * The two-tone focus ring: a 2px white band hugging the control, then a 3px
+ * coal band around it. Whatever the control and the page happen to be, one of
+ * the two bands is high-contrast against its neighbour — the "adjacent
+ * colours" test WCAG 1.4.11 / 2.4.11 apply. Measured in
+ * `components/chatbot/chat-focus-ring.ts`.
+ */
+const FOCUS_DUO = "0 0 0 2px #FFFFFF, 0 0 0 5px #131316";
+
 const config: Config = {
   darkMode: "class",
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
+    // -----------------------------------------------------------------------
+    // Tailwind's five stock breakpoints plus one, restated here rather than
+    // extended, because `extend` appends and the ORDER of this object is the
+    // order the media queries are emitted in. A `split:` rule declared after
+    // `2xl:` would win over it at 1536px and up, which is the same class of
+    // bug `min-[980px]:text-display` shipped in #50 — a rule landing later in
+    // the file than the one it was meant to lose to. Listed in numeric order,
+    // `split` sits where its width says it does.
+    //
+    // `split` (980px) is the width at which a composition stops being a stack
+    // and becomes two panes side by side. It is not a device size: it is the
+    // one breakpoint `prototipo-rediseno.html` declares (`@media (max-width:
+    // 980px)`, line 408), and that block does exactly this — `.auth` drops to
+    // `flex-direction:column`, `.cols`, `.duo` and `.quick` drop to a single
+    // column, the sidebar collapses to its icon rail. `_sistema.css` spends
+    // the same 980px on `.paysplit` (line 369). Today only `AuthShell` reads
+    // it, and it reads it fifteen times.
+    // -----------------------------------------------------------------------
+    screens: {
+      sm: "640px",
+      md: "768px",
+      /** Two panes side by side. Below this the composition is a stack. */
+      split: "980px",
+      lg: "1024px",
+      xl: "1280px",
+      "2xl": "1536px",
+    },
     extend: {
       colors: {
         // -------------------------------------------------------------------
@@ -353,11 +397,60 @@ const config: Config = {
       // depth. `card` is what the shared rule in `globals.css` gives every
       // paper surface at the card radius; `elevated` is reserved for things
       // that float over the page (modals, popovers, drag).
+      //
+      // The map holds TWO families, and they are not the same kind of thing.
+      //
+      // The ELEVATION LADDER (`soft` → `card` → `elevated` → `hero`) answers
+      // "how far off the page is this". `float` is off the ladder on purpose:
+      // it is the only entry whose object is DARK, and a 16% coal shadow under
+      // a near-black disc is invisible, so depth there costs 30%.
+      //
+      // The INDICATOR RINGS (`selected`, `focus-*`) are not elevation at all.
+      // They are drawn with `box-shadow` because an `outline` cannot be two
+      // colours and a shadow follows the control's own `border-radius` for
+      // free. They live here because `box-shadow` is one property and a
+      // control cannot have two — so a ring and a resting shadow have to be
+      // spelled as one value, which is exactly what `focus-duo-float` is.
       boxShadow: {
         soft: "0 1px 2px rgba(19, 19, 22, 0.04), 0 2px 8px -2px rgba(19, 19, 22, 0.05)",
         card: "0 1px 2px rgba(19, 19, 22, 0.06), 0 4px 10px -3px rgba(19, 19, 22, 0.08)",
         elevated:
           "0 2px 6px -1px rgba(19, 19, 22, 0.08), 0 14px 32px -8px rgba(19, 19, 22, 0.16)",
+        /**
+         * A card standing ALONE on the canvas with no page chrome around it —
+         * the auth card and the `/unauthorized` card, the only two. Geometry
+         * and alpha are `_sistema.css`'s own `.authcard` (line 394,
+         * `0 8px 34px rgba(0,0,0,.07)`); only the tint moves, to the coal the
+         * rest of this map is built from. It shipped as two hand-picked
+         * values that straddled it — `0 12px 44px …/.07` and
+         * `0 4px 24px …/.05` — one on each side of the value the prototype
+         * actually declares.
+         */
+        hero: "0 8px 34px rgba(19, 19, 22, 0.07)",
+        /** Resting shadow of the coal assistant launcher. */
+        float: FLOAT_SHADOW,
+        /**
+         * The 1px coal ring that doubles a `border-coal` on a selected control
+         * so the edge reads at 2px without the layout moving a pixel.
+         * `_sistema.css` line 334, `.choice.on`.
+         */
+        selected: "0 0 0 1px #131316",
+        /**
+         * The coal companion band for the two controls that repaint the shared
+         * `outline-ball` ring by hand, because `globals.css`'s `:is(…)` list
+         * cannot reach them: a `[tabindex="-1"]` heading and a `<label>`. The
+         * ball alone is 1.41:1 on paper; this band is 18.54:1 on paper and
+         * 13.13:1 against the ball, and it is what carries the 3:1.
+         * `focus-ring-usage.test.ts` requires one of these on every
+         * `outline-ball`.
+         */
+        "focus-band": "0 0 0 4px #131316",
+        /** The same band drawn inward, for a control that clips its overflow. */
+        "focus-band-inset": "inset 0 0 0 4px #131316",
+        /** Two-tone ring for a control that keeps no resting shadow. */
+        "focus-duo": FOCUS_DUO,
+        /** Two-tone ring for the launcher, which keeps its own while focused. */
+        "focus-duo-float": `${FOCUS_DUO}, ${FLOAT_SHADOW}`,
       },
       maxWidth: {
         "8xl": "88rem",

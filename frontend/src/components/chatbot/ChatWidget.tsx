@@ -197,7 +197,18 @@ export default function ChatWidget({
       /* `text-left` is not decoration: the panel is rendered as a sibling of
          whatever trigger opened it, so a centred host (AuthShell's small
          print) was centring every message bubble inside it. */
-      className="fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] w-[min(340px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-card border border-line bg-paper text-left shadow-[0_14px_40px_rgba(0,0,0,0.12)] lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]"
+      /* `shadow-elevated` is the rung the system reserves for something
+         floating over the page, and it replaces a hand-picked
+         `0 14px 40px rgba(0,0,0,.12)` that came straight from `_sistema.css`'s
+         `.chat`. Measured, the swap changes nothing: this panel writes BOTH
+         `rounded-card` and `bg-paper`, and the shared elevation rule in
+         `globals.css` matches on those two classes at specificity 0,2,0 —
+         which no single `shadow-*` utility can outrank, whatever layer it
+         sits in. So the panel renders `shadow-card` today and rendered
+         `shadow-card` before. Naming the intent is still worth it; making the
+         intent win is a separate change to that shared rule, and it would
+         move every card in the product. */
+      className="fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] w-[min(340px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-card border border-line bg-paper text-left shadow-elevated lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]"
     >
       {/* `.chat > header` — coal, avatar disc, "Responde en segundos". */}
       <header className="flex flex-none items-center gap-[11px] bg-coal px-[15px] py-3 text-white">

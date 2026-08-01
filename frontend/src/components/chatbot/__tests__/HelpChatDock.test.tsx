@@ -18,6 +18,7 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import HelpChatDock, { resolveClearance } from "../HelpChatDock";
 import { closeHelpChat, openHelpChat, resetHelpChatForTests } from "../help-chat-store";
 import { createAuthenticatedAuth, createUnauthenticatedAuth } from "@/components/__tests__/test-utils";
+import tailwindConfig from "../../../../tailwind.config";
 
 vi.mock("next/image", () => ({
   __esModule: true,
@@ -95,9 +96,22 @@ describe("HelpChatDock — the launcher", () => {
     // Never `outline-ball`: #FFD600 is 1.42:1 on white, half of what 2.4.11
     // asks. The two-tone ring keeps a white band and a coal band, so one of
     // them always contrasts against whatever is underneath.
+    //
+    // The two hexes used to be asserted on the className, because that is
+    // where they were written. #32 moved them into `tailwind.config.ts`, so
+    // the class names the token and the token is checked against the theme —
+    // which is strictly more than the old assertion did: a `focus-duo-float`
+    // that stopped carrying both bands would have passed the old test as long
+    // as somebody left the hexes in the string.
     expect(launcher.className).not.toMatch(/outline-ball/);
-    expect(launcher.className).toContain("#FFFFFF");
-    expect(launcher.className).toContain("#131316");
+    expect(launcher.className).toContain("focus-visible:shadow-focus-duo-float");
+
+    const ring = (tailwindConfig.theme as { extend: { boxShadow: Record<string, string> } }).extend
+      .boxShadow["focus-duo-float"];
+    expect(ring).toContain("#FFFFFF");
+    expect(ring).toContain("#131316");
+    // And it restates the resting shadow, or the launcher loses it on focus.
+    expect(ring).toContain("rgba(19, 19, 22, 0.30)");
   });
 
   it("opens the panel, and steps aside while it is open", () => {

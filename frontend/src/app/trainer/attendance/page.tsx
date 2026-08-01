@@ -919,7 +919,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               // a red fill — red is CTA and destructive only.
                               className={`flex min-h-[56px] flex-col justify-center gap-1 rounded-ctl border px-4 py-3 text-left transition-colors ${
                                 isActive
-                                  ? "border-coal bg-paper shadow-[0_0_0_1px_theme(colors.coal.DEFAULT)]"
+                                  ? "border-coal bg-paper shadow-selected"
                                   : "border-line-2 bg-paper hover:border-ink-3"
                               }`}
                             >
