@@ -44,7 +44,7 @@ export default function LoadingState({ label, className }: LoadingStateProps): R
       >
         <Loader2 size={21} strokeWidth={1.5} className="animate-spin" />
       </span>
-      <p className="text-[13px] text-ink-3">{label}</p>
+      <p className="text-sm text-ink-3">{label}</p>
     </div>
   );
 }

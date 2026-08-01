@@ -76,7 +76,7 @@ export default function Pagination({
       {/* Two sibling spans, not one interpolated string: the page count has to
           stay its own exact text node so `getByText("Página 1 de 2")` keeps
           resolving to a single element. */}
-      <p className="text-[13px] text-ink-2">
+      <p className="text-sm text-ink-2">
         <span className="font-semibold text-ink">
           Página {page} de {totalPages}
         </span>

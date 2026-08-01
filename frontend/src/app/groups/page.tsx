@@ -783,7 +783,7 @@ export default function GroupsPage(): React.ReactElement {
         {editingGroup !== null && (
           <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
             <div className="min-w-[220px] flex-1">
-              <p className="text-[13px] font-semibold text-state-bad">Eliminar este horario</p>
+              <p className="text-sm font-semibold text-state-bad">Eliminar este horario</p>
               <p className="text-[12px] text-ink-3">
                 Se eliminan todos sus días y los alumnos quedan sin horario asignado.
               </p>
@@ -838,7 +838,7 @@ export default function GroupsPage(): React.ReactElement {
                   key={group.key}
                   className="flex min-h-drow flex-wrap items-center gap-3 border-b border-line px-3 py-2 last:border-b-0"
                 >
-                  <span className="min-w-0 flex-1 text-[13px] text-ink">
+                  <span className="min-w-0 flex-1 text-sm text-ink">
                     {dias}
                   </span>
                   <Button
@@ -1057,7 +1057,7 @@ export default function GroupsPage(): React.ReactElement {
                         the full five-column row from `xl` up. */}
                     <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <b className="text-[15px] tracking-[-0.015em] text-ink">
+                        <b className="text-base text-ink">
                           {categoriaLabel(card.categoria)}
                         </b>
                         {rangoEdad ? <Badge>{rangoEdad}</Badge> : null}
@@ -1070,7 +1070,7 @@ export default function GroupsPage(): React.ReactElement {
                           track below it marks which días those are. */}
                       <div className="min-w-0">
                         <CellLabel>Horario</CellLabel>
-                        <p className="text-[13px] text-ink-2">
+                        <p className="text-sm text-ink-2">
                           {formatDiaSet(card.dias)} · {formatTime(card.horaInicio)} —{" "}
                           {formatTime(card.horaFin)}
                         </p>
@@ -1086,7 +1086,7 @@ export default function GroupsPage(): React.ReactElement {
                         {inscriptos !== null && (
                           <>
                             <CellLabel>Alumnos</CellLabel>
-                            <p className="text-[15px] font-semibold text-ink">
+                            <p className="text-base font-semibold text-ink">
                               {inscriptos} inscripto{inscriptos === 1 ? "" : "s"}
                             </p>
                           </>

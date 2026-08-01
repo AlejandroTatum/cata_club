@@ -75,14 +75,14 @@ function ResetPasswordContent(): React.ReactElement {
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">
             <AlertCircle size={24} className="text-cata-red" strokeWidth={1.5} aria-hidden="true" />
           </span>
-          <p className="text-[13px] leading-relaxed text-ink-2">
+          <p className="text-sm leading-relaxed text-ink-2">
             El enlace de recuperación no contiene un token válido. Solicite uno nuevo y
             vuelva a intentarlo.
           </p>
         </div>
         <Link
           href="/forgot-password"
-          className="inline-flex h-ctl w-full items-center justify-center gap-2 rounded-ctl border border-cata-red bg-cata-red text-[13px] font-semibold text-white transition-colors hover:border-cata-red-dark hover:bg-cata-red-dark"
+          className="inline-flex h-ctl w-full items-center justify-center gap-2 rounded-ctl border border-cata-red bg-cata-red text-sm font-semibold text-white transition-colors hover:border-cata-red-dark hover:bg-cata-red-dark"
         >
           <ArrowLeft size={14} strokeWidth={2} aria-hidden="true" />
           Solicitar nuevo enlace
@@ -116,14 +116,14 @@ function ResetPasswordContent(): React.ReactElement {
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
             <CheckCircle2 size={24} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
-          <p className="text-[13px] leading-relaxed text-ink-2">
+          <p className="text-sm leading-relaxed text-ink-2">
             Su contraseña ha sido restablecida correctamente. Ya puede iniciar sesión con
             su nueva contraseña.
           </p>
         </div>
         <Link
           href="/login"
-          className="inline-flex h-ctl w-full items-center justify-center gap-2 rounded-ctl border border-cata-red bg-cata-red text-[13px] font-semibold text-white transition-colors hover:border-cata-red-dark hover:bg-cata-red-dark"
+          className="inline-flex h-ctl w-full items-center justify-center gap-2 rounded-ctl border border-cata-red bg-cata-red text-sm font-semibold text-white transition-colors hover:border-cata-red-dark hover:bg-cata-red-dark"
         >
           Iniciar Sesión
         </Link>

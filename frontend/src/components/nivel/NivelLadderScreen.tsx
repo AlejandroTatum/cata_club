@@ -453,7 +453,7 @@ function LadderContent({
         {/* On a phone the name takes the whole first line and the controls the
             second: truncating a student's name to "Arian…" to keep a picker on
             the same row loses the only thing the row is about. */}
-        <span className="min-w-0 flex-1 basis-full truncate text-[13.5px] text-ink sm:basis-auto">
+        <span className="min-w-0 flex-1 basis-full truncate text-sm text-ink sm:basis-auto">
           {nombre}
         </span>
 
@@ -530,7 +530,7 @@ function LadderContent({
 
     return (
       <li key={student.id} className="flex min-h-drow flex-wrap items-center gap-3 py-1.5">
-        <span className="min-w-0 flex-1 basis-full truncate text-[13.5px] text-ink sm:basis-auto">
+        <span className="min-w-0 flex-1 basis-full truncate text-sm text-ink sm:basis-auto">
           {nombre}
         </span>
 
@@ -608,7 +608,7 @@ function LadderContent({
     return (
       <div className="border-t border-line bg-canvas px-5 py-4">
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h3 className="flex-1 text-[13px] font-bold text-ink">
+          <h3 className="flex-1 text-sm font-bold text-ink">
             Estudiantes del nivel {nombre}
           </h3>
           <Button size="sm" onClick={() => setOpenNivelId(null)}>
@@ -654,7 +654,7 @@ function LadderContent({
                     key={student.id}
                     className="flex min-h-drow flex-wrap items-center gap-3 py-1.5"
                   >
-                    <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">
                       {studentFullName(student)}
                     </span>
                     <Button
@@ -758,7 +758,7 @@ function LadderContent({
           directly under the field that asked it. */}
       {buscando ? (
         <section className="mb-5 overflow-hidden rounded-card border border-line bg-paper">
-          <h2 className="border-b border-line px-5 py-3 text-[13px] font-bold text-ink">
+          <h2 className="border-b border-line px-5 py-3 text-sm font-bold text-ink">
             Resultados de la búsqueda ({resultados.length})
           </h2>
           {resultados.length === 0 ? (
@@ -786,7 +786,7 @@ function LadderContent({
       <section className="mb-5 overflow-hidden rounded-card border border-line bg-paper">
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
           <Trophy size={16} strokeWidth={1.5} className="flex-none text-ink-2" aria-hidden="true" />
-          <h2 className="flex-1 text-[13px] font-bold text-ink">
+          <h2 className="flex-1 text-sm font-bold text-ink">
             La escalera ({assignedCount} asignado{assignedCount === 1 ? "" : "s"})
           </h2>
         </div>

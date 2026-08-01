@@ -91,7 +91,7 @@ function mensajeDeError(error: unknown): string {
 
 /** `.bub` — 12px radius, 86% max width, with the tail corner squared off. */
 const BUBBLE_BASE =
-  "max-w-[86%] whitespace-pre-line rounded-xl px-3 py-2.5 text-[13px] leading-[1.45]";
+  "max-w-[86%] whitespace-pre-line rounded-xl px-3 py-2.5 text-sm";
 
 /** `.quick` — 32px pill. */
 const QUICK_REPLY =
@@ -221,7 +221,7 @@ export default function ChatWidget({
           />
         </span>
         <span className="min-w-0 flex-1 leading-tight">
-          <span className="block truncate text-[13.5px] font-bold">{BOT_NAME}</span>
+          <span className="block truncate text-sm font-bold">{BOT_NAME}</span>
           <span className="block truncate text-[11px] text-white/55">Responde en segundos</span>
         </span>
         <button
@@ -348,7 +348,7 @@ export default function ChatWidget({
           placeholder="Escribe tu pregunta…"
           aria-label={`Mensaje para ${BOT_NAME}`}
           disabled={enviando}
-          className="h-ctl min-w-0 flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-[13.5px] text-ink transition-colors placeholder:text-ink-3 focus:border-cata-red disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-ctl min-w-0 flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-sm text-ink transition-colors placeholder:text-ink-3 focus:border-cata-red disabled:cursor-not-allowed disabled:opacity-50"
         />
         <button
           type="submit"

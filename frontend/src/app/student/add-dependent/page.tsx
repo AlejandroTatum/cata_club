@@ -553,7 +553,7 @@ function AddDependentContent(): React.ReactElement {
 
       {/* Form card */}
       <div className="card p-6 sm:p-8">
-        <h2 className="mb-6 text-[13px] font-bold text-ink">
+        <h2 className="mb-6 text-sm font-bold text-ink">
           {ADD_DEPENDENT_STEP_LABELS[step]}
         </h2>
 

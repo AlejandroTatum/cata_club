@@ -48,9 +48,9 @@ export default function EmptyState({
           {icon}
         </span>
       ) : null}
-      <b className="text-[15px] font-bold text-ink">{title}</b>
+      <b className="text-base font-bold text-ink">{title}</b>
       {description ? (
-        <p className="max-w-[44ch] text-[13px] text-ink-3">{description}</p>
+        <p className="max-w-[44ch] text-sm text-ink-3">{description}</p>
       ) : null}
       {action ? <div className="mt-1">{action}</div> : null}
     </div>

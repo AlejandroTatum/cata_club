@@ -265,8 +265,8 @@ export default function DiscountsPage(): React.ReactElement {
                     }`}
                   >
                     <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                      <b className="text-[15px] tracking-[-0.015em] text-ink">{descuento.nombre}</b>
-                      <span className="text-[13px] text-ink-2">{descuentoValorLabel(descuento)}</span>
+                      <b className="text-base text-ink">{descuento.nombre}</b>
+                      <span className="text-sm text-ink-2">{descuentoValorLabel(descuento)}</span>
                       <Badge tone={descuento.activo ? "ok" : "neutral"}>
                         {descuento.activo ? "Activo" : "Inactivo"}
                       </Badge>

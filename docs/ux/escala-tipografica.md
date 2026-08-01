@@ -50,17 +50,23 @@ Los 24 tamaños del inventario congelado, repartidos:
 | Escalón | Absorbe |
 |---|---|
 | `2xs` | 9 · 9,5 · 10 · 10,5 · 11 · 11,5 |
-| `xs` | 12 · 12,5 · 13 |
-| `sm` | 13,5 · 14 · 14,5 |
-| `base` | 15 · 17 |
+| `xs` | 12 · 12,5 |
+| `sm` | 13 · 13,5 · 14 |
+| `base` | 14,5 · 15 · 17 |
 | `lg` | 20 |
 | `xl` | 24 · 26 · 27 |
 | `2xl` | 30 · 32 |
 | `display` | 40 · 42 · 46 · 56 |
 
-Los racimos de medio píxel desaparecen por construcción: `12,5` + `13` (182 usos junto con `13,5`)
-caen en `xs`, y `13,5` + `14` + `14,5` en `sm`. Nadie percibía la diferencia; el sistema deja de
-ofrecerla.
+Los racimos de medio píxel desaparecen por construcción: `13` + `13,5` + `14` caen en `sm`, y
+`14,5` + `15` + `17` en `base`. Nadie percibía la diferencia; el sistema deja de ofrecerla.
+
+**Dos casillas de esta tabla se corrigieron al migrar la banda de cuerpo.** La primera versión
+mandaba `13` a `xs` y `14,5` a `sm`, y ninguna de las dos era la más cercana: `13` está a medio
+píxel de `xs` y de `sm` por igual —el empate se resuelve hacia arriba, que es donde viven sus
+otros 83 usos de interfaz densa—, y `14,5` está a medio píxel de `base` pero a un píxel entero
+de `sm`. Reasignarlas es lo que hace que la migración sea un redondeo al escalón más próximo y
+no una lista de excepciones.
 
 ## Los escalones nombrados de tracking e interlineado
 
@@ -117,6 +123,24 @@ el escalón numérico de Tailwind que lo reproduce exacto (`leading-7` = 28px, `
 Eran andamios y ya no están: al elegir el escalón definitivo, el interlineado vuelve a viajar con
 el tamaño, que es el punto de la escala.
 
+## Lo que costó la banda de cuerpo
+
+145 líneas, seis tamaños retirados de la lista blanca. Tres decisiones no fueron mecánicas:
+
+- **17px → `base` (15px), −2px, ocho usos.** Son subtítulos de sección (`trainer`, `payments`,
+  `student/payments`, `student` ×3, `PaymentBand`, `student/attendance`). Subirlos a `lg` (20px)
+  los habría puesto a la altura de un título de card; el escalón más cercano es `base`, y a esa
+  distancia el subtítulo sigue separándose del cuerpo por peso, que es como venía separándose.
+- **`sm:text-[17px]` desapareció entero.** En `payments/page.tsx` el nombre del solicitante subía
+  de 15 a 17px a partir de `sm`. Los dos extremos caen en `base`, así que el escalón responsivo se
+  quedó sin diferencia que expresar y la clase se retiró en lugar de duplicarse.
+- **Los overrides que ya no se ganaban el lugar.** Los cuatro `tracking-[-0.015em]` estaban a
+  0,005em del tracking que `base` trae puesto y se borraron; el `-0.02em` de la cuota vencida sí
+  contradice a su escalón y pasó a `tracking-dense`. Igual el interlineado: `leading-[1.45]` del
+  chat cedió al 1,5 de `sm`, `leading-[1.25]` de la stat de `student` pasó a `leading-tight`
+  —mismo valor, escalón de fábrica— y el `leading-[1.35]` del toast cedió al 1,5 de `sm`, que le
+  agranda la caja de línea 2,03px por renglón. Es el único cambio de altura de la banda.
+
 ## Anclas que no se mueven
 
 Son las dos reglas duras de "La Paleta" y sirven de control negativo de cualquier verificación
@@ -134,6 +158,9 @@ el título de `PageHeader` no declaraba interlineado y por lo tanto heredaba el 
 ahora toma el 1,15 de su escalón: la caja pasa de 39px a 29,9px. Es el cambio que la escala
 existe para hacer —un titular de página con interlineado de cuerpo es el defecto, no la
 referencia— y es el único que estas dos anclas registran.
+
+El ancla cubre el título, no la tarjeta entera: el subtítulo de `PageHeader` era `text-[13px]` y
+la banda de cuerpo lo llevó a `sm`, o sea 13,5px. Medio píxel, en toda página de administración.
 
 ## Cómo se usa
 

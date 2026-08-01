@@ -199,7 +199,7 @@ export default function NivelLadder({
               <span
                 data-testid={`rung-headcount-${rung.id}`}
                 className={cn(
-                  "flex-none text-[13px] tabular-nums",
+                  "flex-none text-sm tabular-nums",
                   count === 0 ? "text-ink-3" : "font-semibold text-ink",
                 )}
               >

@@ -238,7 +238,7 @@ function CardSection({
   return (
     <section data-testid={testId} className="card overflow-hidden">
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-        <h2 className="flex-1 text-[13px] font-bold text-ink">{title}</h2>
+        <h2 className="flex-1 text-sm font-bold text-ink">{title}</h2>
         {action}
       </div>
       {children}
@@ -538,7 +538,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         </div>
         <div className="min-w-0">
           <p className="text-lg font-bold text-ink">{fullName}</p>
-          <p className="mt-0.5 text-[13px] text-ink-3">{correoDisplay}</p>
+          <p className="mt-0.5 text-sm text-ink-3">{correoDisplay}</p>
           {fotoError && (
             <p role="alert" className="mt-2 text-xs text-cata-red">
               {fotoError}
@@ -688,7 +688,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             </Button>
           }
         >
-          <span className="text-[13px] font-normal text-ink-2">
+          <span className="text-sm font-normal text-ink-2">
             Le enviamos un enlace de cambio a su correo
           </span>
         </DetailRow>
@@ -700,7 +700,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             </Button>
           }
         >
-          <span className="text-[13px] font-normal text-ink-2">
+          <span className="text-sm font-normal text-ink-2">
             Cerrar sesión en este equipo
           </span>
         </DetailRow>
@@ -716,7 +716,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             </Button>
           }
         >
-          <span className="text-[13px] font-normal text-ink-2">
+          <span className="text-sm font-normal text-ink-2">
             Cierra su sesión en todos los demás dispositivos; este equipo sigue conectado
           </span>
         </DetailRow>

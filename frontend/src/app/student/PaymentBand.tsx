@@ -72,10 +72,10 @@ export default function PaymentBand({ situation, action }: PaymentBandProps): Re
           takes the slack instead (`ml-auto` below), so the width buys
           separation between the fact and the errand rather than long lines. */}
       <div className="flex min-w-[220px] max-w-[62ch] flex-1 flex-col gap-1.5">
-        <b className="text-[17px] font-bold tracking-[-0.015em]">{headline}</b>
-        <span className="text-[13px] leading-relaxed text-white/60">{detail}</span>
+        <b className="text-base font-bold">{headline}</b>
+        <span className="text-sm leading-relaxed text-white/60">{detail}</span>
         {priceNote && (
-          <span className="flex items-center gap-2 text-[13px] text-white/60">
+          <span className="flex items-center gap-2 text-sm text-white/60">
             <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
             {priceNote}
           </span>

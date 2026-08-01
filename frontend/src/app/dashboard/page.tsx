@@ -151,7 +151,7 @@ export default function DashboardPage(): React.ReactElement {
                 {pendingPayments}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-bold text-white">
+                <span className="block text-base font-bold text-white">
                   {pendingPayments === 1
                     ? "Pago espera tu validación"
                     : "Pagos esperan tu validación"}
@@ -159,7 +159,7 @@ export default function DashboardPage(): React.ReactElement {
                 {heroNote && (
                   <span
                     data-testid="hero-note"
-                    className="mt-1 flex items-center gap-2 text-[13px] text-white/60"
+                    className="mt-1 flex items-center gap-2 text-sm text-white/60"
                   >
                     <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
                     {heroNote}
@@ -239,7 +239,7 @@ export default function DashboardPage(): React.ReactElement {
               className="overflow-hidden rounded-card border border-line bg-paper"
             >
               <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
-                <h2 className="flex-1 text-[15px] font-bold text-ink">Actividad reciente</h2>
+                <h2 className="flex-1 text-base font-bold text-ink">Actividad reciente</h2>
                 <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
                   Ver todo
                 </Link>
@@ -253,7 +253,7 @@ export default function DashboardPage(): React.ReactElement {
                     >
                       {event.initials}
                     </span>
-                    <span className="min-w-0 flex-1 text-[13.5px] text-ink-2">
+                    <span className="min-w-0 flex-1 text-sm text-ink-2">
                       <b className="font-semibold text-ink">{event.subject}</b> {event.detail}
                     </span>
                     <span className="flex-none text-[11.5px] text-ink-3">
@@ -267,7 +267,7 @@ export default function DashboardPage(): React.ReactElement {
 
           {attendanceStats.totalStudents > 0 && (
             <section className="rounded-card border border-line bg-paper p-[18px]">
-              <h2 className="mb-4 text-[15px] font-bold text-ink">Distribución de asistencias</h2>
+              <h2 className="mb-4 text-base font-bold text-ink">Distribución de asistencias</h2>
               <AttendanceStatusChart stats={attendanceStats} />
             </section>
           )}

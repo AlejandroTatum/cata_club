@@ -358,8 +358,8 @@ function EnrollWizard(): React.ReactElement {
                     : "border-line-2 bg-paper hover:bg-canvas"
                 }`}
               >
-                <b className="text-[14.5px] font-bold text-ink">{choice.title}</b>
-                <p className="text-[13px] leading-relaxed text-ink-3">{choice.description}</p>
+                <b className="text-base font-bold text-ink">{choice.title}</b>
+                <p className="text-sm leading-relaxed text-ink-3">{choice.description}</p>
                 {selected && (
                   <span className="h-badge mt-1 inline-flex items-center gap-1.5 self-start rounded-full bg-coal px-[11px] text-[11.5px] font-bold text-white">
                     <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
@@ -372,12 +372,12 @@ function EnrollWizard(): React.ReactElement {
         </div>
 
         <div className="card p-4">
-          <p className="text-[13px] font-bold text-ink">
+          <p className="text-sm font-bold text-ink">
             {formData.enrollmentType === "self"
               ? "Inscripción como jugador"
               : "Inscripción de dependiente"}
           </p>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">
+          <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
             {formData.enrollmentType === "self"
               ? "Usted será el estudiante titular de la cuenta. No se requieren datos de representante."
               : "Usted será el responsable de pago de este estudiante. Los datos del estudiante se registran por separado de su cuenta."}
@@ -770,7 +770,7 @@ function EnrollWizard(): React.ReactElement {
             : null}
         </div>
 
-        <p className="text-[13px] leading-relaxed text-ink-3">
+        <p className="text-sm leading-relaxed text-ink-3">
           Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"}.
           Después podrá subir el comprobante:{" "}
           <b className="font-semibold text-ink">el club lo valida y recién ahí se activa la membresía</b>.
@@ -890,7 +890,7 @@ function EnrollWizard(): React.ReactElement {
                 copy said "Cinco pasos" while the line directly above it said
                 "Paso 1 de 4", because arriving from the landing with
                 `?type=self` already answers the first step and drops it. */}
-            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3-strong">
+            <p className="mt-1.5 text-sm leading-relaxed text-ink-3-strong">
               {effectiveSteps.length} pasos y queda dentro del club.
               {formData.enrollmentType === "self" && " Se inscribe usted como jugador."}
               {formData.enrollmentType === "child" && " Usted actúa como representante."}
@@ -946,7 +946,7 @@ function EnrollWizard(): React.ReactElement {
 
           {/* Form card */}
           <div className="card p-6 sm:p-8">
-            <h2 className="mb-6 text-[13px] font-bold text-ink">{STEP_LABELS[step]}</h2>
+            <h2 className="mb-6 text-sm font-bold text-ink">{STEP_LABELS[step]}</h2>
 
             <form onSubmit={handleConfirm}>
               {/* Step content */}

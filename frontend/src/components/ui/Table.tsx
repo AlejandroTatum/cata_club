@@ -105,7 +105,7 @@ export function TableCell({
   return (
     <td
       className={cn(
-        "h-row border-b border-line px-4 text-[13.5px] text-ink-2",
+        "h-row border-b border-line px-4 text-sm text-ink-2",
         align === "right" ? "text-right" : "text-left",
         className,
       )}

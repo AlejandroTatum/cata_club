@@ -40,7 +40,7 @@ export default function PageHeader({
         {/* `ink-3-strong`, not `ink-3`: 13px/400 `ink-3` on the `canvas` grey
             the shell paints behind the header is 4.24:1, and the subtitle is
             normal-size text, so AA asks for the full 4.5:1 here. */}
-        {subtitle ? <p className="mt-1 text-[13px] text-ink-3-strong">{subtitle}</p> : null}
+        {subtitle ? <p className="mt-1 text-sm text-ink-3-strong">{subtitle}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>

@@ -112,7 +112,7 @@ import { yearsSinceFounding } from "@/app/landing/landing-config";
  * stays: that is the field reacting, a real 5.00:1 state change.
  */
 export const AUTH_INPUT_CLASSES =
-  "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-[13px] text-[13.5px] text-ink " +
+  "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-[13px] text-sm text-ink " +
   "transition-colors placeholder:text-ink-3 focus:border-cata-red focus:outline-none " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -198,7 +198,7 @@ export default function AuthShell({
              24x24 CSS px and this link measured 101.8 x 19.5 on a 390px
              viewport. The 13px text and the 14px arrow are unchanged; the
              extra 4.5px is split around them by `items-center`. */
-          className={`relative z-[1] inline-flex min-h-[24px] items-center gap-1.5 self-start justify-self-start text-[13px] transition-colors hover:text-white ${ON_COAL_MUTED}`}
+          className={`relative z-[1] inline-flex min-h-[24px] items-center gap-1.5 self-start justify-self-start text-sm transition-colors hover:text-white ${ON_COAL_MUTED}`}
         >
           <ArrowLeft size={14} strokeWidth={2} aria-hidden="true" />
           Volver al sitio
@@ -250,7 +250,7 @@ export default function AuthShell({
           </p>
 
           {/* The supporting line — 14.5px, `margin:-6px 0 0`. */}
-          <p className={`-mt-1.5 text-[14.5px] ${ON_COAL_SUPPORT}`}>
+          <p className={`-mt-1.5 text-base ${ON_COAL_SUPPORT}`}>
             Cada entrenamiento es una oportunidad para superarte.
           </p>
 
@@ -307,7 +307,7 @@ export default function AuthShell({
             Panel de gestión
           </p>
           <h1 className="text-xl font-extrabold text-ink">{title}</h1>
-          {subtitle && <p className="-mt-2 text-[13.5px] text-ink-3">{subtitle}</p>}
+          {subtitle && <p className="-mt-2 text-sm text-ink-3">{subtitle}</p>}
           {children}
         </div>
 

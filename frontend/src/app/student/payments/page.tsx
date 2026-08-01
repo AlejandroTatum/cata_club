@@ -118,7 +118,7 @@ const NO_PAGOS: PagoPersona[] = [];
 
 /** `_sistema.css` `.fld` — the one input shape, 40px like every other control. */
 const FIELD_CLASSES =
-  "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3.5 text-[13px] text-ink " +
+  "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3.5 text-sm text-ink " +
   "placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-45";
 
 const FIELD_LABEL_CLASSES = "text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3";
@@ -179,7 +179,7 @@ function MembershipCard({
           </p>
           <Badge tone={state.tone}>{state.label}</Badge>
         </div>
-        <h2 id="membership-status-title" className="text-[17px] font-bold tracking-tight text-ink">
+        <h2 id="membership-status-title" className="text-base font-bold tracking-tight text-ink">
           {coverageEnd ? (
             <>
               Pagado hasta el <span className="tabular-nums">{formatDate(coverageEnd)}</span>
@@ -188,7 +188,7 @@ function MembershipCard({
             "Todavía no hay ningún pago aprobado"
           )}
         </h2>
-        <p className="mt-1.5 text-[13px] text-ink-3">
+        <p className="mt-1.5 text-sm text-ink-3">
           {coverageEnd
             ? "Es la fecha del pago aprobado que llega más lejos en su historial."
             : "En cuanto el club apruebe un pago, aquí aparecerá hasta qué fecha queda cubierto."}
@@ -202,7 +202,7 @@ function MembershipCard({
               <dt className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong">
                 {fact.label}
               </dt>
-              <dd className="mt-0.5 text-[13.5px] font-bold tabular-nums text-ink">{fact.value}</dd>
+              <dd className="mt-0.5 text-sm font-bold tabular-nums text-ink">{fact.value}</dd>
             </div>
           ))}
         </dl>
@@ -252,14 +252,14 @@ function HowToPay({
     return (
       <section className="card overflow-hidden" aria-labelledby="how-to-pay-title">
         <div className="px-5 py-[18px]">
-          <h2 id="how-to-pay-title" className="text-[15px] font-bold tracking-tight text-ink">
+          <h2 id="how-to-pay-title" className="text-base font-bold tracking-tight text-ink">
             Cómo se paga esta membresía
           </h2>
           {/* The card on the left already names WHO registers the payment,
               from `describePaymentSituation`. Repeating that sentence here
               printed it twice on one screen; this rail answers the next
               question instead — what the reader actually does. */}
-          <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+          <p className="mt-2 text-sm leading-relaxed text-ink-2">
             Su cuenta no registra pagos, pero el pago sí se puede hacer. Estos son los pasos:
           </p>
         </div>
@@ -285,10 +285,10 @@ function HowToPay({
     return (
       <section className="card overflow-hidden" aria-labelledby="how-to-pay-title">
         <div className="px-5 py-[18px]">
-          <h2 id="how-to-pay-title" className="text-[15px] font-bold tracking-tight text-ink">
+          <h2 id="how-to-pay-title" className="text-base font-bold tracking-tight text-ink">
             Cómo se registra un pago
           </h2>
-          <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+          <p className="mt-2 text-sm leading-relaxed text-ink-2">
             El club crea la membresía al registrar el primer pago, así que ese primero se hace en
             administración. Desde el segundo, la renovación se registra aquí: monto, forma de pago
             y —si es transferencia— el comprobante.
@@ -301,10 +301,10 @@ function HowToPay({
   return (
     <section className="card overflow-hidden" aria-labelledby="how-to-pay-title">
       <div className="px-5 py-[18px]">
-        <h2 id="how-to-pay-title" className="text-[15px] font-bold tracking-tight text-ink">
+        <h2 id="how-to-pay-title" className="text-base font-bold tracking-tight text-ink">
           Cómo se registra un pago
         </h2>
-        <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+        <p className="mt-2 text-sm leading-relaxed text-ink-2">
           Son tres pasos y terminan en el club, no en usted: lo último lo hace quien valida.
         </p>
       </div>
@@ -356,7 +356,7 @@ function HowToPayStep({
       >
         {index}
       </span>
-      <p className="text-[13px] leading-relaxed text-ink-2">{children}</p>
+      <p className="text-sm leading-relaxed text-ink-2">{children}</p>
     </li>
   );
 }
@@ -563,7 +563,7 @@ function RenewPaymentForm({
 
   if (hasPendingPago) {
     return (
-      <p className="text-[13px] text-ink-2">
+      <p className="text-sm text-ink-2">
         {studentName
           ? `Ya hay un pago de ${studentName} esperando validación. Espere a que el club lo apruebe para registrar otro.`
           : "Ya tiene un pago esperando validación. Espere a que el club lo apruebe para registrar otro."}
@@ -583,7 +583,7 @@ function RenewPaymentForm({
   return (
     <div className="flex flex-col gap-4">
       {studentName && (
-        <p className="text-[13px] text-ink-2">
+        <p className="text-sm text-ink-2">
           Este pago se registra a nombre de <b className="font-semibold text-ink">{studentName}</b>.
         </p>
       )}
@@ -622,7 +622,7 @@ function RenewPaymentForm({
         <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong">
           Período que cubre
         </p>
-        <p className="mt-1 text-[13.5px] font-bold tabular-nums text-ink">
+        <p className="mt-1 text-sm font-bold tabular-nums text-ink">
           {fechaInicio && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
         </p>
         {months !== null && (
@@ -654,7 +654,7 @@ function RenewPaymentForm({
               {voucherFile ? "Cambiar archivo" : "Seleccionar archivo"}
             </Button>
             {voucherFile && (
-              <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px] text-ink-2">
+              <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink-2">
                 <Paperclip size={14} strokeWidth={1.5} aria-hidden="true" />
                 <span className="truncate">{voucherFile.name}</span>
                 {/* The only way back from attaching the wrong file, and it
@@ -678,7 +678,7 @@ function RenewPaymentForm({
       )}
 
       {error && (
-        <p role="alert" className="text-[13px] font-semibold text-state-bad">
+        <p role="alert" className="text-sm font-semibold text-state-bad">
           {error}
         </p>
       )}
@@ -692,7 +692,7 @@ function RenewPaymentForm({
           <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong">
             Confirme antes de registrar
           </p>
-          <p id="renew-confirm-summary" className="mt-1.5 max-w-[68ch] text-[13.5px] leading-relaxed text-ink">
+          <p id="renew-confirm-summary" className="mt-1.5 max-w-[68ch] text-sm leading-relaxed text-ink">
             Va a registrar <b className="font-bold tabular-nums">{formatCurrency(amount)}</b>{" "}
             {studentName ? (
               <>
@@ -768,7 +768,7 @@ function PagoRow({
     <li className="flex min-h-drow flex-wrap items-start gap-x-4 gap-y-2 border-b border-line px-5 py-3.5 last:border-b-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-[15px] font-bold tabular-nums text-ink">
+          <span className="text-base font-bold tabular-nums text-ink">
             {formatPagoMonto(pago.monto)}
           </span>
           <Badge tone={estado.tone}>{estado.label}</Badge>
@@ -799,7 +799,7 @@ function PagoRow({
             <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-state-bad">
               Motivo del rechazo
             </p>
-            <p className="mt-0.5 text-[13px] text-ink-2">{pago.motivoRechazo}</p>
+            <p className="mt-0.5 text-sm text-ink-2">{pago.motivoRechazo}</p>
           </div>
         )}
       </div>
@@ -1021,7 +1021,7 @@ function PaymentsContent({
             studentName={studentName}
           >
             {blockedAsMinor ? (
-              <p className="text-[13px] text-ink-2">
+              <p className="text-sm text-ink-2">
                 {/* The old copy sent EVERY minor to "su representante" — including
                     the ones whose `representanteId` is null, who were being pointed
                     at a person the backend does not have. `describePaymentSituation`
@@ -1039,7 +1039,7 @@ function PaymentsContent({
                 onRegistered={handleRegistered}
               />
             ) : (
-              <p className="text-[13px] text-ink-2">
+              <p className="text-sm text-ink-2">
                 El club crea la membresía al registrar el primer pago. Acérquese a administración
                 para activarla y después podrá renovarla desde aquí.
               </p>
@@ -1085,7 +1085,7 @@ function PaymentsContent({
           />
 
           {uploadError && (
-            <p role="alert" className="text-[13px] font-semibold text-state-bad">
+            <p role="alert" className="text-sm font-semibold text-state-bad">
               {uploadError}
             </p>
           )}
@@ -1101,7 +1101,7 @@ function PaymentsContent({
           {pagosState.status === "ready" && (
             <section className="card overflow-hidden" aria-labelledby="pagos-title">
               <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-                <h2 id="pagos-title" className="flex-1 text-[13px] font-bold text-ink">
+                <h2 id="pagos-title" className="flex-1 text-sm font-bold text-ink">
                   Historial de pagos
                 </h2>
                 {filteredPagos.length > 0 && (

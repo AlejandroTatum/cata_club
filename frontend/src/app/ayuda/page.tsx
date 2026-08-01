@@ -40,7 +40,7 @@ export default function AyudaPage(): React.ReactElement {
           aria-labelledby="horarios-heading"
           className="rounded-card border border-line bg-paper p-5 sm:p-6"
         >
-          <h2 id="horarios-heading" className="mb-1 text-[15px] font-extrabold text-ink">
+          <h2 id="horarios-heading" className="mb-1 text-base font-extrabold text-ink">
             Horarios de entrenamiento
           </h2>
           <p className="mb-4 text-[12.5px] text-ink-2">
@@ -68,7 +68,7 @@ export default function AyudaPage(): React.ReactElement {
               <tbody>
                 {FAQ_SCHEDULES.map((schedule) => (
                   <tr key={schedule.category} className="border-b border-line last:border-b-0">
-                    <th scope="row" className="py-2.5 pr-4 text-[13px] font-bold text-ink">
+                    <th scope="row" className="py-2.5 pr-4 text-sm font-bold text-ink">
                       {schedule.category}
                     </th>
                     <td className="py-2.5 pr-4 text-[12.5px] text-ink-2">{schedule.ages}</td>
@@ -91,13 +91,13 @@ export default function AyudaPage(): React.ReactElement {
               aria-labelledby={headingId}
               className="rounded-card border border-line bg-paper p-5 sm:p-6"
             >
-              <h2 id={headingId} className="mb-4 text-[15px] font-extrabold text-ink">
+              <h2 id={headingId} className="mb-4 text-base font-extrabold text-ink">
                 {section.title}
               </h2>
               <dl className="flex flex-col gap-4">
                 {section.entries.map((entry) => (
                   <div key={entry.question}>
-                    <dt className="text-[13px] font-bold text-ink">{entry.question}</dt>
+                    <dt className="text-sm font-bold text-ink">{entry.question}</dt>
                     <dd className="mt-1 text-[12.5px] leading-[1.55] text-ink-2">{entry.answer}</dd>
                   </div>
                 ))}
@@ -113,7 +113,7 @@ export default function AyudaPage(): React.ReactElement {
          */}
         <section className="rounded-card border border-line-2 bg-sunken p-5 text-center sm:p-6">
           <HelpCircle size={20} strokeWidth={1.5} aria-hidden="true" className="mx-auto mb-2 text-ink-3" />
-          <h2 className="text-[14px] font-extrabold text-ink">¿No encontró lo que buscaba?</h2>
+          <h2 className="text-sm font-extrabold text-ink">¿No encontró lo que buscaba?</h2>
           <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-[1.5] text-ink-2">
             Pregúntele al asistente con sus propias palabras, o escríbale al club directamente.
           </p>
@@ -121,7 +121,7 @@ export default function AyudaPage(): React.ReactElement {
             <Button variant="primary" onClick={() => openHelpChat()}>
               Preguntar al asistente
             </Button>
-            <Link href="/" className="focus-ring rounded-ctl px-4 py-2 text-[13px] font-semibold text-ink underline underline-offset-2">
+            <Link href="/" className="focus-ring rounded-ctl px-4 py-2 text-sm font-semibold text-ink underline underline-offset-2">
               Volver al inicio
             </Link>
           </div>

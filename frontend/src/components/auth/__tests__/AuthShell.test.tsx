@@ -176,7 +176,7 @@ describe("AuthShell — the two halves share one vertical axis", () => {
     const back = screen.getByRole("link", { name: /volver al sitio/i });
     expect(back.className).toContain("min-h-[24px]");
     // Hit area only: the type and the 14px arrow are untouched.
-    expect(back.className).toContain("text-[13px]");
+    expect(back.className).toContain("text-sm");
   });
 
   it("does not restate a focus ring the system rule already outranks", () => {
