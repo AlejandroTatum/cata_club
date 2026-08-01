@@ -20,6 +20,7 @@ describe("resolveShellKind", () => {
       "/groups",
       "/payments",
       "/attendance",
+      "/discounts",
       "/reports",
       "/trainer",
       "/student",
