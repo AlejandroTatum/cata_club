@@ -15,7 +15,7 @@ Corre dentro de `pnpm test`, así que ya es un gate del job Frontend del CI.
 Si el valor es de verdad inevitable, **no se agrega a la lista blanca**: se le da un nombre
 en `tailwind.config.ts` y deja de ser arbitrario.
 
-## Los siete ejes
+## Los ocho ejes
 
 | Eje | Patrón | Reemplazo |
 |---|---|---|
@@ -24,6 +24,7 @@ en `tailwind.config.ts` y deja de ser arbitrario.
 | Tracking | `tracking-[0.13em]` | escala `tracking-*` |
 | Peso | `font-medium` | `font-semibold` · `font-bold` · `font-extrabold` |
 | Iconos | `size={21}` en un icono de `lucide-react` | escala `ICON` de `lib/icon-size.ts` |
+| Ritmo | `space-y-4` · `gap-y-2` en una pantalla | escalones `page` · `section` · `field` |
 | Sombras | `shadow-[0_4px_24px_…]` | `shadow-soft` · `shadow-card` · `shadow-elevated` |
 | Breakpoints | `min-[980px]` | prefijo con nombre (`sm:` … `2xl:`) |
 
@@ -44,6 +45,13 @@ archivo que importe `lucide-react`, todo `size={…}` falla salvo una expresión
 de `ICON` que no contenga ningún dígito. Es el único eje que captura una expresión en vez de un
 valor, y ya no consulta la lista blanca. Detalle completo en `docs/ux/escala-iconos.md`.
 
+**El de ritmo vertical es el tercero de esa familia.** #31 encontró cinco idiomas distintos para
+separar los bloques de una pantalla, así que el problema nunca fue *qué número* sino que cinco
+formas producían lo mismo. Una paleta cerrada no sirve contra eso. La regla se invirtió igual que
+la de iconos: en un módulo que renderiza `<AppShell>`, todo `space-y-…` y `gap-y-…` falla salvo
+que nombre un escalón (`page`, `section`, `field`) o sea `0`. `gap-*` a secas queda afuera porque
+sobre una fila es horizontal. Detalle completo en `docs/ux/ritmo-vertical.md`.
+
 ## Cómo se achica la lista blanca
 
 La lista vive en `frontend/src/lib/__tests__/arbitrary-style-values.allowlist.ts`, agrupada
@@ -63,7 +71,8 @@ permiso permanente que nadie recuerda por qué está.
 
 **Nunca se agregan entradas**, salvo en el eje de peso, que por lo dicho arriba no es una
 lista de deuda. Una entrada nueva en cualquiera de los otros seis es exactamente lo que el
-candado existe para impedir. El eje de iconos ya no admite ninguna: no tiene lista.
+candado existe para impedir. Los ejes de iconos y de ritmo ya no admiten ninguna: no tienen
+lista.
 
 ## Inventario congelado (2026-08-01)
 

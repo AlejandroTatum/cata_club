@@ -228,7 +228,7 @@ function SessionList({
           {sessions.map((session) => (
             <li
               key={`${session.fecha}-${session.horario}`}
-              className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-5 py-2 last:border-b-0"
+              className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-2 last:border-b-0"
             >
               <span className="w-[92px] flex-none text-2xs font-bold uppercase tabular-nums text-ink-3">
                 {formatDate(session.fecha)}

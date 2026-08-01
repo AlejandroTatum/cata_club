@@ -231,7 +231,7 @@ function AddDependentContent(): React.ReactElement {
 
   function renderChildStep(): React.ReactElement {
     return (
-      <div className="space-y-1">
+      <div className="space-y-field">
         <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
           Ingrese los datos personales del hijo/dependiente a agregar:
         </p>
@@ -312,7 +312,7 @@ function AddDependentContent(): React.ReactElement {
 
   function renderCredentialsStep(): React.ReactElement {
     return (
-      <div className="space-y-4">
+      <div className="space-y-section">
         <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
           Si desea que el dependiente tenga su propia cuenta de acceso, ingrese
           las credenciales. Deje estos campos vacíos si no requiere cuenta para el menor.
@@ -361,7 +361,7 @@ function AddDependentContent(): React.ReactElement {
 
   function renderHealthStep(): React.ReactElement {
     return (
-      <div className="space-y-1">
+      <div className="space-y-field">
         <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
           Información que el club necesita conocer para la seguridad del dependiente:
         </p>
@@ -465,7 +465,7 @@ function AddDependentContent(): React.ReactElement {
     const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
     const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
     return (
-      <div className="space-y-4">
+      <div className="space-y-section">
         <p className="text-sm leading-relaxed text-cata-text/65">
           Esto es lo que vamos a crear. Corrija cualquier bloque antes de confirmar:
         </p>

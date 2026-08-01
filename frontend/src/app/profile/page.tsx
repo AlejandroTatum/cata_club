@@ -147,13 +147,13 @@ function DetailRow({
     // a wrap the value collapsed to one word per line while the button was
     // clipped by the card's own edge. The action now drops to a second line
     // and stays right-aligned; above `sm` nothing about the row changes.
-    <div className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-5 py-2.5 last:border-b-0">
+    <div className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-2.5 last:border-b-0">
       {label && (
         <span className="w-[110px] flex-none text-2xs font-bold uppercase text-ink-3 sm:w-[150px]">
           {label}
         </span>
       )}
-      <span className="flex min-w-[9rem] flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-semibold text-ink">
+      <span className="flex min-w-[9rem] flex-1 flex-wrap items-center gap-x-2 gap-y-field text-sm font-semibold text-ink">
         {children}
         {note && <span className="text-xs font-normal text-ink-3">{note}</span>}
       </span>
@@ -557,7 +557,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             Two facts the prototype draws are still absent, for want of a
             source: "Cuenta activa" (no `activo` flag on `UsuarioMeResponseDTO`)
             and "Cédula" (admin-only, via `/personas/{id}`). */}
-        <div className="flex flex-wrap gap-x-8 gap-y-4 border-t border-line pt-5 sm:flex-none sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+        <div className="flex flex-wrap gap-x-8 gap-y-section border-t border-line pt-5 sm:flex-none sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
           {/*
               EVERY assigned role, not just the session's. `mapBackendRoleToUserRole`
               collapses an account's backend roles to the single

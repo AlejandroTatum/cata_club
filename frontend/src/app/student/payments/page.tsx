@@ -197,7 +197,7 @@ function MembershipCard({
       </div>
 
       {facts.length > 0 && (
-        <dl className="flex flex-wrap gap-x-8 gap-y-3 border-t border-line bg-sunken px-5 py-3.5">
+        <dl className="flex flex-wrap gap-x-8 gap-y-section border-t border-line bg-sunken px-5 py-3.5">
           {facts.map((fact) => (
             <div key={fact.label}>
               <dt className="text-2xs font-bold uppercase text-ink-3-strong">
@@ -766,7 +766,7 @@ function PagoRow({
   const canUpload = !pago.voucherUrl && pago.estadoPago !== "APROBADO";
 
   return (
-    <li className="flex min-h-drow flex-wrap items-start gap-x-4 gap-y-2 border-b border-line px-5 py-3.5 last:border-b-0">
+    <li className="flex min-h-drow flex-wrap items-start gap-x-4 gap-y-field border-b border-line px-5 py-3.5 last:border-b-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="text-base font-bold tabular-nums text-ink">

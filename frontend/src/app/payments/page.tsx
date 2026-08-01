@@ -185,7 +185,7 @@ function DetailLabel({ children }: { children: React.ReactNode }): React.ReactEl
  */
 function DetailCell({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
   return (
-    <div className="flex min-h-drow flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-paper px-[18px] py-3 sm:flex-col sm:items-start sm:justify-center sm:gap-y-0.5 sm:py-1.5">
+    <div className="flex min-h-drow flex-wrap items-center justify-between gap-x-3 gap-y-field bg-paper px-[18px] py-3 sm:flex-col sm:items-start sm:justify-center sm:gap-y-field sm:py-1.5">
       <dt>
         <DetailLabel>{label}</DetailLabel>
       </dt>
@@ -237,7 +237,7 @@ function ProofViewer({
             />
           )
         ) : request.proofPreviewUrl ? (
-          <div role="status" className="space-y-3 text-center text-sm text-ink-2">
+          <div role="status" className="space-y-section text-center text-sm text-ink-2">
             <p>Comprobante no disponible</p>
             <a
               href={request.proofPreviewUrl}
@@ -255,7 +255,7 @@ function ProofViewer({
             </button>
           </div>
         ) : (
-          <div className="space-y-3 text-center">
+          <div className="space-y-section text-center">
             <FileText size={ICON.lg} strokeWidth={1.5} className="mx-auto text-ink-3" aria-hidden="true" />
             <p className="text-xs text-ink-3">
               <Eye size={ICON.sm} strokeWidth={1.5} className="mr-1 inline-block -mt-0.5" aria-hidden="true" />
@@ -865,7 +865,7 @@ export default function PaymentsPage(): React.ReactElement {
           <div
             role="group"
             aria-label="Aprobación por lote"
-            className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-line bg-canvas px-4 py-3"
+            className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-field rounded-card border border-line bg-canvas px-4 py-3"
           >
             <p className="min-w-[240px] flex-1 text-xs text-ink-2">
               {batchTargets.length > 0 ? (
