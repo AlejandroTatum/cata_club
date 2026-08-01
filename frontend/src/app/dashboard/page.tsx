@@ -131,7 +131,7 @@ export default function DashboardPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell eyebrow="Panel administrativo" title="Panel de Control">
+      <AppShell title="Panel de Control">
         {error && (
           <ErrorState
             className="mb-6"
@@ -198,12 +198,12 @@ export default function DashboardPage(): React.ReactElement {
                 label="Membresías activas"
                 value={activeMemberships}
                 unit={`de ${totalPersonas}`}
-                hint={`${membershipPercent}% de las personas registradas`}
+                hint={`${membershipPercent}% del total`}
               />
               <StatCard
                 label="Sin membresía"
                 value={personasSinMembresia}
-                hint={`personas por regularizar de ${totalPersonas}`}
+                hint="por regularizar"
               />
               <StatCard
                 label="Asistencia · 4 semanas"

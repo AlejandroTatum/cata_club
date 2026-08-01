@@ -1355,7 +1355,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
-      <AppShell eyebrow="Tomar asistencia" title="Pasar lista">
+      <AppShell title="Pasar lista">
       {!confirmed && (
         <BackLink
           href={backHref}

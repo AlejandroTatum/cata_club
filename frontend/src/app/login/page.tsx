@@ -4,8 +4,8 @@
  * Layout is `AuthShell`, transcribed from the login stage of
  * `docs/ux/prototipo-rediseno.html` (the approved 14-view prototype, which is
  * the authority for the auth screens). This screen owns none of its own
- * composition: coal panel, card, red eyebrow and the security note below the
- * card all come from the shared template.
+ * composition: coal panel, card and red eyebrow all come from the shared
+ * template.
  *
  * The old mockup's "Acceso rápido (Demo)" shortcuts are intentionally not
  * implemented — real backend auth is wired up, so pre-filled demo credentials
@@ -168,11 +168,7 @@ export default function LoginPage(): React.ReactElement {
   }
 
   return (
-    <AuthShell
-      title="Bienvenido de nuevo"
-      subtitle="Inicie sesión para continuar"
-      note="La autenticación se verifica contra el servidor. Su sesión se mantiene mediante una cookie segura — el navegador nunca almacena su contraseña ni su token de acceso."
-    >
+    <AuthShell title="Bienvenido de nuevo" subtitle="Inicie sesión para continuar">
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="email" className={AUTH_LABEL_CLASSES}>

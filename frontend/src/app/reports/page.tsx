@@ -65,7 +65,6 @@ import {
 } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import BackLink from "@/components/BackLink";
 import {
   fetchNuevosPorPeriodo,
   fetchAttendanceRecords,
@@ -364,9 +363,7 @@ function ReportsContent(): React.ReactElement {
   }
 
   return (
-    <AppShell eyebrow="Documentos del club" title="Reportes">
-      <BackLink href="/dashboard" label="Volver al Panel" />
-
+    <AppShell title="Reportes">
       {/* Preset cards. Even height via `items-stretch` + `h-full`, selection
           marked with coal + the yellow ball dot — red is reserved for the
           primary CTA and for destructive/error states. */}
@@ -566,15 +563,6 @@ function ReportsContent(): React.ReactElement {
             itemNoun={activePreset.noun}
           />
         )}
-
-        <div className="border-t border-line px-5 py-3.5">
-          <p className="text-[12px] text-ink-3">
-            La vista previa se genera al elegir el reporte, antes de descargar. Tanto el PDF como el
-            CSV incluyen los {resultCount} {pluralize(activePreset.noun, resultCount)} del rango
-            seleccionado, no solo esta página. El PDF lo genera el servidor; el CSV se arma en su
-            navegador con esos mismos datos.
-          </p>
-        </div>
       </section>
     </AppShell>
   );

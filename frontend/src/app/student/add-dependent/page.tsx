@@ -528,10 +528,9 @@ function AddDependentContent(): React.ReactElement {
   return (
     // This wizard is reached from a button on `/student`, so it keeps
     // `/student`'s chrome instead of falling back to the dark top nav. The
-    // page's own hero banner is gone: it repeated the eyebrow, title and
+    // page's own hero banner is gone: it repeated the title and
     // subtitle that `AppShell`'s header row now renders once, above `<main>`.
     <AppShell
-      eyebrow="Cuenta del representante"
       title="Agregar dependiente"
       subtitle="Complete los pasos para agregar un nuevo dependiente a su cuenta de representante."
     >

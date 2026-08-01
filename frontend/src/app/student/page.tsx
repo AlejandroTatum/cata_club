@@ -800,7 +800,7 @@ function StudentPortalContent(): React.ReactElement {
       : undefined;
 
   return (
-    <AppShell eyebrow="Área de estudiantes" title="Mi cuenta" subtitle={subtitle}>
+    <AppShell title="Mi cuenta" subtitle={subtitle}>
       {state.status === "loading" && (
         <div className="card">
           <LoadingState label="Cargando su cuenta…" />
