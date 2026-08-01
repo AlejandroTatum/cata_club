@@ -5,8 +5,9 @@ anchos. No tokenizaba `fontSize`: la tipografía era el único eje del sistema q
 y el resultado medido eran **24 tamaños distintos** escritos a mano en 331 lugares, con racimos
 como `12.5` + `13` + `13.5` separados por medio píxel.
 
-Este documento describe la escala que reemplaza esos 24 tamaños. La migración de los usos
-existentes es trabajo de los PR siguientes del issue #29; acá se define el destino.
+Este documento describe la escala que reemplaza esos 24 tamaños y registra lo que costó cada
+banda al migrar. Los 24 tamaños ya están migrados; del issue #29 solo queda la consolidación de
+pesos.
 
 ## Los ocho escalones
 
@@ -168,6 +169,81 @@ Cuatro decisiones sobre los overrides que viajaban en esas líneas:
 No hubo ninguna línea responsive en esta banda: `rg` sobre clases con prefijo de breakpoint y
 tamaño arbitrario no devuelve nada en todo `frontend/src`. La única pareja responsive viva sigue
 siendo el `min-[980px]:text-display` + `min-[980px]:leading-crisp` de `AuthShell`.
+
+## Lo que costó la banda micro
+
+91 líneas en 29 archivos, seis tamaños retirados. Con esto **los tres ejes tipográficos de la
+lista blanca del candado quedan vacíos**: ya no hay forma de escribir un tamaño, un interlineado
+ni un tracking sin nombrar un escalón. Solo quedan los ejes de iconos, sombras y breakpoints,
+que son los issues #30 y #32.
+
+### El colapso de 11,5px, que es el ítem de riesgo de toda la migración
+
+Veintidós usos bajan 1px, y dos de ellos viven en primitivas compartidas: la etiqueta de
+`components/ui/Badge.tsx` y la segunda línea de la celda de identidad de
+`components/ui/Table.tsx`. Un píxel en un componente aislado es un píxel; un píxel en `Table` es
+un píxel en toda vista con tabla, y en `Badge`, en toda vista con estado.
+
+Conviene decir lo incómodo: **11,5px sí tiene autoridad de prototipo**. `_sistema.css` lo escribe
+para la etiqueta del badge y `prototipo-rediseno.html:271` para el pagador de la tarjeta de pago.
+No es una inflación tomada por fuera de la especificación, como sí lo era el 56px de la banda
+display. Se acepta igual, y por una razón declarada: la tabla de absorción de esta misma escala
+—aprobada en el eslabón 1— manda 9 · 9,5 · 10 · 10,5 · 11 · 11,5 a `2xs`, y sostener 11,5px
+aparte significaría un noveno escalón a 1px del octavo, que es exactamente el racimo de medio
+píxel que la escala vino a disolver.
+
+Lo que **no** cambia con el píxel: las dos reglas duras de "La Paleta" que rodean estos usos son
+alturas fijas, no tipográficas —`h-badge` 26px, `h-row` 60px, `h-thead` 44px, `h-ctl-sm` 32px—,
+así que achicar el texto les deja más aire, nunca menos. Y el par de contraste del badge se
+justifica en `_sistema.css` contra el umbral de texto normal (4,5:1), no contra el de texto
+grande: 11,5px/700 y 10,5px/700 están los dos del mismo lado de ese umbral, así que los
+4,98 / 4,97 / 5,05 medidos siguen valiendo.
+
+### La decisión central no fue el tamaño: fue el tracking que trae `2xs`
+
+`2xs` es el único escalón con tracking **positivo**: 0,12em. Es su razón de ser —una
+microetiqueta en mayúsculas a 10,5px sin tracking se lee como una mancha— pero se aplica a todo
+lo que tome el escalón, no solo a las mayúsculas. La banda micro se parte casi en dos por ahí:
+
+- **45 líneas en mayúsculas.** Cuarenta y una traían `tracking-[0.1em]`, `[0.12em]` o `[0.13em]`:
+  el mismo gesto escrito tres veces con 0,03em de dispersión. Las tres clases **se borran** y el
+  escalón pone su 0,12em. No es una aproximación cómoda: el prototipo mismo pide 1,3px sobre
+  10,5px en `thead th` y 1,4px en `.stat .lab`, o sea 0,124em y 0,133em, que están más cerca de
+  los 0,12em del escalón que de los 0,1em que el código escribía. El movimiento real es de
+  +0,21px por letra en las 29 líneas de 0,1em y de −0,105px en las nueve de 0,13em.
+- **46 líneas que no son mayúsculas.** Badges, correos truncados, contadores dentro de un disco,
+  el atajo de teclado, la letra chica de auth. Ahí 0,12em no es un default útil sino un defecto
+  de 1,26px por carácter: ensancha texto con `whitespace-nowrap`, descentra un dígito dentro de
+  un círculo y estira una dirección de correo que ya venía truncada. Las 46 llevan
+  **`tracking-flat`**, que es el escalón que existe justamente para cancelar el tracking de un
+  escalón de tamaño y que hasta este PR no tenía un solo uso.
+
+Es la primera vez en la cadena que migrar un tamaño **agrega** una clase en vez de quitarla, y
+está bien que así sea: `tracking-flat` declara una decisión que antes estaba implícita en que la
+clase arbitraria no emitía `letter-spacing` en absoluto.
+
+### Los overrides restantes
+
+- **`tracking-[0.2em]` del eyebrow del header** pasó a `tracking-caps-wide`, valor idéntico. Es
+  el mismo par que la banda display ya había armado en `AuthShell`.
+- **`tracking-[-0.01em]` de la unidad de `StatCard`** se borró. Está a 0,005em del tracking que
+  `sm` trae puesto —0,0675px por letra a 13,5px—, la misma distancia que retiró el racimo de
+  `-0.015em` de la banda de cuerpo. El número de 32px, que es el ancla, no se toca.
+- **`leading-[1.2]` y `leading-[1.3]` del carnet de socio** pasaron a `leading-tight` (1,25). No
+  se borraron porque contra el 1,4 de `2xs` la caja crecería 2,1px y 1,7px en dos etiquetas que
+  ocupan una sola línea dentro de una tarjeta apretada; y `leading-tight` no es una invención
+  local, es lo que ya llevan los dos valores hermanos, justo debajo de cada etiqueta. El
+  movimiento queda en +1,125px y +0,125px.
+- **`leading-[1.5]` de la letra chica de auth** se borró: contra el 1,4 de `2xs` la caja se achica
+  1,05px por renglón, dentro de la tolerancia con la que las dos bandas anteriores ya retiraron
+  overrides.
+
+Dos escalones nombrados quedan sin usos después de esta banda: `leading-body` (1,45) y —hasta
+que se contaron las 46 líneas de arriba— `tracking-flat`. El segundo encontró su caso; el primero
+sigue esperando el suyo.
+
+Tampoco acá hubo líneas responsive: la única pareja viva sigue siendo el
+`min-[980px]:text-display` + `min-[980px]:leading-crisp` de `AuthShell`.
 
 ## Anclas que no se mueven
 
