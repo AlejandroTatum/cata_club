@@ -307,7 +307,15 @@ export default function AuthShell({
        * column. `row-start-*` is inert under `display:flex`, so the children
        * need no breakpoint of their own.
        */}
-      <div
+      {/*
+       * The landmark is THIS panel, not the composition. The dark side is the
+       * brand rail — a logo, a caption, a copyright and the way out — and the
+       * errand someone came here for is the form on this one. Making the whole
+       * two-panel composition "principal" would announce the decoration as
+       * content. This route reaches the user through no other shell, so if this
+       * element is not the landmark, the page has none.
+       */}
+      <main
         data-testid="auth-panel-light"
         className="flex flex-1 flex-col justify-center bg-canvas px-6 py-10 text-ink split:grid split:flex-1 split:grid-rows-[1fr_auto_1fr] split:px-14 split:py-12"
       >
@@ -364,7 +372,7 @@ export default function AuthShell({
             <HelpChatLauncher variant="quiet" label="¿Necesita ayuda para entrar?" />
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

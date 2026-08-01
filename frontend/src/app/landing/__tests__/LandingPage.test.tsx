@@ -45,6 +45,24 @@ describe("LandingPage", (): void => {
     vi.unstubAllGlobals();
   });
 
+  it("draws exactly one main landmark, opening at the skip link's target", (): void => {
+    // The landing reaches the user through no shell, so it declares its own.
+    // `Navbar` and `Footer` stay outside it — the skip link exists to jump PAST
+    // the nav, so a landmark that contained the nav would defeat it.
+    const { container } = render(<LandingPage />);
+
+    const landmarks = container.querySelectorAll("main");
+    expect(landmarks).toHaveLength(1);
+
+    const skipTarget = container.querySelector("#inicio") as HTMLElement;
+    expect(landmarks[0].contains(skipTarget)).toBe(true);
+    expect(landmarks[0].firstElementChild).toBe(skipTarget);
+
+    const nav = container.querySelector("nav");
+    expect(nav).not.toBeNull();
+    expect(landmarks[0].contains(nav)).toBe(false);
+  });
+
   it("renders every section in the approved order", (): void => {
     render(<LandingPage />);
 

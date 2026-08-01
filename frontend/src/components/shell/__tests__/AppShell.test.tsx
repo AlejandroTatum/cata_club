@@ -609,6 +609,22 @@ describe("AppShell — the page header row", (): void => {
     expect(heading.parentElement?.firstElementChild).toBe(heading);
   });
 
+  it("draws exactly one main landmark", (): void => {
+    // Every authenticated route used to ship two, nested: the root layout wrapped
+    // `{children}` in a `<main>` that carried only a max-width and padding, and
+    // this shell drew its own inside it. Two regions called "principal" is one
+    // guess for anyone navigating by landmark — and the skip link pointed at the
+    // inner one, so the first region found was not the one the jump used.
+    // `lib/__tests__/main-landmark.test.ts` holds the other half of this rule.
+    const { container } = render(
+      <AppShell title="Miembros">
+        <p>contenido</p>
+      </AppShell>,
+    );
+
+    expect(container.querySelectorAll("main")).toHaveLength(1);
+  });
+
   it("places the header row above <main>, so the heading precedes the content", (): void => {
     const { container } = render(
       <AppShell title="Miembros">

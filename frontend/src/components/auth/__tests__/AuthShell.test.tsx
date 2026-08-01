@@ -40,6 +40,17 @@ function renderShell(): void {
 }
 
 describe("AuthShell", () => {
+  it("draws exactly one main landmark, and it is the form panel", (): void => {
+    // /login, /forgot-password and /reset-password reach the user through no
+    // other shell, so if this component declares none the page has none. The
+    // dark side is the brand rail; the errand is the form.
+    renderShell();
+
+    const landmarks = document.querySelectorAll("main");
+    expect(landmarks).toHaveLength(1);
+    expect(landmarks[0]).toHaveAttribute("data-testid", "auth-panel-light");
+  });
+
   it("fills the viewport instead of floating as a bounded, centred artboard", () => {
     renderShell();
 
