@@ -229,7 +229,7 @@ function CrearCuentaContent(): React.ReactElement {
   function renderTypeStep(): React.ReactElement {
     const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
     return (
-      <div className="space-y-4">
+      <div className="space-y-section">
         <p className="text-sm leading-relaxed text-cata-text/65">
           Seleccione el tipo de cuenta que desea crear:
         </p>
@@ -322,7 +322,7 @@ function CrearCuentaContent(): React.ReactElement {
 
   function renderPersonalStep(): React.ReactElement {
     return (
-      <div className="space-y-1">
+      <div className="space-y-field">
         <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
           Ingrese los datos personales de la cuenta a crear:
         </p>
@@ -492,7 +492,7 @@ function CrearCuentaContent(): React.ReactElement {
 
   function renderHealthStep(): React.ReactElement {
     return (
-      <div className="space-y-4">
+      <div className="space-y-section">
         <p className="text-sm leading-relaxed text-cata-text/65">
           Información médica del estudiante (opcional pero recomendada).
         </p>
@@ -561,7 +561,7 @@ function CrearCuentaContent(): React.ReactElement {
 
   function renderCredentialsStep(): React.ReactElement {
     return (
-      <div className="space-y-1">
+      <div className="space-y-field">
         <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
           Ingrese las credenciales de acceso para la cuenta:
         </p>
@@ -600,7 +600,7 @@ function CrearCuentaContent(): React.ReactElement {
       ENTRENADOR: "Entrenador del club",
     };
     return (
-      <div className="space-y-4">
+      <div className="space-y-section">
         <p className="text-sm leading-relaxed text-cata-text/65">
           Revise la información antes de crear la cuenta:
         </p>
@@ -624,7 +624,7 @@ function CrearCuentaContent(): React.ReactElement {
               Datos Personales
             </h3>
           </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-field text-sm">
             <dt className="text-cata-text/65">Nombres</dt>
             <dd className="font-semibold text-cata-text">{formData.nombres}</dd>
             <dt className="text-cata-text/65">Apellidos</dt>
@@ -666,7 +666,7 @@ function CrearCuentaContent(): React.ReactElement {
               Credenciales de Acceso
             </h3>
           </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-field text-sm">
             <dt className="text-cata-text/65">Correo</dt>
             <dd className="font-semibold text-cata-text">{formData.correo}</dd>
             <dt className="text-cata-text/65">Contraseña</dt>
@@ -682,7 +682,7 @@ function CrearCuentaContent(): React.ReactElement {
                 Ficha Medica
               </h3>
             </div>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-field text-sm">
               <dt className="text-cata-text/65">Tipo de Sangre</dt>
               <dd className="font-semibold text-cata-text">{formData.tipoSangre.replace(/_/g, " ")}</dd>
               {formData.condicionesSalud.trim() && (
@@ -780,11 +780,11 @@ function CrearCuentaContent(): React.ReactElement {
           </div>
         </div>
       ) : (
-        <div>
+        <div className="space-y-page">
           <BackLink href="/members" label="Volver a Miembros" />
 
           {/* Progress bar */}
-          <div className="mb-8">
+          <div>
             <div className="mb-2 flex items-center justify-between text-xs text-cata-text/45">
               <span>
                 Paso {currentIndex + 1} de {CREAR_CUENTA_STEP_ORDER.length}

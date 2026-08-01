@@ -403,7 +403,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
       {/* Ficha — full-width row (card is now the modal's full content width,
           not squeezed into a half-width grid column), four stats side by
           side on larger screens instead of a cramped two-up layout. */}
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-cata-border pt-3 text-xs sm:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-section border-t border-cata-border pt-3 text-xs sm:grid-cols-4">
         <div>
           <dt className="text-cata-text/50">Estado</dt>
           <dd className="mt-1">
@@ -460,7 +460,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
             Membresía creada.
           </p>
         ) : showCreateMembership ? (
-          <div className="mt-2.5 space-y-2 rounded-lg bg-cata-bg/60 p-2.5">
+          <div className="mt-2.5 space-y-field rounded-lg bg-cata-bg/60 p-2.5">
             <select
               value={selectedTipoId}
               onChange={(e) => setSelectedTipoId(e.target.value ? Number(e.target.value) : "")}
@@ -517,7 +517,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
               Pago registrado. Recarga para verlo.
             </p>
           ) : showPaymentForm ? (
-            <div className="space-y-2 rounded-lg bg-cata-bg/60 p-2.5">
+            <div className="space-y-field rounded-lg bg-cata-bg/60 p-2.5">
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-semibold text-cata-text/65">
                   Monto
@@ -564,7 +564,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
               {descuentosOfrecidos.length > 0 && (
                 <fieldset className="rounded-lg border border-cata-border/50 bg-cata-surface/50 px-2.5 py-2">
                   <legend className="px-1 text-xs font-semibold text-cata-text/65">Descuentos</legend>
-                  <div className="space-y-1">
+                  <div className="space-y-field">
                     {descuentosOfrecidos.map((descuento) => (
                       <label key={descuento.id} className="flex items-center gap-2 text-xs text-cata-text">
                         <input
@@ -771,7 +771,7 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
           Editar
         </Button>
       </div>
-      <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-2">
+      <dl className="flex flex-wrap items-center gap-x-4 gap-y-field text-xs text-ink-2">
         <div className="flex items-center gap-1.5">
           <dt className="sr-only">Teléfono</dt>
           <Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
@@ -1044,9 +1044,9 @@ function MemberEditDialog({
             {/* Scrollable body. Four groups, each declaring how it persists:
                 identity needs a button, roles and estado save themselves, and
                 each student's membership/ficha médica has its own save. */}
-            <div className="flex-1 space-y-3.5 overflow-y-auto bg-canvas px-5 py-4">
+            <div className="flex-1 space-y-section overflow-y-auto bg-canvas px-5 py-4">
               <ModalSection title="Datos de la cuenta" saveMode="manual">
-                <dl className="space-y-2 text-sm">
+                <dl className="space-y-field text-sm">
                   <div className="flex items-center justify-between gap-3">
                     <dt className="shrink-0 text-ink-3" id={`nombres-label-${account.id}`}>Nombres</dt>
                     <dd className="min-w-0 flex-1">
@@ -1248,7 +1248,7 @@ function MemberEditDialog({
 
               {account.estudiantes.length > 0 && (
                 <ModalSection title="Estudiantes a cargo" saveMode="manual">
-                  <div className="space-y-3">
+                  <div className="space-y-section">
                     {account.estudiantes.map((estudiante) => (
                       <StudentEditPanel
                         key={estudiante.id}

@@ -808,7 +808,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             </p>
             <ul className="flex flex-col gap-3">
               {resumableDrafts.map((draft) => (
-                <li key={draft.key} className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <li key={draft.key} className="flex flex-wrap items-center gap-x-3 gap-y-field">
                   <span className="min-w-[180px] flex-1 text-sm text-ink-2">
                     <b className="font-semibold text-ink">{describeSchedule(draft.horarioId)}</b>
                     <span aria-hidden="true"> · </span>
@@ -845,7 +845,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
           </div>
         )}
         <div>
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-field">
             <p className="text-sm text-ink-3">
               {visible.narrowedToToday
                 ? `Horarios de hoy · ${formatDay(today)}`
@@ -1452,11 +1452,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
           </div>
         </div>
       ) : (
-        <div>
+        <div className="space-y-page">
           {loading && <LoadingState label="Cargando horarios…" />}
 
           {loadError && !loading && (
-            <ErrorState className="mb-8" message={loadError} onRetry={() => loadOptions()} />
+            <ErrorState message={loadError} onRetry={() => loadOptions()} />
           )}
 
           {!loading && !loadError && (

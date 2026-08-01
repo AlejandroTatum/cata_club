@@ -195,7 +195,7 @@ function Carnet({
       {facts.length > 0 && (
         <div
           data-testid="carnet-facts"
-          className="relative z-10 mt-[18px] grid grid-cols-[repeat(auto-fit,minmax(116px,1fr))] gap-x-4 gap-y-[13px] border-t border-white/10 pt-[15px]"
+          className="relative z-10 mt-[18px] grid grid-cols-[repeat(auto-fit,minmax(116px,1fr))] gap-x-4 gap-y-section border-t border-white/10 pt-[15px]"
         >
           {facts.map((fact) => (
             <CarnetFact key={fact.label} label={fact.label} value={fact.value} />
@@ -256,7 +256,7 @@ function TrainingRow({ session, first }: { session: UpcomingTraining; first: boo
      * share it instead. `items-center` already had the content centred, so a
      * taller row just breathes more.
      */
-    <li className="flex min-h-drow flex-1 flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-5 py-3 last:border-b-0">
+    <li className="flex min-h-drow flex-1 flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-3 last:border-b-0">
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2 text-base font-bold tracking-tight text-ink">
           {session.diaLabel}
@@ -323,7 +323,7 @@ function TrainingPanel({
       aria-label="Próximos entrenamientos"
       className="card flex h-full flex-col overflow-hidden"
     >
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 pb-3.5 pt-[18px]">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-field px-5 pb-3.5 pt-[18px]">
         <h2 className="text-base font-bold tracking-tight text-ink">Próximos entrenamientos</h2>
         <p className="text-xs text-ink-3-strong">
           {viewingOwnProfile
@@ -375,7 +375,7 @@ function TrainingPanel({
       {/* One line, not a second panel: it is the same subject — training —
           and it is the fact a family checks right after "when is the next
           one". The record itself lives on `/student/attendance`. */}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-5 gap-y-2 border-t border-line bg-sunken px-5 py-3.5">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-5 gap-y-field border-t border-line bg-sunken px-5 py-3.5">
         <p className="text-xs leading-relaxed text-ink-3-strong">
           {recap ? (
             <>

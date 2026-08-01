@@ -946,7 +946,7 @@ export default function GroupsPage(): React.ReactElement {
               <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-cata-text/40">
                 Alumnos asignados ({alumnosPorHorario.length})
               </p>
-              <div className="space-y-2">
+              <div className="space-y-field">
                 {alumnosVisibles.map((a) => (
                   <div key={a.id} className="flex items-center justify-between rounded-lg bg-cata-bg px-3 py-2">
                     <span className="text-sm text-cata-text">{a.personaNombreCompleto} · {a.edad} años</span>
