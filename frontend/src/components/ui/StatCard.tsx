@@ -65,7 +65,7 @@ export default function StatCard({
 
       <span
         className={cn(
-          "text-[32px] font-extrabold leading-none tracking-[-0.04em] tabular-nums",
+          "text-2xl font-extrabold leading-none tabular-nums",
           hot ? "text-white" : "text-ink",
         )}
       >

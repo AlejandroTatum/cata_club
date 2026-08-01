@@ -59,7 +59,7 @@ function UnauthorizedContent(): React.ReactElement {
           />
         </span>
 
-        <h1 className="m-0 text-balance text-[20px] font-bold tracking-[-0.02em] text-ink">
+        <h1 className="m-0 text-balance text-lg font-bold text-ink">
           Tu cuenta todavía no tiene rol
         </h1>
 

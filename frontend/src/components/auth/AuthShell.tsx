@@ -20,16 +20,22 @@
  * edge-to-edge — no max-width, no outer padding, no frame (border, radius,
  * elevation) around it, because a full-bleed split has no artboard to frame.
  *
- * Everything the prototype established that was NOT objected to survives
- * verbatim: the 42px headline (30px on phones), the coal panel wider than the
- * form panel, the red eyebrow, the ringed logo, the inline figure row, the red
- * links.
+ * Everything the prototype established that was NOT objected to survives: the
+ * big headline (smaller on phones), the coal panel wider than the form panel,
+ * the red eyebrow, the ringed logo, the inline figure row, the red links.
+ *
+ * The three sizes the prototype writes here — 42px and 30px for the headline,
+ * 24px for the card title — have no step of their own in the type scale
+ * (`docs/ux/escala-tipografica.md`), so each takes the nearest one: `display`
+ * (46px) / `2xl` (32px) for the headline, `xl` (26px) for the title. The
+ * headline keeps an explicit `leading-crisp`, because a step tight enough for
+ * a one-line hero is too tight for a motto that wraps to three.
  *
  * The two panels are NOT equal halves: `.auth .dark { flex:1.1 }` against
  * `.auth .light { flex:1 }`. The coal panel is the wider one, because it
- * carries the 42px headline that is the whole point of the screen. Rendering
- * that headline at half its size (21px) is what made the screen read as
- * broken; it is `font-size:42px; font-weight:800; letter-spacing:-1.5px;
+ * carries the headline that is the whole point of the screen. Rendering that
+ * headline at half its size (21px) is what made the screen read as broken;
+ * the prototype writes `font-size:42px; font-weight:800; letter-spacing:-1.5px;
  * line-height:1.12; max-width:15ch; text-wrap:balance`, dropping to 30px on
  * phones (line 417).
  *
@@ -216,9 +222,17 @@ export default function AuthShell({
           </span>
 
           {/*
-           * `.headline` — 42px/800/-1.5px, 30px on phones. Kept as a <p>:
-           * the page's single <h1> is the form title, and the motto is
-           * brand copy, not the heading of a section a user navigates to.
+           * `.headline` — the prototype writes 42px/800/-1.5px, 30px on
+           * phones. The scale has neither size, so this takes `display`
+           * (46px) and `2xl` (32px), and keeps `leading-crisp` because the
+           * motto wraps across three lines and has to read as one block
+           * rather than as three. `leading-crisp` is repeated at the
+           * breakpoint on purpose: `min-[980px]:text-display` is emitted
+           * inside a media query, so it outranks an unmediated `leading-*`
+           * and the desktop headline would silently take the step's own
+           * 0.95. Kept as a <p>: the page's single <h1> is
+           * the form title, and the motto is brand copy, not the heading of
+           * a section a user navigates to.
            *
            * The quotation marks are the typographic pair the 14-view
            * prototype uses (line 794). Guillemets shipped here by mistake,
@@ -230,7 +244,7 @@ export default function AuthShell({
            */}
           <p
             data-testid="auth-headline"
-            className="my-5 max-w-[15ch] text-[30px] font-extrabold leading-[1.12] tracking-[-1.5px] [text-wrap:balance] min-[980px]:my-0 min-[980px]:text-[42px]"
+            className="my-5 max-w-[15ch] text-2xl font-extrabold leading-crisp [text-wrap:balance] min-[980px]:my-0 min-[980px]:text-display min-[980px]:leading-crisp"
           >
             “Formando <em className="not-italic text-ball">campeones</em> para la vida”
           </p>
@@ -249,7 +263,7 @@ export default function AuthShell({
            * out of the top of the panel.
            */}
           <p className="mt-3 flex min-w-[240px] items-baseline justify-center gap-2.5 border-t border-coal-3 pt-[18px]">
-            <b data-testid="auth-figure" className="text-[26px] font-extrabold tabular-nums">
+            <b data-testid="auth-figure" className="text-xl font-extrabold tabular-nums">
               {years}
             </b>
             <small className={`text-[12.5px] ${ON_COAL_MUTED}`}>años formando deportistas</small>
@@ -289,10 +303,10 @@ export default function AuthShell({
           className={`row-start-2 mx-auto flex w-full flex-col gap-3.5 rounded-[18px] border border-line bg-paper px-7 py-[30px] shadow-[0_12px_44px_rgba(0,0,0,0.07)] ${CARD_WIDTH}`}
         >
           {/* The red eyebrow — 10px/700, `letter-spacing:2px`, uppercase. */}
-          <p className="text-[10px] font-bold uppercase tracking-[2px] text-cata-red">
+          <p className="text-[10px] font-bold uppercase tracking-caps-wide text-cata-red">
             Panel de gestión
           </p>
-          <h1 className="text-[24px] font-extrabold tracking-[-0.5px] text-ink">{title}</h1>
+          <h1 className="text-xl font-extrabold text-ink">{title}</h1>
           {subtitle && <p className="-mt-2 text-[13.5px] text-ink-3">{subtitle}</p>}
           {children}
         </div>

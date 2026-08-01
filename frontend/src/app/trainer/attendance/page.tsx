@@ -976,10 +976,10 @@ export default function TrainerAttendancePage(): React.ReactElement {
         <div className="flex flex-wrap items-center gap-5 rounded-card bg-coal px-[22px] py-[18px] text-white">
           <span
             aria-live="polite"
-            className="text-[40px] font-extrabold leading-none tracking-[-0.05em] tabular-nums"
+            className="text-display font-extrabold leading-none tabular-nums"
           >
             {presentCount}
-            <span className="text-[20px] text-white/50">/{students.length}</span>
+            <span className="text-lg text-white/50">/{students.length}</span>
           </span>
           <span className="flex min-w-[170px] flex-1 flex-col gap-1">
             <b className="text-[15px] font-bold">presentes</b>
@@ -1393,7 +1393,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-state-ok-bg">
               <CheckCircle size={32} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
             </div>
-            <h2 className="mb-3 text-[24px] leading-8 font-bold tracking-tight text-ink">
+            <h2 className="mb-3 text-xl font-bold tracking-tight text-ink">
               Asistencia Registrada
             </h2>
             <p className="mb-2 text-sm leading-relaxed text-ink-2">

@@ -1136,7 +1136,7 @@ export default function PaymentsPage(): React.ReactElement {
               <div className="grid grid-cols-2 gap-px border-b border-line bg-line">
                 <div className="flex min-h-drow flex-col justify-center gap-1.5 bg-canvas px-[18px] py-3">
                   <DetailLabel>Monto esperado</DetailLabel>
-                  <span className="text-[24px] font-extrabold leading-none tracking-[-0.03em] tabular-nums text-ink sm:text-[27px]">
+                  <span className="text-xl font-extrabold leading-none tabular-nums text-ink">
                     {formatCurrency(request.expectedAmount)}
                   </span>
                 </div>

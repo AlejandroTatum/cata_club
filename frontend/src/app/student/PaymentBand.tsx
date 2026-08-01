@@ -54,7 +54,7 @@ export default function PaymentBand({ situation, action }: PaymentBandProps): Re
     >
       {figure && (
         <p className="flex flex-none flex-col gap-1">
-          <span className="text-[56px] font-extrabold leading-none tracking-[-0.05em] tabular-nums">
+          <span className="text-display font-extrabold leading-none tabular-nums">
             {figure.value}
           </span>
           {/* 60%, not the 45% the prototype uses for muted white: this line is

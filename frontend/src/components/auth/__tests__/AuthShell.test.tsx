@@ -13,8 +13,10 @@
  *     be no max-width cap and no bounded min-height on the composition.
  *  2. The headline uses TYPOGRAPHIC DOUBLE QUOTES, never guillemets —
  *     *"esos signos de mayor y menor se ven muy mal"*.
- *  3. The headline is 42px on desktop / 30px on phones. It shipped at 21px —
- *     half its intended size — which is what made the screen read as broken.
+ *  3. The headline is the largest step on desktop and one step down on phones.
+ *     The prototype writes 42px/30px; the type scale has neither, so the two
+ *     sizes are `display` (46px) and `2xl` (32px). It shipped at 21px — half
+ *     its intended size — which is what made the screen read as broken.
  *  4. The coal panel is WIDER than the form panel (`flex:1.1` vs `flex:1`),
  *     not an equal half.
  *  5. The card carries the red "Panel de gestión" eyebrow, and the single
@@ -59,12 +61,16 @@ describe("AuthShell", () => {
     expect(headline.textContent).not.toContain("»");
   });
 
-  it("renders the headline at 42px on desktop and 30px on phones", () => {
+  it("renders the headline on the display step on desktop and one step down on phones", () => {
     renderShell();
 
+    // The prototype writes 42px/30px. The scale has no 42 and no 30: the
+    // headline takes `display` (46px) on desktop and `2xl` (32px) on phones,
+    // and keeps `leading-crisp` because it wraps and has to stay one block.
     const headline = screen.getByTestId("auth-headline");
-    expect(headline.className).toContain("min-[980px]:text-[42px]");
-    expect(headline.className).toContain("text-[30px]");
+    expect(headline.className).toContain("min-[980px]:text-display");
+    expect(headline.className).toContain("text-2xl");
+    expect(headline.className).toContain("leading-crisp");
     expect(headline.className).toContain("font-extrabold");
     expect(headline).toHaveTextContent("Formando");
   });
