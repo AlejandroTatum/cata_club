@@ -1,0 +1,81 @@
+# Candado de valores arbitrarios de estilo
+
+El test `frontend/src/lib/__tests__/arbitrary-style-values.test.ts` falla cuando entra al
+código un valor de estilo arbitrario que no estaba en el inventario del día que se instaló.
+No limpia nada: impide que la deuda crezca mientras los issues #29–#32 la bajan.
+
+Corre dentro de `pnpm test`, así que ya es un gate del job Frontend del CI.
+
+## Camino rápido
+
+1. El CI falla con `text-[19px] is not an allowed typography value`.
+2. El mensaje nombra el archivo, el valor y el token más cercano: usar ese token.
+3. `pnpm test` en `frontend/` para confirmar.
+
+Si el valor es de verdad inevitable, **no se agrega a la lista blanca**: se le da un nombre
+en `tailwind.config.ts` y deja de ser arbitrario.
+
+## Los seis ejes
+
+| Eje | Patrón | Reemplazo |
+|---|---|---|
+| Tipografía | `text-[13px]` | escala `text-*` |
+| Interlineado | `leading-[1.45]` | escala `leading-*` |
+| Tracking | `tracking-[0.13em]` | escala `tracking-*` |
+| Iconos | `size={21}` en un icono de `lucide-react` | tamaño ya inventariado, o token nuevo |
+| Sombras | `shadow-[0_4px_24px_…]` | `shadow-soft` · `shadow-card` · `shadow-elevated` |
+| Breakpoints | `min-[980px]` | prefijo con nombre (`sm:` … `2xl:`) |
+
+Los colores arbitrarios (`text-[#B9B9C1]`) quedan fuera a propósito: la paleta la vigila
+`color-contrast.test.ts`, y juntar las dos reglas en un solo candado complica achicar ambas.
+
+## Cómo se achica la lista blanca
+
+La lista vive en `frontend/src/lib/__tests__/arbitrary-style-values.allowlist.ts`, agrupada
+por eje, un valor por línea. Achicarla es el trabajo de cada issue de migración:
+
+1. **Elegir un valor**, no un archivo. `text-[12.5px]` en sus 70 usos es un PR coherente;
+   "el archivo X" mezcla seis decisiones distintas.
+2. **Migrar todos los usos** al token que lo reemplaza.
+3. **Borrar esa línea** de la lista blanca.
+4. **`pnpm test`.** Quedan dos resultados posibles, ambos accionables:
+   - *"is not an allowed … value"* → falta migrar un uso, y el mensaje dice cuál.
+   - *"no longer used, delete this line"* → sobra una entrada; borrarla.
+
+El paso 3 no es opcional. El test verifica en las dos direcciones —que no entren valores
+nuevos y que no queden entradas muertas— justamente para que la lista no se convierta en un
+permiso permanente que nadie recuerda por qué está.
+
+**Nunca se agregan entradas.** Una entrada nueva es exactamente lo que el candado existe
+para impedir.
+
+## Inventario congelado (2026-08-01)
+
+| Eje | Valores distintos |
+|---|---|
+| Tipografía | 24 |
+| Interlineado | 9 |
+| Tracking | 14 |
+| Iconos | 14 |
+| Sombras | 10 |
+| Breakpoints | 1 |
+| **Total** | **72** |
+
+Veinticuatro tamaños de texto donde la escala `text-*` tiene diez, y catorce tamaños de
+icono, son la medida del problema que #29–#32 resuelven.
+
+## Detalles de implementación
+
+| Tema | Decisión |
+|---|---|
+| Recorrido | `node:fs`, igual que `focus-ring-usage.test.ts` y `ui-vocabulary.test.ts`. Sin dependencias nuevas, sin subproceso, sin suponer que `rg` está en la imagen de CI. |
+| Alcance | `frontend/src/**` en `.ts`, `.tsx` y `.css`, saltando los directorios `__tests__`. |
+| Comentarios | Se eliminan antes de escanear: `tailwind.config.ts` y el propio test citan valores prohibidos para explicarlos. |
+| Granularidad | Por valor, no por archivo. La regla es "no entran valores nuevos al vocabulario"; una lista por archivo tendría cientos de líneas y rompería con cada movimiento de código. |
+| Iconos | Solo se revisa `size={N}` en archivos que importan `lucide-react`. Hoy son todos los que usan `size`, y así la regla no vigila cualquier componente que acepte esa prop. |
+| Sombras del foco | Los anillos `#131316` de la lista los exige `focus-ring-usage.test.ts`. Retirarlos significa mover ese par al tema, no borrarlo. |
+
+## Qué NO reemplaza
+
+El hook de diseño que ya está instalado en el repo. El hook revisa la intención de un cambio
+mientras se escribe; el candado cuenta valores en CI. Se complementan.
