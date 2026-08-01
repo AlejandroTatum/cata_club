@@ -56,21 +56,29 @@ interface AxisRule {
 }
 
 /**
- * Tailwind's stock scales, in the unit each axis is written in. These are the
- * targets the migration issues aim at, so naming the nearest one turns a
- * failure into an instruction instead of a complaint.
+ * The scales a value is snapped to, in the unit each axis is written in. These
+ * are the targets the migration issues aim at, so naming the nearest one turns
+ * a failure into an instruction instead of a complaint.
+ *
+ * Typography is the project's OWN eight steps, not Tailwind's stock ten:
+ * `tailwind.config.ts` redefines `xs`…`2xl` and adds `2xs` and `display`, so
+ * the stock table would now hand out wrong advice — it would answer `text-2xl`
+ * for a 24px value that `text-2xl` renders at 32px. `text-3xl` and up are left
+ * out on purpose: they survive as Tailwind defaults but they are not part of
+ * the scale, and suggesting one would migrate a value off the system.
+ *
+ * The other three tables stay stock, because those axes are extended with new
+ * names rather than redefined.
  */
 const TEXT_SCALE: readonly Step[] = [
-  { token: "text-xs", value: 12 },
-  { token: "text-sm", value: 14 },
-  { token: "text-base", value: 16 },
-  { token: "text-lg", value: 18 },
-  { token: "text-xl", value: 20 },
-  { token: "text-2xl", value: 24 },
-  { token: "text-3xl", value: 30 },
-  { token: "text-4xl", value: 36 },
-  { token: "text-5xl", value: 48 },
-  { token: "text-6xl", value: 60 },
+  { token: "text-2xs", value: 10.5 },
+  { token: "text-xs", value: 12.5 },
+  { token: "text-sm", value: 13.5 },
+  { token: "text-base", value: 15 },
+  { token: "text-lg", value: 20 },
+  { token: "text-xl", value: 26 },
+  { token: "text-2xl", value: 32 },
+  { token: "text-display", value: 46 },
 ];
 
 const LEADING_SCALE: readonly Step[] = [
@@ -307,7 +315,9 @@ describe("the detector itself", () => {
 
   it("names the nearest token across units and scales", () => {
     expect(numericValue("1.5rem")).toBe(24);
-    expect(suggestionFor("typography", "1.5rem")).toContain("text-2xl");
+    // 24px snaps to `xl` (26px), two away, not to `2xl` — which the scale
+    // moved to 32px, eight away.
+    expect(suggestionFor("typography", "1.5rem")).toContain("text-xl");
     expect(suggestionFor("leading", "1.24")).toContain("leading-tight");
     expect(suggestionFor("tracking", "-0.048em")).toContain("tracking-tighter");
     expect(suggestionFor("breakpoint", "980px")).toContain("lg:");
