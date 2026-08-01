@@ -135,7 +135,7 @@ function InstitutionalHeader({ pathname }: InstitutionalHeaderProps): React.Reac
             <span className="text-lg font-bold leading-tight tracking-tight text-white">
               Cata Club
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cata-red">
+            <span className="text-2xs font-bold uppercase tracking-caps-wide text-cata-red">
               Tenis de Mesa
             </span>
           </div>

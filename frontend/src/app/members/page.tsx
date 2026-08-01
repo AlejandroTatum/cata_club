@@ -439,14 +439,14 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
       </dl>
 
       {student.membresia && (
-        <p className="mt-1.5 text-[11px] text-cata-text/55">
+        <p className="mt-1.5 text-2xs tracking-flat text-cata-text/55">
           {student.membresia.tipo} &middot;{" "}
           {formatMembershipPeriod(student.membresia.fechaInicio, student.membresia.fechaFin)}
           {" "}&middot; {formatCurrency(student.membresia.monto)}
         </p>
       )}
       {student.ultimoPago && (
-        <p className="mt-0.5 text-[11px] text-cata-text/55">
+        <p className="mt-0.5 text-2xs tracking-flat text-cata-text/55">
           {formatCurrency(student.ultimoPago.monto)} &middot; {student.ultimoPago.periodo}
         </p>
       )}
@@ -552,7 +552,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                 </div>
               </div>
               {paymentMonthlyPrice > 0 && Number(paymentMonto) > 0 && (
-                <p className="text-[10px] text-cata-text/45">
+                <p className="text-2xs tracking-flat text-cata-text/45">
                   {Number(paymentMonto) / paymentMonthlyPrice} meses de vigencia (precio mensual: ${paymentMonthlyPrice})
                 </p>
               )}
@@ -608,7 +608,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
                       <button
                         type="button"
                         onClick={() => setPaymentVoucherFile(null)}
-                        className="text-[10px] text-cata-text/45 hover:text-cata-red"
+                        className="text-2xs tracking-flat text-cata-text/45 hover:text-cata-red"
                       >
                         Quitar
                       </button>
@@ -654,7 +654,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
         <button
           type="button"
           onClick={() => setShowMedical((v) => !v)}
-          className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-[11px] font-medium text-cata-red transition-colors hover:bg-cata-red/25"
+          className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-2xs tracking-flat font-medium text-cata-red transition-colors hover:bg-cata-red/25"
         >
           <Stethoscope size={11} strokeWidth={1.5} aria-hidden="true" />
           Ficha médica
@@ -716,7 +716,7 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
       <TableCell>
         <span className="block">{account.telefono}</span>
         {account.email ? (
-          <span className="mt-px block truncate text-[11.5px] text-ink-3">{account.email}</span>
+          <span className="mt-px block truncate text-2xs tracking-flat text-ink-3">{account.email}</span>
         ) : null}
       </TableCell>
       <TableCell align="right" className="tabular-nums">
@@ -755,7 +755,7 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
           <p className="truncate text-sm font-semibold text-ink">
             {account.nombres} {account.apellidos}
           </p>
-          <p className="text-[11.5px] text-ink-3">{getPayerTypeLabel(account.role)}</p>
+          <p className="text-2xs tracking-flat text-ink-3">{getPayerTypeLabel(account.role)}</p>
         </div>
         <Button
           size="sm"
@@ -1131,7 +1131,7 @@ function MemberEditDialog({
                     type="button"
                     onClick={() => void toggleEstado()}
                     disabled={stateLoading || !rolesReady}
-                    className={`h-badge inline-flex cursor-pointer items-center gap-1.5 rounded-full px-[11px] text-[11.5px] font-bold disabled:opacity-50 ${
+                    className={`h-badge inline-flex cursor-pointer items-center gap-1.5 rounded-full px-[11px] text-2xs tracking-flat font-bold disabled:opacity-50 ${
                       activo ? "bg-state-ok-bg text-state-ok" : "bg-state-bad-bg text-state-bad"
                     }`}
                     aria-pressed={activo}

@@ -445,7 +445,7 @@ function AddDependentContent(): React.ReactElement {
   ): React.ReactElement {
     return (
       <div className="flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0">
-        <span className="w-[150px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+        <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">
           {label}
         </span>
         <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
@@ -539,7 +539,7 @@ function AddDependentContent(): React.ReactElement {
 
       {/* Named stepper — the same contract as the public wizard. */}
       <div className="mb-6">
-        <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+        <p className="text-2xs font-bold uppercase text-ink-3">
           Paso {currentIndex + 1} de {ADD_DEPENDENT_STEP_ORDER.length}
         </p>
       </div>

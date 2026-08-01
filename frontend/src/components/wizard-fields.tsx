@@ -272,7 +272,7 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
       <div className="my-8 h-px bg-line" />
       <div className="mb-3 flex items-center gap-2">
         <Phone size={14} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
-        <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+        <p className="text-2xs font-bold uppercase text-ink-3">
           Contacto de Emergencia
         </p>
       </div>

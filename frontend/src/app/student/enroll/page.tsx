@@ -361,7 +361,7 @@ function EnrollWizard(): React.ReactElement {
                 <b className="text-base font-bold text-ink">{choice.title}</b>
                 <p className="text-sm leading-relaxed text-ink-3">{choice.description}</p>
                 {selected && (
-                  <span className="h-badge mt-1 inline-flex items-center gap-1.5 self-start rounded-full bg-coal px-[11px] text-[11.5px] font-bold text-white">
+                  <span className="h-badge mt-1 inline-flex items-center gap-1.5 self-start rounded-full bg-coal px-[11px] text-2xs tracking-flat font-bold text-white">
                     <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
                     Seleccionado
                   </span>
@@ -694,7 +694,7 @@ function EnrollWizard(): React.ReactElement {
   ): React.ReactElement {
     return (
       <div key={label} className="flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0">
-        <span className="w-[150px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+        <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">
           {label}
         </span>
         <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
@@ -880,7 +880,7 @@ function EnrollWizard(): React.ReactElement {
                 surface (#F4F4F7, the body fill), not inside a card, and
                 `ink-3` only clears AA on `paper` — it measures 4.21:1 here.
                 Same reason `PageHeader` uses the companion token. */}
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong">
+            <p className="text-2xs font-bold uppercase text-ink-3-strong">
               Paso {currentIndex + 1} de {effectiveSteps.length}
             </p>
             <h1 className="mt-1 text-xl font-extrabold text-ink">
@@ -918,11 +918,11 @@ function EnrollWizard(): React.ReactElement {
                     dev-only (`isDemoQuickFillEnabled` gates it on NODE_ENV) so
                     it never reaches a visitor — but a token swap costs nothing
                     and the panel is unreadable to the developers who DO see it. */}
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-3-strong">
+                <p className="text-2xs font-semibold uppercase tracking-wider text-ink-3-strong">
                   Rellenar datos de prueba (solo desarrollo)
                 </p>
               </div>
-              <p className="mb-2 text-[10px] leading-relaxed text-ink-3-strong">
+              <p className="mb-2 text-2xs tracking-flat leading-relaxed text-ink-3-strong">
                 Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno.
               </p>
               <div className="flex flex-wrap gap-2">

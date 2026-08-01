@@ -168,7 +168,7 @@ function actionLabel(request: PaymentValidationRequest): string {
 /** The one label style the detail card uses, in both of its shapes. */
 function DetailLabel({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
-    <span className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">{children}</span>
+    <span className="text-2xs font-bold uppercase text-ink-3">{children}</span>
   );
 }
 
@@ -212,7 +212,7 @@ function ProofViewer({
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
           {request.proofFileName}
         </span>
-        <span className="shrink-0 text-[11.5px] text-ink-3">
+        <span className="shrink-0 text-2xs tracking-flat text-ink-3">
           {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
         </span>
       </div>
@@ -1010,7 +1010,7 @@ export default function PaymentsPage(): React.ReactElement {
                       {renderBatchCheckbox(req)}
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-ink">{req.studentName}</p>
-                        <p className="truncate text-[11.5px] text-ink-3">{payerLabel(req)}</p>
+                        <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
@@ -1221,7 +1221,7 @@ export default function PaymentsPage(): React.ReactElement {
                         is what fixes the dates. Pre-filled from the request,
                         so leaving it alone approves exactly what was asked. */}
                     <fieldset className="rounded-ctl border border-line bg-canvas p-3">
-                      <legend className="px-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+                      <legend className="px-1 text-2xs font-bold uppercase text-ink-3">
                         Período de vigencia
                       </legend>
                       <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
@@ -1305,7 +1305,7 @@ export default function PaymentsPage(): React.ReactElement {
                     </p>
 
                     <fieldset className="flex flex-col gap-2">
-                      <legend className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+                      <legend className="mb-1 text-2xs font-bold uppercase text-ink-3">
                         Motivo <span className="text-cata-red">*</span>
                       </legend>
                       {REJECTION_REASONS.map((reason) => (
@@ -1340,7 +1340,7 @@ export default function PaymentsPage(): React.ReactElement {
                     </fieldset>
 
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+                      <span className="text-2xs font-bold uppercase text-ink-3">
                         Nota para el responsable (opcional)
                       </span>
                       <textarea

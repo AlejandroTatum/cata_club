@@ -107,7 +107,7 @@ export interface AttendanceFiltersProps {
 }
 
 const FIELD_LABEL =
-  "text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3";
+  "text-2xs font-bold uppercase text-ink-3";
 const FIELD_CONTROL =
   "h-ctl rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-ink-3";
 

@@ -60,7 +60,7 @@ export default function PaymentBand({ situation, action }: PaymentBandProps): Re
           {/* 60%, not the 45% the prototype uses for muted white: this line is
               9.5px and carries the figure's unit, which is the half of the
               pair that says what the number counts. */}
-          <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-white/60">
+          <span className="text-2xs font-bold uppercase text-white/60">
             {figure.unit}
           </span>
         </p>

@@ -117,7 +117,7 @@ function AttendanceRecap({
             below two profiles), so this kicker was the only place that could
             name whose record this is — and it said "Su asistencia" to a reader
             who does not train here. */}
-        <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+        <p className="mb-1 text-2xs font-bold uppercase text-ink-3">
           {studentName ? `Asistencia de ${studentName}` : "Su asistencia"}
         </p>
         <h2 id="attendance-recap-title" className="text-base font-bold tracking-tight text-ink">
@@ -165,7 +165,7 @@ function AttendanceRecap({
               index % 2 === 0 ? "border-r border-line" : null,
             )}
           >
-            <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong">
+            <p className="flex items-center gap-1.5 text-2xs font-bold uppercase text-ink-3-strong">
               <span aria-hidden="true" className={cn("h-1.5 w-1.5 flex-none rounded-full", DOT_CLASS[estado])} />
               {getAttendanceLabel(estado)}
             </p>
@@ -229,7 +229,7 @@ function SessionList({
               key={`${session.fecha}-${session.horario}`}
               className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-5 py-2 last:border-b-0"
             >
-              <span className="w-[92px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] tabular-nums text-ink-3">
+              <span className="w-[92px] flex-none text-2xs font-bold uppercase tabular-nums text-ink-3">
                 {formatDate(session.fecha)}
               </span>
               <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{session.horario}</span>

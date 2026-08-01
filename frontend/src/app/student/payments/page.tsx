@@ -121,7 +121,7 @@ const FIELD_CLASSES =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3.5 text-sm text-ink " +
   "placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-45";
 
-const FIELD_LABEL_CLASSES = "text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3";
+const FIELD_LABEL_CLASSES = "text-2xs font-bold uppercase text-ink-3";
 
 /** Parse an ISO date at local noon — the same anchoring `format-utils` uses, for the same reason. */
 function fromIsoDate(iso: string): Date {
@@ -174,7 +174,7 @@ function MembershipCard({
           data that already speaks for itself. */}
       <div className="px-5 py-[18px]">
         <div className="mb-2 flex flex-wrap items-center gap-2.5">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+          <p className="text-2xs font-bold uppercase text-ink-3">
             {studentName ? `Membresía de ${studentName}` : "Su membresía"}
           </p>
           <Badge tone={state.tone}>{state.label}</Badge>
@@ -199,7 +199,7 @@ function MembershipCard({
         <dl className="flex flex-wrap gap-x-8 gap-y-3 border-t border-line bg-sunken px-5 py-3.5">
           {facts.map((fact) => (
             <div key={fact.label}>
-              <dt className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong">
+              <dt className="text-2xs font-bold uppercase text-ink-3-strong">
                 {fact.label}
               </dt>
               <dd className="mt-0.5 text-sm font-bold tabular-nums text-ink">{fact.value}</dd>
@@ -352,7 +352,7 @@ function HowToPayStep({
     <li className="flex gap-3 border-b border-line px-5 py-3.5 last:border-b-0">
       <span
         aria-hidden="true"
-        className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-coal text-[11.5px] font-bold tabular-nums text-white"
+        className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-coal text-2xs tracking-flat font-bold tabular-nums text-white"
       >
         {index}
       </span>
@@ -619,7 +619,7 @@ function RenewPaymentForm({
 
       {/* The consequence of the amount, stated before the reader commits to it. */}
       <div className="rounded-ctl bg-sunken px-3.5 py-3">
-        <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong">
+        <p className="text-2xs font-bold uppercase text-ink-3-strong">
           Período que cubre
         </p>
         <p className="mt-1 text-sm font-bold tabular-nums text-ink">
@@ -689,7 +689,7 @@ function RenewPaymentForm({
            screen and still editable above it. A modal would have dimmed
            exactly the numbers the reader is being asked to check. */
         <div data-testid="renew-confirm" className="rounded-ctl border border-line-2 bg-sunken px-4 py-4">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong">
+          <p className="text-2xs font-bold uppercase text-ink-3-strong">
             Confirme antes de registrar
           </p>
           <p id="renew-confirm-summary" className="mt-1.5 max-w-[68ch] text-sm leading-relaxed text-ink">
@@ -796,7 +796,7 @@ function PagoRow({
             the meta line. */}
         {pago.estadoPago === "RECHAZADO" && pago.motivoRechazo && (
           <div className="mt-2 rounded-ctl bg-state-bad-bg px-3.5 py-2.5">
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-state-bad">
+            <p className="text-2xs font-bold uppercase text-state-bad">
               Motivo del rechazo
             </p>
             <p className="mt-0.5 text-sm text-ink-2">{pago.motivoRechazo}</p>

@@ -56,7 +56,7 @@ export default function StatCard({
     >
       <span
         className={cn(
-          "text-[10.5px] font-bold uppercase tracking-[0.1em]",
+          "text-2xs font-bold uppercase",
           hot ? "text-white/45" : "text-ink-3",
         )}
       >
@@ -73,7 +73,7 @@ export default function StatCard({
         {unit ? (
           <small
             className={cn(
-              "ml-[3px] text-sm font-semibold tracking-[-0.01em]",
+              "ml-[3px] text-sm font-semibold",
               hot ? "text-white/60" : "text-ink-3",
             )}
           >

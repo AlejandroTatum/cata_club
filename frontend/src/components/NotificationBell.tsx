@@ -73,7 +73,7 @@ export default function NotificationBell({
         <Bell size={16} strokeWidth={1.5} aria-hidden="true" />
         {unreadCount > 0 && (
           <span
-            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cata-red px-1 text-[10px] font-bold text-white"
+            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cata-red px-1 text-2xs tracking-flat font-bold text-white"
             aria-hidden="true"
           >
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -92,7 +92,7 @@ export default function NotificationBell({
           <div className="flex items-center justify-between px-2 py-1.5">
             <p className="text-xs font-bold uppercase tracking-wider text-cata-text/45">Notificaciones</p>
             {unreadCount > 0 && (
-              <span className="flex items-center gap-1 text-[11px] font-medium text-cata-red">
+              <span className="flex items-center gap-1 text-2xs tracking-flat font-medium text-cata-red">
                 <CheckCheck size={11} strokeWidth={1.5} aria-hidden="true" />
                 {unreadCount} sin leer
               </span>
@@ -127,7 +127,7 @@ export default function NotificationBell({
                       <p className="text-xs font-medium text-cata-text">{TIPO_LABELS[n.tipo]}</p>
                     </div>
                     <p className="mt-0.5 text-xs text-cata-text/65">{n.mensaje}</p>
-                    <p className="mt-1 text-[10px] text-cata-text/40">{formatDateTime(n.fechaCreacion)}</p>
+                    <p className="mt-1 text-2xs tracking-flat text-cata-text/40">{formatDateTime(n.fechaCreacion)}</p>
                   </button>
                 </li>
               ))}

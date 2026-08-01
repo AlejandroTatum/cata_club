@@ -106,10 +106,10 @@ const MOBILE_TABS: { href: string; label: string }[] = [
   { href: "/payments", label: "Pagos" },
 ];
 
-/** `.phone .tabs2 a` — 10px label under a 19px icon, ≥44px of touch target. */
+/** `.phone .tabs2 a` — `2xs` label under a 19px icon, ≥44px of touch target. */
 const TAB_CLASSES =
   "flex min-h-[44px] flex-1 flex-col items-center justify-center gap-[3px] rounded-lg " +
-  "text-[10px] font-semibold transition-colors";
+  "text-2xs tracking-flat font-semibold transition-colors";
 
 /**
  * Track whether the viewport is at/above `lg`.
@@ -400,7 +400,7 @@ export default function AppShell({
               {/* 50%, not the spec's 42%: white at 0.42 over `coal` composites
                   to 4.10:1, under AA. At 0.50 it measures 5.36:1 and still
                   reads as the quieter second line under the club name. */}
-              <span className="mt-px block truncate text-[9.5px] font-bold uppercase tracking-[0.12em] text-white/50">
+              <span className="mt-px block truncate text-2xs font-bold uppercase text-white/50">
                 {getAreaLabel(role)}
               </span>
             </span>
@@ -473,7 +473,7 @@ export default function AppShell({
                 {showBadge && (
                   // `.nav-i .cnt` — count is already in the accessible name above.
                   <span
-                    className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-cata-red px-1.5 text-[10.5px] font-bold text-white"
+                    className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-cata-red px-1.5 text-2xs tracking-flat font-bold text-white"
                     aria-hidden="true"
                   >
                     {badge}
@@ -570,7 +570,7 @@ export default function AppShell({
                   collapsed ? "lg:justify-center lg:px-0" : ""
                 }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cata-red/[0.28] text-[11px] font-bold">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cata-red/[0.28] text-2xs tracking-flat font-bold">
                   {getUserInitials(session.user.name)}
                 </span>
                 <span className={`min-w-0 flex-1 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
@@ -580,7 +580,7 @@ export default function AppShell({
                   {/* Same correction as the brand's area label: the user card
                       sits on `bg-white/[0.06]` over `coal` (#212124), where
                       white at 0.45 is 4.35:1. At 0.50 it measures 5.04:1. */}
-                  <span className="block truncate text-[11px] text-white/50">
+                  <span className="block truncate text-2xs tracking-flat text-white/50">
                     {getRoleLabel(session.user.role)}
                   </span>
                 </span>
@@ -655,7 +655,7 @@ export default function AppShell({
           >
             <Search size={15} strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Buscar una sección…</span>
-            <kbd className="ml-1 hidden rounded-[5px] border border-line-2 px-[5px] py-0.5 text-[10px] font-bold text-ink-3 sm:inline">
+            <kbd className="ml-1 hidden rounded-[5px] border border-line-2 px-[5px] py-0.5 text-2xs tracking-flat font-bold text-ink-3 sm:inline">
               Ctrl K
             </kbd>
           </button>
@@ -722,7 +722,7 @@ export default function AppShell({
                     />
                     {showBadge && (
                       <span
-                        className="absolute -right-2 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cata-red px-1 text-[9px] font-bold text-white"
+                        className="absolute -right-2 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cata-red px-1 text-2xs tracking-flat font-bold text-white"
                         aria-hidden="true"
                       >
                         {badge}
@@ -797,7 +797,7 @@ export default function AppShell({
               <button
                 type="button"
                 onClick={(): void => setPaletteOpen(false)}
-                className="shrink-0 rounded-md border border-line-2 px-1.5 py-0.5 text-[10px] font-bold text-ink-3"
+                className="shrink-0 rounded-md border border-line-2 px-1.5 py-0.5 text-2xs tracking-flat font-bold text-ink-3"
               >
                 ESC
               </button>

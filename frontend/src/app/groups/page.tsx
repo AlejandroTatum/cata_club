@@ -151,7 +151,7 @@ const ROW_COLUMNS =
   "xl:items-center xl:gap-x-5";
 
 /** `.tbl thead th` typography — the header strip and the stacked cell labels. */
-const CELL_LABEL = "text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong";
+const CELL_LABEL = "text-2xs font-bold uppercase text-ink-3-strong";
 
 /**
  * A cell's own label. Visible below `xl`, where the stacked row has no header
@@ -188,7 +188,7 @@ function DiaTrack({ track, dias }: { track: string[]; dias: string[] }): React.R
             data-testid="dia-marker"
             data-dia={dia}
             data-active={activo ? "true" : "false"}
-            className={`h-badge inline-flex min-w-[38px] items-center justify-center rounded-full px-2 text-[11.5px] font-bold ${
+            className={`h-badge inline-flex min-w-[38px] items-center justify-center rounded-full px-2 text-2xs tracking-flat font-bold ${
               activo ? "bg-coal text-white" : "border border-dashed border-line-2 text-ink-3"
             }`}
           >
@@ -942,7 +942,7 @@ export default function GroupsPage(): React.ReactElement {
         ) : (
           alumnosPorHorario.length > 0 && (
             <div className="border-t border-line pt-4">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-cata-text/40">
+              <p className="mb-2 text-2xs font-medium uppercase tracking-wider text-cata-text/40">
                 Alumnos asignados ({alumnosPorHorario.length})
               </p>
               <div className="space-y-2">

@@ -79,7 +79,7 @@ function levelTagLabel(profile: StudentProfileSummary): string | null {
 function CarnetFact({ label, value }: { label: string; value: string }): React.ReactElement {
   return (
     <div className="min-w-0">
-      <span className="mb-[3px] block text-[10px] font-semibold uppercase leading-[1.2] tracking-[0.1em] text-white/60">
+      <span className="mb-[3px] block text-2xs font-semibold uppercase leading-tight text-white/60">
         {label}
       </span>
       <b className="block text-sm font-bold leading-tight tabular-nums">{value}</b>
@@ -148,7 +148,7 @@ function Carnet({
         </span>
         <div>
           <b className="block text-xs font-bold leading-tight">Cata Club</b>
-          <span className="block text-[10px] uppercase leading-[1.3] tracking-[0.12em] text-white/60">Tenis de mesa</span>
+          <span className="block text-2xs uppercase leading-tight text-white/60">Tenis de mesa</span>
         </div>
       </div>
 
@@ -163,19 +163,19 @@ function Carnet({
 
       <div className="relative z-10 mt-2.5 flex flex-wrap gap-2">
         {level !== null ? (
-          <span className="h-badge inline-flex items-center rounded-full bg-l9 px-[11px] text-[11.5px] font-bold text-ink">
+          <span className="h-badge inline-flex items-center rounded-full bg-l9 px-[11px] text-2xs tracking-flat font-bold text-ink">
             {level}
           </span>
         ) : (
-          <span className="h-badge inline-flex items-center rounded-full bg-white/[0.11] px-[11px] text-[11.5px] font-bold text-white">
+          <span className="h-badge inline-flex items-center rounded-full bg-white/[0.11] px-[11px] text-2xs tracking-flat font-bold text-white">
             Sin nivel asignado
           </span>
         )}
         <span
           className={
             membership.active
-              ? "h-badge inline-flex items-center gap-1.5 rounded-full bg-state-ok/20 px-[11px] text-[11.5px] font-bold text-[#7BE8A4]"
-              : "h-badge inline-flex items-center gap-1.5 rounded-full bg-white/[0.11] px-[11px] text-[11.5px] font-bold text-white"
+              ? "h-badge inline-flex items-center gap-1.5 rounded-full bg-state-ok/20 px-[11px] text-2xs tracking-flat font-bold text-[#7BE8A4]"
+              : "h-badge inline-flex items-center gap-1.5 rounded-full bg-white/[0.11] px-[11px] text-2xs tracking-flat font-bold text-white"
           }
         >
           <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-current" />
@@ -260,7 +260,7 @@ function TrainingRow({ session, first }: { session: UpcomingTraining; first: boo
         <p className="flex flex-wrap items-center gap-2 text-base font-bold tracking-tight text-ink">
           {session.diaLabel}
           {session.isToday && (
-            <span className="h-badge inline-flex items-center gap-1.5 rounded-full bg-coal px-[11px] text-[11.5px] font-bold text-white">
+            <span className="h-badge inline-flex items-center gap-1.5 rounded-full bg-coal px-[11px] text-2xs tracking-flat font-bold text-white">
               <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
               Hoy
             </span>
@@ -678,7 +678,7 @@ function ActivePortalView({
                     <User size={18} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3">
+                    <span className="block text-2xs font-bold uppercase text-ink-3">
                       Su representante
                     </span>
                     <span className="block text-sm font-semibold text-ink">

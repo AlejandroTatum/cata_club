@@ -304,7 +304,7 @@ export default function AuthShell({
           className={`row-start-2 mx-auto flex w-full flex-col gap-3.5 rounded-[18px] border border-line bg-paper px-7 py-[30px] shadow-[0_12px_44px_rgba(0,0,0,0.07)] ${CARD_WIDTH}`}
         >
           {/* The red eyebrow — 10px/700, `letter-spacing:2px`, uppercase. */}
-          <p className="text-[10px] font-bold uppercase tracking-caps-wide text-cata-red">
+          <p className="text-2xs font-bold uppercase tracking-caps-wide text-cata-red">
             Panel de gestión
           </p>
           <h1 className="text-xl font-extrabold text-ink">{title}</h1>
@@ -324,7 +324,7 @@ export default function AuthShell({
                token exists for exactly this case (see `tailwind.config.ts`)
                and reads 4.86:1 without promoting the small print to body ink. */
             <p
-              className={`mx-auto mt-4 text-center text-[11.5px] leading-[1.5] text-ink-3-strong ${CARD_WIDTH}`}
+              className={`mx-auto mt-4 text-center text-2xs tracking-flat text-ink-3-strong ${CARD_WIDTH}`}
             >
               {note}
             </p>

@@ -389,7 +389,7 @@ function ReportsContent(): React.ReactElement {
               <b className="text-base text-ink">{item.title}</b>
               <p className="text-sm text-ink-3">{item.description}</p>
               {selected ? (
-                <span className="h-badge mt-1 inline-flex items-center gap-1.5 rounded-full bg-coal px-[11px] text-[11.5px] font-bold text-white">
+                <span className="h-badge mt-1 inline-flex items-center gap-1.5 rounded-full bg-coal px-[11px] text-2xs tracking-flat font-bold text-white">
                   <span
                     data-testid="preset-ball-dot"
                     aria-hidden="true"
@@ -406,7 +406,7 @@ function ReportsContent(): React.ReactElement {
       {/* Range + the single preset-specific filter + Generar PDF. */}
       <div className="card mb-3.5 flex flex-wrap items-end gap-3.5 p-[17px_18px]">
         <div className="flex min-w-[150px] flex-col gap-1.5">
-          <label htmlFor="fechaInicio" className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+          <label htmlFor="fechaInicio" className="text-2xs font-bold uppercase text-ink-3">
             Desde
           </label>
           <input
@@ -418,7 +418,7 @@ function ReportsContent(): React.ReactElement {
           />
         </div>
         <div className="flex min-w-[150px] flex-col gap-1.5">
-          <label htmlFor="fechaFin" className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+          <label htmlFor="fechaFin" className="text-2xs font-bold uppercase text-ink-3">
             Hasta
           </label>
           <input
@@ -432,7 +432,7 @@ function ReportsContent(): React.ReactElement {
 
         {preset === "asistencia" && (
           <div className="flex min-w-[150px] flex-col gap-1.5">
-            <label htmlFor="horarioId" className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+            <label htmlFor="horarioId" className="text-2xs font-bold uppercase text-ink-3">
               Horario
             </label>
             <select
@@ -453,7 +453,7 @@ function ReportsContent(): React.ReactElement {
 
         {preset === "pagos" && (
           <div className="flex min-w-[150px] flex-col gap-1.5">
-            <label htmlFor="pagosEstado" className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+            <label htmlFor="pagosEstado" className="text-2xs font-bold uppercase text-ink-3">
               Estado
             </label>
             <select
@@ -580,7 +580,7 @@ function calcAge(fechaNacimiento: string): number {
   return age;
 }
 
-const TH = "h-thead whitespace-nowrap border-b border-line bg-[#FAFAFB] px-5 text-left text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3";
+const TH = "h-thead whitespace-nowrap border-b border-line bg-[#FAFAFB] px-5 text-left text-2xs font-bold uppercase text-ink-3";
 const TD = "border-b border-line px-5 py-3 text-sm text-ink-2";
 
 function PersonaPreview({
