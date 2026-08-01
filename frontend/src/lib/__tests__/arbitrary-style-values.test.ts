@@ -27,7 +27,10 @@
  *
  * ## What counts as a violation
  *
- * The six axes below, and only those. Arbitrary COLOURS (`text-[#B9B9C1]`) are
+ * The seven axes below, and only those. Six of them catch a value written
+ * between brackets; `weight` catches a factory class by name, because the
+ * weight scale is the one part of the type system that drifts without ever
+ * writing an arbitrary value. Arbitrary COLOURS (`text-[#B9B9C1]`) are
  * deliberately out of scope: `color-contrast.test.ts` owns the palette, and
  * folding two rules into one guard makes both harder to shrink.
  */
@@ -129,6 +132,18 @@ export const AXES: Record<Axis, AxisRule> = {
     pattern: /\btracking-\[([^\]\s]+)\]/g,
     scale: TRACKING_SCALE,
     advice: "use a step of the `tracking-*` scale",
+  },
+  weight: {
+    spell: (v) => `font-${v}`,
+    // The only axis matched by NAME rather than by brackets. Weights are
+    // factory utilities, so nothing here is arbitrary in the syntactic sense
+    // the other six rules look for — and that is exactly why the weight scale
+    // was the one axis of the type system that drifted without the lock
+    // noticing. `font-sans` and `font-mono` are family, not weight, and the
+    // alternation leaves them out on purpose.
+    pattern: /\bfont-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)\b/g,
+    advice:
+      "use `font-semibold`, `font-bold` or `font-extrabold` — `font-normal` only to undo an inherited weight",
   },
   icon: {
     spell: (v) => `size={${v}}`,
@@ -298,12 +313,26 @@ describe("the detector itself", () => {
     const axes = [
       'className="leading-[1.99]"',
       'className="tracking-[0.37em]"',
+      'className="font-medium"',
       'className="shadow-[0_0_0_9px_#123456]"',
       'className="min-[977px]:flex"',
       'import { X } from "lucide-react";\n<X size={99} />',
     ];
 
-    expect(axes.map((code) => findViolations("x.tsx", code).length)).toEqual([1, 1, 1, 1, 1]);
+    expect(axes.map((code) => findViolations("x.tsx", code).length)).toEqual([1, 1, 1, 1, 1, 1]);
+  });
+
+  it("reads the weight scale as a closed set, not as a bracket", () => {
+    // The four the product may write stay quiet; `font-sans` is a family and
+    // belongs to no axis at all.
+    const allowed = ["font-normal", "font-semibold", "font-bold", "font-extrabold", "font-sans"];
+    expect(allowed.flatMap((c) => findViolations("x.tsx", `className="${c}"`))).toEqual([]);
+
+    // `medium` is the weight this chain retired, and `black` one it never had.
+    const [violation] = findViolations("app/x.tsx", 'className="text-sm font-black"');
+    expect(violation.value).toBe("black");
+    expect(violation.message).toContain("font-black");
+    expect(violation.message).toContain("font-semibold");
   });
 
   it("reads `size` as an icon size only where lucide is imported", () => {

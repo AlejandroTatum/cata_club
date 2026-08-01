@@ -18,11 +18,22 @@
  * prevent — if a genuinely new value is unavoidable, it gets a name in
  * `tailwind.config.ts` first and stops being arbitrary.
  *
+ * `weight` is the one exception, and it is a different kind of list: not debt
+ * that shrinks to nothing, but the closed set of `font-*` weights the product
+ * may write. It is documented on its own entry below.
+ *
  * Full protocol: `docs/ux/candado-valores-arbitrarios.md`.
  */
 
-/** The six axes the lock watches. */
-export type Axis = "typography" | "leading" | "tracking" | "icon" | "shadow" | "breakpoint";
+/** The seven axes the lock watches. */
+export type Axis =
+  | "typography"
+  | "leading"
+  | "tracking"
+  | "weight"
+  | "icon"
+  | "shadow"
+  | "breakpoint";
 
 /**
  * Tolerated values per axis, spelled exactly as they appear in the code: the
@@ -106,6 +117,37 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
    * what `sm` carries and was dropped, like the `-0.015em` cluster before it.
    */
   tracking: [],
+
+  /**
+   * `font-…`. The ONE axis of this file that is not measured debt.
+   *
+   * The other six list values that already existed and that each migration
+   * deletes until the list is empty. This one lists the weights the product
+   * is allowed to write, and it is meant to stay exactly this long: Tailwind
+   * ships nine weight classes as factory utilities, so there is no arbitrary
+   * value to catch — the drift is writing a tenth of a scale that only has
+   * four rungs.
+   *
+   * `_sistema.css` declares `font-weight` fifty-one times and spends it on
+   * five values, but not evenly: 700 thirty-two times, 600 twenty, 800
+   * sixteen — and 500 and 400 exactly once each. `500` is `.nav-i` (:140),
+   * whose active state is the only place in the system where the weight
+   * carries meaning, and it carries it alongside four louder channels. `400`
+   * is `.hint` (:167).
+   *
+   * So `medium` had one line of authority and ninety-one call sites. It is
+   * gone. `extrabold` has sixteen — every headline, every stat figure, every
+   * hero number — and it stays.
+   *
+   * `normal` stays too, and is not a fourth rung: all seven call sites undo
+   * an inherited weight (a note inside a `font-semibold` row, the toast's
+   * supporting line inside a `font-semibold` fill), which is what 400 does
+   * in `.hint` as well.
+   *
+   * The five that are absent — `thin`, `extralight`, `light`, `medium`,
+   * `black` — have never had a call site the system asked for.
+   */
+  weight: ["normal", "semibold", "bold", "extrabold"],
 
   /** `size={…}` on a lucide icon. Fourteen sizes, ten of them between 10 and 21. */
   icon: [
