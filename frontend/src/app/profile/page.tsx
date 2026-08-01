@@ -502,7 +502,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       >
         <div className="flex min-w-0 flex-1 items-center gap-[18px]">
         <div className="relative flex-none">
-          <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-coal text-2xl font-extrabold text-ball">
+          <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-coal text-[24px] leading-8 font-extrabold text-ball">
             {currentFotoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset
               <img
@@ -537,7 +537,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           />
         </div>
         <div className="min-w-0">
-          <p className="text-xl font-bold tracking-[-0.02em] text-ink">{fullName}</p>
+          <p className="text-lg leading-7 font-bold tracking-[-0.02em] text-ink">{fullName}</p>
           <p className="mt-0.5 text-[13px] text-ink-3">{correoDisplay}</p>
           {fotoError && (
             <p role="alert" className="mt-2 text-xs text-cata-red">

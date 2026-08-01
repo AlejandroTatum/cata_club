@@ -1004,7 +1004,7 @@ function MemberEditDialog({
                 <div className="min-w-0">
                   <h2
                     id={`edit-member-title-${account.id}`}
-                    className="truncate text-lg font-bold leading-tight text-cata-text"
+                    className="truncate text-[18px] font-bold leading-tight text-cata-text"
                   >
                     {account.nombres} {account.apellidos}
                   </h2>

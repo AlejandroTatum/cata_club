@@ -132,7 +132,7 @@ function InstitutionalHeader({ pathname }: InstitutionalHeaderProps): React.Reac
             />
           </div>
           <div className="flex flex-col">
-            <span className="text-lg font-bold leading-tight tracking-tight text-white">
+            <span className="text-[18px] font-bold leading-tight tracking-tight text-white">
               Cata Club
             </span>
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cata-red">
@@ -258,7 +258,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
     return (
       <header className="sticky top-0 z-50 border-b border-white/10 bg-cata-dark/95 backdrop-blur-md">
         <nav className="mx-auto flex max-w-8xl items-center justify-between px-4 py-3 sm:px-8 lg:px-12">
-          <div className="flex items-center gap-3 text-lg font-semibold tracking-tight text-white">
+          <div className="flex items-center gap-3 text-[18px] font-semibold tracking-tight text-white">
             <div className="h-8 w-8 animate-pulse rounded-lg bg-white/10" />
             <span className="hidden sm:inline">Cata Club</span>
           </div>
@@ -286,7 +286,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
         <Link
           href="/"
           aria-label="Cata Club"
-          className="flex items-center gap-3 text-lg font-semibold tracking-tight text-white"
+          className="flex items-center gap-3 text-[18px] font-semibold tracking-tight text-white"
         >
           <div className="relative h-8 w-8 overflow-hidden rounded-lg">
             <Image
