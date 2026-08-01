@@ -6,11 +6,11 @@
  * seeded backend), then covers two concerns added across 9 pages:
  *
  * 1. Getting back out of a screen is always a real next/link `<a href>` to a
- *    fixed parent route — never router.back(). On /members and /ranking that
- *    is still the shared BackLink (src/components/BackLink.tsx). /payments
- *    dropped its in-page BackLink in the redesign — a top-level destination
- *    is reached from the sidebar and left the same way — so there the same
- *    guarantee is checked on the sidebar's own "Panel de Control" link.
+ *    fixed parent route — never router.back(). Admin top-level destinations
+ *    (/members, /ranking, /payments) dropped their in-page BackLink — they
+ *    are reached from the sidebar and left the same way — so the guarantee
+ *    is checked on the sidebar's own "Panel de Control" link. The trainer
+ *    flow still renders the shared BackLink (src/components/BackLink.tsx).
  * 2. useToast() (src/contexts/ToastContext.tsx) surfaces a visible toast
  *    after a mutating action — covered here via /payments' reject flow
  *    (error path, since it needs no extra setup beyond one mocked request).
@@ -103,33 +103,37 @@ async function loginAsAdmin(page: Page): Promise<void> {
 }
 
 test.describe("Back navigation + toasts", () => {
-  test("members: BackLink is a real link to /dashboard, not router.back()", async ({ page }) => {
+  test("members: the way back to /dashboard is a real sidebar link, not router.back()", async ({ page }) => {
     await loginAsAdmin(page);
     await page.route("**/api/members", (route) =>
       fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
     );
 
     await page.goto("/members");
-    const back = page.getByRole("link", { name: /volver al panel/i });
-    await expect(back).toBeVisible();
-    await expect(back).toHaveAttribute("href", "/dashboard");
+    const home = page
+      .getByRole("navigation", { name: "Navegación principal" })
+      .getByRole("link", { name: "Panel de Control", exact: true });
+    await expect(home).toBeVisible();
+    await expect(home).toHaveAttribute("href", "/dashboard");
 
-    await back.click();
+    await home.click();
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 
-  test("ranking (admin): BackLink -> /dashboard", async ({ page }) => {
+  test("ranking (admin): the way back to /dashboard is a real sidebar link", async ({ page }) => {
     await loginAsAdmin(page);
     await page.route("**/api/members", (route) =>
       fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
     );
 
     await page.goto("/ranking");
-    const back = page.getByRole("link", { name: /volver al panel/i });
-    await expect(back).toBeVisible();
-    await expect(back).toHaveAttribute("href", "/dashboard");
+    const home = page
+      .getByRole("navigation", { name: "Navegación principal" })
+      .getByRole("link", { name: "Panel de Control", exact: true });
+    await expect(home).toBeVisible();
+    await expect(home).toHaveAttribute("href", "/dashboard");
 
-    await back.click();
+    await home.click();
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 
