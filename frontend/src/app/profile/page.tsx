@@ -148,7 +148,7 @@ function DetailRow({
     // and stays right-aligned; above `sm` nothing about the row changes.
     <div className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-5 py-2.5 last:border-b-0">
       {label && (
-        <span className="w-[110px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3 sm:w-[150px]">
+        <span className="w-[110px] flex-none text-2xs font-bold uppercase text-ink-3 sm:w-[150px]">
           {label}
         </span>
       )}
@@ -218,7 +218,7 @@ function IdentityFact({
 }): React.ReactElement {
   return (
     <div className="min-w-0">
-      <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">{label}</p>
+      <p className="mb-1 text-2xs font-bold uppercase text-ink-3">{label}</p>
       <div className="flex items-center text-sm font-semibold text-ink">{children}</div>
     </div>
   );
@@ -790,7 +790,7 @@ function DependantRow({ profile }: { profile: StudentProfileSummary }): React.Re
 
   return (
     <DetailRow note={membership ? undefined : NO_MEMBERSHIP_FALLBACK}>
-      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-state-neutral-bg text-[10px] font-bold text-state-neutral">
+      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-state-neutral-bg text-2xs tracking-flat font-bold text-state-neutral">
         {personInitials(profile.nombres, profile.apellidos)}
       </span>
       {fullName}

@@ -1,9 +1,12 @@
 /**
  * No new arbitrary style values.
  *
- * The redesign shipped hundreds of hand-picked values — `text-[10.5px]`,
- * `tracking-[0.13em]`, `size={21}` — because the type and metric scale was
- * transcribed by eye instead of being read off a token. The migration issues
+ * The redesign shipped hundreds of hand-picked values — `size={21}`, an
+ * off-scale `min-[980px]` breakpoint, ten one-off elevations — because the
+ * type and metric scale was transcribed by eye instead of being read off a
+ * token. Every example here is deliberately drawn from an axis #29 does NOT
+ * retire: the typography examples this comment used to carry had to be
+ * rewritten by every link of the chain. The migration issues
  * (#29–#32) undo that. The problem is arithmetic: while three hundred uses are
  * being rewritten, use number three hundred and one lands in a PR the same
  * week and the count never falls.

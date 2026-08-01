@@ -29,7 +29,7 @@ export interface StepperProps {
 const PILL =
   "h-ctl-sm inline-flex items-center gap-[7px] rounded-full border px-[13px] text-xs font-semibold";
 const DISC =
-  "flex h-[18px] w-[18px] flex-none items-center justify-center rounded-full text-[10px] font-extrabold";
+  "flex h-[18px] w-[18px] flex-none items-center justify-center rounded-full text-2xs tracking-flat font-extrabold";
 
 export default function Stepper({
   steps,

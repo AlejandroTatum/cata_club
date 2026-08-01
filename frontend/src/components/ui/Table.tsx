@@ -81,7 +81,7 @@ export function TableHeaderCell({
       scope="col"
       className={cn(
         "h-thead whitespace-nowrap border-b border-line bg-sunken px-4",
-        "text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong",
+        "text-2xs font-bold uppercase text-ink-3-strong",
         align === "right" ? "text-right" : "text-left",
         className,
       )}
@@ -129,7 +129,7 @@ export function TableNameCell({ name, sub, className }: TableNameCellProps): Rea
   return (
     <TableCell className={className}>
       <span className="block text-sm font-semibold text-ink">{name}</span>
-      {sub ? <span className="mt-px block text-[11.5px] text-ink-3">{sub}</span> : null}
+      {sub ? <span className="mt-px block text-2xs tracking-flat text-ink-3">{sub}</span> : null}
     </TableCell>
   );
 }

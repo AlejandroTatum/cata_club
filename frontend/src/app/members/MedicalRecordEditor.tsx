@@ -116,7 +116,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
         <Stethoscope size={16} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
         Ficha médica
         {state.isNew && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-2xs tracking-flat font-medium text-blue-700">
             <Plus size={10} strokeWidth={2} aria-hidden="true" />
             Nueva
           </span>
@@ -153,7 +153,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
             placeholder="Ej: Asma, Diabetes"
             className="input-field w-full"
           />
-          <p className="mt-1 text-[10px] text-cata-text/45">
+          <p className="mt-1 text-2xs tracking-flat text-cata-text/45">
             Al guardar se reemplaza la lista completa. Dejar vacío borra todas las enfermedades.
           </p>
         </div>

@@ -210,7 +210,7 @@ export default function ManagedStudentPicker({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <label
         htmlFor={id}
-        className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-3-strong"
+        className="text-2xs font-bold uppercase text-ink-3-strong"
       >
         Estudiante
       </label>

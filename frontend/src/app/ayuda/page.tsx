@@ -51,16 +51,16 @@ export default function AyudaPage(): React.ReactElement {
             <table className="w-full min-w-[420px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-line">
-                  <th scope="col" className="pb-2 pr-4 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong">
+                  <th scope="col" className="pb-2 pr-4 text-2xs font-bold uppercase text-ink-3-strong">
                     Categoría
                   </th>
-                  <th scope="col" className="pb-2 pr-4 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong">
+                  <th scope="col" className="pb-2 pr-4 text-2xs font-bold uppercase text-ink-3-strong">
                     Para quién
                   </th>
-                  <th scope="col" className="pb-2 pr-4 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong">
+                  <th scope="col" className="pb-2 pr-4 text-2xs font-bold uppercase text-ink-3-strong">
                     Días
                   </th>
-                  <th scope="col" className="pb-2 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3-strong">
+                  <th scope="col" className="pb-2 text-2xs font-bold uppercase text-ink-3-strong">
                     Hora
                   </th>
                 </tr>

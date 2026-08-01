@@ -1036,7 +1036,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   {ATTENDANCE_LABELS[state]}
                 </Badge>
               ))}
-              <span className="h-badge inline-flex items-center rounded-full border border-dashed border-line-2 px-[11px] text-[11.5px] font-bold text-ink-3">
+              <span className="h-badge inline-flex items-center rounded-full border border-dashed border-line-2 px-[11px] text-2xs tracking-flat font-bold text-ink-3">
                 Sin revisar
               </span>
               <span className="text-xs text-ink-3">Toque la ficha para confirmar o cambiar</span>
@@ -1143,7 +1143,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                         >
                           <span
                             aria-hidden="true"
-                            className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-state-neutral-bg text-[10px] font-bold text-state-neutral"
+                            className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-state-neutral-bg text-2xs tracking-flat font-bold text-state-neutral"
                           >
                             {getUserInitials(student.name)}
                           </span>
@@ -1166,7 +1166,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               {stateLabel}
                             </Badge>
                           ) : (
-                            <span className="h-badge inline-flex flex-none items-center rounded-full border border-dashed border-line-2 px-[11px] text-[11.5px] font-bold text-ink-3">
+                            <span className="h-badge inline-flex flex-none items-center rounded-full border border-dashed border-line-2 px-[11px] text-2xs tracking-flat font-bold text-ink-3">
                               {stateLabel}
                             </span>
                           )}
@@ -1200,7 +1200,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                 onClick={() => handleDirectAttendanceSet(idx, state)}
                                 aria-checked={isActive}
                                 title={ATTENDANCE_LABELS[state]}
-                                className={`inline-flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-[10px] font-semibold leading-tight transition-colors ${
+                                className={`inline-flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-2xs tracking-flat font-semibold leading-tight transition-colors ${
                                   isActive
                                     ? `border-transparent ${getAttendanceBadgeTokens(state).badgeClass}`
                                     : "border-transparent text-ink-3 hover:bg-canvas hover:text-ink"
@@ -1248,7 +1248,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
         <dl className="overflow-hidden rounded-ctl border border-line">
           <div className="flex h-drow items-center gap-4 border-b border-line px-5">
-            <dt className="w-[160px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+            <dt className="w-[160px] flex-none text-2xs font-bold uppercase text-ink-3">
               Horario
             </dt>
             <dd className="flex-1 text-sm font-semibold text-ink">
@@ -1257,7 +1257,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             </dd>
           </div>
           <div className="flex min-h-drow items-center gap-4 px-5 py-3">
-            <dt className="w-[160px] flex-none text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-3">
+            <dt className="w-[160px] flex-none text-2xs font-bold uppercase text-ink-3">
               Resultado
             </dt>
             <dd className="flex flex-1 flex-wrap gap-2">

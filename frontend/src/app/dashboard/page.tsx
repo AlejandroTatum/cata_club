@@ -249,14 +249,14 @@ export default function DashboardPage(): React.ReactElement {
                   <li key={event.id} className="flex items-center gap-3 px-[18px] py-3">
                     <span
                       aria-hidden="true"
-                      className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-canvas text-[11.5px] font-bold text-ink-2"
+                      className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-canvas text-2xs tracking-flat font-bold text-ink-2"
                     >
                       {event.initials}
                     </span>
                     <span className="min-w-0 flex-1 text-sm text-ink-2">
                       <b className="font-semibold text-ink">{event.subject}</b> {event.detail}
                     </span>
-                    <span className="flex-none text-[11.5px] text-ink-3">
+                    <span className="flex-none text-2xs tracking-flat text-ink-3">
                       {formatHumanDate(event.at)}
                     </span>
                   </li>

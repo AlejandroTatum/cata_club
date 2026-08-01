@@ -222,7 +222,7 @@ export default function ChatWidget({
         </span>
         <span className="min-w-0 flex-1 leading-tight">
           <span className="block truncate text-sm font-bold">{BOT_NAME}</span>
-          <span className="block truncate text-[11px] text-white/55">Responde en segundos</span>
+          <span className="block truncate text-2xs tracking-flat text-white/55">Responde en segundos</span>
         </span>
         <button
           type="button"

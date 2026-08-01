@@ -34,7 +34,7 @@ export type Axis = "typography" | "leading" | "tracking" | "icon" | "shadow" | "
  */
 export const ALLOWLIST: Record<Axis, readonly string[]> = {
   /**
-   * `text-[…]`. Six hand-picked sizes left of the original twenty-five.
+   * `text-[…]`. Empty. The twenty-five hand-picked sizes are all gone.
    *
    * The display band — 18 · 20 · 24 · 26 · 27 · 30 · 32 · 40 · 42 · 46 · 56 —
    * went first: every call site at 18px and above names a step.
@@ -46,13 +46,14 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
    * The dense band followed: `12` and `12.5` collapsed into `xs` (12.5px)
    * across 74 call sites — the single largest cluster of the inventory.
    *
-   * What remains is the 9–11.5px range, which is the micro band of the same
-   * migration issue.
+   * The micro band closed it: `9`, `9.5`, `10`, `10.5`, `11` and `11.5` all
+   * collapsed into `2xs` (10.5px) across 91 call sites. A step is now the only
+   * way to write a font size.
    */
-  typography: ["9px", "9.5px", "10px", "10.5px", "11px", "11.5px"],
+  typography: [],
 
   /**
-   * `leading-[…]`. Three ratios, none of which is a `leading-*` step.
+   * `leading-[…]`. Empty. Line-height travels with the size step.
    *
    * `1.12` and `1.15` retired with the display band: both were headline
    * line-heights, and `leading-crisp` (1.15) is the step that names them.
@@ -68,12 +69,16 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
    * answer is `leading-prose`, and `1.25` on the brand label is
    * `leading-tight`, a factory step that is exactly 1.25.
    *
-   * The three left all sit on micro-band call sites, `1.5` included.
+   * The last three went with the micro band. `1.2` and `1.3` are the two
+   * stacked labels of the member card, whose sibling value already rides
+   * `leading-tight` (1.25) — they now ride it too, within 0.13px of what they
+   * measured. `1.5` was the auth small print, 0.1 from the 1.4 that `2xs`
+   * carries, so it was dropped like the other sub-pixel overrides.
    */
-  leading: ["1.2", "1.3", "1.5"],
+  leading: [],
 
   /**
-   * `tracking-[…]`. Six values, all in `em`.
+   * `tracking-[…]`. Empty. Letter-spacing travels with the size step too.
    *
    * The three `px` trackings are gone — they were the ones that could not
    * scale with the type, and all three lived in `AuthShell.tsx`. Two were
@@ -92,8 +97,15 @@ export const ALLOWLIST: Record<Axis, readonly string[]> = {
    * `0.06em` retired with the dense band. Its single call site is the toast
    * action label, an uppercase run that would close up on the 0em `xs`
    * carries, so it names `tracking-wider` (0.05em) instead of being dropped.
+   *
+   * The micro band retired the last five. `0.1em`, `0.12em` and `0.13em` were
+   * forty-one uppercase micro-labels spread across 0.03em — the exact cluster
+   * `2xs`'s own 0.12em exists to end, so the class simply disappears from all
+   * of them. `0.2em` on the auth eyebrow does contradict the step and names
+   * `tracking-caps-wide`. `-0.01em` on the stat-card unit sat 0.005em from
+   * what `sm` carries and was dropped, like the `-0.015em` cluster before it.
    */
-  tracking: ["-0.01em", "0.1em", "0.12em", "0.13em", "0.2em"],
+  tracking: [],
 
   /** `size={…}` on a lucide icon. Fourteen sizes, ten of them between 10 and 21. */
   icon: [
