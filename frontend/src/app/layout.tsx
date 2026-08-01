@@ -38,9 +38,29 @@ export default function RootLayout({
           <ToastContainer />
           <AuthProviderWrapper>
             <Header hideOnLanding />
-            <main className="app-main mx-auto max-w-8xl px-4 py-10 sm:px-8 lg:px-12">
+            {/*
+             * A `<div>`, deliberately, and NOT a `<main>`.
+             *
+             * This element wraps every page in the product, and every page
+             * reaches the user through a shell that draws its own `<main>`
+             * where its content actually starts. When this one was also a
+             * landmark, each authenticated route shipped two regions called
+             * "principal", one inside the other — and the skip link pointed at
+             * the inner one, so the region a screen reader met first was not
+             * the one the keyboard jump used.
+             *
+             * What it does carry is real and stays: the max width and padding
+             * for the routes with no shell of their own. `globals.css:7-12`
+             * cancels both for `.landing-page`, `.auth-shell` and `.app-shell`,
+             * which is why those three never depended on this element for
+             * anything but the tag it used to be.
+             *
+             * See `lib/__tests__/main-landmark.test.ts` for the closed set of
+             * files allowed to declare the landmark.
+             */}
+            <div className="app-main mx-auto max-w-8xl px-4 py-10 sm:px-8 lg:px-12">
               {children}
-            </main>
+            </div>
             {/*
              * CATA-BOT, once, for every surface — public and authenticated.
              * `/api/chatbot` is public, and the questions it answers are asked

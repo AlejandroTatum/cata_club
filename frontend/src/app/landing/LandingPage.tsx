@@ -326,7 +326,18 @@ export default function LandingPage(): React.ReactElement {
     <div className="landing-page">
       <a className="landing-skip-link" href="#inicio">Saltar al contenido</a>
       <LandingMotion />
-      <Navbar /><Hero /><Stats /><MissionVision /><Values /><Motto /><Gallery /><Schedule /><Location /><Footer />
+      <Navbar />
+      {/*
+       * The landmark opens at `Hero`, which is what `#inicio` — the skip link's
+       * target — already points at, and closes before `Footer`. `Navbar` and
+       * `Footer` stay outside it: they are the page's own banner and
+       * contentinfo, and folding them into "principal" would make the skip link
+       * land inside the region it exists to skip past.
+       */}
+      <main>
+        <Hero /><Stats /><MissionVision /><Values /><Motto /><Gallery /><Schedule /><Location />
+      </main>
+      <Footer />
     </div>
   );
 }

@@ -805,7 +805,11 @@ function EnrollWizard(): React.ReactElement {
   // ---- Render ----
 
   return (
-    <>
+    // The public enrolment wizard reaches the user through no shell, so the
+    // landmark is declared here — around BOTH branches, so the confirmation
+    // screen is as much "principal" as the form it replaces. It used to borrow
+    // the root layout's, which is the wrapper that stopped being one.
+    <main>
       {confirmed ? (
         <div className="flex min-h-[75vh] items-center justify-center py-12">
           <div className="w-full max-w-lg text-center">
@@ -989,7 +993,7 @@ function EnrollWizard(): React.ReactElement {
 
         </div>
       )}
-    </>
+    </main>
   );
 }
 
