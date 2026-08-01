@@ -628,7 +628,35 @@ export default function AppShell({
       )}
 
       {/* `.main` */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/*
+       * THE CONTENT MEASURE.
+       *
+       * The authenticated app had no content max-width, and not by omission:
+       * the root layout declares one and `globals.css:7-12` cancels it for
+       * every route with a shell. Measured effective width was 1152px at a
+       * 1440 viewport, 1632px at 1920 and 2272px at 2560 — nothing stopped a
+       * table or a row of four stat tiles from stretching as far as the glass
+       * went, which is how a 116px-tall tile grew past 400px wide to hold a
+       * 32px number.
+       *
+       * `max-w-8xl` is 1408px, the token the root layout already used for the
+       * public pages, so the app is not inventing a second measure for the
+       * same product. It caps the column BESIDE the 236px rail, so at 1920 the
+       * page uses 1644 of 1920 and at 2560 it centres with the slack split
+       * either side — content stops growing, rather than the window stopping
+       * it.
+       *
+       * The cap sits here and not on `<main>` because the utility row above
+       * shares the content column's 26px edge on purpose (see its own note).
+       * Capping only the content would hang the search box and the bell
+       * outside the right edge of every card below them — the very defect that
+       * note records fixing.
+       *
+       * The Niveles ladder's own `max-w-[520px]` stays: capping a two-tile row
+       * so it reads as a pair is a different decision at a different scale,
+       * and it is documented where it is written.
+       */}
+      <div className="mx-auto flex w-full min-w-0 max-w-8xl flex-1 flex-col">
         {/*
          * `.topbar` — utility strip only; navigation lives in the sidebar.
          *

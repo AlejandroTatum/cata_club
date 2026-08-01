@@ -209,6 +209,37 @@ describe("AppShell", (): void => {
     expect(clipped).toEqual([]);
   });
 
+  it("caps the content measure, and puts the utility row on the same one", (): void => {
+    // The authenticated app had NO content max-width, and not by omission: the
+    // root layout declared one and `globals.css:7-12` cancelled it for every
+    // route with a shell. Measured effective width was 1152px at a 1440
+    // viewport, 1632px at 1920 and 2272px at 2560 — a row of four stat tiles
+    // stretching past 400px each to hold a 32px number.
+    //
+    // The cap wraps the utility row TOO, not just the page content. Those two
+    // columns share one 26px edge on purpose (see the note above the topbar):
+    // capping only the content would hang the search box and the bell outside
+    // the right edge of every card below them, which is the exact defect that
+    // note records being fixed.
+    const { container } = render(
+      <AppShell title="Dashboard">
+        <p>contenido</p>
+      </AppShell>,
+    );
+
+    const measure = container.querySelector(".max-w-8xl");
+    expect(measure).not.toBeNull();
+
+    const main = container.querySelector("main") as HTMLElement;
+    const search = screen.getByRole("button", { name: "Buscar secciones" });
+    expect(measure).toContainElement(main);
+    expect(measure).toContainElement(search);
+
+    // One measure, not two: a second cap somewhere inside would be a second
+    // answer to the same question.
+    expect(container.querySelectorAll(".max-w-8xl")).toHaveLength(1);
+  });
+
   it("derives nav links from the admin role and excludes Inicio", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
