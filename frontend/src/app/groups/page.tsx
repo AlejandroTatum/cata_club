@@ -999,6 +999,15 @@ export default function GroupsPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Horarios"
+        /*
+         * One card per categoría, and there are as many categorías as the club
+         * defines — five today. Like `/discounts` this list has no pager, so
+         * its canvas (508/640/820px) is a record count rather than a page size.
+         * The roster inside a card DOES paginate, and it was measured at this
+         * measure too: it fills the page at every viewport either way. See
+         * `CONTENT_MEASURE`.
+         */
+        measure="short"
         actions={
           <Button variant="dark" onClick={openCreateForm}>
             <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
