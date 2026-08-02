@@ -155,6 +155,22 @@ const ROW_COLUMNS =
 const CELL_LABEL = "text-2xs font-bold uppercase text-ink-3-strong";
 
 /**
+ * The four column names, declared ONCE.
+ *
+ * They used to be typed twice — in the header strip and again in each cell's
+ * `CellLabel` — which is how two of the four came to exist in only one of the
+ * two places. `Grupo` had a strip entry and no cell label, and the strip is
+ * `aria-hidden`, so the first column of every row went unnamed for assistive
+ * tech AT EVERY WIDTH: below `xl` there was no strip to read, and from `xl` up
+ * the strip is hidden from the accessibility tree on purpose. The action column
+ * had neither.
+ *
+ * One source, read by both, so the strip above and the labels below cannot say
+ * different things or forget each other.
+ */
+const COLUMNS = ["Grupo", "Horario", "Alumnos", "Acciones"] as const;
+
+/**
  * A cell's own label. Visible below `xl`, where the stacked row has no header
  * strip above it; from `xl` up it goes `sr-only` rather than `hidden`, because
  * the visible header strip is `aria-hidden` and a bare value with no label
@@ -1026,15 +1042,23 @@ export default function GroupsPage(): React.ReactElement {
           <div className="card overflow-hidden">
             {/* Column legend, once for the whole list instead of a repeated
                 micro-label inside each of the five rows. Hidden below `xl`,
-                where the rows stack and carry their own labels. */}
+                where the rows stack and carry their own labels.
+
+                `aria-hidden` is correct and stays: every cell below carries the
+                same label as an `sr-only` span, so announcing this strip too
+                would read each column name twice per row. What was wrong was
+                that only two of the four cells actually carried one — see
+                `COLUMNS`. */}
             <div
               className={`hidden h-thead border-b border-line bg-sunken px-5 ${CELL_LABEL} ${ROW_COLUMNS}`}
               aria-hidden="true"
             >
-              <span>Grupo</span>
-              <span>Horario</span>
-              <span>Alumnos</span>
-              <span />
+              {COLUMNS.map((column) => (
+                // The action column's name is for assistive tech only: a
+                // visible "Acciones" over two buttons that already say what
+                // they do is a label nobody reads.
+                <span key={column}>{column === "Acciones" ? "" : column}</span>
+              ))}
             </div>
 
             <ul className="divide-y divide-line">
@@ -1052,17 +1076,41 @@ export default function GroupsPage(): React.ReactElement {
                 const parciales = countInscriptosParciales(card.rows, personasPorHorario);
 
                 return (
-                  <li key={card.categoria} data-testid="horario-card" className="px-5 py-4">
+                  /*
+                   * A DISCLOSURE row, not a table row — which is why this list
+                   * is not `ui/Table` and that is a decision, not an omission.
+                   *
+                   * Each row holds a footnote line and, when expanded, a whole
+                   * edit form or student roster. A `<table>` carries those as
+                   * `colSpan` rows, which breaks the primitive's last-row border
+                   * rule and its `divide-y`; and `TableCell` fixes `h-row`,
+                   * which the stacked layout below `xl` has to override with a
+                   * competing `height` utility — the same specificity trap that
+                   * cost this repo two measured bugs in Fase 1.
+                   *
+                   * What WAS wrong here — a column with no accessible name, and
+                   * a row height invented with `py-*` — is fixed above and here.
+                   * The height is `min-h-drow`, the dense-row token every other
+                   * secondary list in the product already uses.
+                   */
+                  <li
+                    key={card.categoria}
+                    data-testid="horario-card"
+                    className="min-h-drow px-5 py-4"
+                  >
                     {/* Three shapes, one row: a stack on a phone, two columns
                         on the tablet/small-laptop band where the five tracks do
                         not fit but a single column wastes half the width, and
                         the full five-column row from `xl` up. */}
                     <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <b className="text-base text-ink">
-                          {categoriaLabel(card.categoria)}
-                        </b>
-                        {rangoEdad ? <Badge>{rangoEdad}</Badge> : null}
+                      <div className="min-w-0">
+                        <CellLabel>{COLUMNS[0]}</CellLabel>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <b className="text-base text-ink">
+                            {categoriaLabel(card.categoria)}
+                          </b>
+                          {rangoEdad ? <Badge>{rangoEdad}</Badge> : null}
+                        </div>
                       </div>
 
                       {/* Days and time, both derived from the rows that exist. A
@@ -1071,7 +1119,7 @@ export default function GroupsPage(): React.ReactElement {
                           + sábado" rather than being rounded to the norm — and the
                           track below it marks which días those are. */}
                       <div className="min-w-0">
-                        <CellLabel>Horario</CellLabel>
+                        <CellLabel>{COLUMNS[1]}</CellLabel>
                         <p className="text-sm text-ink-2">
                           {formatDiaSet(card.dias)} · {formatTime(card.horaInicio)} —{" "}
                           {formatTime(card.horaFin)}
@@ -1087,7 +1135,7 @@ export default function GroupsPage(): React.ReactElement {
                       <div className={`min-w-0 ${inscriptos === null ? "hidden xl:block" : ""}`}>
                         {inscriptos !== null && (
                           <>
-                            <CellLabel>Alumnos</CellLabel>
+                            <CellLabel>{COLUMNS[2]}</CellLabel>
                             <p className="text-base font-semibold text-ink">
                               {inscriptos} inscripto{inscriptos === 1 ? "" : "s"}
                             </p>
@@ -1096,6 +1144,7 @@ export default function GroupsPage(): React.ReactElement {
                       </div>
 
                       <div className="flex gap-2 md:col-span-2 md:justify-end xl:col-span-1 xl:justify-end">
+                        <span className="sr-only">{COLUMNS[3]}</span>
                         <Button
                           size="sm"
                           className="flex-1 md:flex-none"
