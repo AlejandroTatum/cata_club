@@ -75,7 +75,7 @@ import type { PerfilPropio, UserRole } from "@/types/domain";
 // "Sin nivel asignado" / "No disponible" sentences would read as values. The
 // level here is either a real level or the slot is dropped.
 import { personInitials, formatLevelName } from "@/app/student/student-utils";
-import { Badge, Button, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
+import { Badge, Button, ErrorState, LoadingState, PAGE_RAIL, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
 // Reused as-is (not duplicated) for consistency — this is the same
@@ -609,7 +609,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         </div>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+      <div className={PAGE_RAIL}>
       <div className="flex min-w-0 flex-col gap-5">
       {/* 2 — Datos personales, one datum per 56px row. */}
       <CardSection title="Datos personales" testId="profile-column-info">

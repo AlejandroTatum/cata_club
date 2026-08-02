@@ -52,7 +52,7 @@ import { fetchStudentPortal } from "@/services/api";
 import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api";
 import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
 import { formatDate } from "@/lib/format-utils";
-import { Badge, EmptyState, ErrorState, LoadingState, buttonClasses, cn } from "@/components/ui";
+import { Badge, EmptyState, ErrorState, LoadingState, PAGE_RAIL, buttonClasses, cn } from "@/components/ui";
 import { breakdownAttendance, firstNameOf, summarizeRecentAttendance } from "../student-utils";
 import type { AttendanceBreakdown } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
@@ -349,7 +349,7 @@ function AttendanceView({
           }
         />
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <div className={PAGE_RAIL}>
           <div className="flex min-w-0 flex-col gap-3">
             <SessionList profile={selectedProfile} studentName={studentName} />
 

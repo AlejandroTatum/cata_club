@@ -42,6 +42,7 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  PAGE_RAIL,
   STAT_GRID,
   StatCard,
 } from "@/components/ui";
@@ -255,10 +256,7 @@ export default function DashboardPage(): React.ReactElement {
           split used to depend on both cards having data, so the layout moved
           under the admin as records arrived.
         */}
-        <div
-          data-testid="dashboard-lower"
-          className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]"
-        >
+        <div data-testid="dashboard-lower" className={PAGE_RAIL}>
           <section data-testid="activity-feed" className="card overflow-hidden">
             {/* `ui/ActivityList`, not `ui/Table` and not loose markup.
                 A table row is the same fields in the same columns every time;

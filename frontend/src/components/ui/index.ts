@@ -26,6 +26,8 @@ export type { FilterGroupProps, FilterPanelProps } from "./FilterPanel";
 export { default as FilterPill } from "./FilterPill";
 export type { FilterPillProps } from "./FilterPill";
 
+export { PAGE_RAIL } from "./layout";
+
 export { default as LoadingState } from "./LoadingState";
 export type { LoadingStateProps } from "./LoadingState";
 
