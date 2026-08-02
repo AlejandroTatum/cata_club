@@ -193,22 +193,20 @@ export default function TrainerPage(): React.ReactElement {
                 </Link>
               </div>
             ) : (
-              <div className="card">
-                <EmptyState
-                  icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                  title={
-                    todaySchedules.length > 0
-                      ? "Ya no quedan sesiones hoy"
-                      : "Hoy no tienes sesiones"
-                  }
-                  description="Puedes pasar lista de cualquier horario disponible desde Pasar lista."
-                  action={
-                    <Link href="/trainer/attendance" className={buttonClasses("primary")}>
-                      Pasar lista
-                    </Link>
-                  }
-                />
-              </div>
+              <EmptyState
+                icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                title={
+                  todaySchedules.length > 0
+                    ? "Ya no quedan sesiones hoy"
+                    : "Hoy no tienes sesiones"
+                }
+                description="Puedes pasar lista de cualquier horario disponible desde Pasar lista."
+                action={
+                  <Link href="/trainer/attendance" className={buttonClasses("primary")}>
+                    Pasar lista
+                  </Link>
+                }
+              />
             )}
 
             {/* --- What comes after it. One line, not a second list. --- */}
@@ -287,7 +285,7 @@ export default function TrainerPage(): React.ReactElement {
                   )}
                 </div>
               ) : (
-                <EmptyState
+                <EmptyState surface="inset"
                   icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                   title="Todavía no registraste ninguna lista este mes"
                   description="En cuanto pases lista, el resumen de la sesión aparece aquí."

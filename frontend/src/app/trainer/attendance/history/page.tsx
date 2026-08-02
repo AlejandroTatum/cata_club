@@ -150,7 +150,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
           {!loading && !error && (
             <div className="card overflow-hidden">
               {sessions.length === 0 ? (
-                <EmptyState
+                <EmptyState surface="inset"
                   icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                   title="No hay listas en este período"
                   description={

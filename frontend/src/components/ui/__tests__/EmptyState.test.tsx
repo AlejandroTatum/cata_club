@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Calendar } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -93,3 +95,55 @@ describe("EmptyState — layout", () => {
     );
   });
 });
+
+/**
+ * The surface used to belong to whoever called this, and twenty-two call sites
+ * gave four answers: ten wrapped it in a card, eleven let it fall inside one
+ * the screen had already opened, and three gave it nothing — so "no hay nada"
+ * sat on paper on one screen and bare on the canvas on the next.
+ */
+describe("EmptyState — the surface it sits on", () => {
+  it("draws the paper card by default, because a statement needs a surface", () => {
+    const { container } = render(<EmptyState title="Sin registros" />);
+    expect(container.firstElementChild).toHaveClass("card");
+  });
+
+  it("draws none when the screen already opened a card around it", () => {
+    // A card inside a card is a border and a shadow the design never asks for.
+    const { container } = render(<EmptyState title="Sin registros" surface="inset" />);
+    expect(container.firstElementChild).not.toHaveClass("card");
+    // The column itself is unchanged — only the surface goes.
+    expect(container.firstElementChild).toHaveClass("flex", "flex-col", "items-center");
+  });
+
+  it("leaves no caller wrapping it in a card of their own", () => {
+    // The acceptance criterion, on the sources. A `<div className="card">` whose
+    // first child is an `EmptyState` is the wrapper this prop replaces, and it
+    // now renders two nested cards rather than one.
+    const src = join(__dirname, "..", "..", "..");
+    const wrapped: string[] = [];
+
+    for (const path of sourceFiles(src)) {
+      const code = readFileSync(path, "utf8");
+      if (/<div className="card">\s*\n\s*<EmptyState/.test(code)) {
+        wrapped.push(path.slice(src.length + 1));
+      }
+    }
+
+    expect(wrapped).toEqual([]);
+  });
+});
+
+function sourceFiles(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      if (entry === "__tests__") continue;
+      found.push(...sourceFiles(full));
+      continue;
+    }
+    if (/\.tsx$/.test(entry) && !/\.test\.tsx$/.test(entry)) found.push(full);
+  }
+  return found;
+}

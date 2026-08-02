@@ -214,7 +214,7 @@ function SessionList({
       </div>
 
       {sessions.length === 0 ? (
-        <EmptyState
+        <EmptyState surface="inset"
           icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
           title={
             studentName
@@ -338,18 +338,16 @@ function AttendanceView({
       />
 
       {selectedProfile === null ? (
-        <div className="card">
-          <EmptyState
-            icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-            title="No se encontraron estudiantes asociados a esta cuenta"
-            description="Inscríbase como jugador o agregue un hijo o dependiente para empezar a ver asistencias."
-            action={
-              <Link href="/student" className={buttonClasses("secondary", "sm")}>
-                Ir a mi cuenta
-              </Link>
-            }
-          />
-        </div>
+        <EmptyState
+          icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+          title="No se encontraron estudiantes asociados a esta cuenta"
+          description="Inscríbase como jugador o agregue un hijo o dependiente para empezar a ver asistencias."
+          action={
+            <Link href="/student" className={buttonClasses("secondary", "sm")}>
+              Ir a mi cuenta
+            </Link>
+          }
+        />
       ) : (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
           <div className="flex min-w-0 flex-col gap-3">
