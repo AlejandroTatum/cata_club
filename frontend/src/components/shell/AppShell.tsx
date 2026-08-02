@@ -109,9 +109,86 @@ export interface AppShellProps {
    * header action" stays a decision someone made rather than one nobody noticed.
    */
   actions?: React.ReactNode;
+  /**
+   * WHICH content measure this screen is drawn on. Defaults to `"default"`.
+   *
+   * See `CONTENT_MEASURE` for what the two measures are, why there are two,
+   * and what `"short"` does and does not fix.
+   */
+  measure?: ContentMeasure;
   /** Page content, rendered in the main content area below the header. */
   children: React.ReactNode;
 }
+
+/**
+ * THE TWO CONTENT MEASURES.
+ *
+ * `default` is the product's measure and the subject of the long note above
+ * the element that carries it. `short` is #85's answer, and it is narrower for
+ * a reason that has nothing to do with reading width.
+ *
+ * ## What `short` is for
+ *
+ * Two screens draw a page whose height is a function of how many records
+ * EXIST, not of a page size: `/discounts` renders its whole catalog with no
+ * pager, and `/groups` is a card per categoría. Measured in a browser
+ * (`tests/e2e/dead-canvas.spec.ts`), they leave 344/476/656px and
+ * 508/640/820px of canvas under the last card at 1366×768, 1440×900 and
+ * 1920×1080. The other seven lists paginate, and #85 proved at length that
+ * their canvas and a capped page are mutually exclusive states.
+ *
+ * ## What `short` does, honestly
+ *
+ * It does NOT close those numbers. The canvas under the last card is exactly
+ * as tall at every viewport after this change as before it — the readings are
+ * recorded either side in `dead-canvas.spec.ts` and they are identical. What
+ * changes is the shape of the block above it: 1356px of content over 424px of
+ * page reads as a page that ran out of rows; 972px over the same 424px reads
+ * as a column with a margin. This reframes the emptiness. It does not remove
+ * it, and #85 is closed knowing that.
+ *
+ * ## Why 1024px (`5xl`), measured
+ *
+ * The cap is on the PANE, so the content column is 52px narrower than the
+ * number — 972px. Both ends of the range were measured:
+ *
+ * | Pane cap | Content | `/discounts` table | Verdict                    |
+ * |----------|---------|--------------------|----------------------------|
+ * | none     | 1356    | 994px              | today                      |
+ * | 1088     | 1036    | 674px              | works, barely narrower     |
+ * | **1024** | **972** | **610px**          | **83px over the floor**    |
+ * | 960      | 908     | 546px              | works, name column at floor|
+ * | 896      | 844     | 482px              | table scrolls sideways     |
+ *
+ * The floor is the `/discounts` table's 527px min-content beside the 340px
+ * `PAGE_RAIL` and its 20px gap: 887px of content, below which the table starts
+ * scrolling horizontally. 1024 clears it by 83px, which is the headroom a
+ * discount name longer than the seeded ones needs — `TableNameCell` wraps
+ * rather than truncates, so the floor moves with the longest WORD in the
+ * catalog, not the longest name. `/groups` needs 764px for its five-track row
+ * and is nowhere near binding.
+ *
+ * ## Why the cap sits on the pane, and not inside `<main>`
+ *
+ * `/ayuda` caps a div INSIDE `<main>` at `max-w-3xl`, and that is the
+ * precedent #85 cited — but `/ayuda` has no header action. `/discounts` and
+ * `/groups` both do, and capping only the content would leave "Nuevo
+ * descuento" 166px to the right of the card it adds rows to, along with the
+ * search box and the bell — the exact defect the note above records fixing
+ * when it put the cap over the utility row as well as the content.
+ *
+ * The sidebar is OUTSIDE this element, so it does not move between a `short`
+ * screen and a `default` one. The pane's own left edge does: it is `mx-auto`
+ * inside the space beside the sidebar, so at 1920×1080 it starts 166px further
+ * right on a capped screen. That is the price, and it is paid by the utility
+ * row rather than by the alignment between the utility row and the cards.
+ */
+const CONTENT_MEASURE = {
+  default: "max-w-8xl",
+  short: "max-w-5xl",
+} as const;
+
+export type ContentMeasure = keyof typeof CONTENT_MEASURE;
 
 const SIDEBAR_COLLAPSED_KEY = "cata_sidebar_collapsed";
 
@@ -247,6 +324,7 @@ export default function AppShell({
   title,
   subtitle,
   actions,
+  measure = "default",
   children,
 }: AppShellProps): React.ReactElement {
   const pathname = usePathname();
@@ -695,8 +773,15 @@ export default function AppShell({
        * The Niveles ladder's own `max-w-[520px]` stays: capping a two-tile row
        * so it reads as a pair is a different decision at a different scale,
        * and it is documented where it is written.
+       *
+       * `measure="short"` swaps 1408px for 1024px on the two screens whose
+       * content cannot grow to fill either — see `CONTENT_MEASURE`. It is the
+       * SAME element, deliberately: a second cap written anywhere else would be
+       * a second answer to the question this note already answers.
        */}
-      <div className="mx-auto flex w-full min-w-0 max-w-8xl flex-1 flex-col">
+      <div
+        className={`mx-auto flex w-full min-w-0 flex-1 flex-col ${CONTENT_MEASURE[measure]}`}
+      >
         {/*
          * `.topbar` — utility strip only; navigation lives in the sidebar.
          *

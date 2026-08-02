@@ -235,6 +235,14 @@ export default function DiscountsPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Descuentos"
+        /*
+         * The catalog has no pager: it renders `descuentos.map(...)` whole, so
+         * its height is "how many discounts the club has" and no layout choice
+         * on this screen makes it taller. The short measure does not close the
+         * canvas under it — see `CONTENT_MEASURE` — it stops the four rows
+         * being stretched across 1356px first.
+         */
+        measure="short"
         actions={
           <Button variant="dark" onClick={openCreateForm}>
             <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
