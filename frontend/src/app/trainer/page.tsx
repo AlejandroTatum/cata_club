@@ -170,7 +170,7 @@ export default function TrainerPage(): React.ReactElement {
         {error && !loading && <ErrorState message={error} onRetry={() => loadData()} />}
 
         {!loading && !error && (
-          <div className="flex flex-col gap-page">
+          <>
             {/* --- The hero: the one thing to do next. --- */}
             {next ? (
               <div className="flex flex-wrap items-end gap-6 rounded-card bg-coal px-7 py-6 text-white">
@@ -292,7 +292,7 @@ export default function TrainerPage(): React.ReactElement {
                 />
               )}
             </section>
-          </div>
+          </>
         )}
       </AppShell>
     </ProtectedRoute>
