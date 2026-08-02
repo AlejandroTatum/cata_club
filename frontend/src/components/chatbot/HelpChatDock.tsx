@@ -320,6 +320,8 @@ function useDockClearance(dockRef: React.RefObject<HTMLElement | null>): DockCle
  * 12px starts at 56px — a 1px gap, which reads as a collision even though it
  * measures as clearance. At 8px the same two edges sit 5px apart. From `lg`
  * up the corner is empty and the launcher takes the system's usual 20px.
+ *
+ * @touch-target The phone disc is the floor itself; see `docs/ux/objetivo-tactil.md`.
  */
 const LAUNCHER_CLASSES =
   "fixed bottom-4 right-2 z-40 flex h-11 w-11 items-center justify-center rounded-full " +

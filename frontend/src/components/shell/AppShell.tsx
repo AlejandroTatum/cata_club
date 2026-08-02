@@ -141,7 +141,11 @@ const MOBILE_TABS: { href: string; label: string }[] = [
   { href: "/payments", label: "Pagos" },
 ];
 
-/** `.phone .tabs2 a` — `2xs` label under a 19px icon, ≥44px of touch target. */
+/**
+ * `.phone .tabs2 a` — `2xs` label under a 19px icon, ≥44px of touch target.
+ *
+ * @touch-target The phone's primary navigation; see `docs/ux/objetivo-tactil.md`.
+ */
 const TAB_CLASSES =
   "flex min-h-[44px] flex-1 flex-col items-center justify-center gap-[3px] rounded-lg " +
   "text-2xs tracking-flat font-semibold transition-colors";
@@ -399,6 +403,8 @@ export default function AppShell({
        * Same behaviour as the landing's (`landing.css:63-64`): parked off the
        * top edge, slid to 16px on `:focus-visible` only — a mouse user never
        * sees it — at the 48px the landing uses.
+       *
+       * @touch-target Reached by switch and thumb alike; matches the landing.
        */}
       <a
         href={`#${MAIN_CONTENT_ID}`}

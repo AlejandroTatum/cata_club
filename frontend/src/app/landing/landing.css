@@ -58,15 +58,19 @@
 .landing-display { font-family: var(--font-landing-graduate), serif; text-transform: uppercase; }
 .landing-page a:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 4px; }
 .landing-footer a:focus-visible { outline-color: var(--landing-highlight); }
+/* @touch-target The public page's conversion CTA, mostly tapped. */
 .landing-button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 10px; border-radius: 10px; padding: 14px 28px; background: var(--landing-action); color: var(--landing-on-action); font-size: 14px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; box-shadow: 0 6px 16px color-mix(in srgb, var(--landing-brand-black) 24%, transparent); transition: transform 160ms ease, background-color 160ms ease, color 160ms ease; }
 .landing-button:hover { background: var(--landing-action-hover); transform: translateY(-2px); }
 .landing-button svg { width: 17px; height: 17px; }
 .landing-button-block { width: 100%; }
 /* Quiet, low-chroma treatment for secondary navigation actions so they never
-   compete with the page's primary conversion CTA. */
+   compete with the page's primary conversion CTA.
+
+   @touch-target Quieter than the CTA, tapped just as often. */
 .landing-button-quiet { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--landing-border); border-radius: 10px; padding: 14px 28px; background: transparent; color: var(--landing-text); font-size: 14px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; transition: border-color 160ms ease, color 160ms ease; }
 .landing-button-quiet:hover { border-color: var(--landing-action); color: var(--landing-action); }
 .landing-button-quiet svg { width: 17px; height: 17px; }
+/* @touch-target The 48px the shell's own skip link matches. */
 .landing-skip-link { position: fixed; left: 16px; top: -100px; z-index: 100; display: inline-flex; min-height: 48px; align-items: center; border-radius: 10px; padding: 12px 20px; background: var(--landing-action); color: var(--landing-on-action); font-size: 14px; font-weight: 700; transition: top 160ms ease; }
 .landing-skip-link:focus-visible { top: 16px; }
 .landing-eyebrow { color: var(--landing-action); font-size: 14px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase; }
@@ -79,10 +83,12 @@
 .landing-logo img { width: auto; height: 54px; }
 .landing-logo small, .landing-footer-brand small { display: block; color: var(--landing-action); font-family: var(--font-landing-barlow); font-size: 10px; font-weight: 700; letter-spacing: 3.5px; }
 .landing-nav-links { display: flex; gap: 8px; }
+/* @touch-target Declares `touch-action: manipulation`; a thumb is the pointer. */
 .landing-nav-links a { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 999px; padding: 10px 18px; color: var(--landing-text); font-size: 15px; font-weight: 600; touch-action: manipulation; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
 .landing-nav-links a:hover { border-color: var(--landing-link-hover); color: var(--landing-link-hover); }
 .landing-nav-links a.active { border-color: var(--landing-action); background: var(--landing-action); color: var(--landing-on-action); font-weight: 700; }
 .landing-nav-links a.active:hover { border-color: var(--landing-action-hover); background: var(--landing-action-hover); color: var(--landing-on-action); }
+/* @touch-target Rides on `.landing-button-quiet` and lowers it; still 44px. */
 .landing-nav-cta { min-height: 44px; padding: 12px 22px; font-size: 13px; }
 
 .landing-hero { position: relative; display: flex; justify-content: center; align-items: center; gap: 40px; min-height: 578px; padding: 84px 5.55vw; overflow: hidden; background: var(--landing-action); }
@@ -256,7 +262,9 @@
   .landing-navbar { height: auto; min-height: 76px; flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
   .landing-nav-links { order: 3; width: 100%; flex-wrap: wrap; gap: 4px; }
   /* Keep the 44px pointer target promised by the base rule — this override
-     used to shrink it to 40px on the narrowest, most touch-driven viewport. */
+     used to shrink it to 40px on the narrowest, most touch-driven viewport.
+
+     @touch-target The regression that made this whole guard worth writing. */
   .landing-nav-links a { min-height: 44px; flex: 1 1 auto; padding: 8px 10px; font-size: 12px; }
   .landing-logo img { height: 46px; }
   .landing-logo { font-size: 14px; }
