@@ -378,7 +378,40 @@ function ReportsContent(): React.ReactElement {
   }
 
   return (
-    <AppShell title="Reportes">
+    <AppShell
+      title="Reportes"
+      /*
+       * Two named actions rather than one button behind a format menu: the PDF
+       * is the club's document (server-rendered, the one to hand in) and the
+       * CSV is the same rows as data (built here in the browser). They are
+       * different artefacts, so they say so. Red stays on the PDF alone — it is
+       * the primary CTA of the screen and the only red control.
+       *
+       * They used to live INSIDE the filter card, which made "generar" read as
+       * one more filter control rather than as the thing the screen is for.
+       */
+      actions={
+        <>
+          <Button
+            variant="primary"
+            onClick={() => void handleGeneratePdf()}
+            disabled={exportingPdf || !canQuery || resultCount === 0}
+          >
+            {exportingPdf ? (
+              <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            )}
+            {exportingPdf ? "Generando…" : "Generar PDF"}
+          </Button>
+
+          <Button onClick={handleDownloadCsv} disabled={!canQuery || resultCount === 0}>
+            <Table2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            Descargar CSV
+          </Button>
+        </>
+      }
+    >
       {/* Preset cards. Even height via `items-stretch` + `h-full`, selection
           marked with coal + the yellow ball dot — red is reserved for the
           primary CTA and for destructive/error states. */}
@@ -486,34 +519,6 @@ function ReportsContent(): React.ReactElement {
           </div>
         )}
 
-        <span className="flex-1" />
-
-        {/*
-         * Two named actions rather than one button behind a format menu: the
-         * PDF is the club's document (server-rendered, the one to hand in) and
-         * the CSV is the same rows as data (built here in the browser). They
-         * are different artefacts, so they say so. Red stays on the PDF alone
-         * — it is the primary CTA of the screen and the only red control.
-         */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button
-            variant="primary"
-            onClick={() => void handleGeneratePdf()}
-            disabled={exportingPdf || !canQuery || resultCount === 0}
-          >
-            {exportingPdf ? (
-              <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            )}
-            {exportingPdf ? "Generando…" : "Generar PDF"}
-          </Button>
-
-          <Button onClick={handleDownloadCsv} disabled={!canQuery || resultCount === 0}>
-            <Table2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            Descargar CSV
-          </Button>
-        </div>
       </div>
 
       {rangeInverted && (

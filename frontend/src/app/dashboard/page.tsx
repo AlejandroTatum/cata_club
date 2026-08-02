@@ -132,7 +132,15 @@ export default function DashboardPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell title="Panel de Control">
+      <AppShell
+        title="Panel de Control"
+        actions={
+          <Link href="/payments" className={buttonClasses("primary")}>
+            {pendingPayments > 0 ? "Revisar ahora" : "Ver pagos"}
+            <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+          </Link>
+        }
+      >
         {error && (
           <ErrorState
             title="No se pudieron cargar las estadísticas"
@@ -145,7 +153,15 @@ export default function DashboardPage(): React.ReactElement {
           <LoadingState label="Cargando estadísticas…" />
         ) : (
           <>
-            {/* Hero — one number, one action. Nothing else belongs here. */}
+            {/* Hero — one number and the sentence that reads it. Nothing else
+                belongs here.
+
+                It used to close with the action too ("Revisar ahora"), which
+                made this the third place in the product where a screen's
+                primary action could be found. An admin who learned "the button
+                is at the top right" was right on three screens out of eight.
+                The action moved to the header's `actions` slot; the number and
+                the sentence stay, because they are what the action is FOR. */}
             <section className="flex flex-wrap items-center gap-x-6 gap-y-section rounded-card bg-coal px-6 py-6">
               <span className="text-display font-extrabold leading-none tabular-nums text-white">
                 {pendingPayments}
@@ -166,10 +182,6 @@ export default function DashboardPage(): React.ReactElement {
                   </span>
                 )}
               </span>
-              <Link href="/payments" className={buttonClasses("primary")}>
-                {pendingPayments > 0 ? "Revisar ahora" : "Ver pagos"}
-                <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-              </Link>
             </section>
 
             {/*

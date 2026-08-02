@@ -1367,7 +1367,15 @@ export default function MembersPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell title="Miembros">
+      <AppShell
+        title="Miembros"
+        actions={
+          <Link href="/admin/crear-cuenta" className={buttonClasses("primary", "sm")}>
+            <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            Crear cuenta
+          </Link>
+        }
+      >
         {error && (
           <ErrorState
             title="No se pudieron cargar los miembros"
@@ -1408,20 +1416,17 @@ export default function MembersPage(): React.ReactElement {
           <StatCard label="Pagos pendientes" value={stats.pendingPayments} hint="por validar" />
         </div>
 
-        {/* Search + filter chips */}
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="max-w-xs flex-1">
-            <SearchInput
-              label="Buscar miembros"
-              placeholder="Buscar por nombre o correo…"
-              value={searchTerm}
-              onChange={setSearchTerm}
-            />
-          </div>
-          <Link href="/admin/crear-cuenta" className={buttonClasses("primary", "sm")}>
-            <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Crear cuenta
-          </Link>
+        {/* Search + filter chips. "Crear cuenta" used to sit in this row,
+            wedged against the search field: the screen's primary action, at
+            the end of a control that filters. It lives in the header's
+            `actions` slot now — see `AppShellProps.actions`. */}
+        <div className="max-w-xs">
+          <SearchInput
+            label="Buscar miembros"
+            placeholder="Buscar por nombre o correo…"
+            value={searchTerm}
+            onChange={setSearchTerm}
+          />
         </div>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
           {FILTER_CHIPS.map((chip) => (

@@ -73,7 +73,41 @@ export interface AppShellProps {
   title: string;
   /** Optional supporting line below the title. */
   subtitle?: string;
-  /** Optional trailing controls for the page header row. */
+  /**
+   * The screen's PRIMARY action, and the one place it is allowed to live.
+   *
+   * ## The rule
+   *
+   * A screen's primary action goes here. Per-row actions and secondary
+   * controls stay in the body, where the thing they act on is.
+   *
+   * ## Why it needed writing down
+   *
+   * The primary action used to appear in three different places. It was here on
+   * attendance, groups and discounts; loose in the body on members (wedged
+   * against the search field), dashboard (inside the hero) and reports (inside
+   * the filter card); and absent on payments and the Niveles ladder. An admin
+   * who learned "the button is at the top right" was right on three screens out
+   * of eight — which is worse than a button that is always somewhere else,
+   * because it teaches a rule and then breaks it.
+   *
+   * `PageHeader` has rendered this slot since it existed. Three screens simply
+   * ignored it.
+   *
+   * ## The two screens that legitimately pass nothing
+   *
+   * - **payments** is a validation QUEUE. Its actions are per row (approve,
+   *   reject) and its batch bar is conditional on there being reviewed rows to
+   *   flush, so a header button would be absent most of the time and would name
+   *   an action the screen is not primarily for.
+   * - **the Niveles ladder** creates levels from inside the rung being edited
+   *   ("Nuevo nivel para {nombre}"). The action needs the rung as context; the
+   *   header has none.
+   *
+   * Both are enforced as named exceptions in
+   * `components/shell/__tests__/primary-action.test.ts`, so "this screen has no
+   * header action" stays a decision someone made rather than one nobody noticed.
+   */
   actions?: React.ReactNode;
   /** Page content, rendered in the main content area below the header. */
   children: React.ReactNode;
