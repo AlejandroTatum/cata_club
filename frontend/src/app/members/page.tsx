@@ -26,6 +26,7 @@ import {
   buttonClasses,
   EmptyState,
   ErrorState,
+  FilterPanel,
   FilterPill,
   LoadingState,
   Pagination,
@@ -1416,29 +1417,35 @@ export default function MembersPage(): React.ReactElement {
           <StatCard label="Pagos pendientes" value={stats.pendingPayments} hint="por validar" />
         </div>
 
-        {/* Search + filter chips. "Crear cuenta" used to sit in this row,
-            wedged against the search field: the screen's primary action, at
-            the end of a control that filters. It lives in the header's
-            `actions` slot now — see `AppShellProps.actions`. */}
-        <div className="max-w-xs">
-          <SearchInput
-            label="Buscar miembros"
-            placeholder="Buscar por nombre o correo…"
-            value={searchTerm}
-            onChange={setSearchTerm}
-          />
-        </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
-          {FILTER_CHIPS.map((chip) => (
-            <FilterPill
-              key={chip.flag}
-              label={chip.label}
-              count={countAccountsMatchingFlag(accounts, chip.flag)}
-              active={activeFlag === chip.flag}
-              onClick={() => setActiveFlag(chip.flag)}
+        {/* Search + filter chips. They used to sit loose on the canvas as two
+            unrelated rows; `FilterPanel` frames them and fixes their order.
+            "Crear cuenta" used to sit in the search row too — the screen's
+            primary action, at the end of a control that filters. It lives in
+            the header's `actions` slot now — see `AppShellProps.actions`. */}
+        <FilterPanel
+          label="Filtros de miembros"
+          search={
+            <SearchInput
+              label="Buscar miembros"
+              placeholder="Buscar por nombre o correo…"
+              value={searchTerm}
+              onChange={setSearchTerm}
             />
-          ))}
-        </div>
+          }
+          chips={
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
+              {FILTER_CHIPS.map((chip) => (
+                <FilterPill
+                  key={chip.flag}
+                  label={chip.label}
+                  count={countAccountsMatchingFlag(accounts, chip.flag)}
+                  active={activeFlag === chip.flag}
+                  onClick={() => setActiveFlag(chip.flag)}
+                />
+              ))}
+            </div>
+          }
+        />
 
         {/* Members table */}
         {!loading && (

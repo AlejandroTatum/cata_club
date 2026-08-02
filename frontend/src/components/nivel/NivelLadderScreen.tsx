@@ -144,6 +144,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  FilterPanel,
   LoadingState,
   SearchInput,
   StatCard,
@@ -617,10 +618,12 @@ function LadderContent({
           </Button>
         </div>
 
+        {/* Deliberately NOT a `FilterPanel`: a framed panel here would read as
+            a second page-level filter. See the note on the page finder. */}
         <SearchInput
           className="mb-3 max-w-xs"
           label={`Buscar estudiante para el nivel ${nombre}`}
-          placeholder="Buscar por nombre…"
+          placeholder={`Filtrar dentro de ${nombre}…`}
           value={panelSearch}
           onChange={setPanelSearch}
         />
@@ -746,13 +749,27 @@ function LadderContent({
       </div>
 
       {/* The person finder. The screen's real questions are about a student,
-          not about a level, and neither could be asked before. */}
-      <SearchInput
-        className="mb-5 max-w-sm"
-        label="Buscar un estudiante en toda la escalera"
-        placeholder="Buscar estudiante por nombre…"
-        value={studentSearch}
-        onChange={setStudentSearch}
+          not about a level, and neither could be asked before.
+
+          This screen carries TWO search fields and both earn their place: this
+          one asks "where is Ana?" across every rung, the one inside an open
+          rung filters that rung's two columns. They were indistinguishable —
+          same shape, same "Buscar … por nombre…" placeholder, both loose on
+          their surface. The panel is what tells them apart now: the page
+          finder is framed like every other screen's filters, the rung's stays
+          a bare field on the rung's own sunken surface, and its placeholder
+          names the rung it is confined to. */}
+      <FilterPanel
+        className="mb-5"
+        label="Buscar en la escalera"
+        search={
+          <SearchInput
+            label="Buscar un estudiante en toda la escalera"
+            placeholder="Buscar estudiante por nombre…"
+            value={studentSearch}
+            onChange={setStudentSearch}
+          />
+        }
       />
 
       {/* Search results answer the question that was just typed, so they stay

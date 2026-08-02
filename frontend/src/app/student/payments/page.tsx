@@ -64,6 +64,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  FilterPanel,
   FilterPill,
   LoadingState,
   buttonClasses,
@@ -1059,18 +1060,29 @@ function PaymentsContent({
         </div>
 
         <div className="flex min-w-0 flex-col gap-5 lg:col-start-1 lg:row-start-2">
-          {/* Selection is coal plus the ball dot — `FilterPill` owns that rule. */}
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar pagos por estado">
-            {FILTERS.map((option) => (
-              <FilterPill
-                key={option}
-                label={PAGO_FILTER_LABELS[option]}
-                count={counts[option]}
-                active={filter === option}
-                onClick={() => setFilter(option)}
-              />
-            ))}
-          </div>
+          {/* Selection is coal plus the ball dot — `FilterPill` owns that rule.
+              The chips used to sit loose on the canvas here too; the portal
+              filters through the same panel the admin screens do. */}
+          <FilterPanel
+            label="Filtros de pagos"
+            chips={
+              <div
+                className="flex flex-wrap gap-2"
+                role="group"
+                aria-label="Filtrar pagos por estado"
+              >
+                {FILTERS.map((option) => (
+                  <FilterPill
+                    key={option}
+                    label={PAGO_FILTER_LABELS[option]}
+                    count={counts[option]}
+                    active={filter === option}
+                    onClick={() => setFilter(option)}
+                  />
+                ))}
+              </div>
+            }
+          />
 
           <input
             ref={fileInputRef}

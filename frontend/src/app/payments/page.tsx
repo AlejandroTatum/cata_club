@@ -101,6 +101,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  FilterPanel,
   FilterPill,
   LoadingState,
   Pagination,
@@ -798,24 +799,38 @@ export default function PaymentsPage(): React.ReactElement {
           </div>
         )}
 
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          {FILTERS.map((f) => (
-            <FilterPill
-              key={f.key}
-              label={f.label}
-              count={filterCounts[f.key]}
-              active={activeFilter === f.key}
-              onClick={() => setActiveFilter(f.key)}
+        {/* This screen used to read the other way round — chips first, search
+            on its own line underneath — which was the exact inverse of
+            Members. `FilterPanel` renders the slots in one fixed order, so the
+            two screens cannot disagree again. */}
+        <FilterPanel
+          className="mb-6"
+          label="Filtros de pagos"
+          search={
+            <SearchInput
+              label="Buscar estudiante"
+              placeholder="Buscar estudiante"
+              value={query}
+              onChange={setQuery}
             />
-          ))}
-        </div>
-
-        <SearchInput
-          className="mb-6 max-w-[320px]"
-          label="Buscar estudiante"
-          placeholder="Buscar estudiante"
-          value={query}
-          onChange={setQuery}
+          }
+          chips={
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="group"
+              aria-label="Filtrar pagos por estado"
+            >
+              {FILTERS.map((f) => (
+                <FilterPill
+                  key={f.key}
+                  label={f.label}
+                  count={filterCounts[f.key]}
+                  active={activeFilter === f.key}
+                  onClick={() => setActiveFilter(f.key)}
+                />
+              ))}
+            </div>
+          }
         />
 
         {/* A batch that ended half-done is the one outcome a toast cannot
