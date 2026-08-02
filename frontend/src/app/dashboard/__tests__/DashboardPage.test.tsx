@@ -153,9 +153,15 @@ describe("DashboardPage — the hero carries one number and one action", () => {
 
     render(<DashboardPage />);
 
-    const link = await screen.findByRole("link", { name: /ver pagos/i });
-    expect(link).toHaveAttribute("href", "/payments");
-    expect(screen.getByText("La cola está al día")).toBeInTheDocument();
+    // Wait for the hero note, not for the link: `pendingPayments` falls back to
+    // 0 before the stats resolve, so "Ver pagos" is already in the header on the
+    // very first render and awaiting it proves nothing. "La cola está al día" is
+    // the one thing here that only exists once the stats came back saying zero.
+    await screen.findByText("La cola está al día");
+    expect(screen.getByRole("link", { name: /ver pagos/i })).toHaveAttribute(
+      "href",
+      "/payments",
+    );
   });
 
   it("points the primary action at the payment queue", async () => {
@@ -200,12 +206,17 @@ describe("DashboardPage — the three-stat pulse", () => {
 
     render(<DashboardPage />);
 
-    expect(await screen.findByText("Miembros")).toBeInTheDocument();
+    // Two records this week, both present → 100%. Awaited rather than read
+    // synchronously after "Miembros": the page runs two independent fetches,
+    // and "Miembros" only proves the STATS one resolved. The rate comes from
+    // the attendance fetch, which can land a commit later — with no records the
+    // tile reads "0". Waiting for "100" waits for both, since the whole pulse
+    // stays behind the loading state until the stats are in.
+    expect(await screen.findByText("100")).toBeInTheDocument();
+    expect(screen.getByText("Miembros")).toBeInTheDocument();
     expect(screen.getByText("Membresías activas")).toBeInTheDocument();
     expect(screen.getByText("de 44")).toBeInTheDocument();
     expect(screen.getByText("Asistencia · 4 semanas")).toBeInTheDocument();
-    // Two records this week, both present → 100%.
-    expect(screen.getByText("100")).toBeInTheDocument();
   });
 
   it("gives all three tiles the same internal grammar: label, figure, caption", async () => {
@@ -213,14 +224,15 @@ describe("DashboardPage — the three-stat pulse", () => {
 
     render(<DashboardPage />);
 
-    await screen.findByText("Miembros");
+    // The attendance caption, again: it is the last of the three to arrive,
+    // because it needs the attendance fetch and not just the stats one.
+    await screen.findByText("2 de 2 presentes");
     // A caption, a progress bar and four sparkbars side by side read as three
     // unrelated things rather than one pulse. Every tile now closes on a plain
     // caption line — and the caption says what the widget only gestured at.
     expect(screen.queryByRole("img", { name: /asistencia por semana/i })).toBeNull();
     expect(screen.getByText("personas registradas")).toBeInTheDocument();
     expect(screen.getByText("39% del total")).toBeInTheDocument();
-    expect(screen.getByText("2 de 2 presentes")).toBeInTheDocument();
   });
 });
 
@@ -235,9 +247,15 @@ describe("DashboardPage — actividad reciente", () => {
 
     render(<DashboardPage />);
 
-    expect(await screen.findByText("Actividad reciente")).toBeInTheDocument();
-    expect(screen.getByText(/subió un comprobante de \$25,00/)).toBeInTheDocument();
+    // Wait for a ROW, not for "Actividad reciente": the heading is part of the
+    // card's frame and is painted on the first render, empty feed or not, so it
+    // is satisfied before either fetch resolves and the reads below then run
+    // against the empty state. The rows are what the data produces.
+    expect(await screen.findByText(/subió un comprobante de \$25,00/)).toBeInTheDocument();
+    // Synchronous on purpose: both rows come out of the same `Promise.allSettled`
+    // continuation, which sets records and payments in one React commit.
     expect(screen.getByText(/lista registrada · 2 estudiantes/)).toBeInTheDocument();
+    expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
   });
 
   it("caps the feed so it cannot dominate the page", async () => {
@@ -249,6 +267,11 @@ describe("DashboardPage — actividad reciente", () => {
     render(<DashboardPage />);
 
     const feed = await screen.findByTestId("activity-feed");
+    // The card renders unconditionally, so `findByTestId` above resolves on the
+    // empty state too — and `getAllByRole` THROWS when it matches nothing. Wait
+    // for the list itself, which replaces the empty state only once there is
+    // something to list; its items all arrive in that same commit.
+    await within(feed).findByRole("list");
     expect(within(feed).getAllByRole("listitem").length).toBeLessThanOrEqual(5);
   });
 
@@ -258,7 +281,12 @@ describe("DashboardPage — actividad reciente", () => {
 
     render(<DashboardPage />);
 
-    const lower = await screen.findByTestId("dashboard-lower");
+    // The row and the feed card are structural and render immediately; the
+    // donut is the only one of the three that waits for the attendance records.
+    // Awaiting the row would let the donut assertion run against a card still
+    // showing "Sin asistencias registradas".
+    await screen.findByTestId("attendance-donut");
+    const lower = screen.getByTestId("dashboard-lower");
     expect(within(lower).getByTestId("activity-feed")).toBeInTheDocument();
     expect(within(lower).getByTestId("attendance-donut")).toBeInTheDocument();
   });
