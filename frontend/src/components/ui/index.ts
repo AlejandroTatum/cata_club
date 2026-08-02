@@ -20,6 +20,9 @@ export type { EmptyStateProps } from "./EmptyState";
 export { default as ErrorState } from "./ErrorState";
 export type { ErrorStateProps } from "./ErrorState";
 
+export { FilterGroup, FilterPanel, FILTER_LABEL } from "./FilterPanel";
+export type { FilterGroupProps, FilterPanelProps } from "./FilterPanel";
+
 export { default as FilterPill } from "./FilterPill";
 export type { FilterPillProps } from "./FilterPill";
 

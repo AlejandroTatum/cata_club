@@ -16,13 +16,26 @@
  * this component only renders it. The page keeps the derived `query` in its
  * fetch dependencies, so there is no effect syncing child state up to a parent
  * and no duplicate request on mount.
+ *
+ * ## The panel itself is not ours
+ *
+ * The bordered frame and the slot order come from `ui/FilterPanel`, which every
+ * filtering screen now shares. This file used to hold that chrome in a local
+ * class string, which is why it read as "the abstracted one" — it was not; it
+ * is a domain component that happened to be the only one framing its controls.
  */
 
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
 import StudentSearch from "@/components/StudentSearch";
-import { Button, cn, FilterPill } from "@/components/ui";
+import {
+  Button,
+  FILTER_LABEL,
+  FilterGroup,
+  FilterPanel,
+  FilterPill,
+} from "@/components/ui";
 import { formatDay, type TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DateRangePreset } from "@/lib/club-date";
 import type { PersonaBusqueda } from "@/types/domain";
@@ -106,20 +119,6 @@ export interface AttendanceFiltersProps {
   className?: string;
 }
 
-/**
- * What makes the panel read as a panel. It carries NO margin of its own: the
- * shell's `<main>` is a `flex flex-col gap-page` column, so a margin here would
- * be added on top of the 20px step instead of replacing it. It used to carry
- * `mb-5`, and the trainer's history re-declared this entire string through
- * `className` for the sole purpose of dropping it. With the margin gone that
- * caller needs no `className` at all, and the prop can now MERGE (see `cn`
- * below) instead of replacing — a caller that names one detail keeps the rest.
- */
-const PANEL =
-  "flex flex-col gap-4 card p-[18px]";
-
-const FIELD_LABEL =
-  "text-2xs font-bold uppercase text-ink-3";
 const FIELD_CONTROL =
   "h-ctl rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-ink-3";
 
@@ -129,58 +128,71 @@ export default function AttendanceFilters({
   className,
 }: AttendanceFiltersProps): React.ReactElement {
   return (
-    <section
-      aria-label="Filtros de registros"
-      className={cn(PANEL, className)}
-    >
-      <div>
-        <span className={`mb-2 block ${FIELD_LABEL}`}>Rango de fechas</span>
-        <div className="flex flex-wrap gap-2">
-          {DATE_PRESETS.map((option) => (
-            <FilterPill
-              key={option.key}
-              label={option.label}
-              active={filters.preset === option.key}
-              onClick={() => filters.setPreset(option.key)}
-            />
-          ))}
-        </div>
-
-        {filters.preset === "custom" && (
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1.5">
-              <span className={FIELD_LABEL}>Fecha de inicio</span>
-              <input
-                type="date"
-                aria-label="Fecha de inicio"
-                value={filters.customStart}
-                onChange={(e) => filters.setCustomStart(e.target.value)}
-                className={FIELD_CONTROL}
+    <FilterPanel
+      label="Filtros de registros"
+      className={className}
+      search={
+        <FilterGroup label="Alumno">
+          <StudentSearch
+            onSelect={filters.selectStudent}
+            placeholder="Buscar alumno…"
+            resetSignal={filters.studentResetSignal}
+          />
+          {filters.student && (
+            <Button size="sm" variant="ghost" className="self-start" onClick={filters.clearStudent}>
+              Limpiar selección
+            </Button>
+          )}
+        </FilterGroup>
+      }
+      chips={
+        <FilterGroup label="Rango de fechas">
+          <div className="flex flex-wrap gap-2">
+            {DATE_PRESETS.map((option) => (
+              <FilterPill
+                key={option.key}
+                label={option.label}
+                active={filters.preset === option.key}
+                onClick={() => filters.setPreset(option.key)}
               />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className={FIELD_LABEL}>Fecha límite</span>
-              <input
-                type="date"
-                aria-label="Fecha límite"
-                value={filters.customEnd}
-                onChange={(e) => filters.setCustomEnd(e.target.value)}
-                className={FIELD_CONTROL}
-              />
-            </label>
+            ))}
           </div>
-        )}
 
-        {filters.rangeError && (
-          <p role="alert" className="mt-2 text-xs text-cata-red">
-            {filters.rangeError}
-          </p>
-        )}
-      </div>
+          {filters.preset === "custom" && (
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1.5">
+                <span className={FILTER_LABEL}>Fecha de inicio</span>
+                <input
+                  type="date"
+                  aria-label="Fecha de inicio"
+                  value={filters.customStart}
+                  onChange={(e) => filters.setCustomStart(e.target.value)}
+                  className={FIELD_CONTROL}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className={FILTER_LABEL}>Fecha límite</span>
+                <input
+                  type="date"
+                  aria-label="Fecha límite"
+                  value={filters.customEnd}
+                  onChange={(e) => filters.setCustomEnd(e.target.value)}
+                  className={FIELD_CONTROL}
+                />
+              </label>
+            </div>
+          )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className={FIELD_LABEL}>Horario</span>
+          {filters.rangeError && (
+            <p role="alert" className="text-xs text-cata-red">
+              {filters.rangeError}
+            </p>
+          )}
+        </FilterGroup>
+      }
+      fields={
+        <label className="flex max-w-xs flex-col gap-1.5">
+          <span className={FILTER_LABEL}>Horario</span>
           <select
             aria-label="Filtrar por horario"
             value={filters.scheduleId ?? ""}
@@ -195,21 +207,7 @@ export default function AttendanceFilters({
             ))}
           </select>
         </label>
-
-        <div className="flex flex-col gap-1.5">
-          <span className={FIELD_LABEL}>Alumno</span>
-          <StudentSearch
-            onSelect={filters.selectStudent}
-            placeholder="Buscar alumno…"
-            resetSignal={filters.studentResetSignal}
-          />
-          {filters.student && (
-            <Button size="sm" variant="ghost" className="self-start" onClick={filters.clearStudent}>
-              Limpiar selección
-            </Button>
-          )}
-        </div>
-      </div>
-    </section>
+      }
+    />
   );
 }
