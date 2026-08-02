@@ -11,6 +11,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import DiscountsPage from "@/app/discounts/page";
 import type { DescuentoCatalogo } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
+import { PAGE_RAIL } from "@/components/ui";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -255,5 +256,60 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     await waitFor(() => {
       expect(mockActualizarDescuento).toHaveBeenCalledWith(2, { activo: true });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The rail
+// ---------------------------------------------------------------------------
+
+describe("DiscountsPage — la segunda columna", () => {
+  it("keeps the two columns whether or not a form is open", async () => {
+    // A split that appears with the form is a layout that moves under the
+    // admin every time they press "Editar" — the defect #81 removed from the
+    // dashboard, which is not worth reintroducing here.
+    renderPage();
+    await screen.findByText("Beca municipal");
+
+    const rail = screen.getByTestId("discounts-split");
+    expect(rail.className).toBe(PAGE_RAIL);
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+    expect(screen.getByTestId("discounts-split").className).toBe(PAGE_RAIL);
+  });
+
+  it("puts the form beside the table, not above it", async () => {
+    // The assertion that carries the weight: the table and the form are
+    // SIBLINGS in the split, so opening one cannot push the other down. It
+    // used to render between the page header and the catalog.
+    renderPage();
+    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+
+    fireEvent.click(within(becaRow).getByRole("button", { name: /editar/i }));
+
+    const split = screen.getByTestId("discounts-split");
+    const form = screen.getByLabelText(/nombre/i).closest("[data-testid='discounts-rail']");
+    const table = screen.getByRole("table");
+
+    expect(form).not.toBeNull();
+    expect(split.contains(table)).toBe(true);
+    expect(form?.contains(table)).toBe(false);
+  });
+
+  it("answers the missing delete button when no form is open", async () => {
+    // There is no "Eliminar" anywhere on this screen and there never will be:
+    // applied discounts reference the catalog by FK. Until now that rule lived
+    // only in a source comment.
+    renderPage();
+    await screen.findByText("Beca municipal");
+
+    const rail = screen.getByTestId("discounts-rail");
+    expect(within(rail).getByText(/Cómo funciona el catálogo/i)).toBeInTheDocument();
+    expect(within(rail).getByText(/no se elimina/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
+    // The rail holds one thing at a time: the form replaces the rules.
+    expect(screen.queryByText(/Cómo funciona el catálogo/i)).not.toBeInTheDocument();
   });
 });

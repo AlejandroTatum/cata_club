@@ -138,3 +138,52 @@ test.describe("content measure", () => {
     });
   }
 });
+
+/**
+ * The rail, measured on the one admin screen that took it.
+ *
+ * #36 asked for the student/profile second column to be adopted by the admin
+ * screens "whose content does not fill the height", on the theory that a rail
+ * closes vertical emptiness. It does not — it moves content sideways, so it
+ * only shortens a page that already had that content BELOW. What a rail is
+ * actually worth on Descuentos is measured here instead: the edit form used to
+ * render between the page header and the catalog, so opening it pushed the row
+ * being edited down and out of view.
+ *
+ * A unit test can assert the form and the table are siblings. Only a browser
+ * can say the table did not move.
+ */
+const DISCOUNTS = [
+  { id: 1, nombre: "Beca municipal", porcentaje: "100.00", monto: null, activo: true },
+  { id: 2, nombre: "Convenio empresa", porcentaje: null, monto: "5.00", activo: true },
+  { id: 3, nombre: "Hermanos", porcentaje: "15.00", monto: null, activo: true },
+  { id: 4, nombre: "Pago anual", porcentaje: "10.00", monto: null, activo: false },
+];
+
+test.describe("the discounts rail", () => {
+  test("opening the form does not move the catalog", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginAsAdmin(page);
+    // Registered after `loginAsAdmin`'s catch-all, so it wins.
+    await page.route("**/descuentos", (route) => fulfillJson(route, DISCOUNTS));
+    await page.goto("/discounts");
+
+    const table = page.locator("table");
+    await expect(table).toBeVisible();
+    const before = await table.evaluate((el) => el.getBoundingClientRect().top);
+
+    await page.getByRole("row", { name: /Beca municipal/ }).getByRole("button", { name: /editar/i }).click();
+    await expect(page.getByLabel(/nombre/i)).toBeVisible();
+
+    const after = await table.evaluate((el) => el.getBoundingClientRect().top);
+
+    await testInfo.attach("catalog-top-before-after", {
+      body: `${Math.round(before)} → ${Math.round(after)}`,
+      contentType: "text/plain",
+    });
+
+    // Exactly, not approximately: the form is a sibling column, so there is no
+    // mechanism by which the table could shift at all.
+    expect(Math.round(after)).toBe(Math.round(before));
+  });
+});

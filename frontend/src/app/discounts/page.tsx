@@ -25,6 +25,7 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  PAGE_RAIL,
   Table,
   TableBody,
   TableCell,
@@ -167,7 +168,7 @@ export default function DiscountsPage(): React.ReactElement {
     if (!form) return null;
     const isEditing = form.editingId !== null;
     return (
-      <div className="card mb-6 p-5">
+      <div className="card p-5">
         <h2 className="text-sm font-semibold text-ink">
           {isEditing ? "Editar descuento" : "Nuevo descuento"}
         </h2>
@@ -245,95 +246,153 @@ export default function DiscountsPage(): React.ReactElement {
           <ErrorState message={loadError} onRetry={() => void loadCatalog()} />
         )}
 
-        {renderForm()}
-
-        {loading ? (
-          <div className="card">
-            <LoadingState label="Cargando descuentos…" />
-          </div>
-        ) : !loadError && descuentos.length === 0 ? (
-          <EmptyState
-            icon={<Percent size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-            title="Sin descuentos en el catálogo"
-            description="Cree el primer descuento para poder aplicarlo al registrar pagos."
-            action={
-              <Button variant="dark" onClick={openCreateForm}>
-                <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                Nuevo descuento
-              </Button>
-            }
-          />
-        ) : descuentos.length > 0 ? (
-          /*
-           * `ui/Table`, not a `<ul>` of `<li>`.
-           *
-           * This list was already a table — four aligned facts per row, the
-           * same four every time — written as a flex list with its own `px-5
-           * py-4`. That padding is why a discount row was a different height
-           * from a member row and from an attendance row: three lists, three
-           * answers, none of them the `h-row` token.
-           *
-           * There was no header at all, so the value column ("100%", "$5") had
-           * nothing naming it. It has one now.
-           */
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell>Descuento</TableHeaderCell>
-                    <TableHeaderCell>Valor</TableHeaderCell>
-                    <TableHeaderCell>Estado</TableHeaderCell>
-                    <TableHeaderCell align="right">
-                      <span className="sr-only">Acciones</span>
-                    </TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {descuentos.map((descuento) => {
-                    const isToggling = togglingId === descuento.id;
-                    return (
-                      <TableRow
-                        key={descuento.id}
-                        data-inactivo={descuento.activo ? undefined : "true"}
-                        className={descuento.activo ? undefined : "opacity-60"}
-                      >
-                        <TableNameCell name={descuento.nombre} />
-                        <TableCell>{descuentoValorLabel(descuento)}</TableCell>
-                        <TableCell>
-                          <Badge tone={descuento.activo ? "ok" : "neutral"}>
-                            {descuento.activo ? "Activo" : "Inactivo"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell align="right">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" onClick={() => openEditForm(descuento)}>
-                              <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                              Editar
-                            </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => void handleToggleActivo(descuento)}
-                              disabled={isToggling}
-                            >
-                              {isToggling ? (
-                                <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-                              ) : (
-                                <Power size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                              )}
-                              {descuento.activo ? "Desactivar" : "Reactivar"}
-                            </Button>
-                          </div>
-                        </TableCell>
+        {/*
+         * The form is a RAIL, not a slab above the table.
+         *
+         * It used to render between the page header and the catalog, so
+         * pressing "Editar" on the fourth row pushed that row roughly 200px
+         * down and out of view — the admin was editing a record they could no
+         * longer see, and "Cancelar" moved everything back up again. Beside
+         * the table, the row being edited does not move at all.
+         *
+         * The grid keeps its two columns UNCONDITIONALLY, for the reason #81
+         * gave the dashboard: a split that appears with the form is a layout
+         * that moves under the admin every time they open one. With no form
+         * open the rail carries the rule this screen raises and never
+         * answers — there is no "Eliminar" button anywhere on it, and until
+         * now the only explanation lived in a source comment.
+         *
+         * What this is NOT is a cure for vertical emptiness. A rail moves
+         * content sideways; it cannot make a six-row table taller. See the
+         * note on `PAGE_RAIL`.
+         */}
+        <div data-testid="discounts-split" className={PAGE_RAIL}>
+          <div className="flex min-w-0 flex-col gap-page">
+            {loading ? (
+              <div className="card">
+                <LoadingState label="Cargando descuentos…" />
+              </div>
+            ) : !loadError && descuentos.length === 0 ? (
+              <EmptyState
+                icon={<Percent size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                title="Sin descuentos en el catálogo"
+                description="Cree el primer descuento para poder aplicarlo al registrar pagos."
+                action={
+                  <Button variant="dark" onClick={openCreateForm}>
+                    <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                    Nuevo descuento
+                  </Button>
+                }
+              />
+            ) : descuentos.length > 0 ? (
+              /*
+               * `ui/Table`, not a `<ul>` of `<li>`.
+               *
+               * This list was already a table — four aligned facts per row, the
+               * same four every time — written as a flex list with its own `px-5
+               * py-4`. That padding is why a discount row was a different height
+               * from a member row and from an attendance row: three lists, three
+               * answers, none of them the `h-row` token.
+               *
+               * There was no header at all, so the value column ("100%", "$5") had
+               * nothing naming it. It has one now.
+               */
+              <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeaderCell>Descuento</TableHeaderCell>
+                        <TableHeaderCell>Valor</TableHeaderCell>
+                        <TableHeaderCell>Estado</TableHeaderCell>
+                        <TableHeaderCell align="right">
+                          <span className="sr-only">Acciones</span>
+                        </TableHeaderCell>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                    </TableHead>
+                    <TableBody>
+                      {descuentos.map((descuento) => {
+                        const isToggling = togglingId === descuento.id;
+                        return (
+                          <TableRow
+                            key={descuento.id}
+                            data-inactivo={descuento.activo ? undefined : "true"}
+                            className={descuento.activo ? undefined : "opacity-60"}
+                          >
+                            <TableNameCell name={descuento.nombre} />
+                            <TableCell>{descuentoValorLabel(descuento)}</TableCell>
+                            <TableCell>
+                              <Badge tone={descuento.activo ? "ok" : "neutral"}>
+                                {descuento.activo ? "Activo" : "Inactivo"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell align="right">
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" onClick={() => openEditForm(descuento)}>
+                                  <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                                  Editar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => void handleToggleActivo(descuento)}
+                                  disabled={isToggling}
+                                >
+                                  {isToggling ? (
+                                    <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+                                  ) : (
+                                    <Power size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                                  )}
+                                  {descuento.activo ? "Desactivar" : "Reactivar"}
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+
+          <div data-testid="discounts-rail">{renderForm() ?? <CatalogRules />}</div>
+        </div>
       </AppShell>
     </ProtectedRoute>
+  );
+}
+
+/**
+ * What the rail says when no form is open.
+ *
+ * Every other screen's "why can't I delete this?" is answered by a delete
+ * button being disabled or absent with a tooltip. Here the answer is a domain
+ * rule with money behind it — applied discounts reference the catalog by FK
+ * and freeze their values at application time — so it is written out where
+ * the question is asked, rather than left to the admin to infer from a button
+ * that was never drawn.
+ */
+function CatalogRules(): React.ReactElement {
+  return (
+    <section aria-labelledby="discounts-rules-title" className="card p-5">
+      <h2 id="discounts-rules-title" className="text-sm font-semibold text-ink">
+        Cómo funciona el catálogo
+      </h2>
+      <ul className="mt-3 flex flex-col gap-3 text-sm leading-relaxed text-ink-2">
+        <li>
+          Un descuento no se elimina: se <b className="font-semibold text-ink">desactiva</b>. Deja
+          de ofrecerse al registrar pagos y sigue en la lista para reactivarlo.
+        </li>
+        <li>
+          Los pagos que ya lo usaron conservan el valor que tenía cuando se aplicó, así que
+          editarlo nunca reescribe el historial.
+        </li>
+        <li>
+          El descuento se aplica al registrar el pago, en Membresías y Pagos — no desde esta
+          pantalla.
+        </li>
+      </ul>
+    </section>
   );
 }
