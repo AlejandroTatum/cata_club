@@ -19,7 +19,7 @@ import type {
   PagoPersona,
 } from "@/services/api";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
-import { EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
+import { EmptyState, ErrorState, LoadingState, PAGE_RAIL, buttonClasses } from "@/components/ui";
 import AgeUpConfirmation from "@/components/AgeUpConfirmation";
 import ManagedStudentPicker, {
   useManagedProfiles,
@@ -654,7 +654,7 @@ function ActivePortalView({
               but it no longer sits between the band and the training panel at
               full width, where it read as the screen's subject. At 340px it is
               a card the size of a card. */}
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          <div className={PAGE_RAIL}>
             <TrainingPanel
               profile={selectedProfile}
               horariosState={horariosState}

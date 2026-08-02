@@ -19,6 +19,7 @@ import DashboardPage from "@/app/dashboard/page";
 import type { PaymentValidationRequest } from "@/services/api";
 import type { AttendanceRecord } from "@/app/attendance/attendance-utils";
 import { clubIsoDate } from "@/lib/club-date";
+import { PAGE_RAIL } from "@/components/ui";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -300,9 +301,10 @@ describe("DashboardPage — actividad reciente", () => {
     render(<DashboardPage />);
     await screen.findByText("Miembros");
 
-    expect(screen.getByTestId("dashboard-lower").className).toContain(
-      "lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]",
-    );
+    // `PAGE_RAIL`, not a literal: the dashboard used to write its own 16px gap
+    // and its own `minmax(0,340px)` track, one of the six spellings #36 found
+    // of the same split.
+    expect(screen.getByTestId("dashboard-lower").className).toBe(PAGE_RAIL);
   });
 });
 

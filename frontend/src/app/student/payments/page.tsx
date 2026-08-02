@@ -67,6 +67,7 @@ import {
   FilterPanel,
   FilterPill,
   LoadingState,
+  PAGE_RAIL,
   buttonClasses,
 } from "@/components/ui";
 import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
@@ -1013,7 +1014,7 @@ function PaymentsContent({
           instructions can't sit below the history there, which is the position
           a plain rail would have put them in. Above `lg` the rail spans both
           rows on the right and the history returns under the card. */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div className={PAGE_RAIL}>
         <div className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-1">
           <MembershipCard
             membership={selectedProfile.membership}
