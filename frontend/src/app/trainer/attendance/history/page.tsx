@@ -25,13 +25,20 @@
  * this term?" had no answer anywhere in the trainer's product. Grouping stays
  * by session; the filters just narrow what gets grouped.
  *
- * ## Known gap: "Corregir" cannot deep-link
+ * ## "Corregir" deep-links into the session (#95)
  *
- * `AttendanceRecord` (src/app/attendance/attendance-utils.ts:61) carries the
- * horario only as a display string — there is no `horarioId` on the DTO. So
- * "Corregir" opens the wizard at step 1 with the day accordion, rather than
- * jumping straight into that session's roster. Closing that needs a backend
- * field, not a frontend workaround.
+ * Each row addresses its own roll call:
+ * `/trainer/attendance?horario=<id>&fecha=<YYYY-MM-DD>&paso=lista`. Both
+ * halves are load-bearing — the horario says which group, the fecha says
+ * which day, and the same horario on two days is two different sessions. The
+ * wizard opens on that roster with its filed marks already showing, and files
+ * the correction back on that same date.
+ *
+ * This used to be documented here as a gap needing a backend field. It did
+ * not: `AsistenciaResponseDTO` had always sent `horarioId` and the adapter
+ * was dropping it. `AttendanceRecord` carries it now, so the row has an id
+ * and not only the "Lunes 15:00 — 16:30" label, which is not reversible into
+ * a horario.
  */
 
 "use client";
@@ -71,12 +78,25 @@ import {
 import type { EstadoAsistencia } from "@/types/domain";
 import { formatDate } from "@/lib/format-utils";
 import { groupRecordsBySession, type SessionSummary } from "../../trainer-day-utils";
+import { buildWizardQuery } from "../attendance-utils";
 
 /** Sessions per page. */
 const PAGE_SIZE = 10;
 
 /** Best news first, same order as every other attendance surface. */
 const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
+
+/**
+ * Where "Corregir" goes: that session's roll call, already open.
+ *
+ * Built through `buildWizardQuery` rather than by hand so the wizard stays
+ * the single owner of its own address — the parameter names and the step
+ * vocabulary ("lista") live in one module, and this screen cannot drift out
+ * of sync with the page it links into.
+ */
+function buildCorrectionHref(session: SessionSummary): string {
+  return `/trainer/attendance${buildWizardQuery(session.horarioId, session.fecha, "mark-attendance")}`;
+}
 
 export default function TrainerAttendanceHistoryPage(): React.ReactElement {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
@@ -219,7 +239,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                           </TableCell>
                           <TableCell align="right">
                             <Link
-                              href="/trainer/attendance"
+                              href={buildCorrectionHref(sessionRow)}
                               className={buttonClasses("secondary", "sm")}
                             >
                               Corregir

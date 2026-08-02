@@ -241,6 +241,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
   const [result, setResult] = useState<RegisterAttendanceResult | null>(null);
   /** A position read off the URL that still needs its roster loaded. */
   const [pendingRestore, setPendingRestore] = useState<WizardLocation | null>(null);
+  /**
+   * The session date the URL explicitly asked for, `null` for today.
+   *
+   * Deliberately NOT the same value as `sessionDate`, which is always a real
+   * date: this one is what gets written BACK to the URL, so the ordinary
+   * "pasar lista hoy" flow keeps its short address and only a correction
+   * carries `?fecha=`.
+   */
+  const [requestedDate, setRequestedDate] = useState<string | null>(null);
   /** Unfinished roll calls for today, offered on step 1 — never auto-applied. */
   const [resumableDrafts, setResumableDrafts] = useState<StoredAttendanceDraft[]>([]);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
@@ -341,9 +350,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
   const ownedHistoryEntries = useRef(0);
 
   const writeWizardUrl = useCallback(
-    (horarioId: number | null, target: WizardStep, mode: "push" | "replace"): void => {
+    (
+      horarioId: number | null,
+      fecha: string | null,
+      target: WizardStep,
+      mode: "push" | "replace",
+    ): void => {
       if (typeof window === "undefined") return;
-      const url = `${window.location.pathname}${buildWizardQuery(horarioId, target)}`;
+      const url = `${window.location.pathname}${buildWizardQuery(horarioId, fecha, target)}`;
       if (mode === "push") {
         window.history.pushState(null, "", url);
         ownedHistoryEntries.current += 1;
@@ -360,30 +374,37 @@ export default function TrainerAttendancePage(): React.ReactElement {
    * Load a horario's roster and land on `target`.
    *
    * Every entrance to the roll call goes through here — Continuar, the resume
-   * offer on step 1, a reload on `?paso=lista`, and a Back that outlived the
-   * roster in memory — so all of them get the same roster, the same draft
-   * overlay and the same "only reviewed rows come back" guarantee.
+   * offer on step 1, a reload on `?paso=lista`, a "Corregir" deep link from
+   * the history, and a Back that outlived the roster in memory — so all of
+   * them get the same roster, the same draft overlay and the same "only
+   * reviewed rows come back" guarantee.
+   *
+   * `requestedDate` is the session's own day, and `null` means today. It is
+   * the ONE value that decides which session this whole screen is about: the
+   * prefill of already-filed marks, the draft key and the date the batch is
+   * filed on all derive from it. Hard-wiring today here is what stopped the
+   * history's "Corregir" from being able to correct anything — it would open
+   * today's list for that group and file a second session instead.
    */
   const openRoster = useCallback(
     async (
       horarioId: number,
+      requestedDate: string | null,
       target: Exclude<WizardStep, "select-session">,
       mode: "push" | "replace",
     ): Promise<void> => {
       setRosterLoading(true);
       setRosterError(null);
       try {
-        // The wizard always registers attendance for "today" (the backend
-        // defaults fechaEntrenamiento to today's server date when omitted).
-        // Re-opening the wizard for a session that already has today's
-        // attendance recorded must show those existing marks, not silently
-        // default everyone back to unmarked.
-        const today = clubIsoDate();
+        // Re-opening the wizard for a session that already has attendance
+        // recorded must show those existing marks, not silently default
+        // everyone back to unmarked.
+        const fecha = requestedDate ?? clubIsoDate();
         // The prefill fetch is a convenience, not a requirement: if it fails,
         // fall back to an empty list rather than failing the whole roster load.
         const [alumnoHorarios, existingRecords] = await Promise.all([
           fetchAlumnosPorHorario(horarioId),
-          fetchAttendanceRecords({ fechaInicio: today, fechaFin: today, horarioId }).catch(
+          fetchAttendanceRecords({ fechaInicio: fecha, fechaFin: fecha, horarioId }).catch(
             (err: unknown) => {
               console.error("[trainer/attendance] fetchAttendanceRecords prefill failed", err);
               return [];
@@ -395,10 +416,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
         // draft on top — the draft is the newer intent. Neither can produce
         // `UNMARKED`, so a student nobody has decided on stays undecided.
         const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
-        const draft = loadAttendanceDraft(attendanceDraftKey(horarioId, today));
+        const draft = loadAttendanceDraft(attendanceDraftKey(horarioId, fecha));
         const withDraft = applyAttendanceDraft(roster, draft);
 
-        setSessionDate(today);
+        setSessionDate(fecha);
+        setRequestedDate(requestedDate);
         setRestoredFromDraft(
           withDraft !== roster && countUnreviewed(withDraft) < countUnreviewed(roster),
         );
@@ -409,7 +431,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
         setStudentPage(1);
         setOnlyUnreviewed(false);
         setStep(target);
-        writeWizardUrl(horarioId, target, mode);
+        writeWizardUrl(horarioId, requestedDate, target, mode);
       } catch (err) {
         console.error("[trainer/attendance] fetchAlumnosPorHorario failed", err);
         setRosterError("No se pudo cargar el listado de estudiantes de este horario.");
@@ -422,7 +444,10 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   async function handleContinueToRoster(): Promise<void> {
     if (selectedScheduleId === null) return;
-    await openRoster(selectedScheduleId, "mark-attendance", "push");
+    // Always today: a session picked out of the accordion is the one being
+    // taught now. Reusing `requestedDate` here would let a correction the
+    // trainer walked back out of date the NEXT session they choose.
+    await openRoster(selectedScheduleId, null, "mark-attendance", "push");
   }
 
   function handleBack(): void {
@@ -437,7 +462,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
       window.history.back();
       return;
     }
-    writeWizardUrl(selectedScheduleId, previous, "replace");
+    writeWizardUrl(selectedScheduleId, requestedDate, previous, "replace");
     setStep(previous);
   }
 
@@ -445,7 +470,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
     const next = STEP_ORDER[currentIndex + 1];
     if (!next) return;
     setStep(next);
-    writeWizardUrl(selectedScheduleId, next, "push");
+    writeWizardUrl(selectedScheduleId, requestedDate, next, "push");
   }
 
   /**
@@ -456,15 +481,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
    */
   useEffect(() => {
     if (!pendingRestore || loading || loadError) return;
-    const { horarioId, step: target } = pendingRestore;
+    const { horarioId, fecha, step: target } = pendingRestore;
     setPendingRestore(null);
     if (horarioId === null || target === "select-session") return;
     if (!schedules.some((s) => s.id === horarioId)) {
-      writeWizardUrl(null, "select-session", "replace");
+      writeWizardUrl(null, null, "select-session", "replace");
       return;
     }
     setSelectedScheduleId(horarioId);
-    void openRoster(horarioId, target, "replace");
+    void openRoster(horarioId, fecha, target, "replace");
   }, [pendingRestore, loading, loadError, schedules, openRoster, writeWizardUrl]);
 
   /**
@@ -491,7 +516,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
       // The roster this step belongs to is still in memory: show it, marks and
       // all. Otherwise rebuild it — which also re-applies the draft, so the
       // trainer's decisions come back and nobody else's row does.
-      if (entry.horarioId === selectedScheduleId && students.length > 0) {
+      //
+      // The DATE is part of "which roster": the same horario on two days is
+      // two different sessions, and reusing the one in memory would show the
+      // marks of one while the URL — and the batch — say the other.
+      if (
+        entry.horarioId === selectedScheduleId &&
+        entry.fecha === requestedDate &&
+        students.length > 0
+      ) {
         setStep(entry.step);
         return;
       }
@@ -499,7 +532,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
     }
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [confirmed, selectedScheduleId, students.length]);
+  }, [confirmed, selectedScheduleId, requestedDate, students.length]);
 
   function toggleDay(day: DiaSemana): void {
     setExpandedDays((prev) => {
@@ -631,6 +664,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
     try {
       const registration = await registerAttendance({
         horarioId: selectedScheduleId,
+        // Sent explicitly rather than left to the route's "today" default:
+        // this is the day the roster was READ for, and on a correction it is
+        // deliberately not today. Filing on the default would leave the wrong
+        // records untouched and add a second session dated now.
+        fechaEntrenamiento: sessionDate ?? undefined,
         // `toAttendanceMarks` strips the frontend-only `unmarked` sentinel,
         // which the backend contract does not accept.
         students: toAttendanceMarks(students),
@@ -642,7 +680,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
       if (draftKey && registration.failed.length === 0) clearAttendanceDraft(draftKey);
       // Drop the step from the URL: a filed session must not be reachable as
       // an editable roll call by reloading the page that filed it.
-      writeWizardUrl(null, "select-session", "replace");
+      writeWizardUrl(null, null, "select-session", "replace");
     } catch (err) {
       console.error("[trainer/attendance] registerAttendance failed", err);
       setSubmitError("No se pudo registrar la asistencia. Intente nuevamente.");
@@ -653,11 +691,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   function handleReset(): void {
     if (draftKey) clearAttendanceDraft(draftKey);
-    writeWizardUrl(null, "select-session", "replace");
+    writeWizardUrl(null, null, "select-session", "replace");
     ownedHistoryEntries.current = 0;
     setStep("select-session");
     setSelectedScheduleId(null);
     setSessionDate(null);
+    setRequestedDate(null);
     setRestoredFromDraft(false);
     setStudents([]);
     setUndoStack([]);
@@ -752,7 +791,10 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   function handleResumeDraft(draft: StoredAttendanceDraft): void {
     setSelectedScheduleId(draft.horarioId);
-    void openRoster(draft.horarioId, "mark-attendance", "push");
+    // `null`, not `draft.fecha`: the offer only ever lists TODAY's drafts
+    // (`listAttendanceDrafts(clubIsoDate())`), so the two are the same date
+    // and `null` keeps the resumed URL as short as the one it resumes.
+    void openRoster(draft.horarioId, null, "mark-attendance", "push");
   }
 
   /** The in-app way out — guarded only while there is something to discard. */
