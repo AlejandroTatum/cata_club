@@ -62,12 +62,31 @@ const FILES = sourceFiles(SRC).map((path) => ({
   code: stripComments(readFileSync(path, "utf8")),
 }));
 
+/**
+ * The three classes that, TOGETHER, re-declare `.card`.
+ *
+ * Checked as a set over the tokens of one class string rather than with a
+ * regex that walks between them. A pattern like
+ * `rounded-card[^"]*border-line[^"]*bg-paper` needs two unbounded runs either
+ * side of an alternation, which is a shape that backtracks badly on long lines
+ * — and every one of these files has long lines. Splitting on whitespace is
+ * linear and says what it means.
+ */
+const CARD_TOKENS = ["rounded-card", "border-line", "bg-paper"];
+
+/** Every `class`/`className` string literal in a file, as token lists. */
+function classLists(code: string): string[][] {
+  const lists: string[][] = [];
+  for (const match of code.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+    lists.push((match[1] ?? match[2] ?? "").split(/\s+/).filter(Boolean));
+  }
+  return lists;
+}
+
 describe("the paper card has one spelling", () => {
   it("is never assembled from utilities", () => {
     const assembled = FILES.filter(({ code }) =>
-      /rounded-card[^"'`]*\bborder-line\b[^"'`]*\bbg-paper\b|bg-paper[^"'`]*\brounded-card\b/.test(
-        code,
-      ),
+      classLists(code).some((tokens) => CARD_TOKENS.every((token) => tokens.includes(token))),
     ).map(({ path }) => path);
 
     expect(assembled).toEqual([]);
