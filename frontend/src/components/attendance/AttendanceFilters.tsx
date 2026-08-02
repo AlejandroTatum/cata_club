@@ -116,7 +116,7 @@ export interface AttendanceFiltersProps {
  * below) instead of replacing — a caller that names one detail keeps the rest.
  */
 const PANEL =
-  "flex flex-col gap-4 rounded-card border border-line bg-paper p-[18px]";
+  "flex flex-col gap-4 card p-[18px]";
 
 const FIELD_LABEL =
   "text-2xs font-bold uppercase text-ink-3";

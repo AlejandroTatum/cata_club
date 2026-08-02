@@ -257,7 +257,7 @@ export default function DashboardPage(): React.ReactElement {
           {activity.length > 0 && (
             <section
               data-testid="activity-feed"
-              className="overflow-hidden rounded-card border border-line bg-paper"
+              className="card overflow-hidden"
             >
               {/* `ui/ActivityList`, not `ui/Table` and not loose markup.
                   A table row is the same fields in the same columns every time;
@@ -288,7 +288,7 @@ export default function DashboardPage(): React.ReactElement {
           )}
 
           {attendanceStats.totalStudents > 0 && (
-            <section className="rounded-card border border-line bg-paper p-[18px]">
+            <section className="card p-[18px]">
               <h2 className="mb-4 text-base font-bold text-ink">Distribución de asistencias</h2>
               <AttendanceStatusChart stats={attendanceStats} />
             </section>

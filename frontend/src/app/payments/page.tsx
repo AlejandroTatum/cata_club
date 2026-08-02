@@ -208,7 +208,7 @@ function ProofViewer({
   onExpand: () => void;
 }): React.ReactElement {
   return (
-    <div className="overflow-hidden rounded-card border border-line bg-paper lg:sticky lg:top-6">
+    <div className="card overflow-hidden lg:sticky lg:top-6">
       <div className="flex items-center gap-2 border-b border-line bg-sunken px-4 py-3">
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
           {request.proofFileName}
@@ -914,7 +914,7 @@ export default function PaymentsPage(): React.ReactElement {
         {error && !loading && <ErrorState message={error} onRetry={() => void loadRequests()} />}
 
         {!loading && !error && filtered.length === 0 && (
-          <div className="rounded-card border border-line bg-paper">
+          <div className="card">
             <EmptyState
               icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title={
@@ -948,7 +948,7 @@ export default function PaymentsPage(): React.ReactElement {
         )}
 
         {!loading && !error && filtered.length > 0 && (
-          <div className="overflow-hidden rounded-card border border-line bg-paper">
+          <div className="card overflow-hidden">
             {/* Desktop: the five columns that carry a decision. */}
             <div data-testid="payments-table" className="hidden overflow-x-auto md:block">
               <Table>
@@ -1111,7 +1111,7 @@ export default function PaymentsPage(): React.ReactElement {
             was the problem (prototype 10). */}
         <div className="grid gap-5 lg:grid-cols-5">
           <div className="flex flex-col gap-5 lg:col-span-3">
-            <section className="overflow-hidden rounded-card border border-line bg-paper">
+            <section className="card overflow-hidden">
               {/* `tabIndex={-1}` so the effect above can put focus here when
                   the detail opens: reachable programmatically, never a Tab
                   stop of its own.
@@ -1167,7 +1167,7 @@ export default function PaymentsPage(): React.ReactElement {
 
             {isPending && (
               <section
-                className="overflow-hidden rounded-card border border-line bg-paper"
+                className="card overflow-hidden"
                 aria-labelledby="antes-de-aprobar"
               >
                 <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
@@ -1212,7 +1212,7 @@ export default function PaymentsPage(): React.ReactElement {
             )}
 
             {isPending && (
-              <section className="flex flex-col gap-3 rounded-card border border-line bg-paper p-[18px]">
+              <section className="flex flex-col gap-3 card p-[18px]">
                 <h2 className="text-base font-bold text-ink">Decisión</h2>
 
                 {!showRejectForm ? (
@@ -1457,7 +1457,7 @@ export default function PaymentsPage(): React.ReactElement {
               aria-label="Visor de comprobante"
             >
               <div
-                className="relative mx-4 flex h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-card border border-line bg-paper shadow-elevated"
+                className="relative mx-4 flex h-[90vh] w-full max-w-4xl flex-col card overflow-hidden shadow-elevated"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">

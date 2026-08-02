@@ -758,7 +758,7 @@ function LadderContent({
       {/* Search results answer the question that was just typed, so they stay
           directly under the field that asked it. */}
       {buscando ? (
-        <section className="mb-5 overflow-hidden rounded-card border border-line bg-paper">
+        <section className="card mb-5 overflow-hidden">
           <h2 className="border-b border-line px-5 py-3 text-sm font-bold text-ink">
             Resultados de la búsqueda ({resultados.length})
           </h2>
@@ -784,7 +784,7 @@ function LadderContent({
 
       {/* The ladder leads: it is what the screen is about, and the students on
           it are the ones already placed. */}
-      <section className="mb-5 overflow-hidden rounded-card border border-line bg-paper">
+      <section className="card mb-5 overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
           <Trophy size={ICON.sm} strokeWidth={1.5} className="flex-none text-ink-2" aria-hidden="true" />
           <h2 className="flex-1 text-sm font-bold text-ink">

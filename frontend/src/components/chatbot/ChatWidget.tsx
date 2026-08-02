@@ -208,7 +208,7 @@ export default function ChatWidget({
          `shadow-card` before. Naming the intent is still worth it; making the
          intent win is a separate change to that shared rule, and it would
          move every card in the product. */
-      className="fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] w-[min(340px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-card border border-line bg-paper text-left shadow-elevated lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]"
+      className="fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] w-[min(340px,calc(100vw-1.5rem))] flex-col card overflow-hidden text-left shadow-elevated lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]"
     >
       {/* `.chat > header` — coal, avatar disc, "Responde en segundos". */}
       <header className="flex flex-none items-center gap-[11px] bg-coal px-[15px] py-3 text-white">

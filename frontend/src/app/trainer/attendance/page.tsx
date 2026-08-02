@@ -1471,7 +1471,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
               />
 
               <div className="mx-auto max-w-3xl">
-                <div className="rounded-card border border-line bg-paper p-5 sm:p-6">
+                <div className="card p-5 sm:p-6">
                   <h2 className="mb-4 text-sm font-bold text-ink">{STEP_LABELS[step]}</h2>
 
                   <form onSubmit={handleConfirm}>

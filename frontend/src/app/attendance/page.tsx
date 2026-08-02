@@ -155,7 +155,7 @@ export default function AttendancePage(): React.ReactElement {
         {error && !loading && <ErrorState message={error} onRetry={() => void loadRecords()} />}
 
         {!loading && !error && records.length === 0 && (
-          <div className="rounded-card border border-line bg-paper">
+          <div className="card">
             <EmptyState
               icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title="No hay registros en este rango"
@@ -170,7 +170,7 @@ export default function AttendancePage(): React.ReactElement {
         )}
 
         {!loading && !error && records.length > 0 && (
-          <div className="overflow-hidden rounded-card border border-line bg-paper">
+          <div className="card overflow-hidden">
             <div className="overflow-x-auto">
               <Table>
                 <TableHead>
