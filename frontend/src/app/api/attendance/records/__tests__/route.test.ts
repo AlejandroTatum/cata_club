@@ -81,7 +81,7 @@ describe("GET /api/attendance/records", () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual([
-      { id: "1", fecha: "2026-07-18", horario: "Lunes 15:00 — 16:30", personaId: 3, estudiante: "Sofia Alumna", estado: "present" },
+      { id: "1", fecha: "2026-07-18", horario: "Lunes 15:00 — 16:30", horarioId: 1, personaId: 3, estudiante: "Sofia Alumna", estado: "present" },
     ]);
   });
 

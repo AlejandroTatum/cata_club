@@ -100,10 +100,19 @@ describe("buildAttendanceRecord", () => {
       id: "1",
       fecha: "2026-07-18",
       horario: "Lunes 15:00 — 16:30",
+      horarioId: 1,
       personaId: 3,
       estudiante: "Sofia Alumna",
       estado: "present",
     });
+  });
+
+  it("keeps the raw horarioId even when the label falls back to a placeholder", () => {
+    // The two are independent: the label needs `/asistencias/horarios` to have
+    // answered, the id comes straight off the record. A failed schedule lookup
+    // must not cost the caller the id it would use to address the session.
+    const built = buildAttendanceRecord(asistencia, undefined, personas);
+    expect(built.horarioId).toBe(1);
   });
 
   it("falls back to a placeholder horario label when the schedule can't be resolved", () => {

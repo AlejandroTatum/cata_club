@@ -103,6 +103,7 @@ function todayRecord(id: string): AttendanceRecord {
     id,
     fecha: clubIsoDate(),
     horario: "Lunes 15:00 — 16:00",
+    horarioId: 1,
     personaId: Number(id.replace(/\D/g, "")) || 1,
     estudiante: `Estudiante ${id}`,
     estado: "present",

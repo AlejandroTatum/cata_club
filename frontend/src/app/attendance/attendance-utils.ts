@@ -59,7 +59,15 @@ export interface TrainingSchedule {
 export interface AttendanceRecord {
   id: string;
   fecha: string;
+  /** Display label only — "Lunes 15:00 — 16:30". Not reversible into an id:
+   *  two Horario rows can render the same day and times. */
   horario: string;
+  /** Raw horario id of the session. Carried for the same reason `personaId`
+   *  is, and it took the same route: `AsistenciaResponseDTO` has always sent
+   *  `horarioId`, the adapter simply dropped it in favour of the label. It is
+   *  what lets a caller ADDRESS the session — the trainer history's
+   *  "Corregir" resolves the roll call to reopen from this plus `fecha`. */
+  horarioId: number;
   /** Raw persona id of the student — lets callers (e.g. the trainer
    *  attendance wizard) match this record against a roster entry by id
    *  instead of only having the display name to go on. */

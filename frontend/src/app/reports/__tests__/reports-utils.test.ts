@@ -40,6 +40,7 @@ function buildAsistencia(count: number): AttendanceRecord[] {
     id: `rec-${i}`,
     fecha: "2026-07-01",
     horario: "Test",
+    horarioId: 1,
     personaId: i,
     estudiante: `Student ${i}`,
     estado: "present" as EstadoAsistencia,
