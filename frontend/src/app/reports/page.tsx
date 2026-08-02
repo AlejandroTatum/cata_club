@@ -102,6 +102,7 @@ import {
   Badge,
   Button,
   EmptyState,
+  FilterPanel,
   LoadingState,
   Pagination,
   Table,
@@ -451,75 +452,82 @@ function ReportsContent(): React.ReactElement {
         })}
       </div>
 
-      {/* Range + the single preset-specific filter + Generar PDF. */}
-      <div className="card flex flex-wrap items-end gap-section p-[17px_18px]">
-        <div className="flex min-w-[150px] flex-col gap-1.5">
-          <label htmlFor="fechaInicio" className="text-2xs font-bold uppercase text-ink-3">
-            Desde
-          </label>
-          <input
-            type="date"
-            id="fechaInicio"
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-            className="input-field h-ctl"
-          />
-        </div>
-        <div className="flex min-w-[150px] flex-col gap-1.5">
-          <label htmlFor="fechaFin" className="text-2xs font-bold uppercase text-ink-3">
-            Hasta
-          </label>
-          <input
-            type="date"
-            id="fechaFin"
-            value={fechaFin}
-            onChange={(e) => setFechaFin(e.target.value)}
-            className="input-field h-ctl"
-          />
-        </div>
+      {/* Range + the single preset-specific filter. The frame used to be a
+          hand-written card with its own `p-[17px_18px]` and no caption — one
+          pixel off the panel every other screen filters through. */}
+      <FilterPanel
+        label="Filtros del reporte"
+        fields={
+          <div className="flex flex-wrap items-end gap-section">
+            <div className="flex min-w-[150px] flex-col gap-1.5">
+              <label htmlFor="fechaInicio" className="text-2xs font-bold uppercase text-ink-3">
+                Desde
+              </label>
+              <input
+                type="date"
+                id="fechaInicio"
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                className="input-field h-ctl"
+              />
+            </div>
+            <div className="flex min-w-[150px] flex-col gap-1.5">
+              <label htmlFor="fechaFin" className="text-2xs font-bold uppercase text-ink-3">
+                Hasta
+              </label>
+              <input
+                type="date"
+                id="fechaFin"
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+                className="input-field h-ctl"
+              />
+            </div>
 
-        {preset === "asistencia" && (
-          <div className="flex min-w-[150px] flex-col gap-1.5">
-            <label htmlFor="horarioId" className="text-2xs font-bold uppercase text-ink-3">
-              Horario
-            </label>
-            <select
-              id="horarioId"
-              value={horarioId}
-              onChange={(e) => setHorarioId(e.target.value)}
-              className="input-field h-ctl"
-            >
-              <option value="">Todos</option>
-              {horarios.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {formatDay(h.diaSemana)} {h.horaInicio}–{h.horaFin}
-                </option>
-              ))}
-            </select>
+            {preset === "asistencia" && (
+              <div className="flex min-w-[150px] flex-col gap-1.5">
+                <label htmlFor="horarioId" className="text-2xs font-bold uppercase text-ink-3">
+                  Horario
+                </label>
+                <select
+                  id="horarioId"
+                  value={horarioId}
+                  onChange={(e) => setHorarioId(e.target.value)}
+                  className="input-field h-ctl"
+                >
+                  <option value="">Todos</option>
+                  {horarios.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {formatDay(h.diaSemana)} {h.horaInicio}–{h.horaFin}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {preset === "pagos" && (
+              <div className="flex min-w-[150px] flex-col gap-1.5">
+                <label htmlFor="pagosEstado" className="text-2xs font-bold uppercase text-ink-3">
+                  Estado
+                </label>
+                <select
+                  id="pagosEstado"
+                  value={pagosEstado}
+                  onChange={(e) => setPagosEstado(e.target.value)}
+                  className="input-field h-ctl"
+                >
+                  {PAGOS_ESTADO_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
           </div>
-        )}
-
-        {preset === "pagos" && (
-          <div className="flex min-w-[150px] flex-col gap-1.5">
-            <label htmlFor="pagosEstado" className="text-2xs font-bold uppercase text-ink-3">
-              Estado
-            </label>
-            <select
-              id="pagosEstado"
-              value={pagosEstado}
-              onChange={(e) => setPagosEstado(e.target.value)}
-              className="input-field h-ctl"
-            >
-              {PAGOS_ESTADO_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-      </div>
+        }
+      />
 
       {rangeInverted && (
         <div className="alert-error" role="alert">
