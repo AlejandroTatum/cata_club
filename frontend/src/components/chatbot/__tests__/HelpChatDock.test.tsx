@@ -31,10 +31,18 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+const mockPathname = vi.fn<() => string | null>();
+vi.mock("next/navigation", (): { usePathname: () => string | null } => ({
+  usePathname: (): string | null => mockPathname(),
+}));
+
 beforeEach(() => {
   resetHelpChatForTests();
   mockUseAuth.mockReset();
   mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
+  mockPathname.mockReset();
+  // The landing: public chrome, no rail, so the float is the whole affordance.
+  mockPathname.mockReturnValue("/");
   vi.spyOn(global, "fetch").mockResolvedValue(
     new Response(JSON.stringify({ reply: "Entrenamos de lunes a sábado." }), {
       status: 200,
@@ -179,6 +187,84 @@ describe("HelpChatDock — the launcher", () => {
 
     expect(screen.getByRole("button", { name: "¿Cómo inicio sesión?" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "¿Cuáles son los horarios?" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * #59. The float and `ui/Table`'s action lane are anchored to the SAME right
+ * edge, so from `lg` up — where the disc is 76x76 at a 20px inset — the corner
+ * it rests in is the corner the action lane and the pager end in. Measured on
+ * /members: the disc sits at (1344,804) at 1440x900 and (1184,624) at 1280x720,
+ * and the "Editar" centres (x 1365 and x 1207) and the "Página siguiente"
+ * centres (1345,839 and 1185,659) all fall inside it.
+ *
+ * The geometry is asserted in the browser, in `tests/e2e/launcher-occlusion`,
+ * because that is where rects exist. What is asserted here is the RULE that
+ * produces it: the float steps down exactly where the rail already carries
+ * "Ayuda y soporte", and nowhere else.
+ */
+describe("HelpChatDock — where the rail already carries the assistant", () => {
+  const RAIL_ROUTES = ["/members", "/dashboard", "/payments", "/discounts", "/trainer/attendance", "/ayuda"];
+  const RAILLESS_ROUTES = ["/", "/login", "/reset-password", "/student/enroll", "/unauthorized"];
+
+  it.each(RAIL_ROUTES)("steps down from lg up on %s", (route) => {
+    mockPathname.mockReturnValue(route);
+    render(<HelpChatDock />);
+
+    // `lg:hidden`, not `opacity-0`: above `lg` on these routes the launcher is
+    // not withdrawing until the corner frees up, it is not there at all.
+    expect(screen.getByRole("button", { name: /abrir cata-bot/i }).className).toContain("lg:hidden");
+  });
+
+  it.each(RAILLESS_ROUTES)("keeps floating at every width on %s", (route) => {
+    mockPathname.mockReturnValue(route);
+    render(<HelpChatDock />);
+
+    expect(screen.getByRole("button", { name: /abrir cata-bot/i }).className).not.toContain("lg:hidden");
+  });
+
+  it("still floats below lg on a rail route, where the rail is a drawer", () => {
+    mockPathname.mockReturnValue("/members");
+    render(<HelpChatDock />);
+
+    // One media query does both: the phone disc is unconditional, and the
+    // classes that grow it are the same ones that now remove it.
+    const launcher = screen.getByRole("button", { name: /abrir cata-bot/i });
+    expect(launcher.className).toMatch(/\bfixed\b/);
+    expect(launcher.className).toMatch(/\bh-11\b/);
+    expect(launcher.className).not.toContain("hidden lg:");
+  });
+
+  it("survives a route with no pathname rather than vanishing from it", () => {
+    // Next's error boundaries render outside the router, and the root layout
+    // mounts the dock on them too.
+    mockPathname.mockReturnValue(null);
+    render(<HelpChatDock />);
+
+    expect(screen.getByRole("button", { name: /abrir cata-bot/i }).className).not.toContain("lg:hidden");
+  });
+
+  it("returns focus to the trigger that opened the panel, not always to itself", () => {
+    mockPathname.mockReturnValue("/members");
+    render(
+      <>
+        <button type="button" data-testid="rail-row" onClick={(): void => openHelpChat()}>
+          Ayuda y soporte
+        </button>
+        <HelpChatDock />
+      </>,
+    );
+
+    // Above `lg` on /members the launcher is the trigger that is NOT on screen,
+    // so handing focus back to it would drop the caret on an invisible button.
+    const railRow = screen.getByTestId("rail-row");
+    railRow.focus();
+    fireEvent.click(railRow);
+    expect(screen.getByRole("dialog", { name: /cata-bot/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(document.activeElement).toBe(railRow);
   });
 });
 

@@ -40,17 +40,62 @@
  * block, the auth small print, the enrolment header, `/unauthorized` and this
  * launcher all open the SAME panel with the SAME role-scoped quick replies.
  * The launcher hides itself while the panel is open — the panel has its own
- * close control, and this keeps the two from ever sharing a corner — and takes
- * focus back when the panel closes.
+ * close control, and this keeps the two from ever sharing a corner — and hands
+ * focus back to whatever opened the panel when it closes.
+ *
+ * ## Why the float steps down on the app shell from `lg` up (#59)
+ *
+ * The yielding above answers "what furniture is under the corner?". It does
+ * not answer "what CONTENT is under the corner?", and the note above assumed
+ * that question had no answer worth asking — page content under a float being
+ * unavoidable. Measured on /members with 40 rows, it is answerable and the
+ * answer is bad:
+ *
+ * | Viewport  | Launcher rect        | Covered control, by scroll offset          |
+ * |-----------|----------------------|--------------------------------------------|
+ * | 1440x900  | (1344,804) 76x76     | top "Editar" (1334..1397, centre x 1365)   |
+ * |           |                      | foot "Página siguiente" (centre 1345,839)  |
+ * | 1280x720  | (1184,624) 76x76     | top "Editar" (1176..1237, centre x 1207)   |
+ * |           |                      | foot "Página siguiente" (centre 1185,659)  |
+ *
+ * Two things that matter. First, it is not a page-foot defect: the page
+ * scrolls under a viewport-fixed element, so a different row is dead at every
+ * scroll offset and reserving space at the foot of the table fixes none of
+ * them. Second, the trapped control at the foot is the PAGER, not a row —
+ * "Página siguiente" ends on the same right edge the action lane does, and at
+ * maximum scroll there is nowhere left to scroll it out from under the disc.
+ *
+ * The collision is structural: a float anchored bottom-right against the
+ * right-aligned action lane that `ui/Table` and `ui/Pagination` share. It only
+ * exists from `lg` up, where the disc grows to 76x76 at a 20px inset — below
+ * `lg` the disc is 44x44 at an 8px inset and clears both lanes, and the
+ * account list is cards rather than a table anyway.
+ *
+ * `lg` is also exactly where the app shell's sidebar stops being a drawer and
+ * is permanently on screen, carrying its own "Ayuda y soporte" row at
+ * x 10..226 — measured at both 1440 and 1280, at every scroll offset. So on
+ * those routes the float is not the assistant's only door; it is a second door
+ * standing in the action lane. It steps down and the rail keeps the assistant.
+ *
+ * It steps down on `app` routes ONLY. On the landing, the auth screens, the
+ * enrolment funnel and `/unauthorized` there is no rail, which is the whole
+ * reason the float came back — so there it floats at every width.
  */
 
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { resolveShellKind } from "@/lib/shell-routes";
 import ChatWidget, { BOT_NAME } from "./ChatWidget";
-import { closeHelpChat, openHelpChat, useHelpChatState } from "./help-chat-store";
+import {
+  closeHelpChat,
+  openHelpChat,
+  useHelpChatState,
+  OPEN_HELP_CHAT_EVENT,
+} from "./help-chat-store";
 import { LAUNCHER_FOCUS_RING } from "./chat-focus-ring";
 
 /** Breathing room left between the launcher and the furniture that pushed it up. */
@@ -234,12 +279,34 @@ const LAUNCHER_CLASSES =
   "transition-[transform,opacity] duration-200 ease-out hover:bg-coal-3 " +
   "lg:bottom-5 lg:right-5 lg:h-[76px] lg:w-[76px]";
 
+/**
+ * The step-down, as a media query and not as a measurement.
+ *
+ * The clearance withdrawal above keeps the button rendered on purpose, so it
+ * can go on measuring its own corner and come back when the corner frees up.
+ * This one is not conditional on anything that moves: above `lg` on an `app`
+ * route the rail is on screen and the float is redundant, full stop. So it is
+ * the same `lg` media query that grows the disc rather than a `matchMedia`
+ * probe — nothing to hydrate, nothing to flash — and `display: none` rather
+ * than opacity, which takes the button out of the accessibility tree and the
+ * tab order without `aria-hidden` or `tabIndex` having to say so.
+ */
+const RAIL_CARRIES_THE_ASSISTANT = "lg:hidden";
+
 export default function HelpChatDock(): React.ReactElement {
   const { session } = useAuth();
   const { open, draft } = useHelpChatState();
+  const pathname = usePathname();
   const launcherRef = useRef<HTMLButtonElement>(null);
   const clearance = useDockClearance(launcherRef);
   const wasOpenRef = useRef(false);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  // `usePathname` is typed non-null but returns null on the error boundaries
+  // Next renders outside the router, and the root layout mounts this dock on
+  // every one of them. Treated as "no rail", which is the safe side: the float
+  // stays rather than vanishing from a screen that has nothing else.
+  const railCarriesTheAssistant = resolveShellKind(pathname ?? "/") === "app";
 
   const handleClose = useCallback((): void => closeHelpChat(), []);
 
@@ -255,16 +322,43 @@ export default function HelpChatDock(): React.ReactElement {
     return (): void => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
-  // Closing hands focus back to the launcher instead of dropping it on
-  // `<body>`, which would send the next Tab to the top of the document.
+  /*
+   * Remember which trigger opened the panel.
+   *
+   * On the open EVENT and not in an effect: the event is dispatched
+   * synchronously from the trigger's own click handler, so `activeElement` is
+   * still the trigger. By the time effects run, the panel has mounted and
+   * focused its own composer, and the dock would remember the textarea.
+   */
+  useEffect((): (() => void) => {
+    function rememberOpener(): void {
+      const active = document.activeElement;
+      openerRef.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    }
+    window.addEventListener(OPEN_HELP_CHAT_EVENT, rememberOpener);
+    return (): void => window.removeEventListener(OPEN_HELP_CHAT_EVENT, rememberOpener);
+  }, []);
+
+  // Closing hands focus back to whatever opened the panel instead of dropping
+  // it on `<body>`, which would send the next Tab to the top of the document.
+  //
+  // It used to hand focus to this launcher unconditionally, which was the same
+  // thing as long as the launcher was the only trigger on screen. It is not:
+  // the rail's "Ayuda y soporte" row opens the same panel, and above `lg` on an
+  // `app` route the launcher is now the trigger that is NOT there. Falling back
+  // to the launcher covers the opener that has since left the document.
   useEffect((): void => {
     if (wasOpenRef.current && !open) {
-      launcherRef.current?.focus({ preventScroll: true });
+      const opener = openerRef.current;
+      const target = opener?.isConnected ? opener : launcherRef.current;
+      target?.focus({ preventScroll: true });
+      openerRef.current = null;
     }
     wasOpenRef.current = open;
   }, [open]);
 
   const hidden = open || clearance.withdrawn;
+  const stepDown = railCarriesTheAssistant ? RAIL_CARRIES_THE_ASSISTANT : "";
 
   return (
     <>
@@ -282,7 +376,7 @@ export default function HelpChatDock(): React.ReactElement {
         tabIndex={hidden ? -1 : undefined}
         className={`${LAUNCHER_CLASSES} ${LAUNCHER_FOCUS_RING} ${
           hidden ? "pointer-events-none opacity-0" : "opacity-100"
-        }`}
+        } ${stepDown}`}
         style={clearance.lift ? { transform: `translateY(-${clearance.lift}px)` } : undefined}
       >
         {/*
