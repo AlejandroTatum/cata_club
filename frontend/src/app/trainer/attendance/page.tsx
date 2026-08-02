@@ -1194,6 +1194,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
                           {ATTENDANCE_STATES.map((state) => {
                             const isActive = student.attendance === state;
                             return (
+                              /* @touch-target Marked standing up, phone in hand — 44px at
+                                 every width, not only below `lg`. */
                               <button
                                 key={state}
                                 type="button"
