@@ -38,6 +38,27 @@ const ADMIN_SCREENS = [
 ];
 
 /**
+ * The trainer and student surfaces that carry one, added by #43.
+ *
+ * Only two of the seven do, and the reason is measured rather than assumed. The
+ * prototypes put a header action on five of their twelve screens and all five
+ * are admin lists — `19-entrenador:62`, `21-entrenador-historial:55`,
+ * `22-alumno-cuenta:60`, `23-alumno-pagos:59` and `24-alumno-asistencia:59` all
+ * draw a bare `h-page` row with nothing beside it. #74 already overrode that for
+ * `/dashboard` and `/reports`, on the record and for a stated reason, so the
+ * question here was never "does the prototype have one" — it was "does this
+ * screen's action move".
+ */
+const FAMILY_SCREENS = [
+  // "Pasar lista" lived in two places on one screen: `.btn.xl` in the coal hero
+  // when a next session existed, in the empty state's action when none did.
+  "app/trainer/page.tsx",
+  // Its admin twin `/attendance` has carried the identical link since #74, and
+  // this screen offered no way to pass a list unless the table came back empty.
+  "app/trainer/attendance/history/page.tsx",
+];
+
+/**
  * Screens whose primary action is legitimately NOT in the header, each with the
  * reason it is not. Adding a line here is the deliberate act; forgetting the
  * slot is not.
@@ -49,6 +70,28 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // Levels are created from inside the rung being edited, which is context the
   // header does not have.
   "components/nivel/NivelLadderScreen.tsx": "creation needs the rung as context",
+  // --- The five family screens, decided in #43 -----------------------------
+  // A wizard. Its buttons are "Continuar" and "Confirmar Asistencia": they move
+  // through the steps rather than act on the page, and which one is showing is
+  // the step's business. A header slot would name whichever verb happened to be
+  // live, or a third one that is neither.
+  "app/trainer/attendance/page.tsx": "wizard — the buttons are step navigation",
+  // Same shape, same reason.
+  "app/student/add-dependent/page.tsx": "wizard — the buttons are step navigation",
+  // The action depends on the state of the account — finish an enrolment, cover
+  // a membership, nothing at all — and it is the band naming that state that
+  // explains why it is being offered. Hoisted to the header it would arrive
+  // without the sentence that justifies it.
+  "app/student/page.tsx": "the action depends on the account state the band explains",
+  // Read-only. The student consults sessions the trainer recorded; there is no
+  // verb on this screen to promote.
+  "app/student/attendance/page.tsx": "read-only — there is no action to hoist",
+  // "Registrar un pago" is a DISCLOSURE: it opens a form in place, inside the
+  // membership card that says what is being paid for. It is also absent
+  // whenever a payment is already awaiting validation. A header button would be
+  // missing much of the time and, when present, would point 400px down the page
+  // at the form it opened.
+  "app/student/payments/page.tsx": "a disclosure bound to the membership it pays",
 };
 
 function read(path: string): string {
@@ -56,7 +99,7 @@ function read(path: string): string {
 }
 
 describe("the primary action lives in the header slot", () => {
-  it.each(ADMIN_SCREENS)("%s passes an actions slot", (path) => {
+  it.each([...ADMIN_SCREENS, ...FAMILY_SCREENS])("%s passes an actions slot", (path) => {
     expect(read(path)).toMatch(/\bactions=\{/);
   });
 
@@ -74,12 +117,18 @@ describe("the primary action lives in the header slot", () => {
     // The guard is only as good as its list. This is what fails when a new
     // admin screen appears and nobody adds it above — the exact way the three
     // body-CTA screens went unnoticed in the first place.
-    const known = new Set([...ADMIN_SCREENS, ...Object.keys(NO_HEADER_ACTION)]);
+    const known = new Set([
+      ...ADMIN_SCREENS,
+      ...FAMILY_SCREENS,
+      ...Object.keys(NO_HEADER_ACTION),
+    ]);
 
-    // Trainer and student surfaces are out of scope here: their action model is
-    // the subject of its own issue, and folding them in now would assert a rule
-    // that has not been decided for them yet.
-    const outOfScope = /^app\/(trainer|student|admin|ayuda|profile)\//;
+    // What is left out, and why. `/profile` and `/ayuda` reach the user through
+    // their own wrappers rather than a route-level `AppShell`, and
+    // `/admin/crear-cuenta` is the wizard `/members` launches. None of the three
+    // has been claimed by an issue that decided its action model, and asserting
+    // one here would be this file inventing a rule instead of recording one.
+    const outOfScope = /^app\/(admin|ayuda|profile)\//;
 
     const drawsShell = sourceFiles(join(SRC, "app"))
       .concat(sourceFiles(join(SRC, "components", "nivel")))
