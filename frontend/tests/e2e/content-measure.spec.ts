@@ -187,3 +187,121 @@ test.describe("the discounts rail", () => {
     expect(Math.round(after)).toBe(Math.round(before));
   });
 });
+
+/**
+ * The login brand measure, measured (#42).
+ *
+ * The coal panel read as empty on a large monitor because the brand block was
+ * capped in `ch` — a unit that resolves against the element's own font-size and
+ * so answers the same number at every viewport. The panel grew, the block did
+ * not: 440px wide at 1440, at 1920 and at 2560, i.e. 58.7% -> 44.0% -> 32.9%
+ * of the panel it sits in.
+ *
+ * A unit test can pin the classes that produce a fluid cap. Only a browser can
+ * say what the block MEASURES and how many lines the motto sets on, which are
+ * the two things the issue's acceptance criteria are written in — and the two
+ * that pull against each other, since a wider measure is what eventually
+ * collapses a three-line motto to one.
+ */
+const AUTH_VIEWPORTS = [1440, 1920, 2560];
+
+/** The rendered width of the element carrying `testId`, in CSS pixels. */
+async function widthOf(page: Page, testId: string): Promise<number> {
+  const width = await page
+    .locator(`[data-testid="${testId}"]`)
+    .evaluate((el) => el.getBoundingClientRect().width);
+  return Math.round(width);
+}
+
+/** Distinct line boxes of an element's text, counted off its client rects. */
+async function countLines(page: Page, testId: string): Promise<number> {
+  return page.locator(`[data-testid="${testId}"]`).evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const tops = new Set<number>();
+    for (const rect of range.getClientRects()) tops.add(Math.round(rect.top));
+    return tops.size;
+  });
+}
+
+test.describe("the login brand measure", () => {
+  test("grows the brand block with the panel and keeps the motto at 2-3 lines", async ({
+    page,
+  }, testInfo) => {
+    const measured: { width: number; panel: number; cluster: number; lines: number }[] = [];
+
+    for (const width of AUTH_VIEWPORTS) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/login");
+      await expect(page.getByTestId("auth-brand-cluster")).toBeVisible({ timeout: 20_000 });
+      // The measure is `ch`-adjacent and the headline is 46px: an unloaded
+      // fallback face would measure something the shipped screen never shows.
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+
+      measured.push({
+        width,
+        panel: await widthOf(page, "auth-panel-dark"),
+        cluster: await widthOf(page, "auth-brand-cluster"),
+        lines: await countLines(page, "auth-headline"),
+      });
+    }
+
+    // Recorded, not only asserted — same contract as the content column above:
+    // the next person to touch this measure should be able to read what it was.
+    await testInfo.attach("brand-cluster-occupancy", {
+      body: measured
+        .map(
+          (m) =>
+            `${m.width}: panel ${m.panel} / cluster ${m.cluster} = ` +
+            `${((m.cluster / m.panel) * 100).toFixed(1)}%, motto on ${m.lines} lines`,
+        )
+        .join("\n"),
+      contentType: "text/plain",
+    });
+
+    for (const m of measured) {
+      // The acceptance criterion, in its own words: the motto never drops below
+      // two lines and never passes three. Both directions matter — one line is
+      // no longer the centred brand block the panel is built around, and four
+      // is the unreadable stack the issue opened on.
+      expect(m.lines, `motto lines at ${m.width}`).toBeGreaterThanOrEqual(2);
+      expect(m.lines, `motto lines at ${m.width}`).toBeLessThanOrEqual(3);
+      // A stable share of the panel. The frozen cap fell to 32.9% at 2560;
+      // half the panel is a floor with room under every measured number
+      // (61.2 / 63.9 / 52.7) rather than a restatement of one of them.
+      expect(m.cluster / m.panel, `cluster share at ${m.width}`).toBeGreaterThan(0.5);
+    }
+
+    // The defect itself, stated as the one thing a frozen cap cannot do. This
+    // fails on the old code no matter what the bounds are, because 440px at
+    // 1440 and 440px at 1920 are the same number.
+    const [at1440, at1920] = measured;
+    expect(at1920.panel).toBeGreaterThan(at1440.panel);
+    expect(at1920.cluster).toBeGreaterThan(at1440.cluster);
+  });
+
+  for (const width of [1440, 1920, 390]) {
+    test(`renders the auth composition at ${width}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.goto("/login");
+      await expect(page.getByTestId("auth-brand-cluster")).toBeVisible({ timeout: 20_000 });
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+
+      // The capture the issue asks for at each of its three viewports, kept as
+      // an artifact rather than a committed baseline: this screen is still
+      // being composed, and a byte-exact snapshot would fail on every hue.
+      await testInfo.attach(`login-${width}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: "image/png",
+      });
+
+      // What IS asserted at every width: the composition never scrolls
+      // sideways. A percentage measure inside a flex panel is exactly the shape
+      // of change that overflows a narrow one.
+      const overflows = await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      );
+      expect(overflows).toBe(false);
+    });
+  }
+});
