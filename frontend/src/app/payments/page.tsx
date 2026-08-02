@@ -1458,6 +1458,14 @@ export default function PaymentsPage(): React.ReactElement {
             >
               <div
                 className="relative mx-4 flex h-[90vh] w-full max-w-4xl flex-col card overflow-hidden shadow-elevated"
+                /* The panel is a layout box, not a control: its only handler
+                   keeps a click INSIDE the sheet from reaching the backdrop's
+                   close handler above. `role="none"` says that out loud, so
+                   the element stops reading as a home-made interactive one
+                   that owes the keyboard an equivalent — there is nothing here
+                   to activate. A div has no semantics to give up, and every
+                   child (the close button, the viewer) keeps its own. */
+                role="none"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
