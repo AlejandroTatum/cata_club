@@ -240,6 +240,30 @@ describe("AppShell", (): void => {
     expect(container.querySelectorAll(".max-w-8xl")).toHaveLength(1);
   });
 
+  it("swaps that measure for the short one, on the same element", (): void => {
+    // #85's answer for the two screens whose content cannot grow to fill the
+    // 1408px measure. What matters here is not the number but WHERE it lands:
+    // on the one element that already carries the measure, so the utility row,
+    // the page header and the cards stay on a single edge. A narrower cap
+    // written inside `<main>` would move the cards away from the header action
+    // that adds rows to them — see `CONTENT_MEASURE`.
+    const { container } = render(
+      <AppShell title="Descuentos" measure="short">
+        <p>contenido</p>
+      </AppShell>,
+    );
+
+    const measure = container.querySelector(".max-w-5xl");
+    expect(measure).not.toBeNull();
+    expect(container.querySelector(".max-w-8xl")).toBeNull();
+
+    const main = container.querySelector("main") as HTMLElement;
+    expect(measure).toContainElement(main);
+    expect(measure).toContainElement(screen.getByRole("button", { name: "Buscar secciones" }));
+
+    expect(container.querySelectorAll(".max-w-5xl")).toHaveLength(1);
+  });
+
   it("derives nav links from the admin role and excludes Inicio", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
