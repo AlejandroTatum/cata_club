@@ -39,7 +39,7 @@ export default function AyudaPage(): React.ReactElement {
          */}
         <section
           aria-labelledby="horarios-heading"
-          className="rounded-card border border-line bg-paper p-5 sm:p-6"
+          className="card p-5 sm:p-6"
         >
           <h2 id="horarios-heading" className="mb-1 text-base font-extrabold text-ink">
             Horarios de entrenamiento
@@ -90,7 +90,7 @@ export default function AyudaPage(): React.ReactElement {
             <section
               key={section.title}
               aria-labelledby={headingId}
-              className="rounded-card border border-line bg-paper p-5 sm:p-6"
+              className="card p-5 sm:p-6"
             >
               <h2 id={headingId} className="mb-4 text-base font-extrabold text-ink">
                 {section.title}

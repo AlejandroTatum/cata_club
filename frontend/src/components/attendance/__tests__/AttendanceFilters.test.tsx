@@ -41,17 +41,14 @@ function renderPanel(className?: string): HTMLElement {
 
 afterEach(cleanup);
 
-/** The classes that make the panel read as a panel, whatever the caller says. */
-const BASE_CLASSES = [
-  "flex",
-  "flex-col",
-  "gap-4",
-  "rounded-card",
-  "border",
-  "border-line",
-  "bg-paper",
-  "p-[18px]",
-];
+/**
+ * The classes that make the panel read as a panel, whatever the caller says.
+ *
+ * `card` and not `rounded-card border border-line bg-paper`: the product had
+ * two spellings for the same paper surface and this was one of the twenty-one
+ * sites on the assembled side. See `lib/__tests__/card-idiom.test.ts`.
+ */
+const BASE_CLASSES = ["flex", "flex-col", "gap-4", "card", "p-[18px]"];
 
 describe("AttendanceFilters container styling", () => {
   it("carries its own panel classes when the caller passes nothing", () => {

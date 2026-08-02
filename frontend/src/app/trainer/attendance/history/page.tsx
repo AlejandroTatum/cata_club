@@ -148,7 +148,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
           {error && !loading && <ErrorState message={error} onRetry={() => loadHistory()} />}
 
           {!loading && !error && (
-            <div className="overflow-hidden rounded-card border border-line bg-paper">
+            <div className="card overflow-hidden">
               {sessions.length === 0 ? (
                 <EmptyState
                   icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}

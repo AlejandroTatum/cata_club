@@ -193,7 +193,7 @@ export default function TrainerPage(): React.ReactElement {
                 </Link>
               </div>
             ) : (
-              <div className="rounded-card border border-line bg-paper">
+              <div className="card">
                 <EmptyState
                   icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                   title={
@@ -227,7 +227,7 @@ export default function TrainerPage(): React.ReactElement {
             {/* --- Última lista: a result, and something to do about it. --- */}
             <section
               aria-labelledby="ultima-lista-title"
-              className="overflow-hidden rounded-card border border-line bg-paper"
+              className="card overflow-hidden"
             >
               <div className="flex items-center gap-3 border-b border-line px-5 py-4">
                 <h2 id="ultima-lista-title" className="flex-1 text-sm font-bold text-ink">
