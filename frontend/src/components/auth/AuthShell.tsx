@@ -209,10 +209,51 @@ export default function AuthShell({
           Volver al sitio
         </Link>
 
-        {/* The centred cluster — `gap:22px`, `max-width:44ch` (line 792). */}
+        {/*
+         * The centred cluster — `gap:22px`, and a measure that TRACKS THE
+         * PANEL instead of freezing.
+         *
+         * The prototype writes `max-width:44ch` (line 792) on this wrapper.
+         * `ch` resolves against the element's OWN font-size, and this wrapper
+         * declares none, so it inherited the 16px root and the cap computed to
+         * a flat 440px at every viewport. The panel is `flex:1.1` of the
+         * composition and does grow — measured 749px at 1440, 1000px at 1920,
+         * 1336px at 2560 — so the brand block fell from 58.7% of it to 44.0%
+         * to 32.9%. That is the empty dark field: not a missing element, a cap
+         * that answers the same number whatever it is asked.
+         *
+         * `clamp(25rem, 72%, 44rem)` replaces it. The percentage is of the
+         * panel's content box, so the measure grows with the panel; the two
+         * bounds are the limits either side of which the composition breaks,
+         * both measured in a browser at the `display` step:
+         *
+         *   25rem (400px) floor — the supporting line below the headline is
+         *   389px of unbroken text. Under 400px it wraps to two lines, which
+         *   is a regression at the `split` boundary, where 72% of the panel is
+         *   only 289px.
+         *
+         *   44rem (704px) ceiling — the motto sets on 3 lines up to 480px, on
+         *   2 from 490px, and collapses to 1 at 750px. A one-line motto is not
+         *   the centred brand block this panel is built around, so the ceiling
+         *   sits 46px clear of that cliff.
+         *
+         * Measured after the change: 61.3% of the panel at 1440, 63.9% at
+         * 1920, 52.7% at 2560 — an 11-point spread where it used to be 26.
+         *
+         * Contrast is unchanged where it can be, and covered by the file's own
+         * worst case where it moves. A 2-line motto makes the cluster SHORTER,
+         * so from 1920 up the figure caption sits 168px off the panel centre
+         * instead of 194px — both INSIDE the gradient's ~231px fade, so the
+         * caption was already lit before this change and the radial only gets
+         * marginally brighter under it. The bound that covers it is the one
+         * measured above: muted ink at the exact centre, the brightest point
+         * the gradient has, still holds 4.53:1. Every other muted line on this
+         * panel is untouched — the exit link and the copyright are pinned to
+         * the rails, 393px off centre, and neither moves.
+         */}
         <div
           data-testid="auth-brand-cluster"
-          className="relative z-[1] flex flex-col items-center justify-center gap-[22px] self-center justify-self-center [max-width:44ch]"
+          className="relative z-[1] flex flex-col items-center justify-center gap-[22px] self-center justify-self-center max-w-[clamp(25rem,72%,44rem)]"
         >
           {/*
            * 104px, `border:4px solid rgba(255,255,255,.12)`. The 50%-black
@@ -247,6 +288,16 @@ export default function AuthShell({
            * the form title, and the motto is brand copy, not the heading of
            * a section a user navigates to.
            *
+           * `max-w-[15ch]` is the prototype's own measure (line 228) and it
+           * survives ONLY on phones, where at the `2xl` step it computes to
+           * 330px on a 342px panel. From `split` up it is cancelled, because
+           * `ch` freezes the same way the wrapper's `44ch` did: at the
+           * `display` step it computes to a flat 465px, which is 25px LOOSER
+           * than the 440px the wrapper already imposed — so it never bound
+           * anything on desktop, and leaving it in place would now clamp the
+           * motto back to 465px and undo the wrapper's fluid measure. The
+           * desktop measure is the cluster's, and only the cluster's.
+           *
            * The quotation marks are the typographic pair the 14-view
            * prototype uses (line 794). Guillemets shipped here by mistake,
            * copied from the reduced `prototipos/01-login.html`, and the
@@ -257,7 +308,7 @@ export default function AuthShell({
            */}
           <p
             data-testid="auth-headline"
-            className="my-5 max-w-[15ch] text-2xl font-extrabold leading-crisp [text-wrap:balance] split:my-0 split:text-display split:leading-crisp"
+            className="my-5 max-w-[15ch] text-2xl font-extrabold leading-crisp [text-wrap:balance] split:my-0 split:max-w-none split:text-display split:leading-crisp"
           >
             “Formando <em className="not-italic text-ball">campeones</em> para la vida”
           </p>
