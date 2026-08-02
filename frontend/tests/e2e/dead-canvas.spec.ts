@@ -44,6 +44,38 @@
  *
  * Phone and tablet widths are also out of scope: below `sm` these lists are
  * card stacks, not tables, and they scroll at every row count.
+ *
+ * ## The second measure (#85, option B)
+ *
+ * Those same two screens are the ones #85 finally acted on, and the action was
+ * NOT to close their canvas — it cannot be closed, for the reason above. They
+ * are drawn on a 1024px content measure instead of the product's 1408px
+ * (`AppShell` `measure="short"`), so the four discounts read as a column with
+ * a margin rather than as a page that ran out of rows.
+ *
+ * The readings prove exactly that, and no more. `dead` on those two screens is
+ * IDENTICAL either side of the change:
+ *
+ * | Screen             | 1366×768 | 1440×900 | 1920×1080 |
+ * |--------------------|----------|----------|-----------|
+ * | `/discounts`       | 344      | 476      | 656       |
+ * | `/groups` collapsed| 508      | 640      | 820       |
+ *
+ * What moved is the width of the block above it — recorded per reading as
+ * `contentWidth`, and bounded below:
+ *
+ * | Screen             | 1366×768   | 1440×900   | 1920×1080   |
+ * |--------------------|------------|------------|-------------|
+ * | `/discounts` before| 1078       | 1152       | 1356        |
+ * | `/discounts` after | **972**    | **972**    | **972**     |
+ * | `/groups` before   | 1078       | 1152       | 1356        |
+ * | `/groups` after    | **972**    | **972**    | **972**     |
+ *
+ * The reverse of a narrower measure is a table squeezed into a sideways
+ * scroll, so that is asserted too, on the screens the cap touches. The
+ * `/discounts` table's min-content is 527px beside the 340px rail; at 972px of
+ * content it has 610px, and the cap was chosen against that floor — 896px of
+ * pane (844px of content) is where it starts scrolling.
  */
 import { test, expect, type Page, type Route } from "@playwright/test";
 
@@ -79,6 +111,16 @@ interface Reading {
   dead: number;
   /** How far the page scrolls past the viewport. The other side of the trade. */
   overflow: number;
+  /** Width of the widest first-level block — the measure the screen is drawn on. */
+  contentWidth: number;
+  /**
+   * Horizontal scrollers whose content does not fit, as `client/scroll`.
+   *
+   * The reverse of a width cap: a table that no longer fits its column does
+   * not report as an error, it just starts scrolling sideways, and a list you
+   * have to drag to read the last column of is worse than an empty page.
+   */
+  sideways: string[];
 }
 
 async function readCanvas(page: Page): Promise<Reading> {
@@ -86,15 +128,19 @@ async function readCanvas(page: Page): Promise<Reading> {
   return page.evaluate(() => {
     const main = document.querySelector("main");
     if (!main) throw new Error("no <main> on this page");
-    const top = main.getBoundingClientRect().top;
-    const contentBottom = Math.max(
-      top,
-      ...[...main.children].map((el) => el.getBoundingClientRect().bottom),
-    );
+    const box = main.getBoundingClientRect();
+    const children = [...main.children];
+    const contentBottom = Math.max(box.top, ...children.map((el) => el.getBoundingClientRect().bottom));
     return {
       contentBottom: Math.round(contentBottom),
       dead: Math.max(0, Math.round(window.innerHeight - contentBottom)),
       overflow: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+      contentWidth: Math.round(
+        Math.max(0, ...children.map((el) => el.getBoundingClientRect().width)),
+      ),
+      sideways: [...main.querySelectorAll<HTMLElement>(".overflow-x-auto")]
+        .filter((el) => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)
+        .map((el) => `${el.clientWidth}/${el.scrollWidth}`),
     };
   });
 }
@@ -124,6 +170,13 @@ const DEAD_CANVAS_BUDGET = 200;
  * is a ceiling with room over today's worst reading, not a restatement of it.
  */
 const SCROLL_BUDGET_VIEWPORTS = 2;
+
+/**
+ * What `measure="short"` leaves for content: 1024px of pane less the shell's
+ * 26px gutters. The bound is `<=`, because at a viewport narrower than the cap
+ * the window is already the measure and nothing is capped.
+ */
+const SHORT_MEASURE_CONTENT = 972;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -267,6 +320,8 @@ interface Screen {
   name: string;
   /** False for the two screens that have no pager — recorded, not bounded. */
   paginated: boolean;
+  /** True for the screens `AppShell` draws with `measure="short"`. */
+  short?: boolean;
   open: (page: Page, n: number) => Promise<void>;
 }
 
@@ -349,6 +404,10 @@ const SCREENS: Screen[] = [
   {
     name: "groups roster",
     paginated: true,
+    // The roster paginates, but it lives INSIDE `/groups`, so it is drawn on
+    // the same short measure as the collapsed accordion. Both states are
+    // measured for exactly that reason.
+    short: true,
     open: async (page, n) => {
       await mockGroups(page, n);
       await page
@@ -365,6 +424,7 @@ const SCREENS: Screen[] = [
   {
     name: "discounts",
     paginated: false,
+    short: true,
     open: async (page) => {
       await mockSession(page, "admin");
       await page.route("**/api/descuentos", (r) => fulfillJson(r, DISCOUNTS));
@@ -375,6 +435,7 @@ const SCREENS: Screen[] = [
   {
     name: "groups collapsed",
     paginated: false,
+    short: true,
     open: async (page) => {
       await mockGroups(page, 1);
       await expect(page.getByRole("button", { name: /^Ver alumnos de / }).first()).toBeVisible({
@@ -387,6 +448,42 @@ const SCREENS: Screen[] = [
 /** The pager only exists when the records outran the page size. */
 async function pageIsFull(page: Page): Promise<boolean> {
   return (await page.getByRole("button", { name: "Página siguiente" }).count()) > 0;
+}
+
+/**
+ * #85's option B, as two bounds — what the cap does, and what it costs.
+ *
+ * Deliberately says nothing about `dead`: the cap does not change it, the
+ * readings above record that it does not, and a bound claiming otherwise would
+ * be a bound on a thing that did not happen.
+ */
+function assertMeasure(
+  screen: Screen,
+  reading: Reading,
+  viewport: { width: number; height: number },
+  at: string,
+): void {
+  if (screen.short) {
+    // 1. The screen really is on the narrower measure — at every desktop
+    //    width, not just the one someone looked at.
+    expect(reading.contentWidth, `content measure on ${screen.name} at ${at}`).toBeLessThanOrEqual(
+      SHORT_MEASURE_CONTENT,
+    );
+    // 2. The reverse. A narrower column that pushes a table into a sideways
+    //    scroll has traded an empty page for an unreadable one; the cap was
+    //    picked 83px clear of the floor where that starts.
+    expect(reading.sideways, `sideways scroll on ${screen.name} at ${at}`).toEqual([]);
+    return;
+  }
+
+  // The other side of "exactly two screens are short": everything else still
+  // gets the product's measure. Checked where the two differ — below 1024 the
+  // window is narrower than either cap and the comparison means nothing.
+  if (viewport.width >= 1440) {
+    expect(reading.contentWidth, `content measure on ${screen.name} at ${at}`).toBeGreaterThan(
+      SHORT_MEASURE_CONTENT,
+    );
+  }
 }
 
 test.describe("dead canvas", () => {
@@ -408,6 +505,8 @@ test.describe("dead canvas", () => {
           body: JSON.stringify({ ...reading, pageIsFull: full }),
           contentType: "text/plain",
         });
+
+        assertMeasure(screen, reading, viewport, at);
 
         if (!screen.paginated) return;
 
@@ -439,6 +538,11 @@ test.describe("dead canvas", () => {
           body: JSON.stringify({ ...reading, pageIsFull: full }),
           contentType: "text/plain",
         });
+
+        // The measure is a property of the SCREEN, so it holds at the record
+        // count that leaves canvas as well as at the one that fills it — and a
+        // part page is where a squeezed table would show up first.
+        assertMeasure(screen, reading, viewport, at);
 
         // The whole argument of #85, as one assertion: wherever dead canvas
         // survives, the page did NOT fill — there were fewer records than the
