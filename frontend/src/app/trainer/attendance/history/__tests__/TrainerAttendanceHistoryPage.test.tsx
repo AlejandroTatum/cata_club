@@ -105,9 +105,9 @@ const RECORDS: AttendanceRecord[] = [
   record("present", "Diego Mendoza", "2026-07-20"),
   record("late", "Ana Garcia", "2026-07-20"),
   record("absent", "Luis Lopez", "2026-07-20"),
-  // A different session on an earlier day.
-  record("present", "Kevin Sabando", "2026-07-17", "Viernes 17:00 — 18:00"),
-  record("justified", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00"),
+  // A different session, on an earlier day and on a different horario.
+  record("present", "Kevin Sabando", "2026-07-17", "Viernes 17:00 — 18:00", 7),
+  record("justified", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00", 7),
 ];
 
 describe("TrainerAttendanceHistoryPage", () => {
@@ -156,9 +156,27 @@ describe("TrainerAttendanceHistoryPage", () => {
 
     const links = await screen.findAllByRole("link", { name: "Corregir" });
     expect(links).toHaveLength(2);
-    // Deep-linking to the session is blocked: `AttendanceRecord` has no
-    // `horarioId`, so the wizard opens at its own first step.
-    expect(links[0]).toHaveAttribute("href", "/trainer/attendance");
+  });
+
+  it("deep-links Corregir into that session's roll call, not the picker", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    const links = await screen.findAllByRole("link", { name: "Corregir" });
+    const rows = await screen.findAllByRole("row");
+
+    // Row order is most recent first, and each href must belong to the row it
+    // sits in — both the horario AND the day. Sending the Friday's button to
+    // the Monday's roll call is the same defect one row over.
+    expect(rows[1]).toHaveTextContent("20/07/2026");
+    expect(links[0]).toHaveAttribute(
+      "href",
+      "/trainer/attendance?horario=12&fecha=2026-07-20&paso=lista",
+    );
+    expect(rows[2]).toHaveTextContent("17/07/2026");
+    expect(links[1]).toHaveAttribute(
+      "href",
+      "/trainer/attendance?horario=7&fecha=2026-07-17&paso=lista",
+    );
   });
 
   it("refetches with a new range when a preset is picked", async () => {

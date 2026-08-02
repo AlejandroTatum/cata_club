@@ -1792,3 +1792,135 @@ describe("TrainerAttendancePage — undo", () => {
     expect(screen.getByText("25 sin revisar")).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// "Corregir" deep-links into ONE session (#95)
+//
+// The trainer history's rows now address the roll call they summarise:
+// `?horario=<id>&fecha=<YYYY-MM-DD>&paso=lista`. The horario alone is not
+// enough. The wizard was hard-wired to `clubIsoDate()` everywhere it mattered
+// — the prefill of already-filed marks, the draft key, and the date the batch
+// is filed on — so a deep link carrying only the horario would have opened
+// TODAY's roll call for that group and, on Confirmar, filed a brand new
+// session dated today instead of correcting the one the trainer clicked.
+//
+// The clock in these tests is Tuesday 2026-07-21 in club time, so every date
+// below is deliberately NOT today.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — a corrected session keeps its own date", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockPush.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    window.sessionStorage.clear();
+  });
+
+  function deepLink(search: string): void {
+    window.history.replaceState(null, "", `/trainer/attendance${search}`);
+  }
+
+  it("reads the roll call of the day the URL names, not of today", async () => {
+    deepLink("?horario=12&fecha=2026-07-13&paso=lista");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 01");
+
+    // The prefill of already-filed marks has to ask for THAT day. Asking for
+    // today would show an empty list and hide the very records being corrected.
+    expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({
+      fechaInicio: "2026-07-13",
+      fechaFin: "2026-07-13",
+      horarioId: 12,
+    });
+  });
+
+  it("files the correction on the session's own date", async () => {
+    deepLink("?horario=12&fecha=2026-07-13&paso=lista");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+
+    await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
+    // Without this the "correction" is a second session dated today, and the
+    // wrong one stays wrong.
+    expect(mockRegisterAttendance.mock.calls[0][0]).toMatchObject({
+      horarioId: 12,
+      fechaEntrenamiento: "2026-07-13",
+    });
+  });
+
+  it("keys the draft by the session being corrected", async () => {
+    deepLink("?horario=12&fecha=2026-07-13&paso=lista");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 01");
+    fireEvent.click(
+      within(screen.getByRole("radiogroup", { name: /Student 01/ })).getByRole("radio", {
+        name: "Tardanza",
+      }),
+    );
+
+    // A correction interrupted halfway must not come back as today's draft.
+    expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-13")).not.toBeNull();
+    expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).toBeNull();
+  });
+
+  it("carries the date through the wizard's own steps", async () => {
+    deepLink("?horario=12&fecha=2026-07-13&paso=lista");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 01");
+    expect(window.location.search).toBe("?horario=12&fecha=2026-07-13&paso=lista");
+
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    await screen.findByRole("button", { name: /Confirmar Asistencia/ });
+    // Losing the date on Siguiente would file the batch on today after all.
+    expect(window.location.search).toBe("?horario=12&fecha=2026-07-13&paso=confirmar");
+
+    await pressBrowserBack();
+    expect(await screen.findByText("Student 01")).toBeInTheDocument();
+    expect(window.location.search).toBe("?horario=12&fecha=2026-07-13&paso=lista");
+  });
+
+  it("ignores a fecha with no horario to belong to", async () => {
+    deepLink("?fecha=2026-07-13&paso=lista");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(mockFetchAlumnosPorHorario).not.toHaveBeenCalled();
+  });
+
+  it("falls back to today when the URL names no date at all", async () => {
+    // The ordinary "pasar lista" flow is untouched: today needs no address,
+    // so its URL stays exactly as short as it was.
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    expect(window.location.search).toBe("?horario=12&paso=lista");
+    expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({
+      fechaInicio: "2026-07-21",
+      fechaFin: "2026-07-21",
+      horarioId: 12,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+
+    await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
+    expect(mockRegisterAttendance.mock.calls[0][0]).toMatchObject({
+      horarioId: 12,
+      fechaEntrenamiento: "2026-07-21",
+    });
+  });
+});

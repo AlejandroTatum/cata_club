@@ -715,29 +715,65 @@ describe("listAttendanceDrafts", () => {
 describe("parseWizardQuery / buildWizardQuery", () => {
   it("round-trips each step", () => {
     for (const step of WIZARD_STEP_ORDER) {
-      const query = buildWizardQuery(step === "select-session" ? null : 12, step);
+      const query = buildWizardQuery(step === "select-session" ? null : 12, null, step);
       expect(parseWizardQuery(query)).toEqual({
         horarioId: step === "select-session" ? null : 12,
+        fecha: null,
         step,
       });
     }
   });
 
   it("keeps the start of the flow at the bare URL", () => {
-    expect(buildWizardQuery(null, "select-session")).toBe("");
-    expect(buildWizardQuery(12, "mark-attendance")).toBe("?horario=12&paso=lista");
-    expect(buildWizardQuery(12, "confirm")).toBe("?horario=12&paso=confirmar");
+    expect(buildWizardQuery(null, null, "select-session")).toBe("");
+    expect(buildWizardQuery(12, null, "mark-attendance")).toBe("?horario=12&paso=lista");
+    expect(buildWizardQuery(12, null, "confirm")).toBe("?horario=12&paso=confirmar");
+  });
+
+  it("round-trips an explicit session date", () => {
+    // Today needs no address — it is what the wizard defaults to. A CORRECTION
+    // to a past session is the case the URL has to carry, because it is the
+    // one that cannot be re-derived from the clock.
+    expect(buildWizardQuery(12, "2026-07-20", "mark-attendance")).toBe(
+      "?horario=12&fecha=2026-07-20&paso=lista",
+    );
+    expect(parseWizardQuery("?horario=12&fecha=2026-07-20&paso=lista")).toEqual({
+      horarioId: 12,
+      fecha: "2026-07-20",
+      step: "mark-attendance",
+    });
+  });
+
+  it("drops a fecha that is not a real calendar day", () => {
+    // The date decides which session gets FILED, so a typo must fall back to
+    // today rather than address a day that does not exist.
+    for (const junk of ["ayer", "2026-13-01", "2026-02-31", "20-07-2026", "2026-7-2"]) {
+      expect(parseWizardQuery(`?horario=12&fecha=${junk}&paso=lista`).fecha).toBeNull();
+    }
   });
 
   it("refuses a step that has no horario to belong to", () => {
     // A roll call for nobody is not a page — send it back to the picker.
-    expect(parseWizardQuery("?paso=lista")).toEqual({ horarioId: null, step: "select-session" });
+    expect(parseWizardQuery("?paso=lista")).toEqual({
+      horarioId: null,
+      fecha: null,
+      step: "select-session",
+    });
     expect(parseWizardQuery("?horario=abc&paso=lista")).toEqual({
       horarioId: null,
+      fecha: null,
       step: "select-session",
     });
     expect(parseWizardQuery("?horario=0&paso=lista")).toEqual({
       horarioId: null,
+      fecha: null,
+      step: "select-session",
+    });
+    // A date without a horario is just as orphaned, and must not survive the
+    // fall back to the picker either.
+    expect(parseWizardQuery("?fecha=2026-07-20&paso=lista")).toEqual({
+      horarioId: null,
+      fecha: null,
       step: "select-session",
     });
   });
@@ -745,8 +781,9 @@ describe("parseWizardQuery / buildWizardQuery", () => {
   it("treats an unknown step as the picker rather than guessing", () => {
     expect(parseWizardQuery("?horario=12&paso=whatever")).toEqual({
       horarioId: 12,
+      fecha: null,
       step: "select-session",
     });
-    expect(parseWizardQuery("")).toEqual({ horarioId: null, step: "select-session" });
+    expect(parseWizardQuery("")).toEqual({ horarioId: null, fecha: null, step: "select-session" });
   });
 });

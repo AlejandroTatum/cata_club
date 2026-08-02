@@ -484,10 +484,38 @@ export function listAttendanceDrafts(fecha: string): StoredAttendanceDraft[] {
 // A step past the picker is meaningless without the horario it belongs to, so
 // the two are parsed together: `?paso=lista` with no (or a junk) `horario`
 // resolves to the picker rather than to a roll call for nobody.
+//
+// `fecha` joins them for the trainer history's "Corregir" (#95), and it is
+// OPTIONAL on purpose. Today is what the wizard defaults to and needs no
+// address; a correction to a past session is the case the URL has to carry,
+// because it is the only one that cannot be re-derived from the clock. So the
+// ordinary "pasar lista" flow keeps the exact URL it always had, and only a
+// deep link pays for the extra parameter.
 // ---------------------------------------------------------------------------
 
 const HORARIO_QUERY_KEY = "horario";
+const FECHA_QUERY_KEY = "fecha";
 const STEP_QUERY_KEY = "paso";
+
+/**
+ * A "YYYY-MM-DD" that is also a real day.
+ *
+ * The shape check alone would let `2026-02-31` through, and this date decides
+ * which session gets FILED — a batch landing on a day that does not exist is
+ * worse than falling back to today, which is at least a day the trainer can
+ * see on screen. Compared component-wise because `Date` rolls overflow
+ * forward silently (Feb 31 becomes Mar 3) instead of rejecting it.
+ */
+function parseIsoDateParam(raw: string | null): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw ?? "");
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  return raw;
+}
 
 /** Query value per step — the picker is the bare URL, with no `paso` at all. */
 const STEP_QUERY_VALUE: Record<WizardStep, string | null> = {
@@ -503,6 +531,8 @@ const STEP_BY_QUERY_VALUE: Record<string, WizardStep> = {
 
 export interface WizardLocation {
   horarioId: number | null;
+  /** The session's day, or `null` for the wizard's default of today. */
+  fecha: string | null;
   step: WizardStep;
 }
 
@@ -513,14 +543,21 @@ export function parseWizardQuery(search: string): WizardLocation {
   const horarioId =
     Number.isInteger(rawHorarioId) && rawHorarioId > 0 ? rawHorarioId : null;
   const step = STEP_BY_QUERY_VALUE[params.get(STEP_QUERY_KEY) ?? ""] ?? "select-session";
-  if (horarioId === null) return { horarioId: null, step: "select-session" };
-  return { horarioId, step };
+  // A date belongs to a session, and without a horario there is no session for
+  // it to date — it falls back to the picker along with everything else.
+  if (horarioId === null) return { horarioId: null, fecha: null, step: "select-session" };
+  return { horarioId, fecha: parseIsoDateParam(params.get(FECHA_QUERY_KEY)), step };
 }
 
 /** The query string for a position, `""` at the start of the flow. */
-export function buildWizardQuery(horarioId: number | null, step: WizardStep): string {
+export function buildWizardQuery(
+  horarioId: number | null,
+  fecha: string | null,
+  step: WizardStep,
+): string {
   const params = new URLSearchParams();
   if (horarioId !== null) params.set(HORARIO_QUERY_KEY, String(horarioId));
+  if (horarioId !== null && fecha !== null) params.set(FECHA_QUERY_KEY, fecha);
   const paso = STEP_QUERY_VALUE[step];
   if (paso) params.set(STEP_QUERY_KEY, paso);
   const query = params.toString();
