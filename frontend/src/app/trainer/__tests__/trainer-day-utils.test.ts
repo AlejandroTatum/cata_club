@@ -37,6 +37,7 @@ function record(
     id: partial.id ?? Math.random().toString(36),
     fecha: partial.fecha ?? "2026-07-23",
     horario: partial.horario ?? "Lunes 15:00 — 16:00",
+    horarioId: partial.horarioId ?? 1,
     personaId: partial.personaId ?? 1,
     estudiante: partial.estudiante ?? "Ana López",
     estado: partial.estado,
@@ -179,15 +180,40 @@ describe("groupRecordsBySession", () => {
     expect(sessions[0].total).toBe(5);
   });
 
+  it("carries the horario's raw id, not only its label", () => {
+    // What makes a session addressable. A label cannot be turned back into
+    // the horario it describes, so without this the row knows which session
+    // it summarises but cannot say so to anything but a human.
+    const sessions = groupRecordsBySession([
+      record({ estado: "present", horarioId: 7, fecha: "2026-07-20" }),
+    ]);
+
+    expect(sessions[0].horarioId).toBe(7);
+  });
+
   it("separates two horarios on the same day", () => {
     const sessions = groupRecordsBySession([
-      record({ estado: "present", horario: "Lunes 15:00 — 16:00" }),
-      record({ estado: "absent", horario: "Lunes 17:00 — 18:00" }),
+      record({ estado: "present", horarioId: 1, horario: "Lunes 15:00 — 16:00" }),
+      record({ estado: "absent", horarioId: 2, horario: "Lunes 17:00 — 18:00" }),
     ]);
 
     expect(sessions).toHaveLength(2);
     // Later horario first — most recent session at the top.
     expect(sessions[0].horario).toBe("Lunes 17:00 — 18:00");
+  });
+
+  it("keeps two same-labelled horarios apart, because the id is the identity", () => {
+    // Two Horario rows CAN render the same "Lunes 15:00 — 16:00" label: the
+    // label is day + times, and nothing in the schema forbids a second horario
+    // with both. Grouping on the label would merge them into one row whose
+    // "Corregir" pointed at whichever horario happened to be read first.
+    const sessions = groupRecordsBySession([
+      record({ estado: "present", horarioId: 3, horario: "Lunes 15:00 — 16:00" }),
+      record({ estado: "absent", horarioId: 4, horario: "Lunes 15:00 — 16:00" }),
+    ]);
+
+    expect(sessions).toHaveLength(2);
+    expect(sessions.map((s) => s.horarioId).sort()).toEqual([3, 4]);
   });
 
   it("orders most recent day first", () => {

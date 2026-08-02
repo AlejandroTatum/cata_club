@@ -149,6 +149,7 @@ function buildRecord(overrides: Partial<AttendanceRecord> = {}): AttendanceRecor
     id: "att-1",
     fecha: "2026-07-23",
     horario: "Lunes 15:00 — 16:00",
+    horarioId: 1,
     personaId: 1,
     estudiante: "Sofia Vera Zamora",
     estado: "present",

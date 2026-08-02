@@ -59,6 +59,7 @@ describe("buildAttendanceStats", () => {
         id: "a1",
         fecha: "2026-07-01",
         horario: "Test",
+        horarioId: 1,
         personaId: 1,
         estudiante: "Student A",
         estado: "present",
@@ -67,6 +68,7 @@ describe("buildAttendanceStats", () => {
         id: "a2",
         fecha: "2026-07-01",
         horario: "Test",
+        horarioId: 1,
         personaId: 2,
         estudiante: "Student B",
         estado: "present",
@@ -80,10 +82,10 @@ describe("buildAttendanceStats", () => {
 
   it("handles mixed states correctly", () => {
     const records: AttendanceRecord[] = [
-      { id: "a1", fecha: "2026-07-01", horario: "T1", personaId: 1, estudiante: "S1", estado: "present" },
-      { id: "a2", fecha: "2026-07-01", horario: "T1", personaId: 2, estudiante: "S2", estado: "absent" },
-      { id: "a3", fecha: "2026-07-01", horario: "T1", personaId: 3, estudiante: "S3", estado: "late" },
-      { id: "a4", fecha: "2026-07-01", horario: "T1", personaId: 4, estudiante: "S4", estado: "justified" },
+      { id: "a1", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 1, estudiante: "S1", estado: "present" },
+      { id: "a2", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 2, estudiante: "S2", estado: "absent" },
+      { id: "a3", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 3, estudiante: "S3", estado: "late" },
+      { id: "a4", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 4, estudiante: "S4", estado: "justified" },
     ];
     const stats = buildAttendanceStats(records);
     expect(stats.totalPresent).toBe(1);
@@ -96,9 +98,9 @@ describe("buildAttendanceStats", () => {
 
   it("counts unknown estados separately — defensive against bad runtime data", () => {
     const records: AttendanceRecord[] = [
-      { id: "u1", fecha: "2026-07-01", horario: "T1", personaId: 1, estudiante: "S1", estado: "present" as EstadoAsistencia },
-      { id: "u2", fecha: "2026-07-01", horario: "T1", personaId: 2, estudiante: "S2", estado: "unknown_value" as EstadoAsistencia },
-      { id: "u3", fecha: "2026-07-01", horario: "T1", personaId: 3, estudiante: "S3", estado: "" as EstadoAsistencia },
+      { id: "u1", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 1, estudiante: "S1", estado: "present" as EstadoAsistencia },
+      { id: "u2", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 2, estudiante: "S2", estado: "unknown_value" as EstadoAsistencia },
+      { id: "u3", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 3, estudiante: "S3", estado: "" as EstadoAsistencia },
     ];
     const stats = buildAttendanceStats(records);
     expect(stats.totalPresent).toBe(1);
@@ -305,6 +307,7 @@ function buildRecords(count: number): AttendanceRecord[] {
     id: `rec-${i}`,
     fecha: "2026-07-01",
     horario: "Test",
+    horarioId: 1,
     personaId: i,
     estudiante: `Student ${i}`,
     estado: "present" as EstadoAsistencia,

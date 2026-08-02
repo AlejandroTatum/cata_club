@@ -94,6 +94,7 @@ function record(
     id: `${estudiante}-${fecha}-${estado}`,
     fecha,
     horario: "Lunes 15:00 — 16:00",
+    horarioId: 1,
     personaId: 1,
     estudiante,
     estado,

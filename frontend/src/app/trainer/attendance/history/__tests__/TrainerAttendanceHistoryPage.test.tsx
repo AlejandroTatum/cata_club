@@ -87,11 +87,13 @@ function record(
   estudiante: string,
   fecha: string,
   horario = "Lunes 15:00 — 16:00",
+  horarioId = 12,
 ): AttendanceRecord {
   return {
     id: `${estudiante}-${fecha}-${horario}-${estado}`,
     fecha,
     horario,
+    horarioId,
     personaId: 1,
     estudiante,
     estado,

@@ -149,6 +149,10 @@ export function buildAttendanceRecord(
     id: String(asistencia.id),
     fecha: asistencia.fechaEntrenamiento,
     horario: horario ? horarioLabel(horario) : `Horario ${asistencia.horarioId}`,
+    // Independent of the label above: the id comes off the record itself, so
+    // a `/asistencias/horarios` lookup that failed costs the caller the
+    // pretty name but never the ability to address the session.
+    horarioId: asistencia.horarioId,
     personaId: asistencia.personaId,
     estudiante: personaFullName(personas.get(asistencia.personaId), `Persona ${asistencia.personaId}`),
     estado: ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND[asistencia.estado],

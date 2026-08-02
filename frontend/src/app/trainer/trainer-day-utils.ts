@@ -135,6 +135,9 @@ export interface SessionSummary {
   fecha: string;
   /** The horario descriptor as the API renders it, e.g. "Lunes 15:00 — 16:00". */
   horario: string;
+  /** The horario's raw id. With `fecha`, this is the session's address —
+   *  everything the roll call needs to be reopened on exactly this list. */
+  horarioId: number;
   counts: Record<EstadoAsistencia, number>;
   total: number;
 }
@@ -150,23 +153,29 @@ function emptyCounts(): Record<EstadoAsistencia, number> {
 }
 
 /**
- * Group records into sessions — one per (fecha, horario) pair — most recent
+ * Group records into sessions — one per (fecha, horarioId) pair — most recent
  * first.
  *
  * Grouping by SESSION rather than by student is the whole point of
  * `21-entrenador-historial.html`: "el entrenador no busca «qué hizo Ana el
  * 14»; busca «la lista del lunes pasado»".
+ *
+ * The key is the horario's ID, not its label. Nothing in the schema stops two
+ * Horario rows from sharing a day and a pair of times, and on the label those
+ * two sessions would collapse into one row — with one set of counts covering
+ * both, and one "Corregir" pointing at whichever id happened to arrive first.
  */
 export function groupRecordsBySession(records: AttendanceRecord[]): SessionSummary[] {
   const bySession = new Map<string, SessionSummary>();
 
   for (const record of records) {
-    const key = `${record.fecha}|${record.horario}`;
+    const key = `${record.fecha}|${record.horarioId}`;
     let session = bySession.get(key);
     if (!session) {
       session = {
         fecha: record.fecha,
         horario: record.horario,
+        horarioId: record.horarioId,
         counts: emptyCounts(),
         total: 0,
       };

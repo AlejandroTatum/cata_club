@@ -99,6 +99,45 @@ def test_reporte_asistencia_filtra_por_horario_y_periodo(client):
     assert body[0]["estado"] == "PRESENTE"
 
 
+def test_reporte_asistencia_expone_horario_id_y_persona_id(client):
+    """The report rows must carry the RAW ids, not just the values a UI would
+    print. `AsistenciaResponseDTO` has always declared `horario_id`, but until
+    the trainer history's "Corregir" deep link (#95) nothing downstream read
+    it, so nothing stopped it from being dropped as unused. It is a consumed
+    part of the contract now: the frontend resolves the session to correct
+    from `horarioId` + `fechaEntrenamiento`, and a display label cannot stand
+    in for either. Asserted through the HTTP payload, in camelCase, because
+    that is the shape the adapter parses -- `ResponseBase`'s alias generator
+    is part of what is being locked down here."""
+    alumno = _crear_persona(client, "1751515153")
+
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": "MARTES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": "2026-07-07", "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+
+    resp = client.get(
+        "/api/v1/asistencias/reportes",
+        params={"horario_id": horario["id"]},
+    )
+    assert resp.status_code == 200
+    fila = resp.json()[0]
+    assert fila["horarioId"] == horario["id"]
+    assert fila["personaId"] == alumno["id"]
+    assert fila["fechaEntrenamiento"] == "2026-07-07"
+
+
 def test_reporte_alumnos_nuevos_por_periodo(client):
     _crear_persona(client, "1761616161")
     resp = client.get(
