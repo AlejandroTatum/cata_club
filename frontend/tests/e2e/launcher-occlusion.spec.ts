@@ -34,6 +34,37 @@
  *     `pb-[78px]`, so nothing is trapped under it once the page is scrolled
  *     home. That is a different contract from "a float owns a corner nobody
  *     reserved", and it is not what this spec measures.
+ *
+ * ## What #89 added below `lg`, and why it is a different assertion
+ *
+ * Page content under the tab bar is the bar's own business, but the LAUNCHER
+ * under the tab bar is not: the launcher's whole contract is that it yields to
+ * bottom furniture, and at 390×844 it was measured resting INSIDE the bar's
+ * band with `transform: none` at 300ms, 800ms, 1500ms and 3000ms.
+ *
+ * The rule above cannot see it. Measured on /members at 390×844 with the
+ * defect live:
+ *
+ * | Element                  | Rect                                  |
+ * |--------------------------|---------------------------------------|
+ * | tab bar                  | y 782..844                            |
+ * | launcher, unlifted       | x 338..382, y 784..828                |
+ * | tab "Panel"              | x 8..99, centre 53                    |
+ * | tab "Miembros"           | x 103..193, centre 148                |
+ * | tab "Pagos"              | x 197..288, centre 242                |
+ * | tab "Más"                | x 292..382, **centre 337**            |
+ *
+ * The launcher's left edge is 338 and the last tab's centre is 337. ONE pixel.
+ * The float covered the right 44px of a 90px destination and every tab centre
+ * stayed clickable, so "no fixed element owns a control's centre" was true the
+ * entire time the launcher was sitting on the bar. A centre probe would have
+ * reported clear.
+ *
+ * So the phone case asserts the launcher's OWN promise instead — it clears
+ * bottom furniture by `OBSTACLE_GAP_PX` — and it asks twice, because the two
+ * defects behind #89 failed at different times: one left the launcher down
+ * until an unrelated frame shipped (~2s), the other let it climb and then drop
+ * back within ~300ms of arriving.
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
@@ -157,6 +188,46 @@ const SWEEP_OCCLUSIONS = (): Occlusion[] => {
   return found;
 };
 
+/** The admin's phone tab bar, by the name a screen reader announces. */
+const TAB_BAR_LABEL = "Navegación principal (móvil)";
+
+/** `OBSTACLE_GAP_PX` in `HelpChatDock`: what "clear of it" is worth in pixels. */
+const OBSTACLE_GAP_PX = 12;
+
+interface PhoneCorner {
+  /** Pixels of daylight between the launcher's foot and the bar's top edge. */
+  gap: number | null;
+  detail: string;
+}
+
+/** The one number the phone case turns on, plus everything needed to read a failure. */
+const PHONE_CORNER = (label: string): PhoneCorner => {
+  const bar = document.querySelector(`nav[aria-label="${label}"]`);
+  const launcher = document.querySelector('button[aria-label*="CATA-BOT"]');
+  if (!bar || !launcher) {
+    return { gap: null, detail: `bar ${bar ? "present" : "ABSENT"}, launcher ${launcher ? "present" : "ABSENT"}` };
+  }
+
+  const barRect = bar.getBoundingClientRect();
+  const launcherRect = launcher.getBoundingClientRect();
+  const tabs = [...bar.querySelectorAll('a[href],button,[role="button"]')]
+    .map((tab): string => {
+      const r = tab.getBoundingClientRect();
+      const name = (tab.getAttribute("aria-label") ?? tab.textContent ?? "").trim().slice(0, 12);
+      return `${name} x${Math.round(r.left)}..${Math.round(r.right)} c${Math.round(r.left + r.width / 2)}`;
+    })
+    .join(", ");
+
+  return {
+    gap: Math.round(barRect.top - launcherRect.bottom),
+    detail:
+      `bar y ${Math.round(barRect.top)}..${Math.round(barRect.bottom)}, ` +
+      `launcher x ${Math.round(launcherRect.left)}..${Math.round(launcherRect.right)} ` +
+      `y ${Math.round(launcherRect.top)}..${Math.round(launcherRect.bottom)} ` +
+      `transform ${getComputedStyle(launcher).transform}; tabs ${tabs}`,
+  };
+};
+
 const VIEWPORTS = [
   { width: 1440, height: 900 },
   { width: 1280, height: 720 },
@@ -204,3 +275,40 @@ for (const viewport of VIEWPORTS) {
     });
   });
 }
+
+/**
+ * #89, at the width the tab bar exists at. Two probes, one defect each:
+ *
+ *   · 500ms after the bar is on screen. The measurement used to be queued on
+ *     `requestAnimationFrame`, and instrumented on this exact page the first
+ *     callback was requested at 77ms and ran at 2055ms — so 500ms lands well
+ *     inside the window where the launcher was still sitting on the bar.
+ *   · 2500ms later, once every transition has finished. The launcher used to
+ *     climb and then fall back within ~300ms, because it re-derived its
+ *     resting corner from where it was DRAWN while its own 200ms transform
+ *     transition was still running.
+ */
+test("the launcher clears the phone tab bar at 390x844", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockAdminMembers(page);
+
+  await page.goto("/members");
+  await expect(page.getByRole("navigation", { name: TAB_BAR_LABEL })).toBeVisible({ timeout: 20_000 });
+
+  const report: string[] = [];
+  for (const [moment, settle] of [
+    ["as soon as the bar lands", 500],
+    ["once everything has settled", 2500],
+  ] as const) {
+    await page.waitForTimeout(settle);
+
+    const corner = await page.evaluate(PHONE_CORNER, TAB_BAR_LABEL);
+    report.push(`${moment}: gap ${corner.gap} :: ${corner.detail}`);
+
+    expect(corner.gap, `${moment}, at 390x844 :: ${corner.detail}`).toBeGreaterThanOrEqual(
+      OBSTACLE_GAP_PX,
+    );
+  }
+
+  await testInfo.attach("occlusion-390x844", { body: report.join("\n"), contentType: "text/plain" });
+});

@@ -268,6 +268,155 @@ describe("HelpChatDock — where the rail already carries the assistant", () => 
   });
 });
 
+/**
+ * #89. The launcher sat ON the admin phone tab bar at 390×844 — `transform:
+ * none` at 300ms, 800ms, 1500ms and 3000ms, corrected only by a scroll of 1px.
+ *
+ * Measured in Chromium on /members, the corner was lost twice over, and the
+ * two failures are independent:
+ *
+ *   · The measurement was queued on `requestAnimationFrame`, and a page that
+ *     has not painted yet produces no frames. Instrumented, the launcher's
+ *     first callback was requested at 77ms and ran at 2055ms. Worse, the
+ *     coalescing guard read "a frame is pending" as "a measurement is
+ *     pending", so the three `MutationObserver` firings inside that window —
+ *     one of them the tab bar's own arrival, at 115ms — were dropped rather
+ *     than deferred.
+ *   · The resting rect was reconstructed as "where the launcher is drawn, plus
+ *     the lift already applied". The lift is a `transform` on a 200ms
+ *     transition, so for those 200ms the drawn rect is NOT the lift below the
+ *     rest position — at the first frame it is still exactly at rest. The
+ *     reconstruction then placed the rest rect 58px BELOW the viewport floor,
+ *     found nothing there, concluded the corner was free and dropped the
+ *     launcher back onto the tab bar. That is the `transform: none` at 3000ms.
+ *
+ * jsdom has no layout, so both are staged: a stylesheet gives the launcher the
+ * inset its Tailwind classes carry, and every rect under test is stated.
+ */
+describe("HelpChatDock — #89, measuring the corner without a frame to lean on", () => {
+  /** 390×844, the viewport the defect was measured at. */
+  const VIEWPORT_HEIGHT = 844;
+  /** `fixed inset-x-0 bottom-0 h-[62px]`, so it tops out here. */
+  const TAB_BAR_TOP = 782;
+  /** `bottom-4` (16px) under a 44px disc: the launcher rests at 784..828. */
+  const REST_TOP = 784;
+  const REST_BOTTOM = 828;
+  /** 828 − 782 + 12px of breathing room. */
+  const EXPECTED_LIFT = "translateY(-58px)";
+
+  const rects = new Map<Element, DOMRect>();
+
+  const stateRect = (element: Element, top: number, bottom: number, left = 338, right = 382): void => {
+    rects.set(element, {
+      top,
+      bottom,
+      left,
+      right,
+      width: right - left,
+      height: bottom - top,
+      x: left,
+      y: top,
+      toJSON: () => ({}),
+    } as DOMRect);
+  };
+
+  const flush = async (): Promise<void> => {
+    await act(async (): Promise<void> => {
+      // Long enough to drain jsdom's own ~16ms `requestAnimationFrame` too,
+      // so a test that reaches its point on the old code still does.
+      await new Promise((resolve): unknown => setTimeout(resolve, 25));
+      await new Promise((resolve): unknown => setTimeout(resolve, 25));
+    });
+  };
+
+  /** The shell's tab bar, landing after the launcher — as it does on load. */
+  const landTabBar = (): HTMLElement => {
+    const tabBar = document.createElement("nav");
+    tabBar.setAttribute("aria-label", "Navegación principal (móvil)");
+    tabBar.style.position = "fixed";
+    stateRect(tabBar, TAB_BAR_TOP, VIEWPORT_HEIGHT, 0, 390);
+    document.body.appendChild(tabBar);
+    return tabBar;
+  };
+
+  beforeEach(() => {
+    rects.clear();
+    mockPathname.mockReturnValue("/members");
+    document.head.insertAdjacentHTML(
+      "beforeend",
+      '<style id="dock-clearance-fixture">.fixed { position: fixed } .bottom-4 { bottom: 16px }</style>',
+    );
+    Object.defineProperty(window, "innerHeight", { value: VIEWPORT_HEIGHT, configurable: true });
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: Element,
+    ): DOMRect {
+      return rects.get(this) ?? ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 } as DOMRect);
+    });
+    // jsdom has no hit testing: the tab bar owns every point inside its band.
+    document.elementsFromPoint = (_x: number, y: number): Element[] =>
+      [...document.querySelectorAll("nav[aria-label]")].filter((node): boolean => {
+        const rect = rects.get(node);
+        return rect !== undefined && y >= rect.top && y <= rect.bottom;
+      });
+  });
+
+  afterEach(() => {
+    document.getElementById("dock-clearance-fixture")?.remove();
+    delete (document as Partial<Document>).elementsFromPoint;
+  });
+
+  it("climbs over furniture that lands after it, with no frame ever painted", async () => {
+    // The stall, staged: the browser accepts the request and never calls back.
+    // Anything that queues the measurement behind a frame fails here, which is
+    // the whole point — `requestAnimationFrame` is a paint scheduler, and this
+    // measurement must not wait on a paint that may be two seconds away.
+    vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
+
+    const { container } = render(<HelpChatDock />);
+    const launcher = screen.getByRole("button", { name: /abrir cata-bot/i });
+    stateRect(launcher, REST_TOP, REST_BOTTOM);
+    expect(container).toBeTruthy();
+
+    landTabBar();
+    await flush();
+
+    expect(launcher.style.transform).toBe(EXPECTED_LIFT);
+  });
+
+  it("stays up when it re-measures before its own transition has moved it", async () => {
+    render(<HelpChatDock />);
+    const launcher = screen.getByRole("button", { name: /abrir cata-bot/i });
+    stateRect(launcher, REST_TOP, REST_BOTTOM);
+
+    landTabBar();
+    await flush();
+    expect(launcher.style.transform).toBe(EXPECTED_LIFT);
+
+    // React has committed `translateY(-58px)`, the 200ms transition has not
+    // moved a pixel yet, so the launcher is still DRAWN at rest — and a scroll
+    // arrives. The rest rect must not be re-derived from where it is drawn.
+    fireEvent.scroll(window);
+    await flush();
+
+    expect(launcher.style.transform).toBe(EXPECTED_LIFT);
+  });
+
+  it("comes back down when the furniture leaves", async () => {
+    render(<HelpChatDock />);
+    const launcher = screen.getByRole("button", { name: /abrir cata-bot/i });
+    stateRect(launcher, REST_TOP, REST_BOTTOM);
+
+    const tabBar = landTabBar();
+    await flush();
+    expect(launcher.style.transform).toBe(EXPECTED_LIFT);
+
+    tabBar.remove();
+    await flush();
+
+    expect(launcher.style.transform).toBe("");
+  });
+});
+
 describe("resolveClearance", () => {
   it("rests in the corner when nothing owns it", () => {
     expect(resolveClearance(0)).toEqual({ lift: 0, withdrawn: false });

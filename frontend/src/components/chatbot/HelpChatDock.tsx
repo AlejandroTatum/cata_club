@@ -162,23 +162,51 @@ function findFurnitureTop(start: Element, ownerDocumentBody: HTMLElement): numbe
   return null;
 }
 
+interface RestingCorner {
+  top: number;
+  bottom: number;
+  centerX: number;
+}
+
 /**
- * How far the launcher must climb to clear whatever is under its RESTING spot.
+ * Where the launcher would sit if it had never yielded, in viewport
+ * coordinates — the corner it must keep probing even after it has left it.
  *
- * The rest rect is reconstructed from the live rect plus the lift already
- * applied, so a launcher that has already moved keeps probing the corner it
- * came from — otherwise it would find the corner empty (because it left) and
- * drop straight back onto the obstacle, forever.
+ * Asked of the CSS inset (`bottom-4`, `lg:bottom-5`) and not of
+ * `getBoundingClientRect()`, which reports where the launcher is DRAWN. Those
+ * two answers differ for 200ms at a time, because the lift is a `transform`
+ * under `transition-[transform,opacity] duration-200`, and that gap was #89:
+ * the rest rect used to be reconstructed as "drawn rect + the lift already
+ * applied", which is only true once the transition has finished. At its first
+ * frame the launcher is still drawn exactly at rest, so adding 58px pushed the
+ * reconstructed rect 58px BELOW the floor of the viewport, every probe point
+ * fell out of range, and the launcher concluded its corner was free and
+ * dropped back onto the tab bar it had just cleared.
+ *
+ * The inset cannot drift like that: it is where the launcher rests, whatever
+ * it is currently doing, and the answer is the same on every re-measurement.
+ * Only the height and the horizontal centre come from the drawn rect, and a
+ * `translateY` changes neither.
  */
-function measureNeededLift(dock: HTMLElement, appliedLift: number): number {
-  if (typeof document.elementsFromPoint !== "function") return 0;
+function measureRestingCorner(dock: HTMLElement): RestingCorner | null {
   const rect = dock.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return 0;
+  if (rect.width === 0 || rect.height === 0) return null;
+  const inset = Number.parseFloat(window.getComputedStyle(dock).bottom);
+  // `bottom: auto` should not happen — the launcher is `fixed bottom-4` — but
+  // a stylesheet that has not arrived would report it, and the drawn rect is
+  // then the best answer available and the right one while nothing has lifted.
+  const bottom = Number.isFinite(inset) ? window.innerHeight - inset : rect.bottom;
+  return { top: bottom - rect.height, bottom, centerX: rect.left + rect.width / 2 };
+}
+
+/** How far the launcher must climb to clear whatever is under its resting spot. */
+function measureNeededLift(dock: HTMLElement): number {
+  if (typeof document.elementsFromPoint !== "function") return 0;
+  const corner = measureRestingCorner(dock);
+  if (corner === null) return 0;
 
   const viewportHeight = window.innerHeight;
-  const restBottom = rect.bottom + appliedLift;
-  const restTop = rect.top + appliedLift;
-  const centerX = rect.left + rect.width / 2;
+  const { top: restTop, bottom: restBottom, centerX } = corner;
 
   // Three points down the rest rect, top edge included: when a `sticky` bar
   // lands (the page hits its last scroll position) it climbs out of the
@@ -201,35 +229,55 @@ function measureNeededLift(dock: HTMLElement, appliedLift: number): number {
  *
  * Three things move the answer and none of them is a React render: scrolling
  * (a `sticky` bar engages), resizing (the tab bar appears below `lg`), and the
- * page swapping its own content (the attendance wizard grows a commit bar when
- * the trainer advances a step). Hence a scroll/resize pair plus a
- * `MutationObserver`, all funnelled through one `requestAnimationFrame` so a
- * burst of DOM edits costs a single measurement.
+ * page swapping its own content — the shell mounts the admin's phone tab bar
+ * once the session names a role, and the attendance wizard grows a commit bar
+ * when the trainer advances a step. Hence a scroll/resize pair plus a
+ * `MutationObserver`, all funnelled through one timer so a burst of DOM edits
+ * costs a single measurement.
+ *
+ * ## Why a timer and not `requestAnimationFrame` (#89)
+ *
+ * It was a frame, and a page that has not painted yet produces none. Measured
+ * in Chromium on /members at 390×844: the first callback was requested at 77ms
+ * and ran at **2055ms**. The tab bar arrived at 115ms, inside that window, and
+ * the coalescing guard below made it worse than a late measurement — reading
+ * "a frame is pending" as "a measurement is pending", it discarded all three
+ * `MutationObserver` firings of that window instead of deferring them. So the
+ * launcher sat on the tab bar until an unrelated frame finally shipped.
+ *
+ * A `ResizeObserver` on the tab bar, the first fix the issue proposed, would
+ * not have helped: its callbacks are delivered in the same "update the
+ * rendering" step, and instrumented on the same page it stayed silent for the
+ * whole stall alongside `requestAnimationFrame`. Timers are the one scheduler
+ * that kept running through it — a 40ms interval ticked all the way.
+ *
+ * Nothing is lost by the swap. `requestAnimationFrame` earns its keep when the
+ * work must land in the frame it measured, and this work cannot: the
+ * measurement forces its own layout (`getBoundingClientRect`,
+ * `elementsFromPoint`) wherever it runs, and the `setClearance` it ends with
+ * paints a frame later either way. The throttling is unchanged too — scroll
+ * events are dispatched once per frame, so one coalesced timer per event is
+ * one measurement per frame, exactly as before.
  */
 function useDockClearance(dockRef: React.RefObject<HTMLElement | null>): DockClearance {
   const [clearance, setClearance] = useState<DockClearance>(FREE_CORNER);
-  const appliedLiftRef = useRef(0);
 
   useEffect((): (() => void) => {
-    let frame = 0;
+    let pending = 0;
 
     function measure(): void {
-      frame = 0;
+      pending = 0;
       const dock = dockRef.current;
       if (!dock) return;
-      const next = resolveClearance(measureNeededLift(dock, appliedLiftRef.current));
-      appliedLiftRef.current = next.lift;
+      const next = resolveClearance(measureNeededLift(dock));
       setClearance((prev) =>
         prev.lift === next.lift && prev.withdrawn === next.withdrawn ? prev : next,
       );
     }
 
     function schedule(): void {
-      if (frame) return;
-      frame =
-        typeof window.requestAnimationFrame === "function"
-          ? window.requestAnimationFrame(measure)
-          : window.setTimeout(measure, 0);
+      if (pending) return;
+      pending = window.setTimeout(measure, 0);
     }
 
     schedule();
@@ -243,7 +291,7 @@ function useDockClearance(dockRef: React.RefObject<HTMLElement | null>): DockCle
     observer?.observe(document.body, { childList: true, subtree: true });
 
     return (): void => {
-      if (frame) window.cancelAnimationFrame?.(frame);
+      if (pending) window.clearTimeout(pending);
       window.removeEventListener("scroll", schedule, { capture: true });
       window.removeEventListener("resize", schedule);
       observer?.disconnect();
