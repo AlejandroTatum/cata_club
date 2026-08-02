@@ -140,100 +140,98 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
       <AppShell title="Historial de asistencias">
         <BackLink href="/trainer" label="Volver a Mi día" />
 
-        <div className="flex flex-col gap-page">
-          <AttendanceFilters filters={filters} schedules={schedules} />
+        <AttendanceFilters filters={filters} schedules={schedules} />
 
-          {loading && <LoadingState label="Cargando historial…" />}
+        {loading && <LoadingState label="Cargando historial…" />}
 
-          {error && !loading && <ErrorState message={error} onRetry={() => loadHistory()} />}
+        {error && !loading && <ErrorState message={error} onRetry={() => loadHistory()} />}
 
-          {!loading && !error && (
-            <div className="card overflow-hidden">
-              {sessions.length === 0 ? (
-                <EmptyState surface="inset"
-                  icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                  title="No hay listas en este período"
-                  description={
-                    query === null
-                      // Covers both unusable states — one end missing, or the
-                      // two ends inverted — because "complete las dos fechas"
-                      // is wrong advice when both are already filled in.
-                      ? "Ajuste el rango de fechas para ver las listas."
-                      : "Cambie el rango o los filtros, o pase lista para que aparezca aquí."
-                  }
-                  action={
-                    <Link href="/trainer/attendance" className={buttonClasses("primary")}>
-                      Pasar lista
-                    </Link>
-                  }
-                />
-              ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHead>
-                        <tr>
-                          <TableHeaderCell>Sesión</TableHeaderCell>
-                          <TableHeaderCell>Resultado</TableHeaderCell>
-                          <TableHeaderCell align="right">
-                            <span className="sr-only">Acciones</span>
-                          </TableHeaderCell>
-                        </tr>
-                      </TableHead>
-                      <TableBody>
-                        {visible.map((sessionRow: SessionSummary) => (
-                          <TableRow key={`${sessionRow.fecha}|${sessionRow.horario}`}>
-                            <TableNameCell
-                              name={formatDate(sessionRow.fecha)}
-                              sub={sessionRow.horario}
-                            />
-                            <TableCell>
-                              <div className="flex flex-wrap gap-[5px]">
-                                {STATE_ORDER.map((estado) => (
-                                  <Badge key={estado} tone={getAttendanceBadgeTone(estado)}>
-                                    {sessionRow.counts[estado]}
-                                    {/* A bare "9" tells a screen reader
-                                        nothing; the state name rides along
-                                        without changing the 26px pill. */}
-                                    <span className="sr-only">
-                                      {" "}
-                                      {getAttendanceLabel(estado).toLowerCase()}
-                                    </span>
-                                  </Badge>
-                                ))}
-                              </div>
-                            </TableCell>
-                            <TableCell align="right">
-                              <Link
-                                href="/trainer/attendance"
-                                className={buttonClasses("secondary", "sm")}
-                              >
-                                Corregir
-                              </Link>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+        {!loading && !error && (
+          <div className="card overflow-hidden">
+            {sessions.length === 0 ? (
+              <EmptyState surface="inset"
+                icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                title="No hay listas en este período"
+                description={
+                  query === null
+                    // Covers both unusable states — one end missing, or the
+                    // two ends inverted — because "complete las dos fechas"
+                    // is wrong advice when both are already filled in.
+                    ? "Ajuste el rango de fechas para ver las listas."
+                    : "Cambie el rango o los filtros, o pase lista para que aparezca aquí."
+                }
+                action={
+                  <Link href="/trainer/attendance" className={buttonClasses("primary")}>
+                    Pasar lista
+                  </Link>
+                }
+              />
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHead>
+                      <tr>
+                        <TableHeaderCell>Sesión</TableHeaderCell>
+                        <TableHeaderCell>Resultado</TableHeaderCell>
+                        <TableHeaderCell align="right">
+                          <span className="sr-only">Acciones</span>
+                        </TableHeaderCell>
+                      </tr>
+                    </TableHead>
+                    <TableBody>
+                      {visible.map((sessionRow: SessionSummary) => (
+                        <TableRow key={`${sessionRow.fecha}|${sessionRow.horario}`}>
+                          <TableNameCell
+                            name={formatDate(sessionRow.fecha)}
+                            sub={sessionRow.horario}
+                          />
+                          <TableCell>
+                            <div className="flex flex-wrap gap-[5px]">
+                              {STATE_ORDER.map((estado) => (
+                                <Badge key={estado} tone={getAttendanceBadgeTone(estado)}>
+                                  {sessionRow.counts[estado]}
+                                  {/* A bare "9" tells a screen reader
+                                      nothing; the state name rides along
+                                      without changing the 26px pill. */}
+                                  <span className="sr-only">
+                                    {" "}
+                                    {getAttendanceLabel(estado).toLowerCase()}
+                                  </span>
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Link
+                              href="/trainer/attendance"
+                              className={buttonClasses("secondary", "sm")}
+                            >
+                              Corregir
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
 
-                  {totalPages > 1 && (
-                    <Pagination
-                      variant="footer"
-                      page={page}
-                      totalPages={totalPages}
-                      onPageChange={setPage}
-                      totalItems={sessions.length}
-                      pageSize={PAGE_SIZE}
-                      itemNoun="sesión"
-                    />
-                  )}
-                </>
-              )}
-            </div>
-          )}
+                {totalPages > 1 && (
+                  <Pagination
+                    variant="footer"
+                    page={page}
+                    totalPages={totalPages}
+                    onPageChange={setPage}
+                    totalItems={sessions.length}
+                    pageSize={PAGE_SIZE}
+                    itemNoun="sesión"
+                  />
+                )}
+              </>
+            )}
+          </div>
+        )}
 
-        </div>
       </AppShell>
     </ProtectedRoute>
   );

@@ -977,18 +977,16 @@ function PaymentsContent({
 
   if (selectedProfile === null) {
     return (
-      <div className="w-full">
-        <EmptyState
-          icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-          title="No se encontraron estudiantes asociados a esta cuenta"
-          description="Inscríbase como jugador o agregue un hijo o dependiente para registrar pagos."
-          action={
-            <Link href="/student" className={buttonClasses("secondary", "sm")}>
-              Ir a mi cuenta
-            </Link>
-          }
-        />
-      </div>
+      <EmptyState
+        icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+        title="No se encontraron estudiantes asociados a esta cuenta"
+        description="Inscríbase como jugador o agregue un hijo o dependiente para registrar pagos."
+        action={
+          <Link href="/student" className={buttonClasses("secondary", "sm")}>
+            Ir a mi cuenta
+          </Link>
+        }
+      />
     );
   }
 
@@ -997,7 +995,7 @@ function PaymentsContent({
     // 760px cap left the right half of the column empty at 1440; the width now
     // buys a rail that says HOW a payment is made, which is the thing this
     // screen was missing rather than a thing it was too narrow for.
-    <div className="w-full space-y-page">
+    <>
       <ManagedStudentPicker
         id="student-select-payments"
         profiles={managedProfiles}
@@ -1165,7 +1163,7 @@ function PaymentsContent({
           dropped their own back links for exactly this reason (see the header
           comment on `src/app/attendance/page.tsx`), and the family area was
           the last place still carrying one. */}
-    </div>
+    </>
   );
 }
 

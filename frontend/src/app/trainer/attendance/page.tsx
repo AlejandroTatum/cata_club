@@ -1452,7 +1452,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
           </div>
         </div>
       ) : (
-        <div className="space-y-page">
+        <>
           {loading && <LoadingState label="Cargando horarios…" />}
 
           {loadError && !loading && (
@@ -1597,7 +1597,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
               </div>
             </>
           )}
-        </div>
+        </>
       )}
       </AppShell>
     </ProtectedRoute>

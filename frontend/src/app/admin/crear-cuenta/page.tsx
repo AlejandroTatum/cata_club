@@ -780,7 +780,7 @@ function CrearCuentaContent(): React.ReactElement {
           </div>
         </div>
       ) : (
-        <div className="space-y-page">
+        <>
           <BackLink href="/members" label="Volver a Miembros" />
 
           {/* Progress bar */}
@@ -846,7 +846,7 @@ function CrearCuentaContent(): React.ReactElement {
               />
             </form>
           </div>
-        </div>
+        </>
       )}
     </AppShell>
   );

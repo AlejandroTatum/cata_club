@@ -329,7 +329,7 @@ function AttendanceView({
     // cap came from the prototype's `.canvas` and left the right half of the
     // column empty at 1440 — the record is the subject and takes the main
     // column; the counted recap rides in the rail beside it.
-    <div className="w-full space-y-page">
+    <>
       <ManagedStudentPicker
         id="student-select-attendance"
         profiles={managedProfiles}
@@ -368,7 +368,7 @@ function AttendanceView({
       {/* No back link and no "Ver mis pagos" button. The sidebar carries both
           destinations and highlights the current one; the admin screens
           dropped their own "← Volver al Panel" for exactly this reason. */}
-    </div>
+    </>
   );
 }
 

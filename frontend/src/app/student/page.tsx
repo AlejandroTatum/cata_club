@@ -438,7 +438,7 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
 
 function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.ReactElement {
   return (
-    <div className="w-full space-y-page">
+    <>
       <section className="card p-6">
         <h2 className="text-base font-bold tracking-tight text-ink">Bienvenido a Cata Club</h2>
         {/* Capped at a readable measure inside a full-width card, rather than
@@ -463,7 +463,7 @@ function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.
           <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         </Link>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -601,7 +601,7 @@ function ActivePortalView({
     // did not read as the same product. What was one 760px stack is now a
     // band across the top, the training panel in the main column and the
     // carnet in a rail beside it.
-    <div className="w-full space-y-page">
+    <>
       {/* The greeting is NOT a heading here. It used to be a 26px h2 directly
           under `PageHeader`'s own 26px h1, which stacked "ÁREA DE ESTUDIANTES
           / Mi cuenta / Hola, Ana" — three title-weight lines before a single
@@ -728,7 +728,7 @@ function ActivePortalView({
           )}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
