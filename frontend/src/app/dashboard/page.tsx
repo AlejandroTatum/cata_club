@@ -32,13 +32,14 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, CalendarCheck, ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import {
   ActivityItem,
   ActivityList,
   ActivityListHeader,
   buttonClasses,
+  EmptyState,
   ErrorState,
   LoadingState,
   STAT_GRID,
@@ -243,36 +244,37 @@ export default function DashboardPage(): React.ReactElement {
           they share one row: the feed takes the flexible column, the donut a
           fixed narrower one. Each still stands alone when the other has no data.
         */}
+        {/*
+          Both cards now ALWAYS render. They used to unmount when they had
+          nothing to show, which on a fresh install left an admin with a hero, a
+          row of zeroes and roughly 600px of nothing — no message, no action,
+          and no way to tell "there is no activity yet" apart from "this page is
+          broken". A section that disappears answers neither question.
+
+          The row keeps its two columns unconditionally for the same reason: the
+          split used to depend on both cards having data, so the layout moved
+          under the admin as records arrived.
+        */}
         <div
           data-testid="dashboard-lower"
-          className={`grid items-start gap-4 ${
-            // Only split the row when there are in fact two cards to split it
-            // between: a lone card holds the full width rather than sitting
-            // beside an empty 340px track.
-            activity.length > 0 && attendanceStats.totalStudents > 0
-              ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]"
-              : ""
-          }`}
+          className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]"
         >
-          {activity.length > 0 && (
-            <section
-              data-testid="activity-feed"
-              className="card overflow-hidden"
-            >
-              {/* `ui/ActivityList`, not `ui/Table` and not loose markup.
-                  A table row is the same fields in the same columns every time;
-                  this row is a mark, one variable-width sentence and a
-                  timestamp, so there is nothing to align and a `<thead>` would
-                  name nothing. What it was not allowed to keep was writing its
-                  own row height — see the primitive's own note. */}
-              <ActivityListHeader
-                title="Actividad reciente"
-                action={
-                  <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
-                    Ver todo
-                  </Link>
-                }
-              />
+          <section data-testid="activity-feed" className="card overflow-hidden">
+            {/* `ui/ActivityList`, not `ui/Table` and not loose markup.
+                A table row is the same fields in the same columns every time;
+                this row is a mark, one variable-width sentence and a
+                timestamp, so there is nothing to align and a `<thead>` would
+                name nothing. What it was not allowed to keep was writing its
+                own row height — see the primitive's own note. */}
+            <ActivityListHeader
+              title="Actividad reciente"
+              action={
+                <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
+                  Ver todo
+                </Link>
+              }
+            />
+            {activity.length > 0 ? (
               <ActivityList>
                 {activity.map((event) => (
                   <ActivityItem
@@ -284,15 +286,37 @@ export default function DashboardPage(): React.ReactElement {
                   />
                 ))}
               </ActivityList>
-            </section>
-          )}
+            ) : (
+              /* `inset`: the card and its header are already open above. What
+                 the empty state has to do here is name the two things that
+                 actually produce activity, and offer the nearer one. */
+              <EmptyState
+                surface="inset"
+                icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                title="Todavía no hay movimiento"
+                description="Acá aparecen los pagos que suben y las listas que se pasan, apenas ocurra el primero."
+                action={
+                  <Link href="/trainer/attendance" className={buttonClasses("primary", "sm")}>
+                    Pasar lista
+                  </Link>
+                }
+              />
+            )}
+          </section>
 
-          {attendanceStats.totalStudents > 0 && (
-            <section className="card p-[18px]">
-              <h2 className="mb-4 text-base font-bold text-ink">Distribución de asistencias</h2>
+          <section className="card p-[18px]">
+            <h2 className="mb-4 text-base font-bold text-ink">Distribución de asistencias</h2>
+            {attendanceStats.totalStudents > 0 ? (
               <AttendanceStatusChart stats={attendanceStats} />
-            </section>
-          )}
+            ) : (
+              <EmptyState
+                surface="inset"
+                icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                title="Sin asistencias registradas"
+                description="El gráfico se dibuja con la primera lista del período."
+              />
+            )}
+          </section>
         </div>
       </AppShell>
     </ProtectedRoute>
