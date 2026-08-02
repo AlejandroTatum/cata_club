@@ -40,8 +40,32 @@ export interface PaginationProps {
   itemNoun?: string;
   /** Override when the plural is not simply `itemNoun + "s"`. */
   itemNounPlural?: string;
+  /**
+   * WHERE the pager sits — the second thing this component did not know.
+   *
+   * `standalone` floats it under a block with its own separation. `footer`
+   * welds it to the bottom edge of the card it belongs to.
+   *
+   * This is a variant and not a `className` because five callers had already
+   * written the footer by hand and no two agreed: `px-4 py-3` twice, `px-5
+   * py-4`, `px-5 py-3.5` with a fill, and one that drew a whole rounded box —
+   * each of them opening with `mt-0` to cancel a default that was never right
+   * for them. Two more callers wrote nothing at all, so their pager floated
+   * OUTSIDE the card while every other screen's sat inside the foot of it.
+   */
+  variant?: "standalone" | "footer";
   className?: string;
 }
+
+/**
+ * `px-4`, matching `TableCell` — the pager belongs to the column above it, so
+ * its gutter is the cells' gutter. Two of the five hand-written containers had
+ * drifted to `px-5` and sat one step outside the table they footed.
+ */
+const VARIANT_CLASSES: Record<NonNullable<PaginationProps["variant"]>, string> = {
+  standalone: "mt-4",
+  footer: "border-t border-line px-4 py-3",
+};
 
 export default function Pagination({
   page,
@@ -51,6 +75,7 @@ export default function Pagination({
   pageSize,
   itemNoun,
   itemNounPlural,
+  variant = "standalone",
   className,
 }: PaginationProps): ReactElement {
   const hasRange =
@@ -70,7 +95,8 @@ export default function Pagination({
   return (
     <div
       className={cn(
-        "mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row",
+        "flex flex-col items-center justify-between gap-3 sm:flex-row",
+        VARIANT_CLASSES[variant],
         className,
       )}
     >

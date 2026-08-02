@@ -200,7 +200,7 @@ export default function AttendancePage(): React.ReactElement {
 
             {totalPages > 1 && (
               <Pagination
-                className="mt-0 border-t border-line px-4 py-3"
+                variant="footer"
                 page={page}
                 totalPages={totalPages}
                 onPageChange={setPage}

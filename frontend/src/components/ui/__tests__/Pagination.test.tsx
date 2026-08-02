@@ -9,6 +9,8 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import Pagination from "../Pagination";
 
 describe("Pagination", () => {
@@ -109,5 +111,70 @@ describe("Pagination", () => {
   it("renders the 32px in-table control height, not a caller-invented one", () => {
     render(<Pagination page={1} totalPages={2} onPageChange={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Página siguiente" })).toHaveClass("h-ctl-sm");
+  });
+});
+
+/**
+ * Five callers each hand-wrote a container to weld the pager to the bottom of
+ * its card, and no two agreed: `px-4 py-3` twice, `px-5 py-4`, `px-5 py-3.5`
+ * with a fill, and one that drew a whole rounded box. Two more callers wrote
+ * nothing, so their pager floated OUTSIDE the card while every other screen's
+ * sat soldered to the foot of it.
+ *
+ * That is a missing variant, not a missing `className`: the component knew
+ * about exactly one of the two places a pager lives.
+ */
+describe("Pagination — where it sits", () => {
+  it("floats free by default, with its own separation from the block above", () => {
+    const { container } = render(<Pagination page={1} totalPages={2} onPageChange={vi.fn()} />);
+    const root = container.firstElementChild as HTMLElement;
+
+    expect(root).toHaveClass("mt-4");
+    expect(root.className).not.toContain("border-t");
+  });
+
+  it("welds to the foot of a card in the footer variant, with no margin of its own", () => {
+    const { container } = render(
+      <Pagination page={1} totalPages={2} onPageChange={vi.fn()} variant="footer" />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+
+    expect(root).toHaveClass("border-t", "border-line");
+    // A margin here would push the pager off the card edge it is welded to,
+    // which is what every caller was cancelling with `mt-0`.
+    expect(root.className).not.toMatch(/\bmt-/);
+  });
+
+  it("takes the table's own gutter, so the pager lines up with the cells above it", () => {
+    // `TableCell` is `px-4`. A pager at `px-5` sits one step outside the column
+    // it belongs to — two of the five hand-written containers did exactly that.
+    const { container } = render(
+      <Pagination page={1} totalPages={2} onPageChange={vi.fn()} variant="footer" />,
+    );
+
+    expect(container.firstElementChild).toHaveClass("px-4", "py-3");
+  });
+
+  it("leaves no caller writing its own position", () => {
+    // The acceptance criterion, asserted on the sources. `className` stays for
+    // what it is for — a caller adding something the variant does not cover —
+    // but placement is the component's job now.
+    const screens = [
+      "src/app/attendance/page.tsx",
+      "src/app/payments/page.tsx",
+      "src/app/reports/page.tsx",
+      "src/app/members/page.tsx",
+      "src/app/groups/page.tsx",
+      "src/app/trainer/attendance/page.tsx",
+      "src/app/trainer/attendance/history/page.tsx",
+    ];
+
+    for (const path of screens) {
+      const code = readFileSync(join(__dirname, "..", "..", "..", "..", path), "utf8");
+      const call = /<Pagination\b[\s\S]*?\/>/g;
+      for (const [markup] of code.matchAll(call)) {
+        expect(markup, path).not.toMatch(/className=[^\n]*\b(mt-|border-t|px-|py-)/);
+      }
+    }
   });
 });

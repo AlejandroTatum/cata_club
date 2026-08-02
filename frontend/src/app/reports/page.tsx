@@ -569,7 +569,7 @@ function ReportsContent(): React.ReactElement {
 
         {canQuery && !loading && resultCount > 0 && totalPages > 1 && (
           <Pagination
-            className="mt-0 border-t border-line px-5 py-4"
+            variant="footer"
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}

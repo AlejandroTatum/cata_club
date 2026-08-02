@@ -969,6 +969,7 @@ export default function GroupsPage(): React.ReactElement {
                   totalItems={alumnosPorHorario.length}
                   pageSize={ALUMNOS_PAGE_SIZE}
                   itemNoun="alumno"
+                  variant="footer"
                 />
               )}
             </div>
