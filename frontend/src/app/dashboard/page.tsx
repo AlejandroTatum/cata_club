@@ -34,7 +34,16 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { buttonClasses, ErrorState, LoadingState, STAT_GRID, StatCard } from "@/components/ui";
+import {
+  ActivityItem,
+  ActivityList,
+  ActivityListHeader,
+  buttonClasses,
+  ErrorState,
+  LoadingState,
+  STAT_GRID,
+  StatCard,
+} from "@/components/ui";
 import {
   fetchDashboardStats,
   fetchAttendanceRecords,
@@ -250,30 +259,31 @@ export default function DashboardPage(): React.ReactElement {
               data-testid="activity-feed"
               className="overflow-hidden rounded-card border border-line bg-paper"
             >
-              <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
-                <h2 className="flex-1 text-base font-bold text-ink">Actividad reciente</h2>
-                <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
-                  Ver todo
-                </Link>
-              </div>
-              <ul className="divide-y divide-line">
+              {/* `ui/ActivityList`, not `ui/Table` and not loose markup.
+                  A table row is the same fields in the same columns every time;
+                  this row is a mark, one variable-width sentence and a
+                  timestamp, so there is nothing to align and a `<thead>` would
+                  name nothing. What it was not allowed to keep was writing its
+                  own row height — see the primitive's own note. */}
+              <ActivityListHeader
+                title="Actividad reciente"
+                action={
+                  <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
+                    Ver todo
+                  </Link>
+                }
+              />
+              <ActivityList>
                 {activity.map((event) => (
-                  <li key={event.id} className="flex items-center gap-3 px-[18px] py-3">
-                    <span
-                      aria-hidden="true"
-                      className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-canvas text-2xs tracking-flat font-bold text-ink-2"
-                    >
-                      {event.initials}
-                    </span>
-                    <span className="min-w-0 flex-1 text-sm text-ink-2">
-                      <b className="font-semibold text-ink">{event.subject}</b> {event.detail}
-                    </span>
-                    <span className="flex-none text-2xs tracking-flat text-ink-3">
-                      {formatHumanDate(event.at)}
-                    </span>
-                  </li>
+                  <ActivityItem
+                    key={event.id}
+                    initials={event.initials}
+                    subject={event.subject}
+                    detail={event.detail}
+                    at={formatHumanDate(event.at)}
+                  />
                 ))}
-              </ul>
+              </ActivityList>
             </section>
           )}
 
