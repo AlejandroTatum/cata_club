@@ -41,7 +41,7 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import BackLink from "@/components/BackLink";
-import { ClipboardList } from "lucide-react";
+import { ArrowRight, ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
@@ -137,7 +137,22 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
-      <AppShell title="Historial de asistencias">
+      <AppShell
+        title="Historial de asistencias"
+        /*
+         * The same link, with the same label and the same arrow, that `/attendance`
+         * — this screen's admin twin, reading the same records — has carried in its
+         * header since #74. Until now this one offered no way to pass a list at all
+         * unless the table came back empty, so the action existed only in the state
+         * where there was nothing to correct.
+         */
+        actions={
+          <Link href="/trainer/attendance" className={buttonClasses("primary")}>
+            Pasar lista
+            <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+          </Link>
+        }
+      >
         <BackLink href="/trainer" label="Volver a Mi día" />
 
         <AttendanceFilters filters={filters} schedules={schedules} />

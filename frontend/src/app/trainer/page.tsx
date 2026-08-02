@@ -70,16 +70,6 @@ const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent
 /** Ties the "Avisar al club" button to the sentence explaining what it opens. */
 const ABSENCE_NOTICE_HINT_ID = "trainer-absence-notice-hint";
 
-/**
- * `.btn.xl` (`_sistema.css:174`) — 52px, 22px padding, 15px label, 12px
- * radius. Hand-rolled rather than added to the `Button` primitive because
- * this is the single XL control in the product, and `components/ui` is not
- * this change's to extend.
- */
-const XL_CTA =
-  "inline-flex h-[52px] items-center justify-center gap-2 rounded-xl bg-cata-red px-[22px] " +
-  "text-base font-semibold text-white transition-colors hover:bg-cata-red-dark";
-
 /** First name only — "Hola, Carlos Mendoza" is a greeting nobody says out loud. */
 function firstNameOf(fullName: string | undefined): string {
   return fullName?.trim().split(/\s+/)[0] ?? "entrenador";
@@ -164,6 +154,24 @@ export default function TrainerPage(): React.ReactElement {
       <AppShell
         title={`Hola, ${firstNameOf(session?.user?.name)}`}
         subtitle="Mi día — tu próxima sesión y el resumen de la última lista."
+        /*
+         * "Pasar lista" used to live in TWO places on this one screen: `.btn.xl`
+         * inside the coal hero when there was a next session, and inside the
+         * empty state's action when there was not. Which is to say the trainer's
+         * only verb moved depending on the data — the exact shape #74 named on
+         * the admin side ("teaches a rule and then breaks it"), except here one
+         * screen breaks it against itself.
+         *
+         * The header slot is the one place that does not move. It also brings
+         * this screen level with `/dashboard`, whose hero was emptied of its CTA
+         * for the same reason and now "carries ONE number" and nothing else.
+         */
+        actions={
+          <Link href="/trainer/attendance" className={buttonClasses("primary")}>
+            Pasar lista
+            <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+          </Link>
+        }
       >
         {loading && <LoadingState label="Cargando tu día…" />}
 
@@ -187,10 +195,6 @@ export default function TrainerPage(): React.ReactElement {
                     {enrolledLabel ? ` · ${enrolledLabel}` : ""}
                   </span>
                 </div>
-                <Link href="/trainer/attendance" className={XL_CTA}>
-                  Pasar lista
-                  <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                </Link>
               </div>
             ) : (
               <EmptyState

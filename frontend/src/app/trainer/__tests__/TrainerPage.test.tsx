@@ -144,16 +144,24 @@ describe("TrainerPage — Mi día", () => {
     expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(1);
   });
 
-  it("offers exactly one primary action, and it is Pasar lista", async () => {
+  it("offers exactly one primary action, and it is Pasar lista in the header slot", async () => {
     render(<TrainerPage />);
     await screen.findByText("Lunes 15:00 — 16:00");
 
-    // Scoped to the page body: the shell's sidebar carries its own "Pasar
+    // Scoped to the header row: the shell's sidebar carries its own "Pasar
     // lista" nav row, which is navigation, not the screen's CTA.
-    const page = within(screen.getByRole("main"));
-    const cta = page.getByRole("link", { name: /Pasar lista/ });
+    const header = within(screen.getByRole("banner"));
+    const cta = header.getByRole("link", { name: /Pasar lista/ });
     expect(cta).toHaveAttribute("href", "/trainer/attendance");
-    expect(page.getAllByRole("link", { name: /Pasar lista/ })).toHaveLength(1);
+    expect(header.getAllByRole("link", { name: /Pasar lista/ })).toHaveLength(1);
+
+    // And the hero no longer carries a second copy. #43 moved this verb out of
+    // the coal hero precisely because it only existed there when a next session
+    // did — on a day with no sessions left it appeared inside the empty state
+    // instead, so the trainer's one action changed place with the data.
+    expect(
+      within(screen.getByRole("main")).queryByRole("link", { name: /Pasar lista/ }),
+    ).toBeNull();
   });
 
   it("lists what comes after the hero on one line, not as a second list", async () => {
