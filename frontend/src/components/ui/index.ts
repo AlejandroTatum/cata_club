@@ -40,6 +40,8 @@ export type { SearchInputProps } from "./SearchInput";
 
 export { default as StatCard } from "./StatCard";
 export { STAT_GRID } from "./StatCard";
+export { ActivityList, ActivityListHeader, ActivityItem } from "./ActivityList";
+export type { ActivityItemProps } from "./ActivityList";
 export type { StatCardProps, StatCardVariant } from "./StatCard";
 
 export { default as Stepper } from "./Stepper";
