@@ -201,3 +201,69 @@ describe("AuthShell — the two halves share one vertical axis", () => {
     expect(AUTH_INPUT_CLASSES).toContain("focus:border-cata-red");
   });
 });
+
+// ---------------------------------------------------------------------------
+// The frozen measure (#42).
+//
+// The brand block did not grow with the panel. Both caps that could have held
+// it back were written in `ch`, which resolves against the element's OWN
+// font-size and therefore cannot know how wide the viewport is:
+//
+//   wrapper  `max-width:44ch` at the inherited 16px -> a flat 440px
+//   headline `max-w-[15ch]`   at the `display` step -> a flat 465px
+//
+// Measured in Chromium, the coal panel goes 749 -> 1000 -> 1336px across
+// 1440/1920/2560 while the cluster stayed at 440 on all three, so it fell from
+// 58.7% of the panel to 44.0% to 32.9%. The wrapper's 440px was the binding
+// one; the headline's 465px was 25px looser and never bound anything on
+// desktop, which is why the issue's reading of it as "the strangler" did not
+// survive measurement.
+//
+// The real geometry is proved in `tests/e2e/content-measure.spec.ts`, where a
+// browser can lay the page out. What is pinned here is the MECHANISM, i.e. the
+// part a later edit could quietly revert: a fluid cap on the wrapper, and no
+// `ch` cap on the headline above the `split` breakpoint.
+// ---------------------------------------------------------------------------
+
+describe("AuthShell — the brand measure tracks the panel", () => {
+  it("caps the brand cluster with a fluid measure instead of a frozen ch count", () => {
+    renderShell();
+
+    const cluster = screen.getByTestId("auth-brand-cluster");
+    // The percentage is what makes it track the panel; the two bounds are the
+    // limits either side of which the composition breaks. 25rem (400px) is the
+    // 389px supporting line, which wraps to two lines below it; 44rem (704px)
+    // sits clear of the 750px width at which the motto collapses to one line.
+    expect(cluster.className).toContain("max-w-[clamp(25rem,72%,44rem)]");
+    // The frozen cap, in either spelling.
+    expect(cluster.className).not.toContain("[max-width:44ch]");
+    expect(cluster.className).not.toMatch(/max-w-\[\d+(?:\.\d+)?ch\]/);
+  });
+
+  it("drops the headline's own ch measure from the split breakpoint up", () => {
+    renderShell();
+
+    const headline = screen.getByTestId("auth-headline");
+    // Phones keep the prototype's measure: at the `2xl` step `15ch` is 330px
+    // on a 342px panel, which is the wrap the stacked layout was built around.
+    expect(headline.className).toContain("max-w-[15ch]");
+    // Desktop has exactly one measure, and it belongs to the cluster. Leaving
+    // the `ch` cap in place would re-clamp the motto to 465px and undo the
+    // fluid wrapper above it.
+    expect(headline.className).toContain("split:max-w-none");
+  });
+
+  it("keeps every size on the type scale, with no loose pixel left in the panel", () => {
+    // #42 also asked for the Fase 1 scale to be applied here, against an
+    // inventory of six raw sizes (42/26/14.5/13/12.5/12). #29 already did it:
+    // the panel reads `display`, `2xl`, `xl`, `base`, `xs` and `2xs` and owns
+    // no `text-[Npx]` at all. Asserted rather than assumed, so the panel cannot
+    // drift back off the scale.
+    renderShell();
+
+    const dark = screen.getByTestId("auth-panel-dark");
+    for (const node of [dark, ...Array.from(dark.querySelectorAll("*"))]) {
+      expect(node.className.toString()).not.toMatch(/\btext-\[-?\d*\.?\d+(?:px|rem|em|pt)\]/);
+    }
+  });
+});
