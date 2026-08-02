@@ -155,18 +155,16 @@ export default function AttendancePage(): React.ReactElement {
         {error && !loading && <ErrorState message={error} onRetry={() => void loadRecords()} />}
 
         {!loading && !error && records.length === 0 && (
-          <div className="card">
-            <EmptyState
-              icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-              title="No hay registros en este rango"
-              description="Cambie el rango o los filtros, o registre una sesión de entrenamiento."
-              action={
-                <Link href="/trainer/attendance" className={buttonClasses("primary")}>
-                  Tomar asistencia
-                </Link>
-              }
-            />
-          </div>
+          <EmptyState
+            icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+            title="No hay registros en este rango"
+            description="Cambie el rango o los filtros, o registre una sesión de entrenamiento."
+            action={
+              <Link href="/trainer/attendance" className={buttonClasses("primary")}>
+                Tomar asistencia
+              </Link>
+            }
+          />
         )}
 
         {!loading && !error && records.length > 0 && (

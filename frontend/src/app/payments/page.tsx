@@ -914,37 +914,35 @@ export default function PaymentsPage(): React.ReactElement {
         {error && !loading && <ErrorState message={error} onRetry={() => void loadRequests()} />}
 
         {!loading && !error && filtered.length === 0 && (
-          <div className="card">
-            <EmptyState
-              icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-              title={
-                normalizedQuery
-                  ? "Ningún estudiante coincide con la búsqueda"
-                  : activeFilter === "all"
-                    ? "Aún no hay solicitudes de validación de pago"
-                    : `No hay solicitudes ${EMPTY_FILTER_NOUN[activeFilter]}`
-              }
-              description={
-                normalizedQuery
-                  ? "Revise el nombre o limpie la búsqueda para ver toda la cola."
-                  : activeFilter === "all"
-                    ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
-                    : "La cola está al día."
-              }
-              action={
-                activeFilter === "all" && !normalizedQuery ? undefined : (
-                  <Button
-                    onClick={() => {
-                      setActiveFilter("all");
-                      setQuery("");
-                    }}
-                  >
-                    Ver todas
-                  </Button>
-                )
-              }
-            />
-          </div>
+          <EmptyState
+            icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+            title={
+              normalizedQuery
+                ? "Ningún estudiante coincide con la búsqueda"
+                : activeFilter === "all"
+                  ? "Aún no hay solicitudes de validación de pago"
+                  : `No hay solicitudes ${EMPTY_FILTER_NOUN[activeFilter]}`
+            }
+            description={
+              normalizedQuery
+                ? "Revise el nombre o limpie la búsqueda para ver toda la cola."
+                : activeFilter === "all"
+                  ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
+                  : "La cola está al día."
+            }
+            action={
+              activeFilter === "all" && !normalizedQuery ? undefined : (
+                <Button
+                  onClick={() => {
+                    setActiveFilter("all");
+                    setQuery("");
+                  }}
+                >
+                  Ver todas
+                </Button>
+              )
+            }
+          />
         )}
 
         {!loading && !error && filtered.length > 0 && (

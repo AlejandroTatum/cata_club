@@ -1521,33 +1521,31 @@ export default function MembersPage(): React.ReactElement {
         ) : null}
 
         {!loading && filteredAccounts.length === 0 && (
-          <div className="card">
-            <EmptyState
-              icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-              title={
-                searchTerm || activeFlag !== "all"
-                  ? "No se encontraron miembros"
-                  : "Aún no hay miembros registrados"
-              }
-              description={
-                searchTerm || activeFlag !== "all"
-                  ? "Ningún miembro coincide con la búsqueda y los filtros activos."
-                  : "Cuando se registre la primera cuenta, aparecerá en este listado."
-              }
-              action={
-                searchTerm || activeFlag !== "all" ? (
-                  <Button
-                    onClick={() => {
-                      setSearchTerm("");
-                      setActiveFlag("all");
-                    }}
-                  >
-                    Limpiar búsqueda
-                  </Button>
-                ) : undefined
-              }
-            />
-          </div>
+          <EmptyState
+            icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+            title={
+              searchTerm || activeFlag !== "all"
+                ? "No se encontraron miembros"
+                : "Aún no hay miembros registrados"
+            }
+            description={
+              searchTerm || activeFlag !== "all"
+                ? "Ningún miembro coincide con la búsqueda y los filtros activos."
+                : "Cuando se registre la primera cuenta, aparecerá en este listado."
+            }
+            action={
+              searchTerm || activeFlag !== "all" ? (
+                <Button
+                  onClick={() => {
+                    setSearchTerm("");
+                    setActiveFlag("all");
+                  }}
+                >
+                  Limpiar búsqueda
+                </Button>
+              ) : undefined
+            }
+          />
         )}
 
         {/* One dialog for the whole page, keyed so switching accounts remounts

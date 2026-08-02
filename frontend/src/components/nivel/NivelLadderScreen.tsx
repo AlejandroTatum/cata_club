@@ -763,7 +763,7 @@ function LadderContent({
             Resultados de la búsqueda ({resultados.length})
           </h2>
           {resultados.length === 0 ? (
-            <EmptyState
+            <EmptyState surface="inset"
               icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title="Ningún estudiante coincide"
               description="Revise el nombre o borre la búsqueda para ver toda la escalera."
@@ -794,7 +794,7 @@ function LadderContent({
         {loading ? (
           <LoadingState label="Cargando niveles…" />
         ) : niveles.length === 0 ? (
-          <EmptyState
+          <EmptyState surface="inset"
             icon={<Trophy size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="Todavía no hay niveles"
             description="Cuando el club cree su primer nivel, la escalera aparecerá aquí."

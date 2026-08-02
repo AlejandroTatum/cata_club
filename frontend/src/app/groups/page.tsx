@@ -1198,19 +1198,17 @@ export default function GroupsPage(): React.ReactElement {
         ) : null}
 
         {!loading && horarios.length === 0 && (
-          <div className="card">
-            <EmptyState
-              icon={<Calendar size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-              title="No hay horarios configurados"
-              description="Cree un horario de entrenamiento para empezar a asignarle alumnos."
-              action={
-                <Button variant="primary" onClick={openCreateForm}>
-                  <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                  Crear primer horario
-                </Button>
-              }
-            />
-          </div>
+          <EmptyState
+            icon={<Calendar size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+            title="No hay horarios configurados"
+            description="Cree un horario de entrenamiento para empezar a asignarle alumnos."
+            action={
+              <Button variant="primary" onClick={openCreateForm}>
+                <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                Crear primer horario
+              </Button>
+            }
+          />
         )}
 
         <ConfirmDialog

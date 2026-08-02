@@ -252,19 +252,17 @@ export default function DiscountsPage(): React.ReactElement {
             <LoadingState label="Cargando descuentos…" />
           </div>
         ) : !loadError && descuentos.length === 0 ? (
-          <div className="card">
-            <EmptyState
-              icon={<Percent size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-              title="Sin descuentos en el catálogo"
-              description="Cree el primer descuento para poder aplicarlo al registrar pagos."
-              action={
-                <Button variant="dark" onClick={openCreateForm}>
-                  <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                  Nuevo descuento
-                </Button>
-              }
-            />
-          </div>
+          <EmptyState
+            icon={<Percent size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+            title="Sin descuentos en el catálogo"
+            description="Cree el primer descuento para poder aplicarlo al registrar pagos."
+            action={
+              <Button variant="dark" onClick={openCreateForm}>
+                <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                Nuevo descuento
+              </Button>
+            }
+          />
         ) : descuentos.length > 0 ? (
           /*
            * `ui/Table`, not a `<ul>` of `<li>`.

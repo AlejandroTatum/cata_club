@@ -360,7 +360,7 @@ function TrainingPanel({
           </ul>
         ) : (
           <div className="flex-1 border-t border-line">
-            <EmptyState
+            <EmptyState surface="inset"
               icon={<CalendarDays size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title={
                 viewingOwnProfile
@@ -408,13 +408,11 @@ function TrainingPanel({
 function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.ReactElement {
   if (data.membershipPlans.length === 0) {
     return (
-      <div className="card">
-        <EmptyState
-          icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-          title="No hay planes de membresía disponibles"
-          description="El catálogo de planes está vacío en este momento. Consulte con administración."
-        />
-      </div>
+      <EmptyState
+        icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+        title="No hay planes de membresía disponibles"
+        description="El catálogo de planes está vacío en este momento. Consulte con administración."
+      />
     );
   }
   return (
@@ -622,13 +620,11 @@ function ActivePortalView({
       />
 
       {selectedProfile === null || paymentSituation === null ? (
-        <div className="card">
-          <EmptyState
-            icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-            title="No se encontraron estudiantes asociados a esta cuenta"
-            description="Inscríbase como jugador o agregue un hijo o dependiente para empezar."
-          />
-        </div>
+        <EmptyState
+          icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+          title="No se encontraron estudiantes asociados a esta cuenta"
+          description="Inscríbase como jugador o agregue un hijo o dependiente para empezar."
+        />
       ) : (
         <>
           {/* First, across the whole width: the reader came to find out whether

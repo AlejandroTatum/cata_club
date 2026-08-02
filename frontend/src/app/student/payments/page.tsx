@@ -976,18 +976,16 @@ function PaymentsContent({
   if (selectedProfile === null) {
     return (
       <div className="w-full">
-        <div className="card">
-          <EmptyState
-            icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-            title="No se encontraron estudiantes asociados a esta cuenta"
-            description="Inscríbase como jugador o agregue un hijo o dependiente para registrar pagos."
-            action={
-              <Link href="/student" className={buttonClasses("secondary", "sm")}>
-                Ir a mi cuenta
-              </Link>
-            }
-          />
-        </div>
+        <EmptyState
+          icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+          title="No se encontraron estudiantes asociados a esta cuenta"
+          description="Inscríbase como jugador o agregue un hijo o dependiente para registrar pagos."
+          action={
+            <Link href="/student" className={buttonClasses("secondary", "sm")}>
+              Ir a mi cuenta
+            </Link>
+          }
+        />
       </div>
     );
   }
@@ -1112,7 +1110,7 @@ function PaymentsContent({
                 )}
               </div>
               {filteredPagos.length === 0 ? (
-                <EmptyState
+                <EmptyState surface="inset"
                   icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                   title={getEmptyStateMessage(filter)}
                   description={

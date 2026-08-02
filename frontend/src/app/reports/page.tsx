@@ -550,7 +550,7 @@ function ReportsContent(): React.ReactElement {
         </div>
 
         {!canQuery ? (
-          <EmptyState
+          <EmptyState surface="inset"
             icon={<FileText size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="Elija un rango de fechas"
             description={
@@ -610,7 +610,7 @@ function PersonaPreview({
 }): React.ReactElement {
   if (total === 0) {
     return (
-      <EmptyState
+      <EmptyState surface="inset"
         icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron personas"
         description="Ninguna persona se registró en este rango. Pruebe con un rango de fechas más amplio."
@@ -654,7 +654,7 @@ function AsistenciaPreview({
 }): React.ReactElement {
   if (total === 0) {
     return (
-      <EmptyState
+      <EmptyState surface="inset"
         icon={<CheckCircle size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron registros de asistencia"
         description="Ningún registro coincide con los filtros. Amplíe el rango de fechas o quite el filtro de horario."
@@ -700,7 +700,7 @@ function PagosPreview({
 }): React.ReactElement {
   if (total === 0) {
     return (
-      <EmptyState
+      <EmptyState surface="inset"
         icon={<Wallet size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron pagos"
         description="Ningún pago coincide con los filtros. Amplíe el rango de fechas o elija otro estado."
