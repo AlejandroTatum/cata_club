@@ -262,11 +262,20 @@ describe("DashboardPage — actividad reciente", () => {
     expect(within(lower).getByTestId("attendance-donut")).toBeInTheDocument();
   });
 
-  it("omits the card entirely when there is nothing to show", async () => {
+  it("says there is nothing yet, instead of unmounting and leaving a hole", async () => {
+    // It used to unmount. On a fresh install that left a hero, four zeroes and
+    // ~600px of nothing — with no way to tell "no activity yet" apart from
+    // "this page is broken". A section that disappears answers neither.
     render(<DashboardPage />);
     await screen.findByText("Miembros");
 
-    expect(screen.queryByText("Actividad reciente")).not.toBeInTheDocument();
+    expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
+    expect(screen.getByText("Todavía no hay movimiento")).toBeInTheDocument();
+    // An empty state without a next action is a dead end.
+    expect(screen.getByRole("link", { name: /pasar lista/i })).toHaveAttribute(
+      "href",
+      "/trainer/attendance",
+    );
   });
 
   it("keeps the attendance donut, and only when there are records", async () => {
@@ -276,11 +285,24 @@ describe("DashboardPage — actividad reciente", () => {
     expect(await screen.findByTestId("attendance-donut")).toBeInTheDocument();
   });
 
-  it("does not render the donut without any attendance data", async () => {
+  it("keeps the donut's card and explains the blank, rather than dropping it", async () => {
     render(<DashboardPage />);
     await screen.findByText("Miembros");
 
     expect(screen.queryByTestId("attendance-donut")).not.toBeInTheDocument();
+    expect(screen.getByText("Distribución de asistencias")).toBeInTheDocument();
+    expect(screen.getByText("Sin asistencias registradas")).toBeInTheDocument();
+  });
+
+  it("holds the two-column row whether or not either card has data", async () => {
+    // The split used to depend on both cards having data, so the layout moved
+    // under the admin as records arrived.
+    render(<DashboardPage />);
+    await screen.findByText("Miembros");
+
+    expect(screen.getByTestId("dashboard-lower").className).toContain(
+      "lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]",
+    );
   });
 });
 
@@ -296,7 +318,11 @@ describe("DashboardPage — degraded loads", () => {
     render(<DashboardPage />);
 
     expect(await screen.findByText("Miembros")).toBeInTheDocument();
-    expect(screen.queryByText("Actividad reciente")).not.toBeInTheDocument();
+    // The card stays and says so. A secondary list that failed and a club with
+    // no activity yet look the same to the admin either way, so the honest
+    // thing is to keep the section and let the pulse above carry the news.
+    expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
+    expect(screen.getByText("Todavía no hay movimiento")).toBeInTheDocument();
   });
 
   it("offers a retry when the stats themselves fail", async () => {
