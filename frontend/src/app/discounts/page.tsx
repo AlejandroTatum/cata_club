@@ -19,7 +19,20 @@ import { Loader2, Pencil, Percent, Plus, Power } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { Badge, Button, EmptyState, ErrorState, LoadingState } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableNameCell,
+  TableRow,
+} from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchDescuentos, crearDescuento, actualizarDescuento } from "@/services/api";
 import type { DescuentoCatalogo } from "@/services/api";
@@ -253,47 +266,73 @@ export default function DiscountsPage(): React.ReactElement {
             />
           </div>
         ) : descuentos.length > 0 ? (
+          /*
+           * `ui/Table`, not a `<ul>` of `<li>`.
+           *
+           * This list was already a table — four aligned facts per row, the
+           * same four every time — written as a flex list with its own `px-5
+           * py-4`. That padding is why a discount row was a different height
+           * from a member row and from an attendance row: three lists, three
+           * answers, none of them the `h-row` token.
+           *
+           * There was no header at all, so the value column ("100%", "$5") had
+           * nothing naming it. It has one now.
+           */
           <div className="card overflow-hidden">
-            <ul className="divide-y divide-line">
-              {descuentos.map((descuento) => {
-                const isToggling = togglingId === descuento.id;
-                return (
-                  <li
-                    key={descuento.id}
-                    data-inactivo={descuento.activo ? undefined : "true"}
-                    className={`flex flex-wrap items-center justify-between gap-3 px-5 py-4 ${
-                      descuento.activo ? "" : "opacity-60"
-                    }`}
-                  >
-                    <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                      <b className="text-base text-ink">{descuento.nombre}</b>
-                      <span className="text-sm text-ink-2">{descuentoValorLabel(descuento)}</span>
-                      <Badge tone={descuento.activo ? "ok" : "neutral"}>
-                        {descuento.activo ? "Activo" : "Inactivo"}
-                      </Badge>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => openEditForm(descuento)}>
-                        <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                        Editar
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => void handleToggleActivo(descuento)}
-                        disabled={isToggling}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Descuento</TableHeaderCell>
+                    <TableHeaderCell>Valor</TableHeaderCell>
+                    <TableHeaderCell>Estado</TableHeaderCell>
+                    <TableHeaderCell align="right">
+                      <span className="sr-only">Acciones</span>
+                    </TableHeaderCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {descuentos.map((descuento) => {
+                    const isToggling = togglingId === descuento.id;
+                    return (
+                      <TableRow
+                        key={descuento.id}
+                        data-inactivo={descuento.activo ? undefined : "true"}
+                        className={descuento.activo ? undefined : "opacity-60"}
                       >
-                        {isToggling ? (
-                          <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-                        ) : (
-                          <Power size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                        )}
-                        {descuento.activo ? "Desactivar" : "Reactivar"}
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                        <TableNameCell name={descuento.nombre} />
+                        <TableCell>{descuentoValorLabel(descuento)}</TableCell>
+                        <TableCell>
+                          <Badge tone={descuento.activo ? "ok" : "neutral"}>
+                            {descuento.activo ? "Activo" : "Inactivo"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell align="right">
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" onClick={() => openEditForm(descuento)}>
+                              <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => void handleToggleActivo(descuento)}
+                              disabled={isToggling}
+                            >
+                              {isToggling ? (
+                                <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+                              ) : (
+                                <Power size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                              )}
+                              {descuento.activo ? "Desactivar" : "Reactivar"}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         ) : null}
       </AppShell>

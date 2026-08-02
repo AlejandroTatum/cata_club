@@ -368,6 +368,25 @@ const config: Config = {
       // Committed control metrics from `_sistema.css`. These are the reason
       // the UI primitives exist: a button is 40px because `h-ctl` is 40px,
       // not because a caller happened to pick `py-2.5`.
+      //
+      // `row` (60px) vs `drow` (56px) — which one, and when:
+      //
+      //   `row` is the LIST TABLE row: `.tbl tbody td`, one record per line in
+      //   a paginated table you scan down. It is owned by `ui/Table`'s
+      //   `TableCell` and that is the only place it should ever be written.
+      //   A screen reaching for `h-row` directly is a screen rebuilding the
+      //   table primitive, which is what this pass exists to stop.
+      //
+      //   `drow` is the DENSE row: the tighter line used inside a card that is
+      //   not the page's main table — a roster inside an expanded panel, a
+      //   student's own payment history, the rungs of the Niveles ladder. It is
+      //   nearly always written as `min-h-drow`, because those rows wrap and
+      //   the token is a floor rather than a fixed height.
+      //
+      // The test: is this the list the screen is FOR? Then it is a `ui/Table`
+      // and the height comes with it. Is it a secondary list inside something
+      // else? Then it is `min-h-drow`. A row height written as `py-*` is
+      // neither, and is the drift both tokens exist to replace.
       height: {
         ctl: "40px",
         "ctl-sm": "32px",

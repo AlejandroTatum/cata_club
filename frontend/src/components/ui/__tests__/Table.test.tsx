@@ -5,8 +5,8 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import {
   Table,
   TableBody,
@@ -105,5 +105,60 @@ describe("TableNameCell", () => {
     expect(committedHeight(screen.getByText("Laura Vera").closest("td") as HTMLElement)).toBe(
       "60px",
     );
+  });
+});
+
+/**
+ * `TableRow` took `className` and `children` and nothing else, so a screen that
+ * needed to mark a row — state, a test hook, an id — could not migrate to the
+ * primitive without losing it. Descuentos was exactly that case: its rows carry
+ * `data-inactivo`, which is what its own tests read to tell a disabled discount
+ * from an active one. A primitive that drops attributes is a primitive screens
+ * work around instead of adopting, which is how three lists ended up hand-built.
+ */
+describe("TableRow — what it forwards", () => {
+  it("forwards data attributes, so a row can carry its own state", () => {
+    render(
+      <table>
+        <tbody>
+          <TableRow data-inactivo="true">
+            <TableCell>Convenio empresa</TableCell>
+          </TableRow>
+        </tbody>
+      </table>,
+    );
+
+    const row = screen.getByText("Convenio empresa").closest("tr") as HTMLElement;
+    expect(row).toHaveAttribute("data-inactivo", "true");
+  });
+
+  it("still merges className rather than replacing anything", () => {
+    render(
+      <table>
+        <tbody>
+          <TableRow className="opacity-60">
+            <TableCell>Inactivo</TableCell>
+          </TableRow>
+        </tbody>
+      </table>,
+    );
+
+    expect(screen.getByText("Inactivo").closest("tr")).toHaveClass("opacity-60");
+  });
+
+  it("forwards a row-level handler, which a clickable row needs", () => {
+    const onClick = vi.fn();
+    render(
+      <table>
+        <tbody>
+          <TableRow onClick={onClick}>
+            <TableCell>Fila</TableCell>
+          </TableRow>
+        </tbody>
+      </table>,
+    );
+
+    fireEvent.click(screen.getByText("Fila").closest("tr") as HTMLElement);
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });

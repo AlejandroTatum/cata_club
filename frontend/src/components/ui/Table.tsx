@@ -21,6 +21,7 @@
 import type {
   ReactElement,
   ReactNode,
+  HTMLAttributes,
   TableHTMLAttributes,
   TdHTMLAttributes,
   ThHTMLAttributes,
@@ -55,14 +56,26 @@ export function TableBody({ children }: { children: ReactNode }): ReactElement {
   return <tbody>{children}</tbody>;
 }
 
+/**
+ * Forwards every `<tr>` attribute, not just `className`.
+ *
+ * It used to take `className` and `children` and nothing else, which made the
+ * primitive unadoptable by any screen whose rows carry state: Descuentos marks
+ * its rows `data-inactivo`, and that attribute is what its own tests read to
+ * tell a disabled discount from an active one. A primitive that silently drops
+ * what it is handed is one screens work around rather than adopt — which is how
+ * three lists in this product came to be built by hand.
+ */
 export function TableRow({
   className,
   children,
-}: {
-  className?: string;
-  children: ReactNode;
-}): ReactElement {
-  return <tr className={className}>{children}</tr>;
+  ...rest
+}: HTMLAttributes<HTMLTableRowElement>): ReactElement {
+  return (
+    <tr className={className} {...rest}>
+      {children}
+    </tr>
+  );
 }
 
 export interface TableHeaderCellProps extends ThHTMLAttributes<HTMLTableCellElement> {

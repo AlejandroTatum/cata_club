@@ -117,8 +117,8 @@ describe("DiscountsPage — listado", () => {
   it("lists active and inactive discounts, visually distinct", async () => {
     renderPage();
 
-    const becaRow = (await screen.findByText("Beca municipal")).closest("li") as HTMLElement;
-    const convenioRow = screen.getByText("Convenio empresa").closest("li") as HTMLElement;
+    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    const convenioRow = screen.getByText("Convenio empresa").closest("tr") as HTMLElement;
 
     expect(within(becaRow).getByText("Activo")).toBeInTheDocument();
     expect(within(becaRow).getByText("100%")).toBeInTheDocument();
@@ -213,7 +213,7 @@ describe("DiscountsPage — editar", () => {
     mockActualizarDescuento.mockResolvedValueOnce({ ...BECA, porcentaje: "75" });
     renderPage();
 
-    const becaRow = (await screen.findByText("Beca municipal")).closest("li") as HTMLElement;
+    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
     fireEvent.click(within(becaRow).getByRole("button", { name: /editar/i }));
 
     const nombreInput = screen.getByLabelText(/nombre/i) as HTMLInputElement;
@@ -237,7 +237,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     mockActualizarDescuento.mockResolvedValueOnce({ ...BECA, activo: false });
     renderPage();
 
-    const becaRow = (await screen.findByText("Beca municipal")).closest("li") as HTMLElement;
+    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
     fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
 
     await waitFor(() => {
@@ -249,7 +249,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     mockActualizarDescuento.mockResolvedValueOnce({ ...CONVENIO, activo: true });
     renderPage();
 
-    const convenioRow = (await screen.findByText("Convenio empresa")).closest("li") as HTMLElement;
+    const convenioRow = (await screen.findByText("Convenio empresa")).closest("tr") as HTMLElement;
     fireEvent.click(within(convenioRow).getByRole("button", { name: /reactivar/i }));
 
     await waitFor(() => {
