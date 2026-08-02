@@ -84,16 +84,38 @@ hasta el último bloque hay una sola distancia, y ninguna pantalla tiene que ele
 
 | Trabajo | Idioma | Quién lo escribe |
 |---|---|---|
-| Bloques de primer nivel | `space-y-page` sobre `<main>` | `AppShell`, una vez |
+| Bloques de primer nivel | `gap-page` sobre `<main>` | `AppShell`, una vez |
 | Tarjetas hermanas de una grilla | `gap-section` | La pantalla |
 | Partes de una tarjeta | `space-y-section` | El componente |
 | Etiqueta y valor | `space-y-field` · `gap-y-field` | El componente |
 
 La mayoría de las pantallas ya tenía sus bloques como hijos directos de `<main>`: esas solo
-sueltan el `mb-*` de primer nivel y el ritmo les llega solo. Las ocho que envuelven su contenido
-en un bloque —porque además le fijan un ancho, como `/profile` o `/ayuda`— **conservan el
-envoltorio pero nombran el escalón**: `w-full space-y-page`, `flex flex-col gap-page`. El
+sueltan el `mb-*` de primer nivel y el ritmo les llega solo. Las que envuelven su contenido en un
+bloque **porque además le fijan un ancho** —`/ayuda` a `max-w-3xl`, `/student/add-dependent` a
+`max-w-[760px]`— conservan el envoltorio pero nombran el escalón: `flex flex-col gap-page`. El
 envoltorio sigue haciendo su trabajo de ancho; lo que ya no hace es inventar una distancia.
+
+### La corrección de #43: `w-full space-y-page` no era la segunda ortografía, era la misma deriva
+
+La primera versión de esta sección ofrecía **dos** ortografías, `w-full space-y-page` y
+`flex flex-col gap-page`, y la sección siguiente —la que mide el velo— desmiente la primera. #43
+encontró nueve envoltorios escritos así y ninguno hacía trabajo alguno:
+
+| Lo que escribía el envoltorio | Lo que hace bajo `<main>` |
+|---|---|
+| `w-full` | nada: `<main>` es `flex flex-col`, y `align-items: stretch` ya da el ancho completo |
+| `space-y-page` · `gap-page` | nada: `<main>` ya separa a sus hijos 20px |
+
+Un envoltorio cuya lista de clases es solo eso no fija ancho, no fija ritmo y no dibuja nada. Lo
+único que aporta es el nodo capaz de cargar el `margin-top` que la sección siguiente midió mal
+sobre un velo `fixed inset-0`. Nueve de esos nodos —en `/trainer`, `/trainer/attendance`,
+`/trainer/attendance/history`, `/student` (dos), `/student/attendance`, `/student/payments` (dos)
+y `/profile`, más `/admin/crear-cuenta`— desaparecieron: los que JSX obliga a tener una raíz única
+pasaron a `<>`, que no emite nodo, y el resto se borró.
+
+El envoltorio con ancho se queda, y por eso el candado solo dispara cuando la lista de clases
+**no contiene otra cosa** que ritmo y `w-full`: un `max-w-*`, un `mx-auto` o cualquier utilidad
+real lo saca de alcance por construcción.
 
 Ese es el punto: los cinco idiomas no se reducen a una sola etiqueta JSX, se reducen a **un solo
 valor con un solo nombre**. Y eso es exactamente lo que el candado puede verificar.
