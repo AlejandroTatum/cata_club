@@ -15,6 +15,7 @@ from email.mime.text import MIMEText
 from typing import Optional
 
 from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.resiliencia import TIMEOUT_SMTP_SEGUNDOS
 
 logger = logging.getLogger("cataclub.notificaciones")
 
@@ -54,7 +55,7 @@ class ServicioNotificaciones:
         if cuerpo_html:
             msg.attach(MIMEText(cuerpo_html, "html", "utf-8"))
 
-        with smtplib.SMTP(self._host, self._port, timeout=10) as server:
+        with smtplib.SMTP(self._host, self._port, timeout=TIMEOUT_SMTP_SEGUNDOS) as server:
             if self._starttls:
                 server.starttls()
             if self._user:

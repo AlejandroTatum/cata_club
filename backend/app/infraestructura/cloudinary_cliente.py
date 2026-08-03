@@ -12,12 +12,20 @@ Recurso PDF en Cloudinary:
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional
 
 import cloudinary
 import cloudinary.uploader
+from urllib3.util import Timeout
 
+from app.dominio.excepciones import ServicioNoDisponible
 from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.resiliencia import (
+    TIMEOUT_CLOUDINARY_CONEXION_SEGUNDOS,
+    TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
+    UMBRAL_SUBIDA_LENTA_SEGUNDOS,
+)
 
 
 logger = logging.getLogger("cataclub.cloudinary")
@@ -32,6 +40,48 @@ def _configurar_cliente() -> None:
         api_secret=settings.cloudinary_api_secret,
         secure=True,  # SIEMPRE HTTPS para las URLs públicas devueltas
     )
+
+
+def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
+    """ÚNICO punto donde este módulo llama al SDK. Un solo intento: sin
+    reintento. En la ruta de request quien reintenta es la persona (botón en
+    el front); en la ruta de tarea reintenta Celery (autoretry_for + backoff,
+    comprobante_tareas.py:42-45). Un tercer reintento acá multiplicaría los
+    intentos contra el proveedor sin resolver nada.
+
+    El `timeout` es un `urllib3.util.Timeout` (no un float): un float se
+    convierte en `Timeout(read=t, connect=t)` per-operación de socket, sin
+    cota de reloj de pared real (`urllib3/util/timeout.py:186`). Solo una
+    instancia de `Timeout` respeta el `total=` (`connectionpool.py:351`).
+    Nota: `total=` no cubre completamente la fase de ENVÍO del cuerpo del
+    request — un cuerpo que fluye sin nunca estancarse 3s queda sin cota en
+    esa fase específica; documentado, no resuelto (ver diseño).
+    """
+    timeout = Timeout(
+        connect=TIMEOUT_CLOUDINARY_CONEXION_SEGUNDOS,
+        read=TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
+        total=TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
+    )
+
+    inicio = time.perf_counter()
+    try:
+        resultado = cloudinary.uploader.upload(contenido, timeout=timeout, **upload_kwargs)
+    except Exception as exc:
+        logger.exception("Fallo subiendo %s a Cloudinary", descripcion)
+        raise ServicioNoDisponible(f"Error subiendo {descripcion} a Cloudinary: {exc}") from exc
+
+    url: Optional[str] = resultado.get("secure_url")
+    if not url:
+        # Defensive: si el SDK no devuelve secure_url (imposible con secure=True),
+        # lo tratamos como una anomalía del vendor, no del caller.
+        raise ServicioNoDisponible(f"Cloudinary no retornó `secure_url` ({descripcion})")
+
+    elapsed = time.perf_counter() - inicio
+    if elapsed >= UMBRAL_SUBIDA_LENTA_SEGUNDOS:
+        logger.warning("Subida lenta a Cloudinary (%s, %.2fs): %s", descripcion, elapsed, url)
+    else:
+        logger.info("Subida a Cloudinary (%s, %.2fs): %s", descripcion, elapsed, url)
+    return url
 
 
 def subir_pdf_membresia(
@@ -67,22 +117,9 @@ def subir_pdf_membresia(
         "format": "pdf",
     }
 
-    try:
-        resultado = cloudinary.uploader.upload(contenido_pdf, **upload_kwargs)
-    except Exception as exc:
-        logger.exception("Fallo subiendo PDF a Cloudinary (public_id=%s)", nombre_publico)
-        raise RuntimeError(f"Error subiendo PDF a Cloudinary: {exc}") from exc
-
-    url: Optional[str] = resultado.get("secure_url")
-    if not url:
-        # Defensive: si el SDK no devuelve secure_url (imposible con secure=True),
-        # construimos una alternativa pero siempre https.
-        raise RuntimeError(
-            f"Cloudinary no retornó `secure_url` (public_id={nombre_publico})"
-        )
-
-    logger.info("PDF subido a Cloudinary: %s", url)
-    return url
+    return _subir(
+        contenido_pdf, upload_kwargs, f"PDF de membresía (public_id={nombre_publico})"
+    )
 
 
 def subir_voucher_pago(
@@ -137,23 +174,10 @@ def subir_voucher_pago(
     else:
         raise ValueError(f"Tipo MIME no soportado para voucher: {content_type}")
 
-    try:
-        resultado = cloudinary.uploader.upload(contenido, **upload_kwargs)
-    except Exception as exc:
-        logger.exception(
-            "Fallo subiendo voucher a Cloudinary (pago_id=%s, public_id=%s)",
-            pago_id, nombre_publico,
-        )
-        raise RuntimeError(f"Error subiendo voucher a Cloudinary: {exc}") from exc
-
-    url: Optional[str] = resultado.get("secure_url")
-    if not url:
-        raise RuntimeError(
-            f"Cloudinary no retornó `secure_url` (voucher pago_id={pago_id})"
-        )
-
-    logger.info("Voucher de pago %d subido a Cloudinary: %s", pago_id, url)
-    return url
+    return _subir(
+        contenido, upload_kwargs,
+        f"voucher de pago (pago_id={pago_id}, public_id={nombre_publico})",
+    )
 
 
 def subir_foto_perfil(
@@ -195,20 +219,7 @@ def subir_foto_perfil(
         "invalidate": True,
     }
 
-    try:
-        resultado = cloudinary.uploader.upload(contenido, **upload_kwargs)
-    except Exception as exc:
-        logger.exception(
-            "Fallo subiendo foto de perfil a Cloudinary (persona_id=%s, public_id=%s)",
-            persona_id, nombre_publico,
-        )
-        raise RuntimeError(f"Error subiendo foto de perfil a Cloudinary: {exc}") from exc
-
-    url: Optional[str] = resultado.get("secure_url")
-    if not url:
-        raise RuntimeError(
-            f"Cloudinary no retornó `secure_url` (foto perfil persona_id={persona_id})"
-        )
-
-    logger.info("Foto de perfil de persona %d subida a Cloudinary: %s", persona_id, url)
-    return url
+    return _subir(
+        contenido, upload_kwargs,
+        f"foto de perfil (persona_id={persona_id}, public_id={nombre_publico})",
+    )

@@ -2,14 +2,18 @@
 Tests del servicio de notificaciones y de la tarea de recuperación de
 contraseña.
 """
+import inspect
+import re
 from unittest.mock import Mock, patch
 
 import pytest
 from sqlalchemy import select
 
+from app.infraestructura import notificaciones_servicio as notificaciones_servicio_mod
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.tareas.recuperacion_tareas import enviar_enlace_recuperacion
 from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.resiliencia import TIMEOUT_SMTP_SEGUNDOS
 
 
 class TestServicioNotificaciones:
@@ -28,7 +32,9 @@ class TestServicioNotificaciones:
                                 "user@example.com", "token123"
                             )
 
-        mock_smtp_cls.assert_called_once_with("smtp.test", 587, timeout=10)
+        mock_smtp_cls.assert_called_once_with(
+            "smtp.test", 587, timeout=TIMEOUT_SMTP_SEGUNDOS
+        )
         mock_server.starttls.assert_called_once()
         mock_server.login.assert_called_once_with("user", "pass")
         mock_server.sendmail.assert_called_once()
@@ -41,6 +47,28 @@ class TestServicioNotificaciones:
                 ServicioNotificaciones().enviar_correo(
                     "user@example.com", "Asunto", "cuerpo"
                 )
+
+
+# --- Guardia estructural: el timeout SMTP debe venir de la constante --------
+# `test_enviar_recuperacion_contrasenia_usa_smtp` de arriba compara
+# `timeout=TIMEOUT_SMTP_SEGUNDOS` contra el valor recibido por el mock, pero
+# en Python `10 == 10.0`: si `notificaciones_servicio.py` volviera al literal
+# `timeout=10`, esa prueba seguiría en verde. Esta guardia inspecciona el
+# TEXTO fuente del call site en vez del valor ya evaluado -- mismo patrón que
+# `test_limite_tasa_pagos.py::_limite_declarado` y el guardia análogo en
+# `test_celery_config.py`.
+def test_timeout_smtp_referencia_la_constante_no_un_literal():
+    codigo_fuente = inspect.getsource(notificaciones_servicio_mod)
+    patron = re.compile(
+        r"smtplib\.SMTP\([^)]*\btimeout\s*=\s*([A-Za-z_]\w*|[0-9]+(?:\.[0-9]+)?)"
+    )
+    coincidencia = patron.search(codigo_fuente)
+    assert coincidencia, "no se encontró 'timeout=' en la llamada a smtplib.SMTP(...)"
+    valor = coincidencia.group(1)
+    assert valor == "TIMEOUT_SMTP_SEGUNDOS", (
+        "el timeout de smtplib.SMTP debe referenciar la constante importada "
+        f"de resiliencia.py, no un literal numérico; se encontró: {valor!r}"
+    )
 
 
 class TestRecuperacionTarea:
