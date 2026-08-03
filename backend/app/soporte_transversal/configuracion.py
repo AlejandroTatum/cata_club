@@ -128,6 +128,84 @@ def _es_host_inalcanzable_desde_afuera(host: str) -> bool:
     return direccion.is_loopback or direccion.is_unspecified
 
 
+# Contrato de producción. TODO campo de `Settings` tiene que aparecer en
+# EXACTAMENTE UNA de estas dos tablas: no hay tercera opción ni lista de
+# excepciones. Agregar un campo obliga a decidir, y la decisión queda escrita
+# (ver `tests/test_configuracion.py`).
+
+# Campos que `_exigir_config_de_produccion` DEBE rechazar cuando quedan sin
+# configurar. El valor es la variable de entorno tal como la escribe el
+# operador y como aparece en el mensaje de error -- es también donde queda
+# documentado el alias `cors_origenes_raw` -> `CORS_ORIGENES`.
+_CAMPOS_PRODUCCION_CRITICOS: dict[str, str] = {
+    "database_url": "DATABASE_URL",
+    "cors_origenes_raw": "CORS_ORIGENES",
+    "smtp_host": "SMTP_HOST",
+    "frontend_url": "FRONTEND_URL",
+    "cloudinary_cloud_name": "CLOUDINARY_CLOUD_NAME",
+    "cloudinary_api_key": "CLOUDINARY_API_KEY",
+    "cloudinary_api_secret": "CLOUDINARY_API_SECRET",
+}
+
+# Campos deliberadamente FUERA del fail-fast. La razón es obligatoria y se
+# revisa en el PR: es lo único que distingue "vacío legítimo" de "olvidado".
+_CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
+    "app_nombre": "metadato de presentación; ningún despliegue depende de su valor",
+    "app_version": "metadato que fija el repositorio, no el despliegue",
+    "ambiente": "es la LLAVE que activa este propio validador; exigirlo acá sería circular",
+    "jwt_secret_key": (
+        "ya lo valida _secreto_jwt_debe_ser_real de forma INCONDICIONAL "
+        "(:148), en todos los ambientes: es más estricto que producción y "
+        "exigirlo acá duplicaría el error"
+    ),
+    "jwt_algoritmo": "constante de la aplicación (HS256), no un valor por despliegue",
+    "jwt_expira_minutos": "política de sesión con default seguro; int, nunca queda vacío",
+    "jwt_refresh_expira_dias": "idem jwt_expira_minutos: política de sesión con default seguro",
+    "redis_url": (
+        "coordenada de red interna fijada en docker-compose.yml "
+        "(redis://redis:6379/0), no un secreto por despliegue"
+    ),
+    "celery_broker_url": "vacío es VÁLIDO: broker_url_efectivo (:213) cae a redis_url",
+    "celery_result_backend": "vacío es VÁLIDO: result_backend_efectivo (:217) cae a redis_url",
+    "celery_result_expira_segundos": "default operativo (24h), independiente del despliegue",
+    "celery_hora_automatizaciones": "default operativo (02:30 hora local), independiente del despliegue",
+    "cloudinary_carpeta_comprobantes": (
+        "nombre de carpeta dentro de la cuenta de Cloudinary; el default es "
+        "correcto y no es un secreto"
+    ),
+    "cloudinary_carpeta_vouchers": "idem carpeta de comprobantes: nombre de carpeta, no un secreto",
+    "cloudinary_carpeta_fotos_perfil": "idem carpeta de comprobantes: nombre de carpeta, no un secreto",
+    "smtp_port": "int con default 587; el compose lo fija por despliegue y no puede quedar vacío",
+    "smtp_user": (
+        "hay relays de producción legítimos SIN autenticación (Postfix "
+        "local); exigirlo sería un falso positivo, misma asimetría "
+        "deliberada que el host SMTP (:294-297)"
+    ),
+    "smtp_password": "idem smtp_user: hay relays de producción legítimos sin autenticación",
+    "smtp_from": (
+        "default utilizable; una dirección equivocada no se puede detectar "
+        "al arrancar, solo la rechaza el proveedor"
+    ),
+    "smtp_starttls": (
+        "bool con default seguro (True); el riesgo real es que el compose "
+        "lo pise, y eso lo cubre docker-compose.prod.yml + "
+        "tests/test_docker_compose_config.py"
+    ),
+    "opencode_api_key": (
+        "el chatbot de FAQ es una función OPCIONAL: ChatbotServicio "
+        "(chatbot_servicio.py:147) ya acota los fallos upstream a "
+        "429/502/504 en tiempo de request, y docker-compose.yml:110 pasa "
+        "${OPENCODE_API_KEY:-}, o sea que vacío es una configuración "
+        "esperada. Exigirlo negaría el arranque de TODO el backend por una "
+        "función que el club puede no habilitar"
+    ),
+    "reset_hosts_permitidos_raw": (
+        "solo lo consume scripts/reset_dev_db.py, que nunca corre en "
+        "producción; su propia allow-list incondicional lo valida"
+    ),
+}
+
+
 class Settings(BaseSettings):
     """
     Configuración centralizada de la aplicación.
@@ -271,6 +349,28 @@ class Settings(BaseSettings):
                 "DATABASE_URL sigue siendo la URL de ejemplo del repo; define "
                 "la cadena de conexión real del Postgres de producción."
             )
+        else:
+            # Chequeo agnóstico al host, independiente del anterior:
+            # `docker-compose.yml` compone DATABASE_URL como
+            # `${POSTGRES_USER:-usuario}:${POSTGRES_PASSWORD:-password}@db:5432/...`.
+            # Esa URL renderizada difiere de `_DATABASE_URL_DE_EJEMPLO` SOLO en
+            # el host (`db` vs `localhost`), así que la comparación de arriba
+            # nunca la atrapa y un despliegue real puede arrancar con las
+            # credenciales de ejemplo del repo. Comparar usuario/contraseña
+            # por separado detecta esto sin importar el host.
+            credenciales = urlparse(self.database_url)
+            if credenciales.username == "usuario" and credenciales.password == "password":
+                faltantes.append(
+                    "DATABASE_URL usa las credenciales de ejemplo del repo "
+                    "('usuario'/'password'); define POSTGRES_USER y "
+                    "POSTGRES_PASSWORD reales antes de desplegar."
+                )
+            elif not credenciales.password or len(credenciales.password) < 8:
+                faltantes.append(
+                    "DATABASE_URL tiene una contraseña vacía o demasiado "
+                    "corta; define una contraseña real y suficientemente "
+                    "larga para el Postgres de producción."
+                )
         if not self.cors_origenes:
             faltantes.append(
                 "CORS_ORIGENES está vacío; define los orígenes del frontend "
@@ -332,6 +432,17 @@ class Settings(BaseSettings):
                     "dispositivo del usuario (localhost, loopback o dirección "
                     "de bind). Define la URL pública del frontend "
                     "(ej: https://cataclub.com)."
+                )
+
+        # Cloudinary: sin estas 3 credenciales, cualquier subida de un
+        # comprobante, voucher o foto de perfil falla en tiempo de request.
+        for campo in ("cloudinary_cloud_name", "cloudinary_api_key", "cloudinary_api_secret"):
+            if not getattr(self, campo).strip():
+                variable_env = _CAMPOS_PRODUCCION_CRITICOS[campo]
+                faltantes.append(
+                    f"{variable_env} está vacío; define la credencial real de "
+                    "Cloudinary o las subidas de archivos (comprobantes, "
+                    "vouchers, fotos de perfil) fallarán en el primer intento."
                 )
 
         if faltantes:
