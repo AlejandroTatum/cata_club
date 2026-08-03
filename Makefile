@@ -47,6 +47,12 @@ test: test-backend test-compose test-frontend ## Run all tests
 # respaldo (sdd/production-readiness, decisión 1.5 -- sunset en PR-06f).
 # El puerto 5436 es el publicado por `db-test` en docker-compose.yml;
 # TEST_DATABASE_URL en el entorno invocador tiene prioridad sobre este default.
+#
+# Este target provee UNA sola variable a propósito. `AMBIENTE` y
+# `JWT_SECRET_KEY` los pone `backend/tests/conftest.py` con `setdefault`, que
+# es el único lugar donde vive el contrato de entorno de la suite. Agregarlas
+# acá volvería a partir ese contrato en dos y dejaría a `pytest tests/` a
+# secas roto, que era justamente el síntoma del issue #101.
 test-backend: ## Run backend tests (pytest, requires: docker compose --profile test up -d db-test)
 	cd backend && TEST_DATABASE_URL="$${TEST_DATABASE_URL:-postgresql+psycopg://usuario:password@localhost:5436/cataclub_test}" uv run pytest tests/ -v
 

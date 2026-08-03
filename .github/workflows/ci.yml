@@ -64,10 +64,13 @@ jobs:
         run: uv run --frozen --no-build ruff check .
 
       - name: Run tests
+        # Solo TEST_DATABASE_URL. `AMBIENTE` y `JWT_SECRET_KEY` los pone
+        # `backend/tests/conftest.py` con `setdefault`, que es el único lugar
+        # donde vive el contrato de entorno de la suite (issue #101). NO se
+        # declaran acá a propósito: si estuvieran, CI pasaría igual aunque el
+        # default del conftest se rompiera, y volveríamos a tener un gate que
+        # solo funciona en CI. Que este paso corra sin ellas ES la prueba.
         env:
-          AMBIENTE: test
-          # Ponemos una clave larga simulada para que el validador de Pydantic pase sin problemas
-          JWT_SECRET_KEY: "clave_super_secreta_y_segura_de_mas_de_32_caracteres_para_los_tests"
           TEST_DATABASE_URL: postgresql+psycopg://usuario:password@localhost:5432/cataclub_test
         run: uv run --frozen --no-build pytest tests/ -v --cov=app --cov-report=term-missing
 

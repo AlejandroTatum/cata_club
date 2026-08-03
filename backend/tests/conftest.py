@@ -25,6 +25,25 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Deshabilitar rate limiting en tests
 os.environ.setdefault("AMBIENTE", "test")
 
+# Clave de descarte para que `Settings()` pueda importarse. `Settings` valida
+# `JWT_SECRET_KEY` SIEMPRE, en todos los ambientes: sin una clave de 16+
+# caracteres y libre de marcadores de placeholder, el import muere con un
+# ValidationError de pydantic ANTES de recolectar un solo test, y el mensaje
+# habla de pydantic, no de "te falta una variable de entorno".
+#
+# Vive acá y no en el Makefile a propósito. La suite es dueña de su propio
+# contrato de entorno — igual que `AMBIENTE` arriba — así que `pytest tests/`
+# a secas funciona igual que `make test-backend`, y no hay una clave literal
+# duplicada entre el Makefile y ci.yml que se pueda despegar. `setdefault` y
+# no asignación: quien exporte la suya sigue mandando.
+#
+# La asimetría con TEST_DATABASE_URL de más abajo es deliberada: esa NO puede
+# tener default porque tiene que apuntar a un Postgres real, y adivinarlo
+# sería peor que fallar. Esta es de descarte y ningún test depende de su valor.
+os.environ.setdefault(
+    "JWT_SECRET_KEY", "clave-de-descarte-de-la-suite-no-usar-fuera-de-tests"
+)
+
 # Contrato de un solo env var (decisión 1.1): tanto esta suite como Alembic
 # (vía `settings.database_url`, leído en `alembic/env.py`) apuntan al MISMO
 # Postgres. Esto tiene que pasar ANTES de importar cualquier módulo de
