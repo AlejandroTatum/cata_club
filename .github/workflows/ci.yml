@@ -268,6 +268,24 @@ jobs:
       # producción ahora EXIGE esta variable (`${CORS_ORIGENES:?...}`) -- sin
       # ella este job se cae en `docker compose config`, no en el servidor.
       CORS_ORIGENES: https://cataclub.ci.invalid
+      # PR registro de Settings (sdd/production-config-contract): estas 3
+      # credenciales ahora son criticas para produccion
+      # (_CAMPOS_PRODUCCION_CRITICOS en configuracion.py) -- sin ellas el
+      # backend no arranca. Valores de mentira: alcanza con que pasen el
+      # validador, ninguna subida a Cloudinary ocurre en este job.
+      # Se derivan del run_id en vez de escribirse como literales: deja a la
+      # vista que son descartables y no un secreto que alguien deba rotar.
+      CLOUDINARY_CLOUD_NAME: cataclub-ci-invalid
+      CLOUDINARY_API_KEY: ci-${{ github.run_id }}
+      CLOUDINARY_API_SECRET: ci-${{ github.run_id }}
+      # Mismo PR: `_exigir_config_de_produccion` ahora rechaza tambien las
+      # credenciales de Postgres por defecto de `docker-compose.yml`
+      # (`usuario`/`password`), sin importar el host -- por eso hacia falta
+      # este chequeo agnostico al host y no solo la comparacion de URL
+      # completa contra `_DATABASE_URL_DE_EJEMPLO`. Sin fijar estas dos
+      # variables, el backend de este job se cae al arrancar.
+      POSTGRES_USER: cataclub_ci
+      POSTGRES_PASSWORD: ci-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v4

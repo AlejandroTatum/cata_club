@@ -15,10 +15,30 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.soporte_transversal.configuracion import Settings, urls_documentacion
+from app.soporte_transversal.configuracion import (
+    _CAMPOS_EXCLUIDOS_A_PROPOSITO,
+    _CAMPOS_PRODUCCION_CRITICOS,
+    _DATABASE_URL_DE_EJEMPLO,
+    Settings,
+    urls_documentacion,
+)
 from main import app
 
 _SECRETO_VALIDO = "clave_de_pruebas_larga_y_aleatoria_para_configuracion"
+
+# Muestra "sin configurar" para cada campo crítico: el valor que ese campo
+# TIENE en un despliegue al que se le olvidó fijarlo. `database_url` usa el
+# ejemplo real del repo (el default de `Settings`); el resto usa vacío, que
+# es el default real de esos campos.
+_VALORES_SIN_CONFIGURAR: dict[str, str] = {
+    "database_url": _DATABASE_URL_DE_EJEMPLO,
+    "cors_origenes_raw": "",
+    "smtp_host": "",
+    "frontend_url": "",
+    "cloudinary_cloud_name": "",
+    "cloudinary_api_key": "",
+    "cloudinary_api_secret": "",
+}
 
 
 def _construir(**overrides) -> Settings:
@@ -27,10 +47,13 @@ def _construir(**overrides) -> Settings:
     base = {
         "_env_file": None,
         "jwt_secret_key": _SECRETO_VALIDO,
-        "database_url": "postgresql+psycopg://real:real@db.produccion:5432/cataclub",
+        "database_url": "postgresql+psycopg://real:clave_real_de_produccion@db.produccion:5432/cataclub",
         "cors_origenes_raw": "https://cataclub.com",
         "smtp_host": "smtp.sendgrid.net",
         "frontend_url": "https://cataclub.com",
+        "cloudinary_cloud_name": "cataclub-prod",
+        "cloudinary_api_key": "123456789012345",
+        "cloudinary_api_secret": "un-secreto-real-de-cloudinary",
     }
     base.update(overrides)
     return Settings(**base)
@@ -70,6 +93,35 @@ def test_produccion_rechaza_la_database_url_de_ejemplo():
             ambiente="production",
             database_url="postgresql+psycopg://usuario:password@localhost:5432/cataclub_db",
         )
+    assert "DATABASE_URL" in str(error.value)
+
+
+def test_produccion_rechaza_credenciales_de_base_de_datos_por_defecto():
+    """`docker-compose.yml:82` compone `DATABASE_URL` de
+    `${POSTGRES_USER:-usuario}:${POSTGRES_PASSWORD:-password}@db:5432/...`.
+    Un despliegue real que arranca sin fijar `POSTGRES_USER`/`POSTGRES_PASSWORD`
+    obtiene esa URL EXACTA — que NO es `_DATABASE_URL_DE_EJEMPLO` (esta usa
+    `@localhost:5432`, la de compose usa `@db:5432`), así que el chequeo de
+    igualdad de arriba nunca la atrapa. El chequeo agnóstico al host mira
+    usuario/contraseña, no la URL completa."""
+    with pytest.raises(ValidationError) as error:
+        _construir(
+            ambiente="production",
+            database_url="postgresql+psycopg://usuario:password@db:5432/cataclub_db",
+        )
+    assert "DATABASE_URL" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "postgresql+psycopg://real:@db.produccion:5432/cataclub",  # contraseña vacía
+        "postgresql+psycopg://real:abc@db.produccion:5432/cataclub",  # contraseña corta
+    ],
+)
+def test_produccion_rechaza_password_de_base_de_datos_vacia_o_debil(database_url):
+    with pytest.raises(ValidationError) as error:
+        _construir(ambiente="production", database_url=database_url)
     assert "DATABASE_URL" in str(error.value)
 
 
@@ -320,3 +372,91 @@ def test_produccion_reporta_juntos_los_dos_problemas_que_antes_pasaban():
     mensaje = str(error.value)
     assert "SMTP_HOST" in mensaje
     assert "FRONTEND_URL" in mensaje
+
+
+# --- 4. Registro de triage: todo campo de Settings, decidido una sola vez ---
+def test_todo_campo_de_settings_esta_triado_exactamente_una_vez():
+    """`Settings.model_fields` es la fuente de verdad. Cada campo tiene que
+    aparecer en EXACTAMENTE UNA de las dos tablas de triage: ni en ninguna
+    (`sin_triar`, un campo nuevo que nadie decidió), ni en las dos
+    (`en_ambas`, contradicción), ni registrado pero ya no existente
+    (`fantasma`, un rename que dejó un chequeo huérfano)."""
+    campos_reales = set(Settings.model_fields)
+    criticos = set(_CAMPOS_PRODUCCION_CRITICOS)
+    excluidos = set(_CAMPOS_EXCLUIDOS_A_PROPOSITO)
+
+    sin_triar = campos_reales - criticos - excluidos
+    en_ambas = criticos & excluidos
+    fantasma = (criticos | excluidos) - campos_reales
+
+    problemas = []
+    if sin_triar:
+        problemas.append(
+            "sin triar (agregarlo a _CAMPOS_PRODUCCION_CRITICOS o escribir su "
+            f"razón en _CAMPOS_EXCLUIDOS_A_PROPOSITO): {sorted(sin_triar)}"
+        )
+    if en_ambas:
+        problemas.append(f"en ambas tablas a la vez: {sorted(en_ambas)}")
+    if fantasma:
+        problemas.append(
+            f"registrados pero ya no son campos de Settings: {sorted(fantasma)}"
+        )
+    assert not problemas, "; ".join(problemas)
+
+
+def test_toda_exclusion_lleva_una_razon_escrita():
+    """La razón es lo único que distingue "vacío legítimo" de "olvidado" —
+    una razón vacía, en blanco o demasiado corta ("n/a") no cumple ese rol."""
+    sin_razon = {
+        campo: razon
+        for campo, razon in _CAMPOS_EXCLUIDOS_A_PROPOSITO.items()
+        if len(razon.strip()) < 30
+    }
+    assert not sin_razon, f"exclusiones sin razón suficiente: {sin_razon}"
+
+
+def test_toda_muestra_sin_configurar_cubre_un_campo_critico():
+    """Guardia preliminar del test siguiente: si alguien agrega un campo
+    crítico y se olvida la muestra, este test lo dice ANTES de que el test
+    de abajo pase por accidente (`Settings(**{})` seguiría usando el default
+    real del campo, que es exactamente lo que se quiere probar — pero solo
+    si la muestra está a propósito, no por omisión)."""
+    faltan = set(_CAMPOS_PRODUCCION_CRITICOS) - set(_VALORES_SIN_CONFIGURAR)
+    assert not faltan, f"campos críticos sin muestra en _VALORES_SIN_CONFIGURAR: {faltan}"
+
+
+def test_todo_campo_critico_se_rechaza_sin_configurar():
+    """Guardia BEHAVIORAL, complemento de la estructural de arriba: un campo
+    puede estar listado en `_CAMPOS_PRODUCCION_CRITICOS` y sin embargo nunca
+    ser chequeado de verdad por `_exigir_config_de_produccion` (registro
+    fantasma). Este test lo detecta construyendo, por cada campo crítico, un
+    `Settings` de producción con TODO válido salvo ese campo, y verificando
+    que el error nombra su variable de entorno."""
+    for campo, variable_env in _CAMPOS_PRODUCCION_CRITICOS.items():
+        with pytest.raises(ValidationError) as error:
+            _construir(ambiente="production", **{campo: _VALORES_SIN_CONFIGURAR[campo]})
+        assert variable_env in str(error.value), (
+            f"'{campo}' está en _CAMPOS_PRODUCCION_CRITICOS pero "
+            f"_exigir_config_de_produccion no lo rechaza sin configurar "
+            f"(el mensaje no menciona '{variable_env}')"
+        )
+
+
+# --- 5. Cloudinary: producción no puede correr sin las 3 credenciales ------
+@pytest.mark.parametrize(
+    "campo", ["cloudinary_cloud_name", "cloudinary_api_key", "cloudinary_api_secret"]
+)
+def test_produccion_rechaza_cada_secreto_de_cloudinary_vacio(campo):
+    with pytest.raises(ValidationError) as error:
+        _construir(ambiente="production", **{campo: ""})
+    assert _CAMPOS_PRODUCCION_CRITICOS[campo] in str(error.value)
+
+
+def test_produccion_acepta_cloudinary_configurado():
+    ajustes = _construir(
+        ambiente="production",
+        cloudinary_cloud_name="cataclub-prod",
+        cloudinary_api_key="123456789012345",
+        cloudinary_api_secret="un-secreto-real-de-cloudinary",
+    )
+    assert ajustes.cloudinary_cloud_name == "cataclub-prod"

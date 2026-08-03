@@ -9,6 +9,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # sin configurar nada, pero en producción apunta a un Postgres que no existe.
 _DATABASE_URL_DE_EJEMPLO = "postgresql+psycopg://usuario:password@localhost:5432/cataclub_db"
 
+# Usuario y contraseña de ejemplo, DERIVADOS de la URL de arriba en vez de
+# repetidos como literales aparte. Son el mismo valor, y escribirlo dos veces
+# deja que las dos copias se separen en silencio: alguien cambia la URL de
+# ejemplo, el chequeo agnóstico al host de `_exigir_config_de_produccion` sigue
+# comparando contra la vieja, y deja de atrapar lo que existe para atrapar.
+_CREDENCIALES_DE_EJEMPLO = urlparse(_DATABASE_URL_DE_EJEMPLO)
+
+# Piso de longitud para la contraseña de Postgres en producción. No pretende
+# medir fuerza: descarta el olvido y el relleno de una o dos letras.
+_LARGO_MINIMO_PASSWORD_DB = 8
+
 # Único ambiente en el que los chequeos de fail-fast de `_exigir_config_de_produccion`
 # están activos. En `development` y `test` un .env incompleto NUNCA debe
 # impedir el arranque: convertir un olvido de configuración en un stack muerto
@@ -126,6 +137,234 @@ def _es_host_inalcanzable_desde_afuera(host: str) -> bool:
         # No es una IP: queda el caso por nombre.
         return host == "localhost" or host.endswith(".localhost")
     return direccion.is_loopback or direccion.is_unspecified
+
+
+# Contrato de producción. TODO campo de `Settings` tiene que aparecer en
+# EXACTAMENTE UNA de estas dos tablas: no hay tercera opción ni lista de
+# excepciones. Agregar un campo obliga a decidir, y la decisión queda escrita
+# (ver `tests/test_configuracion.py`).
+
+# Campos que `_exigir_config_de_produccion` DEBE rechazar cuando quedan sin
+# configurar. El valor es la variable de entorno tal como la escribe el
+# operador y como aparece en el mensaje de error -- es también donde queda
+# documentado el alias `cors_origenes_raw` -> `CORS_ORIGENES`.
+_CAMPOS_PRODUCCION_CRITICOS: dict[str, str] = {
+    "database_url": "DATABASE_URL",
+    "cors_origenes_raw": "CORS_ORIGENES",
+    "smtp_host": "SMTP_HOST",
+    "frontend_url": "FRONTEND_URL",
+    "cloudinary_cloud_name": "CLOUDINARY_CLOUD_NAME",
+    "cloudinary_api_key": "CLOUDINARY_API_KEY",
+    "cloudinary_api_secret": "CLOUDINARY_API_SECRET",
+}
+
+# Razón compartida por el usuario y la contraseña de SMTP: es la MISMA
+# decisión y antes estaba escrita dos veces, la segunda como "idem smtp_user".
+# Una constante evita que las dos copias se despeguen cuando alguien edite una
+# sola, que es exactamente lo que pasa con las referencias cruzadas en prosa.
+_RAZON_SMTP_SIN_AUTENTICACION = (
+    "hay relays de producción legítimos SIN autenticación (Postfix local); "
+    "exigirlo sería un falso positivo, misma asimetría deliberada que la del "
+    "host SMTP (ver el docstring de `_problemas_de_smtp`)"
+)
+
+# Campos deliberadamente FUERA del fail-fast. La razón es obligatoria y se
+# revisa en el PR: es lo único que distingue "vacío legítimo" de "olvidado".
+_CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
+    "app_nombre": "metadato de presentación; ningún despliegue depende de su valor",
+    "app_version": "metadato que fija el repositorio, no el despliegue",
+    "ambiente": "es la LLAVE que activa este propio validador; exigirlo acá sería circular",
+    "jwt_secret_key": (
+        "ya lo valida _secreto_jwt_debe_ser_real de forma INCONDICIONAL "
+        "(:148), en todos los ambientes: es más estricto que producción y "
+        "exigirlo acá duplicaría el error"
+    ),
+    "jwt_algoritmo": "constante de la aplicación (HS256), no un valor por despliegue",
+    "jwt_expira_minutos": "política de sesión con default seguro; int, nunca queda vacío",
+    "jwt_refresh_expira_dias": "idem jwt_expira_minutos: política de sesión con default seguro",
+    "redis_url": (
+        "coordenada de red interna fijada en docker-compose.yml "
+        "(redis://redis:6379/0), no un secreto por despliegue"
+    ),
+    "celery_broker_url": "vacío es VÁLIDO: broker_url_efectivo (:213) cae a redis_url",
+    "celery_result_backend": "vacío es VÁLIDO: result_backend_efectivo (:217) cae a redis_url",
+    "celery_result_expira_segundos": "default operativo (24h), independiente del despliegue",
+    "celery_hora_automatizaciones": "default operativo (02:30 hora local), independiente del despliegue",
+    "cloudinary_carpeta_comprobantes": (
+        "nombre de carpeta dentro de la cuenta de Cloudinary; el default es "
+        "correcto y no es un secreto"
+    ),
+    "cloudinary_carpeta_vouchers": "idem carpeta de comprobantes: nombre de carpeta, no un secreto",
+    "cloudinary_carpeta_fotos_perfil": "idem carpeta de comprobantes: nombre de carpeta, no un secreto",
+    "smtp_port": "int con default 587; el compose lo fija por despliegue y no puede quedar vacío",
+    "smtp_user": _RAZON_SMTP_SIN_AUTENTICACION,
+    "smtp_password": _RAZON_SMTP_SIN_AUTENTICACION,
+    "smtp_from": (
+        "default utilizable; una dirección equivocada no se puede detectar "
+        "al arrancar, solo la rechaza el proveedor"
+    ),
+    "smtp_starttls": (
+        "bool con default seguro (True); el riesgo real es que el compose "
+        "lo pise, y eso lo cubre docker-compose.prod.yml + "
+        "tests/test_docker_compose_config.py"
+    ),
+    "opencode_api_key": (
+        "el chatbot de FAQ es una función OPCIONAL: ChatbotServicio "
+        "(chatbot_servicio.py:147) ya acota los fallos upstream a "
+        "429/502/504 en tiempo de request, y docker-compose.yml:110 pasa "
+        "${OPENCODE_API_KEY:-}, o sea que vacío es una configuración "
+        "esperada. Exigirlo negaría el arranque de TODO el backend por una "
+        "función que el club puede no habilitar"
+    ),
+    "reset_hosts_permitidos_raw": (
+        "solo lo consume scripts/reset_dev_db.py, que nunca corre en "
+        "producción; su propia allow-list incondicional lo valida"
+    ),
+}
+
+
+# --- Chequeos de producción, uno por preocupación ----------------------------
+# Cada función devuelve los problemas que encontró, o una lista vacía. Viven
+# acá afuera y no dentro de `_exigir_config_de_produccion` porque ese validador
+# terminó haciendo cinco cosas sin relación entre sí en un mismo cuerpo: se
+# volvió difícil de leer y de ejercitar por separado. Separadas, el validador
+# queda como lo que realmente es — una lista de políticas — y cada política se
+# entiende sola. Los mensajes son los mismos de siempre, palabra por palabra.
+
+_CAMPOS_CLOUDINARY = (
+    "cloudinary_cloud_name",
+    "cloudinary_api_key",
+    "cloudinary_api_secret",
+)
+
+
+def _problemas_de_database_url(database_url: str) -> list[str]:
+    if not database_url.strip() or database_url == _DATABASE_URL_DE_EJEMPLO:
+        return [
+            "DATABASE_URL sigue siendo la URL de ejemplo del repo; define "
+            "la cadena de conexión real del Postgres de producción."
+        ]
+
+    # Chequeo agnóstico al host, independiente del anterior:
+    # `docker-compose.yml` compone DATABASE_URL como
+    # `${POSTGRES_USER:-usuario}:${POSTGRES_PASSWORD:-password}@db:5432/...`.
+    # Esa URL renderizada difiere de `_DATABASE_URL_DE_EJEMPLO` SOLO en el host
+    # (`db` vs `localhost`), así que la comparación de arriba nunca la atrapa y
+    # un despliegue real puede arrancar con las credenciales de ejemplo del
+    # repo. Comparar usuario y contraseña por separado lo detecta sin importar
+    # el host.
+    credenciales = urlparse(database_url)
+    if (
+        credenciales.username == _CREDENCIALES_DE_EJEMPLO.username
+        and credenciales.password == _CREDENCIALES_DE_EJEMPLO.password
+    ):
+        return [
+            "DATABASE_URL usa las credenciales de ejemplo del repo "
+            f"('{_CREDENCIALES_DE_EJEMPLO.username}'/"
+            f"'{_CREDENCIALES_DE_EJEMPLO.password}'); define "
+            "POSTGRES_USER y POSTGRES_PASSWORD reales antes de "
+            "desplegar."
+        ]
+    if (
+        not credenciales.password
+        or len(credenciales.password) < _LARGO_MINIMO_PASSWORD_DB
+    ):
+        return [
+            "DATABASE_URL tiene una contraseña vacía o demasiado "
+            "corta; define una contraseña real y suficientemente "
+            "larga para el Postgres de producción."
+        ]
+    return []
+
+
+def _problemas_de_cors(origenes: list[str]) -> list[str]:
+    if not origenes:
+        return [
+            "CORS_ORIGENES está vacío; define los orígenes del frontend "
+            "(CSV, ej: https://cataclub.com)."
+        ]
+    return []
+
+
+def _problemas_de_smtp(smtp_host_crudo: str) -> list[str]:
+    """Correo transaccional. Sin esto la recuperación de contraseña se rompe
+    EN SILENCIO en producción: nadie recibe un error.
+
+    Asimetría deliberada con FRONTEND_URL: acá NO se rechaza localhost ni
+    127.0.0.1. Un Postfix o relay corriendo en la misma máquina es un patrón
+    legítimo de producción, y bloquearlo sería un falso positivo que obliga al
+    operador a pelearse con el arranque.
+    """
+    smtp_host = smtp_host_crudo.strip()
+    if not smtp_host:
+        return [
+            "SMTP_HOST está vacío; define el servidor SMTP real (ej: "
+            "smtp.sendgrid.net) o la recuperación de contraseña fallará "
+            "en el primer intento."
+        ]
+    if _es_catcher_de_correo(smtp_host):
+        return [
+            f"SMTP_HOST apunta a '{smtp_host}', un catcher de correo de "
+            "desarrollo: el envío tiene éxito pero el correo nunca llega "
+            "al usuario. Define el servidor SMTP real de producción."
+        ]
+    return []
+
+
+def _problemas_de_frontend_url(frontend_url_crudo: str) -> list[str]:
+    """FRONTEND_URL sí rechaza localhost, y la razón es la que justifica la
+    asimetría con SMTP: esta URL no la marca el servidor, se incrusta en un
+    correo que se abre en el dispositivo de OTRA persona. Ahí localhost es
+    inequívocamente incorrecto — el enlace de `/reset-password?token=...`
+    muere al llegar.
+    """
+    frontend_url = frontend_url_crudo.strip()
+    if not frontend_url:
+        return [
+            "FRONTEND_URL está vacío; define la URL pública del frontend "
+            "(ej: https://cataclub.com) o los enlaces de recuperación de "
+            "contraseña saldrán sin host."
+        ]
+
+    # Primero: ¿es siquiera una URL ABSOLUTA y abrible? La pregunta NO es "¿el
+    # host está en una lista negra?" — preguntarlo así era el bug: `urlparse`
+    # devuelve `hostname=None` para todo valor sin esquema, y ese None nunca
+    # coincide con ninguna lista, así que `cataclub.com` (el operador olvida
+    # `https://`) y `localhost:3000` (donde `localhost` se parsea como
+    # ESQUEMA) pasaban intactos y el correo salía con un enlace muerto.
+    partes = urlparse(frontend_url)
+    if partes.scheme.lower() not in _ESQUEMAS_PUBLICOS or not partes.hostname:
+        return [
+            f"FRONTEND_URL='{frontend_url}' no es una URL absoluta "
+            "utilizable: falta el esquema http/https o el host. El "
+            "valor se incrusta tal cual en el correo de recuperación, "
+            "así que sin esquema el enlace no abre. Define la URL "
+            "completa (ej: https://cataclub.com)."
+        ]
+    if _es_host_inalcanzable_desde_afuera(partes.hostname):
+        return [
+            f"FRONTEND_URL apunta a '{frontend_url}': ese enlace viaja "
+            "dentro del correo de recuperación y no abre en el "
+            "dispositivo del usuario (localhost, loopback o dirección "
+            "de bind). Define la URL pública del frontend "
+            "(ej: https://cataclub.com)."
+        ]
+    return []
+
+
+def _problemas_de_cloudinary(valores: dict[str, str]) -> list[str]:
+    """Sin estas 3 credenciales, cualquier subida de un comprobante, voucher o
+    foto de perfil falla en tiempo de request en vez de al arrancar."""
+    problemas: list[str] = []
+    for campo, valor in valores.items():
+        if not valor.strip():
+            variable_env = _CAMPOS_PRODUCCION_CRITICOS[campo]
+            problemas.append(
+                f"{variable_env} está vacío; define la credencial real de "
+                "Cloudinary o las subidas de archivos (comprobantes, "
+                "vouchers, fotos de perfil) fallarán en el primer intento."
+            )
+    return problemas
 
 
 class Settings(BaseSettings):
@@ -265,74 +504,15 @@ class Settings(BaseSettings):
         if self.ambiente != _AMBIENTE_ESTRICTO:
             return self
 
-        faltantes: list[str] = []
-        if not self.database_url.strip() or self.database_url == _DATABASE_URL_DE_EJEMPLO:
-            faltantes.append(
-                "DATABASE_URL sigue siendo la URL de ejemplo del repo; define "
-                "la cadena de conexión real del Postgres de producción."
-            )
-        if not self.cors_origenes:
-            faltantes.append(
-                "CORS_ORIGENES está vacío; define los orígenes del frontend "
-                "(CSV, ej: https://cataclub.com)."
-            )
-        # Correo transaccional. Sin esto la recuperación de contraseña se
-        # rompe EN SILENCIO en producción: nadie recibe un error.
-        smtp_host = self.smtp_host.strip()
-        if not smtp_host:
-            faltantes.append(
-                "SMTP_HOST está vacío; define el servidor SMTP real (ej: "
-                "smtp.sendgrid.net) o la recuperación de contraseña fallará "
-                "en el primer intento."
-            )
-        elif _es_catcher_de_correo(smtp_host):
-            faltantes.append(
-                f"SMTP_HOST apunta a '{smtp_host}', un catcher de correo de "
-                "desarrollo: el envío tiene éxito pero el correo nunca llega "
-                "al usuario. Define el servidor SMTP real de producción."
-            )
-        # Asimetría deliberada con FRONTEND_URL: acá NO se rechaza localhost ni
-        # 127.0.0.1. Un Postfix o relay corriendo en la misma máquina es un
-        # patrón legítimo de producción, y bloquearlo sería un falso positivo
-        # que obliga al operador a pelearse con el arranque.
-
-        # FRONTEND_URL sí rechaza localhost, y la razón es la que justifica la
-        # asimetría de arriba: esta URL no la marca el servidor, se incrusta en
-        # un correo que se abre en el dispositivo de OTRA persona. Ahí
-        # localhost es inequívocamente incorrecto — el enlace de
-        # `/reset-password?token=...` muere al llegar.
-        frontend_url = self.frontend_url.strip()
-        if not frontend_url:
-            faltantes.append(
-                "FRONTEND_URL está vacío; define la URL pública del frontend "
-                "(ej: https://cataclub.com) o los enlaces de recuperación de "
-                "contraseña saldrán sin host."
-            )
-        else:
-            # Primero: ¿es siquiera una URL ABSOLUTA y abrible? La pregunta
-            # NO es "¿el host está en una lista negra?" — preguntarlo así era
-            # el bug: `urlparse` devuelve `hostname=None` para todo valor sin
-            # esquema, y ese None nunca coincide con ninguna lista, así que
-            # `cataclub.com` (el operador olvida `https://`) y
-            # `localhost:3000` (donde `localhost` se parsea como ESQUEMA)
-            # pasaban intactos y el correo salía con un enlace muerto.
-            partes = urlparse(frontend_url)
-            if partes.scheme.lower() not in _ESQUEMAS_PUBLICOS or not partes.hostname:
-                faltantes.append(
-                    f"FRONTEND_URL='{frontend_url}' no es una URL absoluta "
-                    "utilizable: falta el esquema http/https o el host. El "
-                    "valor se incrusta tal cual en el correo de recuperación, "
-                    "así que sin esquema el enlace no abre. Define la URL "
-                    "completa (ej: https://cataclub.com)."
-                )
-            elif _es_host_inalcanzable_desde_afuera(partes.hostname):
-                faltantes.append(
-                    f"FRONTEND_URL apunta a '{frontend_url}': ese enlace viaja "
-                    "dentro del correo de recuperación y no abre en el "
-                    "dispositivo del usuario (localhost, loopback o dirección "
-                    "de bind). Define la URL pública del frontend "
-                    "(ej: https://cataclub.com)."
-                )
+        faltantes = [
+            *_problemas_de_database_url(self.database_url),
+            *_problemas_de_cors(self.cors_origenes),
+            *_problemas_de_smtp(self.smtp_host),
+            *_problemas_de_frontend_url(self.frontend_url),
+            *_problemas_de_cloudinary(
+                {campo: getattr(self, campo) for campo in _CAMPOS_CLOUDINARY}
+            ),
+        ]
 
         if faltantes:
             raise ValueError(
