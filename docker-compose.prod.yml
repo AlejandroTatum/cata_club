@@ -18,11 +18,19 @@ services:
       # Hardcodeado, no `${AMBIENTE:-production}`: este overlay debe forzar
       # producción sin depender de que nadie exporte la variable.
       AMBIENTE: production
+      # Sin default utilizable en producción: el default de desarrollo
+      # (`http://localhost:3000`) bloquea en silencio al frontend real por
+      # CORS. `${CORS_ORIGENES:?...}` obliga a que el operador lo exporte --
+      # ver tests/test_docker_compose_config.py:
+      # test_el_overlay_de_produccion_exige_cors_origenes.
+      CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
 
   celery-worker:
     environment:
       AMBIENTE: production
+      CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
 
   celery-beat:
     environment:
       AMBIENTE: production
+      CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"

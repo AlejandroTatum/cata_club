@@ -87,7 +87,11 @@ services:
       JWT_ALGORITMO: HS256
       JWT_EXPIRA_MINUTOS: 60
       JWT_REFRESH_EXPIRA_DIAS: 7
-      CORS_ORIGENES: http://localhost:3000
+      # Interpolado (no literal): sin esto ningún validador de `Settings`
+      # puede ver lo que el operador exporta -- ver
+      # tests/test_docker_compose_config.py:
+      # test_las_variables_criticas_llegan_al_contenedor_en_el_render_de_produccion.
+      CORS_ORIGENES: ${CORS_ORIGENES:-http://localhost:3000}
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}

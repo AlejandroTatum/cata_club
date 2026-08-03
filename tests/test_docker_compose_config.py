@@ -17,6 +17,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 RAIZ = Path(__file__).resolve().parent.parent
 
 # Clave arbitraria pero válida, usada SOLO para renderizar el compose en esta
@@ -27,25 +29,50 @@ RAIZ = Path(__file__).resolve().parent.parent
 # aserción depende del valor; solo de que exista.
 _JWT_PARA_RENDER = "0" * 64
 
+# Mismo patrón que `_JWT_PARA_RENDER`: desde que `docker-compose.prod.yml`
+# declara `${CORS_ORIGENES:?...}` (ver
+# test_el_overlay_de_produccion_exige_cors_origenes), CUALQUIER render de
+# producción que no fije la variable aborta -- incluidos los que no prueban
+# nada relacionado con CORS. Ningún assert de este archivo depende del
+# valor; solo de que exista.
+_CORS_PARA_RENDER = "http://localhost-para-tests.invalid"
 
-def _renderizar(
+
+def _ejecutar_config(
     *archivos_compose: str,
     perfiles: tuple[str, ...] = (),
     entorno: dict[str, str] | None = None,
-) -> dict:
+    omitir: tuple[str, ...] = (),
+) -> subprocess.CompletedProcess:
     args = ["docker", "compose"]
     for perfil in perfiles:
         args += ["--profile", perfil]
     for archivo in archivos_compose:
         args += ["-f", str(RAIZ / archivo)]
     args += ["config", "--format", "json"]
-    resultado = subprocess.run(
+    entorno_final = {
+        "JWT_SECRET_KEY": _JWT_PARA_RENDER,
+        "CORS_ORIGENES": _CORS_PARA_RENDER,
+        **os.environ,
+        **(entorno or {}),
+    }
+    for variable in omitir:
+        entorno_final.pop(variable, None)
+    return subprocess.run(
         args,
         capture_output=True,
         text=True,
         cwd=RAIZ,
-        env={"JWT_SECRET_KEY": _JWT_PARA_RENDER, **os.environ, **(entorno or {})},
+        env=entorno_final,
     )
+
+
+def _renderizar(
+    *archivos_compose: str,
+    perfiles: tuple[str, ...] = (),
+    entorno: dict[str, str] | None = None,
+) -> dict:
+    resultado = _ejecutar_config(*archivos_compose, perfiles=perfiles, entorno=entorno)
     assert resultado.returncode == 0, f"docker compose config falló:\n{resultado.stderr}"
     return json.loads(resultado.stdout)
 
@@ -62,6 +89,112 @@ def _config_produccion(*, con_perfiles: bool = False) -> dict:
         "docker-compose.yml",
         "docker-compose.prod.yml",
         perfiles=PERFILES_DECLARADOS if con_perfiles else (),
+    )
+
+
+# ─── Guarda de centinela: valores del operador llegan al contenedor ────────
+#
+# `docker compose config` RESUELVE la interpolación -- el valor final es
+# indistinguible entre `${CORS_ORIGENES:-http://localhost:3000}` y un
+# literal fijo `http://localhost:3000`. La única forma de probar que una
+# variable es de verdad interpolada es inyectar un valor único (un
+# "centinela") por la exportación del operador y comprobar que ESE valor,
+# y no otro, aparece en el render fusionado. Si una variable está
+# hardcodeada en el compose, ningún validador de `Settings` puede verla
+# nunca, sin importar cuán estricto sea (ver Decisión de diseño 2,
+# sdd/production-config-contract).
+SERVICIOS_PYTHON_DE_PRODUCCION = ("backend", "celery-worker", "celery-beat")
+
+# Variable tal como la resuelve el contenedor -> variables que exporta el
+# operador y que deben terminar DENTRO de ese valor. Casi siempre son la
+# misma; `DATABASE_URL` se compone de las tres `POSTGRES_*` (el host es el
+# servicio `db`, fijo a propósito: la base vive en la misma pila).
+_VARIABLES_CRITICAS_DE_PRODUCCION: dict[str, tuple[str, ...]] = {
+    "JWT_SECRET_KEY": ("JWT_SECRET_KEY",),
+    "CORS_ORIGENES": ("CORS_ORIGENES",),
+    "SMTP_HOST": ("SMTP_HOST",),
+    "FRONTEND_URL": ("FRONTEND_URL",),
+    "DATABASE_URL": ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"),
+    "CLOUDINARY_CLOUD_NAME": ("CLOUDINARY_CLOUD_NAME",),
+    "CLOUDINARY_API_KEY": ("CLOUDINARY_API_KEY",),
+    "CLOUDINARY_API_SECRET": ("CLOUDINARY_API_SECRET",),
+}
+
+# Un centinela por variable exportable por el operador, único para que una
+# variable jamás pueda "aprobar por accidente" leyendo el centinela de otra.
+_SENTINELAS_POR_VARIABLE_OPERADOR: dict[str, str] = {
+    operador: f"centinela-{operador.lower()}-9f3a7c"
+    for variables in _VARIABLES_CRITICAS_DE_PRODUCCION.values()
+    for operador in variables
+}
+
+# Todas las combinaciones (servicio, variable_renderizada, variable_operador)
+# a comprobar. `DATABASE_URL` aporta 3 combinaciones por servicio (una por
+# cada `POSTGRES_*` que la compone); el resto aporta 1. Se listan explícitas
+# -- no se colapsan en una sola aserción por variable -- para que un fallo
+# señale exactamente qué combinación no llegó, en vez de un mensaje agregado.
+_CASOS_CENTINELA = [
+    (servicio, variable_renderizada, operador)
+    for servicio in SERVICIOS_PYTHON_DE_PRODUCCION
+    for variable_renderizada, operadores in _VARIABLES_CRITICAS_DE_PRODUCCION.items()
+    for operador in operadores
+]
+
+
+@pytest.fixture(scope="module")
+def _config_produccion_con_centinelas() -> dict:
+    return _renderizar(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        entorno=dict(_SENTINELAS_POR_VARIABLE_OPERADOR),
+    )
+
+
+@pytest.mark.parametrize(
+    "servicio,variable_renderizada,operador",
+    _CASOS_CENTINELA,
+    ids=[f"{s}-{v}-{o}" for s, v, o in _CASOS_CENTINELA],
+)
+def test_las_variables_criticas_llegan_al_contenedor_en_el_render_de_produccion(
+    _config_produccion_con_centinelas, servicio, variable_renderizada, operador
+):
+    valor_renderizado = str(
+        _config_produccion_con_centinelas["services"][servicio]["environment"].get(
+            variable_renderizada, ""
+        )
+    )
+    centinela = _SENTINELAS_POR_VARIABLE_OPERADOR[operador]
+    assert centinela in valor_renderizado, (
+        f"'{servicio}.{variable_renderizada}' no refleja el valor que exportó "
+        f"el operador para {operador}: el render devolvió "
+        f"{valor_renderizado!r}, sin el centinela {centinela!r}. Esta "
+        f"variable está hardcodeada en el compose de producción -- ningún "
+        f"validador de `Settings` puede verla nunca. Arreglo: usar "
+        f"`${{{operador}}}` o `${{{operador}:?mensaje}}` en el overlay de "
+        f"producción, o `${{{operador}:-default}}` en la base."
+    )
+
+
+def test_el_overlay_de_produccion_exige_cors_origenes():
+    """`CORS_ORIGENES` no puede caer al default de desarrollo en producción:
+    un despliegue real que se olvide de exportarlo terminaría sirviendo con
+    el origen `http://localhost:3000`, que ningún navegador real usa -- el
+    frontend legítimo quedaría bloqueado por CORS en silencio. El overlay de
+    producción tiene que EXIGIR la variable (`${CORS_ORIGENES:?...}`), no
+    solo aceptarla."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        omitir=("CORS_ORIGENES",),
+    )
+    assert resultado.returncode != 0, (
+        "el render de producción tiene que fallar sin CORS_ORIGENES -- en "
+        "cambio completó con éxito, lo que significa que la variable sigue "
+        "teniendo un default utilizable en producción"
+    )
+    assert "CORS_ORIGENES" in resultado.stderr, (
+        f"el render falló, pero el mensaje no menciona CORS_ORIGENES -- no es "
+        f"accionable para quien despliega: {resultado.stderr!r}"
     )
 
 
