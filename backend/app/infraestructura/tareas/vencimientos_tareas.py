@@ -43,7 +43,7 @@ logger.setLevel(logging.INFO)
     bind=True,
     autoretry_for=(Exception,),
     retry_backoff=True,
-    retry_max=3,
+    max_retries=3,
     retry_jitter=True,
 )
 def marcar_membresias_vencidas(self) -> dict:
