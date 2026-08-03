@@ -264,6 +264,10 @@ jobs:
       # host SMTP que no sea un catcher, y una URL absoluta https sin loopback.
       SMTP_HOST: smtp.ci.invalid
       FRONTEND_URL: https://cataclub.ci.invalid
+      # PR compose-slice (sdd/production-config-contract): el overlay de
+      # producción ahora EXIGE esta variable (`${CORS_ORIGENES:?...}`) -- sin
+      # ella este job se cae en `docker compose config`, no en el servidor.
+      CORS_ORIGENES: https://cataclub.ci.invalid
 
     steps:
       - uses: actions/checkout@v4
