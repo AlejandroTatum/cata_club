@@ -23,6 +23,11 @@ dependencies = [
     "reportlab>=4.2.0",
     # --- Almacenamiento de archivos en la nube ---
     "cloudinary>=1.41.0",
+    # `urllib3` ya es transitiva de `cloudinary`; se declara explícita porque
+    # `cloudinary_cliente.py` construye un `urllib3.util.Timeout` directamente
+    # (ver `resiliencia.py`), así que el proyecto depende de su API, no solo
+    # de que Cloudinary la arrastre.
+    "urllib3>=2.0.0",
     # --- Rate limiting ---
     "slowapi>=0.1.9",
     # --- Chatbot de FAQ (DeepSeek vía gateway OpenAI-compatible OpenCode Zen) ---

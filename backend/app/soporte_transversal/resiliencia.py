@@ -1,0 +1,59 @@
+"""
+Política de resiliencia para llamadas a servicios externos (Cloudinary, SMTP)
+y para los workers de Celery.
+
+Módulo PURO: solo constantes numéricas, CERO imports. La mecánica (cómo se
+usan estos números contra cada SDK/transporte) vive en cada adaptador de
+`app.infraestructura.*`, no acá. Esto mantiene un solo lugar de política y
+deja la implementación de transporte donde corresponde (ver
+`cloudinary_cliente.py::_subir`, que arma un `urllib3.util.Timeout` con los
+dos primeros valores).
+
+Todo call site de timeout/retry del proyecto DEBE importar sus valores desde
+este módulo. Ningún call site puede tener un literal numérico propio (hay una
+prueba de guardia que lo verifica, ver `test_cloudinary_cliente.py`).
+"""
+
+# --- Cloudinary (ruta de request: voucher, foto de perfil; ruta de tarea:
+# PDF de membresía) ----------------------------------------------------------
+# Un handshake TCP+TLS contra un CDN global termina bien por debajo de 1s o no
+# termina. Un connect fallido no cuesta nada: no se envió ningún byte.
+TIMEOUT_CLOUDINARY_CONEXION_SEGUNDOS = 3.0
+
+# Deja ~2s de margen bajo el techo de abort del BFF (`BACKEND_TIMEOUT_MS =
+# 10_000`, `bff-helpers.ts:19`) para la escritura en BD, la serialización y el
+# salto BFF↔backend. 5 MB en 8s requiere ~5 Mbit/s de egreso del host — un
+# piso que cualquier entorno hosteado supera salvo un peer degradado. Se
+# comparte entre ruta de request (≤5 MB) y ruta de tarea (~50 KB de PDF):
+# ver razonamiento en el diseño (Decisión 3) sobre por qué NO conviene un
+# valor separado y más largo para el PDF, más chico.
+TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS = 8.0
+
+# Instrumentación, NO un límite: no aborta nada, solo decide si el `logger`
+# registra la subida como `info` o como `warning`. Deliberadamente es el valor
+# que la propuesta original quería IMPONER; acá se opta por medirlo primero.
+UMBRAL_SUBIDA_LENTA_SEGUNDOS = 4.0
+
+# --- SMTP --------------------------------------------------------------------
+# Valor histórico de `notificaciones_servicio.py`, sin cambios, ahora
+# nombrado. `smtplib` lo aplica POR operación de socket (connect/starttls/
+# login/sendmail), así que un SMTP totalmente degradado puede demorar ~40s
+# por destinatario — de ahí que el límite blando de Celery de abajo sea 300s
+# y no 60s.
+TIMEOUT_SMTP_SEGUNDOS = 10.0
+
+# --- Celery: límites de tiempo de worker -------------------------------------
+# Dimensionado para el PEOR batch, no para una subida individual: el límite
+# blando debe sobrevivir a `alertar_vencimientos_hoy_mas_5`
+# (`alertas_tareas.py:73-86`), que abre una conexión SMTP nueva por
+# destinatario y puede acumular ~40s cada una si el SMTP está degradado.
+CELERY_LIMITE_BLANDO_SEGUNDOS = 300
+
+# Brecha de 60s sobre el límite blando: ventana de limpieza para que
+# `SoftTimeLimitExceeded` desenrolle los bloques `with SessionLocal()` y
+# `autoretry_for` alcance a programar el reintento antes del SIGKILL duro.
+# Además, DEBE quedar por debajo de los 900s del intervalo más corto del beat
+# (`reconciliar_comprobantes_faltantes`, `crontab(minute="*/15")`,
+# `celery_app.py`) para que una corrida trabada no se solape con su propia
+# sucesora.
+CELERY_LIMITE_DURO_SEGUNDOS = 360
