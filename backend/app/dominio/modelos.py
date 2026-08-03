@@ -49,6 +49,7 @@ usuario_rol = Table(
     "usuario_rol", Base.metadata,
     Column("usuario_id", ForeignKey("usuario.id"), primary_key=True),
     Column("rol_id", ForeignKey("rol.id"), primary_key=True),
+    Index("ix_usuario_rol_rol_id", "rol_id"),
 )
 
 
@@ -65,6 +66,10 @@ class Pais(Base):
 
 class Provincia(Base):
     __tablename__ = "provincia"
+    __table_args__ = (
+        Index("ix_provincia_pais_id", "pais_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(100))
     pais_id: Mapped[int] = mapped_column(ForeignKey("pais.id"))
@@ -75,6 +80,10 @@ class Provincia(Base):
 
 class Canton(Base):
     __tablename__ = "canton"
+    __table_args__ = (
+        Index("ix_canton_provincia_id", "provincia_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(100))
     provincia_id: Mapped[int] = mapped_column(ForeignKey("provincia.id"))
@@ -85,6 +94,10 @@ class Canton(Base):
 
 class Direccion(Base):
     __tablename__ = "direccion"
+    __table_args__ = (
+        Index("ix_direccion_canton_id", "canton_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     barrio: Mapped[str] = mapped_column(String(100))
     calle_principal: Mapped[str] = mapped_column(String(150))
@@ -167,6 +180,12 @@ class Usuario(Base):
 # ---------------------------------------------------------------------------
 class Persona(Base):
     __tablename__ = "persona"
+    __table_args__ = (
+        Index("ix_persona_representante_id", "representante_id"),
+        Index("ix_persona_direccion_id", "direccion_id"),
+        Index("ix_persona_institucion_id", "institucion_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     nombres: Mapped[str] = mapped_column(String(100))
     apellidos: Mapped[str] = mapped_column(String(100))
@@ -270,6 +289,8 @@ class Membresia(Base):
             unique=True,
             postgresql_where=text("estado = 'ACTIVA'"),
         ),
+        Index("ix_membresia_persona_id", "persona_id"),
+        Index("ix_membresia_tipo_membresia_id", "tipo_membresia_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -307,6 +328,8 @@ class Pago(Base):
             unique=True,
             postgresql_where=text("estado_pago = 'PENDIENTE_VALIDACION'"),
         ),
+        Index("ix_pago_persona_id", "persona_id"),
+        Index("ix_pago_membresia_id", "membresia_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -386,6 +409,13 @@ class Descuento(Base):
 
 class DescuentoAplicado(Base):
     __tablename__ = "descuento_aplicado"
+    __table_args__ = (
+        Index("ix_descuento_aplicado_pago_id", "pago_id"),
+        Index("ix_descuento_aplicado_descuento_id", "descuento_id"),
+        Index("ix_descuento_aplicado_persona_id", "persona_id"),
+        Index("ix_descuento_aplicado_autorizado_por_persona_id", "autorizado_por_persona_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     # Valor CONGELADO en dinero al momento de aplicar (para un descuento
     # porcentual, el resultado de aplicar el porcentaje vigente al monto base
@@ -484,6 +514,11 @@ class Asistencia(Base):
     fijo y el dato no tiene consumidor (docs/concepto-alcance-modelo.md §4).
     """
     __tablename__ = "asistencia"
+    __table_args__ = (
+        Index("ix_asistencia_persona_id", "persona_id"),
+        Index("ix_asistencia_horario_id", "horario_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     fecha_entrenamiento: Mapped[date] = mapped_column(Date)
     fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
@@ -514,6 +549,7 @@ class AlumnoHorario(Base):
     # previo del servicio. No hace falta migración — la base ya la tiene.
     __table_args__ = (
         UniqueConstraint("persona_id", "horario_id", name="uq_alumno_horario"),
+        Index("ix_alumno_horario_horario_id", "horario_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -555,6 +591,10 @@ class FichaMedica(Base):
 
 class Enfermedades(Base):
     __tablename__ = "enfermedades"
+    __table_args__ = (
+        Index("ix_enfermedades_ficha_medica_id", "ficha_medica_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre_enfermedad: Mapped[str] = mapped_column(String(150))
 
@@ -585,6 +625,10 @@ class Enfermedades(Base):
 # ---------------------------------------------------------------------------
 class Ranking(Base):
     __tablename__ = "ranking"
+    __table_args__ = (
+        Index("ix_ranking_nivel_ranking_id", "nivel_ranking_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), unique=True)
 
@@ -604,6 +648,10 @@ class Ranking(Base):
 # ---------------------------------------------------------------------------
 class Notificacion(Base):
     __tablename__ = "notificacion"
+    __table_args__ = (
+        Index("ix_notificacion_persona_id", "persona_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     tipo: Mapped[TipoNotificacion] = mapped_column(SAEnum(TipoNotificacion))
     mensaje: Mapped[str] = mapped_column(String(255))
