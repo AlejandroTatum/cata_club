@@ -18,6 +18,10 @@ from celery import Celery
 from celery.schedules import crontab
 
 from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.resiliencia import (
+    CELERY_LIMITE_BLANDO_SEGUNDOS,
+    CELERY_LIMITE_DURO_SEGUNDOS,
+)
 
 
 # --- Construcción del app de Celery -----------------------------------------
@@ -46,6 +50,18 @@ celery_app.conf.update(
     task_acks_late=True,            # ack recién al terminar; los mensajes no se pierden si el worker muere.
     task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,  # fairness: no acapara tareas largas
+
+    # --- Límites de tiempo (protección contra tareas trabadas) ---
+    # Blando: dimensionado para el PEOR batch (alertas por correo con SMTP
+    # degradado, ver `resiliencia.py`). Al vencer lanza `SoftTimeLimitExceeded`,
+    # que YA es capturado por los `autoretry_for=(Exception,)` existentes:
+    # una tarea trabada se reintenta con backoff en vez de perder el slot.
+    task_soft_time_limit=CELERY_LIMITE_BLANDO_SEGUNDOS,
+    # Duro: brecha de 60s sobre el blando (ventana de limpieza) y por debajo
+    # de los 900s del beat más corto (`reconciliar-comprobantes-faltantes`,
+    # cada 15 min) para que una corrida trabada no se solape con su sucesora.
+    # SIGKILL del proceso hijo; NO pasa por `autoretry_for` (último recurso).
+    task_time_limit=CELERY_LIMITE_DURO_SEGUNDOS,
 
     # --- Serialización ---
     task_serializer="json",
