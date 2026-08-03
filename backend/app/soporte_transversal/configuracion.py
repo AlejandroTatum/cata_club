@@ -9,6 +9,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # sin configurar nada, pero en producción apunta a un Postgres que no existe.
 _DATABASE_URL_DE_EJEMPLO = "postgresql+psycopg://usuario:password@localhost:5432/cataclub_db"
 
+# Usuario y contraseña de ejemplo, DERIVADOS de la URL de arriba en vez de
+# repetidos como literales aparte. Son el mismo valor, y escribirlo dos veces
+# deja que las dos copias se separen en silencio: alguien cambia la URL de
+# ejemplo, el chequeo agnóstico al host de `_exigir_config_de_produccion` sigue
+# comparando contra la vieja, y deja de atrapar lo que existe para atrapar.
+_CREDENCIALES_DE_EJEMPLO = urlparse(_DATABASE_URL_DE_EJEMPLO)
+
+# Piso de longitud para la contraseña de Postgres en producción. No pretende
+# medir fuerza: descarta el olvido y el relleno de una o dos letras.
+_LARGO_MINIMO_PASSWORD_DB = 8
+
 # Único ambiente en el que los chequeos de fail-fast de `_exigir_config_de_produccion`
 # están activos. En `development` y `test` un .env incompleto NUNCA debe
 # impedir el arranque: convertir un olvido de configuración en un stack muerto
@@ -359,13 +370,21 @@ class Settings(BaseSettings):
             # credenciales de ejemplo del repo. Comparar usuario/contraseña
             # por separado detecta esto sin importar el host.
             credenciales = urlparse(self.database_url)
-            if credenciales.username == "usuario" and credenciales.password == "password":
+            if (
+                credenciales.username == _CREDENCIALES_DE_EJEMPLO.username
+                and credenciales.password == _CREDENCIALES_DE_EJEMPLO.password
+            ):
                 faltantes.append(
                     "DATABASE_URL usa las credenciales de ejemplo del repo "
-                    "('usuario'/'password'); define POSTGRES_USER y "
-                    "POSTGRES_PASSWORD reales antes de desplegar."
+                    f"('{_CREDENCIALES_DE_EJEMPLO.username}'/"
+                    f"'{_CREDENCIALES_DE_EJEMPLO.password}'); define "
+                    "POSTGRES_USER y POSTGRES_PASSWORD reales antes de "
+                    "desplegar."
                 )
-            elif not credenciales.password or len(credenciales.password) < 8:
+            elif (
+                not credenciales.password
+                or len(credenciales.password) < _LARGO_MINIMO_PASSWORD_DB
+            ):
                 faltantes.append(
                     "DATABASE_URL tiene una contraseña vacía o demasiado "
                     "corta; define una contraseña real y suficientemente "

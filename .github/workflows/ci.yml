@@ -273,9 +273,11 @@ jobs:
       # (_CAMPOS_PRODUCCION_CRITICOS en configuracion.py) -- sin ellas el
       # backend no arranca. Valores de mentira: alcanza con que pasen el
       # validador, ninguna subida a Cloudinary ocurre en este job.
+      # Se derivan del run_id en vez de escribirse como literales: deja a la
+      # vista que son descartables y no un secreto que alguien deba rotar.
       CLOUDINARY_CLOUD_NAME: cataclub-ci-invalid
-      CLOUDINARY_API_KEY: "123456789012345"
-      CLOUDINARY_API_SECRET: clave-de-mentira-para-ci-nunca-se-usa
+      CLOUDINARY_API_KEY: ci-${{ github.run_id }}
+      CLOUDINARY_API_SECRET: ci-${{ github.run_id }}
       # Mismo PR: `_exigir_config_de_produccion` ahora rechaza tambien las
       # credenciales de Postgres por defecto de `docker-compose.yml`
       # (`usuario`/`password`), sin importar el host -- por eso hacia falta
@@ -283,7 +285,7 @@ jobs:
       # completa contra `_DATABASE_URL_DE_EJEMPLO`. Sin fijar estas dos
       # variables, el backend de este job se cae al arrancar.
       POSTGRES_USER: cataclub_ci
-      POSTGRES_PASSWORD: clave-de-mentira-para-ci-nunca-se-usa
+      POSTGRES_PASSWORD: ci-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v4
