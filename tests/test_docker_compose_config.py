@@ -198,6 +198,30 @@ def test_el_overlay_de_produccion_exige_cors_origenes():
     )
 
 
+def test_produccion_activa_starttls_en_los_servicios_python():
+    """`docker-compose.yml` deja `SMTP_STARTTLS` en `false` para que mailpit
+    (SMTP sin TLS) siga funcionando en desarrollo. Producción no tiene ese
+    catcher local: sin STARTTLS el correo transaccional (incluidos los
+    enlaces de recuperación de contraseña) viaja en texto plano hacia
+    cualquier proveedor SMTP real. El overlay de producción tiene que
+    defaultear a `true`, sin perder la posibilidad de que el operador lo
+    desactive explícitamente."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        omitir=("SMTP_STARTTLS",),
+    )
+    assert resultado.returncode == 0, f"docker compose config falló:\n{resultado.stderr}"
+    config = json.loads(resultado.stdout)
+    for servicio in SERVICIOS_PYTHON_DE_PRODUCCION:
+        valor = config["services"][servicio]["environment"].get("SMTP_STARTTLS")
+        assert str(valor).lower() == "true", (
+            f"'{servicio}.SMTP_STARTTLS' resolvió a {valor!r} en el render de "
+            f"producción sin que el operador lo fije -- el overlay de "
+            f"producción tiene que defaultear a 'true'"
+        )
+
+
 # Namespace de GHCR del dueño actual del repositorio. La migración de
 # propiedad (el repo pasó al namespace propio) dejó las referencias apuntando
 # al namespace del equipo anterior: producción seguía tirando de imágenes que

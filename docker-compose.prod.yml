@@ -12,6 +12,11 @@
 # servicio, y logging rotado quedan para la continuación de esta PR (ver
 # decisiones de diseño 4.5/4.6/4.7): no forman parte de la propiedad de
 # seguridad medida (build en el droplet OOM-ea un 2GB) que esta PR entrega.
+# `SMTP_STARTTLS` se repite en los tres servicios porque cada uno resuelve
+# `environment: *backend_env` a su propia copia del mapa base ANTES de que
+# este overlay se fusione: un override puesto solo en `backend:` acá no
+# alcanza a `celery-worker`/`celery-beat`, aunque los tres compartan el mismo
+# alias YAML en `docker-compose.yml`.
 services:
   backend:
     environment:
@@ -24,13 +29,22 @@ services:
       # ver tests/test_docker_compose_config.py:
       # test_el_overlay_de_produccion_exige_cors_origenes.
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
+      # `false` (default de la base) es correcto para mailpit en desarrollo,
+      # que no habla TLS. Producción no tiene ese catcher local: sin
+      # STARTTLS el correo transaccional -- incluidos los enlaces de
+      # recuperación de contraseña -- viaja en texto plano hacia el
+      # proveedor SMTP real. El operador puede seguir desactivándolo
+      # explícitamente si su proveedor no lo soporta.
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
 
   celery-worker:
     environment:
       AMBIENTE: production
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
 
   celery-beat:
     environment:
       AMBIENTE: production
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
