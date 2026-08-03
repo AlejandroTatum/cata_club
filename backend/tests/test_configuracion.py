@@ -392,7 +392,7 @@ def test_todo_campo_de_settings_esta_triado_exactamente_una_vez():
     problemas = []
     if sin_triar:
         problemas.append(
-            "sin triar (agregalo a _CAMPOS_PRODUCCION_CRITICOS o escribí su "
+            "sin triar (agregarlo a _CAMPOS_PRODUCCION_CRITICOS o escribir su "
             f"razón en _CAMPOS_EXCLUIDOS_A_PROPOSITO): {sorted(sin_triar)}"
         )
     if en_ambas:
