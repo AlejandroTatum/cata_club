@@ -41,7 +41,7 @@ UMBRAL_RECONCILIACION_MINUTOS = 10
     bind=True,
     autoretry_for=(Exception,),
     retry_backoff=True,
-    retry_max=5,
+    max_retries=5,
     retry_jitter=True,
 )
 def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
@@ -115,7 +115,7 @@ def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
     bind=True,
     autoretry_for=(Exception,),
     retry_backoff=True,
-    retry_max=3,
+    max_retries=3,
     retry_jitter=True,
 )
 def reconciliar_comprobantes_faltantes(self) -> dict:
