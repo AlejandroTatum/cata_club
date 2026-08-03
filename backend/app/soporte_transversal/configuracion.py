@@ -158,6 +158,16 @@ _CAMPOS_PRODUCCION_CRITICOS: dict[str, str] = {
     "cloudinary_api_secret": "CLOUDINARY_API_SECRET",
 }
 
+# Razón compartida por el usuario y la contraseña de SMTP: es la MISMA
+# decisión y antes estaba escrita dos veces, la segunda como "idem smtp_user".
+# Una constante evita que las dos copias se despeguen cuando alguien edite una
+# sola, que es exactamente lo que pasa con las referencias cruzadas en prosa.
+_RAZON_SMTP_SIN_AUTENTICACION = (
+    "hay relays de producción legítimos SIN autenticación (Postfix local); "
+    "exigirlo sería un falso positivo, misma asimetría deliberada que la del "
+    "host SMTP (ver el docstring de `_problemas_de_smtp`)"
+)
+
 # Campos deliberadamente FUERA del fail-fast. La razón es obligatoria y se
 # revisa en el PR: es lo único que distingue "vacío legítimo" de "olvidado".
 _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
@@ -187,12 +197,8 @@ _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
     "cloudinary_carpeta_vouchers": "idem carpeta de comprobantes: nombre de carpeta, no un secreto",
     "cloudinary_carpeta_fotos_perfil": "idem carpeta de comprobantes: nombre de carpeta, no un secreto",
     "smtp_port": "int con default 587; el compose lo fija por despliegue y no puede quedar vacío",
-    "smtp_user": (
-        "hay relays de producción legítimos SIN autenticación (Postfix "
-        "local); exigirlo sería un falso positivo, misma asimetría "
-        "deliberada que el host SMTP (:294-297)"
-    ),
-    "smtp_password": "idem smtp_user: hay relays de producción legítimos sin autenticación",
+    "smtp_user": _RAZON_SMTP_SIN_AUTENTICACION,
+    "smtp_password": _RAZON_SMTP_SIN_AUTENTICACION,
     "smtp_from": (
         "default utilizable; una dirección equivocada no se puede detectar "
         "al arrancar, solo la rechaza el proveedor"
