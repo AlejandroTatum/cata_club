@@ -85,5 +85,5 @@ def test_toda_fk_tiene_cobertura_de_indice():
             f"\"{violacion.split('.')[-1]}\") al __table_args__"
             for violacion in violaciones
         )
-        + "\nAgregá cada Index al __table_args__ de la clase y creá la migración."
+        + "\nAgregar cada Index al __table_args__ de la clase y crear la migración."
     )
