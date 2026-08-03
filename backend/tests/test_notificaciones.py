@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.tareas.recuperacion_tareas import enviar_enlace_recuperacion
 from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.resiliencia import TIMEOUT_SMTP_SEGUNDOS
 
 
 class TestServicioNotificaciones:
@@ -28,7 +29,9 @@ class TestServicioNotificaciones:
                                 "user@example.com", "token123"
                             )
 
-        mock_smtp_cls.assert_called_once_with("smtp.test", 587, timeout=10)
+        mock_smtp_cls.assert_called_once_with(
+            "smtp.test", 587, timeout=TIMEOUT_SMTP_SEGUNDOS
+        )
         mock_server.starttls.assert_called_once()
         mock_server.login.assert_called_once_with("user", "pass")
         mock_server.sendmail.assert_called_once()
