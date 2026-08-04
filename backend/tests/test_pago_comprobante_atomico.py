@@ -17,6 +17,13 @@ Dos familias de pruebas:
    `reconciliar_comprobantes_faltantes`, que re-despacha la generación del
    PDF para pagos APROBADOS sin comprobante más viejos que el umbral.
 
+3. Carrera de inserción de comprobante (auditoría degradacion-controlada,
+   slice 1, bug 3): dos disparos concurrentes de `generar_comprobante_pdf_
+   tarea` para el mismo `pago_id` -- el perdedor debe recibir el
+   `IntegrityError` de la restricción única de `comprobante_pago.pago_id`
+   SIN propagarlo, re-leer la fila ya commiteada por el ganador y devolver
+   su URL.
+
 CONVENIOS DE FIXTURE:
 - Las fábricas del grafo persona→tipo→membresía→pago viven en
   `tests/fabricas_pagos.py` (compartidas con `test_invariantes_constraints.py`).
@@ -33,6 +40,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -414,3 +422,82 @@ def test_redespacho_es_idempotente_si_ya_hay_comprobante(db_session, monkeypatch
         .count()
     )
     assert total_comprobantes == 1
+
+
+# --- 5. Carrera de inserción de comprobante (bug 3) -------------------------
+
+def test_integrityerror_devuelve_url_del_ganador(motor_test):
+    """Carrera de inserción: dos disparos concurrentes de `generar_
+    comprobante_pdf_tarea` para el mismo `pago_id` -- el perdedor recibe
+    `IntegrityError` de la restricción única de `comprobante_pago.pago_id`.
+    NO debe propagarlo (desperdiciando un reintento de Celery): debe
+    re-leer la fila ya commiteada por el ganador y devolver su URL.
+
+    La carrera se simula determinísticamente: `subir_pdf_membresia` (llamado
+    DESPUÉS de que la tarea ya decidió generar el comprobante, justo antes de
+    su propio INSERT) inserta y commitea, desde una sesión real
+    independiente, la fila del "ganador" -- exactamente la ventana en la que
+    otro worker podría completar su INSERT primero."""
+    sesion = Session(bind=motor_test)
+    persona = crear_persona_orm(
+        sesion, "1799000903", nombres="Carrera", apellidos="Comprobante",
+        telefono="0990000903",
+    )
+    tipo = crear_tipo_membresia_orm(
+        sesion, categoria="Carrera Comprobante", precio=Decimal("35.00"),
+    )
+    membresia = crear_membresia_orm(
+        sesion, persona, tipo, EstadoMembresia.ACTIVA,
+        monto_aplicado=Decimal("35.00"),
+        fecha_activacion=datetime(2026, 7, 1, tzinfo=timezone.utc),
+    )
+    pago = crear_pago_orm(
+        sesion, persona, membresia, EstadoPago.APROBADO,
+        monto=Decimal("35.00"), tipo_pago=TipoPago.TRANSFERENCIA,
+    )
+    sesion.commit()
+    pago_id, membresia_id, tipo_id, persona_id = pago.id, membresia.id, tipo.id, persona.id
+    sesion.close()
+
+    url_ganador = "https://res.cloudinary.com/demo/comprobante-ganador.pdf"
+
+    def _subir_y_ganar_la_carrera(*args, **kwargs):
+        ganadora = Session(bind=motor_test)
+        try:
+            ganadora.add(ComprobantePago(
+                pago_id=pago_id, archivo_url=url_ganador, formato_archivo="pdf",
+            ))
+            ganadora.commit()
+        finally:
+            ganadora.close()
+        return "https://no-deberia-usarse.pdf"
+
+    try:
+        with patch.object(
+            ct, "generar_comprobante_pago_pdf", return_value=b"pdf-falso",
+        ), patch.object(
+            ct, "subir_pdf_membresia", side_effect=_subir_y_ganar_la_carrera,
+        ):
+            resultado = ct.generar_comprobante_pdf_tarea(pago_id)
+
+        assert resultado["comprobante_url"] == url_ganador
+
+        verificacion = Session(bind=motor_test)
+        try:
+            total = verificacion.query(ComprobantePago).filter(
+                ComprobantePago.pago_id == pago_id
+            ).count()
+            assert total == 1
+        finally:
+            verificacion.close()
+    finally:
+        limpieza = Session(bind=motor_test)
+        limpieza.query(ComprobantePago).filter(
+            ComprobantePago.pago_id == pago_id
+        ).delete()
+        limpieza.query(Pago).filter(Pago.id == pago_id).delete()
+        limpieza.query(Membresia).filter(Membresia.id == membresia_id).delete()
+        limpieza.query(TipoMembresia).filter(TipoMembresia.id == tipo_id).delete()
+        limpieza.query(Persona).filter(Persona.id == persona_id).delete()
+        limpieza.commit()
+        limpieza.close()
