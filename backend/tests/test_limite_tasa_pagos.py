@@ -19,7 +19,9 @@ import re
 
 import pytest
 
-from app.presentacion.routers import auth_router, enrollment_router, membresias_pagos_router
+from app.presentacion.routers import (
+    auth_router, descuentos_router, enrollment_router, membresias_pagos_router, personas_router,
+)
 
 
 def _limite_declarado(modulo, nombre_funcion: str) -> str | None:
@@ -83,24 +85,68 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
         "adjuntar_comprobante": "20/minute",
         "subir_voucher": "5/minute",
     },
+    # PR3 (sdd/api-abuse-protection, Fase 4): cobertura D6 de personas_router.
+    # Regla aplicada endpoint por endpoint (ver sdd/api-abuse-protection/apply-progress
+    # para el razonamiento completo por grupo):
+    #   - `listar_instituciones`: única superficie anónima del router (D6-a) --
+    #     prioridad más alta de todo el cambio, valor fijado por diseño.
+    #   - `crear_cuenta_admin` / `crear_representado`: acuñan una identidad nueva
+    #     (Usuario + tokens), la misma categoría que ya protegen `registro` y
+    #     `autoinscribir` -- ver D1 ("acuñar identidades nuevas exige
+    #     POST /auth/registro, que está limitado"). `crear_cuenta_admin` iguala
+    #     el tier de `registro` (equivalente admin-driven); `crear_representado`
+    #     iguala el tier de autoservicio autenticado (`actualizar_perfil_propio`).
+    #   - `listar_personas` / `listar_representados` / `buscar_personas`: (D6-d)
+    #     devuelven listas de personas (PII real en las dos primeras). Tier
+    #     admin/autoservicio de confianza, más laxo que las mutaciones.
+    #   - `reporte_nuevos_por_periodo` / su PDF: (D6-b) amplificación -- escaneo
+    #     completo del rango de fechas y, en el segundo caso, render de PDF
+    #     bloqueante en threadpool. El PDF es más caro por llamada -> tope menor.
+    #   - El resto de endpoints (mutaciones de una sola fila sin envío de
+    #     correo/archivo/dinero, y GETs de una sola entidad por id) NO
+    #     matchean ningún criterio D6 y quedan sin decorar a propósito --
+    #     mismo criterio que ya excluye a `crear_tipo_membresia`/
+    #     `crear_membresia` en `membresias_pagos_router`.
+    personas_router: {
+        "listar_instituciones": "60/minute",
+        "crear_cuenta_admin": "20/minute",
+        "crear_representado": "10/minute",
+        "listar_personas": "30/minute",
+        "listar_representados": "30/minute",
+        "buscar_personas": "30/minute",
+        "reporte_nuevos_por_periodo": "20/minute",
+        "reporte_nuevos_por_periodo_pdf": "10/minute",
+    },
+    # `descuentos_router`: los 4 endpoints son ADMINISTRADOR-only, mutan o leen
+    # UNA fila de `Descuento` (catálogo), no acuñan identidad, no devuelven
+    # lista de personas y no son un escaneo/reporte -- ningún criterio D6
+    # aplica. Mismo criterio EXACTO que ya excluye a `crear_tipo_membresia` y
+    # `crear_membresia` en `membresias_pagos_router` (config financiera de una
+    # sola fila, admin-only, sin decorador). Inventario vacío a propósito: una
+    # igualdad de conjunto contra `{}` sigue detectando si alguien agrega un
+    # límite sin pasar por esta decisión.
+    descuentos_router: {},
 }
 
 
-@pytest.mark.parametrize("modulo", [auth_router, enrollment_router, membresias_pagos_router])
+@pytest.mark.parametrize(
+    "modulo",
+    [auth_router, enrollment_router, membresias_pagos_router, personas_router, descuentos_router],
+)
 def test_inventario_exhaustivo_de_limites_de_tasa(modulo):
     assert _inventario_declarado(modulo) == _INVENTARIO_ESPERADO[modulo]
 
 
 # --- Cobertura directa del fix de `_limite_declarado` -----------------------
 #
-# Ningún endpoint SÍNCRONO está decorado todavía dentro del alcance de esta
-# PR (los cinco que sí lo están -- `listar_personas`, `listar_pagos`,
-# `reporte_pagos`, `obtener_estadisticas_membresias`, `listar_horarios` --
-# reciben su `@limiter.limit(...)` en una PR posterior), así que el fix del
-# regex no tiene ningún caso real en los routers para ejercitarlo todavía.
-# Estas dos pruebas fijan el comportamiento del propio `_limite_declarado`
-# contra texto fuente sintético, en vez de dejar el fix sin cobertura hasta
-# que exista un endpoint sync real que lo dispare.
+# `listar_personas` (PR3, personas_router) ya es un caso real de endpoint
+# SÍNCRONO decorado -- el fix del regex deja de ser solo teórico. Aun así se
+# mantienen estas dos pruebas contra texto fuente sintético: cubren el
+# comportamiento del propio `_limite_declarado` de forma aislada, sin
+# depender de que el router real conserve para siempre un endpoint sync
+# decorado. `listar_pagos`, `reporte_pagos` y `obtener_estadisticas_membresias`
+# (membresias_pagos_router) y `listar_horarios` (asistencias_router, PR4)
+# siguen sin decorar -- ver Fase 3 nota 3.3 y Fase 5 de las tareas.
 def test_limite_declarado_reconoce_endpoints_sincronos(monkeypatch):
     codigo_fuente_sincrono = (
         '@limiter.limit("60/minute")\n'
