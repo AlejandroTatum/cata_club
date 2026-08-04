@@ -35,37 +35,60 @@ def _limite_declarado(modulo, nombre_funcion: str) -> str | None:
     return coincidencia.group("valor") if coincidencia else None
 
 
-# --- Rutas nuevas cubiertas por esta PR (antes sin ningún rate limit) -------
-@pytest.mark.parametrize("nombre_funcion,limite_esperado", [
-    ("registrar_pago", "10/minute"),
-    ("subir_voucher", "5/minute"),
-    ("validar_pago", "20/minute"),
-    ("adjuntar_comprobante", "20/minute"),
-])
-def test_ruta_de_pagos_declara_el_limite_de_tasa_esperado(nombre_funcion, limite_esperado):
-    assert _limite_declarado(membresias_pagos_router, nombre_funcion) == limite_esperado
+def _inventario_declarado(modulo) -> dict[str, str]:
+    """Recolecta TODOS los pares (función, límite declarado) de un router, en
+    vez de consultar función por función. Es lo que hace al guardia exigente:
+    una aserción de PRESENCIA ("estas N rutas declaran esto") no detecta un
+    límite que desaparece -- basta con que las que quedan sigan matcheando.
+    Una aserción de IGUALDAD DE CONJUNTO exacta sí lo detecta, porque el lado
+    "actual" también se achica. `_limite_declarado` arriba se mantiene tal
+    cual (y sus pruebas directas, sin tocar) porque sigue siendo la única vía
+    de cobertura directa del propio regex."""
+    codigo_fuente = inspect.getsource(modulo)
+    patron = re.compile(
+        r'@limiter\.limit\("(?P<valor>[^"]+)"\)\s*\n\s*(?:async )?def (?P<nombre>\w+)\('
+    )
+    return {m.group("nombre"): m.group("valor") for m in patron.finditer(codigo_fuente)}
 
 
-# --- Regresión: límites ya existentes, sin tocar por esta PR ----------------
+# --- Inventario EXACTO de límites declarados, por router ---------------------
 #
-# Los valores anónimos subieron en sdd/api-abuse-protection (Slice 0): con la
-# clave de rate limit anterior (`get_remote_address`), CADA uno de estos
-# endpoints era un tope compartido por el club entero (un solo BFF = una sola
-# IP), no un límite por persona. Siguen siendo topes GLOBALES para siempre --
-# `/auth/refresh` recibe el token en el body, y estos endpoints son
-# anónimos por diseño -- así que los valores bajos de antes no frenaban
-# ningún ataque real: solo dejaban a todo el club afuera si un socio se
-# equivocaba de contraseña. Ver diseño D3 para el detalle completo.
-@pytest.mark.parametrize("modulo,nombre_funcion,limite_esperado", [
-    (auth_router, "login", "60/minute"),
-    (auth_router, "registro", "20/minute"),
-    (auth_router, "refrescar", "120/minute"),
-    (auth_router, "solicitar_recuperacion", "10/minute"),
-    (auth_router, "restablecer_contrasenia", "20/minute"),
-    (enrollment_router, "autoinscribir", "10/minute"),
-])
-def test_ruta_existente_conserva_su_limite_de_tasa(modulo, nombre_funcion, limite_esperado):
-    assert _limite_declarado(modulo, nombre_funcion) == limite_esperado
+# Reemplaza los dos guardias por subconjunto que existían antes (uno para las
+# rutas nuevas de pagos, otro de regresión para auth/enrollment): ambos solo
+# confirmaban que las rutas listadas seguían ahí con el valor correcto, así
+# que si alguien borraba un `@limiter.limit(...)` sin querer -- o lo movía a
+# la función equivocada -- el guardia seguía en verde mientras el resto de la
+# lista matcheara. La igualdad de conjunto exacta contra `_inventario_declarado`
+# cierra ese hueco: agregar o quitar CUALQUIER decorador en estos routers
+# rompe esta prueba hasta que el diccionario esperado se actualice a
+# propósito. PR3-PR5 extienden este mismo diccionario router por router --
+# ver `sdd/api-abuse-protection/tasks`.
+_INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
+    auth_router: {
+        "login": "60/minute",
+        "registro": "20/minute",
+        "actualizar_perfil_propio": "10/minute",
+        "actualizar_foto_perfil": "10/minute",
+        "refrescar": "120/minute",
+        "invalidar_sesiones": "5/minute",
+        "solicitar_recuperacion": "10/minute",
+        "restablecer_contrasenia": "20/minute",
+    },
+    enrollment_router: {
+        "autoinscribir": "10/minute",
+    },
+    membresias_pagos_router: {
+        "registrar_pago": "10/minute",
+        "validar_pago": "20/minute",
+        "adjuntar_comprobante": "20/minute",
+        "subir_voucher": "5/minute",
+    },
+}
+
+
+@pytest.mark.parametrize("modulo", [auth_router, enrollment_router, membresias_pagos_router])
+def test_inventario_exhaustivo_de_limites_de_tasa(modulo):
+    assert _inventario_declarado(modulo) == _INVENTARIO_ESPERADO[modulo]
 
 
 # --- Cobertura directa del fix de `_limite_declarado` -----------------------
