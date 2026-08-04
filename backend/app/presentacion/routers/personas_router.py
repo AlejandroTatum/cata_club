@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
 from datetime import date, datetime, time, timezone
 
 from app.infraestructura.db import obtener_sesion
+from app.soporte_transversal.rate_limit import limiter
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.persona_schemas import (
@@ -52,12 +53,22 @@ router = APIRouter(prefix="/personas", tags=["Personas"])
 
 
 # --- Flujo 1: creación de cuenta completa desde el admin --------------------
+# Rate-limited (D6-c): acuña una identidad nueva (Persona + Usuario + Rol) y
+# devuelve tokens de auto-login, la misma categoría que `POST /auth/registro`
+# (D1: "acuñar identidades nuevas exige POST /auth/registro, que está
+# limitado -- eso cierra el lazo"). Mismo tier que `registro` (20/min): es su
+# equivalente admin-driven, no una operación masiva. `registrar_persona`
+# (abajo) NO se decora porque solo crea una Persona -- ninguna credencial,
+# ninguna identidad nueva que acuñar.
 @router.post(
     "/admin/cuentas",
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
-async def crear_cuenta_admin(datos: AdminCrearCuentaDTO, db: Session = Depends(obtener_sesion)):
+@limiter.limit("20/minute")
+async def crear_cuenta_admin(
+    request: Request, datos: AdminCrearCuentaDTO, db: Session = Depends(obtener_sesion)
+):
     """Crea Persona + Usuario + Rol en un solo request (JUGADOR / REPRESENTANTE / MENOR).
     Retorna tokens JWT para auto-login inmediato del admin y de la cuenta creada."""
     return AdminCuentaServicio(db).crear_cuenta(datos)
@@ -87,7 +98,15 @@ async def registrar_persona(persona_in: PersonaCreateDTO, db: Session = Depends(
 # que `GET /membresias/pagos`. El tope es 200 porque es exactamente lo que
 # piden los tres consumidores del BFF (`PERSONAS_PAGE_LIMIT` en
 # `api/members`, `attendance-adapter` y `payments-adapter`).
+#
+# Rate-limited (D6-d): devuelve una lista de personas con PII real. Tier
+# admin-de-confianza (30/min): alcanza para paginar la pantalla de Miembros a
+# ritmo normal sin acotar a cero el abuso de una sesión admin comprometida --
+# también es la primera cobertura real del fix de regex sync/async (Slice 0):
+# hasta ahora ningún endpoint SÍNCRONO estaba decorado de verdad.
+@limiter.limit("30/minute")
 def listar_personas(
+    request: Request,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(obtener_sesion),
@@ -101,12 +120,17 @@ def listar_personas(
 # la misma razón documentada en membresias_pagos_router.py: `/{persona_id}`
 # es un patrón de un solo segmento que capturaría "GET /personas/reportes/..."
 # interpretando "reportes" como persona_id.
+# Rate-limited (D6-b/d): escaneo completo del rango de fechas + lista de
+# PersonaResponseDTO (PII). 20/min, mismo tier que `validar_pago`/
+# `adjuntar_comprobante` -- amplificación admin, no autoservicio.
 @router.get(
     "/reportes/nuevos-por-periodo",
     response_model=List[PersonaResponseDTO],
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
+@limiter.limit("20/minute")
 async def reporte_nuevos_por_periodo(
+    request: Request,
     fecha_inicio: date = Query(...),
     fecha_fin: date = Query(...),
     db: Session = Depends(obtener_sesion),
@@ -129,11 +153,17 @@ async def reporte_nuevos_por_periodo(
 # síncrono). Se ejecuta vía `run_in_threadpool` para no bloquear el event loop
 # de asyncio (un solo worker uvicorn) — mismo motivo por el que
 # `generar_comprobante_pago_pdf` corre en una tarea de Celery, no inline.
+# Rate-limited (D6-b): mismo escaneo que el JSON hermano de arriba, más el
+# render de PDF bloqueante en threadpool -- el costo por llamada es mayor,
+# así que el tope es más chico (10/min, no 20/min): mismo principio que ya
+# separa `chatbot` por costo real medido.
 @router.get(
     "/reportes/nuevos-por-periodo/pdf",
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
+@limiter.limit("10/minute")
 async def reporte_nuevos_por_periodo_pdf(
+    request: Request,
     fecha_inicio: date = Query(...),
     fecha_fin: date = Query(...),
     db: Session = Depends(obtener_sesion),
@@ -180,8 +210,18 @@ class InstitucionResponseDTO(ResponseBase, BaseModel):
     tipo_escuela: str
 
 
+# Rate-limited (D6-a): ÚNICA superficie anónima de los 7 routers sin
+# cobertura del cambio completo -- prioridad más alta de todo
+# `api-abuse-protection`. Deliberadamente SIN autenticación (documentado en
+# `frontend/src/app/api/personas/instituciones/route.ts:5-8`: debe seguir
+# pública para visitantes anónimos de `student/enroll`); la mitigación acá es
+# el límite, no un login. Como todo el tráfico anónimo comparte la única IP
+# del BFF (D3), la clave es GLOBAL para siempre -- 60/min es el mismo tope
+# que ya rige `login`, un techo de club entero, no un presupuesto por
+# usuario: una carga de formulario por visita no se acerca a esa cifra.
 @router.get("/instituciones", response_model=List[InstitucionResponseDTO])
-async def listar_instituciones(db: Session = Depends(obtener_sesion)):
+@limiter.limit("60/minute")
+async def listar_instituciones(request: Request, db: Session = Depends(obtener_sesion)):
     """Lista todas las instituciones educativas (para selector en wizard de inscripción)."""
     from app.infraestructura.repositorios.institucion_repositorio import InstitucionRepositorio
     instituciones = InstitucionRepositorio(db).listar()
@@ -192,12 +232,19 @@ async def listar_instituciones(db: Session = Depends(obtener_sesion)):
 
 
 # --- Búsqueda (autocomplete) ------------------------------------------------
+# Rate-limited (D6-d): devuelve una lista de personas (DTO liviano, sin
+# cédula/teléfono, pero igual nombres+foto). Cualquier rol autenticado la
+# alcanza, no solo admin -- tier de autoservicio de confianza, 30/min: cubre
+# ráfagas normales de tipeo en el autocomplete sin dejar de acotar un
+# scraping del roster completo por búsquedas incrementales.
 @router.get(
     "/buscar",
     response_model=List[PersonaBusquedaDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
+@limiter.limit("30/minute")
 async def buscar_personas(
+    request: Request,
     q: str = Query(..., min_length=2, max_length=100),
     rol: Optional[str] = Query(default=None),
     skip: int = Query(default=0, ge=0),
@@ -245,12 +292,17 @@ async def obtener_persona(
 # se toma de `token_payload["persona_id"]`, nunca de la URL sola. ADMINISTRADOR
 # y ENTRENADOR quedan exceptuados porque legítimamente necesitan consultar
 # representados de cualquier persona (panel admin).
+# Rate-limited (D6-d): devuelve una lista de PersonaResponseDTO (PII real de
+# los representados), aunque el tamaño típico sea chico. Mismo tier 30/min
+# que las demás lecturas de lista de este lote.
 @router.get(
     "/{persona_id}/representados",
     response_model=List[PersonaResponseDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
+@limiter.limit("30/minute")
 async def listar_representados(
+    request: Request,
     persona_id: int,
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
     db: Session = Depends(obtener_sesion),
@@ -271,12 +323,19 @@ async def listar_representados(
 # el chequeo inline de `crear_antecedentes_club` (línea ~165): reusa la
 # excepción de dominio ya mapeada a 403, sin revelar si el `persona_id` de la
 # URL existe o pertenece a otro representante.
+# Rate-limited (D6-c): `RepresentadoCreateDTO` puede acuñar una identidad
+# nueva (Persona + Usuario, si vienen `correo`/`contrasenia`) igual que
+# `autoinscribir` -- la misma categoría que D1 cierra con el límite de
+# `POST /auth/registro`. Tier de autoservicio autenticado (10/min), igual que
+# `actualizar_perfil_propio`/`actualizar_foto_perfil`.
 @router.post(
     "/{persona_id}/representados", response_model=PersonaResponseDTO,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(GestorPermisos(["REPRESENTANTE", "ADMINISTRADOR"]))],
 )
+@limiter.limit("10/minute")
 async def crear_representado(
+    request: Request,
     persona_id: int,
     datos: RepresentadoCreateDTO,
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
