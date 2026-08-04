@@ -31,7 +31,7 @@ router = APIRouter(prefix="/enrollment", tags=["Autoinscripción"])
         "Retorna tokens JWT para auto-login inmediato."
     ),
 )
-@limiter.limit("3/minute")
+@limiter.limit("10/minute")
 async def autoinscribir(
     request: Request,
     datos: EnrollmentCreateDTO,
