@@ -23,8 +23,8 @@ from sqlalchemy import select
 
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
-from app.dominio.modelos import Pago, Membresia, Persona
-from app.dominio.enums import EstadoPago, EstadoMembresia
+from app.dominio.modelos import Pago, Membresia, Persona, Notificacion
+from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion
 from app.soporte_transversal.tiempo import hoy_club
 
 
@@ -72,7 +72,7 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
 
         for pago, membresia, persona in filas:
             try:
-                _disparar_notificacion_vencimiento(persona, membresia, pago, fecha_objetivo)
+                _disparar_notificacion_vencimiento(db, persona, membresia, pago, fecha_objetivo)
                 alertas_enviadas.append({
                     "pago_id": pago.id,
                     "membresia_id": membresia.id,
@@ -97,50 +97,87 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
     }
 
 
-def _disparar_notificacion_vencimiento(
-    persona: Persona, membresia: Membresia, pago: Pago, vence: date
-) -> None:
-    """Crea notificaciones in-app para el alumno (y su representante si existe),
-    y envía un correo electrónico real si SMTP está configurado."""
-    from app.dominio.modelos import Notificacion
-    from app.dominio.enums import TipoNotificacion
+def _ya_notificado(db, persona_id: int, pago_id: int) -> bool:
+    """Dedup de idempotencia: ¿ya existe una notificación de vencimiento para
+    este destinatario y este pago? Clave `(tipo, persona_id,
+    entidad_relacionada_id=pago.id)`, migración-free (`Notificacion.
+    entidad_relacionada_id` ya es nullable y sin FK, ver `modelos.py`)."""
+    return db.execute(
+        select(Notificacion.id).where(
+            Notificacion.tipo == TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO,
+            Notificacion.persona_id == persona_id,
+            Notificacion.entidad_relacionada_id == pago_id,
+        )
+    ).first() is not None
 
-    with SessionLocal() as db:
-        notif_alumno = Notificacion(
+
+def _disparar_notificacion_vencimiento(
+    db, persona: Persona, membresia: Membresia, pago: Pago, vence: date
+) -> None:
+    """Crea notificaciones in-app para el alumno (y su representante si
+    existe) y envía un correo electrónico real si SMTP está configurado.
+
+    Orden deliberado (Decisión A del diseño): se lee y se deduplica sobre la
+    sesión EXTERNA del lote (`db`, la abierta por `alertar_vencimientos_hoy_
+    mas_5`) -- eso además elimina el `refresh` entre sesiones distintas que
+    causaba `InvalidRequestError`. El envío ocurre SIN transacción abierta.
+    Recién si el envío tiene éxito (o no aplica) se abre una sesión corta
+    para insertar y commitear las filas con `entidad_relacionada_id=pago.id`.
+    Así la fila commiteada significa "en-app registrado Y correo enviado" en
+    vez de solo "en-app registrado" -- se acepta una ventana de milisegundos
+    de duplicado ante una caída justo después del envío, a cambio de eliminar
+    la pérdida silenciosa y permanente de la alerta."""
+    alumno_pendiente = not _ya_notificado(db, persona.id, pago.id)
+    representante_pendiente = bool(persona.representante_id) and not _ya_notificado(
+        db, persona.representante_id, pago.id
+    )
+
+    if not alumno_pendiente and not representante_pendiente:
+        return  # ya procesado por completo en un intento anterior
+
+    filas_pendientes: list[Notificacion] = []
+
+    if alumno_pendiente:
+        filas_pendientes.append(Notificacion(
             tipo=TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO,
             mensaje=f"Tu membresía vence el {vence.strftime('%d/%m/%Y')}.",
             persona_id=persona.id,
-        )
-        db.add(notif_alumno)
+            entidad_relacionada_id=pago.id,
+        ))
 
-        if persona.representante_id:
-            notif_rep = Notificacion(
-                tipo=TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO,
-                mensaje=f"La membresía de {persona.nombres} {persona.apellidos} vence el {vence.strftime('%d/%m/%Y')}.",
-                persona_id=persona.representante_id,
+        if persona.usuario:
+            try:
+                from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+                svc = ServicioNotificaciones()
+                svc.enviar_correo(
+                    destinatario=persona.usuario.correo,
+                    asunto="Vencimiento de membresía - Cata Club",
+                    cuerpo_texto=(
+                        f"Hola {persona.nombres},\n\n"
+                        f"Tu membresía vence el {vence.strftime('%d/%m/%Y')}. "
+                        f"Por favor, regulariza tu pago para evitar la suspensión de beneficios."
+                    ),
+                )
+            except RuntimeError:
+                logger.warning(
+                    "SMTP no configurado — email no enviado para persona_id=%s", persona.id
+                )
+        else:
+            logger.warning(
+                "persona_id=%s no tiene usuario vinculado — email omitido", persona.id
             )
-            db.add(notif_rep)
 
-        db.commit()
-        db.refresh(persona, ["usuario"])
-
-    if not persona.usuario:
-        logger.warning("persona_id=%s no tiene usuario vinculado — email omitido", persona.id)
-        return
-
-    try:
-        from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
-        svc = ServicioNotificaciones()
-        svc.enviar_correo(
-            destinatario=persona.usuario.correo,
-            asunto="Vencimiento de membresía - Cata Club",
-            cuerpo_texto=(
-                f"Hola {persona.nombres},\n\n"
-                f"Tu membresía vence el {vence.strftime('%d/%m/%Y')}. "
-                f"Por favor, regulariza tu pago para evitar la suspensión de beneficios."
+    if representante_pendiente:
+        filas_pendientes.append(Notificacion(
+            tipo=TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO,
+            mensaje=(
+                f"La membresía de {persona.nombres} {persona.apellidos} "
+                f"vence el {vence.strftime('%d/%m/%Y')}."
             ),
-        )
-    except RuntimeError:
-        logger.warning(
-            "SMTP no configurado — email no enviado para persona_id=%s", persona.id
-        )
+            persona_id=persona.representante_id,
+            entidad_relacionada_id=pago.id,
+        ))
+
+    with SessionLocal() as db_escritura:
+        db_escritura.add_all(filas_pendientes)
+        db_escritura.commit()
