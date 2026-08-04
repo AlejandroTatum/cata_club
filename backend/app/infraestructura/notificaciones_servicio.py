@@ -14,10 +14,28 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
+from app.dominio.excepciones import ServicioNoDisponible
+from app.soporte_transversal.circuito_breaker import CircuitoBreaker
 from app.soporte_transversal.configuracion import settings
-from app.soporte_transversal.resiliencia import TIMEOUT_SMTP_SEGUNDOS
+from app.soporte_transversal.resiliencia import (
+    CIRCUITO_SMTP_COOLDOWN_SEGUNDOS,
+    CIRCUITO_SMTP_UMBRAL_FALLOS,
+    TIMEOUT_SMTP_SEGUNDOS,
+)
 
 logger = logging.getLogger("cataclub.notificaciones")
+
+# Circuit breaker en proceso (degradacion-controlada, slice 3): instancia a
+# nivel de MÓDULO, no de instancia. `ServicioNotificaciones` se crea nueva en
+# cada llamada (ver `alertas_tareas.py::_disparar_notificacion_
+# vencimiento`), así que el estado del circuito tiene que vivir afuera de
+# `self` para sobrevivir entre invocaciones -- mismo criterio que
+# `cloudinary_cliente.py::_circuito_cloudinary` (Decisión E del diseño).
+_circuito_smtp = CircuitoBreaker(
+    nombre="smtp",
+    umbral_fallos=CIRCUITO_SMTP_UMBRAL_FALLOS,
+    cooldown_segundos=CIRCUITO_SMTP_COOLDOWN_SEGUNDOS,
+)
 
 
 class ServicioNotificaciones:
@@ -40,11 +58,31 @@ class ServicioNotificaciones:
         cuerpo_html: Optional[str] = None,
     ) -> None:
         """Envía un correo vía SMTP. Falla explícitamente si no hay broker
-        configurado."""
+        configurado.
+
+        Antes de abrir la conexión se consulta el circuit breaker
+        (`_circuito_smtp`, degradacion-controlada slice 3): si está ABIERTO,
+        esta función NUNCA llama a `smtplib` -- levanta `ServicioNoDisponible`
+        de inmediato (mismo contrato que `cloudinary_cliente.py::_subir`).
+
+        Clasificación de fallos (Decisión D del diseño): un fallo de
+        TRANSPORTE (conexión, HELO, autenticación, timeout de socket, u
+        `OSError` genérico -- `smtplib.SMTPException` hereda de `OSError`)
+        cuenta contra el circuito. Un RECHAZO de este mensaje puntual
+        (destinatario, remitente o datos rechazados por el servidor) también
+        se traduce a `ServicioNoDisponible`, pero NO cuenta: el circuito mide
+        la salud del proveedor, no la calidad de los datos de un mensaje --
+        de lo contrario tres direcciones malas en un mismo lote abrirían el
+        circuito para todos los destinatarios siguientes."""
         if not self._host:
             raise RuntimeError(
                 "SMTP_HOST no está configurado: no se puede enviar correo real. "
                 "Configura SMTP_HOST, SMTP_PORT, SMTP_USER y SMTP_PASSWORD."
+            )
+
+        if not _circuito_smtp.permitir():
+            raise ServicioNoDisponible(
+                f"SMTP no disponible (circuito abierto): destinatario={destinatario}"
             )
 
         msg = MIMEMultipart("alternative")
@@ -55,12 +93,32 @@ class ServicioNotificaciones:
         if cuerpo_html:
             msg.attach(MIMEText(cuerpo_html, "html", "utf-8"))
 
-        with smtplib.SMTP(self._host, self._port, timeout=TIMEOUT_SMTP_SEGUNDOS) as server:
-            if self._starttls:
-                server.starttls()
-            if self._user:
-                server.login(self._user, self._password)
-            server.sendmail(self._from, destinatario, msg.as_string())
+        try:
+            with smtplib.SMTP(self._host, self._port, timeout=TIMEOUT_SMTP_SEGUNDOS) as server:
+                if self._starttls:
+                    server.starttls()
+                if self._user:
+                    server.login(self._user, self._password)
+                server.sendmail(self._from, destinatario, msg.as_string())
+        except (
+            smtplib.SMTPRecipientsRefused,
+            smtplib.SMTPSenderRefused,
+            smtplib.SMTPDataError,
+        ) as exc:
+            # Rechazo de ESTE mensaje puntual: no cuenta contra el circuito.
+            raise ServicioNoDisponible(
+                f"Destinatario rechazado por el servidor SMTP: {destinatario}"
+            ) from exc
+        except OSError as exc:
+            # `smtplib.SMTPException` hereda de `OSError`: este único except
+            # cubre `SMTPConnectError`, `SMTPServerDisconnected`,
+            # `SMTPHeloError`, `SMTPAuthenticationError`, `socket.timeout` y
+            # cualquier `OSError` genérico de la capa de transporte.
+            _circuito_smtp.registrar_fallo()
+            logger.exception("Fallo de transporte SMTP enviando a %s", destinatario)
+            raise ServicioNoDisponible(f"SMTP no disponible: {exc}") from exc
+        else:
+            _circuito_smtp.registrar_exito()
 
         logger.info("Correo enviado a %s con asunto '%s'", destinatario, asunto)
 

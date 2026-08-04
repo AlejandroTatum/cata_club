@@ -4,16 +4,22 @@ contraseña.
 """
 import inspect
 import re
+import smtplib
+import socket
 from unittest.mock import Mock, patch
 
 import pytest
 from sqlalchemy import select
 
+from app.dominio.excepciones import ServicioNoDisponible
 from app.infraestructura import notificaciones_servicio as notificaciones_servicio_mod
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.tareas.recuperacion_tareas import enviar_enlace_recuperacion
 from app.soporte_transversal.configuracion import settings
-from app.soporte_transversal.resiliencia import TIMEOUT_SMTP_SEGUNDOS
+from app.soporte_transversal.resiliencia import (
+    CIRCUITO_SMTP_UMBRAL_FALLOS,
+    TIMEOUT_SMTP_SEGUNDOS,
+)
 
 
 class TestServicioNotificaciones:
@@ -68,6 +74,135 @@ def test_timeout_smtp_referencia_la_constante_no_un_literal():
     assert valor == "TIMEOUT_SMTP_SEGUNDOS", (
         "el timeout de smtplib.SMTP debe referenciar la constante importada "
         f"de resiliencia.py, no un literal numérico; se encontró: {valor!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker SMTP (degradacion-controlada, slice 3)
+# ---------------------------------------------------------------------------
+# El circuito de SMTP vive como una única instancia a nivel de módulo
+# (`notificaciones_servicio_mod._circuito_smtp`), igual que el de Cloudinary
+# (`cloudinary_cliente.py::_circuito_cloudinary`): `ServicioNotificaciones`
+# se instancia nueva en cada llamada (ver `alertas_tareas.py`), así que el
+# estado del circuito tiene que vivir afuera de `self` para sobrevivir entre
+# invocaciones. El fixture autouse de `tests/conftest.py` lo reinicia entre
+# tests.
+def _configurar_smtp(monkeypatch):
+    """Deja `settings` con SMTP "configurado" (host presente) y sin
+    autenticación, para no tener que mockear `server.login`."""
+    monkeypatch.setattr(settings, "smtp_host", "smtp.test")
+    monkeypatch.setattr(settings, "smtp_port", 587)
+    monkeypatch.setattr(settings, "smtp_user", "")
+    monkeypatch.setattr(settings, "smtp_starttls", False)
+
+
+def test_circuito_abierto_no_abre_smtp(monkeypatch):
+    _configurar_smtp(monkeypatch)
+    for _ in range(CIRCUITO_SMTP_UMBRAL_FALLOS):
+        notificaciones_servicio_mod._circuito_smtp.registrar_fallo()
+    assert notificaciones_servicio_mod._circuito_smtp.estado == "abierto"
+
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP"
+    ) as mock_smtp_cls:
+        with pytest.raises(ServicioNoDisponible):
+            ServicioNotificaciones().enviar_correo(
+                "user@example.com", "Asunto", "cuerpo"
+            )
+
+        assert mock_smtp_cls.call_count == 0
+
+
+_FALLOS_DE_TRANSPORTE = [
+    smtplib.SMTPConnectError(421, "conexión rechazada"),
+    smtplib.SMTPServerDisconnected("conexión perdida"),
+    smtplib.SMTPHeloError(500, "error en HELO"),
+    smtplib.SMTPAuthenticationError(535, "autenticación fallida"),
+    socket.timeout("tiempo de espera agotado"),
+    OSError("fallo de red genérico"),
+]
+
+
+@pytest.mark.parametrize(
+    "excepcion",
+    _FALLOS_DE_TRANSPORTE,
+    ids=[type(e).__name__ for e in _FALLOS_DE_TRANSPORTE],
+)
+def test_fallo_de_transporte_es_servicio_no_disponible(monkeypatch, excepcion):
+    """Un fallo de TRANSPORTE (conexión, HELO, autenticación, timeout de
+    socket, u OSError genérico) se traduce a `ServicioNoDisponible` y cuenta
+    contra el circuito (Decisión D del diseño)."""
+    _configurar_smtp(monkeypatch)
+
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP",
+        side_effect=excepcion,
+    ):
+        with pytest.raises(ServicioNoDisponible):
+            ServicioNotificaciones().enviar_correo(
+                "user@example.com", "Asunto", "cuerpo"
+            )
+
+    assert notificaciones_servicio_mod._circuito_smtp.fallos_consecutivos == 1
+
+
+_RECHAZOS_DE_DESTINATARIO = [
+    smtplib.SMTPRecipientsRefused({"user@example.com": (550, "buzón inexistente")}),
+    smtplib.SMTPSenderRefused(501, "remitente rechazado", "no-reply@cataclub.com"),
+    smtplib.SMTPDataError(554, "contenido rechazado"),
+]
+
+
+@pytest.mark.parametrize(
+    "excepcion",
+    _RECHAZOS_DE_DESTINATARIO,
+    ids=[type(e).__name__ for e in _RECHAZOS_DE_DESTINATARIO],
+)
+def test_destinatario_rechazado_no_abre_el_circuito(monkeypatch, excepcion):
+    """Un rechazo de ESTE mensaje puntual (destinatario, remitente o datos)
+    se sigue traduciendo a `ServicioNoDisponible`, pero NO cuenta contra el
+    circuito: tres direcciones malas en un mismo lote no deben abrirlo para
+    todos los destinatarios siguientes (Decisión D del diseño)."""
+    _configurar_smtp(monkeypatch)
+
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP",
+        side_effect=excepcion,
+    ):
+        for _ in range(CIRCUITO_SMTP_UMBRAL_FALLOS + 1):
+            with pytest.raises(ServicioNoDisponible):
+                ServicioNotificaciones().enviar_correo(
+                    "user@example.com", "Asunto", "cuerpo"
+                )
+
+    assert notificaciones_servicio_mod._circuito_smtp.estado == "cerrado"
+    assert notificaciones_servicio_mod._circuito_smtp.fallos_consecutivos == 0
+
+
+# --- Guardia estructural: mismo patrón que
+# `test_umbral_cloudinary_referencia_la_constante_no_un_literal`
+# (`test_cloudinary_cliente.py`).
+def test_umbral_smtp_referencia_la_constante_no_un_literal():
+    codigo_fuente = inspect.getsource(notificaciones_servicio_mod)
+
+    patron_umbral = re.compile(r"umbral_fallos\s*=\s*([A-Za-z_]\w*|[0-9]+(?:\.[0-9]+)?)")
+    patron_cooldown = re.compile(r"cooldown_segundos\s*=\s*([A-Za-z_]\w*|[0-9]+(?:\.[0-9]+)?)")
+
+    coincidencia_umbral = patron_umbral.search(codigo_fuente)
+    coincidencia_cooldown = patron_cooldown.search(codigo_fuente)
+
+    assert coincidencia_umbral, "no se encontró 'umbral_fallos=' en la construcción del CircuitoBreaker"
+    assert coincidencia_cooldown, "no se encontró 'cooldown_segundos=' en la construcción del CircuitoBreaker"
+
+    valor_umbral = coincidencia_umbral.group(1)
+    valor_cooldown = coincidencia_cooldown.group(1)
+    assert valor_umbral == "CIRCUITO_SMTP_UMBRAL_FALLOS", (
+        "umbral_fallos debe referenciar la constante importada de resiliencia.py, "
+        f"no un literal numérico; se encontró: {valor_umbral!r}"
+    )
+    assert valor_cooldown == "CIRCUITO_SMTP_COOLDOWN_SEGUNDOS", (
+        "cooldown_segundos debe referenciar la constante importada de resiliencia.py, "
+        f"no un literal numérico; se encontró: {valor_cooldown!r}"
     )
 
 
