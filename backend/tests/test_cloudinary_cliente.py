@@ -100,6 +100,24 @@ def test_mime_no_soportado_sigue_siendo_value_error():
         cc.subir_voucher_pago(b"x", "voucher-x", "application/zip", 1)
 
 
+# --- 3b. Idempotencia de `overwrite=False`: lock-in (degradacion-controlada,
+# slice 1, fase 1.6) -- `subir_pdf_membresia` ya trata un `existing: True`
+# del SDK como éxito porque solo lee `secure_url`, presente en ambos casos.
+# Esta prueba fija ese comportamiento para que un refactor futuro no lo
+# rompa en silencio.
+def test_pdf_existente_devuelve_misma_url_sin_error():
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {
+            "secure_url": "https://cdn.test/comprobante-existente.pdf",
+            "existing": True,
+        }
+
+        url = _subir_pdf()
+
+        assert url == "https://cdn.test/comprobante-existente.pdf"
+        assert mock_upload.call_count == 1
+
+
 # --- 4. Guardia: ninguna función reintenta tras un fallo --------------------
 # Invariante crítico del diseño: Celery ya reintenta `subir_pdf_membresia`
 # (autoretry_for + backoff + jitter, comprobante_tareas.py:42-45). Un
