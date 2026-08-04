@@ -20,14 +20,18 @@ cruzada, ya corregido para cuando estas pruebas corren.
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from unittest.mock import Mock
 
 import pytest
+from celery.exceptions import Retry as CeleryRetry
 from sqlalchemy.orm import Session
 
 import app.infraestructura.tareas.alertas_tareas as alertas_mod
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoModalidad, TipoPago
+from app.dominio.excepciones import ServicioNoDisponible
 from app.dominio.modelos import Membresia, Notificacion, Pago, Persona, TipoMembresia, Usuario
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+from app.soporte_transversal.resiliencia import CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
 
 
 HOY = date(2029, 6, 15)
@@ -306,6 +310,36 @@ def test_reintento_no_duplica_notificacion_ni_correo(
         Notificacion.persona_id == persona.id
     ).count()
     assert total == 1
+
+
+# --- Fase 3.3: alineación del countdown de reintento al cooldown del
+# circuito SMTP (degradacion-controlada, slice 3, Decisión B del diseño) ----
+
+def test_reintento_del_lote_usa_el_cooldown_del_circuito(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Un circuito SMTP ABIERTO hace que `enviar_correo` levante
+    `ServicioNoDisponible`. Sin este override, el backoff exponencial por
+    defecto de Celery (0-1s, 0-2s, 0-4s -- ~7s peor caso) agotaría los 3
+    reintentos DENTRO del cooldown del circuito y el lote del día se
+    perdería. La tarea debe llamar a `self.retry(countdown=...)` con el
+    cooldown del circuito en vez de dejar el backoff por defecto."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    persona = _crear_persona(db_session, "1002003019")
+    _crear_usuario(db_session, persona, "alumno019@cataclub.test")
+    _crear_membresia_con_pago(db_session, persona, VENCE)
+    _mock_envio(monkeypatch, falla=ServicioNoDisponible("circuito SMTP abierto"))
+
+    mock_retry = Mock(side_effect=CeleryRetry("reintentando", None))
+    monkeypatch.setattr(alertas_mod.alertar_vencimientos_hoy_mas_5, "retry", mock_retry)
+
+    with pytest.raises(CeleryRetry):
+        alertas_mod.alertar_vencimientos_hoy_mas_5()
+
+    assert mock_retry.call_count == 1
+    _, kwargs = mock_retry.call_args
+    assert kwargs["countdown"] == CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
+    assert isinstance(kwargs["exc"], ServicioNoDisponible)
 
 
 def test_representante_recibe_una_sola_notificacion_en_reintento(

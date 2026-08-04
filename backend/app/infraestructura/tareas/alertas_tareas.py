@@ -23,8 +23,10 @@ from sqlalchemy import select
 
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
+from app.dominio.excepciones import ServicioNoDisponible
 from app.dominio.modelos import Pago, Membresia, Persona, Notificacion
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion
+from app.soporte_transversal.resiliencia import CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
 from app.soporte_transversal.tiempo import hoy_club
 
 
@@ -79,6 +81,25 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
                     "persona_id": persona.id,
                     "vence": pago.fecha_fin.isoformat(),
                 })
+            except ServicioNoDisponible as exc:
+                # Decisión B del diseño: el circuito SMTP ABIERTO hace fallar
+                # rápido a `enviar_correo`. Sin este override, el backoff
+                # exponencial por defecto de Celery (`retry_backoff=True`,
+                # 0-1s/0-2s/0-4s -- ~7s peor caso) agotaría los 3 reintentos
+                # DENTRO del cooldown del circuito y el lote del día se
+                # perdería. `self.retry(countdown=...)` alinea el reintento
+                # al cooldown en vez del backoff exponencial; `max_retries`
+                # no cambia -- el decorador lo sigue fijando en 3, y
+                # `autoretry_for` re-lanza un `Retry` sin tocarlo (ver
+                # `celery/app/autoretry.py`), así que `test_celery_tope_de_
+                # reintentos.py` queda intacto. La dedup de la fase 1.4 hace
+                # que el reintento retome donde el intento anterior se quedó.
+                logger.warning(
+                    "Circuito SMTP abierto durante el lote (pago_id=%s); "
+                    "reintentando en %.0fs",
+                    pago.id, CIRCUITO_SMTP_COOLDOWN_SEGUNDOS,
+                )
+                raise self.retry(exc=exc, countdown=CIRCUITO_SMTP_COOLDOWN_SEGUNDOS)
             except Exception:
                 logger.exception(
                     "Fallo notificando vencimiento (pago_id=%s)", pago.id
