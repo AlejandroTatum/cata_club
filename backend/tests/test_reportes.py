@@ -456,3 +456,50 @@ def test_reporte_pagos_pdf_usa_threadpool(client, monkeypatch):
     resp = client.get("/api/v1/membresias/pagos/reportes/pdf")
     assert resp.status_code == 200
     assert llamadas == [generar_reporte_pdf]
+
+
+# --- Tope del reporte de pagos (sdd/api-abuse-protection, D5) ---------------
+#
+# `_reporte_pagos_items` pedía siempre `limit=10000` a `PagoServicio.listar_pagos`
+# y descartaba el `total` real que ese método ya devuelve (independiente del
+# `limit`, ver `membresia_pago_servicio.py`). Un rango de fechas que matcheara
+# más de 10000 pagos se truncaba en silencio: el llamador recibía una
+# respuesta 200 con los primeros N pagos y ninguna señal de que faltaban
+# filas. Estas pruebas fijan el reemplazo: en vez de truncar, se rechaza con
+# 422 -- mismo patrón que el 422 ya existente para un rango de fechas
+# invertido, unas líneas más arriba en `_reporte_pagos_items`.
+def test_reporte_pagos_supera_el_limite_maximo_da_422(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.presentacion.routers.membresias_pagos_router.LIMITE_MAXIMO_REPORTE_PAGOS", 2,
+    )
+    _crear_pago(client, "1801010105")
+    _crear_pago(client, "1801010106")
+    _crear_pago(client, "1801010107")
+
+    resp = client.get("/api/v1/membresias/pagos/reportes")
+    assert resp.status_code == 422
+    assert "2" in resp.json()["detail"]
+
+
+def test_reporte_pagos_pdf_supera_el_limite_maximo_da_422(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.presentacion.routers.membresias_pagos_router.LIMITE_MAXIMO_REPORTE_PAGOS", 2,
+    )
+    _crear_pago(client, "1801010108")
+    _crear_pago(client, "1801010109")
+    _crear_pago(client, "1801010110")
+
+    resp = client.get("/api/v1/membresias/pagos/reportes/pdf")
+    assert resp.status_code == 422
+
+
+def test_reporte_pagos_exactamente_en_el_limite_da_200(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.presentacion.routers.membresias_pagos_router.LIMITE_MAXIMO_REPORTE_PAGOS", 2,
+    )
+    _crear_pago(client, "1801010111")
+    _crear_pago(client, "1801010112")
+
+    resp = client.get("/api/v1/membresias/pagos/reportes")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
