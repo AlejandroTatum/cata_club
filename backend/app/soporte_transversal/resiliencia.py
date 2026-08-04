@@ -34,6 +34,19 @@ TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS = 8.0
 # que la propuesta original quería IMPONER; acá se opta por medirlo primero.
 UMBRAL_SUBIDA_LENTA_SEGUNDOS = 4.0
 
+# --- Circuit breaker Cloudinary (degradacion-controlada, slice 2) -----------
+# 3 subidas fallidas seguidas, no una sola: una sola falla puede ser un
+# glitch transitorio de un peer; 3 x el timeout total (~8s c/u, ~24s en
+# total) alcanza para confirmar que el proveedor está caído de verdad, no
+# que hubo una subida floja.
+CIRCUITO_CLOUDINARY_UMBRAL_FALLOS = 3
+
+# Mayor al timeout total (8s), para que una sonda en SEMIABIERTO siempre
+# termine antes de que se admita otra sonda: con un cooldown menor al
+# timeout, dos sondas podrían quedar en vuelo al mismo tiempo. Con 30s, una
+# persona espera como máximo 30s a que el sistema vuelva a probar.
+CIRCUITO_CLOUDINARY_COOLDOWN_SEGUNDOS = 30.0
+
 # --- SMTP --------------------------------------------------------------------
 # Valor histórico de `notificaciones_servicio.py`, sin cambios, ahora
 # nombrado. `smtplib` lo aplica POR operación de socket (connect/starttls/
