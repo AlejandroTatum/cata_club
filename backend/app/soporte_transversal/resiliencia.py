@@ -55,6 +55,22 @@ CIRCUITO_CLOUDINARY_COOLDOWN_SEGUNDOS = 30.0
 # y no 60s.
 TIMEOUT_SMTP_SEGUNDOS = 10.0
 
+# --- Circuit breaker SMTP (degradacion-controlada, slice 3) -----------------
+# 3 fallos de TRANSPORTE consecutivos, no uno solo: un socket flojo aislado
+# puede ser un glitch; solo cuentan fallas de transporte reales (nunca un
+# destinatario rechazado, ver Decisión D del diseño), así que 3 seguidas
+# confirman que el relay está caído, no que hubo 3 direcciones malas en el
+# mismo lote.
+CIRCUITO_SMTP_UMBRAL_FALLOS = 3
+
+# Mayor al costo peor-caso por destinatario (~40s, TIMEOUT_SMTP_SEGUNDOS por
+# cada operación de socket: connect/starttls/login/sendmail), para que el
+# circuito no "aletee" (abra/cierre) en medio de un lote. Con 60s, 3
+# reintentos del lote (Decisión B del diseño) cubren ~180s de ventana de
+# recuperación, y una sonda en SEMIABIERTO siempre entra dentro del límite
+# blando de 300s de abajo.
+CIRCUITO_SMTP_COOLDOWN_SEGUNDOS = 60.0
+
 # --- Celery: límites de tiempo de worker -------------------------------------
 # Dimensionado para el PEOR batch, no para una subida individual: el límite
 # blando debe sobrevivir a `alertar_vencimientos_hoy_mas_5`
