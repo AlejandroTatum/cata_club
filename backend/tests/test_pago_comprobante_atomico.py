@@ -424,6 +424,30 @@ def test_redespacho_es_idempotente_si_ya_hay_comprobante(db_session, monkeypatch
     assert total_comprobantes == 1
 
 
+def test_genera_comprobante_sin_carrera_ni_comprobante_previo(db_session, monkeypatch):
+    """Camino feliz, sin carrera y sin comprobante previo: genera el PDF,
+    sube a Cloudinary y persiste el `ComprobantePago`. Cierra la cobertura
+    del camino de éxito de `generar_comprobante_pdf_tarea` (las otras
+    pruebas de este archivo solo ejercitan las ramas de "ya existe" y de
+    "carrera")."""
+    viejo = datetime.now(timezone.utc) - timedelta(minutes=30)
+    pago = _sembrar_pago(db_session, "1712000006", EstadoPago.APROBADO, viejo)
+    url_nueva = "https://res.cloudinary.com/demo/comprobante-nuevo.pdf"
+    monkeypatch.setattr(ct, "generar_comprobante_pago_pdf", lambda **kwargs: b"pdf-falso")
+    monkeypatch.setattr(ct, "subir_pdf_membresia", lambda *a, **k: url_nueva)
+    _usar_sesion_del_test(monkeypatch, db_session)
+
+    resultado = ct.generar_comprobante_pdf_tarea(pago.id)
+
+    assert resultado["comprobante_url"] == url_nueva
+    comprobante = (
+        db_session.query(ComprobantePago)
+        .filter(ComprobantePago.pago_id == pago.id)
+        .one()
+    )
+    assert comprobante.archivo_url == url_nueva
+
+
 # --- 5. Carrera de inserción de comprobante (bug 3) -------------------------
 
 def test_integrityerror_devuelve_url_del_ganador(motor_test):
