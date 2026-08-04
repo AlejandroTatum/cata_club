@@ -20,6 +20,7 @@ from datetime import date, timedelta
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
@@ -64,13 +65,25 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
             select(Pago, Membresia, Persona)
             .join(Membresia, Membresia.id == Pago.membresia_id)
             .join(Persona, Persona.id == Pago.persona_id)
+            # `Persona.usuario` se leía perezosamente dentro del loop de abajo
+            # (`persona.usuario.correo`): una consulta extra por destinatario
+            # (N+1). Es relación a-uno (`uselist=False`, `usuario.persona_id`
+            # es UNIQUE), así que el LEFT JOIN no puede multiplicar filas y
+            # `joinedload` la resuelve en el MISMO SELECT sin costo de una
+            # segunda consulta (a diferencia de `selectinload`). El lote
+            # sigue sin ser libre de N+1: `_ya_notificado` (más abajo) sigue
+            # corriendo una vez por destinatario a propósito (idempotencia).
+            .options(joinedload(Persona.usuario))
             .where(
                 Pago.estado_pago == EstadoPago.APROBADO,
                 Pago.fecha_fin == fecha_objetivo,
                 Membresia.estado == EstadoMembresia.ACTIVA,
             )
         )
-        filas = db.execute(stmt).all()
+        # `.unique()` es defensiva, no obligatoria para una relación a-uno:
+        # protege a este `joinedload` de fallar en silencio si en el futuro
+        # `Persona.usuario` pasara a ser a-muchos.
+        filas = db.execute(stmt).unique().all()
 
         for pago, membresia, persona in filas:
             try:
