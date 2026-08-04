@@ -8,7 +8,9 @@ Ningún test toca la red: se parchea `cloudinary.uploader.upload` (mismo
 criterio que `test_notificaciones.py:16` para `smtplib.SMTP`) — probar que un
 socket realmente expira sería probar una dependencia, no nuestro código.
 """
+import inspect
 import logging
+import re
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +18,7 @@ from urllib3.util import Timeout
 
 import app.infraestructura.cloudinary_cliente as cc
 from app.dominio.excepciones import ServicioNoDisponible
+from app.soporte_transversal.resiliencia import CIRCUITO_CLOUDINARY_UMBRAL_FALLOS
 
 
 def _subir_pdf(**overrides):
@@ -186,3 +189,47 @@ def test_subida_rapida_emite_info_no_warning(caplog, monkeypatch):
     niveles = [r.levelname for r in caplog.records]
     assert "INFO" in niveles
     assert "WARNING" not in niveles
+
+
+# --- 8. Circuit breaker (degradacion-controlada, slice 2) -------------------
+# El circuito de Cloudinary vive como una única instancia a nivel de módulo
+# (`cc._circuito_cloudinary`), compartida por las 3 funciones públicas porque
+# todas pasan por `_subir()`. El fixture autouse de `tests/conftest.py` lo
+# reinicia entre tests para que el estado de uno no se filtre al siguiente.
+def test_circuito_abierto_no_llama_al_sdk():
+    for _ in range(CIRCUITO_CLOUDINARY_UMBRAL_FALLOS):
+        cc._circuito_cloudinary.registrar_fallo()
+    assert cc._circuito_cloudinary.estado == "abierto"
+
+    with _parchear_upload() as mock_upload:
+        with pytest.raises(ServicioNoDisponible):
+            _subir_pdf()
+
+        assert mock_upload.call_count == 0
+
+
+# --- 9. Guardia estructural: el umbral/cooldown deben venir de resiliencia.py,
+# nunca de un literal -- mismo patrón que
+# `test_notificaciones.py::test_timeout_smtp_referencia_la_constante_no_un_literal`.
+def test_umbral_cloudinary_referencia_la_constante_no_un_literal():
+    codigo_fuente = inspect.getsource(cc)
+
+    patron_umbral = re.compile(r"umbral_fallos\s*=\s*([A-Za-z_]\w*|[0-9]+(?:\.[0-9]+)?)")
+    patron_cooldown = re.compile(r"cooldown_segundos\s*=\s*([A-Za-z_]\w*|[0-9]+(?:\.[0-9]+)?)")
+
+    coincidencia_umbral = patron_umbral.search(codigo_fuente)
+    coincidencia_cooldown = patron_cooldown.search(codigo_fuente)
+
+    assert coincidencia_umbral, "no se encontró 'umbral_fallos=' en la construcción del CircuitoBreaker"
+    assert coincidencia_cooldown, "no se encontró 'cooldown_segundos=' en la construcción del CircuitoBreaker"
+
+    valor_umbral = coincidencia_umbral.group(1)
+    valor_cooldown = coincidencia_cooldown.group(1)
+    assert valor_umbral == "CIRCUITO_CLOUDINARY_UMBRAL_FALLOS", (
+        "umbral_fallos debe referenciar la constante importada de resiliencia.py, "
+        f"no un literal numérico; se encontró: {valor_umbral!r}"
+    )
+    assert valor_cooldown == "CIRCUITO_CLOUDINARY_COOLDOWN_SEGUNDOS", (
+        "cooldown_segundos debe referenciar la constante importada de resiliencia.py, "
+        f"no un literal numérico; se encontró: {valor_cooldown!r}"
+    )

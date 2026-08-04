@@ -120,6 +120,26 @@ def _mock_disparo_celery_comprobante(monkeypatch):
     monkeypatch.setattr(mps.PagoServicio, "_disparar_generacion_comprobante_pdf", lambda self, pago_id: None)
 
 
+@pytest.fixture(autouse=True)
+def _reiniciar_circuitos_breaker():
+    """Resetea el estado de los circuit breakers en memoria entre tests
+    (degradacion-controlada, slice 2): el estado vive en una única instancia
+    a nivel de módulo por adaptador (Decisión E del diseño), así que un test
+    que fuerza un circuito a ABIERTO -- por ejemplo
+    `test_circuito_abierto_no_llama_al_sdk` -- dejaría ese estado filtrado
+    al siguiente test si no se reinicia acá. Autouse: aplica a toda la
+    suite, no solo a los tests de circuit breaker (protege en particular a
+    `test_ninguna_funcion_reintenta_tras_un_fallo`).
+
+    Solo el breaker de Cloudinary existe en este slice; el de SMTP se suma
+    en el próximo slice (degradacion-controlada, slice 3) y este fixture se
+    extiende ese día."""
+    import app.infraestructura.cloudinary_cliente as cloudinary_cliente_mod
+    cloudinary_cliente_mod._circuito_cloudinary.reiniciar()
+    yield
+    cloudinary_cliente_mod._circuito_cloudinary.reiniciar()
+
+
 @pytest.fixture()
 def persona_sin_usuario(db_session):
     """Crea una Persona (sin Usuario asociado) directamente vía ORM, para
