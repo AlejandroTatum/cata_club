@@ -1,5 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Pais, Provincia, Canton
@@ -12,8 +12,18 @@ class PaisRepositorio:
     def obtener_por_id(self, pais_id: int) -> Optional[Pais]:
         return self.db.get(Pais, pais_id)
 
-    def listar(self) -> List[Pais]:
-        return self.db.query(Pais).all()
+    def listar(self, skip: int = 0, limit: Optional[int] = None) -> List[Pais]:
+        # Alfabético porque el catálogo alimenta un selector de ubicación. El
+        # id desempata: `nombre` NO es UNIQUE, y sin orden TOTAL `OFFSET/LIMIT`
+        # puede repetir o saltear filas entre páginas.
+        stmt = select(Pais).order_by(Pais.nombre.asc(), Pais.id.asc()).offset(skip)
+        if limit is not None:          # None = sin tope: preserva a los
+            stmt = stmt.limit(limit)   # llamadores actuales, que piden todo
+        return list(self.db.scalars(stmt).all())
+
+    def contar(self) -> int:
+        stmt = select(func.count()).select_from(Pais)
+        return self.db.execute(stmt).scalar_one()
 
     def crear(self, pais: Pais) -> Pais:
         self.db.add(pais)

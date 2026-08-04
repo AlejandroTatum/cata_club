@@ -22,8 +22,11 @@ class PaisServicio:
     def crear_pais(self, datos: PaisCreateDTO) -> Pais:
         return self.repo.crear(Pais(**datos.model_dump()))
 
-    def listar_paises(self) -> List[Pais]:
-        return self.repo.listar()
+    def listar_paises(self, skip: int = 0, limit: Optional[int] = None) -> List[Pais]:
+        return self.repo.listar(skip=skip, limit=limit)
+
+    def contar_paises(self) -> int:
+        return self.repo.contar()
 
     def obtener_pais(self, pais_id: int) -> Pais:
         pais = self.repo.obtener_por_id(pais_id)
