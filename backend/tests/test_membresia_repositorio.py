@@ -69,33 +69,22 @@ def test_listar_respeta_skip_y_limit(db_session):
     assert {m.id for m in primera_pagina}.isdisjoint({m.id for m in segunda_pagina})
 
 
-def test_listar_no_incurre_en_n_mas_uno_al_cargar_relaciones(db_session):
+def test_listar_no_incurre_en_n_mas_uno_al_cargar_relaciones(db_session, contar_selects):
     """`joinedload(persona)` + `joinedload(tipo_membresia)` deben resolverse
     en el MISMO SELECT que trae las membresías. Si degeneran a lazy-load, el
     número de sentencias SQL crecería con la cantidad de filas."""
-    from sqlalchemy import event
-
     _crear_membresias(db_session, cantidad=6)
     db_session.expire_all()  # fuerza recarga real desde la BD, no la identity map
 
     repo = MembresiaRepositorio(db_session)
 
-    sentencias: list[str] = []
-
-    def _contar(conn, cursor, statement, parameters, context, executemany):
-        sentencias.append(statement)
-
-    engine = db_session.get_bind()
-    event.listen(engine, "after_cursor_execute", _contar)
-    try:
+    with contar_selects() as sentencias:
         resultado = repo.listar(skip=0, limit=200)
         # Acceder a las relaciones NO debe disparar SELECTs adicionales si el
         # joinedload funcionó; si degenera a lazy-load, cada acceso agrega uno.
         for membresia in resultado:
             _ = membresia.persona.nombres
             _ = membresia.tipo_membresia.categoria
-    finally:
-        event.remove(engine, "after_cursor_execute", _contar)
 
     assert len(resultado) == 6
     selects = [s for s in sentencias if s.strip().upper().startswith("SELECT")]

@@ -12,9 +12,6 @@ filas.
 """
 from datetime import date
 
-import pytest
-from sqlalchemy import event
-
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import NivelRanking, Persona, Ranking, Rol, Usuario
 from app.servicios_negocio.ranking_servicio import RankingServicio
@@ -53,30 +50,6 @@ def _asignar_ranking(db_session, persona_id, nivel_id):
     db_session.add(ranking)
     db_session.commit()
     return ranking
-
-
-@pytest.fixture()
-def contar_selects(db_session):
-    """Cuenta las sentencias SELECT ejecutadas dentro del bloque `with`.
-    Mismo mecanismo (`after_cursor_execute`) que el guard de N+1 de
-    `test_membresia_repositorio.py`."""
-    import contextlib
-
-    @contextlib.contextmanager
-    def _medir():
-        sentencias: list[str] = []
-
-        def _contar(conn, cursor, statement, parameters, context, executemany):
-            sentencias.append(statement)
-
-        engine = db_session.get_bind()
-        event.listen(engine, "after_cursor_execute", _contar)
-        try:
-            yield sentencias
-        finally:
-            event.remove(engine, "after_cursor_execute", _contar)
-
-    return _medir
 
 
 def test_listar_alumnos_con_nivel_no_incurre_en_n_mas_uno(db_session, contar_selects):
