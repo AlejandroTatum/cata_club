@@ -154,6 +154,17 @@ def listar_pagos(
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
+# Tope duro del reporte de pagos "todo en una respuesta" (sin paginar, el
+# frontend pagina client-side -- ver comentario del router más abajo). El
+# valor no cambia (10000): lo que cambia es qué pasa al superarlo. Antes se
+# pedía `limit=LIMITE_MAXIMO_REPORTE_PAGOS` y se descartaba el `total` real
+# que `PagoServicio.listar_pagos` ya devuelve (independiente del `limit`),
+# así que un rango con más de 10000 pagos se truncaba en silencio: 200 con
+# los primeros N y ninguna señal de que faltaban filas. Ahora se rechaza con
+# 422, mismo patrón que el rango de fechas invertido más abajo.
+LIMITE_MAXIMO_REPORTE_PAGOS = 10000
+
+
 def _reporte_pagos_items(
     db: Session,
     estado_pago: Optional[EstadoPago],
@@ -169,10 +180,18 @@ def _reporte_pagos_items(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="La fecha de inicio debe ser anterior a la fecha de fin.",
         )
-    items, _ = PagoServicio(db).listar_pagos(
+    items, total = PagoServicio(db).listar_pagos(
         estado_pago=estado_pago, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
-        skip=0, limit=10000,
+        skip=0, limit=LIMITE_MAXIMO_REPORTE_PAGOS,
     )
+    if total > LIMITE_MAXIMO_REPORTE_PAGOS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"El reporte supera el límite máximo de {LIMITE_MAXIMO_REPORTE_PAGOS} "
+                "pagos. Reduzca el rango de fechas para continuar."
+            ),
+        )
     return items
 
 
