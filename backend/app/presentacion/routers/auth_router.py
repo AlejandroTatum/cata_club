@@ -18,7 +18,7 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 
 @router.post("/login")
-@limiter.limit("5/minute")
+@limiter.limit("60/minute")
 async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(obtener_sesion)):
     return AuthServicio(db).login(form.username, form.password)
 
@@ -28,7 +28,7 @@ async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), d
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
-@limiter.limit("3/minute")
+@limiter.limit("20/minute")
 async def registro(request: Request, datos: RegistroUsuarioDTO, db: Session = Depends(obtener_sesion)):
     """
     Solo ADMINISTRADOR: crea el `Usuario` (credenciales) para una `Persona`
@@ -100,7 +100,7 @@ async def actualizar_foto_perfil(
 
 
 @router.post("/refresh")
-@limiter.limit("10/minute")
+@limiter.limit("120/minute")
 async def refrescar(request: Request, datos: RefreshTokenDTO, db: Session = Depends(obtener_sesion)):
     """
     Recibe un refresh token en el BODY (no en header Authorization, porque
@@ -146,12 +146,12 @@ async def logout():
 
 # --- E01-RF003: recuperación de contraseña -----------------------------------
 @router.post("/recuperar-contrasenia", response_model=SolicitarRecuperacionResponseDTO)
-@limiter.limit("3/minute")
+@limiter.limit("10/minute")
 async def solicitar_recuperacion(request: Request, datos: SolicitarRecuperacionDTO, db: Session = Depends(obtener_sesion)):
     return AuthServicio(db).solicitar_recuperacion(datos.correo)
 
 
 @router.post("/restablecer-contrasenia", status_code=status.HTTP_204_NO_CONTENT)
-@limiter.limit("5/minute")
+@limiter.limit("20/minute")
 async def restablecer_contrasenia(request: Request, datos: RestablecerContraseniaDTO, db: Session = Depends(obtener_sesion)):
     AuthServicio(db).restablecer_contrasenia(datos.token, datos.nueva_contrasenia)
