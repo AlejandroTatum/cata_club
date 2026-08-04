@@ -17,6 +17,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
@@ -103,9 +104,26 @@ def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
             formato_archivo="pdf",
         )
         db.add(comprobante)
-        db.commit()
-        db.refresh(comprobante)
+        try:
+            db.commit()
+        except IntegrityError:
+            # Carrera: otro disparo (ej. reconciliación + disparo original
+            # solapados) ya insertó y commiteó el comprobante de este pago
+            # entre nuestra lectura y este commit. No es un fallo real -- el
+            # ganador ya dejó el trabajo hecho -- así que no se propaga (eso
+            # desperdiciaría un reintento de Celery): se relee la fila ya
+            # commiteada y se devuelve su URL.
+            db.rollback()
+            ganador = db.execute(
+                select(ComprobantePago).where(ComprobantePago.pago_id == pago.id)
+            ).scalar_one()
+            logger.warning(
+                "Carrera de inserción de comprobante para pago %s; "
+                "se reutiliza la URL del ganador.", pago_id,
+            )
+            return {"pago_id": pago_id, "comprobante_url": ganador.archivo_url}
 
+        db.refresh(comprobante)
         logger.info("Comprobante creado para pago %s -> %s", pago_id, url)
     return {"pago_id": pago_id, "comprobante_url": url}
 
