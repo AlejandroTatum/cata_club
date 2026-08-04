@@ -45,8 +45,14 @@ class ProvinciaServicio:
             raise EntidadNoEncontrada(f"País con id {datos.pais_id} no encontrado")
         return self.repo.crear(Provincia(**datos.model_dump()))
 
-    def listar_provincias(self, pais_id: Optional[int] = None) -> List[Provincia]:
-        return self.repo.listar(pais_id=pais_id)
+    def listar_provincias(
+        self, pais_id: Optional[int] = None,
+        skip: int = 0, limit: Optional[int] = None,
+    ) -> List[Provincia]:
+        return self.repo.listar(pais_id=pais_id, skip=skip, limit=limit)
+
+    def contar_provincias(self, pais_id: Optional[int] = None) -> int:
+        return self.repo.contar(pais_id=pais_id)
 
     def obtener_provincia(self, provincia_id: int) -> Provincia:
         provincia = self.repo.obtener_por_id(provincia_id)
@@ -67,8 +73,14 @@ class CantonServicio:
             )
         return self.repo.crear(Canton(**datos.model_dump()))
 
-    def listar_cantones(self, provincia_id: Optional[int] = None) -> List[Canton]:
-        return self.repo.listar(provincia_id=provincia_id)
+    def listar_cantones(
+        self, provincia_id: Optional[int] = None,
+        skip: int = 0, limit: Optional[int] = None,
+    ) -> List[Canton]:
+        return self.repo.listar(provincia_id=provincia_id, skip=skip, limit=limit)
+
+    def contar_cantones(self, provincia_id: Optional[int] = None) -> int:
+        return self.repo.contar(provincia_id=provincia_id)
 
     def obtener_canton(self, canton_id: int) -> Canton:
         canton = self.repo.obtener_por_id(canton_id)
