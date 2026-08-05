@@ -6,6 +6,8 @@ Solo el CRUD del catálogo vive aquí. La APLICACIÓN de un descuento a un pago
 registro del pago y vive en `PagoServicio.registrar_pago`: aplicar un
 descuento ES un atributo del hecho de pagar, no una operación del catálogo.
 """
+from typing import Optional
+
 from sqlalchemy.orm import Session
 
 from app.dominio.excepciones import EntidadDuplicada, EntidadNoEncontrada, OperacionInvalida
@@ -28,8 +30,11 @@ class DescuentoServicio:
             raise EntidadDuplicada(f"Ya existe un descuento con el nombre '{datos.nombre}'")
         return self.repo.crear(Descuento(**datos.model_dump()))
 
-    def listar(self) -> list[Descuento]:
-        return self.repo.listar()
+    def listar(self, skip: int = 0, limit: Optional[int] = None) -> list[Descuento]:
+        return self.repo.listar(skip=skip, limit=limit)
+
+    def contar_descuentos(self) -> int:
+        return self.repo.contar()
 
     def obtener(self, descuento_id: int) -> Descuento:
         descuento = self.repo.obtener_por_id(descuento_id)
