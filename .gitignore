@@ -1,15 +1,19 @@
 # Secrets
 .env
 .env.*
-!.env.example
+# Covers .env.example and frontend/.env.local.example; the narrower
+# !.env.example did not rescue the latter, leaving a tracked file ignored.
+!.env*.example
 
 # OS
 .DS_Store
 Thumbs.db
 
 # IDEs
-.vscode/
-.idea/
+# No trailing slash: in this checkout these exist as files, not directories,
+# and a trailing-slash pattern would not match them.
+.vscode
+.idea
 *.swp
 *.swo
 
@@ -42,3 +46,26 @@ playwright-report/
 .atl/
 .codegraph/
 .engram/
+
+# Developer environment leaking into the repository root
+# This checkout hosts the developer's home-level dotfiles at the repository
+# root. They are untracked, and before this section they were also unignored,
+# so a `git add -A` would have staged real credentials. The repository is
+# public, so these must never be committed.
+.aws/
+.config/
+.gitconfig
+.mcp.json
+.bashrc
+.bash_profile
+.profile
+.zshrc
+.zprofile
+.ripgreprc
+
+# Claude Code local state.
+# `.claude/settings.local.json` and `.claude/skills/` are already tracked, so
+# only the unversioned siblings are ignored.
+.claude/*
+!.claude/settings.local.json
+!.claude/skills/
