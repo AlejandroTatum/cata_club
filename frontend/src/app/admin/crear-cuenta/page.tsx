@@ -262,8 +262,8 @@ function CrearCuentaContent(): React.ReactElement {
                 : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
             }`}
           >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-              <Building2 size={ICON.base} strokeWidth={1.5} className="text-blue-700" aria-hidden="true" />
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cuenta-representante-bg">
+              <Building2 size={ICON.base} strokeWidth={1.5} className="text-cuenta-representante" aria-hidden="true" />
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Representante</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
@@ -280,8 +280,8 @@ function CrearCuentaContent(): React.ReactElement {
                 : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
             }`}
           >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50">
-              <Baby size={ICON.base} strokeWidth={1.5} className="text-purple-700" aria-hidden="true" />
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cuenta-menor-bg">
+              <Baby size={ICON.base} strokeWidth={1.5} className="text-cuenta-menor" aria-hidden="true" />
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Menor / Dependiente</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
@@ -298,8 +298,8 @@ function CrearCuentaContent(): React.ReactElement {
                 : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
             }`}
           >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
-              <Dumbbell size={ICON.base} strokeWidth={1.5} className="text-emerald-700" aria-hidden="true" />
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cuenta-entrenador-bg">
+              <Dumbbell size={ICON.base} strokeWidth={1.5} className="text-cuenta-entrenador" aria-hidden="true" />
             </div>
             <h3 className="mb-1 font-semibold text-cata-text">Entrenador</h3>
             <p className="text-xs leading-relaxed text-cata-text/65">
@@ -309,7 +309,7 @@ function CrearCuentaContent(): React.ReactElement {
         </div>
 
         {formData.accountType === "MENOR" && age !== null && !isNaN(age) && age >= 18 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <div className="rounded-xl border border-state-warn/30 bg-state-warn-bg p-3 text-xs text-state-warn">
             <p className="flex items-center gap-1.5 font-semibold">
               <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               La fecha de nacimiento indica una persona mayor de edad ({age} años). Seleccione Jugador o Representante.
@@ -437,11 +437,11 @@ function CrearCuentaContent(): React.ReactElement {
         )}
 
         {formData.accountType === "MENOR" && (
-          <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4">
-            <h3 className="mb-2 text-sm font-semibold text-purple-800">
+          <div className="mt-4 rounded-xl border border-cuenta-menor/25 bg-cuenta-menor-bg p-4">
+            <h3 className="mb-2 text-sm font-semibold text-cuenta-menor">
               Representante Legal
             </h3>
-            <p className="mb-3 text-xs text-purple-600">
+            <p className="mb-3 text-xs text-cuenta-menor">
               Busque y seleccione el representante legal para este menor:
             </p>
             <div className="relative">
@@ -461,26 +461,28 @@ function CrearCuentaContent(): React.ReactElement {
               />
             </div>
             {searchingRepresentante && (
-              <p className="mt-2 text-xs text-purple-500">Buscando...</p>
+              <p className="mt-2 text-xs text-cuenta-menor">Buscando...</p>
             )}
             {representanteResults.length > 0 && (
-              <ul className="mt-2 max-h-40 divide-y divide-purple-200 overflow-y-auto rounded-lg border border-purple-200 bg-white">
+              <ul className="mt-2 max-h-40 divide-y divide-cuenta-menor/25 overflow-y-auto rounded-lg border border-cuenta-menor/25 bg-paper">
                 {representanteResults.map((r) => (
                   <li key={r.id}>
                     <button
                       type="button"
                       onClick={() => selectRepresentante(r.id, `${r.nombres} ${r.apellidos}`)}
-                      className="w-full px-3 py-2 text-left text-xs text-purple-800 hover:bg-purple-50"
+                      className="w-full px-3 py-2 text-left text-xs text-cuenta-menor hover:bg-cuenta-menor-bg"
                     >
                       {r.nombres} {r.apellidos}
-                      <span className="ml-2 text-purple-400">ID: {r.id}</span>
+                      {/* Metadata, not category identity, so it leaves the hue:
+                          `purple-400` on white measured 2.64:1 (#139). */}
+                      <span className="ml-2 text-ink-3">ID: {r.id}</span>
                     </button>
                   </li>
                 ))}
               </ul>
             )}
             {representanteSelected && (
-              <p className="mt-2 text-xs text-purple-700">
+              <p className="mt-2 text-xs text-cuenta-menor">
                 Seleccionado: <strong>{representanteSelected.nombre}</strong> (ID: {representanteSelected.id})
               </p>
             )}
@@ -497,7 +499,7 @@ function CrearCuentaContent(): React.ReactElement {
           Información médica del estudiante (opcional pero recomendada).
         </p>
 
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div className="rounded-xl border border-state-ok/30 bg-state-ok-bg p-4">
           <div className="mb-3">
             <label htmlFor="crear-cuenta-tipo-sangre" className="mb-1.5 block text-sm font-semibold text-cata-text">
               Tipo de Sangre
@@ -713,7 +715,7 @@ function CrearCuentaContent(): React.ReactElement {
           </div>
         )}
 
-        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-state-ok/30 bg-state-ok-bg p-4 text-sm text-state-ok">
           <input
             type="checkbox"
             checked={summaryReviewed}
@@ -721,11 +723,14 @@ function CrearCuentaContent(): React.ReactElement {
               setSummaryReviewed(e.target.checked);
               setFormErrors([]);
             }}
-            className="mt-0.5 h-4 w-4 rounded border-emerald-200 text-emerald-700 focus:ring-emerald-200"
+            className="mt-0.5 h-4 w-4 rounded border-state-ok/30 text-state-ok focus:ring-state-ok/30"
           />
           <span>
             Revisé el resumen y confirmo que la información está correcta.
-            <span className="mt-1 block text-xs text-emerald-400/75">
+            {/* `emerald-400/75` on this tint measured 1.58:1 (#139): the hint
+                was all but invisible. `ink-3-strong` is the muted ink meant for
+                tinted surfaces, at 5.24:1 here. */}
+            <span className="mt-1 block text-xs text-ink-3-strong">
               Esto evita crear la cuenta por accidente al llegar al último paso.
             </span>
           </span>
