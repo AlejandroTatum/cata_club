@@ -344,3 +344,45 @@ def client_sin_token(db_session):
         yield c
 
     app.dependency_overrides.clear()
+
+
+# --- Guard compartido de N+1 (consultas-sin-n1, slice 1) -------------------
+# Antes existían DOS implementaciones ad-hoc de este mismo mecanismo
+# (`test_membresia_repositorio.py` y `test_ranking_alumnos_con_nivel.py`),
+# copiadas en vez de compartidas. Se unifican acá, al FINAL del archivo a
+# propósito: la cadena de PRs de `degradacion-controlada` inserta
+# `_reiniciar_circuitos_breaker` cerca de la L123 y puede tocar el bloque de
+# imports de la L14-21; el final de archivo no comparte líneas de contexto
+# con ninguno de los dos, así que un rebase encima no pisa esta fixture.
+@pytest.fixture()
+def contar_selects(db_session):
+    """Cuenta las sentencias SELECT ejecutadas dentro del bloque `with`.
+
+    `event.listen(..., "after_cursor_execute", ...)` sobre `db_session.
+    get_bind()` -- el `Connection` propio de este test bajo el aislamiento
+    por transacción+savepoint -- es lo que hace seguro escuchar acá sin
+    contaminar otros tests: el listener se registra y se remueve dentro del
+    `with`, y la conexión es exclusiva de esta prueba.
+
+    Los imports (`contextlib`, `sqlalchemy.event`) se mantienen locales al
+    cuerpo de la fixture a propósito (no se hoistean al bloque de imports
+    del archivo), para minimizar la superficie de conflicto en merges."""
+    import contextlib
+
+    from sqlalchemy import event
+
+    @contextlib.contextmanager
+    def _medir():
+        sentencias: list[str] = []
+
+        def _contar(conn, cursor, statement, parameters, context, executemany):
+            sentencias.append(statement)
+
+        engine = db_session.get_bind()
+        event.listen(engine, "after_cursor_execute", _contar)
+        try:
+            yield sentencias
+        finally:
+            event.remove(engine, "after_cursor_execute", _contar)
+
+    return _medir
