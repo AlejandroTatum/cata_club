@@ -20,8 +20,11 @@ import cloudinary.uploader
 from urllib3.util import Timeout
 
 from app.dominio.excepciones import ServicioNoDisponible
+from app.soporte_transversal.circuito_breaker import CircuitoBreaker
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.resiliencia import (
+    CIRCUITO_CLOUDINARY_COOLDOWN_SEGUNDOS,
+    CIRCUITO_CLOUDINARY_UMBRAL_FALLOS,
     TIMEOUT_CLOUDINARY_CONEXION_SEGUNDOS,
     TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
     UMBRAL_SUBIDA_LENTA_SEGUNDOS,
@@ -29,6 +32,17 @@ from app.soporte_transversal.resiliencia import (
 
 
 logger = logging.getLogger("cataclub.cloudinary")
+
+# Circuit breaker en proceso (degradacion-controlada, slice 2): una única
+# instancia a nivel de módulo, compartida por las 3 funciones públicas de
+# este módulo porque todas pasan por `_subir()`. Ver Decisión E del diseño:
+# estado en memoria + reloj monotónico + lock, sin Redis compartido -- un
+# solo proceso Uvicorn y Celery con `--concurrency=2` no lo necesitan.
+_circuito_cloudinary = CircuitoBreaker(
+    nombre="cloudinary",
+    umbral_fallos=CIRCUITO_CLOUDINARY_UMBRAL_FALLOS,
+    cooldown_segundos=CIRCUITO_CLOUDINARY_COOLDOWN_SEGUNDOS,
+)
 
 
 def _configurar_cliente() -> None:
@@ -49,6 +63,13 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
     comprobante_tareas.py:42-45). Un tercer reintento acá multiplicaría los
     intentos contra el proveedor sin resolver nada.
 
+    Antes de llamar al SDK se consulta el circuit breaker
+    (`_circuito_cloudinary`, degradacion-controlada slice 2): si está
+    ABIERTO, esta función NUNCA llama al SDK -- solo levanta
+    `ServicioNoDisponible` de inmediato. Esto NO es un reintento ni lo
+    contradice: el breaker decide si se hace el único intento permitido, no
+    agrega un segundo intento sobre uno que ya falló.
+
     El `timeout` es un `urllib3.util.Timeout` (no un float): un float se
     convierte en `Timeout(read=t, connect=t)` per-operación de socket, sin
     cota de reloj de pared real (`urllib3/util/timeout.py:186`). Solo una
@@ -57,6 +78,11 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
     request — un cuerpo que fluye sin nunca estancarse 3s queda sin cota en
     esa fase específica; documentado, no resuelto (ver diseño).
     """
+    if not _circuito_cloudinary.permitir():
+        raise ServicioNoDisponible(
+            f"Cloudinary no disponible (circuito abierto): {descripcion}"
+        )
+
     timeout = Timeout(
         connect=TIMEOUT_CLOUDINARY_CONEXION_SEGUNDOS,
         read=TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
@@ -67,6 +93,7 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
     try:
         resultado = cloudinary.uploader.upload(contenido, timeout=timeout, **upload_kwargs)
     except Exception as exc:
+        _circuito_cloudinary.registrar_fallo()
         logger.exception("Fallo subiendo %s a Cloudinary", descripcion)
         raise ServicioNoDisponible(f"Error subiendo {descripcion} a Cloudinary: {exc}") from exc
 
@@ -74,7 +101,10 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
     if not url:
         # Defensive: si el SDK no devuelve secure_url (imposible con secure=True),
         # lo tratamos como una anomalía del vendor, no del caller.
+        _circuito_cloudinary.registrar_fallo()
         raise ServicioNoDisponible(f"Cloudinary no retornó `secure_url` ({descripcion})")
+
+    _circuito_cloudinary.registrar_exito()
 
     elapsed = time.perf_counter() - inicio
     if elapsed >= UMBRAL_SUBIDA_LENTA_SEGUNDOS:
