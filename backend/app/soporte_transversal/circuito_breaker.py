@@ -29,6 +29,27 @@ CERRADO = "cerrado"
 ABIERTO = "abierto"
 SEMIABIERTO = "semiabierto"
 
+# --- Registro de observabilidad (operacion-observable, slice 1a) -----------
+# Diccionario a nivel de módulo, poblado desde `CircuitoBreaker.__init__` --
+# ningún adaptador (`cloudinary_cliente.py`, `notificaciones_servicio.py`)
+# necesita tocarse: construir el breaker YA lo registra. Guardado por un
+# lock de módulo separado del `_lock` por-instancia: escribir una entrada del
+# registro nunca compite con el hot path de `permitir()`.
+#
+# Colisión de clave: last-wins, silencioso (Decisión 2 del diseño).
+# `test_circuito_breaker.py` construye legítimamente muchos breakers con
+# nombres repetidos y relojes falsos; lanzar rompería la recolección de
+# pruebas -- convertiría un diagnóstico en una caída. Se documenta acá en vez
+# de intentar prevenir la colisión.
+#
+# Sin limpieza entre tests: vaciar el diccionario tiraría también las dos
+# instancias productivas registradas al importar (`cloudinary`, `smtp`), que
+# no se re-registran solas sin un nuevo import del módulo. Los tests deben
+# afirmar sobre las entradas que ellos mismos crearon (subconjunto), nunca
+# sobre la igualdad completa del diccionario.
+_REGISTRO: dict[str, "CircuitoBreaker"] = {}
+_registro_lock = threading.Lock()
+
 
 class CircuitoBreaker:
     """Circuit breaker CLOSED/OPEN/HALF-OPEN clásico, con los tres estados
@@ -66,6 +87,9 @@ class CircuitoBreaker:
         self._estado = CERRADO
         self._fallos_consecutivos = 0
         self._momento_apertura = 0.0
+
+        with _registro_lock:
+            _REGISTRO[nombre] = self
 
     @property
     def estado(self) -> str:
@@ -169,3 +193,36 @@ class CircuitoBreaker:
                 "Circuito %s reABIERTO: la llamada de prueba falló",
                 self._nombre, extra=extra,
             )
+
+
+def resumen_circuitos() -> dict[str, dict[str, object]]:
+    """Accesor de solo lectura para observabilidad (operacion-observable,
+    slice 1a): devuelve un resumen JSON-serializable de cada breaker
+    registrado (nombre, estado, fallos consecutivos).
+
+    Decisión 2 del diseño, explícita y NO accidental: lee `_estado` y
+    `_fallos_consecutivos` de cada breaker SIN tomar `self._lock`. Se acepta
+    una lectura sucia benigna: (a) bajo el GIL de CPython, leer un atributo
+    `str`/`int` es atómico -- nunca un valor a medio escribir, a lo sumo
+    microsegundos de antigüedad; (b) es un diagnóstico pensado para un futuro
+    `/health` (P2), donde esa antigüedad no importa; (c) tomar el lock
+    por-entrada haría que una lectura de diagnóstico compita con el hot path
+    de `permitir()` -- exactamente la inversión de prioridades que esta
+    funcionalidad existe para evitar. Consecuencia aceptada: `estado` y
+    `fallos_consecutivos` de una misma entrada pueden provenir de instantes
+    distintos.
+
+    Solo lee `_REGISTRO` bajo `_registro_lock` (una operación O(1) de
+    iteración de dict, no de escritura del hot path); nunca toca `_lock` de
+    ninguna instancia.
+    """
+    with _registro_lock:
+        entradas = list(_REGISTRO.items())
+
+    return {
+        nombre: {
+            "estado": breaker._estado,
+            "fallos_consecutivos": breaker._fallos_consecutivos,
+        }
+        for nombre, breaker in entradas
+    }
