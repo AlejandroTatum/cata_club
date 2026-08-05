@@ -123,21 +123,21 @@ def _mock_disparo_celery_comprobante(monkeypatch):
 @pytest.fixture(autouse=True)
 def _reiniciar_circuitos_breaker():
     """Resetea el estado de los circuit breakers en memoria entre tests
-    (degradacion-controlada, slice 2): el estado vive en una única instancia
-    a nivel de módulo por adaptador (Decisión E del diseño), así que un test
-    que fuerza un circuito a ABIERTO -- por ejemplo
-    `test_circuito_abierto_no_llama_al_sdk` -- dejaría ese estado filtrado
-    al siguiente test si no se reinicia acá. Autouse: aplica a toda la
-    suite, no solo a los tests de circuit breaker (protege en particular a
-    `test_ninguna_funcion_reintenta_tras_un_fallo`).
-
-    Solo el breaker de Cloudinary existe en este slice; el de SMTP se suma
-    en el próximo slice (degradacion-controlada, slice 3) y este fixture se
-    extiende ese día."""
+    (degradacion-controlada, slices 2 y 3): el estado vive en una única
+    instancia a nivel de módulo por adaptador (Decisión E del diseño), así
+    que un test que fuerza un circuito a ABIERTO -- por ejemplo
+    `test_circuito_abierto_no_llama_al_sdk` o
+    `test_circuito_abierto_no_abre_smtp` -- dejaría ese estado filtrado al
+    siguiente test si no se reinicia acá. Autouse: aplica a toda la suite,
+    no solo a los tests de circuit breaker (protege en particular a
+    `test_ninguna_funcion_reintenta_tras_un_fallo`)."""
     import app.infraestructura.cloudinary_cliente as cloudinary_cliente_mod
+    import app.infraestructura.notificaciones_servicio as notificaciones_servicio_mod
     cloudinary_cliente_mod._circuito_cloudinary.reiniciar()
+    notificaciones_servicio_mod._circuito_smtp.reiniciar()
     yield
     cloudinary_cliente_mod._circuito_cloudinary.reiniciar()
+    notificaciones_servicio_mod._circuito_smtp.reiniciar()
 
 
 @pytest.fixture()
