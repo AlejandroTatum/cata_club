@@ -182,10 +182,13 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Unit tests
-        run: pnpm test
-
-      - name: Coverage report
+      - name: Unit tests + coverage
+        # Una sola corrida de vitest, no dos. Antes había un paso `pnpm test`
+        # (`vitest run`) justo antes de este: ejecutaba EXACTAMENTE la misma
+        # suite, y este es superconjunto estricto — corre los mismos tests y
+        # además aplica los thresholds. El primer paso no aportaba ninguna
+        # señal que este no diera, y costaba la suite entera de nuevo.
+        #
         # Sin `continue-on-error`: con los thresholds de vitest.config.ts este
         # paso es un gate real. Antes la cobertura se medía pero no podía
         # fallar el build — alarma instalada pero desenchufada.
