@@ -378,6 +378,64 @@ describe("status badges — each foreground on its own -bg tint", () => {
   });
 });
 
+describe("account-type accents — /admin/crear-cuenta", () => {
+  // The four account-type cards differentiate by hue: one icon chip each, and
+  // the MENOR card opens a representative-search panel tinted to match. Three
+  // of the four were written in Tailwind's DEFAULT palette rather than in a
+  // token, and the surface-fill guard at the bottom of this file could not see
+  // them: it matches arbitrary `bg-[#…]` only, so a named-but-off-system colour
+  // passed while never being measured against anything.
+  //
+  // Two of those uses were under AA. The pair is what the token exists for, so
+  // the pair is what has to clear it.
+  const cuenta = group("cuenta");
+  const TYPES = ["representante", "menor", "entrenador"];
+
+  it.each(TYPES)("meets AA for %s on its own tint", (tone) => {
+    expect(contrastRatio(cuenta[tone], cuenta[`${tone}-bg`])).toBeGreaterThanOrEqual(
+      AA_NORMAL_TEXT,
+    );
+  });
+
+  it.each(TYPES)("keeps %s readable on paper, where the result list sits", (tone) => {
+    expect(contrastRatio(cuenta[tone], PAPER)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  // Kept as tripwires. Both are the same shape of mistake the retired badge
+  // grey was: reaching for a lighter step of a hue to make text look secondary,
+  // on a tint that had no contrast budget left to spend.
+  it("confirms the two purple values the block shipped would still fail today", () => {
+    // `text-purple-500` on the `purple-50` panel, 3.69:1 — the "Buscando..."
+    // status line while the representative search is in flight.
+    expect(contrastRatio("#A855F7", "#FAF5FF")).toBeLessThan(AA_NORMAL_TEXT);
+    // `text-purple-400` on white, 2.64:1 — the "ID: n" suffix on every result.
+    // Lower than the 3.78:1 the audit filed as Alta on the login notice.
+    expect(contrastRatio("#C084FC", PAPER)).toBeLessThan(AA_NORMAL_TEXT);
+  });
+
+  // The same screen carried two status blocks in the same off-system way: an
+  // amber over-18 warning and a green summary-confirmation box. Those are
+  // STATUS, not category, so they went to `state-warn` and `state-ok` rather
+  // than to a token of their own. The green one hid the worst pair in the
+  // product — worse than the 2.31:1 the audit had recorded as its floor.
+  it("confirms the summary hint was effectively invisible before", () => {
+    // `text-emerald-400/75` composited over `bg-emerald-50`: 1.58:1.
+    expect(contrastRatio(compositeOver("#34D399", "#ECFDF5", 0.75), "#ECFDF5")).toBeLessThan(
+      AA_NON_TEXT,
+    );
+  });
+
+  it("gives that hint the muted ink meant for tinted surfaces", () => {
+    expect(contrastRatio(ink["3-strong"], state["ok-bg"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("moves that ID suffix to the neutral ink, which does clear AA on paper", () => {
+    // The suffix is metadata, not category identity, so it leaves the hue
+    // entirely rather than looking for a darker purple.
+    expect(contrastRatio(ink["3"], PAPER)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+});
+
 describe("sidebar rail — the two sub-labels on coal", () => {
   // Both are white at a fractional alpha, so the real foreground is the
   // composite against the surface underneath.
@@ -500,5 +558,69 @@ describe("every surface fill on a screen comes from the palette", () => {
   // already wrong before anyone measures it.
   it("names every background it paints, so the ladder above actually applies", () => {
     expect(offenders).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tailwind's own palette is not this product's palette
+// ---------------------------------------------------------------------------
+
+/**
+ * The rule above catches `bg-[#FAFAFB]` and misses `bg-purple-50`, because one
+ * is spelled as a literal and the other as a name. But `purple-50` is no more
+ * this product's colour than the hex was: it is Tailwind's default palette,
+ * measured against nothing, and it is how two under-AA pairs shipped inside
+ * `admin/crear-cuenta` while this file reported 54 green assertions (#139).
+ *
+ * So the second half of the rule: a named colour has to be named HERE.
+ */
+const TAILWIND_HUES =
+  "slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose";
+const RAW_PALETTE = new RegExp(
+  `\\b(?:bg|text|border|divide|ring|from|via|to)-(?:${TAILWIND_HUES})-(?:50|100|200|300|400|500|600|700|800|900|950)\\b`,
+  "g",
+);
+
+/**
+ * The files that still carry it, frozen on 2026-08-05. Not approved values:
+ * measured debt. The list only ever shrinks, and `admin/crear-cuenta` is the
+ * first entry off it.
+ *
+ * Entries are never added. A new one is exactly what this guard exists to
+ * prevent — an unavoidable new hue gets a name in `tailwind.config.ts` first,
+ * and stops being Tailwind's.
+ */
+const RAW_PALETTE_DEBT: readonly string[] = [
+  "app/attendance/attendance-utils.ts",
+  "app/groups/groups-page-utils.ts",
+  "app/groups/page.tsx",
+  "app/members/MedicalRecordEditor.tsx",
+  "app/student/add-dependent/page.tsx",
+  "app/student/enroll/page.tsx",
+  "app/student/proof-utils.ts",
+];
+
+describe("no screen paints with Tailwind's default palette", () => {
+  const offenders = sourceFiles(SRC)
+    .map((path) => ({
+      path: path.slice(SRC.length + 1),
+      code: stripComments(readFileSync(path, "utf8")),
+    }))
+    .flatMap(({ path, code }) =>
+      (code.match(RAW_PALETTE) ?? []).map((value) => `${path}: ${value}`),
+    );
+
+  it("no longer carries any of it in the account-creation screen", () => {
+    expect(offenders.filter((line) => line.startsWith("app/admin/crear-cuenta/"))).toEqual([]);
+  });
+
+  it("keeps the frozen debt from spreading to a file that was clean", () => {
+    const files = [...new Set(offenders.map((line) => line.slice(0, line.indexOf(": "))))].sort();
+    expect(files.filter((file) => !RAW_PALETTE_DEBT.includes(file))).toEqual([]);
+  });
+
+  it("reports a debt entry that no longer has any use left, so the list shrinks", () => {
+    const files = new Set(offenders.map((line) => line.slice(0, line.indexOf(": "))));
+    expect(RAW_PALETTE_DEBT.filter((file) => !files.has(file))).toEqual([]);
   });
 });

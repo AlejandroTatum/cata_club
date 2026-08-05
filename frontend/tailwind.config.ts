@@ -180,6 +180,39 @@ const config: Config = {
           "bad-bg": "#FBE9EA",
         },
 
+        /**
+         * Account-type accents — `/admin/crear-cuenta` only.
+         *
+         * The screen offers four kinds of account and gives each one a hue, so
+         * the four cards read as a set of choices rather than a list. That is
+         * the one place in the product where colour carries CATEGORY and not
+         * status, which is why these cannot borrow `state`: `state-ok` green on
+         * "Entrenador" would say the account is healthy, not that it coaches.
+         *
+         * Same shape as `state` — a foreground and the tint it sits on — and
+         * the same rule: the pair is the token's purpose, so the pair clears AA
+         * (`color-contrast.test.ts`), not the foreground on its own.
+         *
+         * The values are the ones the screen already shipped, kept so nothing
+         * changes visually, except where they were under AA. `menor` used four
+         * steps of one hue for four jobs; two of them measured 3.69:1 and
+         * 2.64:1 (#139). The tint-borne text now takes this single value at
+         * 6.51:1, and the "ID: n" suffix leaves the hue for `ink-3`, because it
+         * is metadata and never carried category meaning.
+         *
+         * "Jugador" is absent on purpose: it already wears `cata-red`, the
+         * system accent, at `/15`. Baking that composite into a hex here would
+         * be a second copy of a colour the palette already owns.
+         */
+        cuenta: {
+          representante: "#1D4ED8",
+          "representante-bg": "#EFF6FF",
+          menor: "#7E22CE",
+          "menor-bg": "#FAF5FF",
+          entrenador: "#047857",
+          "entrenador-bg": "#ECFDF5",
+        },
+
         // Level ramp — sequential greys, l1 is the TOP of the ladder and l10
         // the base. Carries no occupancy meaning; it is pure rank ordering.
         l1: "#131316",
