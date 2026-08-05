@@ -142,18 +142,37 @@ serie.
   regresión no pasa en silencio.
   *Verificación:* `frontend/src/lib/__tests__/color-contrast.test.ts`, 54/54.
 
-- [ ] **Objetivos táctiles bajo el mínimo.** (Media)
-  El token `h-ctl` es de 40 px contra los 44 recomendados, de forma sistemática
-  en todo el shell.
-  *Ubicación:* `frontend/tailwind.config.ts:391` y `:400`.
-  **Es el único de los tres ítems de token que sigue abierto**, y el de blast
-  radius más ancho: cambia la altura de cada botón, input y select del shell, y
-  ningún test unitario lo cubre.
+- [x] **Objetivos táctiles bajo el mínimo.** (#97 — cerrado decidiendo que no)
+  Los 44 px son **SC 2.5.5, nivel AAA**. El proyecto adopta **SC 2.5.8 (AA,
+  24×24)**, que ya estaba candado en el eje de iconos desde antes. `h-ctl` se
+  queda en 40 px: supera el piso AA casi al doble, y `gap-page` está definido
+  como `h-ctl / 2`, así que moverlo arrastra el ritmo vertical de las 26
+  páginas por un criterio que el producto no reclama. El 44 sí rige donde
+  alguien lo prometió: las superficies marcadas `@touch-target`.
+  *Argumento y medidas:* `docs/ux/objetivo-tactil.md`.
+  *Candado:* `frontend/src/lib/__tests__/touch-target-usage.test.ts`, 7/7. Su
+  último caso, «leaves the desktop control height alone at 40px» (`:288-293`),
+  afirma `h-ctl === 40` y la derivación de `gap-page`.
+  **Sí lo cubre un test unitario, y subirlo lo rompe.** Esta corrección existe
+  porque la versión anterior de esta línea decía lo contrario y señalaba
+  `tailwind.config.ts:391,400`, que es exactamente el cambio que no va.
 
-- [ ] **`AppShell` no tiene enlace de salto al contenido.** (Media)
-  El landing sí lo tiene.
+- [x] **`AppShell` no tiene enlace de salto al contenido.** (#151)
+  Lo tiene: primero en el orden de tabulación, aparcado fuera del borde
+  superior y traído a la vista solo con `:focus-visible`, igual que el del
+  landing. `<main>` lleva `tabIndex={-1}` (`:856`) para que el foco se mueva
+  de verdad y no solo haya scroll.
+  *Ubicación:* `frontend/src/components/shell/AppShell.tsx:487-492`, destino
+  del salto en `:195`.
 
-- [ ] **Logos con `alt` vacío** en landing, enroll y carnet. (Media)
+- [x] **Logos con `alt` vacío** en landing, enroll y carnet. (#151 — no era un defecto)
+  Los tres `alt=""` son correctos y `enroll` no tiene ninguna imagen. En el
+  landing el logo va dentro de `<a aria-label="Cata Club, inicio">` con el
+  texto «Cata Club» al lado (`LandingPage.tsx:69`), y en el pie repite ese
+  mismo texto (`:313`); en el carnet, `student/page.tsx:142-148` ya trae el
+  razonamiento escrito. Nombrar esas imágenes haría que el lector de pantalla
+  diga el nombre del club dos veces seguidas: WCAG 1.1.1 llama decorativa a la
+  imagen redundante. **Ponerles texto sería la regresión**, no el arreglo.
 
 - [ ] **No existe deshacer en ninguna parte.** (Media)
   «Corregir» en el historial es un viaje aparte, no un undo.
@@ -188,8 +207,16 @@ serie.
   `MedicalRecordEditor` existe solo bajo `members/`, que es área de
   administración.
 
-- [ ] **Bloque `purple` en `admin/crear-cuenta`.** (Baja)
-  Fuera del sistema de tokens de diseño. Decisión visual.
+- [ ] **Bloque de color en `admin/crear-cuenta`.** (Alta — reclasificado)
+  Figuraba como «Baja, decisión visual». Al medirlo son **tres fallos de
+  contraste AA**, y el peor es el más bajo registrado en el proyecto:
+  `text-emerald-400/75` sobre `bg-emerald-50` mide **1,58:1** en la ayuda del
+  checkbox de resumen, contra el 2,31:1 que la auditoría tenía como su piso.
+  Los otros dos son 2,64:1 en el sufijo «ID: n» y 3,69:1 en «Buscando...».
+  El candado de paleta no podía verlos: detectaba `bg-[#...]`, solo hex
+  arbitrarios, y un color de Tailwind con nombre pasaba limpio sin haber sido
+  medido nunca.
+  *Causa raíz y medidas:* #139. *En curso:* #140.
 
 ---
 
@@ -300,9 +327,18 @@ hilos, no razonando sobre el código.
 **Un bloqueante**: la selección de dependiente que se pierde al navegar. Mueve
 plata equivocada, así que va primero.
 
-**Un ítem de token en el frontend**: el objetivo táctil. Foco y contraste, los
-otros dos del trío original, ya estaban cerrados y con tests que los vigilan
-cuando se verificó esta lista contra el código.
+**Los tres ítems de token en el frontend están cerrados**, y conviene leer cómo:
+foco y contraste se corrigieron (#151) y hoy los sostienen dos guardianes; el
+objetivo táctil se cerró **decidiendo que no** (#97), porque los 44 px son AAA y
+el proyecto adopta el AA de 24×24.
+
+Vale la advertencia, porque ya pasó dos veces en este mismo documento: cinco
+ítems de §4 figuraron abiertos después de estar resueltos en el código, y uno
+—el táctil— llegó a describirse como «no lo cubre ningún test unitario»
+señalando la línea exacta que había que cambiar. Cambiarla rompe
+`touch-target-usage.test.ts` y mueve el ritmo vertical de las 26 páginas.
+**Antes de tomar un ítem de acá, verificalo contra el código y corré sus
+tests.** Este documento es una hipótesis con fecha, no una fuente.
 
 **Dos agujeros de operación**: el healthcheck que miente y el circuit breaker
 que degrada en silencio. Ninguno se manifiesta hasta el día que importa.
