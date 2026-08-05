@@ -104,6 +104,14 @@ RUTAS_PUBLICAS = {
     ("GET", "/health"),  # liveness probe (PR-09, sdd/production-readiness): sin
                          # dependencias a proposito, debe responder aunque la BD
                          # este caida (lo usa el healthcheck de docker-compose.yml).
+    ("GET", "/health/ready"),  # readiness probe (PR2, sdd/borde-http-observable):
+                               # comprueba PostgreSQL y Redis y responde 503 si
+                               # alguna esta caida. Anonima a proposito, por el
+                               # mismo motivo que /health: una sonda que exige
+                               # token no sirve cuando lo que se cayo es la BD
+                               # de la que depende autenticar. No expone dato
+                               # alguno mas alla del estado up/down de cada
+                               # dependencia.
     ("GET", "/personas/instituciones"),
     ("POST", "/auth/login"),
     ("POST", "/auth/logout"),

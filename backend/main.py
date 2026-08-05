@@ -1,9 +1,13 @@
+import asyncio
 import logging
 
+import redis
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.pool import NullPool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.soporte_transversal.configuracion import settings, urls_documentacion
@@ -158,3 +162,102 @@ async def raiz():
 @app.get("/health", tags=["Salud"])
 async def salud():
     return {"estado": "ok"}
+
+
+# --- Readiness probe -----------------------------------------------------
+# Distingue "vivo" (arriba, /health) de "listo" (puede servir tráfico porque
+# sus dependencias críticas responden). Motor y cliente propios, separados
+# del `engine` pooled de `app/infraestructura/db.py`: en un apagón total de
+# Postgres, esperar hasta el `pool_timeout` de ese pool (30s por defecto)
+# haría que la sonda de readiness colgara mucho más de lo razonable, además
+# de competir por un slot del pool de la aplicación. `NullPool` cierra la
+# conexión de verdad al salir del context manager, sin devolverla a ningún
+# pool.
+TIMEOUT_CONEXION_POSTGRES_SEGUNDOS = 2
+TIMEOUT_SENTENCIA_POSTGRES_MS = 2000
+TIMEOUT_REDIS_SEGUNDOS = 2
+
+_motor_sonda = create_engine(
+    settings.database_url,
+    poolclass=NullPool,
+    connect_args={
+        "connect_timeout": TIMEOUT_CONEXION_POSTGRES_SEGUNDOS,
+        "options": f"-c statement_timeout={TIMEOUT_SENTENCIA_POSTGRES_MS}",
+    },
+)
+
+# `from_url` no abre ninguna conexión al construirse (perezoso, igual que
+# `create_engine` en `db.py`), así que este singleton a nivel de módulo es
+# seguro de crear incluso con Redis caído. `retry_on_timeout=False`
+# explícito: un reintento silencioso duplicaría el peor caso de latencia.
+_cliente_redis_sonda = redis.Redis.from_url(
+    settings.redis_url,
+    socket_connect_timeout=TIMEOUT_REDIS_SEGUNDOS,
+    socket_timeout=TIMEOUT_REDIS_SEGUNDOS,
+    retry_on_timeout=False,
+)
+
+
+def _verificar_postgres() -> bool:
+    """`connect_timeout` acota el handshake TCP; `statement_timeout` (fijado
+    como GUC de sesión vía `options`) acota la consulta en sí, que
+    `connect_timeout` no cubre -- un servidor que acepta el socket y después
+    se queda mudo colgaría el `SELECT 1` indefinidamente sin ese segundo
+    límite. Se captura `Exception` y no `SQLAlchemyError` a propósito: una
+    falla de DNS, por ejemplo, levanta fuera de esa jerarquía, y el objetivo
+    de esta función es que la sonda jamás termine en un 500 sin manejar."""
+    try:
+        with _motor_sonda.connect() as conexion:
+            conexion.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        _log.warning("Sonda de readiness: Postgres no responde", exc_info=True)
+        return False
+
+
+def _verificar_redis() -> bool:
+    """Mismo principio que `_verificar_postgres`: cualquier excepción del
+    driver (timeout de conexión, timeout de socket, Redis caído) se traduce
+    a `False` en vez de escapar hacia el endpoint."""
+    try:
+        return bool(_cliente_redis_sonda.ping())
+    except Exception:
+        _log.warning("Sonda de readiness: Redis no responde", exc_info=True)
+        return False
+
+
+@app.get("/health/ready", tags=["Salud"])
+async def salud_lista():
+    """Sonda de readiness: sin `Depends` (ni autenticación ni sesión de
+    negocio) a propósito -- es un guardia estructural espejo del que tiene
+    `/health`. Los dos chequeos son bloqueantes por naturaleza (ambos
+    drivers son síncronos), así que corren en el threadpool vía
+    `asyncio.to_thread` y se combinan con `gather` para no serializar el
+    peor caso de cada uno sobre el event loop.
+
+    Ninguna excepción puede escapar como 500 por triple capa: cada
+    verificador ya captura `Exception` y devuelve `bool`; `gather(...,
+    return_exceptions=True)` convierte cualquier excepción que igual se
+    filtrara en un valor, no en un raise; y la normalización `resultado is
+    True` trata cualquier cosa que no sea exactamente `True` -- una
+    excepción devuelta, un `None`, un valor inesperado -- como caída.
+    """
+    resultados = await asyncio.gather(
+        asyncio.to_thread(_verificar_postgres),
+        asyncio.to_thread(_verificar_redis),
+        return_exceptions=True,
+    )
+    postgres_ok, redis_ok = (resultado is True for resultado in resultados)
+
+    if postgres_ok and redis_ok:
+        return {"estado": "listo", "postgres": "ok", "redis": "ok"}
+
+    caidas = [
+        nombre
+        for nombre, ok in (("postgres", postgres_ok), ("redis", redis_ok))
+        if not ok
+    ]
+    return _respuesta_error(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        f"Dependencias no disponibles: {', '.join(caidas)}.",
+    )
