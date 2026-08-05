@@ -111,7 +111,12 @@ describe("fetchAlumnosConNivel — GET /api/ranking/alumnos-con-nivel", () => {
 describe("fetchInstituciones — GET /api/personas/instituciones", () => {
   it("reads `tipoEscuela`, the alias `InstitucionResponseDTO` serialises", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
-      okResponse([{ id: 1, nombre: "Unidad Educativa Beatriz Cueva", tipoEscuela: "FISCAL" }]),
+      okResponse({
+        items: [{ id: 1, nombre: "Unidad Educativa Beatriz Cueva", tipoEscuela: "FISCAL" }],
+        total: 1,
+        skip: 0,
+        limit: 200,
+      }),
     );
 
     const [institucion] = await fetchInstituciones();
@@ -126,7 +131,12 @@ describe("fetchInstituciones — GET /api/personas/instituciones", () => {
 
   it("would surface, not hide, a snake_case body", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
-      okResponse([{ id: 1, nombre: "Unidad Educativa Beatriz Cueva", tipo_escuela: "FISCAL" }]),
+      okResponse({
+        items: [{ id: 1, nombre: "Unidad Educativa Beatriz Cueva", tipo_escuela: "FISCAL" }],
+        total: 1,
+        skip: 0,
+        limit: 200,
+      }),
     );
 
     const [institucion] = await fetchInstituciones();
@@ -134,5 +144,61 @@ describe("fetchInstituciones — GET /api/personas/instituciones", () => {
     // The wizard filters and labels on this value; `undefined` rendered as
     // "Nombre (undefined)" and matched no filter option.
     expect(institucion.tipoEscuela).toBeUndefined();
+  });
+
+  it("drains every page and terminates on an empty page even if `total` overstates the count", async () => {
+    // Two real pages of 2, then a page that lies about `total` (says 5 more
+    // exist) but returns nothing — the empty-page guard must end the loop
+    // instead of re-requesting forever.
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        okResponse({
+          items: [
+            { id: 1, nombre: "Colegio A", tipoEscuela: "FISCAL" },
+            { id: 2, nombre: "Colegio B", tipoEscuela: "PRIVADA" },
+          ],
+          total: 9,
+          skip: 0,
+          limit: 2,
+        }),
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          items: [
+            { id: 3, nombre: "Colegio C", tipoEscuela: "FISCAL" },
+            { id: 4, nombre: "Colegio D", tipoEscuela: "PRIVADA" },
+          ],
+          total: 9,
+          skip: 2,
+          limit: 2,
+        }),
+      )
+      .mockResolvedValueOnce(okResponse({ items: [], total: 9, skip: 4, limit: 2 }));
+
+    const instituciones = await fetchInstituciones();
+
+    expect(instituciones).toEqual([
+      { id: 1, nombre: "Colegio A", tipoEscuela: "FISCAL" },
+      { id: 2, nombre: "Colegio B", tipoEscuela: "PRIVADA" },
+      { id: 3, nombre: "Colegio C", tipoEscuela: "FISCAL" },
+      { id: 4, nombre: "Colegio D", tipoEscuela: "PRIVADA" },
+    ]);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("issues exactly one request for a single-page catalog", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      okResponse({
+        items: [{ id: 1, nombre: "Colegio A", tipoEscuela: "FISCAL" }],
+        total: 1,
+        skip: 0,
+        limit: 200,
+      }),
+    );
+
+    const instituciones = await fetchInstituciones();
+
+    expect(instituciones).toEqual([{ id: 1, nombre: "Colegio A", tipoEscuela: "FISCAL" }]);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

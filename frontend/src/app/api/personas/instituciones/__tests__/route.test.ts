@@ -34,7 +34,9 @@ afterEach(() => {
 
 describe("GET /api/personas/instituciones", () => {
   it("succeeds with NO Authorization header and NO cookie (permanent public guard)", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([{ id: 1, nombre: "Colegio Central" }]));
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ items: [{ id: 1, nombre: "Colegio Central" }], total: 1, skip: 0, limit: 200 }),
+    );
 
     const response = await GET(institucionesRequest());
 
@@ -44,12 +46,17 @@ describe("GET /api/personas/instituciones", () => {
     expect(headers.has("Authorization")).toBe(false);
   });
 
-  it("proxies GET /personas/instituciones and forwards the backend's list", async () => {
-    const instituciones = [
-      { id: 1, nombre: "Colegio Central", tipoEscuela: "PUBLICA" },
-      { id: 2, nombre: "Instituto Norte", tipoEscuela: "PRIVADA" },
-    ];
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(instituciones));
+  it("proxies GET /personas/instituciones and forwards the backend's paginated envelope", async () => {
+    const envelope = {
+      items: [
+        { id: 1, nombre: "Colegio Central", tipoEscuela: "PUBLICA" },
+        { id: 2, nombre: "Instituto Norte", tipoEscuela: "PRIVADA" },
+      ],
+      total: 2,
+      skip: 0,
+      limit: 200,
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(envelope));
 
     const response = await GET(institucionesRequest());
     const body = await response.json();
@@ -59,7 +66,33 @@ describe("GET /api/personas/instituciones", () => {
       expect.objectContaining({ method: "GET" }),
     );
     expect(response.status).toBe(200);
-    expect(body).toEqual(instituciones);
+    expect(body).toEqual(envelope);
+  });
+
+  it("forwards skip/limit query params to the backend, unchanged", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 200, limit: 200 }));
+
+    const request = new NextRequest(
+      "http://localhost/api/personas/instituciones?skip=200&limit=200",
+      { method: "GET" },
+    );
+    await GET(request);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/personas/instituciones?skip=200&limit=200",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("issues no query string when skip/limit are absent (backend applies its own defaults)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 }));
+
+    await GET(institucionesRequest());
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/personas/instituciones",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 
   it("returns 503 when the backend is unreachable", async () => {

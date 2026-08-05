@@ -22,10 +22,10 @@ la guardia de regresión de ese tope.
 """
 from datetime import date, time
 
-from app.dominio.enums import Categoria, DiaSemana, TipoRol
+from app.dominio.enums import Categoria, DiaSemana, TipoEscuela, TipoRol
 from app.dominio.modelos import (
-    AlumnoHorario, HorarioEntrenamiento, NivelRanking, Persona, Ranking,
-    Rol, Usuario,
+    AlumnoHorario, HorarioEntrenamiento, Institucion, NivelRanking, Persona,
+    Ranking, Rol, Usuario,
 )
 from tests.conftest import crear_entrenador
 
@@ -72,11 +72,13 @@ def _crear_horario(db_session):
     return horario
 
 
-def _paginas_sin_solape_y_completas(client, url, ids_esperados, tamano_pagina):
+def _paginas_sin_solape_y_completas(client, url, ids_esperados, tamano_pagina, clave="personaId"):
     """Aserción compartida: recorre el listado por páginas y verifica que no
     haya solape entre páginas y que la unión cubra exactamente lo esperado.
     El orden dentro de cada página debe ser el mismo que el del listado
-    completo (orden estable declarado con ORDER BY)."""
+    completo (orden estable declarado con ORDER BY). `clave` es el campo del
+    item que identifica cada fila (`personaId` por defecto; `id` para
+    listados que no son de personas, como instituciones)."""
     vistos: list[int] = []
     skip = 0
     while True:
@@ -84,7 +86,7 @@ def _paginas_sin_solape_y_completas(client, url, ids_esperados, tamano_pagina):
         assert resp.status_code == 200
         cuerpo = resp.json()
         assert cuerpo["total"] == len(ids_esperados)
-        pagina = [item["personaId"] for item in cuerpo["items"]]
+        pagina = [item[clave] for item in cuerpo["items"]]
         assert len(pagina) <= tamano_pagina
         assert not set(pagina) & set(vistos), "las páginas se solapan"
         vistos.extend(pagina)
@@ -92,6 +94,13 @@ def _paginas_sin_solape_y_completas(client, url, ids_esperados, tamano_pagina):
         if len(pagina) < tamano_pagina:
             break
     assert vistos == ids_esperados
+
+
+def _crear_institucion(db_session, nombre, tipo_escuela=TipoEscuela.FISCAL):
+    institucion = Institucion(nombre=nombre, tipo_escuela=tipo_escuela)
+    db_session.add(institucion)
+    db_session.commit()
+    return institucion
 
 
 # --- GET /ranking/alumnos-con-nivel -----------------------------------------
@@ -291,6 +300,55 @@ def test_alumnos_por_horario_pagina_sin_solape_con_orden_estable(client, db_sess
         f"/api/v1/asistencias/horarios/{horario.id}/alumnos?",
         esperados,
         tamano_pagina=2,
+    )
+
+
+# --- GET /personas/instituciones --------------------------------------------
+def test_instituciones_responde_el_envelope_paginado(client, db_session):
+    for nombre in ["Colegio A", "Colegio B", "Colegio C", "Colegio D", "Colegio E"]:
+        _crear_institucion(db_session, nombre)
+
+    resp = client.get("/api/v1/personas/instituciones?skip=0&limit=2")
+
+    assert resp.status_code == 200
+    cuerpo = resp.json()
+    assert set(cuerpo.keys()) == {"items", "total", "skip", "limit"}
+    assert len(cuerpo["items"]) == 2
+    assert cuerpo["total"] == 5
+    assert cuerpo["skip"] == 0
+    assert cuerpo["limit"] == 2
+
+
+def test_instituciones_rechaza_limit_por_encima_del_tope(client):
+    assert client.get("/api/v1/personas/instituciones?limit=201").status_code == 422
+    assert client.get("/api/v1/personas/instituciones?limit=0").status_code == 422
+    assert client.get("/api/v1/personas/instituciones?skip=-1").status_code == 422
+
+
+def test_instituciones_no_requiere_autenticacion(client, db_session):
+    """El selector de instituciones del wizard de inscripción es público
+    (visitantes anónimos): sin token, con parámetros válidos, debe responder
+    200 y no 401/403."""
+    _crear_institucion(db_session, "Colegio A")
+
+    resp = client.get("/api/v1/personas/instituciones?skip=0&limit=10")
+
+    assert resp.status_code == 200
+
+
+def test_instituciones_pagina_sin_solape_con_orden_estable(client, db_session):
+    """`nombre` NO es UNIQUE (D4): se insertan dos instituciones con el mismo
+    nombre para forzar el desempate por `id`. Sin un orden TOTAL,
+    OFFSET/LIMIT puede repetir o saltear filas entre páginas."""
+    instituciones = [
+        _crear_institucion(db_session, "Colegio Igual") for _ in range(3)
+    ] + [
+        _crear_institucion(db_session, f"Colegio Z{i}") for i in range(2)
+    ]
+    esperados = [i.id for i in sorted(instituciones, key=lambda inst: (inst.nombre, inst.id))]
+
+    _paginas_sin_solape_y_completas(
+        client, "/api/v1/personas/instituciones?", esperados, tamano_pagina=2, clave="id",
     )
 
 
