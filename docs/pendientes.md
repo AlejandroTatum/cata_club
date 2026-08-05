@@ -1,7 +1,10 @@
 # Pendientes abiertos — Cata Club
 
 - **Fecha:** 5 de agosto de 2026
-- **Verificado contra:** `main` en `717787a`
+- **Verificado contra:** `main` en `54bc583`
+- **Cómo se verificó:** leyendo el código y corriendo sus tests, no releyendo
+  los documentos de origen. Es la única forma de que esta lista no herede los
+  errores que vino a corregir.
 - **Propósito:** una sola lista de lo que sigue abierto, con su evidencia y su
   ubicación, para ir tachando a medida que se resuelve.
 
@@ -103,18 +106,30 @@ serie.
   historial.
   *Fuente:* evaluación de usabilidad, «Lo que bloquea la meta» §2.
 
-- [ ] **Los indicadores de foco incumplen WCAG 2.4.11.** (Alta)
-  `outline-ball` mide 1,42:1 sobre blanco contra los 3:1 requeridos. Corregido
-  solo en el asistente; el resto del sistema mantiene el defecto.
-  Es un cambio de token: se corrige en un lugar y sube en las 26 páginas.
+- [x] **Los indicadores de foco incumplen WCAG 2.4.11.** (#151)
+  El indicador dejó de ser una decisión por componente y pasó a ser regla del
+  sistema: un anillo de dos bandas concéntricas —2 px `ball` pegado al control,
+  2 px `coal` alrededor— en `globals.css:291-304`. El selector se construye con
+  `:is(…):not(…):focus-visible` para llegar a especificidad 0,3,0 y ganarle a
+  las utilidades `focus-visible:*` de Tailwind sin `!important`, porque los 12
+  puntos de uso de `outline-ball` no se podían editar desde ahí. Todas las
+  adyacencias quedaron medidas: la banda `coal` da 18,54:1 sobre `paper`,
+  16,89:1 sobre `sunken`, 15,20:1 sobre `canvas` y 3,71:1 sobre el rojo del CTA.
+  *Verificación:* `frontend/src/lib/__tests__/focus-ring-usage.test.ts`, 5/5.
 
-- [ ] **Cuatro fallos de contraste medidos.** (Alta)
-  El peor es 2,31:1 en el panel de datos de prueba de `/student/enroll`; 3,78:1
-  en la nota de seguridad del login.
+- [x] **Cuatro fallos de contraste medidos.** (#151)
+  Los cuatro pares están corregidos y vigilados. El test conserva el peor par
+  que halló la auditoría —2,31:1— como tripwire explícito, así que una
+  regresión no pasa en silencio.
+  *Verificación:* `frontend/src/lib/__tests__/color-contrast.test.ts`, 54/54.
 
 - [ ] **Objetivos táctiles bajo el mínimo.** (Media)
   El token `h-ctl` es de 40 px contra los 44 recomendados, de forma sistemática
-  en todo el shell. También es un cambio de token.
+  en todo el shell.
+  *Ubicación:* `frontend/tailwind.config.ts:391` y `:400`.
+  **Es el único de los tres ítems de token que sigue abierto**, y el de blast
+  radius más ancho: cambia la altura de cada botón, input y select del shell, y
+  ningún test unitario lo cubre.
 
 - [ ] **`AppShell` no tiene enlace de salto al contenido.** (Media)
   El landing sí lo tiene.
@@ -238,6 +253,8 @@ Se conserva para no volver a perseguirlo.
 | 8 | Desactivar una persona no revocaba sus tokens | Cubierto por la revocación unificada |
 | A | `capacidad_maxima` verificada sin bloqueo | `SELECT ... FOR UPDATE` sobre la fila del nivel (issue #8), con test de dos asignaciones concurrentes por un único cupo |
 | B | Guarda de «último administrador» sin bloqueo | `SELECT ... FOR UPDATE` sobre la fila del catálogo `ADMINISTRADOR` (issue #8), con test de quitar rol y desactivar cuenta en simultáneo |
+| C | Aprobación de pago validada sin bloqueo | `SELECT ... FOR UPDATE` sobre la fila del pago (issue #8): revalidar ya no reactiva la membresía, no re-aplica la gratuidad familiar ni duplica la notificación |
+| — | Faltaban restricciones de unicidad que respaldaran las invariantes | Migración `c3d9f2b7a1e5_invariantes_de_negocio_como_constraints`: índices únicos parciales sobre membresía `ACTIVA` y pago `PENDIENTE_VALIDACION`, más tres `CheckConstraint` en descuento |
 | — | CI no construía ni levantaba la imagen Docker | Job `docker-images`: construye, levanta, sondea hasta sano y baja |
 | — | `frontend`, `celery-worker`, `celery-beat` sin healthcheck | Los siete servicios los declaran |
 | — | CI en pnpm 9 contra `package.json` en 10.33.2 | CI deriva la versión de `package.json`, fuente única |
@@ -264,9 +281,9 @@ hilos, no razonando sobre el código.
 **Un bloqueante**: la selección de dependiente que se pierde al navegar. Mueve
 plata equivocada, así que va primero.
 
-**Tres ítems de token en el frontend** —foco, contraste y objetivo táctil— que
-se corrigen en un lugar y suben en las 26 páginas. Es la mejor relación
-esfuerzo/resultado abierta en el proyecto.
+**Un ítem de token en el frontend**: el objetivo táctil. Foco y contraste, los
+otros dos del trío original, ya estaban cerrados y con tests que los vigilan
+cuando se verificó esta lista contra el código.
 
 **Dos agujeros de operación**: el healthcheck que miente y el circuit breaker
 que degrada en silencio. Ninguno se manifiesta hasta el día que importa.
