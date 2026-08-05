@@ -691,16 +691,52 @@ export interface Institucion {
  * snake_case key made every option render "Nombre (undefined)" and left the
  * "tipo de escuela" filter unable to match anything.
  */
-export async function fetchInstituciones(): Promise<Institucion[]> {
-  const response: unknown = await request<unknown>(apiEndpoint("/personas/instituciones"));
-  if (!Array.isArray(response)) {
-    throw new ApiClientError("Respuesta inválida de instituciones.", 502);
-  }
-  return response.map((item: Record<string, unknown>) => ({
+function isPaginatedEnvelope(value: unknown): value is PaginatedEnvelope<Record<string, unknown>> {
+  if (typeof value !== "object" || value === null) return false;
+  const body = value as Record<string, unknown>;
+  return Array.isArray(body.items) && typeof body.total === "number";
+}
+
+function mapInstitucion(item: Record<string, unknown>): Institucion {
+  return {
     id: item.id as number,
     nombre: item.nombre as string,
     tipoEscuela: item.tipoEscuela as string,
-  }));
+  };
+}
+
+/**
+ * Drains the FULL institution catalog across every page, keeping the
+ * `Promise<Institucion[]>` signature callers already rely on. The backend
+ * endpoint is paginated (`{items, total, skip, limit}`, tope `le=200`), so
+ * one request is no longer guaranteed to return everything.
+ *
+ * Three independent terminations, all required:
+ *  - an empty page ends the loop even if `all.length < total` — guards
+ *    against a lying/stale `total` causing an infinite re-fetch of page 1;
+ *  - `all.length >= total` — the normal, expected termination;
+ *  - a thrown `ApiClientError` from `request()` (e.g. a 422 on bad bounds,
+ *    surfaced by the BFF as a 502) propagates up rather than looping.
+ * `skip` advances by `items.length` (what was actually RECEIVED), not by
+ * `ROSTER_PAGE_LIMIT`, so a short page still leaves the loop correct.
+ */
+export async function fetchInstituciones(): Promise<Institucion[]> {
+  const all: Institucion[] = [];
+  let skip = 0;
+  for (;;) {
+    const response: unknown = await request<unknown>(
+      apiEndpoint(`/personas/instituciones?skip=${skip}&limit=${ROSTER_PAGE_LIMIT}`),
+    );
+    if (!isPaginatedEnvelope(response)) {
+      throw new ApiClientError("Respuesta inválida de instituciones.", 502);
+    }
+    const { items, total } = response;
+    all.push(...items.map(mapInstitucion));
+    if (items.length === 0) break;
+    skip += items.length;
+    if (all.length >= total) break;
+  }
+  return all;
 }
 
 function isApiErrorBody(value: unknown): value is { message?: string; detail?: string } {

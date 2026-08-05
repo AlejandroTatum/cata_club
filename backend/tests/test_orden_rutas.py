@@ -19,7 +19,7 @@ def test_instituciones_no_es_capturada_por_persona_id(client):
     """El selector de institución educativa del wizard de inscripción."""
     respuesta = client.get("/api/v1/personas/instituciones")
     assert respuesta.status_code == 200
-    assert isinstance(respuesta.json(), list)
+    assert set(respuesta.json().keys()) == {"items", "total", "skip", "limit"}
 
 
 def test_ninguna_ruta_literal_queda_despues_del_comodin():

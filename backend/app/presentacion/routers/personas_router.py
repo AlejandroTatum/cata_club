@@ -219,16 +219,23 @@ class InstitucionResponseDTO(ResponseBase, BaseModel):
 # del BFF (D3), la clave es GLOBAL para siempre -- 60/min es el mismo tope
 # que ya rige `login`, un techo de club entero, no un presupuesto por
 # usuario: una carga de formulario por visita no se acerca a esa cifra.
-@router.get("/instituciones", response_model=List[InstitucionResponseDTO])
+@router.get("/instituciones", response_model=PaginatedResponse[InstitucionResponseDTO])
 @limiter.limit("60/minute")
-async def listar_instituciones(request: Request, db: Session = Depends(obtener_sesion)):
-    """Lista todas las instituciones educativas (para selector en wizard de inscripción)."""
+async def listar_instituciones(
+    request: Request,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=200),
+    db: Session = Depends(obtener_sesion),
+):
+    """Lista instituciones educativas (para selector en wizard de inscripción)."""
     from app.infraestructura.repositorios.institucion_repositorio import InstitucionRepositorio
-    instituciones = InstitucionRepositorio(db).listar()
-    return [
+    repo = InstitucionRepositorio(db)
+    instituciones = repo.listar(skip=skip, limit=limit)
+    items = [
         InstitucionResponseDTO(id=i.id, nombre=i.nombre, tipo_escuela=i.tipo_escuela.value)
         for i in instituciones
     ]
+    return PaginatedResponse(items=items, total=repo.contar(), skip=skip, limit=limit)
 
 
 # --- Búsqueda (autocomplete) ------------------------------------------------
@@ -295,6 +302,12 @@ async def obtener_persona(
 # Rate-limited (D6-d): devuelve una lista de PersonaResponseDTO (PII real de
 # los representados), aunque el tamaño típico sea chico. Mismo tier 30/min
 # que las demás lecturas de lista de este lote.
+# Deliberadamente SIN paginar: la cardinalidad está acotada por familia (no
+# crece con el padrón), y hay dos llamadores que necesitan el conjunto
+# COMPLETO, no una página: `frontend/src/app/api/student/route.ts:85,96,108`
+# (arma el perfil de cada hijo) y
+# `backend/app/servicios_negocio/ranking_servicio.py:275,291` (fan-out de
+# notificaciones a representante + hijos).
 @router.get(
     "/{persona_id}/representados",
     response_model=List[PersonaResponseDTO],

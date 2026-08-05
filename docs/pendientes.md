@@ -75,14 +75,33 @@ serie.
   *Ubicación:* `backend/main.py`.
   *Fuente:* auditoría, hallazgo abierto D.
 
-- [ ] **Cuatro endpoints de listado devuelven `List[...]` sin paginar.** (Media)
-  `GET /ranking/niveles`, `GET /ranking/notificaciones/mias`,
-  `GET /membresias/tipos` y `GET /personas/{id}/representados`.
-  Son de cardinalidad acotada por el negocio, por eso quedaron al final.
+- [x] **Tres endpoints de catálogo devuelven `List[...]` sin paginar — cerrado.** (Media)
+  `GET /ranking/niveles`, `GET /membresias/tipos` y `GET
+  /personas/{id}/representados` quedan documentados en código como
+  deliberadamente sin paginación: su cardinalidad está acotada por el
+  negocio (niveles y tipos de membresía son catálogos fijos; los
+  representados están acotados por familia) y no crece con el padrón. Los
+  dos llamadores de `representados` que necesitan el conjunto COMPLETO
+  (`frontend/src/app/api/student/route.ts:85,96,108`,
+  `backend/app/servicios_negocio/ranking_servicio.py:275,291`) siguen
+  funcionando sin cambios.
+  *Ubicación:* `backend/app/presentacion/routers/ranking_router.py:36-41`,
+  `backend/app/presentacion/routers/personas_router.py:298-316`,
+  `backend/app/presentacion/routers/membresias_pagos_router.py:62-67`.
   *Fuente:* hallazgos de la presentación §1.
 
-- [ ] **`institucion_repositorio` sin paginación ni conteo.** (Baja)
-  Es el último de los ocho repositorios que no acepta `skip`/`limit`.
+- [ ] **`GET /ranking/notificaciones/mias` devuelve `List[...]` sin paginar.** (Media)
+  Queda fuera del cierre anterior: no se evaluó su cardinalidad en ese
+  cambio.
+  *Fuente:* hallazgos de la presentación §1.
+
+- [x] **`institucion_repositorio` sin paginación ni conteo — cerrado.** (Baja)
+  `listar(skip, limit)` + `contar()`, mismo patrón que
+  `geografia_repositorio.py` (desempate por `id`: `nombre` no es UNIQUE).
+  `GET /personas/instituciones` responde el envelope `PaginatedResponse`
+  estándar; el BFF forwardea `skip`/`limit` y el cliente
+  (`fetchInstituciones`) drena todas las páginas manteniendo su firma
+  `Promise<Institucion[]>`.
   *Ubicación:* `backend/app/infraestructura/repositorios/institucion_repositorio.py`.
 
 ---

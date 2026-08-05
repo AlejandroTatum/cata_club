@@ -33,6 +33,10 @@ async def crear_nivel(datos: NivelRankingCreateDTO, db: Session = Depends(obtene
     return NivelRankingServicio(db).crear_nivel(datos)
 
 
+# Deliberadamente SIN paginar: la escalera de niveles tiene cardinalidad
+# acotada y fija (el club define un puñado de niveles una sola vez, no un
+# nivel por alumno). Lo que crece con el padrón son las ASIGNACIONES a esos
+# niveles (`GET /ranking/asignaciones`, abajo), no la lista de niveles.
 @router.get(
     "/niveles", response_model=List[NivelRankingConOcupacionDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
