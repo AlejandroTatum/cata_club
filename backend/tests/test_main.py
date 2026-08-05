@@ -1,8 +1,13 @@
 """
-Tests a nivel de aplicación (`main.py`): endpoint de salud y middleware de
-cabeceras de seguridad (sdd/production-readiness, PR-09/PR-10).
+Tests a nivel de aplicación (`main.py`): endpoint de salud, middleware de
+cabeceras de seguridad (sdd/production-readiness, PR-09/PR-10), y contrato de
+traducción de `IntegrityError` no manejado (sdd/borde-http-observable, PR1).
 """
+import logging
+
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from main import app
 
@@ -53,3 +58,69 @@ def test_cabeceras_de_seguridad_presentes_incluso_en_respuesta_401(client_sin_to
     assert respuesta.headers["content-security-policy"] == (
         "default-src 'none'; frame-ancestors 'none'"
     )
+
+
+# --- Manejador global de IntegrityError (PR1, sdd/borde-http-observable) ----
+_RUTA_DESCARTABLE = "/__prueba__/integrity-error"
+
+
+@pytest.fixture()
+def ruta_que_lanza_integrity_error():
+    """Registra sobre `app.router` una ruta descartable que lanza
+    `IntegrityError` a propósito, sin pasar por ningún camino de negocio
+    conocido, para fijar por test el contrato observable del manejador global
+    ya implementado en `main.py` (`_integrity_error_handler`).
+
+    La restauración se hace por asignación de slice (`app.router.routes[:] =
+    ...`), no por rebind: `app.routes` es una property que devuelve la MISMA
+    lista que `app.router.routes`, así que un rebind rompería cualquier
+    referencia ya capturada a esa lista. El `assert` final hace que la propia
+    fixture se auto-verifique: si la limpieza falla, pytest reporta el error
+    en este test en lugar de contaminar en silencio a los siguientes.
+    """
+    rutas_previas = list(app.router.routes)
+
+    @app.get(_RUTA_DESCARTABLE, include_in_schema=False)
+    async def _lanzar():
+        raise IntegrityError("INSERT INTO tabla ...", {}, Exception("llave duplicada"))
+
+    try:
+        yield _RUTA_DESCARTABLE
+    finally:
+        app.router.routes[:] = rutas_previas
+        app.openapi_schema = None
+        assert all(getattr(r, "path", None) != _RUTA_DESCARTABLE for r in app.routes)
+
+
+def test_integrity_error_no_manejado_responde_409_con_traceback(
+    ruta_que_lanza_integrity_error, caplog, monkeypatch
+):
+    """Fija el contrato del manejador global ya implementado en `main.py`
+    (`_integrity_error_handler`, líneas 89-95): un `IntegrityError` que llega
+    sin traducir hasta la app responde 409 con cuerpo `{detail, message}` (el
+    contrato de `_respuesta_error`) y queda registrado con traceback vía
+    `_log.exception`, sin silenciarse.
+
+    Nota: `esquema_migrado` (conftest, autouse/session) corre Alembic, que
+    aplica `fileConfig(alembic.ini)` con `disable_existing_loggers=True` --
+    eso deshabilita el logger `main` ya instanciado al momento de recolectar
+    los tests. Se reactiva explícitamente acá, mismo precedente que
+    `test_cloudinary_cliente.py` (comentario junto a
+    `test_subida_lenta_emite_warning_en_vez_de_info`): no es parte del
+    comportamiento bajo prueba, es un efecto de sesión de la suite."""
+    monkeypatch.setattr(logging.getLogger("main"), "disabled", False)
+
+    with caplog.at_level(logging.ERROR, logger="main"):
+        with TestClient(app) as cliente:
+            respuesta = cliente.get(ruta_que_lanza_integrity_error)
+
+    assert respuesta.status_code == 409
+
+    cuerpo = respuesta.json()
+    assert cuerpo["detail"]
+    assert cuerpo["message"]
+    assert cuerpo["detail"] == cuerpo["message"]
+
+    registros = [r for r in caplog.records if r.name == "main"]
+    assert registros, "se esperaba al menos un registro del logger 'main'"
+    assert registros[-1].exc_info is not None
