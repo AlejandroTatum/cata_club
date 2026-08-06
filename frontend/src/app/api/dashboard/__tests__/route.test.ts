@@ -9,7 +9,7 @@
 
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GET } from "../route";
+import { GET, type DashboardStats } from "../route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -53,6 +53,35 @@ describe("GET /api/dashboard", () => {
     expect(await response.json()).toEqual(stats);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(vi.mocked(global.fetch).mock.calls[0][0]).toContain("/dashboard/stats");
+  });
+
+  /**
+   * The handler is a passthrough, so the wire already carried `totalAlumnos`
+   * the day the backend grew it — what was missing is the DECLARATION. This
+   * test is annotated with `DashboardStats` on purpose: it is a lock on the
+   * interface, and it goes red under `pnpm type-check` (TS2353, excess
+   * property) rather than under vitest for as long as the field is undeclared.
+   * Without the annotation the object would be inferred and nothing would fail.
+   */
+  it("declares and carries totalAlumnos, the denominator of «membresías activas»", async () => {
+    const stats: DashboardStats = {
+      totalPersonas: 86,
+      totalAlumnos: 84,
+      activeMemberships: 21,
+      pendingPayments: 3,
+      todaySchedules: 5,
+      personasSinMembresia: 63,
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(stats));
+
+    const response = await GET(getRequest());
+    const body = (await response.json()) as DashboardStats;
+
+    expect(response.status).toBe(200);
+    // Both counts survive: they answer different questions and the page needs
+    // each for a different tile.
+    expect(body.totalAlumnos).toBe(84);
+    expect(body.totalPersonas).toBe(86);
   });
 
   it("propagates the backend's status when /dashboard/stats fails", async () => {

@@ -122,9 +122,10 @@ export default function DashboardPage(): React.ReactElement {
   const overAWeek = countPaymentsWaitingOverAWeek(payments);
   const activeMemberships = stats?.activeMemberships ?? 0;
   const totalPersonas = stats?.totalPersonas ?? 0;
+  const totalAlumnos = stats?.totalAlumnos ?? 0;
   const personasSinMembresia = stats?.personasSinMembresia ?? 0;
   const membershipPercent =
-    totalPersonas > 0 ? Math.round((activeMemberships / totalPersonas) * 100) : 0;
+    totalAlumnos > 0 ? Math.round((activeMemberships / totalAlumnos) * 100) : 0;
 
   /**
    * The hero's second line, or nothing at all.
@@ -209,18 +210,20 @@ export default function DashboardPage(): React.ReactElement {
             <div className={STAT_GRID}>
               <StatCard label="Miembros" value={totalPersonas} hint="personas registradas" />
               {/*
-                  "de N personas", not a bare "de N": this counts membresía
-                  rows in estado ACTIVA against EVERY registered persona —
-                  administradores and entrenadores included, none of whom ever
-                  holds a membership. `/members` counts a different population
-                  (students inside the account tree), and the two tiles were
-                  both labelled "Membresías activas" while answering different
-                  questions. Each now names its own denominator.
+                  The denominator is `totalAlumnos`, not `totalPersonas`: this
+                  counts membresía rows in estado ACTIVA, and administradores
+                  and entrenadores are on the padrón without ever holding one.
+                  Counting against the whole padrón made a club of 84 alumnos
+                  with 21 active memberships read "de 86 · 24%" instead of
+                  "de 84 · 25%" — every staff account pushing the ratio further
+                  down. The tile above answers the other question and keeps the
+                  full padrón; the backend supplies both counts precisely so
+                  neither has to stand in for the other.
               */}
               <StatCard
                 label="Membresías activas"
                 value={activeMemberships}
-                unit={`de ${totalPersonas}`}
+                unit={`de ${totalAlumnos}`}
                 hint={`${membershipPercent}% del total`}
               />
               <StatCard
