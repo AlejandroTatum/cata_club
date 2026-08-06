@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 
 import main
+from app.soporte_transversal.circuito_breaker import CircuitoBreaker, resumen_circuitos
 from app.soporte_transversal.configuracion import settings
 from main import app
 
@@ -526,3 +527,65 @@ def test_orden_de_la_pila_de_middleware_es_el_declarado():
         main._CorrelacionDeRequestMiddleware,
         CORSMiddleware,
     ]
+
+
+# --- GET /diagnostico/circuitos (P2, feat/diagnostico-circuitos-http) -------
+# `resumen_circuitos()` (app/soporte_transversal/circuito_breaker.py) existía
+# desde sdd/operacion-observable sin un solo consumidor HTTP: ese cambio dejó
+# la exposición explícitamente fuera de alcance porque `main.py` es de esta
+# pista (commit b799f7d, issue #142). Esta ruta cierra ese pendiente.
+def test_diagnostico_circuitos_responde_200_con_forma_esperada_para_administrador(client):
+    """`client` (conftest.py) autentica con rol ADMINISTRADOR: la ruta debe
+    responder 200 con el dict que devuelve `resumen_circuitos()` tal cual,
+    sin envoltorio adicional -- cada entrada expone `estado` y
+    `fallos_consecutivos`."""
+    respuesta = client.get("/diagnostico/circuitos")
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert isinstance(cuerpo, dict)
+    for entrada in cuerpo.values():
+        assert set(entrada.keys()) == {"estado", "fallos_consecutivos"}
+
+
+def test_diagnostico_circuitos_responde_403_a_autenticado_sin_rol_administrador(
+    client_sin_permisos,
+):
+    """A diferencia de una sonda up/down, este resumen le dice a un atacante
+    QUÉ dependencia externa está caída y CUÁNDO golpear: es inteligencia
+    operativa, no estado de salud, así que exige rol ADMINISTRADOR igual que
+    el resto de las rutas administrativas del sistema."""
+    respuesta = client_sin_permisos.get("/diagnostico/circuitos")
+    assert respuesta.status_code == 403
+
+
+def test_diagnostico_circuitos_no_admite_peticiones_sin_token(client_sin_token):
+    """Sin credenciales no hay rol que evaluar: `GestorAutenticacion.decodificar_token`
+    rechaza antes de que `GestorPermisos` llegue a correr."""
+    respuesta = client_sin_token.get("/diagnostico/circuitos")
+    assert respuesta.status_code == 401
+
+
+def test_diagnostico_circuitos_devuelve_resumen_circuitos_tal_cual(client):
+    """Registra un breaker con estado conocido y verifica que la ruta HTTP
+    refleja el estado real vía `resumen_circuitos()`. Afirma sobre un
+    SUBCONJUNTO del cuerpo, nunca sobre la igualdad completa: el registro
+    también contiene los breakers productivos (`cloudinary`, `smtp`),
+    registrados al importarse sus adaptadores (ver
+    `test_circuito_breaker.py`, sección 12)."""
+    breaker = CircuitoBreaker(
+        nombre="diagnostico_http_prueba", umbral_fallos=5, cooldown_segundos=30.0,
+    )
+    breaker.registrar_fallo()
+    breaker.registrar_fallo()
+
+    respuesta = client.get("/diagnostico/circuitos")
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["diagnostico_http_prueba"] == {
+        "estado": "cerrado",
+        "fallos_consecutivos": 2,
+    }
+    # Coherencia con el accesor de dominio subyacente: la ruta no transforma
+    # ni envuelve `resumen_circuitos()`.
+    assert cuerpo["diagnostico_http_prueba"] == resumen_circuitos()["diagnostico_http_prueba"]
