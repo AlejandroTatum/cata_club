@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { BLOOD_TYPES } from "@/types/enrollment";
+import { ApiClientError } from "@/services/api";
 import { buildEnrollmentRequest, getEnrollmentErrorMessage, initialFormData, type EnrollFormData } from "../enroll-utils";
+
+/**
+ * The exact shape a failing call reaches the wizard as — every failure route in
+ * `services/api.ts` throws `ApiClientError(message, status)`.
+ */
+function apiError(message: string, status: number): ApiClientError {
+  return new ApiClientError(message, status);
+}
 
 function form(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
   return { ...initialFormData, nombres: " Ana ", apellidos: " Pérez ", fechaNacimiento: "2000-01-15", cedula: "1712345678", telefono: "0991234567", correo: "ana@example.com", contrasenia: "password8", tipoSangre: BLOOD_TYPES.O_POSITIVO, contactoEmergencia: "María", telefonoEmergencia: "0997654321", ...overrides };
@@ -47,22 +56,27 @@ describe("buildEnrollmentRequest", () => {
 
 describe("getEnrollmentErrorMessage", () => {
   it("surfaces backend message for 400 when present", () => {
-    expect(getEnrollmentErrorMessage({ status: 400, message: "Ya existe una persona con la cedula 1712345678" }))
+    expect(getEnrollmentErrorMessage(apiError("Ya existe una persona con la cedula 1712345678", 400)))
       .toBe("Ya existe una persona con la cedula 1712345678");
   });
 
   it("falls back to generic message for 400 without message", () => {
-    expect(getEnrollmentErrorMessage({ status: 400 }))
+    expect(getEnrollmentErrorMessage(apiError("", 400)))
       .toBe("No se pudo validar la inscripción. Revise sus datos e intente nuevamente.");
   });
 
-  it("returns rate-limit message for 429", () => {
-    expect(getEnrollmentErrorMessage({ status: 429 }))
-      .toBe("Ha realizado demasiados intentos. Espere un momento antes de continuar.");
+  it("returns the one rate-limit sentence for 429", () => {
+    // POST /inscripciones is rate-limited on the public form. The wording is
+    // the translator's: this screen no longer keeps a private variant of it.
+    expect(getEnrollmentErrorMessage(apiError("", 429)))
+      .toBe("Demasiados intentos. Espere un momento e intente nuevamente.");
   });
 
-  it("returns generic fallback for unknown errors", () => {
-    expect(getEnrollmentErrorMessage(new Error("database secret")))
-      .toBe("No se pudo completar la inscripción. Intente nuevamente más tarde.");
+  it("reports the connection when fetch never reached the backend", () => {
+    // Every failure route in services/api.ts throws ApiClientError(message,
+    // status), so the only status-less error this catch can see is fetch
+    // itself rejecting — and its message is the browser's, not the product's.
+    expect(getEnrollmentErrorMessage(new TypeError("Failed to fetch")))
+      .toBe("No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.");
   });
 });

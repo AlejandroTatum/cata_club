@@ -30,6 +30,7 @@
 import type { NextResponse } from "next/server";
 import type { UserRole, Usuario } from "@/types/domain";
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/auth-cookies";
+import { toUserMessage } from "@/lib/error-message";
 
 // Re-exported so existing call sites (Route Handlers under src/app/api/auth/**)
 // keep importing cookie names from this file. The canonical definition lives
@@ -262,7 +263,7 @@ export async function backendFetch(path: string, init: RequestInit): Promise<Aut
       ok: false,
       error: {
         code: "config_error",
-        message: error instanceof Error ? error.message : "Configuración del servidor inválida.",
+        message: toUserMessage(error, "Configuración del servidor inválida."),
       },
     };
   }

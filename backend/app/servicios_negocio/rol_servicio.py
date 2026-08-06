@@ -105,7 +105,13 @@ class RolServicio:
         usuario = self._obtener_usuario_de_persona(persona_id)
         rol = next((r for r in usuario.roles if r.tipo_rol == tipo_rol), None)
         if not rol:
-            raise EntidadNoEncontrada(f"Esta persona no tiene el rol {tipo_rol.value}")
+            # OperacionInvalida (400), no EntidadNoEncontrada (404): la persona
+            # existe y el rol del catálogo existe; lo que no se puede es quitar
+            # un rol que no está asignado. El 404 además hacía inalcanzable el
+            # mensaje: el frontend solo confía en el `detail` de 400/409/422
+            # (ver frontend/src/lib/error-message.ts), así que el modal de
+            # roles perdía la frase con la que reconcilia su checkbox.
+            raise OperacionInvalida(f"Esta persona no tiene el rol {tipo_rol.value}")
         if tipo_rol == TipoRol.ADMINISTRADOR:
             self._asegurar_que_no_se_quita_a_si_mismo(usuario, persona_id_solicitante)
             self._asegurar_que_queda_otro_administrador(usuario, "quitar el rol ADMINISTRADOR")

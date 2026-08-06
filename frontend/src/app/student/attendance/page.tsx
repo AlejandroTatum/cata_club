@@ -58,6 +58,7 @@ import type { AttendanceBreakdown } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
 import { CalendarCheck, User } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { toUserMessage } from "@/lib/error-message";
 
 /**
  * Mirrors `RECENT_SESSIONS_LIMIT` in src/lib/server/student-adapter.ts.
@@ -270,7 +271,7 @@ function StudentAttendanceContent(): React.ReactElement {
         setState({
           status: "error",
           message:
-            error instanceof Error ? error.message : "No se pudo cargar su historial de asistencia.",
+            toUserMessage(error, "No se pudo cargar su historial de asistencia."),
         });
       });
     return () => {

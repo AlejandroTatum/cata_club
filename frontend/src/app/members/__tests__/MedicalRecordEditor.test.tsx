@@ -26,6 +26,17 @@ vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
 }));
 
+/**
+ * What `fetchFichaMedica` really rejects with when there is no record yet: an
+ * `ApiClientError`, which carries the STATUS as well as the sentence. These
+ * mocks used to throw a bare `Error`, and it passed only because the component
+ * detected "no record" by looking for a substring in the message. It now reads
+ * the 404, so the mock has to be faithful to the client it stands in for.
+ */
+function notFound(): Error & { status: number } {
+  return Object.assign(new Error("Ficha médica no encontrada"), { status: 404 });
+}
+
 describe("MedicalRecordEditor blood type", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -33,8 +44,8 @@ describe("MedicalRecordEditor blood type", () => {
   });
 
   it("creates a first record with DESCONOCIDO instead of an unset blood type", async () => {
-    // No record yet: the backend answers the GET with "Ficha médica no encontrada".
-    mockFetchFichaMedica.mockRejectedValue(new Error("Ficha médica no encontrada"));
+    // No record yet: the backend answers the GET with a 404.
+    mockFetchFichaMedica.mockRejectedValue(notFound());
 
     render(<MedicalRecordEditor personaId={7} />);
 
@@ -52,7 +63,7 @@ describe("MedicalRecordEditor blood type", () => {
   });
 
   it("offers DESCONOCIDO as a selectable option, not just as a default", async () => {
-    mockFetchFichaMedica.mockRejectedValue(new Error("Ficha médica no encontrada"));
+    mockFetchFichaMedica.mockRejectedValue(notFound());
 
     render(<MedicalRecordEditor personaId={7} />);
 

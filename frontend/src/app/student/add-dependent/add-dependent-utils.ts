@@ -11,6 +11,7 @@
 
 import type { RepresentadoCreatePayload } from "@/services/api";
 import type { TipoSangre } from "@/types/domain";
+import { toUserMessage } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -322,28 +323,17 @@ function isFutureDate(value: string): boolean {
   return parsed > today;
 }
 
+/**
+ * The observation this used to encode by hand — that a 400 carries a clean
+ * Spanish sentence worth showing ("Ya existe una persona con la cédula …")
+ * while a 422 carries a raw pydantic payload that is not safe verbatim — was
+ * right, and it is exactly the argument the translator now makes for the whole
+ * product. The difference is that the translator decides by INSPECTING the
+ * text, so a 422 that happens to carry a clean sentence is no longer thrown
+ * away and a 400 that leaks a column name is no longer shown.
+ */
 export function getAddDependentErrorMessage(error: unknown): string {
-  if (typeof error === "object" && error !== null && "status" in error) {
-    const status = (error as Record<string, unknown>).status;
-    // 400 = a domain business-rule violation (see backend's EntidadDuplicada/
-    // OperacionInvalida — e.g. "Ya existe una persona con la cédula ...").
-    // Those always carry a single clean, user-facing Spanish message, so
-    // surface it instead of a generic string that hides which field was
-    // wrong (previously always replaced, even for a duplicate cédula).
-    if (status === 400) {
-      const message = (error as Record<string, unknown>).message;
-      if (typeof message === "string" && message.trim()) return message.trim();
-    }
-    // 422 = raw FastAPI/pydantic validation errors (a list of field/loc/msg
-    // objects, not a single string) — not safe to show verbatim.
-    if (status === 400 || status === 422) {
-      return "No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.";
-    }
-    if (status === 403) {
-      return "No tiene permisos para agregar un dependiente.";
-    }
-  }
-  return "No se pudo agregar el dependiente. Intente nuevamente más tarde.";
+  return toUserMessage(error, "No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.");
 }
 
 // ---------------------------------------------------------------------------

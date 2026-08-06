@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { ApiClientError } from "@/services/api";
 import {
   validateAddDependentStep,
   validateAddDependentForm,
@@ -15,6 +16,15 @@ import {
   initialAddDependentFormData,
   type AddDependentFormData,
 } from "../add-dependent-utils";
+
+/**
+ * The exact shape a failing call reaches the wizard as. Every failure route in
+ * `services/api.ts` throws `ApiClientError(message, status)`, so an error
+ * carrying a `message` and no `status` is a shape the client cannot produce.
+ */
+function apiError(message: string, status: number): ApiClientError {
+  return new ApiClientError(message, status);
+}
 
 /** Build a valid-enough form data, with overrides. */
 function validForm(overrides: Partial<AddDependentFormData> = {}): AddDependentFormData {
@@ -243,27 +253,34 @@ describe("getAddDependentErrorMessage", () => {
     // main.py _respuesta_error), safe to show as-is instead of a generic
     // message that hides which field was actually wrong.
     expect(
-      getAddDependentErrorMessage({ status: 400, message: "Ya existe una persona con la cédula 1712345678" }),
+      getAddDependentErrorMessage(apiError("Ya existe una persona con la cédula 1712345678", 400)),
     ).toBe("Ya existe una persona con la cédula 1712345678");
   });
 
   it("falls back to a generic message for a 400 with no usable message", () => {
-    expect(getAddDependentErrorMessage({ status: 400 }))
+    expect(getAddDependentErrorMessage(apiError("", 400)))
       .toBe("No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.");
   });
 
   it("uses a generic message for 422 — raw pydantic validation errors aren't a single safe string", () => {
-    expect(getAddDependentErrorMessage({ status: 422, message: "[{...raw pydantic errors...}]" }))
+    expect(getAddDependentErrorMessage(apiError("[{...raw pydantic errors...}]", 422)))
       .toBe("No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.");
   });
 
-  it("maps 403 to a permissions message", () => {
-    expect(getAddDependentErrorMessage({ status: 403 }))
-      .toBe("No tiene permisos para agregar un dependiente.");
+  it("maps 403 to the one permissions sentence the product uses everywhere", () => {
+    // POST /representados refuses a caller whose session is valid but whose
+    // role is not allowed to add a dependent. The wording is the translator's,
+    // not this screen's: a per-screen variant of "no tiene permisos" was one of
+    // the 28 independent decisions the single translator exists to end.
+    expect(getAddDependentErrorMessage(apiError("", 403)))
+      .toBe("No tiene permisos para realizar esta acción.");
   });
 
-  it("falls back to a generic message for a non-status error", () => {
-    expect(getAddDependentErrorMessage(new Error("database secret")))
-      .toBe("No se pudo agregar el dependiente. Intente nuevamente más tarde.");
+  it("reports the connection, not the raw failure, when fetch never reached the backend", () => {
+    // The only status-less error a call site can actually see: every failure
+    // route in services/api.ts throws ApiClientError(message, status), so a
+    // bare Error can only come from fetch itself rejecting.
+    expect(getAddDependentErrorMessage(new TypeError("Failed to fetch")))
+      .toBe("No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.");
   });
 });

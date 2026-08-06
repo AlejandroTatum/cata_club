@@ -129,8 +129,21 @@ describe("toUserMessage — the vocabulary gate", () => {
     const longest = "Ya existe una persona con esa cédula en el padrón del club.";
 
     expect(isUserFacingText(longest)).toBe(true);
-    expect(isUserFacingText(longest.padEnd(120, "."))).toBe(true);
-    expect(isUserFacingText(longest.padEnd(121, "."))).toBe(false);
+    expect(isUserFacingText(longest.padEnd(200, "."))).toBe(true);
+    expect(isUserFacingText(longest.padEnd(201, "."))).toBe(false);
+  });
+
+  it("lets through the longest hand-authored refusal the backend actually sends", () => {
+    // The message that moved the ceiling from 120 to 200. Copied verbatim from
+    // rol_servicio._asegurar_que_queda_otro_administrador — if the backend
+    // rewrites it longer, this goes red before a user loses it to the fallback.
+    const refusal =
+      "No se puede quitar el rol ADMINISTRADOR: es el último administrador activo del " +
+      "sistema y quedaría sin acceso de administración. Asigne el rol " +
+      "ADMINISTRADOR a otra cuenta activa antes de continuar.";
+
+    expect(refusal.length).toBeLessThanOrEqual(200);
+    expect(toUserMessage(apiError(refusal, 400), FALLBACK)).toBe(refusal);
   });
 
   it("treats a blank detail as no detail", () => {

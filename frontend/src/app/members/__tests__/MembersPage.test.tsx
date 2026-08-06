@@ -404,7 +404,11 @@ describe("MembersPage — Editar member modal", () => {
   });
 
   it("shows a clear error when saving Nombre/Teléfono fails", async () => {
-    mockActualizarPersona.mockRejectedValueOnce(new Error("No se pudo actualizar"));
+    // PATCH /personas/{id} failed server-side. Nothing the user typed into
+    // Nombre or Teléfono caused it, so the 500's own `detail` has nothing to
+    // add and the modal reports the server instead.
+    const { ApiClientError } = await import("@/services/api");
+    mockActualizarPersona.mockRejectedValueOnce(new ApiClientError("No se pudo actualizar", 500));
     render(
       <ToastProvider>
         <MembersPage />
@@ -416,7 +420,9 @@ describe("MembersPage — Editar member modal", () => {
     const dialog = screen.getByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /guardar nombre, apellido y teléfono/i }));
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("No se pudo actualizar");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "El servidor no pudo completar la operación. Intente nuevamente en unos minutos.",
+    );
   });
 
   it("selecting a role in the modal fires asignarRol, same as the old popover", async () => {
@@ -456,7 +462,14 @@ describe("MembersPage — Editar member modal", () => {
   });
 
   it('reconciles local state when the backend reports "ya tiene el rol" on assign', async () => {
-    mockAsignarRol.mockRejectedValueOnce(new Error("Esta persona ya tiene el rol ADMINISTRADOR"));
+    // `rol_servicio.asignar_rol` raises OperacionInvalida, which backend/main.py
+    // maps to 400 — the status that means "about what you sent". The sentence
+    // is hand-authored and names no implementation, so it survives both gates
+    // and reaches the branch in page.tsx that reconciles the checkbox.
+    const { ApiClientError } = await import("@/services/api");
+    mockAsignarRol.mockRejectedValueOnce(
+      new ApiClientError("Esta persona ya tiene el rol ADMINISTRADOR", 400),
+    );
     render(
       <ToastProvider>
         <MembersPage />
@@ -489,7 +502,15 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(adminCheckbox);
     await waitFor(() => expect(adminCheckbox).toBeChecked());
 
-    mockQuitarRol.mockRejectedValueOnce(new Error("Esta persona no tiene el rol ADMINISTRADOR"));
+    // `rol_servicio.quitar_rol` raises OperacionInvalida → 400. It used to
+    // raise EntidadNoEncontrada → 404, and a 404 `detail` is one the frontend
+    // does not trust: the sentence never reached the branch in page.tsx that
+    // reconciles the checkbox. The persona exists — what is invalid is
+    // removing a role that was never assigned.
+    const { ApiClientError } = await import("@/services/api");
+    mockQuitarRol.mockRejectedValueOnce(
+      new ApiClientError("Esta persona no tiene el rol ADMINISTRADOR", 400),
+    );
     fireEvent.click(adminCheckbox);
 
     await waitFor(() => {
@@ -512,9 +533,16 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(adminCheckbox);
     await waitFor(() => expect(adminCheckbox).toBeChecked());
 
+    // Verbatim from rol_servicio._asegurar_que_queda_otro_administrador, not
+    // the truncated version this test used to carry: the real sentence is 196
+    // characters and it is the reason MAX_DETAIL_LENGTH is 200 rather than the
+    // 120 an incomplete survey put it at. OperacionInvalida → 400.
     const refusal =
-      "No se puede quitar el rol ADMINISTRADOR: es el último administrador activo del sistema";
-    mockQuitarRol.mockRejectedValueOnce(new Error(refusal));
+      "No se puede quitar el rol ADMINISTRADOR: es el último administrador activo del " +
+      "sistema y quedaría sin acceso de administración. Asigne el rol " +
+      "ADMINISTRADOR a otra cuenta activa antes de continuar.";
+    const { ApiClientError } = await import("@/services/api");
+    mockQuitarRol.mockRejectedValueOnce(new ApiClientError(refusal, 400));
     fireEvent.click(adminCheckbox);
 
     await waitFor(() => {
@@ -581,7 +609,10 @@ describe("MembersPage — Editar member modal", () => {
   });
 
   it("disables the role checkboxes and shows an error instead of silently keeping stale data when the roles fetch fails", async () => {
-    mockObtenerRolesDePersona.mockRejectedValue(new Error("No se pudo conectar"));
+    // fetch itself rejected — the modal opened with the backend unreachable.
+    // Every failure route in services/api.ts throws ApiClientError(message,
+    // status), so this is the one status-less shape a call site can see.
+    mockObtenerRolesDePersona.mockRejectedValue(new TypeError("Failed to fetch"));
     render(
       <ToastProvider>
         <MembersPage />
@@ -598,7 +629,9 @@ describe("MembersPage — Editar member modal", () => {
     const alerts = await within(dialog).findAllByRole("alert");
     expect(alerts.length).toBeGreaterThan(0);
     for (const alert of alerts) {
-      expect(alert).toHaveTextContent("No se pudo conectar");
+      expect(alert).toHaveTextContent(
+        "No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.",
+      );
     }
     expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeDisabled();
   });
@@ -634,7 +667,10 @@ describe("MembersPage — Editar member modal", () => {
   });
 
   it("does not carry a stale error into a freshly reopened modal", async () => {
-    mockAsignarRol.mockRejectedValueOnce(new Error("Error de red"));
+    // A real network drop while assigning: fetch rejects with a TypeError and
+    // never reaches the client's ApiClientError paths. What the assertion is
+    // really about is that the alert does not survive a modal reopen.
+    mockAsignarRol.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     render(
       <ToastProvider>
         <MembersPage />
@@ -647,7 +683,9 @@ describe("MembersPage — Editar member modal", () => {
       expect(screen.getByRole("checkbox", { name: /admin/i })).not.toBeDisabled();
     });
     fireEvent.click(screen.getByRole("checkbox", { name: /admin/i }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Error de red");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
     fireEvent.click(getEditButton(row));

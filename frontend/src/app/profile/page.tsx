@@ -86,6 +86,7 @@ import { backendRoleForUserRole, getBackendRoleLabel, getRoleLabel } from "@/lib
 import { Loader2, Save, X, Camera, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
+import { toUserMessage } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -95,9 +96,7 @@ import { formatDate } from "@/lib/format-utils";
 const STUDENT_SUMMARY_ROLES: ReadonlySet<UserRole> = new Set(["representante", "estudiante"]);
 
 function toErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof ApiClientError) return error.message;
-  if (error instanceof Error) return error.message;
-  return fallback;
+  return toUserMessage(error, fallback);
 }
 
 function describeMembership(membership: MembershipSummary | null): { label: string; tone: BadgeTone } | null {

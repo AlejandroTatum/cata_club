@@ -95,6 +95,7 @@ import {
 } from "./payments-utils";
 import { CreditCard, Loader2, Paperclip, Plus, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { toUserMessage } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -558,7 +559,7 @@ function RenewPaymentForm({
       );
       onRegistered();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo registrar el pago.");
+      setError(toUserMessage(err, "No se pudo registrar el pago."));
     } finally {
       setLoading(false);
     }
@@ -892,7 +893,7 @@ function PaymentsContent({
         setPagosState({
           status: "error",
           message:
-            error instanceof Error ? error.message : "No se pudo cargar el historial de pagos.",
+            toUserMessage(error, "No se pudo cargar el historial de pagos."),
         });
       });
     return () => {
@@ -962,7 +963,7 @@ function PaymentsContent({
     } catch (err) {
       // Inline, not `alert()`: a browser dialog cannot be styled, cannot be
       // read by the surrounding context, and blocks the page it interrupts.
-      setUploadError(err instanceof Error ? err.message : "No se pudo subir el comprobante.");
+      setUploadError(toUserMessage(err, "No se pudo subir el comprobante."));
     } finally {
       setUploadingId(null);
       setPendingUploadPagoId(null);
@@ -1194,7 +1195,7 @@ function PaymentsPageContent(): React.ReactElement {
         if (cancelled) return;
         setState({
           status: "error",
-          message: error instanceof Error ? error.message : "No se pudo cargar la información.",
+          message: toUserMessage(error, "No se pudo cargar la información."),
         });
       });
     return () => {

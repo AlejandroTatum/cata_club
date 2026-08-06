@@ -90,7 +90,23 @@ describe("backendFetch", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.error.code).toBe("config_error");
-    expect(result.error.message).toMatch(/BACKEND_API_URL/);
+  });
+
+  it("does not put the env var name in the message the route handler sends to the browser", async () => {
+    // `error.message` is not a log line: every route handler under
+    // src/app/api/ writes it straight into the JSON response body (see
+    // auth/login/route.ts, auth/refresh/route.ts). `getBackendApiUrl()`
+    // throws an English sentence naming BACKEND_API_URL and telling the
+    // reader to edit .env.local — a deployment detail, addressed to whoever
+    // runs the server, that no member of the club can act on. The operator
+    // still gets it: the thrown Error is unchanged and reaches the server log.
+    delete process.env.BACKEND_API_URL;
+
+    const result = await backendFetch("/auth/login", { method: "POST" });
+
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error.message).not.toMatch(/BACKEND_API_URL|\.env\.local|NEXT_PUBLIC_/);
+    expect(result.error.message).toBe("Configuración del servidor inválida.");
   });
 
   it("never attempts a network call when the backend URL is missing", async () => {

@@ -6,6 +6,7 @@
  */
 
 import { BLOOD_TYPES, type BloodType, type EnrollmentRequest } from "@/types/enrollment";
+import { toUserMessage } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -193,19 +194,20 @@ export function isDemoQuickFillEnabled(
   return nodeEnv !== "production";
 }
 
+/**
+ * This one passed the backend's `detail` through on 422 as well as 400 — the
+ * case its sibling in `add-dependent-utils` documented in writing as unsafe,
+ * because a 422 is where FastAPI puts a serialized list of field/loc/msg
+ * objects. Two helpers, the same question, opposite answers, and nothing
+ * reconciling them. The translator is that reconciliation.
+ */
 export function getEnrollmentErrorMessage(error: unknown): string {
-  if (typeof error === "object" && error !== null && "status" in error) {
-    const status = (error as Record<string, unknown>).status;
-    const message = (error as Record<string, unknown>).message;
-    if (status === 400 || status === 422) {
-      if (typeof message === "string" && message.trim()) return message.trim();
-      return "No se pudo validar la inscripción. Revise sus datos e intente nuevamente.";
-    }
-    if (status === 429) {
-      return "Ha realizado demasiados intentos. Espere un momento antes de continuar.";
-    }
-  }
-  return "No se pudo completar la inscripción. Intente nuevamente más tarde.";
+  // The old helper carried two fallbacks — "revise sus datos" for 400/422 and
+  // "intente más tarde" for everything else. The translator answers everything
+  // else from the status now, so the one remaining fallback is the one for the
+  // case it cannot answer: a 400/422 whose detail was not fit to show. Telling
+  // that user to wait would be the wrong advice; their form is what is wrong.
+  return toUserMessage(error, "No se pudo validar la inscripción. Revise sus datos e intente nuevamente.");
 }
 
 // ---------------------------------------------------------------------------

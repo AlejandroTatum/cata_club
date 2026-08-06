@@ -120,6 +120,7 @@ import {
   VALIDATION_STATUS_TONES,
 } from "@/lib/status-badges";
 import type { PersonaReporte } from "@/types/domain";
+import { toUserMessage } from "@/lib/error-message";
 
 type ReportPreset = "periodo" | "asistencia" | "pagos";
 
@@ -231,7 +232,7 @@ function ReportsContent(): React.ReactElement {
         setPagosResults(await fetchPagosReporte(params));
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "No se pudo generar la vista previa.";
+      const message = toUserMessage(err, "No se pudo generar la vista previa.");
       setError(message);
       setPersonaResults([]);
       setAttendanceResults([]);
@@ -304,7 +305,7 @@ function ReportsContent(): React.ReactElement {
         await exportPagosReportePdf(params);
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "No se pudo generar el PDF del reporte.";
+      const message = toUserMessage(err, "No se pudo generar el PDF del reporte.");
       setError(message);
     } finally {
       setExportingPdf(false);

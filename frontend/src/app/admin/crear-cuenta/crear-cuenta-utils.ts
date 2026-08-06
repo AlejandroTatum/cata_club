@@ -1,3 +1,5 @@
+import { toUserMessage } from "@/lib/error-message";
+
 /**
  * Pure utility functions for the Admin "Create Account" wizard.
  *
@@ -239,19 +241,13 @@ export function calculateAge(
   return age;
 }
 
+/**
+ * One of three hand-rolled versions of the same idea that used to live in this
+ * codebase, each with slightly different rules — this one passed the backend's
+ * `detail` through on 400 only, its sibling in `enroll-utils` did it on 422 as
+ * well, and the third documented in writing that 422 was unsafe. They now all
+ * defer to the single translator, which is where that argument is made once.
+ */
 export function getCrearCuentaErrorMessage(error: unknown): string {
-  if (typeof error === "object" && error !== null && "status" in error) {
-    const status = (error as Record<string, unknown>).status;
-    if (status === 400) {
-      const message = (error as Record<string, unknown>).message;
-      if (typeof message === "string" && message.trim()) return message.trim();
-    }
-    if (status === 400 || status === 422) {
-      return "No se pudo crear la cuenta. Revise los datos ingresados e intente nuevamente.";
-    }
-    if (status === 403) {
-      return "No tiene permisos para crear cuentas.";
-    }
-  }
-  return "No se pudo crear la cuenta. Intente nuevamente más tarde.";
+  return toUserMessage(error, "No se pudo crear la cuenta. Revise los datos ingresados e intente nuevamente.");
 }

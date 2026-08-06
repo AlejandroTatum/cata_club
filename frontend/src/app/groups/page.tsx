@@ -107,6 +107,7 @@ import {
   type CategoriaCard,
   type PersonasPorHorario,
 } from "./groups-page-utils";
+import { toUserMessage } from "@/lib/error-message";
 
 function formatTime(timeStr: string): string {
   const [h, m] = timeStr.split(":");
@@ -129,7 +130,7 @@ function cardTitle(card: CategoriaCard): string {
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
-  return err instanceof ApiClientError ? err.message : fallback;
+  return toUserMessage(err, fallback);
 }
 
 /**
