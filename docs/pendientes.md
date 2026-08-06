@@ -1,11 +1,16 @@
 # Pendientes — índice de candados — Cata Club
 
-- **Fecha:** 5 de agosto de 2026
+- **Fecha:** 6 de agosto de 2026
 - **Verificado contra:** `main` en `51a6de9`
-- **Re-derivado después:** únicamente el ítem del conteo del panel, contra
-  `ad57c31` (PR #150, que cerró la mitad de backend) y el cableado de frontend
-  de este PR. **El resto de la lista no se re-verificó** y sigue apoyado en
-  `51a6de9`: vale el punto 1 de abajo, es hipótesis hasta re-derivarlo.
+- **Re-derivado después, en dos tandas:**
+  - El ítem del conteo del panel, contra `ad57c31` (PR #150, que cerró la mitad
+    de backend) y el cableado de frontend de #152.
+  - Contra `fa13172` (6 de agosto): los seis ítems nuevos que abre este PR, y el
+    ítem de los errores en inglés, que pasó a cerrados porque #153 y #155 lo
+    resolvieron entero y le dejaron su candado.
+
+  **El resto de la lista no se re-verificó** y sigue apoyado en `51a6de9`: vale
+  el punto 1 de abajo, es hipótesis hasta re-derivarlo.
 - **Propósito:** una sola lista de lo que sigue abierto, con su evidencia, el
   comando que la reproduce y el test que lo cerraría; y una sola tabla de lo
   cerrado, cada fila sostenida por un candado ejecutable.
@@ -78,27 +83,125 @@ La severidad indica **consecuencia**, no esfuerzo:
     `horario_entrenamiento`. Exige primero decidir el mecanismo (FK, enum
     derivado, o validación en el servicio).
 
+- [ ] **El mensaje del 408 no puede salir nunca, y en su lugar el usuario lee
+  que la operación «se canceló».** (Alta)
+  - **Qué está mal:** `STATUS_MESSAGES` promete «La operación tardó demasiado.
+    Intente nuevamente.» para un 408 que nada en esta pila produce: no hay un
+    solo `408` en `backend/app` ni en el resto de `frontend/src`, y el
+    despliegue no tiene ingress ni proxy inverso que pudiera emitirlo. Lo que
+    sí ocurre cuando el servidor se demora es que el cliente aborta por su
+    cuenta a los 10 s (`DEFAULT_TIMEOUT_MS`, el `setTimeout` que llama a
+    `controller.abort()`); `request` tiene `try/finally` pero no `catch`, así
+    que el `AbortError` sube intacto hasta el traductor, que lo mapea a «La
+    operación se canceló.». El usuario lee que algo se canceló —como si hubiera
+    navegado, cerrado el formulario o pedido otra cosa— cuando lo que pasó es
+    que el servidor no contestó a tiempo.
+    Va en Alta y no en deuda por lo que es: un mensaje **falso** al usuario, la
+    clase exacta de defecto que el traductor vino a eliminar. Que además sea
+    código muerto es la mitad menor del problema.
+  - **Dónde:** `frontend/src/lib/error-message.ts:162` (la promesa
+    inalcanzable); `frontend/src/services/api.ts:207`
+    (`DEFAULT_TIMEOUT_MS = 10_000`), `:299` (el `setTimeout` que aborta),
+    `:311-365` (el `try/finally` sin `catch`);
+    `frontend/src/lib/error-message.ts:224` (el mapeo a «se canceló»).
+  - **Cómo se verificó:** `rg -n '\b408\b' backend/app frontend/src` → un único
+    resultado, la propia fila de `STATUS_MESSAGES`;
+    `rg -ln 'caddy|nginx|traefik' --glob '!**/node_modules/**' --glob '!**/*.lock' .`
+    → solo este documento, ningún proxy en la pila que pudiera emitirlo.
+  - **Qué test lo cerraría:** dos, y son distintos. El de comportamiento: un
+    request que se pasa del timeout llega al traductor como «tardó demasiado» y
+    no como «se canceló» —exige antes separar el abort por timeout del abort del
+    llamador, que hoy comparten el mismo `AbortController`—. Y el guardián: toda
+    clave de `STATUS_MESSAGES` es un status que algún camino de esta pila puede
+    devolver, rojo si se agrega otra promesa inalcanzable.
+
 ### Deuda (Media)
 
-- [ ] **Los errores al usuario salen en inglés cuando el backend peor se
-  porta.**
-  - **Qué está mal:** `api.ts` construye `Request failed with status N` y solo
-    lo reemplaza si el cuerpo parsea como JSON de error conocido; un 502 del
-    proxy, HTML o cuerpo vacío dejan la cadena en inglés. 27 sitios en 13
-    archivos `.tsx` renderizan `err.message` crudo, la mayoría con fallback
-    español que solo actúa si el throw no es `Error` — es decir, nunca cuando
-    más se lo necesita.
-  - **Dónde:** `frontend/src/services/api.ts:335`; sin fallback alguno:
-    `frontend/src/app/profile/page.tsx:98-99`,
-    `frontend/src/app/groups/page.tsx:132`,
-    `frontend/src/app/members/page.tsx:284,379,853,875,900`,
-    `frontend/src/components/nivel/NivelLadderScreen.tsx:431`.
+- [ ] **`GENERIC_FAILURE` atraviesa las dos compuertas y le gana al fallback del
+  llamador.**
+  - **Qué está mal:** «No se pudo completar la operación.» no dispara ningún
+    patrón de `IMPLEMENTATION_VOCABULARY` y mide bastante menos de 200
+    caracteres, así que `isUserFacingText` la aprueba. El cliente la pone como
+    `message` de todo `ApiClientError` cuyo cuerpo no matchee `isApiErrorBody`;
+    si ese status es 400, 409 o 422, la compuerta 1 también pasa y
+    `toUserMessage` devuelve el genérico del cliente en lugar del fallback del
+    llamador, que sí nombra la operación («No se pudo guardar el descuento.»).
+    El módulo exige evidencia positiva de que el texto se escribió para una
+    persona. Este texto la tiene, pero no la escribió el backend: la escribió el
+    propio cliente para cuando no hay nada que decir.
+  - **Latente, no vivo:** hoy no se encontró una ruta BFF que devuelva 400, 409
+    o 422 con un cuerpo que `isApiErrorBody` rechace —`passthroughBackendError`
+    normaliza todo a `{ message: <string> }`, incluido el `detail` de lista de un
+    422 de FastAPI—. La compuerta falla abierta; el costo lo paga quien agregue
+    la próxima ruta con otra forma de error.
+  - **Ojo con la cita:** el relevamiento que originó este ítem lo apoyaba en
+    `error-message.ts:62` («It is not wired up yet.»). Esa línea dice otra cosa
+    —habla del cableado del módulo, no de la compuerta— y además hoy es falsa
+    (ver el ítem siguiente). El defecto se sostiene igual, por lectura del
+    código, no por esa cita.
+  - **Dónde:** `frontend/src/lib/error-message.ts:186` (la constante),
+    `:141-145` (la compuerta 2), `:239-242` (la compuerta 1 y el retorno del
+    `detail`); `frontend/src/services/api.ts:340` (dónde se pone), `:747-752`
+    (`isApiErrorBody`, que exige `detail`/`message` string no vacío). Un segundo
+    genérico de la misma familia vive fuera del traductor en `:924`
+    («No se pudo generar el PDF.»).
   - **Cómo se verificó:**
-    `rg -n 'Request failed with status' frontend/src/services/api.ts` y
-    `rg -n 'err(or)?\.message' frontend/src --glob '*.tsx' | rg -v __tests__ | wc -l` → 27.
-  - **Qué test lo cerraría:** el del traductor único (todo status → mensaje en
-    español) más un guardián estilo `focus-ring-usage` que prohíba renderizar
-    `err.message` fuera del traductor.
+    `rg -n 'GENERIC_FAILURE|isApiErrorBody|INPUT_STATUSES' frontend/src/lib/error-message.ts frontend/src/services/api.ts`
+    (mostrar la constante y las dos compuertas) y
+    `rg -n 'GENERIC_FAILURE' frontend/src/lib/__tests__/` → cero: ningún test del
+    traductor pasa la constante por la compuerta.
+  - **Qué test lo cerraría:** uno que afirme `isUserFacingText(GENERIC_FAILURE)
+    === false`; o, mejor porque ataca la causa, que `toUserMessage` con un
+    `ApiClientError(GENERIC_FAILURE, 409)` devuelva el fallback del llamador.
+
+- [ ] **El encabezado de `error-message.ts` afirma «It is not wired up yet» y
+  hace dos PRs que dejó de ser cierto.**
+  - **Qué está mal:** el comentario del módulo declara que solo `GENERIC_FAILURE`
+    está vivo y que «los 28 sitios de render pasan a `toUserMessage` en el
+    follow-up». Ese follow-up ya ocurrió, en #153 y #155: hoy hay 30 llamadas a
+    `toUserMessage` en 17 archivos y **cero** lecturas crudas de `err.message` en
+    `.tsx`. Es la misma clase de afirmación que este documento pagó tres veces
+    —estado escrito en prosa, sin comando que lo re-derive, envejeciendo en
+    silencio— solo que dentro de un comentario. Y ya cobró: el relevamiento que
+    abrió este PR la citó como evidencia de otra cosa.
+  - **Dónde:** `frontend/src/lib/error-message.ts:62-64`.
+  - **Cómo se verificó:**
+    `rg -c 'toUserMessage\(' --glob '!**/__tests__/**' --glob '!**/error-message.ts' frontend/src`
+    → 17 archivos, 30 llamadas sumadas;
+    `rg -n 'err(or)?\.message' --glob '*.tsx' --glob '!**/__tests__/**' frontend/src`
+    → sin resultados.
+  - **Qué test lo cerraría:** ninguno razonable, y conviene decirlo en vez de
+    inventar un campo. Es prosa dentro de un comentario; no hay candado barato
+    para el tiempo verbal de una oración. El cierre es borrar el párrafo: el
+    guardián `error-message-usage.test.ts` ya afirma el estado que el comentario
+    niega. Se anota igual porque un comentario que miente cuesta lo mismo que un
+    documento que miente.
+
+- [ ] **`downloadBlob` no tiene timeout ni cancelación, y el encabezado del
+  cliente promete que sí.**
+  - **Qué está mal:** la cabecera del módulo declara que «every request aborts
+    after 10 seconds by default». `downloadBlob` no pasa por `request`: llama a
+    `fetch(endpoint)` pelado, sin `signal` y sin `setTimeout`. El BFF que proxea
+    tampoco pone uno. Y es justo el camino más lento del producto, la generación
+    de PDF: un backend colgado deja la pestaña esperando sin error, sin cancelar
+    y sin límite, la bandera de pending de la pantalla nunca se apaga, y al
+    usuario no le queda más salida que recargar. No muestra un dato incorrecto
+    —por eso Media y no Alta—, pero es una operación sin cota que además
+    contradice por escrito la garantía del propio módulo.
+  - **Dónde:** `frontend/src/services/api.ts:15-17` (la promesa), `:918-919` (el
+    `fetch` sin `signal`);
+    `frontend/src/lib/server/backend-client.ts:167-174` (`proxyBackendPdfGet`,
+    sin timeout propio); el consumidor que se queda colgado,
+    `frontend/src/app/reports/page.tsx:308`.
+  - **Cómo se verificó:**
+    `rg -n 'signal|Timeout|TIMEOUT' frontend/src/lib/server/backend-client.ts`
+    → sin resultados; `rg -n 'fetch\(' frontend/src/services/api.ts` → tres
+    llamadas, y la de `:919` es la única sin `signal`.
+  - **Qué test lo cerraría:** uno con temporizadores falsos que afirme que
+    `downloadBlob` aborta pasado su timeout y que el error llega tipado. El
+    precedente de cómo elegir el número está en `CHATBOT_TIMEOUT_MS`
+    (`api.ts:1638-1647`), que resolvió el caso simétrico decidiendo a propósito
+    quién aborta primero, el cliente o el BFF.
 
 - [ ] **Dos sistemas de tokens de color conviven: `cata-*` y La Paleta.**
   - **Qué está mal:** 449 usos de tokens `cata-*` en posición de clase, en 37
@@ -200,6 +303,50 @@ La severidad indica **consecuencia**, no esfuerzo:
     corresponde.
 
 ### Baja
+
+- [ ] **El patrón MIME de la compuerta 2 incluye `audio` y `video`, que son
+  palabras españolas.**
+  - **Qué está mal:** el comentario funda la lista cerrada de los nueve tipos
+    IANA en que «`palabra/palabra` a secas no es un MIME en español», y por eso
+    exige un tipo conocido antes de la barra. El argumento vale para
+    `application`, `font`, `image`, `message`, `model`, `multipart` y `text`,
+    que no son palabras en español. No vale para `audio` ni `video`, que se
+    escriben igual: «audio/visual» o «audio/video» en una frase corriente
+    disparan el patrón y esconden el `detail` tras el fallback del llamador. Es
+    la misma rendija que la review cerró con `lunes/miércoles`, tapada a medias.
+  - **Consecuencia hoy, ninguna — por eso Baja y no Media:** ni `backend/app` ni
+    `frontend/src` contienen la palabra `audio` o `video` fuera del propio
+    patrón, así que ningún mensaje del producto la dispara. El criterio del
+    módulo —«cada patrón está acá porque un mensaje real lo disparó»— todavía no
+    se cumple en el sentido inverso: es un hueco de forma, no un defecto vivo.
+  - **Dónde:** `frontend/src/lib/error-message.ts:109` (el patrón), `:104-108`
+    (el comentario que lo funda).
+  - **Cómo se verificó:** `rg -n 'audio|v[ií]deo' backend/app frontend/src` → un
+    único resultado, la propia línea 109.
+  - **Qué test lo cerraría:** en `error-message.test.ts`, al lado del caso de
+    `lunes/miércoles`: `isUserFacingText` devuelve `true` para la frase con
+    `audio/visual` que se elija. Exige antes decidir el arreglo —sacar los dos
+    tipos de la lista, o exigir después de la barra un subtipo IANA plausible—,
+    porque el test se escribe distinto según cuál se tome.
+
+- [ ] **La rama de cuerpo ilegible de `downloadBlob` no está cubierta.**
+  - **Desmentido primero:** el relevamiento anotaba «`downloadBlob` sin test de
+    error». No se sostiene. `frontend/src/services/__tests__/api.test.ts:821`
+    —«downloadBlob throws a typed error on a non-2xx response»— cubre la rama de
+    fallo con cuerpo JSON y afirma además que no se crea el object URL.
+  - **Qué está mal, entonces:** lo que queda sin cubrir es el `catch` interno,
+    el que actúa cuando el cuerpo del error no parsea como JSON —un 502 del
+    proxy, HTML, cuerpo vacío— y deja en pie el default «No se pudo generar el
+    PDF.». Ese default es además el segundo genérico del cliente, hermano de
+    `GENERIC_FAILURE` y también fuera del traductor (ver el ítem de la
+    compuerta 2, arriba).
+  - **Dónde:** `frontend/src/services/api.ts:924` (el default), `:930-932` (el
+    `catch` que lo deja pasar).
+  - **Cómo se verificó:** `rg -n 'No se pudo generar el PDF\.' frontend/src` → un
+    único resultado, `api.ts:924`, sin ninguna aparición bajo `__tests__`.
+  - **Qué test lo cerraría:** el hermano del que ya existe: `downloadBlob` contra
+    una respuesta 502 de cuerpo no-JSON rechaza con «No se pudo generar el PDF.»
+    y con el status en el error.
 
 - [ ] **Dos sesiones de pytest concurrentes contra un mismo Postgres
   colisionan.**
@@ -357,6 +504,7 @@ backend: `cd backend && pytest "<archivo>::<test>"`.
 
 | Ítem | Cierre | Candado |
 |---|---|---|
+| Los errores al usuario salían en inglés cuando el backend peor se portaba | #153 y #155. El default del cliente pasó de `Request failed with status N` a `GENERIC_FAILURE` en español (`frontend/src/services/api.ts:340`; el inglés sobrevive solo en el comentario que documenta la historia, `:336`), y los 27 sitios que renderizaban `err.message` crudo pasaron por `toUserMessage`: hoy 30 llamadas en 17 archivos y cero lecturas crudas en `.tsx` (`rg -n 'err(or)?\.message' --glob '*.tsx' --glob '!**/__tests__/**' frontend/src` → sin resultados). Quedan tres observaciones del traductor en abiertos —el 408 inalcanzable, `GENERIC_FAILURE` cruzando la compuerta 2 y el encabezado ya falso—: son defectos del traductor nuevo, no la recaída de este ítem | `frontend/src/lib/__tests__/error-message.test.ts` · 19/19 y el guardián que pedía este ítem, `frontend/src/lib/__tests__/error-message-usage.test.ts` — «only the translator reads an error's message» · 5/5. Corridos el 6 de agosto de 2026 sobre `fa13172` |
 | El panel contaba «por regularizar» a quien no tenía NINGUNA membresía, y usaba todo el padrón como denominador de «membresías activas» | Dos mitades, dos PRs. #150 (backend): el `NOT EXISTS` exige estado `ACTIVA` y filtra por rol alumno, y nace `total_alumnos` junto a `total_personas` porque son dos preguntas distintas (`backend/app/presentacion/schemas/dashboard_schemas.py:11`). Este PR (frontend): el campo se declara en las dos copias de `DashboardStats` (`frontend/src/app/api/dashboard/route.ts:23`, `frontend/src/services/api.ts:842`) y la pantalla lo lee — el `%` y el «de N» pasan a `totalAlumnos` (`frontend/src/app/dashboard/page.tsx:128,226`), la tarjeta «Miembros» se queda en `totalPersonas` porque dice «personas registradas» y son todas | `backend/tests/test_dashboard_stats.py::test_total_alumnos_es_el_denominador_y_total_personas_cuenta_a_todos` + `::test_alumno_con_membresia_vencida_cuenta_como_por_regularizar`, `::test_alumno_con_membresia_inactiva_cuenta_como_por_regularizar`, `::test_staff_sin_membresia_no_cuenta_como_por_regularizar` · `frontend/src/app/dashboard/__tests__/DashboardPage.test.tsx` — «counts active memberships against the alumnos, and Miembros against the whole padrón» · 18/18. El del contrato es de tipos, no de runtime: la route es passthrough y el campo ya viajaba, así que `frontend/src/app/api/dashboard/__tests__/route.test.ts` — «declares and carries totalAlumnos» se pone rojo bajo `cd frontend && npm run type-check` (TS2353), no bajo vitest |
 | La selección de dependiente se perdía al navegar | Ya estaba en el código al corte anterior: `?alumno=` en la URL + `sessionStorage` por cuenta (`frontend/src/app/student/ManagedStudentPicker.tsx:43-150`); Pagos, Asistencia y Mi cuenta leen la misma fuente | `frontend/src/app/student/payments/__tests__/StudentPaymentsPage.test.tsx` — «the dependent selection survives navigation» y 3 hermanos · 27/27 |
 | El botón Atrás destruía la lista de asistencia | Una entrada real de historial por paso (`pushState`, `trainer/attendance/page.tsx:362`), `popstate` restaura plantel con marcas (`:517-533`), borrador en `sessionStorage` y aviso `beforeunload` (`:763`) | `frontend/src/app/trainer/attendance/__tests__/TrainerAttendancePage.test.tsx` — «returns Back from step 3 to the roll call, marks intact, instead of ejecting the trainer» y hermanos · 82/82 |
