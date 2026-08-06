@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import re
+import uuid
 
 import redis
 from fastapi import FastAPI, HTTPException, Request, status
@@ -92,7 +94,12 @@ for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
 # sin pasar por la app, así que siguen viendo el `IntegrityError` crudo.
 @app.exception_handler(IntegrityError)
 async def _integrity_error_handler(request: Request, exc: IntegrityError):
-    _log.exception("IntegrityError no manejado en %s %s", request.method, request.url.path)
+    _log.exception(
+        "IntegrityError no manejado en %s %s [request_id=%s]",
+        request.method,
+        request.url.path,
+        getattr(request.state, "request_id", "-"),
+    )
     return _respuesta_error(
         status.HTTP_409_CONFLICT,
         "La operación entra en conflicto con el estado actual de los datos.",
@@ -110,7 +117,50 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
+    # Sin esto, un browser cross-origin (el frontend Next.js corre en otro
+    # origen) descarta `X-Request-ID` antes de que el JavaScript de la
+    # página pueda leerlo: `allow_headers` sólo habilita cabeceras del
+    # REQUEST, `expose_headers` es lo que habilita la LECTURA de una
+    # cabecera de la RESPUESTA desde el cliente (sdd/borde-http-observable,
+    # PR3).
+    expose_headers=["X-Request-ID"],
 )
+
+
+# --- Correlación de requests ---------------------------------------------
+# Cada respuesta lleva un `X-Request-ID` rastreable: se respeta el que manda
+# el cliente si es válido, o se genera uno nuevo con `uuid4()`. Un id que
+# viaja a los logs es superficie de inyección, así que se valida contra una
+# lista BLANCA de caracteres (no una lista negra): cualquier valor entrante
+# que no matchee -- vacío, con caracteres fuera del set aceptado, o
+# excesivamente largo -- se descarta sin más aviso y se reemplaza por uno
+# generado, en vez de rechazar el request con un 400: una cabecera de
+# correlación malformada jamás debe tumbar un request legítimo.
+CABECERA_REQUEST_ID = "X-Request-ID"
+_FORMATO_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+class _CorrelacionDeRequestMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        entrante = request.headers.get(CABECERA_REQUEST_ID, "")
+        identificador = (
+            entrante if _FORMATO_REQUEST_ID.fullmatch(entrante) else str(uuid.uuid4())
+        )
+        request.state.request_id = identificador
+        respuesta: Response = await call_next(request)
+        respuesta.headers[CABECERA_REQUEST_ID] = identificador
+        return respuesta
+
+
+# Registrado DESPUÉS (más abajo) de CORSMiddleware, a propósito: queda POR
+# FUERA de CORS, así que un preflight OPTIONS que CORS resuelve en
+# corto-circuito (sin llamar a `call_next` hacia el router) igual sale con
+# `X-Request-ID`. Y queda POR DENTRO de Cabeceras (registrada después, ver
+# comentario de abajo), así que `request.state.request_id` ya está poblado
+# cuando corren el router y los manejadores de excepciones -- incluido
+# `_integrity_error_handler`, arriba -- antes de que la respuesta suba de
+# vuelta por esta capa.
+app.add_middleware(_CorrelacionDeRequestMiddleware)
 
 
 # --- Cabeceras de seguridad ---------------------------------------------
@@ -127,12 +177,15 @@ class _CabecerasDeSeguridadMiddleware(BaseHTTPMiddleware):
         return respuesta
 
 
-# Registrado DESPUÉS (más abajo) del CORSMiddleware de arriba, a propósito:
-# `add_middleware` de Starlette antepone cada middleware nuevo a la pila, así
-# que el ÚLTIMO registrado queda MÁS AFUERA. Esta es la única posición que
-# post-procesa TODAS las respuestas -- incluidas las de CORS, las de los 5
-# manejadores de excepciones de dominio (arriba) y los 429 de rate limiting
-# (ver decisión de diseño 2.4, sdd/production-readiness).
+# Registrado DESPUÉS (más abajo) de CORSMiddleware y de Correlación de
+# arriba, a propósito: `add_middleware` de Starlette antepone cada
+# middleware nuevo a la pila, así que el ÚLTIMO registrado queda MÁS AFUERA.
+# Esta es la única posición que post-procesa TODAS las respuestas --
+# incluidas las de CORS, las de Correlación, las de los 5 manejadores de
+# excepciones de dominio (arriba) y los 429 de rate limiting (ver decisión
+# de diseño 2.4, sdd/production-readiness). Pila resultante, de afuera hacia
+# adentro: Cabeceras -> Correlación -> CORS -> router
+# (sdd/borde-http-observable, D6).
 app.add_middleware(_CabecerasDeSeguridadMiddleware)
 
 app.include_router(auth_router.router, prefix="/api/v1")
