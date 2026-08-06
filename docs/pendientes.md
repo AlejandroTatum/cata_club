@@ -2,6 +2,10 @@
 
 - **Fecha:** 5 de agosto de 2026
 - **Verificado contra:** `main` en `54bc583`
+- **Última actualización parcial:** `main` en `71736d4`, sobre los tres ítems
+  del borde HTTP (`#141`, `#143`, `#144`). El resto del documento **no** se
+  reverificó en esa pasada, así que la fecha de verificación completa sigue
+  siendo la de arriba.
 - **Cómo se verificó:** leyendo el código y corriendo sus tests, no releyendo
   los documentos de origen. Es la única forma de que esta lista no herede los
   errores que vino a corregir.
@@ -72,10 +76,13 @@ serie.
   en paralelo dejaba al club sin ningún administrador y sin vía de rescate.
   *Ubicación:* `backend/app/servicios_negocio/rol_servicio.py:65-84`.
 
-- [ ] **El handler global mapea `IntegrityError` a 409.** (Media)
-  Un futuro error de servidor por violación de integridad se le presenta al
-  cliente como un conflicto que él causó. El traceback sí queda registrado.
-  *Ubicación:* `backend/main.py`.
+- [x] **El handler global mapea `IntegrityError` a 409 — cerrado.** (#141)
+  El handler ya existía desde `080f19f`; lo que faltaba era la prueba que
+  fijara su contrato. `#141` la agregó: 409, cuerpo con `detail` y `message`,
+  y traceback registrado vía `_log.exception`, así que un constraint violado
+  por un bug sigue siendo diagnosticable en el log.
+  *Ubicación:* `backend/main.py:95-106`; test en
+  `backend/tests/test_main.py::test_integrity_error_no_manejado_responde_409_con_traceback`.
   *Fuente:* auditoría, hallazgo abierto D.
 
 - [x] **Tres endpoints de catálogo devuelven `List[...]` sin paginar — cerrado.** (Media)
@@ -227,13 +234,28 @@ serie.
   `resiliencia.py`, pero nada observa ni alerta cuando el circuito abre. Un
   servicio caído que nadie ve es un servicio caído que nadie arregla.
 
-- [ ] **El healthcheck del backend no comprueba PostgreSQL ni Redis.** (Alta)
-  `GET /health` devuelve `{"estado": "ok"}` incondicionalmente
-  (`backend/main.py:158`). Reporta sano con la base caída.
+- [x] **El healthcheck del backend no comprueba PostgreSQL ni Redis — cerrado.** (#143)
+  Resuelto con una sonda nueva, no modificando la que había. `GET /health`
+  **sigue** devolviendo `{"estado": "ok"}` incondicionalmente y eso es
+  deliberado: es la sonda de *liveness* que usa el healthcheck de
+  `docker-compose.yml` para decidir si reinicia el contenedor, y comprobar la
+  base ahí lo pondría a reiniciar la API en bucle justo cuando lo caído es
+  Postgres, que no levanta la base y encima saca la API de servicio mientras
+  se recupera. El `GET /health/ready` nuevo es el que comprueba Postgres y
+  Redis, con clientes dedicados y timeouts de driver, y responde 503 ante
+  cualquier caída, incluida la parcial.
+  *Ubicación:* `backend/main.py:282` (`/health/ready`); `/health` intacto en
+  `backend/main.py:215`.
 
-- [ ] **Sin correlación de requests, métricas ni trazas.** (Media)
-  No hay `X-Request-ID` ni equivalente en el backend. Un incidente de extremo a
-  extremo no se puede reconstruir.
+- [ ] **Sin métricas ni trazas.** (Media)
+  La **correlación** de este ítem se cerró en `#144`: toda respuesta lleva
+  `X-Request-ID`, se respeta el entrante si valida contra una lista blanca de
+  caracteres o se genera con `uuid4()`, y el middleware va entre CORS y las
+  cabeceras de seguridad con un test guardián que compara la pila completa por
+  igualdad (`backend/main.py:139-160`).
+  Lo que queda abierto son las otras dos patas: no hay métricas ni trazas
+  distribuidas. Con el `request_id` ya disponible en `request.state`, son
+  ahora incrementales sobre él.
   *Fuente:* auditoría, deuda operativa.
 
 - [ ] **`docker-compose.prod.yml` no completa el contrato de operación.** (Media)
