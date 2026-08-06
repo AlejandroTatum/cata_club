@@ -35,6 +35,7 @@ import type {
 import type { EnrollmentRequest, EnrollmentResponse } from "@/types/enrollment";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { MemberAccount } from "@/app/members/members-utils";
+import { GENERIC_FAILURE } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
 // Types — Membership Payment Validation (CU012)
@@ -332,7 +333,11 @@ async function request<T>(
     }
 
     if (!response.ok) {
-      let message = `Request failed with status ${response.status}`;
+      // The default was `Request failed with status ${status}` — English, and
+      // it reached real screens whenever a proxy 502 or a gateway 504 answered
+      // without a JSON body. `GENERIC_FAILURE` is Spanish and safe to render
+      // as-is; the status itself is on the error for anyone who needs it.
+      let message = GENERIC_FAILURE;
       try {
         const errorBody: unknown = await response.json();
         if (isApiErrorBody(errorBody)) {
@@ -914,7 +919,9 @@ export async function downloadBlob(endpoint: string, fallbackFilename: string): 
   const response = await fetch(endpoint);
 
   if (!response.ok) {
-    let message = `No se pudo generar el PDF (status ${response.status}).`;
+    // The HTTP code used to be printed at the user here (`(status 504)`). It
+    // told them nothing they could act on and it is already on the error.
+    let message = "No se pudo generar el PDF.";
     try {
       const errorBody: unknown = await response.json();
       if (isApiErrorBody(errorBody)) {

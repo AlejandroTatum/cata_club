@@ -44,6 +44,7 @@ import {
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
+import { GENERIC_FAILURE } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -210,14 +211,16 @@ describe("error handling", () => {
     await expect(fetchPaymentValidations()).rejects.toThrow("Not found");
   });
 
-  it("falls back to a status-based message when no JSON body is returned", async () => {
+  it("falls back to a Spanish message when no JSON body is returned", async () => {
+    // A proxy 502 or a gateway 504 answers with no body at all, and this
+    // message reached real screens. It used to be `Request failed with status
+    // 500` — English, and it named the HTTP code at the user. The status is
+    // still on the error for anyone debugging; see `lib/error-message.ts`.
     vi.mocked(global.fetch).mockResolvedValue(
       new Response(null, { status: 500 }),
     );
 
-    await expect(fetchPaymentValidations()).rejects.toThrow(
-      "Request failed with status 500",
-    );
+    await expect(fetchPaymentValidations()).rejects.toThrow(GENERIC_FAILURE);
   });
 
   it("includes the HTTP status on the thrown error", async () => {
