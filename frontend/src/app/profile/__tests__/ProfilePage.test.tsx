@@ -64,6 +64,20 @@ const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 const mockInvalidarOtrasSesiones = vi.fn();
 
+/**
+ * The exact shape a failing call reaches a screen as. Every failure route in
+ * `services/api.ts` throws `ApiClientError(message, status)`, so an error
+ * carrying a message and no status is a shape the client cannot produce.
+ */
+class MockApiClientError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiClientError";
+    this.status = status;
+  }
+}
+
 vi.mock("@/services/api", () => ({
   fetchMiPerfil: () => mockFetchMiPerfil(),
   actualizarMiPerfil: (data: unknown) => mockActualizarMiPerfil(data),
@@ -662,7 +676,13 @@ describe("ProfilePage — change password", () => {
   it("surfaces an error message when the recovery-email request fails (triangulation)", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
     mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
-    mockSolicitarRecuperacion.mockRejectedValueOnce(new Error("No se pudo enviar el correo."));
+    // The mail leg of /auth/recuperar-contrasenia failed on the server. A 5xx
+    // `detail` describes the server's failure, not the address on file, so the
+    // alert carries the product's sentence about the server rather than the
+    // body of the 500.
+    mockSolicitarRecuperacion.mockRejectedValueOnce(
+      new MockApiClientError("No se pudo enviar el correo.", 500),
+    );
 
     render(
       <ToastProvider>
@@ -673,7 +693,9 @@ describe("ProfilePage — change password", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /cambiar contraseña/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo enviar el correo.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "El servidor no pudo completar la operación. Intente nuevamente en unos minutos.",
+    );
   });
 });
 

@@ -1061,7 +1061,12 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitFor(() => {
       expect(mockAsignarAlumnoAHorario).toHaveBeenCalledTimes(2);
     });
-    expect(await screen.findByText("Error de red al asignar el alumno.")).toBeInTheDocument();
+    // The mock was already faithful — a 500 from the assign endpoint. What
+    // was fiction is the assertion: a 5xx `detail` describes the server's
+    // failure, so the row reports the server, not the body of the 500.
+    expect(
+      await screen.findByText("El servidor no pudo completar la operación. Intente nuevamente en unos minutos."),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/asignado correctamente/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/ya estaba asignado a este horario/i)).not.toBeInTheDocument();
   });
@@ -1102,7 +1107,11 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitFor(() => {
       expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(2);
     });
-    expect(await screen.findByText("Error de red al desasignar el alumno.")).toBeInTheDocument();
+    // Same as the assign case: the 500 mock was already faithful, only the
+    // expectation pinned the raw `detail`.
+    expect(
+      await screen.findByText("El servidor no pudo completar la operación. Intente nuevamente en unos minutos."),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Alumno desasignado del horario.")).not.toBeInTheDocument();
   });
 });

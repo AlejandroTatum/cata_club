@@ -67,11 +67,28 @@
 /**
  * The longest a `detail` may be and still be a sentence somebody wrote for a
  * form. Past this it is a log line that escaped — a serialized validation
- * payload, a chained exception, a stack summary. The longest legitimate one
- * measured is about 90 characters, so this leaves room for one longer sentence
- * and no more; a larger ceiling is just an untested window for a Spanish dump.
+ * payload, a chained exception, a stack summary.
+ *
+ * This was 120, on the strength of a survey that put the longest legitimate
+ * message at about 90 characters. That survey was incomplete. The refusal in
+ * `rol_servicio._asegurar_que_queda_otro_administrador` is 196 characters:
+ *
+ *   `No se puede quitar el rol ADMINISTRADOR: es el último administrador
+ *    activo del sistema y quedaría sin acceso de administración. Asigne el
+ *    rol ADMINISTRADOR a otra cuenta activa antes de continuar.`
+ *
+ * It arrives as a 400, it is hand-authored, it names no implementation, and
+ * it is the single most useful sentence that screen can produce — it is the
+ * only thing that tells an admin why the club would be locked out and what to
+ * do instead. At 120 the user got "No se pudo actualizar el rol." and no way
+ * to act. The ceiling was measuring the survey, not the product.
+ *
+ * 200 is the real longest message plus one clause of headroom. It stays a
+ * ceiling and not an open door: a dump is hundreds of characters, and the
+ * vocabulary gate below is what actually catches leaked identifiers — length
+ * was never the gate doing that work.
  */
-const MAX_DETAIL_LENGTH = 120;
+const MAX_DETAIL_LENGTH = 200;
 
 /**
  * Marks of a message addressed to a developer. Each pattern is here because a

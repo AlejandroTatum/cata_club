@@ -67,6 +67,20 @@ const mockExportNuevosPorPeriodoPdf = vi.fn();
 const mockExportAsistenciaReportePdf = vi.fn();
 const mockExportPagosReportePdf = vi.fn();
 
+/**
+ * The exact shape a failing call reaches a screen as. Every failure route in
+ * `services/api.ts` throws `ApiClientError(message, status)`, so an error
+ * carrying a message and no status is a shape the client cannot produce.
+ */
+class MockApiClientError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiClientError";
+    this.status = status;
+  }
+}
+
 vi.mock("@/services/api", () => ({
   fetchNuevosPorPeriodo: (...args: unknown[]) => mockFetchNuevosPorPeriodo(...args),
   fetchAttendanceRecords: (...args: unknown[]) => mockFetchAttendanceRecords(...args),
@@ -264,12 +278,19 @@ describe("ReportsPage — preview area", () => {
   });
 
   it("surfaces a fetch failure instead of showing a stale or empty preview as success", async () => {
-    mockFetchNuevosPorPeriodo.mockRejectedValue(new Error("Error al cargar reportes."));
+    // The report aggregation failed server-side on GET /reportes/nuevos —
+    // nothing the user typed into the date range caused it and nothing they
+    // can retype fixes it, so the 500's own `detail` has nothing to add.
+    mockFetchNuevosPorPeriodo.mockRejectedValue(
+      new MockApiClientError("Error al cargar reportes.", 500),
+    );
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     setRange("2026-01-01", "2026-12-31");
-    expect(await screen.findByText("Error al cargar reportes.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("El servidor no pudo completar la operación. Intente nuevamente en unos minutos."),
+    ).toBeInTheDocument();
   });
 });
 

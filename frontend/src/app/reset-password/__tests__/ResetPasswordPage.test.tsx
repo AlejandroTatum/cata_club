@@ -22,6 +22,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import ResetPasswordPage from "@/app/reset-password/page";
 import { buildPasswordRules } from "@/app/reset-password/reset-password-utils";
+// The mocked ApiClientError — see the vi.mock factory below.
+import { ApiClientError as MockApiClientError } from "@/services/api";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -51,10 +53,26 @@ vi.mock("@/contexts/ToastContext", () => ({
 }));
 
 const mockRestablecerContrasenia = vi.fn();
-vi.mock("@/services/api", () => ({
-  restablecerContrasenia: (token: string, nuevaContrasenia: string) =>
-    mockRestablecerContrasenia(token, nuevaContrasenia),
-}));
+vi.mock("@/services/api", () => {
+  // vi.mock is hoisted, so the class has to be defined inside the factory;
+  // it is re-imported below to build instances of the exact same class the
+  // mocked module exports. Every failure route in the real client throws
+  // ApiClientError(message, status) — an error with a message and no status
+  // is a shape it cannot produce.
+  class MockApiClientError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.name = "ApiClientError";
+      this.status = status;
+    }
+  }
+  return {
+    restablecerContrasenia: (token: string, nuevaContrasenia: string) =>
+      mockRestablecerContrasenia(token, nuevaContrasenia),
+    ApiClientError: MockApiClientError,
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -226,7 +244,14 @@ describe("ResetPasswordPage", () => {
 
   describe("failed submission", () => {
     it("shows the server error via toast.showError instead of an inline alert", async () => {
-      mockRestablecerContrasenia.mockRejectedValue(new Error("El token ha expirado."));
+      // An expired or already-used reset token is refused by
+      // POST /auth/restablecer-contrasenia as a 400 — the status that means
+      // "about what you sent". The frontend cannot know the token expired,
+      // so the backend's sentence is the only thing that tells the user to
+      // ask for a new link, and it survives both gates to reach the toast.
+      mockRestablecerContrasenia.mockRejectedValue(
+        new MockApiClientError("El token ha expirado.", 400),
+      );
 
       render(<ResetPasswordPage />);
       fillMatchingPasswords();

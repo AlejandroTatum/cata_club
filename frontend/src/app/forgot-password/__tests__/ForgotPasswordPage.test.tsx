@@ -88,6 +88,10 @@ describe("ForgotPasswordPage", () => {
 
   describe("failed submission", () => {
     it("shows the mapped API error via toast.showError instead of an inline alert", async () => {
+      // A 5xx from /auth/recuperar-contrasenia: the mail leg failed on the
+      // server. Its `detail` describes the server's failure, never the
+      // address the user typed, so what reaches the toast is the product's
+      // own sentence about the server — not the body of the 500.
       mockSolicitarRecuperacion.mockRejectedValue(
         new MockApiClientError("No se pudo procesar la solicitud.", 500),
       );
@@ -97,7 +101,7 @@ describe("ForgotPasswordPage", () => {
 
       await waitFor(() => {
         expect(mockShowError).toHaveBeenCalledWith(
-          "No se pudo procesar la solicitud.",
+          "El servidor no pudo completar la operación. Intente nuevamente en unos minutos.",
         );
       });
       expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
