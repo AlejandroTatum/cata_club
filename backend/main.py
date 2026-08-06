@@ -4,7 +4,7 @@ import re
 import uuid
 
 import redis
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import create_engine, text
@@ -12,6 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.soporte_transversal.circuito_breaker import resumen_circuitos
 from app.soporte_transversal.configuracion import settings, urls_documentacion
 from app.soporte_transversal.rate_limit import limiter
 from app.presentacion.routers import (
@@ -314,3 +316,39 @@ async def salud_lista():
         status.HTTP_503_SERVICE_UNAVAILABLE,
         f"Dependencias no disponibles: {', '.join(caidas)}.",
     )
+
+
+# --- Diagnóstico de circuit breakers -------------------------------------
+# Deliberadamente NO vive bajo /health: /health y /health/ready son sondas
+# ANÓNIMAS pensadas para que un orquestador (docker-compose, Kubernetes) las
+# golpee sin credenciales y decida si reiniciar o enrutar tráfico al
+# contenedor. Esta ruta, en cambio, exige rol -- ver el docstring de abajo
+# para el porqué -- y devuelve 403 a cualquiera sin ese rol. Colgarla de
+# /health invitaría a que alguien configure el healthcheck del orquestador
+# apuntando ahí (por analogía con /health/ready) y se coma un 403 constante
+# que un orquestador anónimo no sabe distinguir de una caída real del
+# servicio: un fallo de configuración se disfrazaría de incidente de
+# disponibilidad. Ruta administrativa aparte, prefijo `/diagnostico`, para
+# que esa clase de error de configuración ni siquiera sea posible por
+# analogía de nombre.
+@app.get(
+    "/diagnostico/circuitos",
+    tags=["Diagnóstico"],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def diagnostico_circuitos():
+    """Expone `resumen_circuitos()` (app/soporte_transversal/circuito_breaker.py)
+    tal cual, sin transformarlo ni envolverlo: ya es un dict JSON-serializable
+    con la forma `{nombre: {"estado": ..., "fallos_consecutivos": ...}}`, y
+    envolverlo no agregaría nada que este endpoint necesite.
+
+    Exige rol ADMINISTRADOR (`GestorPermisos`, que traduce a 403 vía
+    `PermisosInsuficientes` en `_MAPA_EXCEPCIONES`) a diferencia de las
+    sondas de arriba: a diferencia de un simple up/down, este resumen le
+    dice a quien lo lea QUÉ dependencia externa (Cloudinary, SMTP) está
+    caída y CUÁNDO conviene golpearla -- es inteligencia operativa sobre la
+    postura de resiliencia del sistema, no estado de salud genérico, y
+    exponerla sin autenticación sería regalarle a un atacante el mapa de
+    puntos débiles del backend en el peor momento posible.
+    """
+    return resumen_circuitos()

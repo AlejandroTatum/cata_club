@@ -184,6 +184,12 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/dashboard/stats"): frozenset({"ADMINISTRADOR"}),
+    # Resumen de circuit breakers (P2, feat/diagnostico-circuitos-http): le
+    # dice a quien la lea QUÉ dependencia externa está caída y CUÁNDO
+    # golpear -- inteligencia operativa, no un simple up/down -- por eso
+    # exige el mismo rol que el resto del panel administrativo y no vive
+    # entre las sondas anónimas de /health.
+    ("GET", "/diagnostico/circuitos"): frozenset({"ADMINISTRADOR"}),
     # Catálogo de descuentos (issue #11): TODO el CRUD es del ADMINISTRADOR
     # -- el catálogo es del club y la decisión de aplicar es del admin. El
     # listado incluye inactivos (vista de administración), por eso ni la
