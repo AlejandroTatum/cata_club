@@ -2,6 +2,10 @@
 
 - **Fecha:** 5 de agosto de 2026
 - **Verificado contra:** `main` en `51a6de9`
+- **Re-derivado después:** únicamente el ítem del conteo del panel, contra
+  `ad57c31` (PR #150, que cerró la mitad de backend) y el cableado de frontend
+  de este PR. **El resto de la lista no se re-verificó** y sigue apoyado en
+  `51a6de9`: vale el punto 1 de abajo, es hipótesis hasta re-derivarlo.
 - **Propósito:** una sola lista de lo que sigue abierto, con su evidencia, el
   comando que la reproduce y el test que lo cerraría; y una sola tabla de lo
   cerrado, cada fila sostenida por un candado ejecutable.
@@ -54,29 +58,6 @@ La severidad indica **consecuencia**, no esfuerzo:
 ## Abiertos
 
 ### Datos incorrectos
-
-- [ ] **El panel de control cuenta «por regularizar» a quien no tiene NINGUNA
-  membresía, no a quien no tiene membresía ACTIVA.** (Bloqueante)
-  - **Qué está mal:** la tarjeta del panel dice contar alumnos por
-    regularizar, pero la consulta excluye a toda persona con *alguna* fila de
-    membresía, aunque esté `VENCIDA` o `INACTIVA` — exactamente la gente que
-    debe regularizar (y pagar). Además cuenta a todo el padrón sin filtrar
-    rol, y el denominador de «membresías activas: X de Y» usa esa misma
-    población total. Alumnos que deben plata quedan invisibles.
-  - **Dónde:** `backend/app/presentacion/routers/dashboard_router.py:57-62`
-    (el `NOT EXISTS` sin predicado de estado; el denominador en `:33`);
-    la etiqueta en `frontend/src/app/dashboard/page.tsx:229`
-    (`hint="por regularizar"`).
-  - **Cómo se verificó:**
-    `rg -n "personas_sin_membresia" -A 5 backend/app/presentacion/routers/dashboard_router.py`
-    — no aparece `Membresia.estado` en el filtro.
-  - **Qué test lo cerraría:** uno por cada borde:
-    `test_alumno_con_membresia_vencida_cuenta_como_por_regularizar`,
-    `test_alumno_con_membresia_inactiva_cuenta_como_por_regularizar`,
-    `test_staff_sin_membresia_no_cuenta_como_por_regularizar`,
-    `test_total_personas_es_la_poblacion_que_puede_tener_membresia`.
-    **En curso** en una rama paralela al corte de este documento; si su PR
-    mergea, mover esta entrada a la tabla de cerrados con esos tests.
 
 - [ ] **`tipo_membresia.franja_horaria` es texto libre desincronizado del
   horario real.** (Alta)
@@ -376,6 +357,7 @@ backend: `cd backend && pytest "<archivo>::<test>"`.
 
 | Ítem | Cierre | Candado |
 |---|---|---|
+| El panel contaba «por regularizar» a quien no tenía NINGUNA membresía, y usaba todo el padrón como denominador de «membresías activas» | Dos mitades, dos PRs. #150 (backend): el `NOT EXISTS` exige estado `ACTIVA` y filtra por rol alumno, y nace `total_alumnos` junto a `total_personas` porque son dos preguntas distintas (`backend/app/presentacion/schemas/dashboard_schemas.py:11`). Este PR (frontend): el campo se declara en las dos copias de `DashboardStats` (`frontend/src/app/api/dashboard/route.ts:23`, `frontend/src/services/api.ts:842`) y la pantalla lo lee — el `%` y el «de N» pasan a `totalAlumnos` (`frontend/src/app/dashboard/page.tsx:128,226`), la tarjeta «Miembros» se queda en `totalPersonas` porque dice «personas registradas» y son todas | `backend/tests/test_dashboard_stats.py::test_total_alumnos_es_el_denominador_y_total_personas_cuenta_a_todos` + `::test_alumno_con_membresia_vencida_cuenta_como_por_regularizar`, `::test_alumno_con_membresia_inactiva_cuenta_como_por_regularizar`, `::test_staff_sin_membresia_no_cuenta_como_por_regularizar` · `frontend/src/app/dashboard/__tests__/DashboardPage.test.tsx` — «counts active memberships against the alumnos, and Miembros against the whole padrón» · 18/18. El del contrato es de tipos, no de runtime: la route es passthrough y el campo ya viajaba, así que `frontend/src/app/api/dashboard/__tests__/route.test.ts` — «declares and carries totalAlumnos» se pone rojo bajo `cd frontend && npm run type-check` (TS2353), no bajo vitest |
 | La selección de dependiente se perdía al navegar | Ya estaba en el código al corte anterior: `?alumno=` en la URL + `sessionStorage` por cuenta (`frontend/src/app/student/ManagedStudentPicker.tsx:43-150`); Pagos, Asistencia y Mi cuenta leen la misma fuente | `frontend/src/app/student/payments/__tests__/StudentPaymentsPage.test.tsx` — «the dependent selection survives navigation» y 3 hermanos · 27/27 |
 | El botón Atrás destruía la lista de asistencia | Una entrada real de historial por paso (`pushState`, `trainer/attendance/page.tsx:362`), `popstate` restaura plantel con marcas (`:517-533`), borrador en `sessionStorage` y aviso `beforeunload` (`:763`) | `frontend/src/app/trainer/attendance/__tests__/TrainerAttendancePage.test.tsx` — «returns Back from step 3 to the roll call, marks intact, instead of ejecting the trainer» y hermanos · 82/82 |
 | No existía deshacer | `frontend/src/lib/deferred-commit.ts` (`UNDO_WINDOW_MS = 8000`): la mutación espera, la UI avanza, «Deshacer» cancela algo que nunca ocurrió; `flush` en unmount/`pagehide`. En pagos; asistencia trae su propio deshacer de marcas | `frontend/src/lib/__tests__/deferred-commit.test.tsx` · 10/10 + `PaymentsPage.test.tsx` |

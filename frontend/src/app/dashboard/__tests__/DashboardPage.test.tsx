@@ -65,9 +65,13 @@ vi.mock("@/services/api", () => ({
   fetchPaymentValidations: () => mockFetchPaymentValidations(),
 }));
 
+// `totalPersonas` and `totalAlumnos` differ on purpose, and every assertion
+// below reads one or the other. A fixture where they were equal would let the
+// page read either field and stay green — the exact defect this suite locks.
 function statsFixture(overrides: Partial<Record<string, number>> = {}): Record<string, number> {
   return {
     totalPersonas: 44,
+    totalAlumnos: 40,
     activeMemberships: 17,
     pendingPayments: 14,
     todaySchedules: 3,
@@ -202,7 +206,7 @@ describe("DashboardPage — the sidebar's table of contents is gone", () => {
 // ---------------------------------------------------------------------------
 
 describe("DashboardPage — the three-stat pulse", () => {
-  it("shows members, active memberships against the total, and the 4-week rate", async () => {
+  it("shows members, active memberships against the alumnos, and the 4-week rate", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([todayRecord("1"), todayRecord("2")]);
 
     render(<DashboardPage />);
@@ -216,8 +220,36 @@ describe("DashboardPage — the three-stat pulse", () => {
     expect(await screen.findByText("100")).toBeInTheDocument();
     expect(screen.getByText("Miembros")).toBeInTheDocument();
     expect(screen.getByText("Membresías activas")).toBeInTheDocument();
-    expect(screen.getByText("de 44")).toBeInTheDocument();
+    expect(screen.getByText("de 40")).toBeInTheDocument();
     expect(screen.getByText("Asistencia · 4 semanas")).toBeInTheDocument();
+  });
+
+  /**
+   * The half of #150 that never reached the screen.
+   *
+   * The backend grew `total_alumnos` alongside `total_personas` precisely
+   * because the pulse asks two different questions: how many people are
+   * registered, and how many of the people who CAN hold a membership hold an
+   * active one. Administradores and entrenadores are in the first number and
+   * never in the second, so reusing `totalPersonas` as the denominator
+   * understates the ratio for as long as any staff account exists.
+   */
+  it("counts active memberships against the alumnos, and Miembros against the whole padrón", async () => {
+    mockFetchDashboardStats.mockResolvedValue(
+      statsFixture({ totalPersonas: 86, totalAlumnos: 84, activeMemberships: 21 }),
+    );
+
+    render(<DashboardPage />);
+
+    await screen.findByText("Membresías activas");
+    // 21 of 84 alumnos is 25%. Against all 86 registered personas the same
+    // club reads "de 86 · 24%" — which is the bug, not a rounding difference.
+    expect(screen.getByText("de 84")).toBeInTheDocument();
+    expect(screen.getByText("25% del total")).toBeInTheDocument();
+    // The Miembros tile answers the other question and keeps the full padrón:
+    // it is captioned "personas registradas" and there are 86 of them.
+    expect(screen.getByText("86")).toBeInTheDocument();
+    expect(screen.getByText("personas registradas")).toBeInTheDocument();
   });
 
   it("gives all three tiles the same internal grammar: label, figure, caption", async () => {
@@ -233,7 +265,8 @@ describe("DashboardPage — the three-stat pulse", () => {
     // caption line — and the caption says what the widget only gestured at.
     expect(screen.queryByRole("img", { name: /asistencia por semana/i })).toBeNull();
     expect(screen.getByText("personas registradas")).toBeInTheDocument();
-    expect(screen.getByText("39% del total")).toBeInTheDocument();
+    // 17 of the 40 alumnos, not of the 44 registered personas.
+    expect(screen.getByText("43% del total")).toBeInTheDocument();
   });
 });
 

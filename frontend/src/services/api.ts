@@ -833,7 +833,13 @@ export async function fetchStudentPortal(personaId: string): Promise<StudentPort
 
 /** Aggregate counts for the admin overview — see src/app/api/dashboard/route.ts for how each is composed. */
 export interface DashboardStats {
+  /** Everyone on the padrón, staff included — the "Miembros" tile. */
   totalPersonas: number;
+  /**
+   * The population that can hold a membership: the denominator of
+   * "MEMBRESÍAS ACTIVAS · X de Y". Not interchangeable with `totalPersonas`.
+   */
+  totalAlumnos: number;
   activeMemberships: number;
   pendingPayments: number;
   todaySchedules: number;
