@@ -34,6 +34,7 @@ import { useToast } from "@/contexts/ToastContext";
 import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui";
 import { buildPasswordRules } from "./reset-password-utils";
+import { toUserMessage } from "@/lib/error-message";
 
 /** `.authnote` for this screen — the expired-link exit the prototype asks for. */
 const EXPIRED_LINK_NOTE = (
@@ -103,7 +104,7 @@ function ResetPasswordContent(): React.ReactElement {
       setSuccess(true);
       toast.showSuccess("Contraseña actualizada correctamente");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Ocurrió un error inesperado.";
+      const message = toUserMessage(err, "Ocurrió un error inesperado.");
       toast.showError(message);
     } finally {
       setSubmitting(false);

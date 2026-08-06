@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { toUserMessage } from "@/lib/error-message";
 
 export interface AgeUpConfirmationProps {
   open: boolean;
@@ -75,7 +76,7 @@ export default function AgeUpConfirmation({
     try {
       await onConfirm(contrasenia);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Ocurrió un error inesperado.");
+      setError(toUserMessage(err, "Ocurrió un error inesperado."));
       setLoading(false);
     }
   }

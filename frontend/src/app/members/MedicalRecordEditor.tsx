@@ -7,6 +7,7 @@ import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import { ErrorState, LoadingState } from "@/components/ui";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
+import { toUserMessage, isNotFound } from "@/lib/error-message";
 
 interface MedicalRecordEditorProps {
   personaId: number;
@@ -52,12 +53,17 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : "No se pudo cargar la ficha médica.";
-        if (message.toLowerCase().includes("not found") || message.toLowerCase().includes("no encontrada")) {
+        // "No hay ficha todavía" is a 404, and that is the only thing that
+        // reliably says so. This used to sniff the message for "not found" —
+        // an ENGLISH substring, in a product that speaks Spanish, coming from
+        // a sentence the backend was free to reword at any time. Now that the
+        // translator refuses English text on principle, that check could not
+        // have survived anyway; the status was always the real signal.
+        if (isNotFound(error)) {
           // No medical record yet — allow creation of a new one.
           setState({ status: "ready", ficha: undefined as unknown as FichaMedicaEditable, isNew: true });
         } else {
-          setState({ status: "error", message });
+          setState({ status: "error", message: toUserMessage(error, "No se pudo cargar la ficha médica.") });
         }
       });
 
@@ -88,7 +94,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
       setReloadToken((n) => n + 1);
       showSuccess("Ficha médica guardada correctamente.");
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "No se pudo guardar la ficha médica.";
+      const message = toUserMessage(error, "No se pudo guardar la ficha médica.");
       setSaveError(message);
       showError(message);
     } finally {

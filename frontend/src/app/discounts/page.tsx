@@ -38,6 +38,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { fetchDescuentos, crearDescuento, actualizarDescuento } from "@/services/api";
 import type { DescuentoCatalogo } from "@/services/api";
 import { descuentoValorLabel } from "./discounts-utils";
+import { toUserMessage } from "@/lib/error-message";
 
 type Modalidad = "PORCENTAJE" | "MONTO";
 
@@ -74,7 +75,7 @@ export default function DiscountsPage(): React.ReactElement {
     try {
       setDescuentos(await fetchDescuentos());
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "No se pudo cargar el catálogo de descuentos.");
+      setLoadError(toUserMessage(err, "No se pudo cargar el catálogo de descuentos."));
     } finally {
       setLoading(false);
     }
@@ -141,7 +142,7 @@ export default function DiscountsPage(): React.ReactElement {
       closeForm();
       await loadCatalog();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "No se pudo guardar el descuento.");
+      setFormError(toUserMessage(err, "No se pudo guardar el descuento."));
     } finally {
       setSaving(false);
     }
@@ -158,7 +159,7 @@ export default function DiscountsPage(): React.ReactElement {
       );
       await loadCatalog();
     } catch (err) {
-      showError(err instanceof Error ? err.message : "No se pudo actualizar el descuento.");
+      showError(toUserMessage(err, "No se pudo actualizar el descuento."));
     } finally {
       setTogglingId(null);
     }

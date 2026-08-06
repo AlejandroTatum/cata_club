@@ -24,6 +24,7 @@ import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/
 import { Button } from "@/components/ui";
 import { solicitarRecuperacion, ApiClientError } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
+import { toUserMessage } from "@/lib/error-message";
 
 export default function ForgotPasswordPage(): React.ReactElement {
   const toast = useToast();
@@ -45,9 +46,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
       setSubmitted(true);
     } catch (err) {
       toast.showError(
-        err instanceof ApiClientError
-          ? err.message
-          : "No se pudo procesar la solicitud. Intente nuevamente.",
+        toUserMessage(err, "No se pudo procesar la solicitud. Intente nuevamente."),
       );
     } finally {
       setSubmitting(false);

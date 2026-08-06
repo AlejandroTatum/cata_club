@@ -182,6 +182,20 @@ function statusOf(error: unknown): number | null {
 }
 
 /**
+ * Whether the server said the thing does not exist.
+ *
+ * A few screens legitimately BRANCH on a 404 rather than report it — a missing
+ * medical record means "offer to create one", not "something went wrong". They
+ * used to detect it by looking for "not found" inside the message, which was
+ * an English substring in a Spanish product and broke the moment the backend
+ * reworded anything. Reading the status belongs here for the same reason
+ * reading the message does: one place decides what an error is saying.
+ */
+export function isNotFound(error: unknown): boolean {
+  return statusOf(error) === 404;
+}
+
+/**
  * Turns anything thrown into a sentence the user can read.
  *
  * @param error    Whatever reached the `catch`. Never assumed to be an `Error`.

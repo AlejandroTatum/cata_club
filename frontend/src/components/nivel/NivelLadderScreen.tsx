@@ -170,6 +170,7 @@ import {
   unassignedStudents,
 } from "@/app/nivel/nivel-page-utils";
 import type { UserRole } from "@/types/domain";
+import { toUserMessage } from "@/lib/error-message";
 
 /** How long a row shows its success label before reverting to the verb. */
 const SUCCESS_RESET_DELAY_MS = 2000;
@@ -428,7 +429,7 @@ function LadderContent({
       }, SUCCESS_RESET_DELAY_MS);
       resetTimersRef.current.set(student.id, timer);
     } catch (err) {
-      const message = err instanceof ApiClientError ? err.message : "Error al asignar el nivel.";
+      const message = toUserMessage(err, "Error al asignar el nivel.");
       setAssignError(message);
       showError(message);
     } finally {

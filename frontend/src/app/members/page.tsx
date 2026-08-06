@@ -97,6 +97,7 @@ import type { Grupo, BackendTipoRol, FichaMedicaEditable, TipoSangre } from "@/t
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import MedicalRecordEditor from "./MedicalRecordEditor";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
+import { toUserMessage } from "@/lib/error-message";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
@@ -281,7 +282,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
       // asking the user to reload the page themselves.
       onMembershipCreated();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error al crear la membresía.";
+      const message = toUserMessage(err, "Error al crear la membresía.");
       setMembershipError(message);
       showError(message);
     } finally {
@@ -376,7 +377,7 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
       setPaymentVoucherFile(null);
       showSuccess("Pago registrado correctamente.");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "No se pudo registrar el pago.";
+      const msg = toUserMessage(err, "No se pudo registrar el pago.");
       setPaymentError(msg);
       showError(msg);
     } finally {
@@ -850,7 +851,7 @@ function MemberEditDialog({
       });
       setInfoSuccess(true);
     } catch (error: unknown) {
-      setInfoError(error instanceof Error ? error.message : "No se pudieron guardar los cambios.");
+      setInfoError(toUserMessage(error, "No se pudieron guardar los cambios."));
     } finally {
       setInfoSaving(false);
     }
@@ -872,8 +873,13 @@ function MemberEditDialog({
         showSuccess(`Rol ${ROLE_LABELS[role]} asignado correctamente.`);
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "No se pudo actualizar el rol.";
-      // If the backend says the role is already present/absent, reconcile local state.
+      const message = toUserMessage(error, "No se pudo actualizar el rol.");
+      // If the backend says the role is already present/absent, reconcile local
+      // state. This reads the TRANSLATED message, so it only reconciles while
+      // the backend's sentence survives the vocabulary gate — it does today
+      // (plain Spanish on a 4xx), but a reworded detail carrying an underscore
+      // would silently stop reconciling. The durable fix is a status or an
+      // error code the frontend can branch on; see the PR's follow-ups.
       if (message.toLowerCase().includes("ya tiene el rol")) {
         setRoles((prev) => (prev.includes(role) ? prev : [...prev, role]));
       } else if (message.toLowerCase().includes("no tiene el rol")) {
@@ -897,7 +903,7 @@ function MemberEditDialog({
       setActivo(next);
       showSuccess(next ? "Cuenta activada correctamente." : "Cuenta desactivada correctamente.");
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "No se pudo cambiar el estado.";
+      const message = toUserMessage(error, "No se pudo cambiar el estado.");
       setStateError(message);
       showError(message);
     } finally {
@@ -972,10 +978,7 @@ function MemberEditDialog({
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        const message =
-          error instanceof Error
-            ? error.message
-            : "No se pudieron cargar los roles y el estado actuales de esta cuenta.";
+        const message = toUserMessage(error, "No se pudieron cargar los roles y el estado actuales de esta cuenta.");
         setRoleError(message);
         setStateError(message);
       })

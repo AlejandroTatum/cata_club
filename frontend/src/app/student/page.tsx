@@ -42,6 +42,7 @@ import {
 } from "./student-utils";
 import { CalendarDays, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { toUserMessage } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -511,7 +512,7 @@ function ActivePortalView({
         if (cancelled) return;
         setPagosState({
           status: "error",
-          message: error instanceof Error ? error.message : "No se pudo cargar el historial de pagos.",
+          message: toUserMessage(error, "No se pudo cargar el historial de pagos."),
         });
       });
     return () => {
@@ -758,7 +759,7 @@ function StudentPortalContent(): React.ReactElement {
         if (cancelled) return;
         setState({
           status: "error",
-          message: error instanceof Error ? error.message : "No se pudo cargar su cuenta.",
+          message: toUserMessage(error, "No se pudo cargar su cuenta."),
         });
       });
     return () => {
