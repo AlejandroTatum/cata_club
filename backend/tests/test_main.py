@@ -1,16 +1,20 @@
 """
 Tests a nivel de aplicación (`main.py`): endpoint de salud, middleware de
 cabeceras de seguridad (sdd/production-readiness, PR-09/PR-10), contrato de
-traducción de `IntegrityError` no manejado (sdd/borde-http-observable, PR1) y
-sonda de readiness `GET /health/ready` (sdd/borde-http-observable, PR2).
+traducción de `IntegrityError` no manejado (sdd/borde-http-observable, PR1),
+sonda de readiness `GET /health/ready` (sdd/borde-http-observable, PR2) y
+middleware de correlación `X-Request-ID` (sdd/borde-http-observable, PR3).
 """
 import logging
+import uuid
 
 import pytest
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 
 import main
+from app.soporte_transversal.configuracion import settings
 from main import app
 
 
@@ -271,3 +275,110 @@ def test_verificar_redis_ante_timeout_devuelve_false_sin_colgar(monkeypatch):
     monkeypatch.setattr(main._cliente_redis_sonda, "ping", _ping_agotado)
 
     assert main._verificar_redis() is False
+
+
+# --- Middleware de correlación X-Request-ID (PR3, sdd/borde-http-observable) -
+# `_CorrelacionDeRequestMiddleware` se registra entre `CORSMiddleware` y
+# `_CabecerasDeSeguridadMiddleware` (D6/D7 del diseño): toda respuesta debe
+# llevar `X-Request-ID`, respetando el valor entrante cuando es válido y
+# generando uno nuevo con `uuid4()` en caso contrario, sin desplazar a
+# Cabeceras del puesto más externo de la pila.
+def test_x_request_id_presente_en_respuesta_exitosa():
+    """Toda respuesta exitosa lleva el header `X-Request-ID` con un valor no
+    vacío, aunque el cliente no haya enviado ninguno."""
+    with TestClient(app) as cliente:
+        respuesta = cliente.get("/health")
+    assert respuesta.headers["x-request-id"]
+
+
+def test_x_request_id_entrante_valido_se_respeta():
+    """Si el cliente manda un `X-Request-ID` que valida contra el formato
+    aceptado, el servidor lo propaga tal cual en la respuesta, sin
+    reemplazarlo por uno generado."""
+    id_entrante = "3f8f1c2a-6b7d-4e9a-9c1a-1234567890ab"
+    with TestClient(app) as cliente:
+        respuesta = cliente.get("/health", headers={"X-Request-ID": id_entrante})
+    assert respuesta.headers["x-request-id"] == id_entrante
+
+
+@pytest.mark.parametrize(
+    "valor_entrante",
+    ["", "<script>alert(1)</script>", "a" * 300],
+    ids=["cadena-vacia", "caracteres-no-permitidos", "excesivamente-largo"],
+)
+def test_x_request_id_entrante_invalido_se_descarta_y_se_genera_uno_nuevo(valor_entrante):
+    """Un `X-Request-ID` entrante que no valida (vacío, con caracteres fuera
+    de la lista blanca, o excesivamente largo) NUNCA se refleja tal cual: un
+    id que viaja a los logs es superficie de inyección, así que no se confía
+    en el cliente. Se descarta y se genera un UUID nuevo del lado del
+    servidor en su lugar."""
+    with TestClient(app) as cliente:
+        respuesta = cliente.get("/health", headers={"X-Request-ID": valor_entrante})
+    nuevo_id = respuesta.headers["x-request-id"]
+    assert nuevo_id != valor_entrante
+    uuid.UUID(nuevo_id)  # levanta ValueError si no es un UUID válido
+
+
+def test_x_request_id_presente_en_preflight_options_cortocircuito_por_cors():
+    """Un preflight OPTIONS con `Origin` + `Access-Control-Request-Method`
+    coincidentes con un origen permitido lo resuelve `CORSMiddleware` en
+    corto-circuito, sin invocar `call_next` hacia el router. Igual debe
+    llevar `X-Request-ID`: prueba de que Correlación queda POR FUERA de CORS
+    en la pila (D6), así que el camino corto de CORS no se lo pierde."""
+    origen = settings.cors_origenes[0]
+    with TestClient(app) as cliente:
+        respuesta = cliente.options(
+            "/health",
+            headers={
+                "Origin": origen,
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+    assert respuesta.status_code == 200
+    assert respuesta.headers["x-request-id"]
+
+
+def test_cabeceras_de_seguridad_presentes_en_preflight_options_cortocircuito_por_cors():
+    """Complementa el test anterior: las 5 cabeceras de seguridad también
+    sobreviven al camino corto de CORS, prueba de que Cabeceras sigue siendo
+    la más externa de la pila incluso sobre una respuesta que CORS resuelve
+    sin llegar al router."""
+    origen = settings.cors_origenes[0]
+    with TestClient(app) as cliente:
+        respuesta = cliente.options(
+            "/health",
+            headers={
+                "Origin": origen,
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+    assert respuesta.headers["x-content-type-options"] == "nosniff"
+    assert respuesta.headers["content-security-policy"] == (
+        "default-src 'none'; frame-ancestors 'none'"
+    )
+
+
+def test_x_request_id_presente_en_respuesta_de_error_de_autenticacion(client_sin_token):
+    """Un 401 de autenticación fallida también lleva `X-Request-ID`: prueba
+    de que Correlación, igual que Cabeceras, post-procesa TODAS las
+    respuestas, incluidas las de error."""
+    respuesta = client_sin_token.get("/api/v1/geografia/paises")
+    assert respuesta.status_code == 401
+    assert respuesta.headers["x-request-id"]
+
+
+def test_orden_de_la_pila_de_middleware_es_el_declarado():
+    """Guardián de pila (D6): `app.user_middleware[0]` es el middleware MÁS
+    EXTERNO -- `add_middleware` de Starlette antepone cada registro nuevo, así
+    que el ÚLTIMO en registrarse queda más afuera. Esta igualdad de lista
+    COMPLETA (no una comprobación de presencia ni de índice aislado) protege
+    la invariante de que `_CabecerasDeSeguridadMiddleware` sigue siendo el más
+    externo, con `_CorrelacionDeRequestMiddleware` en el medio y
+    `CORSMiddleware` más adentro, pegado al router: cualquier reordenamiento
+    accidental, o la inserción de un middleware nuevo en cualquier punto de la
+    pila, hace fallar este test aunque el resto de la suite siga en verde."""
+    assert [m.cls for m in app.user_middleware] == [
+        main._CabecerasDeSeguridadMiddleware,
+        main._CorrelacionDeRequestMiddleware,
+        CORSMiddleware,
+    ]
