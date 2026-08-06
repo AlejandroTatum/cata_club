@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import ahora_club
-from app.dominio.enums import DiaSemana, EstadoMembresia, EstadoPago
-from app.dominio.modelos import HorarioEntrenamiento, Membresia, Pago, Persona
+from app.dominio.enums import DiaSemana, EstadoMembresia, EstadoPago, TipoRol
+from app.dominio.modelos import HorarioEntrenamiento, Membresia, Pago, Persona, Rol, Usuario
 from app.presentacion.schemas.dashboard_schemas import DashboardStatsDTO
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 
@@ -32,6 +32,18 @@ _WEEKDAY_MAP = {
 async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardStatsDTO:
     total_personas = db.query(func.count(Persona.id)).scalar() or 0
 
+    # Población que puede tener membresía: alumnos. Con Usuario, el rol ALUMNO
+    # decide; SIN Usuario también es alumno (un menor representado sin
+    # credenciales no recibe Usuario — `PersonaServicio.crear_representado` —
+    # pero entrena y paga membresía). Solo administrador y entrenador quedan
+    # fuera: nunca tienen membresía y distorsionan el denominador de
+    # "MEMBRESÍAS ACTIVAS · X de Y".
+    es_alumno = Persona.usuario.has(
+        Usuario.roles.any(Rol.tipo_rol == TipoRol.ALUMNO)
+    ) | ~Persona.usuario.has()
+
+    total_alumnos = db.query(func.count(Persona.id)).filter(es_alumno).scalar() or 0
+
     active_memberships = (
         db.query(func.count(Membresia.id))
         .filter(Membresia.estado == EstadoMembresia.ACTIVA)
@@ -54,15 +66,21 @@ async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardSta
         or 0
     )
 
+    # "Por regularizar" = alumnos sin membresía ACTIVA. Contar solo a quienes
+    # no tienen NINGUNA membresía histórica ocultaba a los vencidos/inactivos.
     personas_sin_membresia = (
         db.query(func.count(Persona.id))
-        .filter(~select(Membresia.id).where(Membresia.persona_id == Persona.id).correlate(Persona).exists())
+        .filter(
+            es_alumno,
+            ~Persona.membresias.any(Membresia.estado == EstadoMembresia.ACTIVA),
+        )
         .scalar()
         or 0
     )
 
     return DashboardStatsDTO(
         total_personas=total_personas,
+        total_alumnos=total_alumnos,
         active_memberships=active_memberships,
         pending_payments=pending_payments,
         today_schedules=today_schedules,
