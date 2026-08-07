@@ -1108,6 +1108,57 @@ describe("MembersPage — honest aggregate coverage", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The stats row doesn't print the same count twice.
+//
+// "Estudiantes" and "Con membresía activa" sit side by side in the same tile
+// row. The total student count was the tile's own value AND, verbatim, the
+// number inside the neighboring tile's hint ("de N estudiantes") — the same
+// figure spelled out twice a few centimeters apart.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — the stats row doesn't repeat the student count", () => {
+  it("doesn't echo the total student count inside the neighboring tile's hint", async () => {
+    const active = (id: string): MemberAccount => ({
+      ...ACCOUNT,
+      id,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          id: `${id}-e`,
+          membresia: {
+            tipo: "Mensual",
+            estado: "activa",
+            fechaInicio: "2026-07-01",
+            fechaFin: "2026-07-31",
+            monto: 50,
+            id: Number(id),
+          },
+        },
+      ],
+    });
+    // 2 accounts with an active membership + 1 without → 3 students total,
+    // 2 with an active membership: two distinct, unambiguous figures.
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [active("1"), active("2"), { ...ACCOUNT, id: "3" }],
+      niveles: [],
+    });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const label = await screen.findByText("Estudiantes");
+    const tile = label.closest("div") as HTMLElement;
+    // The total (3) is the "Estudiantes" tile's own value...
+    expect(within(tile).getByText("3")).toBeInTheDocument();
+    // ...and the old bug repeated it, verbatim, inside the tile beside it.
+    expect(screen.queryByText("de 3 estudiantes")).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Modal footer honesty (P0).
 //
 // The footer's red primary read "Guardar cambios" but its handler was

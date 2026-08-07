@@ -220,6 +220,36 @@ describe("PaymentsPage — opens on the pending queue", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 1b. The status badge doesn't echo the active tab
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — the status badge doesn't echo the active tab", () => {
+  it("hides the per-row status badge while the tab already fixes a single status", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
+    renderPage();
+
+    // "Pendientes" is the default tab: every visible row is already pending,
+    // so a per-row "Pendiente" badge would only restate the tab.
+    await screen.findByTestId("payments-table");
+    expect(within(queueTable()).queryByText("Pendiente")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("payments-cards")).queryByText("Pendiente"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the per-row status badge once the tab stops fixing a single status", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
+    renderPage();
+
+    await screen.findByTestId("payments-table");
+    fireEvent.click(screen.getByRole("button", { name: /^todas/i }));
+
+    expect(within(queueTable()).getByText("Pendiente")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 2. Keyboard operability
 // ---------------------------------------------------------------------------
 
@@ -677,21 +707,31 @@ describe("PaymentsPage — batch approval", () => {
     await parkOpenDetail();
   }
 
+  /**
+   * Scoped by row rather than by accessible name: an unreviewed checkbox no
+   * longer encodes the student's name in its own name (that reason is now
+   * shared, visible text — see below), so the row is what disambiguates it.
+   */
   function batchCheckbox(studentName: string): HTMLElement {
-    return within(queueTable()).getByRole("checkbox", {
-      name: new RegExp(`(incluir el pago de|revise el pago de) ${studentName}`, "i"),
-    });
+    const row = within(queueTable()).getByText(studentName).closest("tr");
+    if (!row) throw new Error(`No row found for ${studentName}`);
+    return within(row as HTMLElement).getByRole("checkbox");
   }
 
-  it("cannot select a payment that was never reviewed", async () => {
+  it("cannot select a payment that was never reviewed, and says why on screen", async () => {
     renderPage();
     await screen.findByTestId("payments-table");
 
-    expect(batchCheckbox("Juan Pérez")).toBeDisabled();
-    // The disabled control says why, rather than leaving the admin guessing.
-    expect(batchCheckbox("Juan Pérez")).toHaveAccessibleName(
-      /revise el pago de Juan Pérez antes de incluirlo/i,
-    );
+    const checkbox = batchCheckbox("Juan Pérez");
+    expect(checkbox).toBeDisabled();
+    // The reason is real text next to the checkbox now, not only an
+    // aria-label a sighted admin never hears — and it is the SAME string as
+    // the accessible name, via aria-labelledby, so the two cannot diverge.
+    // Both pending rows are unreviewed, so the reason is scoped to this row.
+    const reason = "Revisar antes de incluir en un lote";
+    const row = checkbox.closest("tr") as HTMLElement;
+    expect(within(row).getByText(reason)).toBeInTheDocument();
+    expect(checkbox).toHaveAccessibleName(reason);
     expect(screen.queryByRole("group", { name: /aprobación por lote/i })).not.toBeInTheDocument();
   });
 

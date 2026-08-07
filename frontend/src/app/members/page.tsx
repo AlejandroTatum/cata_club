@@ -1414,7 +1414,11 @@ export default function MembersPage(): React.ReactElement {
             hint={
               membresiasDegraded
                 ? "No disponible ahora mismo"
-                : `de ${stats.totalStudents} estudiantes`
+                // The count itself already sits in the "Estudiantes" tile
+                // right beside this one — repeating it here just echoed
+                // that figure. The population it's measured against still
+                // has to be named, because it is students, not accounts.
+                : "de los estudiantes"
             }
           />
           <StatCard label="Pagos pendientes" value={stats.pendingPayments} hint="por validar" />
