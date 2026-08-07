@@ -104,13 +104,11 @@ NIVELES = [
 MEMBRESIAS_TIPO = [
     {
         "categoria": "Mensual Infantil",
-        "franja_horaria": "15:00-18:00",
         "precio": 25.00,
         "modalidad": TipoModalidad.MENSUAL,
     },
     {
         "categoria": "Mensual Adultos",
-        "franja_horaria": "20:00-21:00",
         "precio": 40.00,
         "modalidad": TipoModalidad.MENSUAL,
     },
@@ -581,9 +579,11 @@ def main() -> None:
         #
         # Asignamos cada alumno a TODOS los horarios de su categoría de
         # membresía:
-        #   - "Mensual Infantil" (franja 15-18h) → FORMATIVO, INFANTIL,
-        #     JUVENIL (cierren a las 18:00).
-        #   - "Mensual Adultos" (franja 20-21h) → ADULTOS.
+        #   - "Mensual Infantil" → FORMATIVO, INFANTIL, JUVENIL.
+        #   - "Mensual Adultos" → ADULTOS.
+        # El mapeo va del nombre del plan a categorías de horario, no a horas:
+        # las horas de cada categoría salen de `CATEGORIA_METADATA` y son lo
+        # único que el portal del alumno muestra.
         # Idempotente: usa _obtener_o_crear con el unique (persona_id,
         # horario_id) para no duplicar al re-ejecutar el seed.
         # ==================================================================

@@ -31,6 +31,7 @@ import {
   isRepresentative,
   isMinor,
   buildWeeklyTrainingSchedule,
+  describeAssignedWindows,
   describeMembershipState,
   describePaymentSituation,
   findNextTrainingSessions,
@@ -92,9 +93,12 @@ function CarnetFact({ label, value }: { label: string; value: string }): React.R
 function Carnet({
   profile,
   coverageEnd,
+  horariosState,
 }: {
   profile: StudentProfileSummary;
   coverageEnd: string | null;
+  /** The same assignments the training panel reads — see `franja` below. */
+  horariosState: HorariosState;
 }): React.ReactElement {
   const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
   const level = levelTagLabel(profile);
@@ -109,7 +113,13 @@ function Carnet({
     facts.push({ label: "Socio desde", value: formatDate(profile.membership.fechaActivacion) });
   }
   if (profile.membership?.categoria) facts.push({ label: "Plan", value: profile.membership.categoria });
-  if (profile.membership?.franjaHoraria) facts.push({ label: "Franja", value: profile.membership.franjaHoraria });
+  // Derived from the assignments, never from the plan: the membership type is
+  // a price, and the `franja_horaria` column it used to be read from was a
+  // hand-typed String(80) that drifted from the club's real hours — an Adultos
+  // student read "20:00-21:00" here and "20:00 — 21:15" on the panel beside it.
+  const franja =
+    horariosState.status === "ready" ? describeAssignedWindows(horariosState.asignaciones) : null;
+  if (franja) facts.push({ label: "Franja", value: franja });
   if (profile.membership?.modalidad) {
     facts.push({
       label: "Modalidad",
@@ -421,10 +431,12 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
       {data.membershipPlans.map((plan) => (
         <div key={plan.id} className="card flex flex-col p-5">
           <h3 className="text-base font-bold text-ink">{plan.nombre}</h3>
+          {/* Name and price only. The plan used to print a franja too, but a
+              membership type is what the family pays, not when they train —
+              the hours come from the horarios the club assigns afterwards. */}
           <span className="mt-2 text-xl font-extrabold tabular-nums text-ink">
             {formatCurrency(plan.precio)}
           </span>
-          <p className="mt-1 text-xs text-ink-3">{plan.franjaHoraria}</p>
         </div>
       ))}
     </div>
@@ -664,7 +676,11 @@ function ActivePortalView({
             />
 
             <div className="flex flex-col gap-5">
-              <Carnet profile={selectedProfile} coverageEnd={coverageEnd} />
+              <Carnet
+                profile={selectedProfile}
+                coverageEnd={coverageEnd}
+                horariosState={horariosState}
+              />
 
               {/* Only on the minor's OWN account. Shown to a guardian looking
                   at their dependent it read "Su representante: Laura Vera" to

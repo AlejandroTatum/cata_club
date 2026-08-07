@@ -81,7 +81,7 @@ def test_no_puede_leer_pii_de_otra_persona(client_ajeno, victima):
 def test_no_puede_leer_pago_de_otra_persona(client_ajeno, victima, db_session):
     """Un pago expone monto y `voucher_url` (la evidencia bancaria en Cloudinary)."""
     tipo = TipoMembresia(
-        categoria="ADULTOS", franja_horaria="AM",
+        categoria="ADULTOS",
         precio=Decimal("30.00"), modalidad=TipoModalidad.MENSUAL,
     )
     db_session.add(tipo)

@@ -260,10 +260,17 @@ class AntecedentesClub(Base):
 # Membresías y Pagos
 # ---------------------------------------------------------------------------
 class TipoMembresia(Base):
+    """El plan que la familia paga: categoría comercial, precio y modalidad.
+
+    Sin franja horaria: la tenía como `String(80)` cargado a mano y se
+    desincronizó del horario real del club (declaraba 20:00-21:00 para
+    ADULTOS, que entrena hasta las 21:15). Las horas de un alumno salen de
+    los `AlumnoHorario` que el club le asignó, cuya `categoria` deriva de
+    `app.dominio.categoria_metadata` -- la eliminó `d1a5f8c30b72`.
+    """
     __tablename__ = "tipo_membresia"
     id: Mapped[int] = mapped_column(primary_key=True)
     categoria: Mapped[str] = mapped_column(String(80))
-    franja_horaria: Mapped[str] = mapped_column(String(80))
     precio: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     modalidad: Mapped[TipoModalidad] = mapped_column(SAEnum(TipoModalidad))
 

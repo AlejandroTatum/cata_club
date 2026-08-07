@@ -55,7 +55,7 @@ const pago = {
 
 const membresia = { id: 77, estado: "ACTIVA", tipoMembresiaId: 1 };
 
-const tipo = { id: 1, categoria: "MENSUAL", franjaHoraria: "TARDE" };
+const tipo = { id: 1, categoria: "MENSUAL" };
 
 beforeEach(() => {
   vi.spyOn(global, "fetch");

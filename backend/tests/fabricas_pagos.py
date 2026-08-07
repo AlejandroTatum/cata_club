@@ -49,12 +49,10 @@ def crear_tipo_membresia_orm(
     sesion,
     *,
     categoria: str = "Adultos",
-    franja_horaria: str = "18:00-19:00",
     precio: Decimal = Decimal("30.00"),
 ) -> TipoMembresia:
     tipo = TipoMembresia(
-        categoria=categoria, franja_horaria=franja_horaria,
-        precio=precio, modalidad=TipoModalidad.MENSUAL,
+        categoria=categoria, precio=precio, modalidad=TipoModalidad.MENSUAL,
     )
     sesion.add(tipo)
     sesion.flush()
@@ -118,7 +116,7 @@ def crear_tipo_membresia_api(client) -> dict:
     return client.post(
         "/api/v1/membresias/tipos",
         json={
-            "categoria": "Adultos", "franja_horaria": "18:00-19:00",
+            "categoria": "Adultos",
             "precio": "35.00", "modalidad": "MENSUAL",
         },
     ).json()

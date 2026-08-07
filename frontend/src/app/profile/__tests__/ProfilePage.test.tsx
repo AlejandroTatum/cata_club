@@ -328,7 +328,7 @@ describe("ProfilePage — student/representante summary view", () => {
           nivelNombre: "Nivel 3",
         },
         recentSessions: [],
-        membership: { id: 1, estado: "ACTIVA", personaId: 1, montoAplicado: "85.00", categoria: "Mensual", modalidad: "MENSUAL", franjaHoraria: "Tarde" },
+        membership: { id: 1, estado: "ACTIVA", personaId: 1, montoAplicado: "85.00", categoria: "Mensual", modalidad: "MENSUAL" },
       },
       representados: [],
       membershipPlans: [],
@@ -442,7 +442,7 @@ describe("ProfilePage — student/representante summary view", () => {
         fechaNacimiento: "1985-03-01",
           ranking: { status: "unavailable", reason: "forbidden" },
           recentSessions: [],
-          membership: { id: 9, estado: "ACTIVA", personaId: 1, montoAplicado: "85.00", categoria: "Mensual", modalidad: "MENSUAL", franjaHoraria: null },
+          membership: { id: 9, estado: "ACTIVA", personaId: 1, montoAplicado: "85.00", categoria: "Mensual", modalidad: "MENSUAL" },
         },
         representados: [
           {

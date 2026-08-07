@@ -82,7 +82,7 @@ describe("GET /api/student", () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse([])) // /personas/5/representados
       .mockResolvedValueOnce(jsonResponse([])) // /asistencias/horarios
-      .mockResolvedValueOnce(jsonResponse([{ id: 1, categoria: "Mensual", franjaHoraria: "Tarde", precio: "85.00", modalidad: "MENSUAL" }])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse([{ id: 1, categoria: "Mensual", precio: "85.00", modalidad: "MENSUAL" }])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse(self)) // /personas/5
       .mockResolvedValueOnce(jsonResponse(perfilDisponible)) // /ranking/5/perfil
       .mockResolvedValueOnce(jsonResponse([])) // /asistencias/persona/5
@@ -100,7 +100,7 @@ describe("GET /api/student", () => {
       ranking: { status: "available", nivelNombre: "Intermedios" },
     });
     expect(body.self.membership).toMatchObject({ estado: "ACTIVA", categoria: "Mensual", modalidad: "MENSUAL" });
-    expect(body.membershipPlans).toEqual([{ id: "1", nombre: "Mensual", precio: 85, franjaHoraria: "Tarde", modalidad: "MENSUAL" }]);
+    expect(body.membershipPlans).toEqual([{ id: "1", nombre: "Mensual", precio: 85, modalidad: "MENSUAL" }]);
   });
 
   it("marks a representado's ranking as unavailable/forbidden when the backend returns 403", async () => {

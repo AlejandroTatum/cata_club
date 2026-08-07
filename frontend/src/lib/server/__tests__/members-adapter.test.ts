@@ -51,7 +51,7 @@ const pago: BackendPagoListItem = {
 };
 
 const membresia: BackendMembresia = { id: 100, estado: "ACTIVA", tipoMembresiaId: 5 };
-const tipo: BackendTipoMembresia = { id: 5, categoria: "Mensual Adultos", franjaHoraria: "18:00-20:00" };
+const tipo: BackendTipoMembresia = { id: 5, categoria: "Mensual Adultos" };
 
 describe("buildMemberAccounts", () => {
   it("groups a representante with their representados as one account", () => {
@@ -93,7 +93,7 @@ describe("buildMemberAccounts", () => {
     const student = accounts.find((a) => a.id === "2")?.estudiantes[0];
     expect(student?.membresia).toEqual({
       id: 100,
-      tipo: "Mensual Adultos (18:00-20:00)",
+      tipo: "Mensual Adultos",
       estado: "activa",
       fechaInicio: "2026-07-01",
       fechaFin: "2026-07-31",
@@ -119,7 +119,7 @@ describe("buildMemberAccounts", () => {
     const student = accounts[0].estudiantes[0];
     expect(student.membresia).toEqual({
       id: 3,
-      tipo: "Mensual Adultos (18:00-20:00)",
+      tipo: "Mensual Adultos",
       estado: "activa",
       fechaInicio: "",
       fechaFin: "",

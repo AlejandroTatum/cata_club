@@ -79,7 +79,7 @@ def _crear_historial_completo(db_session, persona: Persona) -> dict:
         persona_id=persona.id, horario_id=horario.id,
     )
     tipo = TipoMembresia(
-        categoria="JUVENIL", franja_horaria="TARDE",
+        categoria="JUVENIL",
         precio=Decimal("30.00"), modalidad=TipoModalidad.MENSUAL,
     )
     db_session.add_all([asistencia, tipo])

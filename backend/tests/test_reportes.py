@@ -22,7 +22,7 @@ def _crear_tipo_membresia(client, modalidad="MENSUAL"):
     return client.post(
         "/api/v1/membresias/tipos",
         json={
-            "categoria": "Adultos", "franja_horaria": "18:00-19:00",
+            "categoria": "Adultos",
             "precio": "35.00", "modalidad": modalidad,
         },
     ).json()

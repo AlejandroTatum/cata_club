@@ -58,7 +58,7 @@ const pagoResponse = {
 
 const persona = { id: 3, nombres: "Sofia", apellidos: "Alumna" };
 const membresia = { estado: "ACTIVA", tipoMembresiaId: 5 };
-const tipos = [{ id: 5, categoria: "Mensual", franjaHoraria: "Mañana" }];
+const tipos = [{ id: 5, categoria: "Mensual" }];
 
 beforeEach(() => {
   vi.spyOn(global, "fetch");
@@ -152,7 +152,7 @@ describe("PUT /api/payments/[id] — approve", () => {
       id: "42",
       studentName: "Sofia Alumna",
       membershipPeriod: "01/07/2026 – 31/07/2026",
-      membershipType: "Mensual (Mañana)",
+      membershipType: "Mensual",
       expectedAmount: 85,
       paymentMethod: "Transferencia",
       uploadedAt: "2026-06-28T10:30:00Z",

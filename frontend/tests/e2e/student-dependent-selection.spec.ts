@@ -64,7 +64,6 @@ function dependent(personaId: string, nombres: string, fechaNacimiento: string) 
       montoAplicado: "40.00",
       categoria: `Plan de ${nombres}`,
       modalidad: "MENSUAL",
-      franjaHoraria: "TARDE",
       fechaActivacion: "2026-01-10",
       fechaFin: "2026-12-31",
     },

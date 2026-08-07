@@ -77,7 +77,7 @@ describe("buildPaymentValidationRequest", () => {
   };
 
   const membresia: BackendMembresia = { id: 100, estado: "ACTIVA", tipoMembresiaId: 5 };
-  const tipo: BackendTipoMembresia = { id: 5, categoria: "Mensual Adultos", franjaHoraria: "18:00-20:00" };
+  const tipo: BackendTipoMembresia = { id: 5, categoria: "Mensual Adultos" };
 
   it("populates responsablePagoName when provided", () => {
     const request = buildPaymentValidationRequest(pago, "Sofia Martinez", membresia, tipo, "Carlos Martinez");

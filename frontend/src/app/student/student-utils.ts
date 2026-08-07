@@ -360,8 +360,7 @@ function clubMinutesOfDay(now: Date): number {
  * student to all three, which is why the seed hands one child fifteen
  * assignments for five days. Listing them raw would tell a parent their
  * daughter has three sessions on Monday; adjacent windows are therefore merged
- * into the one block she actually attends — the same 15:00-18:00 her
- * membership's `franjaHoraria` states.
+ * into the one block she actually attends — 15:00-18:00.
  *
  * Rows whose weekday or times the backend sent in a shape this build does not
  * recognise are dropped rather than rendered as "undefined".
@@ -408,6 +407,41 @@ export function buildWeeklyTrainingSchedule(
     }
   }
   return slots;
+}
+
+/**
+ * The time band the club actually trains this student in, for the carnet.
+ *
+ * There is no such thing as "the student's franja" as a single stored value:
+ * a student holds one `AlumnoHorario` row per día per categoría, and the club
+ * routinely puts one child in FORMATIVO + INFANTIL + JUVENIL at once. So the
+ * band is derived from those rows through `buildWeeklyTrainingSchedule` — the
+ * very function the "Próximos entrenamientos" list is built from — which is
+ * what keeps the two readings on this screen from disagreeing.
+ *
+ * Distinct windows are listed rather than collapsed into their outer bounds:
+ * a student training 15:00-16:00 and 20:00-21:15 is not training from 15:00
+ * to 21:15, and printing that range would invent five hours of class.
+ *
+ * Returns `null` when the club has assigned no schedule — the carnet then
+ * omits the fact instead of showing a band nobody committed to.
+ */
+export function describeAssignedWindows(
+  rows: Pick<AlumnoHorario, "horarioDia" | "horarioHoraInicio" | "horarioHoraFin">[],
+): string | null {
+  const windows = new Map<string, { start: string; end: string }>();
+  for (const slot of buildWeeklyTrainingSchedule(rows)) {
+    windows.set(`${slot.horaInicio}-${slot.horaFin}`, {
+      start: slot.horaInicio,
+      end: slot.horaFin,
+    });
+  }
+  if (windows.size === 0) return null;
+
+  return [...windows.values()]
+    .sort((a, b) => minutesOf(a.start) - minutesOf(b.start) || minutesOf(a.end) - minutesOf(b.end))
+    .map((window) => `${window.start} — ${window.end}`)
+    .join(" · ");
 }
 
 /**

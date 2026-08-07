@@ -11,7 +11,6 @@ from app.presentacion.schemas.descuento_schemas import DescuentoAplicadoResponse
 # --- TipoMembresia ---
 class TipoMembresiaCreateDTO(BaseModel):
     categoria: str
-    franja_horaria: str
     precio: Decimal = Field(..., gt=0)
     modalidad: TipoModalidad
 

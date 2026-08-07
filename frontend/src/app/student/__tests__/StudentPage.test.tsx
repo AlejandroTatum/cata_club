@@ -266,7 +266,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
       self: {
         ...PORTAL.self!,
         ranking: { status: "available", nivelRankingId: 3, nivelNombre: "Nivel 3" },
-        membership: { id: 4, estado: "ACTIVA", personaId: 9, montoAplicado: "25.00", categoria: "Mensual", modalidad: "MENSUAL", franjaHoraria: "Tarde" },
+        membership: { id: 4, estado: "ACTIVA", personaId: 9, montoAplicado: "25.00", categoria: "Mensual", modalidad: "MENSUAL" },
       },
     });
 
@@ -332,12 +332,14 @@ describe("StudentPage — the club membership card (carnet)", () => {
           montoAplicado: "25.00",
           categoria: "Mensual",
           modalidad: "MENSUAL",
-          franjaHoraria: "Tarde",
           fechaActivacion: "2026-03-18",
         },
       },
     });
     mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
+    // "Franja" is one of the six cells, and it only exists when the club has
+    // assigned a schedule to derive it from.
+    mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
 
     render(<StudentPage />);
 
@@ -365,11 +367,111 @@ describe("StudentPage — the club membership card (carnet)", () => {
 });
 
 /**
+ * The carnet's "Franja" and the "Próximos entrenamientos" panel are two
+ * inches apart on one screen, and they used to disagree: the card printed
+ * `tipo_membresia.franja_horaria`, a hand-typed String(80) that nothing kept
+ * in sync, while the panel derived the real window from the horarios the club
+ * assigned. An Adultos student read "20:00-21:00" on the card and
+ * "20:00 — 21:15" on the list.
+ *
+ * These assertions are about COHERENCE, not existence: they read the window
+ * off the panel and demand the card say the same thing. Dropping the column
+ * without deriving its replacement leaves them red.
+ */
+describe("StudentPage — the carnet's franja agrees with the assigned schedule", () => {
+  const ADULTOS_MEMBERSHIP = {
+    id: 4,
+    estado: "ACTIVA",
+    personaId: 9,
+    montoAplicado: "40.00",
+    categoria: "Mensual Adultos",
+    modalidad: "MENSUAL" as const,
+  };
+
+  function portalForAdultos() {
+    return { ...PORTAL, self: { ...PORTAL.self!, membership: ADULTOS_MEMBERSHIP } };
+  }
+
+  function franjaValue(carnet: HTMLElement): string | undefined {
+    return within(carnet).getByText("Franja").parentElement?.lastElementChild?.textContent ?? undefined;
+  }
+
+  it("states the window the club assigned (21:15), not the plan's stale 21:00", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalForAdultos());
+    mockFetchHorariosPorAlumno.mockResolvedValue([
+      asignacion("LUNES", "20:00:00", "21:15:00", 1),
+      asignacion("MIERCOLES", "20:00:00", "21:15:00", 2),
+    ]);
+
+    render(<StudentPage />);
+
+    const panel = await screen.findByTestId("student-situation");
+    await waitFor(() => {
+      expect(within(panel).getAllByText("20:00 — 21:15").length).toBeGreaterThan(0);
+    });
+    const windowOnTheList = within(panel).getAllByText("20:00 — 21:15")[0].textContent;
+
+    const carnet = await screen.findByTestId("student-carnet");
+    await waitFor(() => {
+      expect(franjaValue(carnet)).toBe(windowOnTheList);
+    });
+    expect(within(carnet).queryByText(/21:00/)).not.toBeInTheDocument();
+  });
+
+  it("merges the three contiguous afternoon blocks into the one window the panel shows", async () => {
+    // Sofia Vera's real shape in the club's data: one student assigned to
+    // FORMATIVO + INFANTIL + JUVENIL at once. Three rows, one window.
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalForAdultos());
+    mockFetchHorariosPorAlumno.mockResolvedValue([
+      asignacion("MARTES", "15:00:00", "16:00:00", 1),
+      asignacion("MARTES", "16:00:00", "17:00:00", 2),
+      asignacion("MARTES", "17:00:00", "18:00:00", 3),
+    ]);
+
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    await waitFor(() => {
+      expect(franjaValue(carnet)).toBe("15:00 — 18:00");
+    });
+  });
+
+  it("keeps two windows apart rather than inventing the range that spans their gap", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalForAdultos());
+    mockFetchHorariosPorAlumno.mockResolvedValue([
+      asignacion("MARTES", "15:00:00", "16:00:00", 1),
+      asignacion("JUEVES", "20:00:00", "21:15:00", 2),
+    ]);
+
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    await waitFor(() => {
+      expect(franjaValue(carnet)).toBe("15:00 — 16:00 · 20:00 — 21:15");
+    });
+    expect(within(carnet).queryByText("15:00 — 21:15")).not.toBeInTheDocument();
+  });
+
+  it("omits the fact entirely when the club assigned no schedule", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalForAdultos());
+    mockFetchHorariosPorAlumno.mockResolvedValue([]);
+
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    await waitFor(() => {
+      expect(within(carnet).getByText("Plan")).toBeInTheDocument();
+    });
+    expect(within(carnet).queryByText("Franja")).not.toBeInTheDocument();
+  });
+});
+
+/**
  * The panel the user asked for: "que le diga los próximos entrenamientos".
  *
  * Every date on it is the next calendar occurrence of a slot the club actually
  * assigned to this student (`AlumnoHorario`), never a projection off the
- * membership's `franjaHoraria` — which is a time range with no weekday in it.
+ * membership plan — a price carries no weekday and no hour.
  */
 describe("StudentPage — próximos entrenamientos", () => {
   it("lists the next occurrences of the schedule the club assigned, soonest first", async () => {
@@ -461,8 +563,6 @@ describe("StudentPage — próximos entrenamientos", () => {
           montoAplicado: "25.00",
           categoria: "Mensual Infantil",
           modalidad: "MENSUAL",
-          // A time range with no weekday in it — not a schedule.
-          franjaHoraria: "15:00-18:00",
         },
       },
     });
@@ -534,7 +634,6 @@ describe("StudentPage — the payment band", () => {
     montoAplicado: "35.00",
     categoria: "Mensual",
     modalidad: "MENSUAL" as const,
-    franjaHoraria: "15:00-18:00",
   };
 
   function portalWithMembership(overrides: Record<string, unknown> = {}) {
@@ -716,7 +815,7 @@ describe("StudentPage — membership state on the carnet", () => {
   it("shows membresía pendiente for an INACTIVA membership", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
-      self: { ...PORTAL.self!, membership: { id: 5, estado: "INACTIVA", personaId: 9, montoAplicado: "85.00", categoria: "Mensual", modalidad: "MENSUAL", franjaHoraria: null } },
+      self: { ...PORTAL.self!, membership: { id: 5, estado: "INACTIVA", personaId: 9, montoAplicado: "85.00", categoria: "Mensual", modalidad: "MENSUAL" } },
     });
 
     render(<StudentPage />);

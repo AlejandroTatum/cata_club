@@ -30,7 +30,7 @@ def _crear_persona(db_session, cedula: str) -> Persona:
 
 def _crear_tipo_membresia(db_session) -> TipoMembresia:
     tipo = TipoMembresia(
-        categoria="ADULTOS", franja_horaria="AM",
+        categoria="ADULTOS",
         precio=Decimal("30.00"), modalidad=TipoModalidad.MENSUAL,
     )
     db_session.add(tipo)
