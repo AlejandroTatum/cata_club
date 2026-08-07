@@ -26,7 +26,7 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
 )
 from app.infraestructura.repositorios.antecedentes_club_repositorio import AntecedentesClubRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
-from app.infraestructura.repositorios.ranking_repositorio import NotificacionRepositorio
+from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.presentacion.schemas.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentCreateDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import (

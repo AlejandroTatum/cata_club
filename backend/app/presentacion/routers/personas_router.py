@@ -14,13 +14,11 @@ from app.presentacion.schemas.persona_schemas import (
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
-from app.presentacion.schemas.ranking_schemas import AsignarNivelDTO, RankingResponseDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
 from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.antecedentes_club_servicio import AntecedentesClubServicio
-from app.servicios_negocio.ranking_servicio import RankingServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.politica_acceso import (
@@ -306,7 +304,7 @@ async def obtener_persona(
 # crece con el padrón), y hay dos llamadores que necesitan el conjunto
 # COMPLETO, no una página: `frontend/src/app/api/student/route.ts:85,96,108`
 # (arma el perfil de cada hijo) y
-# `backend/app/servicios_negocio/ranking_servicio.py:275,291` (fan-out de
+# `backend/app/servicios_negocio/notificacion_servicio.py` (fan-out de
 # notificaciones a representante + hijos).
 @router.get(
     "/{persona_id}/representados",
@@ -414,35 +412,6 @@ async def cambiar_estado_persona(
     persona_id: int, datos: EstadoPersonaDTO, db: Session = Depends(obtener_sesion)
 ):
     return PersonaServicio(db).cambiar_estado(persona_id, datos.activo)
-
-
-# --- Nivel del alumno (E03-RF002) -------------------------------------------
-# UNA operación idempotente donde antes había dos endpoints en
-# `ranking_router` (`POST /ranking/asignar-nivel-inicial` y `PATCH
-# /ranking/{persona_id}/mover-de-nivel`) y, en consecuencia, dos verbos en la
-# pantalla de niveles ("Asignar" / "Mover") para lo que el usuario vive como
-# una sola acción. Aquella división no describía nada del negocio: existía
-# solo porque el dato tiene tres estados (sin fila de `Ranking`, fila con
-# nivel NULL, fila con nivel) y cada endpoint cubría un subconjunto.
-#
-# Vive en ESTE router porque el recurso es la persona -- el nivel es un
-# atributo suyo, igual que `/estado` o `/cuenta/estado`, que son sus hermanos
-# de forma (PATCH, cuerpo de un solo campo, rol declarado acá). Lo que NO se
-# duplica es la lógica: la regla de negocio (capacidad, existencia, upsert)
-# sigue viviendo en `RankingServicio`, su dueño.
-@router.patch(
-    "/{persona_id}/nivel", response_model=RankingResponseDTO,
-    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
-)
-async def asignar_nivel(
-    persona_id: int, datos: AsignarNivelDTO, db: Session = Depends(obtener_sesion)
-):
-    """Deja al alumno en el nivel indicado, haya tenido nivel o no.
-
-    `{"nivel_ranking_id": null}` lo deja SIN nivel: es la única forma de
-    desasignar que existe: el endpoint de movimiento que esto reemplaza
-    exigía un destino, así que un alumno mal asignado no se podía sacar."""
-    return RankingServicio(db).asignar_nivel(persona_id, datos.nivel_ranking_id)
 
 
 # --- AntecedentesClub (E01-RF008): existían los DTOs pero ningún endpoint ---

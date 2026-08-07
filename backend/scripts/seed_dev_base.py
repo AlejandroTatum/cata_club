@@ -8,7 +8,6 @@ Creates:
   - 1 Admin account         (admin@cataclub.com / admin12345)
   - 1 Trainer account       (entrenador@cataclub.com / trainer12345)
   - 26 weekly schedules     (5 categories; Competitivo also runs Saturday)
-  - 11 ranking levels       (1A .. 10)
   - 2 membership types      (Mensual Infantil, Mensual Adultos)
   - 2 representantes (padres/tutores): Laura con 2 hijos, Carlos con 1
   - 4 self-managed students (sin representante): Ana, Luis y Maria menores
@@ -39,11 +38,9 @@ from app.dominio.modelos import (
     Usuario,
     Rol,
     HorarioEntrenamiento,
-    NivelRanking,
     TipoMembresia,
     Membresia,
     Pago,
-    Ranking,
     AlumnoHorario,
 )
 from app.dominio.enums import (
@@ -82,23 +79,6 @@ HORARIOS = [
 ]
 
 # ---------------------------------------------------------------------------
-# NivelRanking (1 = best ... 11 = lowest)
-# ---------------------------------------------------------------------------
-NIVELES = [
-    (1, "1A"),
-    (2, "1B"),
-    (3, "2"),
-    (4, "3"),
-    (5, "4"),
-    (6, "5"),
-    (7, "6"),
-    (8, "7"),
-    (9, "8"),
-    (10, "9"),
-    (11, "10"),
-]
-
-# ---------------------------------------------------------------------------
 # TipoMembresia
 # ---------------------------------------------------------------------------
 MEMBRESIAS_TIPO = [
@@ -134,7 +114,6 @@ ALUMNOS = [
         "contrasenia": "alumno123",
         "telefono": "0971111111",
         "edad_anios": 16,
-        "nivel_ranking_id": 2,
         "membresia_categoria": "Mensual Infantil",
     },
     {
@@ -145,7 +124,6 @@ ALUMNOS = [
         "contrasenia": "alumno123",
         "telefono": "0972222222",
         "edad_anios": 16,
-        "nivel_ranking_id": 1,
         "membresia_categoria": "Mensual Infantil",
     },
     {
@@ -156,7 +134,6 @@ ALUMNOS = [
         "contrasenia": "alumno123",
         "telefono": "0973333333",
         "edad_anios": 16,
-        "nivel_ranking_id": 6,
         "membresia_categoria": "Mensual Adultos",
     },
     {
@@ -170,7 +147,6 @@ ALUMNOS = [
         "contrasenia": "alumno123",
         "telefono": "0974444444",
         "edad_anios": 27,
-        "nivel_ranking_id": 5,
         "membresia_categoria": "Mensual Adultos",
     },
 ]
@@ -181,7 +157,7 @@ ALUMNOS = [
 # Antes cada representante declaraba un único `"hijo"`, así que la familia
 # con varios dependientes no existía en ningún lado y el selector de perfil
 # del portal del representante — que solo aparece a partir de 2 perfiles —
-# no se podía probar. Laura tiene 2 hijos con edad, nivel y categoría de
+# no se podía probar. Laura tiene 2 hijos con edad y categoría de
 # membresía distintos (para que el selector muestre datos realmente
 # diferentes) y Carlos se queda con 1 para no perder el caso de un único
 # representado.
@@ -203,7 +179,6 @@ REPRESENTANTES = [
                 "correo": "sofia@cataclub.com",
                 "telefono": "0981000011",
                 "edad_anios": 10,
-                "nivel_ranking_id": 4,
                 "membresia_categoria": "Mensual Infantil",
             },
             {
@@ -213,7 +188,6 @@ REPRESENTANTES = [
                 "correo": "martin@cataclub.com",
                 "telefono": "0981000014",
                 "edad_anios": 16,
-                "nivel_ranking_id": 7,
                 "membresia_categoria": "Mensual Adultos",
             },
         ],
@@ -234,7 +208,6 @@ REPRESENTANTES = [
                 "correo": "diego@cataclub.com",
                 "telefono": "0981000013",
                 "edad_anios": 12,
-                "nivel_ranking_id": 3,
                 "membresia_categoria": "Mensual Infantil",
             },
         ],
@@ -357,21 +330,7 @@ def main() -> None:
         print(f"[seed] Horarios creados: {horario_count} (de 26 posibles)")
 
         # ==================================================================
-        # 4. NivelRanking (1 = best ... 11 = lowest)
-        # ==================================================================
-        nivel_count = 0
-        for numero, nombre in NIVELES:
-            _, created = _obtener_o_crear(
-                db, NivelRanking,
-                NivelRanking.numero_nivel == numero,
-                {"numero_nivel": numero, "nombre": nombre},
-            )
-            if created:
-                nivel_count += 1
-        print(f"[seed] Niveles de ranking creados: {nivel_count} (de 11 posibles)")
-
-        # ==================================================================
-        # 5. TipoMembresia
+        # 4. TipoMembresia
         # ==================================================================
         tipos_membresia = {}
         for tm_data in MEMBRESIAS_TIPO:
@@ -385,7 +344,7 @@ def main() -> None:
                 print(f"[seed] TipoMembresia creado: {tm_data['categoria']}")
 
         # ==================================================================
-        # 6. Representantes + hijos
+        # 5. Representantes + hijos
         # ==================================================================
         rol_alumno, _ = _obtener_o_crear(
             db, Rol, Rol.tipo_rol == TipoRol.ALUMNO,
@@ -506,17 +465,12 @@ def main() -> None:
                         membresia_id=membresia.id,
                     ))
 
-                ranking = Ranking(
-                    persona_id=hijo_persona.id,
-                    nivel_ranking_id=hijo["nivel_ranking_id"],
-                )
-                db.add(ranking)
                 hijos_creados += 1
 
         print(f"[seed] Representantes creados: {representantes_creados}, Hijos creados: {hijos_creados}")
 
         # ==================================================================
-        # 7. Self-managed students (Ana, Luis, Maria menores; Pedro adulto)
+        # 6. Self-managed students (Ana, Luis, Maria menores; Pedro adulto)
         # ==================================================================
         for alu in ALUMNOS:
             existing_user = db.query(Usuario).filter(Usuario.correo == alu["correo"]).first()
@@ -553,7 +507,7 @@ def main() -> None:
                     tipo_membresia_id=tm.id,
                 )
                 db.add(membresia)
-                # `flush()` obligatorio: el bloque 8 arma `alumno_horario` a
+                # `flush()` obligatorio: el bloque 7 arma `alumno_horario` a
                 # partir de una CONSULTA de membresías. Sin volcarla, la
                 # sesión (autoflush desactivado) todavía no la ve y el alumno
                 # recién creado se queda sin horarios hasta la corrida
@@ -562,16 +516,10 @@ def main() -> None:
                 # ya hacía este flush; este no.
                 db.flush()
 
-            ranking = Ranking(
-                persona_id=alu_persona.id,
-                nivel_ranking_id=alu["nivel_ranking_id"],
-            )
-            db.add(ranking)
-
             print(f"[seed] Alumno creado: {alu['nombres']} {alu['apellidos']} ({alu['correo']})")
 
         # ==================================================================
-        # 8. Asignaciones alumno_horario (para que el wizard de asistencia
+        # 7. Asignaciones alumno_horario (para que el wizard de asistencia
         # muestre estudiantes al seleccionar un horario). Sin este bloque,
         # la tabla `alumno_horario` queda vacía y `/asistencias/horarios/:id
         # /alumnos` responde `[]` para cualquier horario — el entrenador ve

@@ -1,6 +1,6 @@
 """Dev-only bulk seed: generates a moderate-volume, realistic dataset to
 manually test every flow end-to-end (admin dashboard, members, groups,
-payments, attendance, trainer ranking, student portal).
+payments, attendance, student portal).
 
 Unlike seed_dev_base.py which runs automatically on container start and
 creates the minimum viable dataset, this script must be run manually:
@@ -8,10 +8,9 @@ creates the minimum viable dataset, this script must be run manually:
     docker compose exec backend uv run python scripts/seed_dev_bulk.py
 
 It depends on seed_dev_base.py having already run at least once (needs the
-ENTRENADOR account, the 11 NivelRanking rows, the 26 HorarioEntrenamiento
-schedules, and the 2 TipoMembresia rows it creates). If any of those are
-missing, this script prints a warning and skips the dependent section instead
-of crashing.
+ENTRENADOR account, the 26 HorarioEntrenamiento schedules, and the 2
+TipoMembresia rows it creates). If any of those are missing, this script
+prints a warning and skips the dependent section instead of crashing.
 
 Creates (idempotent -- safe to run multiple times, following the same
 `_obtener_o_crear` check-before-insert pattern as seed_dev_base.py):
@@ -19,8 +18,6 @@ Creates (idempotent -- safe to run multiple times, following the same
   - ~16 representante (parent) accounts, each with 1-4 managed children.
   - ~20 self-managed adult student accounts (student IS their own payer).
   - Total students across everyone: ~55-65.
-  - Students spread across all 11 real niveles de ranking; a handful left
-    unassigned (nivel_ranking_id = None) to exercise "sin grupo" in /groups.
   - Membresias in a mix of estados (ACTIVA / VENCIDA / INACTIVA), across both
     TipoMembresia categories seeded by seed_dev_base.py.
   - Pagos in a mix of estados (APROBADO / PENDIENTE_VALIDACION / RECHAZADO),
@@ -48,8 +45,6 @@ from app.dominio.modelos import (
     Pago,
     ComprobantePago,
     HorarioEntrenamiento,
-    NivelRanking,
-    Ranking,
     Asistencia,
     AlumnoHorario,
 )
@@ -113,9 +108,6 @@ HIJOS_POR_REPRESENTANTE = [3, 2, 4, 1, 3, 2, 4, 1, 2, 3, 2, 4, 1, 3, 2, 2]
 # responsable de pago, matching la regla de dominio ya documentada en el
 # frontend (members/page.tsx).
 CANTIDAD_AUTOGESTIONADOS = 20
-
-# Números de nivel reales sembrados por seed_dev_base.py (1..11).
-NUMEROS_NIVEL = list(range(1, 12))
 
 
 def _obtener_o_crear(db, modelo, filtro, defaults):
@@ -366,29 +358,6 @@ def _asignar_membresia_y_pago(
     db.flush()
 
 
-def _asignar_ranking(db, persona: Persona, indice: int, niveles: dict[int, NivelRanking]) -> Ranking | None:
-    """Crea (si no existe) la fila de Ranking. Deja sin nivel (nivel_ranking_id
-    = None) uno de cada 9 alumnos, para ejercitar "sin grupo" en /groups."""
-    existente = db.query(Ranking).filter(Ranking.persona_id == persona.id).first()
-    if existente:
-        return existente
-
-    sin_grupo = (indice % 9 == 0)
-    nivel_id = None
-    if not sin_grupo and niveles:
-        numero = NUMEROS_NIVEL[indice % len(NUMEROS_NIVEL)]
-        nivel = niveles.get(numero)
-        nivel_id = nivel.id if nivel else None
-
-    ranking = Ranking(
-        persona_id=persona.id,
-        nivel_ranking_id=nivel_id,
-    )
-    db.add(ranking)
-    db.flush()
-    return ranking
-
-
 def main() -> None:
     db = SessionLocal()
     try:
@@ -403,17 +372,6 @@ def main() -> None:
             db, Rol, Rol.tipo_rol == TipoRol.REPRESENTANTE,
             {"tipo_rol": TipoRol.REPRESENTANTE, "descripcion": "Representante"},
         )
-
-        niveles = {
-            n.numero_nivel: n
-            for n in db.query(NivelRanking).filter(NivelRanking.numero_nivel.in_(NUMEROS_NIVEL)).all()
-        }
-        if len(niveles) < len(NUMEROS_NIVEL):
-            print(
-                "[seed] AVISO: no se encontraron los 11 NivelRanking esperados "
-                "(corra primero seed_dev_base.py). La asignación de nivel "
-                "usará solo los niveles disponibles."
-            )
 
         tipo_infantil = db.query(TipoMembresia).filter(TipoMembresia.categoria == "Mensual Infantil").first()
         tipo_adultos = db.query(TipoMembresia).filter(TipoMembresia.categoria == "Mensual Adultos").first()
@@ -484,14 +442,7 @@ def main() -> None:
         db.flush()
 
         # ------------------------------------------------------------------
-        # 3. Ranking (asignación de nivel, unos pocos sin grupo)
-        # ------------------------------------------------------------------
-        for i, (persona, _) in enumerate(estudiantes):
-            _asignar_ranking(db, persona, i, niveles)
-        db.flush()
-
-        # ------------------------------------------------------------------
-        # 4. Asistencia histórica (últimas 4 sesiones de los primeros 3
+        # 3. Asistencia histórica (últimas 4 sesiones de los primeros 3
         #    horarios del club), para un subconjunto de alumnos.
         # ------------------------------------------------------------------
         asistencias_creadas = 0

@@ -24,7 +24,7 @@ from app.presentacion.routers import (
     asistencias_router,
     ficha_medica_router,
     geografia_router,
-    ranking_router,
+    notificaciones_router,
     enrollment_router,
     dashboard_router,
     chatbot_router,
@@ -213,7 +213,7 @@ app.include_router(descuentos_router.router, prefix="/api/v1")
 app.include_router(asistencias_router.router, prefix="/api/v1")
 app.include_router(ficha_medica_router.router, prefix="/api/v1")
 app.include_router(geografia_router.router, prefix="/api/v1")
-app.include_router(ranking_router.router, prefix="/api/v1")
+app.include_router(notificaciones_router.router, prefix="/api/v1")
 app.include_router(enrollment_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 app.include_router(chatbot_router.router, prefix="/api/v1")

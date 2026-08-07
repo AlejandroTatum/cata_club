@@ -23,8 +23,8 @@ from app.dominio.enums import (
     TipoModalidad, TipoNotificacion, TipoPago, TipoRol, TipoSangre,
 )
 from app.dominio.modelos import (
-    Asistencia, FichaMedica, HorarioEntrenamiento, Membresia, NivelRanking,
-    Notificacion, Pago, Persona, Ranking, Rol, TipoMembresia, Usuario,
+    Asistencia, FichaMedica, HorarioEntrenamiento, Membresia,
+    Notificacion, Pago, Persona, Rol, TipoMembresia, Usuario,
     AlumnoHorario,
 )
 from app.infraestructura.db import obtener_sesion
@@ -365,47 +365,6 @@ def test_desactivada_desaparece_de_la_nomina_del_horario(client, db_session):
     respuesta = client.get(f"/api/v1/asistencias/horarios/{horario.id}/alumnos")
     assert respuesta.status_code == 200
     assert alumno.id not in [a["personaId"] for a in respuesta.json()["items"]]
-
-
-def test_desactivada_desaparece_del_roster_de_alumnos_con_nivel(client, db_session):
-    alumno = _crear_persona(db_session, cedula="1710034065")
-    _crear_usuario(db_session, alumno, tipo_rol=TipoRol.ALUMNO)
-
-    _desactivar(client, alumno.id)
-
-    respuesta = client.get("/api/v1/ranking/alumnos-con-nivel")
-    assert respuesta.status_code == 200
-    assert alumno.id not in [a["personaId"] for a in respuesta.json()["items"]]
-
-
-def test_desactivada_desaparece_de_la_tabla_del_nivel(client, db_session):
-    nivel = NivelRanking(numero_nivel=1, nombre="Nivel 1")
-    alumno = _crear_persona(db_session, cedula="1710034065")
-    db_session.add(nivel)
-    db_session.flush()
-    db_session.add(Ranking(persona_id=alumno.id, nivel_ranking_id=nivel.id))
-    db_session.commit()
-
-    _desactivar(client, alumno.id)
-
-    respuesta = client.get(f"/api/v1/ranking/niveles/{nivel.id}/tabla")
-    assert respuesta.status_code == 200
-    assert alumno.id not in [r["personaId"] for r in respuesta.json()]
-
-
-def test_desactivada_desaparece_de_las_asignaciones_de_ranking(client, db_session):
-    nivel = NivelRanking(numero_nivel=1, nombre="Nivel 1")
-    alumno = _crear_persona(db_session, cedula="1710034065")
-    db_session.add(nivel)
-    db_session.flush()
-    db_session.add(Ranking(persona_id=alumno.id, nivel_ranking_id=nivel.id))
-    db_session.commit()
-
-    _desactivar(client, alumno.id)
-
-    respuesta = client.get("/api/v1/ranking/asignaciones")
-    assert respuesta.status_code == 200
-    assert alumno.id not in [r["personaId"] for r in respuesta.json()["items"]]
 
 
 # --- Listados ADMINISTRATIVOS: la persona desactivada SIGUE apareciendo -----

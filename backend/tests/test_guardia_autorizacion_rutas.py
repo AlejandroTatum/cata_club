@@ -127,8 +127,8 @@ RUTAS_PUBLICAS = {
 # Cada entrada cae en uno de dos casos, ya documentados con comentario en el
 # router correspondiente:
 #   (a) catalogo/lectura no sensible para cualquier autenticado
-#       (horarios, tipos de membresia, niveles de ranking, geografia --
-#       fijado por REQ-SEC-2 en esta misma PR).
+#       (horarios, tipos de membresia, geografia -- fijado por REQ-SEC-2 en
+#       esta misma PR).
 #   (b) ownership verificado DENTRO del handler via `PoliticaAccesoPersona`
 #       o un chequeo equivalente contra `token_payload["persona_id"]`.
 RUTAS_SOLO_AUTENTICADAS = {
@@ -153,10 +153,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/personas/{persona_id}"),                           # (b)
     ("GET", "/personas/{persona_id}/antecedentes-club"),         # (b)
     ("GET", "/personas/{persona_id}/representados"),             # (b)
-    ("GET", "/ranking/niveles"),                                 # (a)
-    ("GET", "/ranking/niveles/{nivel_id}/tabla"),                # (a)
     ("GET", "/ranking/notificaciones/mias"),                     # (b) - propio via `persona_id` del token
-    ("GET", "/ranking/{persona_id}/perfil"),                     # (b) - chequeo inline equivalente a PoliticaAccesoPersona
     ("PATCH", "/auth/me"),                                       # (b) - propio via `sub`
     ("PATCH", "/fichas-medicas/persona/{persona_id}"),           # (b) - admin o representante, SIN el titular
     ("PATCH", "/ranking/notificaciones/{notificacion_id}/leer"), # (b) - propio via `persona_id` del token
@@ -207,17 +204,11 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/personas/reportes/nuevos-por-periodo"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
-    ("GET", "/ranking/alumnos-con-nivel"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
-    ("GET", "/ranking/asignaciones"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("PATCH", "/membresias/pagos/{pago_id}/validar"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/cuenta/estado"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/estado"): frozenset({"ADMINISTRADOR"}),
-    # Reemplaza a `POST /ranking/asignar-nivel-inicial` + `PATCH
-    # /ranking/{persona_id}/mover-de-nivel`, que pedían exactamente estos dos
-    # roles: la operación única hereda el mismo permiso, no uno nuevo.
-    ("PATCH", "/personas/{persona_id}/nivel"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/horarios"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
@@ -234,7 +225,6 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
-    ("POST", "/ranking/niveles"): frozenset({"ADMINISTRADOR"}),
     ("PUT", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
 }
 

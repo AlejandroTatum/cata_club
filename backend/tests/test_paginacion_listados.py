@@ -1,9 +1,7 @@
 """
 Paginación de los listados que crecen con el padrón (issue #7).
 
-Los tres listados que devolvían la tabla completa (`GET
-/ranking/alumnos-con-nivel`, `GET /ranking/asignaciones` y `GET
-/asistencias/horarios/{id}/alumnos`) pasan a responder el mismo envelope
+`GET /asistencias/horarios/{id}/alumnos` pasa a responder el mismo envelope
 `PaginatedResponse` que ya usan `GET /personas/` y `GET /membresias/pagos`:
 `{items, total, skip, limit}`, con `skip >= 0` y `1 <= limit <= 200`.
 
@@ -24,16 +22,13 @@ from datetime import date, time
 
 from app.dominio.enums import Categoria, DiaSemana, TipoEscuela, TipoRol
 from app.dominio.modelos import (
-    AlumnoHorario, HorarioEntrenamiento, Institucion, NivelRanking, Persona,
-    Ranking, Rol, Usuario,
+    AlumnoHorario, HorarioEntrenamiento, Institucion, Persona, Rol, Usuario,
 )
-from tests.conftest import crear_entrenador
 
 
 # --- Fábricas ---------------------------------------------------------------
 def _alta_alumno(db_session, nombres, apellidos, cedula, activo=True):
-    """Persona + Usuario con rol ALUMNO (el criterio de rol que usa
-    `PersonaRepositorio.listar_por_rol_con_ranking`)."""
+    """Persona + Usuario con rol ALUMNO."""
     persona = Persona(
         nombres=nombres, apellidos=apellidos, cedula=cedula,
         fecha_nacimiento=date(2000, 1, 1), telefono="0991234567",
@@ -48,18 +43,6 @@ def _alta_alumno(db_session, nombres, apellidos, cedula, activo=True):
     ))
     db_session.commit()
     return persona
-
-
-def _crear_nivel(db_session, numero_nivel=1, nombre="Elite"):
-    nivel = NivelRanking(numero_nivel=numero_nivel, nombre=nombre)
-    db_session.add(nivel)
-    db_session.commit()
-    return nivel
-
-
-def _asignar_ranking(db_session, persona_id, nivel_id):
-    db_session.add(Ranking(persona_id=persona_id, nivel_ranking_id=nivel_id))
-    db_session.commit()
 
 
 def _crear_horario(db_session):
@@ -101,133 +84,6 @@ def _crear_institucion(db_session, nombre, tipo_escuela=TipoEscuela.FISCAL):
     db_session.add(institucion)
     db_session.commit()
     return institucion
-
-
-# --- GET /ranking/alumnos-con-nivel -----------------------------------------
-def test_alumnos_con_nivel_responde_el_envelope_paginado(client, db_session):
-    nivel = _crear_nivel(db_session)
-    alumnos = [
-        _alta_alumno(db_session, f"Alumno{i}", f"Apellido{i:02d}", f"17200100{i:02d}")
-        for i in range(5)
-    ]
-    _asignar_ranking(db_session, alumnos[0].id, nivel.id)
-
-    resp = client.get("/api/v1/ranking/alumnos-con-nivel?skip=0&limit=2")
-
-    assert resp.status_code == 200
-    cuerpo = resp.json()
-    assert set(cuerpo.keys()) == {"items", "total", "skip", "limit"}
-    assert len(cuerpo["items"]) == 2
-    assert cuerpo["total"] == 5
-    assert cuerpo["skip"] == 0
-    assert cuerpo["limit"] == 2
-    # La forma de cada fila no cambia con el envelope.
-    assert cuerpo["items"][0] == {
-        "personaId": alumnos[0].id, "nombres": "Alumno0",
-        "apellidos": "Apellido00", "nivelRankingId": nivel.id,
-    }
-
-
-def test_alumnos_con_nivel_rechaza_limit_por_encima_del_tope(client):
-    assert client.get("/api/v1/ranking/alumnos-con-nivel?limit=201").status_code == 422
-    assert client.get("/api/v1/ranking/alumnos-con-nivel?limit=0").status_code == 422
-    assert client.get("/api/v1/ranking/alumnos-con-nivel?skip=-1").status_code == 422
-
-
-def test_alumnos_con_nivel_total_cuenta_solo_el_conjunto_filtrado(client, db_session):
-    """`total` debe contar a los alumnos ACTIVOS con rol ALUMNO (el filtro
-    del listado), no la página devuelta ni la tabla persona entera."""
-    for i in range(3):
-        _alta_alumno(db_session, f"Activo{i}", f"Apellido{i:02d}", f"172001010{i}")
-    _alta_alumno(db_session, "Baja", "Zulueta", "1720010199", activo=False)
-    # Un entrenador sin rol ALUMNO: jamás pertenece a este listado.
-    crear_entrenador(db_session, cedula="1720010198")
-
-    resp = client.get("/api/v1/ranking/alumnos-con-nivel?limit=2")
-
-    assert resp.status_code == 200
-    cuerpo = resp.json()
-    assert len(cuerpo["items"]) == 2
-    assert cuerpo["total"] == 3
-
-
-def test_alumnos_con_nivel_pagina_sin_solape_con_orden_estable(client, db_session):
-    """Orden de nómina (apellidos, nombres, id): dos páginas consecutivas no
-    comparten filas y entre todas cubren el roster completo. Se insertan en
-    orden inverso al alfabético para que un listado sin ORDER BY falle."""
-    alumnos = [
-        _alta_alumno(db_session, f"Alumno{i}", f"Apellido{9 - i:02d}", f"172001020{i}")
-        for i in range(5)
-    ]
-    esperados = [a.id for a in sorted(alumnos, key=lambda p: (p.apellidos, p.nombres, p.id))]
-
-    _paginas_sin_solape_y_completas(
-        client, "/api/v1/ranking/alumnos-con-nivel?", esperados, tamano_pagina=2,
-    )
-
-
-# --- GET /ranking/asignaciones ----------------------------------------------
-def test_asignaciones_responde_el_envelope_paginado(client, db_session):
-    nivel = _crear_nivel(db_session)
-    for i in range(5):
-        alumno = _alta_alumno(
-            db_session, f"Alumno{i}", f"Apellido{i:02d}", f"172001030{i}"
-        )
-        _asignar_ranking(db_session, alumno.id, nivel.id)
-
-    resp = client.get("/api/v1/ranking/asignaciones?skip=0&limit=2")
-
-    assert resp.status_code == 200
-    cuerpo = resp.json()
-    assert set(cuerpo.keys()) == {"items", "total", "skip", "limit"}
-    assert len(cuerpo["items"]) == 2
-    assert cuerpo["total"] == 5
-    assert cuerpo["limit"] == 2
-
-
-def test_asignaciones_rechaza_limit_por_encima_del_tope(client):
-    assert client.get("/api/v1/ranking/asignaciones?limit=201").status_code == 422
-    assert client.get("/api/v1/ranking/asignaciones?limit=0").status_code == 422
-    assert client.get("/api/v1/ranking/asignaciones?skip=-1").status_code == 422
-
-
-def test_asignaciones_total_excluye_a_los_dados_de_baja(client, db_session):
-    """La baja lógica ya excluía a la persona de `items`; `total` tiene que
-    contar con el MISMO filtro, no la tabla ranking completa."""
-    nivel = _crear_nivel(db_session)
-    activos = []
-    for i in range(3):
-        alumno = _alta_alumno(
-            db_session, f"Activo{i}", f"Apellido{i:02d}", f"172001040{i}"
-        )
-        _asignar_ranking(db_session, alumno.id, nivel.id)
-        activos.append(alumno)
-    baja = _alta_alumno(db_session, "Baja", "Zulueta", "1720010499", activo=False)
-    _asignar_ranking(db_session, baja.id, nivel.id)
-
-    resp = client.get("/api/v1/ranking/asignaciones?limit=2")
-
-    assert resp.status_code == 200
-    cuerpo = resp.json()
-    assert cuerpo["total"] == 3
-    assert baja.id not in [fila["personaId"] for fila in cuerpo["items"]]
-
-
-def test_asignaciones_pagina_sin_solape_con_orden_estable(client, db_session):
-    """El listado ordena por `persona_id`: páginas consecutivas sin solape
-    que cubren todas las asignaciones activas."""
-    nivel = _crear_nivel(db_session)
-    ids = []
-    for i in range(5):
-        alumno = _alta_alumno(
-            db_session, f"Alumno{i}", f"Apellido{i:02d}", f"172001050{i}"
-        )
-        _asignar_ranking(db_session, alumno.id, nivel.id)
-        ids.append(alumno.id)
-
-    _paginas_sin_solape_y_completas(
-        client, "/api/v1/ranking/asignaciones?", sorted(ids), tamano_pagina=2,
-    )
 
 
 # --- GET /asistencias/horarios/{id}/alumnos ---------------------------------

@@ -38,7 +38,7 @@ esquema completo se descarta y se reconstruye desde cero.
    cero** — la misma garantía que ahora también verifica el job de CI
    `migraciones-desde-cero` en cada PR.
 4. `scripts/seed_dev_base.py` (idempotente) para recrear los datos mínimos
-   de desarrollo (admin, entrenador, horarios, niveles de ranking, etc.).
+   de desarrollo (admin, entrenador, horarios, membresías, etc.).
 
 ## El guard: `validar_reset_permitido`
 

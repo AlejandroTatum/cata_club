@@ -233,8 +233,6 @@ class Persona(Base):
     asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="persona")
     pagos: Mapped[List["Pago"]] = relationship(back_populates="persona")
     membresias: Mapped[List["Membresia"]] = relationship(back_populates="persona")
-    # 1..0..1 con Ranking: una persona puede o no tener fila de ranking.
-    ranking: Mapped[Optional["Ranking"]] = relationship(back_populates="persona", uselist=False)
     notificaciones: Mapped[List["Notificacion"]] = relationship(back_populates="persona")
 
     # Asignación directa a horarios
@@ -464,34 +462,6 @@ class ComprobantePago(Base):
 # ---------------------------------------------------------------------------
 # Asistencia y Horarios
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Nivel de Ranking (E03) — unifica "grupo de entrenamiento" y "nivel
-# competitivo": el nivel de ranking es una asignación independiente de los
-# horarios — un alumno puede estar en cualquier horario con cualquier nivel
-# (incluido sin nivel). El nivel trae el límite de capacidad que pedía
-# E03-RF001 (6 a 10 deportistas) y se asigna vía `Ranking.nivel_ranking_id`.
-#
-# Nota de diseño: el máximo (10) SÍ se valida de forma dura al asignar una
-# persona a un nivel (servicios_negocio lanza OperacionInvalida si ya está
-# lleno). El mínimo (6) se expone como información en el DTO de respuesta
-# (`necesita_revision`) pero NO bloquea operaciones: un club nuevo o un nivel
-# recién creado puede tener menos de 6 personas temporalmente, y bloquear ahí
-# dejaría al Administrador sin forma de operar. Es una decisión de diseño
-# explícita, no una omisión.
-# ---------------------------------------------------------------------------
-class NivelRanking(Base):
-    __tablename__ = "nivel_ranking"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    # Orden jerárquico: 1 = nivel más alto/competitivo. Único para poder
-    # calcular "nivel inmediatamente superior/inferior" sin ambigüedad.
-    numero_nivel: Mapped[int] = mapped_column(unique=True)
-    nombre: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
-    capacidad_minima: Mapped[int] = mapped_column(default=6)
-    capacidad_maxima: Mapped[int] = mapped_column(default=10)
-
-    rankings: Mapped[List["Ranking"]] = relationship(back_populates="nivel_ranking")
-
-
 class HorarioEntrenamiento(Base):
     """
     Sin entrenador titular: el club no asigna entrenadores a horarios -- la
@@ -508,9 +478,6 @@ class HorarioEntrenamiento(Base):
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time] = mapped_column(Time)
 
-    # Horario y nivel de ranking son INDEPENDIENTES: un alumno puede estar en
-    # cualquier horario sin que medie su nivel de ranking, y viceversa. El
-    # nivel de cada alumno vive exclusivamente en `Ranking.nivel_ranking_id`.
     asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="horario")
     alumno_horarios: Mapped[List["AlumnoHorario"]] = relationship(back_populates="horario")
 
@@ -610,45 +577,6 @@ class Enfermedades(Base):
 
 
 # ---------------------------------------------------------------------------
-# Ranking (E03)
-#
-# Ya NO es un ranking competitivo: toda esa funcionalidad (puntos, posiciones,
-# cierre mensual, justificativos, reingreso) fue derogada por decisión de
-# producto. Lo único que queda de esta tabla es la ASIGNACIÓN de un alumno a
-# un nivel/grupo de entrenamiento, y por eso su estado se reduce a una sola
-# columna de negocio:
-#   - `nivel_ranking_id`: el nivel de ranking ES el grupo de entrenamiento
-#     (ver NivelRanking arriba). Puede ser NULL momentáneamente entre que se
-#     crea la fila de Ranking (alumno nuevo) y el Entrenador le asigna nivel
-#     inicial (RF002) -- por eso es nullable, no obligatorio en el modelo.
-#     Su presencia ES el estado de asignación: no hay un flag aparte que
-#     pueda contradecirla.
-#
-# Las columnas `puntaje_acumulado`, `posicion_actual`, `participo` y
-# `esta_en_ranking` existieron aquí y fueron eliminadas: las tres primeras
-# perdieron a su único escritor (el cierre mensual RF007) y `esta_en_ranking`
-# nunca tuvo ningún camino -- automático ni manual -- que lo pusiera en False,
-# así que era permanentemente True para toda fila.
-# ---------------------------------------------------------------------------
-class Ranking(Base):
-    __tablename__ = "ranking"
-    __table_args__ = (
-        Index("ix_ranking_nivel_ranking_id", "nivel_ranking_id"),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), unique=True)
-
-    # --- E03-RF002/RF009: nivel operativo actual (= grupo de entrenamiento) ---
-    nivel_ranking_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("nivel_ranking.id"), nullable=True
-    )
-    nivel_ranking: Mapped[Optional["NivelRanking"]] = relationship(back_populates="rankings")
-
-    persona: Mapped["Persona"] = relationship(back_populates="ranking")
-
-
-# ---------------------------------------------------------------------------
 # Notificación in-app. Genérica a propósito: no se acopla a un único flujo,
 # para poder reutilizarse en otros procesos del sistema (ej. vencimiento de
 # membresía, ver `alertas_tareas.py`).
@@ -664,9 +592,9 @@ class Notificacion(Base):
     mensaje: Mapped[str] = mapped_column(String(255))
     leida: Mapped[bool] = mapped_column(Boolean, default=False)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
-    # Id de la entidad relacionada (ej. el Ranking o la Membresia que
-    # originó la notificación), sin FK estricta porque el tipo de entidad
-    # varía según `tipo` -- mantenerlo simple evita una jerarquía de tablas.
+    # Id de la entidad relacionada (ej. la Membresia o el Pago que originó
+    # la notificación), sin FK estricta porque el tipo de entidad varía
+    # según `tipo` -- mantenerlo simple evita una jerarquía de tablas.
     entidad_relacionada_id: Mapped[Optional[int]] = mapped_column(nullable=True)
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))

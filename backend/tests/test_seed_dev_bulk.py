@@ -31,7 +31,7 @@ def _motor_en_memoria(*modulos):
     """Motor SQLite fresco compartido por los módulos de seed recibidos.
 
     El bulk seed depende de lo que siembra el base (entrenador, horarios,
-    niveles, tipos de membresía), así que ambos tienen que apuntar a la misma
+    tipos de membresía), así que ambos tienen que apuntar a la misma
     sesión — mismo montaje que `test_seed_dev_base._motor_en_memoria`.
     """
     engine = create_engine(
