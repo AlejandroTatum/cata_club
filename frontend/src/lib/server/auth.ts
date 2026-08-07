@@ -491,7 +491,7 @@ export function buildSession(me: BackendMeResponse): ServerSession {
 
   const user: Usuario =
     role === "estudiante"
-      ? { ...base, role: "estudiante", grupoId: null, activo: true }
+      ? { ...base, role: "estudiante", activo: true }
       : { ...base, role };
 
   return {

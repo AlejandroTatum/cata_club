@@ -36,7 +36,6 @@ import {
   describePaymentSituation,
   findNextTrainingSessions,
   firstNameOf,
-  formatLevelName,
   resolveCoverageEnd,
   summarizeRecentAttendance,
   type UpcomingTraining,
@@ -70,14 +69,8 @@ type HorariosState =
 // This is the one thing a parent screenshots, so it is an identity document
 // and is held to that standard: every field on it is real. The prototype's
 // "Miembro nº", "Desde" and "Renueva" are NOT rendered — see the block comment
-// above `parseLevelNumber` in student-utils.ts for where each one dies.
+// above `resolveCoverageEnd` in student-utils.ts for where each one dies.
 // ---------------------------------------------------------------------------
-
-function levelTagLabel(profile: StudentProfileSummary): string | null {
-  const { ranking } = profile;
-  if (ranking.status !== "available" || ranking.nivelRankingId === null) return null;
-  return formatLevelName(ranking.nivelNombre);
-}
 
 function CarnetFact({ label, value }: { label: string; value: string }): React.ReactElement {
   return (
@@ -101,7 +94,6 @@ function Carnet({
   horariosState: HorariosState;
 }): React.ReactElement {
   const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
-  const level = levelTagLabel(profile);
   // The same reading `/student/payments` shows, from the same function — the
   // two screens used to word this differently for the same `estado`.
   const membership = describeMembershipState(profile.membership?.estado);
@@ -174,15 +166,6 @@ function Carnet({
       </p>
 
       <div className="relative z-10 mt-2.5 flex flex-wrap gap-2">
-        {level !== null ? (
-          <span className="h-badge inline-flex items-center rounded-full bg-l9 px-[11px] text-2xs tracking-flat font-bold text-ink">
-            {level}
-          </span>
-        ) : (
-          <span className="h-badge inline-flex items-center rounded-full bg-white/[0.11] px-[11px] text-2xs tracking-flat font-bold text-white">
-            Sin nivel asignado
-          </span>
-        )}
         <span
           className={
             membership.active

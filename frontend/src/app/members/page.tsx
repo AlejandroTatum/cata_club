@@ -6,8 +6,8 @@
  * and contact/identity information for each.
  *
  * Connected to the real backend (Fase 4): `GET /api/members` aggregates
- * `/personas`, `/membresias/pagos*` and `/ranking/niveles*` server-side —
- * see src/lib/server/members-adapter.ts for the DTO translation and the
+ * `/personas` and `/membresias/pagos*` server-side — see
+ * src/lib/server/members-adapter.ts for the DTO translation and the
  * backend gaps found while building it (no `email`/`roles`/account-active
  * flag exposed on Persona).
  */
@@ -70,7 +70,6 @@ import { ICON } from "@/lib/icon-size";
 import { fetchMembers, obtenerRolesDePersona, asignarRol, quitarRol, cambiarEstadoCuenta, actualizarPersona, fetchFichaMedica, actualizarFichaMedica, fetchTiposMembresia, crearMembresia, registrarPago, fetchDescuentos } from "@/services/api";
 import type { TipoMembresiaCatalogo, RegistrarPagoInput, DescuentoCatalogo } from "@/services/api";
 import { computeMontoFinal, descuentosActivos, descuentoValorLabel } from "@/app/discounts/discounts-utils";
-import { nivelToGrupo } from "@/app/groups/groups-page-utils";
 import { getUserInitials } from "@/lib/auth-utils";
 import {
   buildMemberStats,
@@ -79,7 +78,6 @@ import {
   accountMatchesFlag,
   countAccountsMatchingFlag,
   getAccountStatusBadge,
-  getNivelLabelFromGrupo,
   paginateAccounts,
   getTotalPages,
   MEMBERS_PAGE_SIZE,
@@ -93,7 +91,7 @@ import {
   type MemberStudentSummary,
   type MemberFilterFlag,
 } from "./members-utils";
-import type { Grupo, BackendTipoRol, FichaMedicaEditable, TipoSangre } from "@/types/domain";
+import type { BackendTipoRol, FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import MedicalRecordEditor from "./MedicalRecordEditor";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
@@ -103,7 +101,6 @@ const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
   { flag: "vencida", label: "Membresía vencida" },
   { flag: "pendiente", label: "Pago pendiente" },
-  { flag: "sin-grupo", label: "Sin grupo asignado" },
 ];
 
 // The per-state `PaymentStatusIcon` that used to prefix the payment badge is
@@ -168,7 +165,6 @@ function ModalSection({
 
 interface StudentRowProps {
   student: MemberStudentSummary;
-  grupos: Grupo[];
   /**
    * Called after a membership is successfully created so the page can refetch
    * and show the new row. The panel used to tell the user "Recarga para
@@ -189,7 +185,7 @@ function calculateAge(fechaNacimiento: string | undefined): number | null {
   return age;
 }
 
-function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowProps): React.ReactElement {
+function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [showMedical, setShowMedical] = useState(false);
   const [showCreateMembership, setShowCreateMembership] = useState(false);
@@ -231,7 +227,6 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
     ? PAYMENT_STATUS_TONE[student.ultimoPago.estado]
     : "neutral";
 
-  const nivelDisplay = getNivelLabelFromGrupo(student.grupoId, grupos);
   const personaId = Number(student.id);
   const age = calculateAge(student.fechaNacimiento);
   const paymentMonthlyPrice = student.membresia?.monto != null ? Number(student.membresia.monto) : 0;
@@ -405,19 +400,13 @@ function StudentEditPanel({ student, grupos, onMembershipCreated }: StudentRowPr
       {/* Ficha — full-width row (card is now the modal's full content width,
           not squeezed into a half-width grid column), four stats side by
           side on larger screens instead of a cramped two-up layout. */}
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-section border-t border-cata-border pt-3 text-xs sm:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-section border-t border-cata-border pt-3 text-xs sm:grid-cols-3">
         <div>
           <dt className="text-cata-text/50">Estado</dt>
           <dd className="mt-1">
             <Badge tone={student.activo ? "ok" : "bad"}>
               {student.activo ? "Activo" : "Inactivo"}
             </Badge>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-cata-text/50">Grupo</dt>
-          <dd className="mt-1 font-semibold text-cata-text">
-            {nivelDisplay ?? "Sin grupo asignado"}
           </dd>
         </div>
         <div>
@@ -685,7 +674,6 @@ interface AccountListItemProps {
 
 interface MemberEditDialogProps {
   account: MemberAccount;
-  grupos: Grupo[];
   onClose: () => void;
   /** Refetch the member list — forwarded to each student's edit panel. */
   onMembershipCreated: () => void;
@@ -801,7 +789,6 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
 
 function MemberEditDialog({
   account,
-  grupos,
   onClose,
   onMembershipCreated,
 }: MemberEditDialogProps): React.ReactElement {
@@ -1257,7 +1244,6 @@ function MemberEditDialog({
                       <StudentEditPanel
                         key={estudiante.id}
                         student={estudiante}
-                        grupos={grupos}
                         onMembershipCreated={onMembershipCreated}
                       />
                     ))}
@@ -1291,7 +1277,6 @@ export default function MembersPage(): React.ReactElement {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFlag, setActiveFlag] = useState<MemberFilterFlag>("all");
   const [accounts, setAccounts] = useState<MemberAccount[]>([]);
-  const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [personasCapped, setPersonasCapped] = useState(false);
   /** At least one membership could not be read upstream — see `MembersResponse`. */
   const [membresiasDegraded, setMembresiasDegraded] = useState(false);
@@ -1316,12 +1301,10 @@ export default function MembersPage(): React.ReactElement {
     try {
       const {
         accounts: membersData,
-        niveles,
         personasCapped: upstreamPersonasCapped,
         membresiasDegraded: upstreamMembresiasDegraded = false,
       } = await fetchMembers();
       setAccounts(membersData);
-      setGrupos(niveles.map(nivelToGrupo));
       setPersonasCapped(upstreamPersonasCapped);
       setMembresiasDegraded(upstreamMembresiasDegraded);
     } catch {
@@ -1570,7 +1553,6 @@ export default function MembersPage(): React.ReactElement {
           <MemberEditDialog
             key={editingAccount.id}
             account={editingAccount}
-            grupos={grupos}
             onClose={() => setEditingAccountId(null)}
             onMembershipCreated={() => void loadMembers({ silent: true })}
           />

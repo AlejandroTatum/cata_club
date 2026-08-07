@@ -18,11 +18,10 @@
  *
  * ## What this deliberately does NOT check
  *
- * That EVERY control in a file is inside the panel. `NivelLadderScreen` has two
- * search fields on purpose — the page finder searches every rung, the one
- * inside an open rung filters that rung's two columns — and the second one is
- * bare BY DESIGN: a framed panel nested inside a rung would read as a second
- * page-level filter. A rule strict enough to catch that would fire on the one
+ * That EVERY control in a file is inside the panel. A screen may legitimately
+ * carry a second, bare search/filter control nested inside an already-panelled
+ * section — a framed panel nested inside another would read as a second
+ * page-level filter. A rule strict enough to catch that would fire on the
  * screen that thought about it hardest, and a guard that fires on correct code
  * is a guard people learn to skip. The narrow rule catches the real regression:
  * a new screen that filters and never imports the panel at all.

@@ -1,8 +1,7 @@
 /**
- * Translates FastAPI's `/personas`, `/membresias/pagos*`, `/membresias/*`
- * and `/ranking/niveles*` DTOs (camelCase, see backend
- * app/presentacion/schemas/persona_schemas.py, membresia_pago_schemas.py,
- * ranking_schemas.py) into the `MemberAccount[]` shape
+ * Translates FastAPI's `/personas`, `/membresias/pagos*` and `/membresias/*`
+ * DTOs (camelCase, see backend app/presentacion/schemas/persona_schemas.py,
+ * membresia_pago_schemas.py) into the `MemberAccount[]` shape
  * src/app/members/page.tsx already renders — server-only, used by
  * src/app/api/members/route.ts. Mirrors src/lib/server/payments-adapter.ts
  * and attendance-adapter.ts.
@@ -15,9 +14,7 @@
  * to `/personas/{id}/representados` — same avoid-N+1 tradeoff already
  * documented in attendance-adapter.ts's `fetchPersonaNameMap`.
  *
- * Known backend gaps found while building this (new — not the
- * horario/nivel-ranking link gap already documented in
- * attendance-adapter.ts):
+ * Known backend gaps found while building this:
  *
  *  1. `PersonaResponseDTO` carries no `roles` field, and there is no bulk
  *     "roles by persona" endpoint (only `POST`/`DELETE
@@ -89,7 +86,6 @@ function buildMemberStudentSummary(
   membresiaById: Map<number, BackendMembresia>,
   membresiaByPersona: Map<number, BackendMembresia>,
   tipoById: Map<number, BackendTipoMembresia>,
-  nivelId: number | undefined,
 ): MemberStudentSummary {
   /*
    * A membership does not require a payment to exist. Three personas in the
@@ -108,7 +104,6 @@ function buildMemberStudentSummary(
     nombres: persona.nombres,
     apellidos: persona.apellidos,
     telefono: persona.telefono,
-    grupoId: nivelId !== undefined ? String(nivelId) : null,
     fechaNacimiento: persona.fechaNacimiento,
     activo: true, // gap #3 above — no readable account-active flag exists via any GET endpoint
     membresia: membresia
@@ -145,7 +140,6 @@ function buildMemberStudentSummary(
  * @param membresiaById — `Membresia` lookups keyed by `membresiaId`.
  * @param membresiaByPersona — fallback `Membresia` for personas with no Pago, keyed by `personaId`.
  * @param tipoById — `TipoMembresia` catalog keyed by `tipoMembresiaId`.
- * @param nivelIdByPersona — current `NivelRanking` (Grupo) id, keyed by `personaId`.
  */
 export function buildMemberAccounts(
   personas: BackendPersonaFull[],
@@ -153,7 +147,6 @@ export function buildMemberAccounts(
   membresiaById: Map<number, BackendMembresia>,
   membresiaByPersona: Map<number, BackendMembresia>,
   tipoById: Map<number, BackendTipoMembresia>,
-  nivelIdByPersona: Map<number, number>,
 ): MemberAccount[] {
   const childrenByRepresentante = new Map<number, BackendPersonaFull[]>();
   for (const persona of personas) {
@@ -188,7 +181,6 @@ export function buildMemberAccounts(
           membresiaById,
           membresiaByPersona,
           tipoById,
-          nivelIdByPersona.get(persona.id),
         ),
       ),
     };

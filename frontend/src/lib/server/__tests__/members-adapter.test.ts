@@ -61,18 +61,16 @@ describe("buildMemberAccounts", () => {
       new Map([[100, membresia]]),
       new Map(),
       new Map([[5, tipo]]),
-      new Map([[3, 7]]),
     );
 
     const carlos = accounts.find((a) => a.id === "2");
     expect(carlos?.role).toBe("representante");
     expect(carlos?.estudiantes).toHaveLength(1);
     expect(carlos?.estudiantes[0].id).toBe("3");
-    expect(carlos?.estudiantes[0].grupoId).toBe("7");
   });
 
   it("treats a root persona with no representados as a representante account (all root personas are adults)", () => {
-    const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map(), new Map());
+    const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map());
 
     const account = accounts.find((a) => a.id === "1");
     expect(account?.role).toBe("representante");
@@ -87,7 +85,6 @@ describe("buildMemberAccounts", () => {
       new Map([[100, membresia]]),
       new Map(),
       new Map([[5, tipo]]),
-      new Map(),
     );
 
     const student = accounts.find((a) => a.id === "2")?.estudiantes[0];
@@ -113,7 +110,6 @@ describe("buildMemberAccounts", () => {
       new Map(),
       new Map([[1, { ...membresia, id: 3, montoAplicado: "25.00" }]]),
       new Map([[5, tipo]]),
-      new Map(),
     );
 
     const student = accounts[0].estudiantes[0];
@@ -130,16 +126,15 @@ describe("buildMemberAccounts", () => {
   });
 
   it("leaves membresia/ultimoPago null when a student has neither payment nor membership", () => {
-    const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map(), new Map());
+    const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map());
     const student = accounts[0].estudiantes[0];
     expect(student.membresia).toBeNull();
     expect(student.ultimoPago).toBeNull();
-    expect(student.grupoId).toBeNull();
     expect(student.activo).toBe(true);
   });
 
   it("returns no email field (Persona has none) and no accounts for non-root personas outside their group", () => {
-    const accounts = buildMemberAccounts([parent, child], new Map(), new Map(), new Map(), new Map(), new Map());
+    const accounts = buildMemberAccounts([parent, child], new Map(), new Map(), new Map(), new Map());
     expect(accounts).toHaveLength(1);
     expect(accounts[0].email).toBeUndefined();
   });

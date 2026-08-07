@@ -64,7 +64,7 @@ describe("PUT /api/groups/horarios/[id]", () => {
   });
 
   it("forwards categoria to the backend with the bearer token", async () => {
-    const actualizado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", nivelRankingId: null };
+    const actualizado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" };
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(actualizado));
 
     const access = makeJwt(3600);

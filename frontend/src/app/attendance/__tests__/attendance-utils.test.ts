@@ -5,14 +5,10 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  MOCK_ATTENDANCE_RECORDS,
-  MOCK_SCHEDULES,
-} from "@/mocks/attendance";
+import { MOCK_ATTENDANCE_RECORDS } from "@/mocks/attendance";
 import {
   buildAttendanceStats,
   formatDay,
-  formatNivel,
   getAttendanceBadgeTokens,
   getAttendanceRatePercent,
   paginateRecords,
@@ -147,55 +143,8 @@ describe("formatDay", () => {
 });
 
 // ---------------------------------------------------------------------------
-// formatNivel
-// ---------------------------------------------------------------------------
-
-describe("formatNivel", () => {
-  it('returns "Principiante" for principiante', () => {
-    expect(formatNivel("principiante")).toBe("Principiante");
-  });
-
-  it('returns "Intermedio" for intermedio', () => {
-    expect(formatNivel("intermedio")).toBe("Intermedio");
-  });
-
-  it('returns "Avanzado" for avanzado', () => {
-    expect(formatNivel("avanzado")).toBe("Avanzado");
-  });
-
-  it("returns fallback for unexpected nivel value at runtime", () => {
-    // @ts-expect-error — testing runtime resilience with unexpected value
-    const result = formatNivel("profesional");
-    expect(result).toContain("Nivel desconocido");
-    expect(result).toContain("profesional");
-  });
-
-  it("never returns undefined for unknown nivel", () => {
-    // @ts-expect-error — testing runtime resilience with unexpected value
-    expect(formatNivel(undefined)).toBe("Nivel desconocido: undefined");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Mock data integrity
 // ---------------------------------------------------------------------------
-
-describe("MOCK_SCHEDULES", () => {
-  it("has at least one schedule", () => {
-    expect(MOCK_SCHEDULES.length).toBeGreaterThan(0);
-  });
-
-  it("every schedule has required fields", () => {
-    for (const s of MOCK_SCHEDULES) {
-      expect(s.id).toBeTruthy();
-      expect(s.diaSemana).toBeTruthy();
-      expect(s.horaInicio).toBeTruthy();
-      expect(s.horaFin).toBeTruthy();
-      expect(s.cancha).toBeTruthy();
-      expect(s.cupoMaximo).toBeGreaterThan(0);
-    }
-  });
-});
 
 describe("MOCK_ATTENDANCE_RECORDS", () => {
   it("has at least one record", () => {
@@ -358,7 +307,6 @@ function buildSchedule(id: number, diaSemana: TrainingSchedule["diaSemana"]): Tr
     diaSemana,
     horaInicio: "15:00",
     horaFin: "16:00",
-    nivelRankingId: null,
   };
 }
 

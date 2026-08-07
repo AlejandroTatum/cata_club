@@ -86,7 +86,6 @@ const BASE_PROFILE: StudentProfileSummary = {
   nombres: "Alumno",
   apellidos: "Test",
   fechaNacimiento: "2000-05-14",
-  ranking: { status: "unavailable", reason: "error" },
   recentSessions: [],
   membership: null,
   representante: null,

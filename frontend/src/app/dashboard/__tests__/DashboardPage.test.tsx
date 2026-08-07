@@ -195,7 +195,7 @@ describe("DashboardPage — the sidebar's table of contents is gone", () => {
     render(<DashboardPage />);
     await screen.findByText("Miembros");
 
-    for (const href of ["/members", "/nivel"]) {
+    for (const href of ["/members", "/groups"]) {
       expect(document.querySelector(`a[href="${href}"]`)).toBeNull();
     }
   });

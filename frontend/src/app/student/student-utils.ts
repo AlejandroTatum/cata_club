@@ -9,7 +9,6 @@ import type {
   AlumnoHorario,
   MembershipSummary,
   PagoPersona,
-  StudentRankingSummary,
   StudentSessionSummary,
 } from "@/services/api";
 import { CLUB_TIME_ZONE, calendarIsoDate, clubToday } from "@/lib/club-date";
@@ -72,50 +71,6 @@ export function isRepresentative(representadosCount: number): boolean {
 import type { BadgeTone } from "@/components/ui/Badge";
 
 // ---------------------------------------------------------------------------
-// Ranking display
-// ---------------------------------------------------------------------------
-
-export interface RankingDisplay {
-  label: string;
-  detail: string;
-  /** `Badge` tone, not a class string — colour lives in the primitive. */
-  tone: BadgeTone;
-}
-
-/**
- * Human-readable label + badge class for a `StudentRankingSummary` — one
- * place to keep the three states (available/in-ranking, available/
- * not-yet-ranked, unavailable) consistent.
- *
- * No longer shows "Posición #X · Y pts": the backend stopped exposing
- * `posicionActual`/`puntajeAcumulado` because they were frozen forever (no
- * writer since `cerrar_mes()` was removed) — showing a frozen number as if
- * it were live was the actual reliability bug this addresses. See
- * apply-progress of `limpieza-asistencia-y-nivel-entrenador` slice E.
- *
- * "Sin nivel asignado" keys off `nivelRankingId`, not the removed
- * `estaEnRanking` flag: that flag was true for every ranking row that
- * existed, so a row created before the trainer picked a level was shown as
- * "Activo en este nivel" with no level. Reading the level id gets that case
- * right and covers the old one (no row at all → id null) unchanged.
- */
-export function describeRanking(ranking: StudentRankingSummary): RankingDisplay {
-  if (ranking.status === "unavailable") {
-    return ranking.reason === "forbidden"
-      ? { label: "No disponible", detail: "Solo el propio alumno puede ver este perfil.", tone: "warn" }
-      : { label: "No disponible", detail: "No se pudo consultar el ranking en este momento.", tone: "warn" };
-  }
-  if (ranking.nivelRankingId === null) {
-    return { label: "Sin nivel asignado", detail: "Aún no fue asignado a un nivel de ranking.", tone: "warn" };
-  }
-  return {
-    label: ranking.nivelNombre ?? "Nivel sin nombre",
-    detail: "Activo en este nivel.",
-    tone: "ok",
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Carnet — the membership card
 //
 // Every field the club card shows must come from the portal payload. Three
@@ -132,40 +87,6 @@ export function describeRanking(ranking: StudentRankingSummary): RankingDisplay 
 //     shows "Cobertura hasta" instead, derived from the furthest `fechaFin`
 //     among the persona's APPROVED payments, which is a real coverage end.
 // ---------------------------------------------------------------------------
-
-/**
- * The rung number behind a backend level name, or `null` when it cannot be
- * read as one of the ten ladder rungs.
- *
- * `NivelRanking.nombre` is free text: the seed data uses "Nivel 9", but an
- * admin may rename a level to "Intermedios". Only a real 1–10 rung earns the
- * `LevelChip`; anything else falls back to the plain name, never a guessed
- * number.
- */
-export function parseLevelNumber(nivelNombre: string | null): number | null {
-  if (!nivelNombre) return null;
-  const match = /(\d{1,2})\s*$/.exec(nivelNombre.trim());
-  if (!match) return null;
-  const rung = Number(match[1]);
-  return Number.isInteger(rung) && rung >= 1 && rung <= 10 ? rung : null;
-}
-
-/**
- * A level name with the word "Nivel" in front of it when the backend name is a
- * bare rung number.
- *
- * `NivelRanking.nombre` is free text and the seed data uses both conventions:
- * "Nivel 9" in one place and a bare "3" in another. Printed raw next to a
- * student's name — as the dependants list on /profile does — a lone "3" reads
- * as a count of something, not as a rank.
- */
-export function formatLevelName(nivelNombre: string | null | undefined): string | null {
-  if (!nivelNombre) return null;
-  const name = nivelNombre.trim();
-  if (!name) return null;
-  const rung = parseLevelNumber(name);
-  return rung !== null ? `Nivel ${rung}` : name;
-}
 
 /**
  * First given name — "Sofía", not "Sofía Alejandra".

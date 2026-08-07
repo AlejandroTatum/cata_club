@@ -322,11 +322,6 @@ describe("ProfilePage — student/representante summary view", () => {
         nombres: "Sofía",
         apellidos: "Alumna",
         fechaNacimiento: "2012-05-10",
-        ranking: {
-          status: "available",
-          nivelRankingId: 3,
-          nivelNombre: "Nivel 3",
-        },
         recentSessions: [],
         membership: { id: 1, estado: "ACTIVA", personaId: 1, montoAplicado: "85.00", categoria: "Mensual", modalidad: "MENSUAL" },
       },
@@ -348,10 +343,6 @@ describe("ProfilePage — student/representante summary view", () => {
     const hero = screen.getByTestId("profile-hero");
     expect(screen.getAllByText("Activa").length).toBe(1);
     expect(within(hero).getByText("Membresía")).toBeInTheDocument();
-    // The level the portal already returns fills the rail's third slot. It is
-    // read from `ranking.nivelNombre`, so it is real or it is absent.
-    expect(within(hero).getByText("Nivel")).toBeInTheDocument();
-    expect(within(hero).getByText("Nivel 3")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -363,7 +354,6 @@ describe("ProfilePage — student/representante summary view", () => {
         nombres: "Sofía",
         apellidos: "Alumna",
         fechaNacimiento: "2012-05-10",
-        ranking: { status: "unavailable", reason: "error" },
         recentSessions: [],
       },
       representados: [],
@@ -381,9 +371,6 @@ describe("ProfilePage — student/representante summary view", () => {
     const hero = screen.getByTestId("profile-hero");
     expect(within(hero).getByText("Membresía")).toBeInTheDocument();
     expect(within(hero).getByText("No disponible — consulte con administración")).toBeInTheDocument();
-    // The ranking call failed, so no level is claimed — the slot is dropped,
-    // never filled with a guess.
-    expect(within(hero).queryByText("Nivel")).not.toBeInTheDocument();
   });
 
   it("renders one row per representado for a representante session, always showing the honest 'no disponible' note for their membership (the backend never scopes /membresias/mias to a dependent, only to the caller) (triangulation)", async () => {
@@ -396,7 +383,6 @@ describe("ProfilePage — student/representante summary view", () => {
           nombres: "Juan",
           apellidos: "Hijo",
           fechaNacimiento: "2014-02-01",
-          ranking: { status: "unavailable", reason: "forbidden" },
           recentSessions: [],
           membership: null,
         },
@@ -405,7 +391,6 @@ describe("ProfilePage — student/representante summary view", () => {
           nombres: "Ana",
           apellidos: "Hija",
           fechaNacimiento: "2016-08-15",
-          ranking: { status: "unavailable", reason: "forbidden" },
           recentSessions: [],
           membership: null,
         },
@@ -440,7 +425,6 @@ describe("ProfilePage — student/representante summary view", () => {
         nombres: "Rosa",
         apellidos: "Representante",
         fechaNacimiento: "1985-03-01",
-          ranking: { status: "unavailable", reason: "forbidden" },
           recentSessions: [],
           membership: { id: 9, estado: "ACTIVA", personaId: 1, montoAplicado: "85.00", categoria: "Mensual", modalidad: "MENSUAL" },
         },
@@ -450,7 +434,6 @@ describe("ProfilePage — student/representante summary view", () => {
             nombres: "Juan",
             apellidos: "Hijo",
             fechaNacimiento: "2014-02-01",
-            ranking: { status: "unavailable", reason: "forbidden" },
             recentSessions: [],
             membership: null,
           },
@@ -480,7 +463,6 @@ describe("ProfilePage — student/representante summary view", () => {
         nombres: "Sofía",
         apellidos: "Alumna",
         fechaNacimiento: "2012-05-10",
-        ranking: { status: "unavailable", reason: "error" },
         recentSessions: [],
       },
       representados: [],
@@ -627,7 +609,6 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
         nombres: "Sofía",
         apellidos: "Alumna",
         fechaNacimiento: "2012-05-10",
-        ranking: { status: "unavailable", reason: "error" },
         recentSessions: [],
       },
       representados: [],
@@ -848,7 +829,6 @@ describe("ProfilePage — profile photo upload (student/representante branch, ow
         nombres: "Sofía",
         apellidos: "Alumna",
         fechaNacimiento: "2012-05-10",
-        ranking: { status: "unavailable", reason: "error" },
         recentSessions: [],
       },
       representados: [],
@@ -874,7 +854,6 @@ describe("ProfilePage — profile photo upload (student/representante branch, ow
         nombres: "Sofía",
         apellidos: "Alumna",
         fechaNacimiento: "2012-05-10",
-        ranking: { status: "unavailable", reason: "error" },
         recentSessions: [],
       },
       representados: [],
@@ -917,7 +896,6 @@ describe("ProfilePage — profile photo upload (student/representante branch, ow
         nombres: "Rosa",
         apellidos: "Representante",
         fechaNacimiento: "1985-03-01",
-        ranking: { status: "unavailable", reason: "forbidden" },
         recentSessions: [],
       },
       representados: [],
@@ -967,7 +945,6 @@ describe("ProfilePage — profile photo upload (student/representante branch, ow
         nombres: "Sofía",
         apellidos: "Alumna",
         fechaNacimiento: "2012-05-10",
-        ranking: { status: "unavailable", reason: "error" },
         recentSessions: [],
       },
       representados: [],

@@ -156,7 +156,6 @@ const SELF: StudentProfileSummary = {
   nombres: "Alumno",
   apellidos: "Test",
   fechaNacimiento: ADULT_BIRTH_DATE,
-  ranking: { status: "unavailable", reason: "error" },
   recentSessions: [],
   membership: {
     id: 3,

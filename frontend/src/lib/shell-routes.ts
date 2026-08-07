@@ -72,7 +72,6 @@ const STANDALONE_PREFIXES = [
 const APP_SHELL_PREFIXES = [
   "/dashboard",
   "/members",
-  "/nivel",
   "/groups",
   "/payments",
   "/attendance",

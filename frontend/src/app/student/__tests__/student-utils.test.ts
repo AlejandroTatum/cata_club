@@ -7,12 +7,9 @@ import {
   derivePortalMode,
   isRepresentative,
   isMinor,
-  describeRanking,
   describeMembershipState,
   breakdownAttendance,
   daysUntil,
-  formatLevelName,
-  parseLevelNumber,
   personInitials,
   summarizeRecentAttendance,
   resolveCoverageEnd,
@@ -22,7 +19,7 @@ import {
   COVERAGE_ENDING_SOON_DAYS,
 } from "../student-utils";
 import type { PaymentSituationInput } from "../student-utils";
-import type { PagoPersona, StudentRankingSummary, StudentSessionSummary } from "@/services/api";
+import type { PagoPersona, StudentSessionSummary } from "@/services/api";
 
 // ---------------------------------------------------------------------------
 // derivePortalMode / isRepresentative
@@ -85,92 +82,6 @@ describe("isMinor", () => {
 
   it("returns false for invalid date format", () => {
     expect(isMinor("not-a-date")).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// describeRanking
-// ---------------------------------------------------------------------------
-
-describe("describeRanking", () => {
-  it("describes an unavailable/forbidden ranking", () => {
-    const ranking: StudentRankingSummary = { status: "unavailable", reason: "forbidden" };
-    const result = describeRanking(ranking);
-    expect(result.label).toBe("No disponible");
-    expect(result.tone).toBe("warn");
-  });
-
-  it("describes an unavailable/error ranking", () => {
-    const ranking: StudentRankingSummary = { status: "unavailable", reason: "error" };
-    expect(describeRanking(ranking).label).toBe("No disponible");
-  });
-
-  // "Sin nivel asignado" now hangs off `nivelRankingId`, not the removed
-  // `estaEnRanking` flag. That flag was permanently true whenever a ranking
-  // row existed, so the only case it ever caught was "no row at all"; a row
-  // that existed without a level was mislabelled as active.
-  it("describes an available ranking with no nivel assigned yet", () => {
-    const ranking: StudentRankingSummary = {
-      status: "available",
-      nivelRankingId: null,
-      nivelNombre: null,
-    };
-    const result = describeRanking(ranking);
-    expect(result.label).toBe("Sin nivel asignado");
-    expect(result.tone).toBe("warn");
-  });
-
-  it("describes an active ranking without exposing position/points (removed — frozen data, no writer since cerrar_mes() removal)", () => {
-    const ranking: StudentRankingSummary = {
-      status: "available",
-      nivelRankingId: 4,
-      nivelNombre: "Intermedios",
-    };
-    const result = describeRanking(ranking);
-    expect(result.label).toBe("Intermedios");
-    expect(result.detail).toBe("Activo en este nivel.");
-    expect(result.detail).not.toMatch(/Posición|pts/);
-    expect(result.tone).toBe("ok");
-  });
-
-  it("falls back to a placeholder label for an assigned nivel whose nombre is null", () => {
-    // `NivelRanking.nombre` is nullable, so an assigned student can have a
-    // level id and no name. That is still ASSIGNED — branching on the name
-    // instead of the id would silently demote them to "Sin nivel asignado".
-    const ranking: StudentRankingSummary = {
-      status: "available",
-      nivelRankingId: 9,
-      nivelNombre: null,
-    };
-    const result = describeRanking(ranking);
-    expect(result.label).toBe("Nivel sin nombre");
-    expect(result.tone).toBe("ok");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// parseLevelNumber — the carnet's level chip
-// ---------------------------------------------------------------------------
-
-describe("parseLevelNumber", () => {
-  it("reads the rung out of the backend's level name", () => {
-    expect(parseLevelNumber("Nivel 9")).toBe(9);
-    expect(parseLevelNumber("nivel 1")).toBe(1);
-    expect(parseLevelNumber("10")).toBe(10);
-  });
-
-  it("returns null when there is no name at all", () => {
-    expect(parseLevelNumber(null)).toBeNull();
-    expect(parseLevelNumber("   ")).toBeNull();
-  });
-
-  it("returns null for a named level with no rung number — the chip must not invent one", () => {
-    expect(parseLevelNumber("Intermedios")).toBeNull();
-  });
-
-  it("returns null for a rung outside the 1–10 ladder", () => {
-    expect(parseLevelNumber("Nivel 0")).toBeNull();
-    expect(parseLevelNumber("Nivel 11")).toBeNull();
   });
 });
 
@@ -269,32 +180,6 @@ describe("resolveCoverageEnd", () => {
   it("returns null when nothing has been approved", () => {
     expect(resolveCoverageEnd([pago({ estadoPago: "PENDIENTE_VALIDACION" })])).toBeNull();
     expect(resolveCoverageEnd([])).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// formatLevelName
-// ---------------------------------------------------------------------------
-
-describe("formatLevelName", () => {
-  it("names a bare rung number, so it does not read as a count", () => {
-    // The seed data stores one level as "3" and another as "Nivel 9"; printed
-    // raw beside a student's name, a lone "3" is not recognisable as a rank.
-    expect(formatLevelName("3")).toBe("Nivel 3");
-  });
-
-  it("leaves an already-named level alone", () => {
-    expect(formatLevelName("Nivel 9")).toBe("Nivel 9");
-  });
-
-  it("keeps a free-text level name verbatim rather than guessing a rung", () => {
-    expect(formatLevelName("1B")).toBe("1B");
-    expect(formatLevelName("Intermedios")).toBe("Intermedios");
-  });
-
-  it("returns null when there is no level to name", () => {
-    expect(formatLevelName(null)).toBeNull();
-    expect(formatLevelName("   ")).toBeNull();
   });
 });
 

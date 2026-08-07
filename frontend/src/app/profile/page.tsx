@@ -5,7 +5,7 @@
  * Four blocks at the prototype's 820px measure, not a grid of cramped boxes:
  *
  *   1. `.idcard` — a 72px coal/ball avatar, the name and the correo on the
- *      left; a rail of account facts on the right (rol, membresía, nivel,
+ *      left; a rail of account facts on the right (rol, membresía,
  *      miembro desde — whichever of them this account actually has). Per the
  *      prototype's own decision note, "Estado de cuenta" does not earn a
  *      section: it is one binary fact, so it folds in beside the role.
@@ -70,11 +70,7 @@ import {
 import ConfirmDialog from "@/components/ConfirmDialog";
 import type { StudentPortalSummary, StudentProfileSummary, MembershipSummary } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
-// `formatLevelName`, not `describeRanking`: this page prints the level beside
-// a name and inside a labelled rail, where `describeRanking`'s
-// "Sin nivel asignado" / "No disponible" sentences would read as values. The
-// level here is either a real level or the slot is dropped.
-import { personInitials, formatLevelName } from "@/app/student/student-utils";
+import { personInitials } from "@/app/student/student-utils";
 import { Badge, Button, ErrorState, LoadingState, PAGE_RAIL, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
@@ -451,11 +447,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     props.kind === "staff" ? props.perfil.telefono : (props.perfil?.telefono ?? "");
   const fechaCreacion = props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
 
-  const nivel =
-    props.kind === "student" && self && self.ranking.status === "available" && self.ranking.nivelRankingId !== null
-      ? formatLevelName(self.ranking.nivelNombre)
-      : null;
-
   // The page action lives in `PageHeader`'s own row (`.rowline` in
   // `25-perfil.html`), passed up through `AppShell`. It used to sit on a line
   // of its own below a "Volver al Panel" link, and those two rows together
@@ -547,10 +538,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         </div>
 
         {/* The rail. Rol and Membresía keep their badge treatment — they are
-            states, not free text — while Nivel and Miembro desde read as
-            values. Nothing here is derived or estimated: `nivel` is dropped
-            outright when the ranking call came back unavailable, and
-            "Miembro desde" only appears once `fetchMiPerfil()` has resolved.
+            states, not free text — while Miembro desde reads as a value.
+            Nothing here is derived or estimated: "Miembro desde" only
+            appears once `fetchMiPerfil()` has resolved.
 
             Two facts the prototype draws are still absent, for want of a
             source: "Cuenta activa" (no `activo` flag on `UsuarioMeResponseDTO`)
@@ -600,7 +590,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               )}
             </IdentityFact>
           )}
-          {nivel && <IdentityFact label="Nivel">{nivel}</IdentityFact>}
           {fechaCreacion && (
             <IdentityFact label="Miembro desde">{formatDate(fechaCreacion)}</IdentityFact>
           )}
@@ -781,10 +770,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 function DependantRow({ profile }: { profile: StudentProfileSummary }): React.ReactElement {
   const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
   const membership = describeMembership(profile.membership);
-  const nivel =
-    profile.ranking.status === "available" && profile.ranking.nivelRankingId !== null
-      ? formatLevelName(profile.ranking.nivelNombre)
-      : null;
 
   return (
     <DetailRow note={membership ? undefined : NO_MEMBERSHIP_FALLBACK}>
@@ -793,7 +778,6 @@ function DependantRow({ profile }: { profile: StudentProfileSummary }): React.Re
       </span>
       {fullName}
       {membership && <Badge tone={membership.tone}>{membership.label}</Badge>}
-      {nivel && <span className="text-xs font-normal text-ink-3">{nivel}</span>}
     </DetailRow>
   );
 }

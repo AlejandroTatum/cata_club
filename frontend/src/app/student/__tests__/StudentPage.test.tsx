@@ -106,7 +106,6 @@ const PORTAL: StudentPortalSummary = {
     nombres: "Alumno",
     apellidos: "Test",
     fechaNacimiento: "2000-05-14",
-    ranking: { status: "unavailable", reason: "error" },
     recentSessions: [],
     membership: null,
     representante: null,
@@ -260,12 +259,11 @@ describe("StudentPage — contextual dependent CTA", () => {
 });
 
 describe("StudentPage — the club membership card (carnet)", () => {
-  it("shows the student's name, real level and membership state", async () => {
+  it("shows the student's name and membership state", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
         ...PORTAL.self!,
-        ranking: { status: "available", nivelRankingId: 3, nivelNombre: "Nivel 3" },
         membership: { id: 4, estado: "ACTIVA", personaId: 9, montoAplicado: "25.00", categoria: "Mensual", modalidad: "MENSUAL" },
       },
     });
@@ -274,7 +272,6 @@ describe("StudentPage — the club membership card (carnet)", () => {
 
     const carnet = await screen.findByTestId("student-carnet");
     expect(within(carnet).getByText("Alumno Test")).toBeInTheDocument();
-    expect(within(carnet).getByText("Nivel 3")).toBeInTheDocument();
     expect(within(carnet).getByText("Membresía activa")).toBeInTheDocument();
     // The carnet carries the whole membership: plan, modalidad and amount.
     expect(within(carnet).getByText("Plan")).toBeInTheDocument();
@@ -358,12 +355,6 @@ describe("StudentPage — the club membership card (carnet)", () => {
     ]);
   });
 
-  it("says 'Sin nivel asignado' rather than guessing a rung when the ranking is unavailable", async () => {
-    render(<StudentPage />);
-
-    const carnet = await screen.findByTestId("student-carnet");
-    expect(within(carnet).getByText("Sin nivel asignado")).toBeInTheDocument();
-  });
 });
 
 /**

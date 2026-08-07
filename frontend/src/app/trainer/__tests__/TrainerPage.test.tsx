@@ -73,7 +73,6 @@ function schedule(id: number, horaInicio: string, horaFin: string): TrainingSche
     diaSemana: "lun",
     horaInicio,
     horaFin,
-    nivelRankingId: 9,
   };
 }
 

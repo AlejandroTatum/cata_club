@@ -15,8 +15,8 @@
  * than no shortcut: it teaches the user the assistant is useless.
  *
  * They are role-scoped for the same reason. The FAQ itself is written per
- * role, so offering a student "¿Cómo asigno un nivel?" would hand them a
- * question about a screen they cannot reach.
+ * role, so offering a student a question about an admin-only screen would
+ * hand them one they cannot reach.
  */
 
 import type { UserRole } from "@/types/domain";
@@ -30,7 +30,7 @@ export const TALK_TO_CLUB_LABEL = "Hablar con el club";
 
 /** Role-scoped prompts, most useful first. Never more than two. */
 const BY_ROLE: Record<UserRole, string[]> = {
-  admin: ["¿Cómo valido un pago?", "¿Cómo asigno un nivel?"],
+  admin: ["¿Cómo valido un pago?", "¿Quién define los horarios?"],
   trainer: ["¿Cómo tomo asistencia?", "¿Dónde veo el historial?"],
   representante: ["¿Cómo veo mis pagos?", "¿Dónde veo mi asistencia?"],
   estudiante: ["¿Cómo veo mis pagos?", "¿Dónde veo mi asistencia?"],

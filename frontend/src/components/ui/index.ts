@@ -34,9 +34,6 @@ export type { LoadingStateProps } from "./LoadingState";
 export { default as Pagination } from "./Pagination";
 export type { PaginationProps } from "./Pagination";
 
-export { default as LevelChip, LEVELS, isLevel } from "./LevelChip";
-export type { Level, LevelChipProps } from "./LevelChip";
-
 export { default as PageHeader } from "./PageHeader";
 export type { PageHeaderProps } from "./PageHeader";
 

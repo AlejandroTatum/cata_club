@@ -136,11 +136,6 @@ export const FAQ_SECTIONS: FaqSection[] = [
           "Durante unos segundos, sí: la decisión queda retenida y Deshacer la cancela antes de que salga. Pasado ese momento, el pago ya quedó registrado.",
       },
       {
-        question: "¿Qué son los niveles?",
-        answer:
-          "Los niveles son grupos de entrenamiento, no una clasificación competitiva. Ahí se asigna a cada estudiante, respetando el cupo mínimo y máximo de cada nivel. En la escalera del club, el nivel 1 es la cima.",
-      },
-      {
         question: "¿Quién define los horarios?",
         answer:
           "El administrador, desde Gestión de Horarios. Cada horario pertenece a una categoría con su día y su hora; la clase la da el entrenador disponible.",

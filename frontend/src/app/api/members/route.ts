@@ -1,15 +1,15 @@
 /**
- * GET /api/members — aggregates FastAPI's `/personas`, `/membresias/pagos*`,
- * `/membresias/*` and `/ranking/niveles*` into the `MemberAccount[]` shape
+ * GET /api/members — aggregates FastAPI's `/personas`, `/membresias/pagos*`
+ * and `/membresias/*` into the `MemberAccount[]` shape
  * src/app/members/page.tsx renders (see src/lib/server/members-adapter.ts
  * for the DTO translation and the backend gaps found while building it).
  * Mirrors src/app/api/payments/route.ts's aggregation style.
  *
- * `GET /membresias/pagos` and `GET /ranking/niveles/{id}/tabla` calls are
- * best-effort: this page's own protection (`allowedRoles={["admin"]}`)
- * covers the admin-only payments queue in practice, but if either fails
- * (e.g. a future non-admin caller) the response still renders — accounts
- * without resolvable membership/group data, not a hard failure.
+ * `GET /membresias/pagos` is best-effort: this page's own protection
+ * (`allowedRoles={["admin"]}`) covers the admin-only payments queue in
+ * practice, but if it fails (e.g. a future non-admin caller) the response
+ * still renders — accounts without resolvable membership data, not a hard
+ * failure.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -17,7 +17,6 @@ import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { buildMemberAccounts, type BackendPersonaFull } from "@/lib/server/members-adapter";
 import type { BackendMembresia, BackendPagoListItem, BackendTipoMembresia } from "@/lib/server/payments-adapter";
-import type { NivelConOcupacion, TablaRankingItem } from "@/services/api";
 
 const PERSONAS_PAGE_LIMIT = 200;
 
@@ -43,18 +42,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   const personasBody = (await personasResult.response.json()) as PaginatedPersonas;
 
-  const [pagosResult, tiposResult, nivelesResult] = await Promise.all([
+  const [pagosResult, tiposResult] = await Promise.all([
     backendFetchAuthed(request, "/membresias/pagos?limit=200"),
     backendFetchAuthed(request, "/membresias/tipos"),
-    backendFetchAuthed(request, "/ranking/niveles"),
   ]);
 
   const pagos: BackendPagoListItem[] =
     pagosResult.ok && pagosResult.response.ok ? ((await pagosResult.response.json()) as PaginatedPagos).items : [];
   const tipos: BackendTipoMembresia[] =
     tiposResult.ok && tiposResult.response.ok ? await tiposResult.response.json() : [];
-  const niveles: NivelConOcupacion[] =
-    nivelesResult.ok && nivelesResult.response.ok ? await nivelesResult.response.json() : [];
 
   const latestPagoByPersona = new Map<number, BackendPagoListItem>();
   for (const pago of pagos) {
@@ -138,26 +134,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const tipoById = new Map(tipos.map((tipo) => [tipo.id, tipo]));
 
-  const tablaEntries = await Promise.all(
-    niveles.map(async (nivel) => {
-      const result = await backendFetchAuthed(request, `/ranking/niveles/${nivel.id}/tabla`);
-      const tabla: TablaRankingItem[] = result.ok && result.response.ok ? await result.response.json() : [];
-      return tabla.map((item) => [item.personaId, nivel.id] as const);
-    }),
-  );
-  const nivelIdByPersona = new Map(tablaEntries.flat());
-
   const accounts = buildMemberAccounts(
     personasBody.items,
     latestPagoByPersona,
     membresiaById,
     membresiaByPersona,
     tipoById,
-    nivelIdByPersona,
   );
 
   const personasCapped = personasBody.total >= PERSONAS_PAGE_LIMIT;
-  const response = NextResponse.json({ accounts, niveles, personasCapped, membresiasDegraded });
+  const response = NextResponse.json({ accounts, personasCapped, membresiasDegraded });
   if (personasResult.refreshedAccessToken) {
     setAuthCookies(response, { accessToken: personasResult.refreshedAccessToken });
   }

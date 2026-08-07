@@ -6,10 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  MOCK_MEMBER_ACCOUNTS,
-  MOCK_GRUPOS,
-} from "@/mocks/members";
+import { MOCK_MEMBER_ACCOUNTS } from "@/mocks/members";
 import {
   buildMemberStats,
   formatMembershipPeriod,
@@ -17,8 +14,6 @@ import {
   countActiveStudents,
   filterAccounts,
   getAccountStatusBadge,
-  getGrupoById,
-  getNivelLabelFromGrupo,
   normalizeText,
   accountMatchesFlag,
   countAccountsMatchingFlag,
@@ -457,12 +452,6 @@ describe("MOCK_MEMBER_ACCOUNTS", () => {
         expect(estudiante.id).toBeTruthy();
         expect(estudiante.nombres).toBeTruthy();
         expect(estudiante.apellidos).toBeTruthy();
-        // grupoId is either a valid group reference or null (unassigned)
-        expect(estudiante.grupoId).toBeDefined();
-        if (estudiante.grupoId !== null) {
-          expect(typeof estudiante.grupoId).toBe("string");
-          expect(estudiante.grupoId.length).toBeGreaterThan(0);
-        }
       }
     }
   });
@@ -471,126 +460,6 @@ describe("MOCK_MEMBER_ACCOUNTS", () => {
     for (const account of MOCK_MEMBER_ACCOUNTS) {
       expect(account.estudiantes.length).toBeGreaterThan(0);
     }
-  });
-
-  it("students do not own nivel directly — nivel comes from group context", () => {
-    for (const account of MOCK_MEMBER_ACCOUNTS) {
-      for (const estudiante of account.estudiantes) {
-        // The MemberStudentSummary type uses grupoId, not nivel
-        expect("nivel" in estudiante).toBe(false);
-      }
-    }
-  });
-
-  it("every grupoId references a known group", () => {
-    const knownIds = new Set(MOCK_GRUPOS.map((g) => g.id));
-    for (const account of MOCK_MEMBER_ACCOUNTS) {
-      for (const estudiante of account.estudiantes) {
-        if (estudiante.grupoId !== null) {
-          expect(knownIds.has(estudiante.grupoId)).toBe(true);
-        }
-      }
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// MOCK_GRUPOS
-// ---------------------------------------------------------------------------
-
-describe("MOCK_GRUPOS", () => {
-  it("has at least one group", () => {
-    expect(MOCK_GRUPOS.length).toBeGreaterThan(0);
-  });
-
-  it("each group has required fields", () => {
-    for (const grupo of MOCK_GRUPOS) {
-      expect(grupo.id).toBeTruthy();
-      expect(grupo.nombre).toBeTruthy();
-      expect(["principiante", "intermedio", "avanzado"] as const).toContain(
-        grupo.nivel,
-      );
-      expect(grupo.estudiantesIds.length).toBeGreaterThan(0);
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getGrupoById
-// ---------------------------------------------------------------------------
-
-describe("getGrupoById", () => {
-  it("returns the grupo for a valid grupoId", () => {
-    const grupo = getGrupoById("grupo-001", MOCK_GRUPOS);
-    expect(grupo).toBeDefined();
-    expect(grupo?.nombre).toBe("Principiantes");
-  });
-
-  it("returns undefined for null input", () => {
-    expect(getGrupoById(null, MOCK_GRUPOS)).toBeUndefined();
-  });
-
-  it("returns undefined for unknown grupoId", () => {
-    expect(getGrupoById("grupo-unknown", MOCK_GRUPOS)).toBeUndefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getNivelLabelFromGrupo
-// ---------------------------------------------------------------------------
-
-describe("getNivelLabelFromGrupo", () => {
-  it("returns capitalized nivel for known groups", () => {
-    expect(getNivelLabelFromGrupo("grupo-001", MOCK_GRUPOS)).toBe("Principiante");
-    expect(getNivelLabelFromGrupo("grupo-002", MOCK_GRUPOS)).toBe("Intermedio");
-    expect(getNivelLabelFromGrupo("grupo-003", MOCK_GRUPOS)).toBe("Avanzado");
-  });
-
-  it("returns null for null grupoId", () => {
-    expect(getNivelLabelFromGrupo(null, MOCK_GRUPOS)).toBeNull();
-  });
-
-  it("returns null for unknown grupoId", () => {
-    expect(getNivelLabelFromGrupo("grupo-unknown", MOCK_GRUPOS)).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Unassigned student (no group)
-// ---------------------------------------------------------------------------
-
-describe("unassigned student (grupoId: null)", () => {
-  const NULL_GRUPO_STUDENT = {
-    id: "stu-null-grupo",
-    nombres: "Nueva",
-    apellidos: "Alumna",
-    grupoId: null,
-    activo: true,
-    membresia: null,
-    ultimoPago: null,
-  };
-
-  it("fixture has null grupoId", () => {
-    expect(NULL_GRUPO_STUDENT.grupoId).toBeNull();
-  });
-
-  it("getNivelLabelFromGrupo returns null for null grupoId", () => {
-    const nivelDisplay = getNivelLabelFromGrupo(
-      NULL_GRUPO_STUDENT.grupoId,
-      MOCK_GRUPOS,
-    );
-    expect(nivelDisplay).toBeNull();
-  });
-
-  it("null nivelDisplay triggers 'Sin grupo asignado' rendering (mimics StudentRow)", () => {
-    const nivelDisplay = getNivelLabelFromGrupo(
-      NULL_GRUPO_STUDENT.grupoId,
-      MOCK_GRUPOS,
-    );
-    // This mirrors the ternary in StudentRow (page.tsx line 133):
-    //   {nivelDisplay ? <span>{nivelDisplay}</span> : <span>Sin grupo asignado</span>}
-    const rendered = nivelDisplay ?? "Sin grupo asignado";
-    expect(rendered).toBe("Sin grupo asignado");
   });
 });
 
@@ -653,20 +522,6 @@ describe("accountMatchesFlag", () => {
       estudiantes: [{ ...account.estudiantes[0], ultimoPago: null }],
     };
     expect(accountMatchesFlag(noPending, "pendiente")).toBe(false);
-  });
-
-  it('"sin-grupo" only matches accounts with at least one student without a grupoId', () => {
-    const account: MemberAccount = {
-      ...MOCK_MEMBER_ACCOUNTS[0],
-      estudiantes: [{ ...MOCK_MEMBER_ACCOUNTS[0].estudiantes[0], grupoId: null }],
-    };
-    expect(accountMatchesFlag(account, "sin-grupo")).toBe(true);
-
-    const withGrupo: MemberAccount = {
-      ...account,
-      estudiantes: [{ ...account.estudiantes[0], grupoId: "grupo-1" }],
-    };
-    expect(accountMatchesFlag(withGrupo, "sin-grupo")).toBe(false);
   });
 });
 
