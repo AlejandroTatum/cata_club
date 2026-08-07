@@ -2,12 +2,16 @@
 
 - **Fecha:** 6 de agosto de 2026
 - **Verificado contra:** `main` en `51a6de9`
-- **Re-derivado después, en dos tandas:**
+- **Re-derivado después, en tres tandas:**
   - El ítem del conteo del panel, contra `ad57c31` (PR #150, que cerró la mitad
     de backend) y el cableado de frontend de #152.
   - Contra `fa13172` (6 de agosto): los seis ítems nuevos que abre este PR, y el
     ítem de los errores en inglés, que pasó a cerrados porque #153 y #155 lo
     resolvieron entero y le dejaron su candado.
+  - Contra `930a5c5` (7 de agosto): los dos follow-ups que dejó la revisión del
+    PR #160 y que hasta ahora vivían solo en el cuerpo de ese PR — el fallo de
+    red que el carnet imprime igual que «sin horario asignado», y la franja que
+    `/student/payments` dejó de mostrar.
 
   **El resto de la lista no se re-verificó** y sigue apoyado en `51a6de9`: vale
   el punto 1 de abajo, es hipótesis hasta re-derivarlo.
@@ -95,6 +99,41 @@ La severidad indica **consecuencia**, no esfuerzo:
     llamador, que hoy comparten el mismo `AbortController`—. Y el guardián: toda
     clave de `STATUS_MESSAGES` es un status que algún camino de esta pila puede
     devolver, rojo si se agrega otra promesa inalcanzable.
+
+- [ ] **Un fallo de red al consultar el horario se imprime en el carnet igual
+  que «el club no le asignó horario».** (Alta)
+  - **Qué está mal:** el carnet emite la fila «Franja» bajo una única
+    condición —`horariosState.status === "ready"`— y `describeAssignedWindows`
+    devuelve `null` cuando el alumno no tiene filas `alumno_horario`. Tres
+    estados distintos colapsan así en el mismo carnet sin fila: la petición en
+    vuelo, la petición que falló, y el alumno al que efectivamente nadie le
+    asignó horario. La ausencia de esa fila no es neutra: el docstring de
+    `describeAssignedWindows` la define como el signo de que el club no asignó
+    horario («the carnet then omits the fact instead of showing a band nobody
+    committed to»). Ante un fallo de red ese signo afirma algo falso, y las dos
+    acciones que habilita son opuestas: recargar la página contra ir a
+    preguntar en administración.
+  - **Lo que lo atenúa, y por qué igual va en Alta:** el panel «Próximos
+    entrenamientos» se renderiza en la misma pantalla, con el mismo
+    `horariosState`, y sí distingue los tres estados (`page.tsx:346` para
+    `loading`, `:352` para `error`), así que quien lea la pantalla completa ve
+    el fallo. Pero el carnet es la parte que se imprime y se saca de captura:
+    leído solo —que es exactamente para lo que existe— sigue afirmando el
+    hecho falso.
+  - **Dónde:** `frontend/src/app/student/page.tsx:120-122` (la única rama que
+    emite la fila); `frontend/src/app/student/student-utils.ts:439` (el
+    `return null` sin horarios asignados); `frontend/src/app/student/page.tsx:550`
+    (el `catch` que fija `status: "error"`).
+  - **Cómo se verificó:**
+    `rg -n 'horariosState.status === "ready" \? describeAssignedWindows|windows\.size === 0\) return null' frontend/src/app/student/page.tsx frontend/src/app/student/student-utils.ts`
+    → dos resultados, y son toda la lógica que decide la fila: una sola rama la
+    produce, y la función devuelve `null` cuando no hay ventanas. Ni `error` ni
+    `loading` tienen rama propia en el carnet.
+  - **Qué test lo cerraría:** en `frontend/src/app/student/__tests__/StudentPage.test.tsx`,
+    uno que monte la pantalla con la consulta de horarios fallando y le exija al
+    carnet un texto que NO aparezca cuando esa misma consulta responde con cero
+    asignaciones. Hoy sale rojo: los dos escenarios renderizan un carnet
+    idéntico.
 
 ### Deuda (Media)
 
@@ -500,6 +539,32 @@ con el objetivo táctil (#97).
     — solo alta, ninguna vinculación de persona existente.
   - **Qué lo cierra:** la definición del flujo (¿quién aprueba?, ¿cómo se
     demuestra el vínculo?) y después su endpoint con tests de autorización.
+
+- [ ] **La franja desapareció de `/student/payments` y no se decidió si vuelve
+  derivada.**
+  - **Qué falta:** la decisión, registrada fuera del cuerpo de un PR. #160
+    eliminó `tipo_membresia.franja_horaria` y con ella la fila «Franja» de esa
+    pantalla, con un motivo explícito: esa pantalla no tiene los horarios a
+    mano, y un plan ahí es un precio. No fue un descuido — fue una decisión
+    tomada que no quedó en ningún índice. Lo que sigue abierto es si la franja
+    vuelve derivada de los `alumno_horario` del alumno, como en el carnet, o si
+    se acepta que ese dato viva solo en `/student`.
+  - **Dónde:** `frontend/src/app/student/payments/page.tsx:162-166` (el bloque
+    de `facts`, del que se removió la fila).
+  - **Cómo se verificó:**
+    `git show 930a5c5^:frontend/src/app/student/payments/page.tsx | rg -n -i franja`
+    → una coincidencia,
+    `167:  if (membership?.franjaHoraria) facts.push({ label: "Franja", ... })`;
+    `rg -n -i franja frontend/src/app/student/payments/page.tsx` → sin
+    coincidencias. El dato estaba y dejó de estar.
+  - **Qué lo cierra:** la decisión registrada. Si es «vuelve», la funde el mismo
+    candado de coherencia que #160 dejó en el carnet, aplicado a esta pantalla:
+    la franja que muestra `/student/payments` es la misma cadena que
+    `describeAssignedWindows` produce sobre los `alumno_horario` del alumno, y
+    se pone rojo el día que las dos pantallas discrepen. Si es «no vuelve», la
+    cierra un test que afirme que esta pantalla no imprime franja alguna —
+    rojo si alguien la repone leyéndola del plan, que es el defecto que #160
+    eliminó.
 
 - [ ] **Qué operaciones administrativas existen realmente en el negocio.**
   - **Qué falta:** revisar cada alta/baja administrativa contra el negocio
