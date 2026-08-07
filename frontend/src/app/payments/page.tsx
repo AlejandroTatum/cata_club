@@ -749,12 +749,20 @@ export default function PaymentsPage(): React.ReactElement {
    * has reviewed yet: the affordance is what raises the question. The reason
    * used to live ONLY in the accessible name, which answered a sighted admin's
    * "why can't I check this?" with nothing at all. It is now real text next to
-   * the checkbox, and `aria-labelledby` points straight at it — one string,
-   * read both ways, so the visible copy and the accessible name cannot say
-   * different things. A resolved payment gets no control at all, because
+   * the checkbox, and `aria-labelledby` points at it — but the reason text is
+   * SHARED across every unreviewed row, so with two or more unreviewed rows on
+   * screen it alone is not a unique name: a screen reader would announce the
+   * same control twice with no way to tell them apart. `aria-labelledby`
+   * accepts several ids, so it also points at the row's own name element —
+   * the same node the sighted admin already reads to know whose row this is —
+   * making the accessible name unique without duplicating that name in the
+   * visible reason text. A resolved payment gets no control at all, because
    * there is nothing left to decide about it.
    */
-  function renderBatchCheckbox(req: PaymentValidationRequest): React.ReactElement | null {
+  function renderBatchCheckbox(
+    req: PaymentValidationRequest,
+    nameId: string,
+  ): React.ReactElement | null {
     if (req.validationStatus !== "pendiente") return null;
     const isReviewed = Boolean(reviewed[req.id]);
     if (isReviewed) {
@@ -778,7 +786,7 @@ export default function PaymentsPage(): React.ReactElement {
           checked={false}
           disabled
           onChange={() => toggleBatchSelection(req.id)}
-          aria-labelledby={reasonId}
+          aria-labelledby={`${nameId} ${reasonId}`}
           className="h-[18px] w-[18px] flex-none accent-coal disabled:cursor-not-allowed disabled:opacity-40"
         />
         <span id={reasonId} className="text-2xs leading-tight text-ink-3">
@@ -1000,10 +1008,15 @@ export default function PaymentsPage(): React.ReactElement {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {paginatedRequests.map((req) => (
+                  {paginatedRequests.map((req) => {
+                    const desktopNameId = `payment-name-desktop-${req.id}`;
+                    return (
                     <TableRow key={req.id}>
-                      <TableCell className="pr-0">{renderBatchCheckbox(req)}</TableCell>
-                      <TableNameCell name={req.studentName} sub={payerLabel(req)} />
+                      <TableCell className="pr-0">{renderBatchCheckbox(req, desktopNameId)}</TableCell>
+                      <TableNameCell
+                        name={<span id={desktopNameId}>{req.studentName}</span>}
+                        sub={payerLabel(req)}
+                      />
                       <TableCell>{humanizePaymentPeriod(req.membershipPeriod)}</TableCell>
                       <TableCell align="right" className="font-semibold tabular-nums text-ink">
                         {formatCurrency(req.expectedAmount)}
@@ -1036,20 +1049,25 @@ export default function PaymentsPage(): React.ReactElement {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
 
             {/* Mobile: the same rows as cards, like members already does. */}
             <ul data-testid="payments-cards" className="divide-y divide-line md:hidden">
-              {paginatedRequests.map((req) => (
+              {paginatedRequests.map((req) => {
+                const mobileNameId = `payment-name-mobile-${req.id}`;
+                return (
                 <li key={req.id} className="flex flex-col gap-3 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
-                      {renderBatchCheckbox(req)}
+                      {renderBatchCheckbox(req, mobileNameId)}
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-ink">{req.studentName}</p>
+                        <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
+                          {req.studentName}
+                        </p>
                         <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
                       </div>
                     </div>
@@ -1082,7 +1100,8 @@ export default function PaymentsPage(): React.ReactElement {
                     </Button>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
 
             {totalPages > 1 && (

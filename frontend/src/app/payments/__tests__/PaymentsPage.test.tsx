@@ -149,6 +149,32 @@ async function openRequest(studentName: string): Promise<void> {
   fireEvent.click(action);
 }
 
+/**
+ * The desktop table's batch checkbox for a given student, scoped by row
+ * rather than by accessible name: several unreviewed rows can carry the same
+ * shared reason text, so the row is what disambiguates them in a lookup.
+ */
+function batchCheckbox(studentName: string): HTMLElement {
+  const row = within(queueTable()).getByText(studentName).closest("tr");
+  if (!row) throw new Error(`No row found for ${studentName}`);
+  return within(row as HTMLElement).getByRole("checkbox");
+}
+
+/**
+ * The accessible name an `aria-labelledby` list produces: the referenced
+ * elements' text content, in order, joined by a space. Computed by hand
+ * rather than imported from an accessibility library so the assertion does
+ * not depend on one being resolvable in this workspace.
+ */
+function accessibleNameFromLabelledby(el: HTMLElement): string {
+  return (el.getAttribute("aria-labelledby") ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
+    .join(" ")
+    .trim();
+}
+
 /** Tick every checklist item, which is what unlocks "Aprobar pago". */
 function completeChecklist(): void {
   const group = screen.getByRole("group", { name: /antes de aprobar/i });
@@ -246,6 +272,11 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
 
     expect(within(queueTable()).getByText("Pendiente")).toBeInTheDocument();
     expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
+    // The mobile cards render the same rows through their own branch
+    // (`payments-cards`), which carries its own copy of this badge.
+    const cards = screen.getByTestId("payments-cards");
+    expect(within(cards).getByText("Pendiente")).toBeInTheDocument();
+    expect(within(cards).getByText("Validado")).toBeInTheDocument();
   });
 });
 
@@ -707,17 +738,6 @@ describe("PaymentsPage — batch approval", () => {
     await parkOpenDetail();
   }
 
-  /**
-   * Scoped by row rather than by accessible name: an unreviewed checkbox no
-   * longer encodes the student's name in its own name (that reason is now
-   * shared, visible text — see below), so the row is what disambiguates it.
-   */
-  function batchCheckbox(studentName: string): HTMLElement {
-    const row = within(queueTable()).getByText(studentName).closest("tr");
-    if (!row) throw new Error(`No row found for ${studentName}`);
-    return within(row as HTMLElement).getByRole("checkbox");
-  }
-
   it("cannot select a payment that was never reviewed, and says why on screen", async () => {
     renderPage();
     await screen.findByTestId("payments-table");
@@ -725,13 +745,15 @@ describe("PaymentsPage — batch approval", () => {
     const checkbox = batchCheckbox("Juan Pérez");
     expect(checkbox).toBeDisabled();
     // The reason is real text next to the checkbox now, not only an
-    // aria-label a sighted admin never hears — and it is the SAME string as
-    // the accessible name, via aria-labelledby, so the two cannot diverge.
-    // Both pending rows are unreviewed, so the reason is scoped to this row.
+    // aria-label a sighted admin never hears — and it is part of the
+    // accessible name via `aria-labelledby`, alongside the row's own student
+    // name, so the visible copy and the accessible name cannot say different
+    // things. Both pending rows are unreviewed, so the reason alone would not
+    // be a unique name; the student name is what disambiguates them.
     const reason = "Revisar antes de incluir en un lote";
     const row = checkbox.closest("tr") as HTMLElement;
     expect(within(row).getByText(reason)).toBeInTheDocument();
-    expect(checkbox).toHaveAccessibleName(reason);
+    expect(checkbox).toHaveAccessibleName(`Juan Pérez ${reason}`);
     expect(screen.queryByRole("group", { name: /aprobación por lote/i })).not.toBeInTheDocument();
   });
 
@@ -849,6 +871,31 @@ describe("PaymentsPage — batch approval", () => {
     const bar = await screen.findByRole("group", { name: /aprobación por lote/i });
     expect(bar.textContent).toContain("1 de 1 pagos revisados seleccionados");
     expect(within(bar).getByRole("button", { name: /^aprobar 1 pago$/i })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// An unreviewed batch checkbox's accessible name must stay unique per row.
+//
+// The visible reason ("Revisar antes de incluir en un lote") is shared text
+// pointed at by every unreviewed checkbox's `aria-labelledby`. With two
+// unreviewed rows on screen, a screen reader that only heard the shared
+// reason would announce two controls with the identical name and give the
+// admin no way to tell them apart.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — unreviewed batch checkboxes keep distinct accessible names", () => {
+  it("names each unreviewed checkbox after its own student, not just the shared reason", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, SECOND_PENDING]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    const juanName = accessibleNameFromLabelledby(batchCheckbox("Juan Pérez"));
+    const sofiaName = accessibleNameFromLabelledby(batchCheckbox("Sofia Vera"));
+
+    expect(juanName).toContain("Juan Pérez");
+    expect(sofiaName).toContain("Sofia Vera");
+    expect(juanName).not.toBe(sofiaName);
   });
 });
 

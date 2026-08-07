@@ -1155,6 +1155,10 @@ describe("MembersPage — the stats row doesn't repeat the student count", () =>
     expect(within(tile).getByText("3")).toBeInTheDocument();
     // ...and the old bug repeated it, verbatim, inside the tile beside it.
     expect(screen.queryByText("de 3 estudiantes")).not.toBeInTheDocument();
+    // The neighboring tile still names the population it measures against —
+    // it just does not spell out the figure a second time.
+    const activeTile = screen.getByText("Con membresía activa").closest("div") as HTMLElement;
+    expect(within(activeTile).getByText("de los estudiantes")).toBeInTheDocument();
   });
 });
 
