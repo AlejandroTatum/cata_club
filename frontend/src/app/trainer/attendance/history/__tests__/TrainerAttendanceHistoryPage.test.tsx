@@ -71,14 +71,12 @@ const SCHEDULES: TrainingSchedule[] = [
     diaSemana: "lun",
     horaInicio: "15:00",
     horaFin: "16:00",
-    nivelRankingId: null,
   },
   {
     id: 9,
     diaSemana: "vie",
     horaInicio: "17:00",
     horaFin: "18:00",
-    nivelRankingId: null,
   },
 ];
 

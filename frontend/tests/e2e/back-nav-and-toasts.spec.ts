@@ -7,10 +7,10 @@
  *
  * 1. Getting back out of a screen is always a real next/link `<a href>` to a
  *    fixed parent route — never router.back(). Admin top-level destinations
- *    (/members, /ranking, /payments) dropped their in-page BackLink — they
- *    are reached from the sidebar and left the same way — so the guarantee
- *    is checked on the sidebar's own "Panel de Control" link. The trainer
- *    flow still renders the shared BackLink (src/components/BackLink.tsx).
+ *    (/members, /payments) dropped their in-page BackLink — they are reached
+ *    from the sidebar and left the same way — so the guarantee is checked on
+ *    the sidebar's own "Panel de Control" link. The trainer flow still
+ *    renders the shared BackLink (src/components/BackLink.tsx).
  * 2. useToast() (src/contexts/ToastContext.tsx) surfaces a visible toast
  *    after a mutating action — covered here via /payments' reject flow
  *    (error path, since it needs no extra setup beyond one mocked request).
@@ -106,43 +106,10 @@ test.describe("Back navigation + toasts", () => {
   test("members: the way back to /dashboard is a real sidebar link, not router.back()", async ({ page }) => {
     await loginAsAdmin(page);
     await page.route("**/api/members", (route) =>
-      fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
+      fulfillJson(route, { accounts: [], personasCapped: false }),
     );
 
     await page.goto("/members");
-    const home = page
-      .getByRole("navigation", { name: "Navegación principal" })
-      .getByRole("link", { name: "Panel de Control", exact: true });
-    await expect(home).toBeVisible();
-    await expect(home).toHaveAttribute("href", "/dashboard");
-
-    await home.click();
-    await expect(page).toHaveURL(/\/dashboard$/);
-  });
-
-  test("nivel (admin): /ranking still answers, and lands on the route that names it", async ({
-    page,
-  }) => {
-    // The route was renamed when the competitive feature was retired. The old
-    // name is in bookmarks and shared messages, so it redirects permanently
-    // rather than 404ing — this is the assertion that the redirect is wired,
-    // not just declared in `next.config.js`.
-    await loginAsAdmin(page);
-    await page.route("**/api/members", (route) =>
-      fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
-    );
-
-    await page.goto("/ranking");
-    await expect(page).toHaveURL(/\/nivel$/);
-  });
-
-  test("nivel (admin): the way back to /dashboard is a real sidebar link", async ({ page }) => {
-    await loginAsAdmin(page);
-    await page.route("**/api/members", (route) =>
-      fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
-    );
-
-    await page.goto("/nivel");
     const home = page
       .getByRole("navigation", { name: "Navegación principal" })
       .getByRole("link", { name: "Panel de Control", exact: true });
@@ -247,38 +214,5 @@ test.describe("Back navigation + toasts", () => {
 
     await home.click();
     await expect(page).toHaveURL(/\/dashboard$/);
-  });
-
-  test("trainer/nivel: BackLink -> /trainer for the trainer actor (same panel, different role)", async ({ page, baseURL }) => {
-    // Session established directly (cookie + /api/auth/session), like
-    // members-results-disclosure.spec.ts — no need to drive the login form
-    // again here since that path is already covered by the admin login
-    // above and by admin-smoke.spec.ts.
-    await page.context().addCookies([
-      { name: "access_token", value: MOCK_ACCESS_TOKEN, url: baseURL ?? E2E_BASE_URL },
-    ]);
-    await page.route("**/api/**", (route) => {
-      if (route.request().method() === "GET") return fulfillJson(route, []);
-      return fulfillJson(route, {});
-    });
-    await page.route("**/api/auth/session", (route) =>
-      fulfillJson(route, {
-        user: { id: "2", name: "Trainer Demo", email: "trainer@cataclub.com", role: "trainer", representanteId: null },
-        roles: ["ENTRENADOR"],
-        loggedInAt: new Date().toISOString(),
-      }),
-    );
-    await page.route("**/api/members", (route) =>
-      fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
-    );
-
-    await page.goto("/trainer/nivel");
-
-    const back = page.getByRole("link", { name: /volver a entrenador/i });
-    await expect(back).toBeVisible();
-    await expect(back).toHaveAttribute("href", "/trainer");
-
-    await back.click();
-    await expect(page).toHaveURL(/\/trainer$/);
   });
 });

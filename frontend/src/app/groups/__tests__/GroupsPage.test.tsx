@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import GroupsPage from "@/app/groups/page";
 import { ApiClientError } from "@/services/api";
-import type { AlumnoHorario, NivelConOcupacion } from "@/services/api";
+import type { AlumnoHorario } from "@/services/api";
 import type { MemberAccount } from "@/app/members/members-utils";
 import { ToastProvider } from "@/contexts/ToastContext";
 
@@ -63,11 +63,9 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 const mockFetchMembers = vi.fn();
-const mockSetStudentNivel = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 const mockFetchHorarios = vi.fn().mockResolvedValue([]);
-const mockFetchNivelesConOcupacion = vi.fn().mockResolvedValue([]);
 const mockCrearHorario = vi.fn();
 const mockActualizarHorario = vi.fn();
 const mockEliminarHorario = vi.fn();
@@ -86,11 +84,9 @@ vi.mock("@/services/api", () => {
   }
   return {
     fetchMembers: () => mockFetchMembers(),
-    setStudentNivel: (personaId: number, nivelId: number | null) => mockSetStudentNivel(personaId, nivelId),
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     fetchHorarios: () => mockFetchHorarios(),
-    fetchNivelesConOcupacion: () => mockFetchNivelesConOcupacion(),
     crearHorario: (dto: unknown) => mockCrearHorario(dto),
     actualizarHorario: (id: number, dto: unknown) => mockActualizarHorario(id, dto),
     eliminarHorario: (id: number) => mockEliminarHorario(id),
@@ -100,50 +96,6 @@ vi.mock("@/services/api", () => {
     ApiClientError: MockApiClientError,
   };
 });
-
-const NIVELES: NivelConOcupacion[] = [
-  {
-    id: 1,
-    numeroNivel: 1,
-    nombre: "Nivel Iniciación",
-    capacidadMinima: 1,
-    capacidadMaxima: 10,
-    personasActuales: 0,
-    cuposDisponibles: 10,
-    necesitaRevision: false,
-    nivelCategoria: "principiante",
-  },
-  {
-    id: 2,
-    numeroNivel: 2,
-    nombre: "Nivel Intermedio",
-    capacidadMinima: 1,
-    capacidadMaxima: 10,
-    personasActuales: 0,
-    cuposDisponibles: 10,
-    necesitaRevision: false,
-    nivelCategoria: "intermedio",
-  },
-];
-
-const UNASSIGNED_ACCOUNT: MemberAccount = {
-  id: "acc-1",
-  role: "representante",
-  nombres: "María",
-  apellidos: "González",
-  telefono: "0999999999",
-  estudiantes: [
-    {
-      id: "10",
-      nombres: "Sofía",
-      apellidos: "González",
-      grupoId: null,
-      activo: true,
-      membresia: null,
-      ultimoPago: null,
-    },
-  ],
-};
 
 /**
  * Wait until the schedules have loaded.
@@ -160,67 +112,12 @@ async function waitForHorarios(): Promise<void> {
   });
 }
 
-async function findUnassignedRow(): Promise<HTMLElement> {
-  const heading = await screen.findByText(/^estudiantes sin grupo/i);
-  const section = heading.closest("div.card") as HTMLElement;
-  return within(section).getByText("Sofía González").closest("div.card-hover") as HTMLElement;
-}
-
-describe.skip("GroupsPage — unassigned dropdown assign (MOVED to RankingPage — issue #43)", () => {
-  beforeEach(() => {
-    mockFetchMembers.mockReset();
-    mockSetStudentNivel.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [UNASSIGNED_ACCOUNT], niveles: NIVELES });
-    mockSetStudentNivel.mockResolvedValue(undefined);
-  });
-
-  it("renders one dropdown + Asignar button per unassigned student, not one button per nivel", async () => {
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    const row = await findUnassignedRow();
-
-    const select = within(row).getByRole("combobox");
-    const buttons = within(row).getAllByRole("button");
-
-    // Exactly one select (not N buttons — one per nivel) and one Asignar button.
-    expect(select).toBeInTheDocument();
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0]).toHaveTextContent(/asignar/i);
-  });
-
-  it("fires handleAssignStudent's mutation with the nivel picked from the dropdown", async () => {
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    const row = await findUnassignedRow();
-
-    const select = within(row).getByRole("combobox");
-    fireEvent.change(select, { target: { value: "2" } });
-    fireEvent.click(within(row).getByRole("button", { name: /asignar/i }));
-
-    await waitFor(() => {
-      expect(mockSetStudentNivel).toHaveBeenCalledWith(10, 2);
-    });
-  });
-
-  it("disables the Asignar button until a nivel is picked", async () => {
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    const row = await findUnassignedRow();
-
-    const assignButton = within(row).getByRole("button", { name: /asignar/i });
-    expect(assignButton).toBeDisabled();
-
-    const select = within(row).getByRole("combobox");
-    fireEvent.change(select, { target: { value: "1" } });
-    expect(assignButton).toBeEnabled();
-  });
-});
-
 describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue([]);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
   });
 
   // The screen's name matches its nav entry and the approved prototype
@@ -299,10 +196,8 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
     mockFetchAlumnosPorHorario.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
   });
 
@@ -585,12 +480,10 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue([
       { id: 801, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
     ]);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
   });
 
   function card(): HTMLElement {
@@ -622,12 +515,10 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue([
       { id: 901, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "NO_EXISTE" },
     ]);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
   });
 
   it("shows the raw value instead of crashing — or mislabelling it as Formativo", async () => {
@@ -659,15 +550,13 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
     mockCrearHorario.mockReset();
     mockActualizarHorario.mockReset();
     mockEliminarHorario.mockReset();
     mockFetchAlumnosPorHorario.mockReset();
     mockDesasignarAlumnoDeHorario.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
     mockCrearHorario.mockResolvedValue({});
     mockActualizarHorario.mockResolvedValue({});
     mockEliminarHorario.mockResolvedValue(undefined);
@@ -766,11 +655,9 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
     mockFetchAlumnosPorHorario.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue(GROUPS);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
   });
 
@@ -860,17 +747,17 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   // belongs to instead of pooling every schedule on the screen.
   const SINGLE_DIA_ROW = { id: 603, diaSemana: "VIERNES", horaInicio: "20:00", horaFin: "21:15", categoria: "ADULTOS" };
 
-  // Nivel-matched (grupoId "2") but NEVER enrolled via AlumnoHorario for any
-  // row above — proves the roster is sourced from fetchAlumnosPorHorario, not
-  // from nivel/grupoId matching against the general student pool.
-  const NIVEL_MATCH_UNENROLLED_ACCOUNT: MemberAccount = {
-    id: "acc-nivel-match",
+  // Present in the general student pool but NEVER enrolled via AlumnoHorario
+  // for any row above — proves the roster is sourced from
+  // fetchAlumnosPorHorario, not from matching against the general student pool.
+  const UNENROLLED_ACCOUNT: MemberAccount = {
+    id: "acc-unenrolled",
     role: "representante",
     nombres: "Carla",
     apellidos: "Ruiz",
     telefono: "0999999999",
     estudiantes: [
-      { id: "50", nombres: "Carla", apellidos: "Ruiz", grupoId: "2", activo: true, membresia: null, ultimoPago: null },
+      { id: "50", nombres: "Carla", apellidos: "Ruiz", activo: true, membresia: null, ultimoPago: null },
     ],
   };
 
@@ -881,20 +768,18 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     apellidos: "Vega",
     telefono: "0999999999",
     estudiantes: [
-      { id: "70", nombres: "Diego", apellidos: "Vega", grupoId: null, activo: true, membresia: null, ultimoPago: null },
+      { id: "70", nombres: "Diego", apellidos: "Vega", activo: true, membresia: null, ultimoPago: null },
     ],
   };
 
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
     mockFetchAlumnosPorHorario.mockReset();
     mockAsignarAlumnoAHorario.mockReset();
     mockDesasignarAlumnoDeHorario.mockReset();
     mockFetchHorarios.mockResolvedValue([...MULTI_DIA_GROUP_ROWS, SINGLE_DIA_ROW]);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
-    mockFetchMembers.mockResolvedValue({ accounts: [NIVEL_MATCH_UNENROLLED_ACCOUNT], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [UNENROLLED_ACCOUNT] });
     mockAsignarAlumnoAHorario.mockResolvedValue({});
     mockDesasignarAlumnoDeHorario.mockResolvedValue(undefined);
     mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) => {
@@ -1044,7 +929,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   });
 
   it("assigning a student calls asignarAlumnoAHorario once per horario_id row of the group", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
@@ -1064,7 +949,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   });
 
   it("assigning tolerates a per-row 400 (already assigned to that día) and still reports success if any row assigned", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
     mockAsignarAlumnoAHorario.mockImplementation((dto: { horario_id: number }) =>
       dto.horario_id === 601
         ? Promise.reject(new ApiClientError("El alumno ya está asignado al horario.", 400))
@@ -1088,7 +973,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   });
 
   it("shows a real error (not a false success) when every row fails with a non-400 error while assigning", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
     mockAsignarAlumnoAHorario.mockRejectedValue(new ApiClientError("Error de red al asignar el alumno.", 500));
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
@@ -1177,13 +1062,11 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
     mockEliminarHorario.mockReset();
     mockFetchAlumnosPorHorario.mockReset();
     mockDesasignarAlumnoDeHorario.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
     mockEliminarHorario.mockResolvedValue(undefined);
     mockDesasignarAlumnoDeHorario.mockResolvedValue(undefined);
   });
@@ -1285,15 +1168,13 @@ describe("GroupsPage — save resyncs local state after a mid-sequence failure (
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
     mockCrearHorario.mockReset();
     mockActualizarHorario.mockReset();
     mockEliminarHorario.mockReset();
     mockFetchAlumnosPorHorario.mockReset();
     mockDesasignarAlumnoDeHorario.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValueOnce(GROUP_ROWS).mockResolvedValue(RESYNCED_ROWS);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
   });
 
@@ -1341,11 +1222,9 @@ describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockFetchNivelesConOcupacion.mockReset();
     mockCrearHorario.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [], niveles: NIVELES });
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
-    mockFetchNivelesConOcupacion.mockResolvedValue(NIVELES);
     mockCrearHorario.mockResolvedValue({});
   });
 

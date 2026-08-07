@@ -19,11 +19,10 @@
  * That every two-column layout in the product is a rail. `/payments` splits
  * its proof viewer off with `lg:grid-cols-5` + `lg:col-span-3`, and that is a
  * PROPORTIONAL split, not a rail: the payment proof is an image, and an image
- * that scales with the window is the point of showing it. `NivelLadderScreen`
- * pairs two equal columns with `md:grid-cols-2`. Neither is the shape this
- * constant describes, and a rule wide enough to catch them would fire on the
- * two files that thought about it hardest — a guard that fires on correct code
- * is a guard people learn to skip.
+ * that scales with the window is the point of showing it. That is not the
+ * shape this constant describes, and a rule wide enough to catch it would
+ * fire on a file that thought about it hardest — a guard that fires on
+ * correct code is a guard people learn to skip.
  *
  * The narrow rule catches the real regression: a new screen that wants a rail
  * and types its own measure instead of importing the one that exists.

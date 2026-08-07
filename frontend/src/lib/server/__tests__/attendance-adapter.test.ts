@@ -66,7 +66,7 @@ describe("horarioLabel", () => {
 });
 
 describe("buildTrainingSchedule", () => {
-  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", nivelRankingId: null };
+  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
 
   it("maps a backend Horario into a TrainingSchedule (no trainer — issue #13)", () => {
     expect(buildTrainingSchedule(horario)).toEqual({
@@ -74,7 +74,6 @@ describe("buildTrainingSchedule", () => {
       diaSemana: "lun",
       horaInicio: "15:00",
       horaFin: "16:30",
-      nivelRankingId: null,
     });
   });
 });
@@ -90,7 +89,7 @@ describe("buildAttendanceRecord", () => {
     personaId: 3,
     horarioId: 1,
   };
-  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", nivelRankingId: null };
+  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
   const personas = new Map([
     [3, { id: 3, nombres: "Sofia", apellidos: "Alumna" }],
   ]);

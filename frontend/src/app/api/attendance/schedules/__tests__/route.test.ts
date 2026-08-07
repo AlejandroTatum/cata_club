@@ -31,7 +31,7 @@ function getRequest(cookie = ""): NextRequest {
   return new NextRequest("http://localhost/api/attendance/schedules", { headers: cookie ? { cookie } : {} });
 }
 
-const horario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", nivelRankingId: null };
+const horario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
 
 beforeEach(() => {
   vi.spyOn(global, "fetch");
@@ -73,7 +73,7 @@ describe("GET /api/attendance/schedules", () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual([
-      { id: 1, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30", nivelRankingId: null },
+      { id: 1, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:30" },
     ]);
   });
 

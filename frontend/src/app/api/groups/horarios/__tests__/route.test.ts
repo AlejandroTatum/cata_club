@@ -71,7 +71,7 @@ describe("GET /api/groups/horarios", () => {
   });
 
   it("proxies GET /asistencias/horarios with the bearer token", async () => {
-    const horarios = [{ id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", nivelRankingId: null }];
+    const horarios = [{ id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" }];
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(horarios));
 
     const access = makeJwt(3600);
@@ -120,7 +120,7 @@ describe("POST /api/groups/horarios", () => {
   });
 
   it("forwards exactly categoria and dia_semana with the bearer token", async () => {
-    const creado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", nivelRankingId: null };
+    const creado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" };
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creado, 201));
 
     const access = makeJwt(3600);
@@ -160,7 +160,7 @@ describe("POST /api/groups/horarios", () => {
   });
 
   it("does not forward a stale entrenador_id — the relation is gone (issue #13)", async () => {
-    const creado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO", nivelRankingId: null };
+    const creado = { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" };
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creado, 201));
 
     const access = makeJwt(3600);

@@ -398,36 +398,8 @@ export async function updatePaymentValidation(
 }
 
 // ---------------------------------------------------------------------------
-// Types — Attendance & Ranking (Fase 3)
+// Types — Attendance (Fase 3)
 // ---------------------------------------------------------------------------
-
-/**
- * A ranking level with current occupancy — `GET /ranking/niveles`.
- * `NivelRanking` IS the "Grupo" concept for the frontend (see backend's
- * ranking_schemas.py module docstring); already camelCase, passed through
- * unmodified by the Route Handler.
- */
-export interface NivelConOcupacion {
-  id: number;
-  numeroNivel: number;
-  nombre: string | null;
-  capacidadMinima: number;
-  capacidadMaxima: number;
-  personasActuales: number;
-  cuposDisponibles: number;
-  necesitaRevision: boolean;
-  nivelCategoria: "principiante" | "intermedio" | "avanzado";
-}
-
-/** A row of a nivel's roster — `GET /ranking/niveles/:id/tabla`. No longer
- * carries `posicionActual`/`puntajeAcumulado` (backend stopped exposing
- * them — frozen forever since `cerrar_mes()` was removed, slice E of
- * `limpieza-asistencia-y-nivel-entrenador`); this endpoint now serves
- * purely as a roster (attendance roster + members nivel-mapping). */
-export interface TablaRankingItem {
-  personaId: number;
-  personaNombreCompleto: string;
-}
 
 /** One student's attendance mark, part of a `registerAttendance` batch. */
 export interface AttendanceStudentMark {
@@ -452,7 +424,7 @@ export interface RegisterAttendanceResult {
 }
 
 // ---------------------------------------------------------------------------
-// Attendance & Ranking API Methods (Fase 3)
+// Attendance API Methods (Fase 3)
 // ---------------------------------------------------------------------------
 
 /** List real training schedules (Horario). */
@@ -476,11 +448,6 @@ export async function fetchAttendanceRecords(params?: {
   return request<AttendanceRecord[]>(apiEndpoint(`/attendance/records${query ? `?${query}` : ""}`));
 }
 
-/** List ranking levels (Grupo) with current occupancy. */
-export async function fetchNivelesConOcupacion(): Promise<NivelConOcupacion[]> {
-  return request<NivelConOcupacion[]>(apiEndpoint("/ranking/niveles"));
-}
-
 /** Persist attendance for a session (one real `POST /asistencias` per student, partial-failure-tolerant). */
 export async function registerAttendance(data: RegisterAttendanceRequest): Promise<RegisterAttendanceResult> {
   return request<RegisterAttendanceResult>(apiEndpoint("/attendance/records"), {
@@ -499,10 +466,6 @@ export async function registerAttendance(data: RegisterAttendanceRequest): Promi
  * `@/services/categorias`) — the response still carries them for display,
  * but `CrearHorarioDTO`/`ActualizarHorarioDTO` below no longer accept them
  * as client input.
- *
- * There is no `nivelRankingId`: a horario is not tied to a ranking level.
- * The backing column was dropped by migration `c4d5e6f7a8b9`, and a student's
- * level lives on `Ranking.nivel_ranking_id` alone.
  *
  * There is no `entrenadorId` either: the club does not assign trainers to
  * schedules — whoever is available teaches the class. The backing column was
@@ -579,7 +542,6 @@ export async function eliminarHorario(id: number): Promise<void> {
 /** Aggregated member response, including whether the upstream persona page reached its cap before accounts were grouped. */
 export interface MembersResponse {
   accounts: MemberAccount[];
-  niveles: NivelConOcupacion[];
   personasCapped: boolean;
   /**
    * `true` when at least one membership could not be resolved upstream, so
@@ -591,25 +553,17 @@ export interface MembersResponse {
   membresiasDegraded?: boolean;
 }
 
-/** List every account (responsible payer + managed students) and ranking niveles with occupancy, aggregated server-side — see src/lib/server/members-adapter.ts. */
+/** List every account (responsible payer + managed students), aggregated server-side — see src/lib/server/members-adapter.ts. */
 export async function fetchMembers(): Promise<MembersResponse> {
   return request<MembersResponse>(apiEndpoint("/members"));
 }
 
-/** Lightweight student row from GET /api/ranking/alumnos-con-nivel — accessible to admin and trainer. */
-export interface AlumnoConNivel {
-  personaId: number;
-  nombres: string;
-  apellidos: string;
-  nivelRankingId: number | null;
-}
-
 /**
- * Page size for the roster listings that became paginated on the backend
- * (issue #7): alumnos-con-nivel, asignaciones and horario rosters. 200 is the
- * backend's hard cap (`le=200`) and the same ceiling `PERSONAS_PAGE_LIMIT`
- * already uses in `src/app/api/members/route.ts` — one capped page, matching
- * how the members screen consumes `GET /personas/`.
+ * Page size for roster listings paginated on the backend (issue #7):
+ * asignaciones and horario rosters. 200 is the backend's hard cap (`le=200`)
+ * and the same ceiling `PERSONAS_PAGE_LIMIT` already uses in
+ * `src/app/api/members/route.ts` — one capped page, matching how the members
+ * screen consumes `GET /personas/`.
  */
 const ROSTER_PAGE_LIMIT = 200;
 
@@ -617,54 +571,6 @@ const ROSTER_PAGE_LIMIT = 200;
 interface PaginatedEnvelope<T> {
   items: T[];
   total: number;
-}
-
-/**
- * List all students (rol ALUMNO) with their current `nivelRankingId` (null if
- * unassigned). Available to both admin and trainer; replaces `fetchMembers`
- * for the nivel-asignation panel because `/personas/` is admin-only.
- */
-export async function fetchAlumnosConNivel(): Promise<AlumnoConNivel[]> {
-  // camelCase, NOT snake_case: `AlumnoConNivelDTO` extends `ResponseBase`,
-  // which sets `alias_generator=_to_camel` (backend schemas/base.py:45), and
-  // the BFF passes the body through untouched. Reading `persona_id` /
-  // `nivel_ranking_id` yielded `undefined` for every field, which is worse than
-  // a crash: `undefined !== null` counted every student as assigned while
-  // `undefined === nivel.id` matched no level, so /ranking reported "68 de 68
-  // asignados" over eleven levels that all read "Sin estudiantes".
-  //
-  // Paginated (issue #7): the endpoint answers the standard `{items, total}`
-  // envelope; one page at the backend's cap, same as `PERSONAS_PAGE_LIMIT`.
-  const { items } = await request<
-    PaginatedEnvelope<{ personaId: number; nombres: string; apellidos: string; nivelRankingId: number | null }>
-  >(apiEndpoint(`/ranking/alumnos-con-nivel?limit=${ROSTER_PAGE_LIMIT}`));
-  return items.map((it) => ({
-    personaId: it.personaId,
-    nombres: it.nombres,
-    apellidos: it.apellidos,
-    nivelRankingId: it.nivelRankingId ?? null,
-  }));
-}
-
-/**
- * Put a student on a level — `PATCH /personas/{id}/nivel`. Admin and trainer.
- *
- * ONE call for what used to be `assignStudentToNivel` and `moveStudentToNivel`.
- * Those two mirrored two backend endpoints that each refused half the cases
- * (one rejected a student who already held a level, the other a student who
- * did not), so every caller had to branch on the student's current level
- * before choosing a function. The backend operation is idempotent now:
- * calling this twice with the same level succeeds twice and leaves the same
- * state, whatever the student's starting point was.
- *
- * `nivelRankingId: null` takes the student off their level. There was no way
- * to express that before — the move endpoint required a destination.
- */
-export async function setStudentNivel(personaId: number, nivelRankingId: number | null): Promise<void> {
-  await request<unknown>(apiEndpoint(`/personas/${personaId}/nivel`), {
-    method: "PATCH",
-    body: JSON.stringify({ nivelRankingId }),
-  });
 }
 
 /** Submit one public, backend-transactional enrollment request. */
@@ -691,8 +597,7 @@ export interface Institucion {
  *
  * `tipoEscuela`, NOT `tipo_escuela`: `InstitucionResponseDTO` extends
  * `ResponseBase` (backend/app/presentacion/schemas/persona_schemas.py:17), so
- * it serialises camelCase like every other response — see
- * `fetchAlumnosConNivel` for the same bug and what it cost. Reading the
+ * it serialises camelCase like every other response. Reading the
  * snake_case key made every option render "Nombre (undefined)" and left the
  * "tipo de escuela" filter unable to match anything.
  */
@@ -761,23 +666,6 @@ function isEnrollmentResponse(value: unknown): value is EnrollmentResponse {
 // Types & API Methods — Student Portal (Fase 6)
 // ---------------------------------------------------------------------------
 
-/**
- * Ranking profile for one student — `GET /ranking/{id}/perfil` is
- * ownership-checked server-side (self, or ADMINISTRADOR/ENTRENADOR), so a
- * representante viewing a represented child's profile legitimately gets
- * `"unavailable"/"forbidden"` instead of data. See
- * src/lib/server/student-adapter.ts for the full gap writeup.
- */
-export type StudentRankingSummary =
-  | {
-      status: "available";
-      /** `null` means "not assigned to a level yet". Replaces the removed
-       *  `estaEnRanking`, a flag no code path could ever set to false. */
-      nivelRankingId: number | null;
-      nivelNombre: string | null;
-    }
-  | { status: "unavailable"; reason: "forbidden" | "error" };
-
 /** One real past attendance record — shown as "recent activity" in place of a future schedule the API can't derive per-student (see student-adapter.ts). */
 export interface StudentSessionSummary {
   fecha: string;
@@ -791,7 +679,6 @@ export interface StudentProfileSummary {
   nombres: string;
   apellidos: string;
   fechaNacimiento: string;
-  ranking: StudentRankingSummary;
   recentSessions: StudentSessionSummary[];
   membership: MembershipSummary | null;
   representante: { nombres: string; apellidos: string } | null;
@@ -852,37 +739,6 @@ export interface DashboardStats {
 /** Fetch aggregate dashboard stats, composed server-side from `/personas`, `/membresias/pagos*` and `/asistencias/horarios` — `GET /api/dashboard`. */
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   return request<DashboardStats>(apiEndpoint("/dashboard"));
-}
-
-// ---------------------------------------------------------------------------
-// Ranking Data Fetching (GET endpoints — replace mock data)
-// ---------------------------------------------------------------------------
-
-/**
- * `AsignacionRankingResponseDTO` extends `ResponseBase`
- * (backend/app/presentacion/schemas/ranking_schemas.py:113), so the wire shape
- * is camelCase — this interface was declared snake_case, which would have made
- * every field `undefined` at runtime. Nothing renders it today, so the bug was
- * latent rather than visible; it is corrected here so the next caller does not
- * inherit it.
- *
- * NOTE: `GET /ranking/asignaciones` currently answers 500 on the live backend.
- * Verify it before building anything on this.
- */
-export interface AsignacionRanking {
-  personaId: number;
-  personaNombreCompleto: string;
-  nivelRankingId: number;
-  nivelRankingNombre: string | null;
-  nivelRankingNumero: number;
-}
-
-export async function fetchAsignacionesRanking(): Promise<AsignacionRanking[]> {
-  // Paginated (issue #7): standard `{items, total}` envelope, one capped page.
-  const { items } = await request<PaginatedEnvelope<AsignacionRanking>>(
-    apiEndpoint(`/ranking/asignaciones?limit=${ROSTER_PAGE_LIMIT}`),
-  );
-  return items;
 }
 
 // ---------------------------------------------------------------------------

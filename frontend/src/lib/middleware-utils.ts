@@ -23,7 +23,6 @@ export const PROTECTED_PATH_PREFIXES = [
   "/dashboard",
   "/attendance",
   "/trainer",
-  "/nivel",
   "/groups",
   "/payments",
   "/members",

@@ -148,13 +148,11 @@ describe("Header", (): void => {
   it.each([
     "/dashboard",
     "/members",
-    "/nivel",
     "/groups",
     "/payments",
     "/attendance",
     "/trainer",
     "/trainer/attendance",
-    "/trainer/nivel",
     "/reports",
     "/student",
     "/profile",
@@ -295,17 +293,10 @@ describe("Header", (): void => {
 
     render(<Header />);
 
-    // Trainer gets Inicio + Mi día + Pasar lista + Niveles. Level assignment
-    // is NOT an admin-only action — the backend grants ENTRENADOR the same
-    // `PATCH /personas/{id}/nivel` it grants ADMINISTRADOR — and `/trainer/nivel`
-    // renders the same ladder screen `/nivel` does, under the same label.
+    // Trainer gets Inicio + Mi día + Pasar lista.
     expect(screen.getByRole("link", { name: /Inicio/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Mi día" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Niveles" })).toHaveAttribute(
-      "href",
-      "/trainer/nivel",
-    );
 
     // The nav must not carry an English label — see auth-utils.
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();

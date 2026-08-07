@@ -30,7 +30,6 @@ import {
   User,
   Users,
   Calendar,
-  Trophy,
   FileText,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -71,14 +70,12 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   "/login": LogIn,
   "/dashboard": LayoutGrid,
   "/members": Users,
-  "/nivel": Trophy,
   "/groups": Calendar,
   "/payments": CreditCard,
   "/discounts": Percent,
   "/attendance": ClipboardCheck,
   "/trainer": LayoutGrid,
   "/trainer/attendance": ClipboardCheck,
-  "/trainer/nivel": Trophy,
   "/reports": FileText,
   "/student": User,
   "/student/payments": CreditCard,

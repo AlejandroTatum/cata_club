@@ -26,7 +26,6 @@ function schedule(
     diaSemana: "lun",
     horaInicio,
     horaFin,
-    nivelRankingId: null,
   };
 }
 

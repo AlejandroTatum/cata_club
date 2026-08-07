@@ -132,48 +132,25 @@ describe("getNavLinksForRole", () => {
 
   it("returns admin links including /groups, /members and /attendance", () => {
     const links = getNavLinksForRole("admin");
-    expect(links).toHaveLength(9);
+    expect(links).toHaveLength(8);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
     expect(links[1]).toEqual({ href: "/dashboard", label: "Panel de Control" });
     expect(links[2]).toEqual({ href: "/members", label: "Miembros" });
-    expect(links[3]).toEqual({ href: "/nivel", label: "Niveles" });
-    expect(links[4]).toEqual({ href: "/groups", label: "Horarios" });
-    expect(links[5]).toEqual({ href: "/payments", label: "Membresías y Pagos" });
-    expect(links[6]).toEqual({ href: "/discounts", label: "Descuentos" });
-    expect(links[7]).toEqual({ href: "/attendance", label: "Asistencias" });
-    expect(links[8]).toEqual({ href: "/reports", label: "Reportes" });
+    expect(links[3]).toEqual({ href: "/groups", label: "Horarios" });
+    expect(links[4]).toEqual({ href: "/payments", label: "Membresías y Pagos" });
+    expect(links[5]).toEqual({ href: "/discounts", label: "Descuentos" });
+    expect(links[6]).toEqual({ href: "/attendance", label: "Asistencias" });
+    expect(links[7]).toEqual({ href: "/reports", label: "Reportes" });
   });
 
-  // Labels are Spanish and name the destination. The old set said
-  // "Dashboard", "Asistencia" and "Nivel".
+  // Labels are Spanish and name the destination. The old set said "Dashboard"
+  // and "Asistencia".
   it("returns trainer links named after their destinations, in Spanish", () => {
     const links = getNavLinksForRole("trainer");
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(3);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
     expect(links[1]).toEqual({ href: "/trainer", label: "Mi día" });
     expect(links[2]).toEqual({ href: "/trainer/attendance", label: "Pasar lista" });
-    expect(links[3]).toEqual({ href: "/trainer/nivel", label: "Niveles" });
-  });
-
-  it("gives the trainer's ladder the same nav label the admin's has", () => {
-    // `/trainer/nivel` and `/nivel` render the SAME screen under the SAME
-    // title, so the sidebar must not call it two different things depending on
-    // who is signed in.
-    const adminLabel = getNavLinksForRole("admin").find((l) => l.href === "/nivel")?.label;
-    const trainerLabel = getNavLinksForRole("trainer").find(
-      (l) => l.href === "/trainer/nivel",
-    )?.label;
-    expect(trainerLabel).toBe(adminLabel);
-    expect(trainerLabel).toBe("Niveles");
-  });
-
-  it("keeps the trainer's level-assignment section reachable", () => {
-    // Trainers do assign levels: the backend grants ENTRENADOR the same
-    // `PATCH /personas/{id}/nivel` it grants ADMINISTRADOR, and `/trainer/nivel` is a
-    // live screen. The 403 that once justified hiding it came from the roster
-    // endpoint, which now has a trainer-readable replacement.
-    const links = getNavLinksForRole("trainer");
-    expect(links.some((l) => l.href === "/trainer/nivel")).toBe(true);
   });
 
   it("uses no English labels in any role's navigation", () => {

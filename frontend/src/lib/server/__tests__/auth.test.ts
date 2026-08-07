@@ -427,7 +427,7 @@ describe("buildSession", () => {
       roles: ["ALUMNO"],
     });
 
-    expect(session.user).toMatchObject({ role: "estudiante", grupoId: null, activo: true });
+    expect(session.user).toMatchObject({ role: "estudiante", activo: true });
   });
 
   it("builds a representante session", () => {

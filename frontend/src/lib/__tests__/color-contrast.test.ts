@@ -304,24 +304,6 @@ describe("muted small print that sits OUTSIDE a card", () => {
   });
 });
 
-describe("/nivel — the unassigned-level chip", () => {
-  // This used to guard a `Badge` reading "Sin asignar" in Tailwind greys. That
-  // badge is gone: the unassigned rung on /nivel is now the `—` chip
-  // (page.tsx:283-289), which wears the system's own neutral state pair. The
-  // coverage follows the shipping markup rather than the retired one.
-  it("meets AA for the em-dash chip on the neutral tint", () => {
-    expect(contrastRatio(state.neutral, state["neutral-bg"])).toBeGreaterThanOrEqual(
-      AA_NORMAL_TEXT,
-    );
-  });
-
-  it("confirms the gray-400 the retired badge used would still fail today", () => {
-    // Kept as a tripwire: 2.31:1 was the worst pair the audit found, and it is
-    // the shape of mistake ("just use a lighter grey") most likely to recur.
-    expect(contrastRatio("#9CA3AF", "#F3F4F6")).toBeLessThan(AA_NORMAL_TEXT);
-  });
-});
-
 describe("muted text on the canvas grey — kicker, subtitle, table head", () => {
   // The kicker ("Panel administrativo", "Área de entrenadores", …) and the
   // subtitle are two rules in PageHeader.tsx, and both sit on the `canvas` grey
@@ -592,7 +574,6 @@ const RAW_PALETTE = new RegExp(
  */
 const RAW_PALETTE_DEBT: readonly string[] = [
   "app/attendance/attendance-utils.ts",
-  "app/groups/groups-page-utils.ts",
   "app/groups/page.tsx",
   "app/members/MedicalRecordEditor.tsx",
   "app/student/add-dependent/page.tsx",

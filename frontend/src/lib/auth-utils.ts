@@ -47,7 +47,6 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
       links.push(
         { href: "/dashboard", label: "Panel de Control" },
         { href: "/members", label: "Miembros" },
-        { href: "/nivel", label: "Niveles" },
         { href: "/groups", label: "Horarios" },
         { href: "/payments", label: "Membresías y Pagos" },
         { href: "/discounts", label: "Descuentos" },
@@ -62,17 +61,6 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
         // "Asistencias" is the record list, this one is the act of taking it.
         // One word apart, they used to read as the same destination.
         { href: "/trainer/attendance", label: "Pasar lista" },
-        // The prototype `docs/ux/prototipos/19-entrenador.html` dropped this
-        // row on the premise that trainers do not assign levels. They do:
-        // `/trainer/nivel` is a live screen and the backend grants ENTRENADOR
-        // the same `PATCH /personas/{id}/nivel` it grants an admin. The 403 that
-        // prompted the removal came from the roster endpoint, and is fixed —
-        // the screen now reads `GET /ranking/alumnos-con-nivel`.
-        //
-        // "Niveles", not "Nivel": `/trainer/nivel` renders the very same
-        // `NivelLadderScreen` the admin's `/nivel` renders, under the same
-        // title. One screen, one name, whoever is reading the sidebar.
-        { href: "/trainer/nivel", label: "Niveles" },
       );
       break;
     case "representante":

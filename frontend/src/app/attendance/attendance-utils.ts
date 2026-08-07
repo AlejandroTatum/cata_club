@@ -8,7 +8,7 @@
  * No React dependencies — pure functions for testability.
  */
 
-import type { DiaSemana, NivelTecnico, EstadoAsistencia } from "@/types/domain";
+import type { DiaSemana, EstadoAsistencia } from "@/types/domain";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MONTH_ABBR } from "@/lib/format-utils";
 
@@ -17,34 +17,15 @@ import { MONTH_ABBR } from "@/lib/format-utils";
 // ---------------------------------------------------------------------------
 
 /**
- * A training schedule slot, displayed in the admin overview.
- *
- * The `nivel` field this interface used to carry was marked `@deprecated`
- * ("technical level belongs to Grupo, not ScheduleSlot") and its only reader
- * was `getScheduleLevelLabel`, itself uncalled. Both are gone: a deprecated
- * field nobody reads is not backward compatibility, it is a second answer to
- * "what level is this?" sitting in the type where someone will eventually
- * believe it. Level comes from `Grupo.nivel`.
- */
-export interface ScheduleSlot {
-  id: string;
-  diaSemana: DiaSemana;
-  horaInicio: string;
-  horaFin: string;
-  cancha: string;
-  cupoMaximo: number;
-  activo: boolean;
-}
-
-/**
  * A real training schedule slot (Horario), as returned by
  * `GET /api/attendance/schedules` (proxying FastAPI's `/asistencias/horarios`).
  *
- * Deliberately leaner than `ScheduleSlot`: the real `HorarioResponseDTO` has
- * no `cancha`, `cupoMaximo`, `activo`, or nivel/group linkage — those mock
- * fields have no backend equivalent (see `src/lib/server/attendance-adapter.ts`
- * for the documented gap). Only what the backend actually returns is modeled
- * here; the admin page renders accordingly.
+ * Deliberately leaner than the mock-era shape it replaced: the real
+ * `HorarioResponseDTO` has no `cancha`, `cupoMaximo`, `activo`, or nivel/group
+ * linkage — those mock fields have no backend equivalent (see
+ * `src/lib/server/attendance-adapter.ts` for the documented gap). Only what
+ * the backend actually returns is modeled here; the admin page renders
+ * accordingly.
  */
 export interface TrainingSchedule {
   id: number;
@@ -52,7 +33,6 @@ export interface TrainingSchedule {
   /** "HH:mm", seconds already trimmed by the adapter. */
   horaInicio: string;
   horaFin: string;
-  nivelRankingId: number | null;
 }
 
 /** A recent attendance record, enriched with the student's name. */
@@ -99,12 +79,6 @@ export const DIA_SEMANA_LABELS: Record<DiaSemana, string> = {
   vie: "Viernes",
   sab: "Sábado",
   dom: "Domingo",
-};
-
-export const NIVEL_LABELS: Record<NivelTecnico, string> = {
-  principiante: "Principiante",
-  intermedio: "Intermedio",
-  avanzado: "Avanzado",
 };
 
 /** Human-readable labels for each attendance state, in Spanish. */
@@ -273,16 +247,6 @@ export function getAttendanceRatePercent(stats: AttendanceDayStats): number {
  */
 export function formatDay(dia: DiaSemana): string {
   return DIA_SEMANA_LABELS[dia] ?? `Día desconocido: ${dia}`;
-}
-
-/**
- * Get a human-readable label for a technical level.
- *
- * Returns a fallback string when the value is not a known level.
- * Safety: never returns undefined — avoids rendering "undefined" in the UI.
- */
-export function formatNivel(nivel: NivelTecnico): string {
-  return NIVEL_LABELS[nivel] ?? `Nivel desconocido: ${nivel}`;
 }
 
 /** Which schedules the picker shows, and why — see `selectVisibleSchedules`. */

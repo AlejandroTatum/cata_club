@@ -8,19 +8,19 @@
  *     name a user ever sees.
  *   - ROUTE: `/groups`, kept because it is linked from bookmarks, tests and
  *     the middleware route table.
- *   - DOMAIN TYPE: `Grupo` / `HorarioEntrenamiento` in `types/domain.ts`,
- *     mirroring the backend's own vocabulary.
+ *   - DOMAIN TYPE: `HorarioEntrenamiento`, mirroring the backend's own
+ *     vocabulary.
  * Renaming the route or the domain type is a refactor with a blast radius
  * across the API layer and the backend; it is deliberately NOT part of the
  * consistency pass. The user-facing name is the one that had to converge.
  *
- * Lists all HorarioEntrenamiento records with day, time, trainer, and
- * assigned training level. Shows which students belong to each schedule
- * based on their ranking level assignment. Allows creating, editing, and
- * deleting schedules.
+ * Lists all HorarioEntrenamiento records with day, time and categoría. Shows
+ * which students belong to each schedule based on direct alumno↔horario
+ * assignment. Allows creating, editing, and deleting schedules.
  *
  * Rebuilt for issue #43 — replaces the old NivelRanking-as-Grupo placeholder
- * with real HorarioEntrenamiento management.
+ * with real HorarioEntrenamiento management. The ranking feature itself was
+ * later removed from the MVP entirely (see the "ranking / nivel" removal).
  *
  * v2 (Gestión de Horarios): once a `categoria` is picked, its day-set and
  * time range are LOCKED (not just pre-filled) — see
@@ -81,13 +81,12 @@ import {
   actualizarHorario,
   eliminarHorario,
   fetchMembers,
-  fetchNivelesConOcupacion,
   fetchAlumnosPorHorario,
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
   ApiClientError,
 } from "@/services/api";
-import type { Horario, CrearHorarioDTO, ActualizarHorarioDTO, NivelConOcupacion, AlumnoHorario } from "@/services/api";
+import type { Horario, CrearHorarioDTO, ActualizarHorarioDTO, AlumnoHorario } from "@/services/api";
 import {
   groupHorarios,
   diffGroupSave,
@@ -256,8 +255,8 @@ const NEW_GROUP_KEY = "__new__";
 /**
  * Rows per page in the "Ver alumnos" roster.
  *
- * Ten, matching every other paged list in the product (attendance, nivel,
- * reports). The biggest categoría carries 44 students, which is four pages —
+ * Ten, matching every other paged list in the product (attendance, reports).
+ * The biggest categoría carries 44 students, which is four pages —
  * short enough that paging is navigation rather than a search substitute.
  */
 const ALUMNOS_PAGE_SIZE = 10;
@@ -270,7 +269,6 @@ const EMPTY_FORM: HorarioFormData = {
 
 export default function GroupsPage(): React.ReactElement {
   const [horarios, setHorarios] = useState<Horario[]>([]);
-  const [niveles, setNiveles] = useState<NivelConOcupacion[]>([]);
   const [allStudents, setAllStudents] = useState<StudentRef[]>([]);
   const [loading, setLoading] = useState(true);
   const { showSuccess, showError } = useToast();
@@ -441,19 +439,16 @@ export default function GroupsPage(): React.ReactElement {
     setLoading(true);
     setLoadError(null);
     try {
-      const [horariosData, nivelesData, membersData] = await Promise.all([
+      const [horariosData, membersData] = await Promise.all([
         fetchHorarios(),
-        fetchNivelesConOcupacion(),
         fetchMembers(),
       ]);
       setHorarios(horariosData);
-      setNiveles(nivelesData);
       const students: StudentRef[] = membersData.accounts.flatMap((account) =>
         account.estudiantes.map((estudiante) => ({
           id: estudiante.id,
           nombres: estudiante.nombres,
           apellidos: estudiante.apellidos,
-          grupoId: estudiante.grupoId,
           activo: estudiante.activo,
         })),
       );

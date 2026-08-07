@@ -4,9 +4,8 @@
  * It used to have three. The action sat in the header's `actions` slot on
  * attendance, groups and discounts; loose in the body on members (wedged
  * against the search field), dashboard (inside the hero) and reports (inside
- * the filter card); and was absent on payments and the Niveles ladder. An admin
- * who learned "the button is at the top right" was right on three screens out
- * of eight.
+ * the filter card); and was absent on payments. An admin who learned "the
+ * button is at the top right" was right on three screens out of eight.
  *
  * ## Why a source rule
  *
@@ -67,9 +66,6 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // A validation queue: the actions are per row, and the batch bar only exists
   // when there are reviewed rows to flush.
   "app/payments/page.tsx": "queue — actions are per row",
-  // Levels are created from inside the rung being edited, which is context the
-  // header does not have.
-  "components/nivel/NivelLadderScreen.tsx": "creation needs the rung as context",
   // --- The five family screens, decided in #43 -----------------------------
   // A wizard. Its buttons are "Continuar" and "Confirmar Asistencia": they move
   // through the steps rather than act on the page, and which one is showing is
@@ -131,7 +127,6 @@ describe("the primary action lives in the header slot", () => {
     const outOfScope = /^app\/(admin|ayuda|profile)\//;
 
     const drawsShell = sourceFiles(join(SRC, "app"))
-      .concat(sourceFiles(join(SRC, "components", "nivel")))
       .map((p) => p.slice(SRC.length + 1))
       .filter((p) => /<AppShell\b/.test(read(p)))
       .filter((p) => !outOfScope.test(p));

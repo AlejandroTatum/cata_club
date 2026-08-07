@@ -22,7 +22,6 @@ import { NextRequest } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/groups/horarios/route";
 import { PUT } from "@/app/api/groups/horarios/[id]/route";
-import { PATCH as PATCH_NIVEL } from "@/app/api/personas/[id]/nivel/route";
 import { POST as POST_PAGO } from "@/app/api/membresias/pagos/route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 import {
@@ -47,7 +46,6 @@ import {
   updatePaymentValidation,
   fetchStudentPortal,
   searchStudents,
-  setStudentNivel,
   subirVoucherPago,
   registrarPago,
   fetchDescuentos,
@@ -172,8 +170,6 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     ["updatePaymentValidation", () => updatePaymentValidation("9", { action: "approved" })],
     ["fetchStudentPortal", () => fetchStudentPortal("2")],
     ["searchStudents", () => searchStudents("ana")],
-    ["setStudentNivel", () => setStudentNivel(2, 3)],
-    ["setStudentNivel (quitar)", () => setStudentNivel(2, null)],
     [
       "subirVoucherPago",
       () => subirVoucherPago(4, new File(["x"], "voucher.png", { type: "image/png" })),
@@ -370,58 +366,5 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
 
     expect(response.status).not.toBe(400);
     expect(forwardedToBackend().descuento_ids).toEqual([1, 2]);
-  });
-
-  /**
-   * The level assignment is the exact drift this seam exists for. It used to be
-   * two client functions over two BFF routes over two backend endpoints; it is
-   * one of each now, and the body the client builds (`nivelRankingId`) is not
-   * the body the backend DTO declares (`nivel_ranking_id`) — the handler is the
-   * only thing translating between them.
-   */
-  it("setStudentNivel's body is accepted by PATCH /api/personas/[id]/nivel", async () => {
-    const clientBody = await captureBody(() => setStudentNivel(3, 2));
-
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ id: 1, personaId: 3, nivelRankingId: 2 }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-
-    const response = await PATCH_NIVEL(
-      new NextRequest("http://localhost/api/personas/3/nivel", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
-        body: JSON.stringify(clientBody),
-      }),
-      { params: { id: "3" } },
-    );
-
-    expect(response.status).not.toBe(400);
-    expect(forwardedToBackend()).toEqual({ nivel_ranking_id: 2 });
-  });
-
-  it("setStudentNivel(null)'s body is accepted as the unassign instruction", async () => {
-    const clientBody = await captureBody(() => setStudentNivel(3, null));
-
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ id: 1, personaId: 3, nivelRankingId: null }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-
-    const response = await PATCH_NIVEL(
-      new NextRequest("http://localhost/api/personas/3/nivel", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
-        body: JSON.stringify(clientBody),
-      }),
-      { params: { id: "3" } },
-    );
-
-    expect(response.status).not.toBe(400);
-    expect(forwardedToBackend()).toEqual({ nivel_ranking_id: null });
   });
 });

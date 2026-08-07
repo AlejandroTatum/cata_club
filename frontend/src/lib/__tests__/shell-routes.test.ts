@@ -73,7 +73,7 @@ describe("resolveShellKind", () => {
 
   it("keeps the app shell for descendants of an app section", () => {
     expect(resolveShellKind("/trainer/attendance")).toBe("app");
-    expect(resolveShellKind("/trainer/nivel")).toBe("app");
+    expect(resolveShellKind("/trainer/attendance/history")).toBe("app");
     expect(resolveShellKind("/student/add-dependent")).toBe("app");
   });
 

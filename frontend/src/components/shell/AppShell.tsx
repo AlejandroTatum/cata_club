@@ -86,25 +86,22 @@ export interface AppShellProps {
    * The primary action used to appear in three different places. It was here on
    * attendance, groups and discounts; loose in the body on members (wedged
    * against the search field), dashboard (inside the hero) and reports (inside
-   * the filter card); and absent on payments and the Niveles ladder. An admin
-   * who learned "the button is at the top right" was right on three screens out
-   * of eight — which is worse than a button that is always somewhere else,
-   * because it teaches a rule and then breaks it.
+   * the filter card); and absent on payments. An admin who learned "the button
+   * is at the top right" was right on three screens out of eight — which is
+   * worse than a button that is always somewhere else, because it teaches a
+   * rule and then breaks it.
    *
    * `PageHeader` has rendered this slot since it existed. Three screens simply
    * ignored it.
    *
-   * ## The two screens that legitimately pass nothing
+   * ## The screen that legitimately passes nothing
    *
-   * - **payments** is a validation QUEUE. Its actions are per row (approve,
-   *   reject) and its batch bar is conditional on there being reviewed rows to
-   *   flush, so a header button would be absent most of the time and would name
-   *   an action the screen is not primarily for.
-   * - **the Niveles ladder** creates levels from inside the rung being edited
-   *   ("Nuevo nivel para {nombre}"). The action needs the rung as context; the
-   *   header has none.
+   * **payments** is a validation QUEUE. Its actions are per row (approve,
+   * reject) and its batch bar is conditional on there being reviewed rows to
+   * flush, so a header button would be absent most of the time and would name
+   * an action the screen is not primarily for.
    *
-   * Both are enforced as named exceptions in
+   * This is enforced as a named exception in
    * `components/shell/__tests__/primary-action.test.ts`, so "this screen has no
    * header action" stays a decision someone made rather than one nobody noticed.
    */
@@ -769,10 +766,6 @@ export default function AppShell({
        * Capping only the content would hang the search box and the bell
        * outside the right edge of every card below them — the very defect that
        * note records fixing.
-       *
-       * The Niveles ladder's own `max-w-[520px]` stays: capping a two-tile row
-       * so it reads as a pair is a different decision at a different scale,
-       * and it is documented where it is written.
        *
        * `measure="short"` swaps 1408px for 1024px on the two screens whose
        * content cannot grow to fill either — see `CONTENT_MEASURE`. It is the

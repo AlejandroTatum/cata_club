@@ -55,8 +55,6 @@ export interface UsuarioEstudiante extends UsuarioBase {
   role: "estudiante";
   fechaNacimiento?: string;
   telefono?: string;
-  /** The group this student is assigned to (if any). Technical level is carried by the group, not the student. */
-  grupoId: string | null;
   activo: boolean;
 }
 
@@ -70,9 +68,6 @@ export type Usuario = UsuarioEstudiante | UsuarioStaff;
 // ---------------------------------------------------------------------------
 // Actors (role-specific profiles)
 // ---------------------------------------------------------------------------
-
-/** Training level / technical category for students. */
-export type NivelTecnico = "principiante" | "intermedio" | "avanzado";
 
 // The mock-era `Entrenador` profile interface was removed with the
 // trainer–schedule relation (issue #13): it had no consumer, and trainers
@@ -166,31 +161,6 @@ export interface ComprobantePago {
 }
 
 // ---------------------------------------------------------------------------
-// Groups (Grupos)
-// ---------------------------------------------------------------------------
-
-/**
- * A training group (Grupo) — the set of students assigned together.
- *
- * Technical level (NivelTecnico) belongs to the group, NOT to the student.
- * A student's technical level is determined by which group they belong to.
- * Students with no group assignment have no technical level yet — their
- * level is pending trainer evaluation.
- *
- * The group assignment screen (/admin/groups) will be built in a future slice.
- */
-export interface Grupo {
-  id: string;
-  nombre: string;
-  nivel: NivelTecnico;
-  estudiantesIds: string[];
-  horariosIds?: string[];
-  activo: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// ---------------------------------------------------------------------------
 // Schedule & Attendance
 // ---------------------------------------------------------------------------
 
@@ -205,24 +175,11 @@ export interface Grupo {
  */
 export type DiaSemana = "lun" | "mar" | "mie" | "jue" | "vie" | "sab" | "dom";
 
-/**
- * A training session slot (Horario).
- *
- * Note: Horario does NOT own a trainer, and attendance does not record who
- * taught the session (issue #13): any trainer operates any session.
- */
-export interface Horario {
-  id: string;
-  diaSemana: DiaSemana;
-  horaInicio: string; // "HH:mm"
-  horaFin: string;    // "HH:mm"
-  nivel: NivelTecnico;
-  cancha: string;
-  cupoMaximo: number;
-  activo: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+// The mock-era `Horario` interface (diaSemana/horaInicio/horaFin/nivel/
+// cancha/cupoMaximo/activo) was removed once every consumer moved to the
+// real, backend-shaped `Horario` in `@/services/api` — the real schedule
+// carries none of those mock-only fields (see attendance-adapter.ts's
+// documented gap) and the club places no capacity limit on a schedule.
 
 // ---------------------------------------------------------------------------
 // Roles and editable medical record (Grupo B)

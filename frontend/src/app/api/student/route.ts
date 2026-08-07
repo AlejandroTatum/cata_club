@@ -9,26 +9,14 @@ import type { BackendAsistencia, BackendHorario } from "@/lib/server/attendance-
 import {
   buildMembershipPlans,
   buildMembershipView,
-  buildRankingView,
   buildRecentSessions,
   buildStudentProfileView,
   type BackendMembresiaPropia,
-  type BackendPerfilRanking,
   type BackendTipoMembresiaCatalogo,
   type MembershipView,
   type StudentPortalView,
   type StudentProfileView,
-  type StudentRankingView,
 } from "@/lib/server/student-adapter";
-
-async function fetchRanking(request: NextRequest, personaId: number): Promise<StudentRankingView> {
-  const result = await backendFetchAuthed(request, `/ranking/${personaId}/perfil`);
-  if (!result.ok) return { status: "unavailable", reason: "error" };
-  if (result.response.status === 403) return { status: "unavailable", reason: "forbidden" };
-  if (!result.response.ok) return { status: "unavailable", reason: "error" };
-  const body = (await result.response.json()) as BackendPerfilRanking;
-  return buildRankingView(body);
-}
 
 async function fetchMemberships(
   request: NextRequest,
@@ -45,9 +33,8 @@ async function fetchProfile(
   horariosById: Map<number, BackendHorario>,
   tiposById: Map<number, BackendTipoMembresiaCatalogo>,
 ): Promise<StudentProfileView | null> {
-  const [personaResult, rankingView, historialResult, memberships] = await Promise.all([
+  const [personaResult, historialResult, memberships] = await Promise.all([
     backendFetchAuthed(request, `/personas/${personaId}`),
-    fetchRanking(request, personaId),
     backendFetchAuthed(request, `/asistencias/persona/${personaId}`),
     fetchMemberships(request, personaId),
   ]);
@@ -71,7 +58,7 @@ async function fetchProfile(
   const activeMembership = memberships.find((m) => m.estado === "ACTIVA" || m.estado === "VENCIDA") ?? memberships[0] ?? null;
   const membership = activeMembership ? buildMembershipView(activeMembership, tiposById) : null;
 
-  return buildStudentProfileView(persona, rankingView, recentSessions, membership, representante);
+  return buildStudentProfileView(persona, recentSessions, membership, representante);
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {

@@ -1,23 +1,21 @@
 /**
  * Unit tests for the student portal adapter's pure translation functions.
- * Network-touching composition (fetchProfile/fetchRanking) is covered
- * indirectly through the Route Handler tests, which mock `global.fetch`.
+ * Network-touching composition (fetchProfile) is covered indirectly through
+ * the Route Handler tests, which mock `global.fetch`.
  */
 
 import { describe, it, expect } from "vitest";
 import {
   buildRecentSessions,
   buildStudentProfileView,
-  buildRankingView,
   buildMembershipPlans,
-  type BackendPerfilRanking,
   type BackendTipoMembresiaCatalogo,
 } from "../student-adapter";
 import type { BackendAsistencia, BackendHorario } from "../attendance-adapter";
 import type { BackendPersonaFull } from "../members-adapter";
 
 describe("buildRecentSessions", () => {
-  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00", nivelRankingId: null };
+  const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
   const horariosById = new Map([[1, horario]]);
 
   function asistencia(overrides: Partial<BackendAsistencia>): BackendAsistencia {
@@ -72,38 +70,6 @@ describe("buildRecentSessions", () => {
   });
 });
 
-describe("buildRankingView", () => {
-  it("maps an available perfil without leaking dead posicion/puntaje fields", () => {
-    const perfil: BackendPerfilRanking = {
-      personaId: 5,
-      nivelRankingId: 1,
-      nivelRankingNombre: "Avanzados",
-    };
-    expect(buildRankingView(perfil)).toEqual({
-      status: "available",
-      nivelRankingId: 1,
-      nivelNombre: "Avanzados",
-    });
-  });
-
-  // `estaEnRanking` was a permanently-true flag with no writer; the level id
-  // is now the only assignment signal, so it has to reach the view. A student
-  // with no level yet must arrive as `nivelRankingId: null`, not as a missing
-  // field the UI would read as "assigned".
-  it("carries a null nivelRankingId through for a student with no level yet", () => {
-    const perfil: BackendPerfilRanking = {
-      personaId: 7,
-      nivelRankingId: null,
-      nivelRankingNombre: null,
-    };
-    expect(buildRankingView(perfil)).toEqual({
-      status: "available",
-      nivelRankingId: null,
-      nivelNombre: null,
-    });
-  });
-});
-
 describe("buildStudentProfileView", () => {
   const persona: BackendPersonaFull = {
     id: 5,
@@ -114,8 +80,8 @@ describe("buildStudentProfileView", () => {
     representanteId: null,
   };
 
-  it("combines persona + ranking + sessions into a profile view", () => {
-    const profile = buildStudentProfileView(persona, { status: "unavailable", reason: "forbidden" }, []);
+  it("combines persona + sessions into a profile view", () => {
+    const profile = buildStudentProfileView(persona, []);
     expect(profile).toEqual({
       personaId: "5",
       nombres: "Sofia",
@@ -123,7 +89,6 @@ describe("buildStudentProfileView", () => {
       fechaNacimiento: "1995-01-01",
       representante: null,
       representanteId: null,
-      ranking: { status: "unavailable", reason: "forbidden" },
       recentSessions: [],
       membership: null,
     });

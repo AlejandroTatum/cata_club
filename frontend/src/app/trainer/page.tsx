@@ -14,10 +14,9 @@
  *
  * "N estudiantes inscritos", not "N esperan": the number is a count of
  * `AlumnoHorario` rows (who is ENROLLED), and no DTO says who turned up. And
- * no level anywhere on THIS screen — neither the hero nor a Niveles section —
- * because "Mi día" has one decision on it. Levels are their own destination:
- * `/trainer/nivel` renders the same ladder the admin's `/nivel` renders (see
- * `NivelLadderScreen`), and the sidebar links to it.
+ * no level anywhere on THIS screen — "Mi día" has one decision on it, and the
+ * competitive-ranking feature the old level concept belonged to was removed
+ * from the MVP entirely.
  *
  * "Avisar al club" has no endpoint behind it: nothing in the API notifies the
  * club about a student. It opens the help assistant with the message already

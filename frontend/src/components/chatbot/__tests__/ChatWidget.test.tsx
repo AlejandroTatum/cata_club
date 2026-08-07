@@ -343,7 +343,7 @@ describe("getQuickReplies", () => {
 
   it("never offers a student a question about a screen they cannot reach", () => {
     const studentPrompts = getQuickReplies("estudiante");
-    expect(studentPrompts).not.toContain("¿Cómo asigno un nivel?");
+    expect(studentPrompts).not.toContain("¿Quién define los horarios?");
     expect(studentPrompts).not.toContain("¿Cómo valido un pago?");
   });
 });

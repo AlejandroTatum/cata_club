@@ -156,7 +156,6 @@ const ACCOUNT: MemberAccount = {
       id: "10",
       nombres: "Sofía",
       apellidos: "González",
-      grupoId: null,
       activo: true,
       membresia: null,
       ultimoPago: null,
@@ -208,7 +207,7 @@ describe("MembersPage — Editar member modal", () => {
     mockActualizarFichaMedica.mockReset();
     mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
     mockCrearMembresia.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT], niveles: [] });
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
     // Default: persona has no roles yet and is active — matches the old
     // hardcoded placeholder so existing tests below don't need to change,
     // while the real fetch-on-open behavior is exercised explicitly by the
@@ -321,7 +320,6 @@ describe("MembersPage — Editar member modal", () => {
           ],
         },
       ],
-      niveles: [],
     });
     render(
       <ToastProvider>
@@ -722,7 +720,7 @@ describe("MembersPage — Editar member modal", () => {
   });
 
   it("opening a second row's modal closes any previously open modal (only one at a time)", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: createAccounts(2), niveles: [] });
+    mockFetchMembers.mockResolvedValue({ accounts: createAccounts(2) });
     render(
       <ToastProvider>
         <MembersPage />
@@ -752,7 +750,7 @@ describe("MembersPage — Editar member modal", () => {
 describe("MembersPage — Crear membresía inline form", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT], niveles: [] });
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
     mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
   });
 
@@ -808,7 +806,7 @@ describe("MembersPage — Registrar pago inline form", () => {
         },
       ],
     };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia], niveles: [] });
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
 
     render(
       <ToastProvider>
@@ -840,7 +838,7 @@ describe("MembersPage — Registrar pago inline form", () => {
         },
       ],
     };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia], niveles: [] });
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
     mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
 
     render(
@@ -897,7 +895,7 @@ describe("MembersPage — Registrar pago inline form", () => {
         },
       ],
     };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia], niveles: [] });
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
     mockFetchDescuentos.mockResolvedValue([
       { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
       { id: 2, nombre: "Beca vieja", porcentaje: "100", monto: null, activo: false },
@@ -958,7 +956,7 @@ describe("MembersPage — Registrar pago inline form", () => {
         },
       ],
     };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia], niveles: [] });
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
     mockFetchDescuentos.mockResolvedValue([
       { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
     ]);
@@ -1003,7 +1001,7 @@ describe("MembersPage — Registrar pago inline form", () => {
         },
       ],
     };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia], niveles: [] });
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
     mockFetchDescuentos.mockResolvedValue([
       { id: 1, nombre: "Beca parcial", porcentaje: "60", monto: null, activo: true },
       { id: 2, nombre: "Familiar", porcentaje: "50", monto: null, activo: true },
@@ -1037,7 +1035,7 @@ describe("MembersPage — Registrar pago inline form", () => {
   });
 
   it("does NOT render a 'Registrar pago' button when the student has no membership", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT], niveles: [] });
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
 
     render(
       <ToastProvider>
@@ -1072,7 +1070,7 @@ describe("MembersPage — capped results help", () => {
 
 describe("MembersPage — honest aggregate coverage", () => {
   it("shows the incomplete-coverage notice when the upstream persona cap is reached after accounts collapse", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT], niveles: [], personasCapped: true });
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT], personasCapped: true });
 
     render(
       <ToastProvider>
@@ -1091,7 +1089,7 @@ describe("MembersPage — honest aggregate coverage", () => {
   });
 
   it("hides the incomplete-coverage notice below the cap without adding pagination controls", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: createAccounts(199), niveles: [], personasCapped: false });
+    mockFetchMembers.mockResolvedValue({ accounts: createAccounts(199), personasCapped: false });
 
     render(
       <ToastProvider>
@@ -1140,7 +1138,6 @@ describe("MembersPage — the stats row doesn't repeat the student count", () =>
     // 2 with an active membership: two distinct, unambiguous figures.
     mockFetchMembers.mockReset().mockResolvedValue({
       accounts: [active("1"), active("2"), { ...ACCOUNT, id: "3" }],
-      niveles: [],
     });
 
     render(
@@ -1174,7 +1171,7 @@ describe("MembersPage — the stats row doesn't repeat the student count", () =>
 
 describe("MembersPage — edit modal footer does not fake a save", () => {
   beforeEach(() => {
-    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT], niveles: [] });
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
     mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
     mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
     mockCrearMembresia.mockReset();
@@ -1373,7 +1370,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
 
     mockFetchMembers.mockImplementationOnce(async () => {
       await refreshed;
-      return { accounts: [ACCOUNT], niveles: [] };
+      return { accounts: [ACCOUNT] };
     });
 
     const form = combobox.parentElement as HTMLElement;
@@ -1400,7 +1397,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
 
 describe("MembersPage — defers /api/members until the role resolves", () => {
   beforeEach(() => {
-    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT], niveles: [] });
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
     mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
   });
 

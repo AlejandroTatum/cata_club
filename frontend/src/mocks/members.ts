@@ -1,5 +1,5 @@
 /**
- * Centralized mock data for members and groups.
+ * Centralized mock data for members.
  *
  * Shared across pages (members, groups, attendance, trainer) and tests.
  * Moved from src/app/members/members-utils.ts to create a clear mock-data
@@ -9,7 +9,6 @@
  * functions belong in src/lib/*-utils.ts or the respective *-utils.ts files.
  */
 
-import type { Grupo } from "@/types/domain";
 import type { MemberAccount } from "@/app/members/members-utils";
 
 // ---------------------------------------------------------------------------
@@ -30,7 +29,6 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
         nombres: "Sofía",
         apellidos: "Martínez",
         email: "sofia.martinez@email.com",
-        grupoId: "grupo-001",
         fechaNacimiento: "2014-03-15",
         activo: true,
         membresia: {
@@ -53,7 +51,6 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
         nombres: "Mateo",
         apellidos: "Martínez",
         email: "mateo.martinez@email.com",
-        grupoId: "grupo-002",
         fechaNacimiento: "2012-08-22",
         activo: true,
         membresia: {
@@ -76,7 +73,6 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
         nombres: "Emilia",
         apellidos: "Martínez",
         email: "emilia.martinez@email.com",
-        grupoId: "grupo-001",
         fechaNacimiento: "2016-11-05",
         activo: true,
         membresia: {
@@ -109,7 +105,6 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
         nombres: "Valentina",
         apellidos: "López",
         email: "valentina.lopez@email.com",
-        grupoId: "grupo-003",
         fechaNacimiento: "2010-02-10",
         activo: true,
         membresia: {
@@ -142,7 +137,6 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
         nombres: "Camila",
         apellidos: "Flores",
         email: "camila.flores@email.com",
-        grupoId: "grupo-001",
         fechaNacimiento: "2015-06-18",
         activo: true,
         membresia: {
@@ -170,7 +164,6 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
         nombres: "Nicolás",
         apellidos: "Acosta",
         email: "nicolas.acosta@email.com",
-        grupoId: "grupo-002",
         activo: true,
         membresia: {
           tipo: "anual",
@@ -202,7 +195,6 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
         nombres: "Santiago",
         apellidos: "Ramírez",
         email: "santiago.ramirez@email.com",
-        grupoId: "grupo-001",
         fechaNacimiento: "2013-09-30",
         activo: true,
         membresia: {
@@ -225,7 +217,6 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
         nombres: "Isabella",
         apellidos: "Morales",
         email: "isabella.morales@email.com",
-        grupoId: "grupo-001",
         fechaNacimiento: "2014-12-12",
         activo: true,
         membresia: {
@@ -253,49 +244,11 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
         nombres: "Joaquín",
         apellidos: "Mendoza",
         email: "joaquin.mendoza@email.com",
-        grupoId: null,
         fechaNacimiento: "2017-04-20",
         activo: true,
         membresia: null,
         ultimoPago: null,
       },
     ],
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Mock Groups — technical level is carried by the group, not the student.
-// ---------------------------------------------------------------------------
-
-export const MOCK_GRUPOS: Grupo[] = [
-  {
-    id: "grupo-001",
-    nombre: "Principiantes",
-    nivel: "principiante",
-    estudiantesIds: ["stu-001", "stu-003", "stu-005", "stu-007", "stu-008"],
-    horariosIds: ["hor-001", "hor-004", "hor-007"],
-    activo: true,
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-01-01T00:00:00Z",
-  },
-  {
-    id: "grupo-002",
-    nombre: "Intermedios",
-    nivel: "intermedio",
-    estudiantesIds: ["stu-002", "stu-006"],
-    horariosIds: ["hor-002", "hor-005"],
-    activo: true,
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-01-01T00:00:00Z",
-  },
-  {
-    id: "grupo-003",
-    nombre: "Avanzados",
-    nivel: "avanzado",
-    estudiantesIds: ["stu-004"],
-    horariosIds: ["hor-003", "hor-006", "hor-008"],
-    activo: true,
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-01-01T00:00:00Z",
   },
 ];

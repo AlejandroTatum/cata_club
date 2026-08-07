@@ -49,7 +49,7 @@ function buildUser(role: UserRole, id: string, name: string, email: string): Usu
     createdAt: "2026-01-01T00:00:00Z",
   };
   if (role === "estudiante") {
-    return { ...base, role, grupoId: null, activo: true };
+    return { ...base, role, activo: true };
   }
   return { ...base, role };
 }

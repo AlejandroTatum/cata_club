@@ -1,8 +1,8 @@
 /**
  * Composes FastAPI's `/personas/{id}`, `/personas/{id}/representados`,
- * `/ranking/{id}/perfil` and `/asistencias/persona/{id}` into the
- * `StudentPortalView` shape `src/app/student/page.tsx` renders — server-only,
- * used by `src/app/api/student/route.ts`. Mirrors members-adapter.ts /
+ * and `/asistencias/persona/{id}` into the `StudentPortalView` shape
+ * `src/app/student/page.tsx` renders — server-only, used by
+ * `src/app/api/student/route.ts`. Mirrors members-adapter.ts /
  * attendance-adapter.ts (pure builders here, fetching in the route handler).
  *
  * Documented backend gap (do NOT work around by fabricating data): there is
@@ -17,13 +17,6 @@
  * guessing or reusing the admin-only queue payments-adapter.ts/
  * members-adapter.ts consume (that reuse only works for an admin caller;
  * the student/representante's own token can't authorize it).
- *
- * Second gap: `GET /ranking/{persona_id}/perfil` enforces ownership
- * (persona_id === the caller's own persona_id, or ADMINISTRADOR/ENTRENADOR
- * — see ranking_router.py's `obtener_perfil_alumno`) — a representante can
- * never read a represented child's ranking profile through this endpoint.
- * `StudentRankingView`'s `"unavailable"` / `reason: "forbidden"` surfaces
- * this explicitly instead of silently omitting the field.
  */
 
 import { horarioLabel, ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND, type BackendAsistencia, type BackendHorario } from "@/lib/server/attendance-adapter";
@@ -31,34 +24,8 @@ import type { BackendPersonaFull } from "@/lib/server/members-adapter";
 import type { EstadoAsistencia } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
-// Backend DTO shapes (camelCase, as received from FastAPI)
-// ---------------------------------------------------------------------------
-
-/** `PerfilRankingAlumnoDTO` (see backend app/presentacion/schemas/ranking_schemas.py).
- * No longer carries `posicionActual`/`puntajeAcumulado` — backend stopped
- * exposing them (frozen forever since `cerrar_mes()` was removed; see
- * apply-progress of `limpieza-asistencia-y-nivel-entrenador` slice E) — nor
- * `estaEnRanking`, whose column was dropped: it had no writer that could set
- * it to false, so `nivelRankingId` is the assignment state now. */
-export interface BackendPerfilRanking {
-  personaId: number;
-  nivelRankingId: number | null;
-  nivelRankingNombre: string | null;
-}
-
-// ---------------------------------------------------------------------------
 // View shapes returned by the Route Handler
 // ---------------------------------------------------------------------------
-
-export type StudentRankingView =
-  | {
-      status: "available";
-      /** `null` means "not assigned to a level yet" — the only assignment
-       *  signal left after `estaEnRanking` was dropped. */
-      nivelRankingId: number | null;
-      nivelNombre: string | null;
-    }
-  | { status: "unavailable"; reason: "forbidden" | "error" };
 
 export interface StudentSessionView {
   fecha: string;
@@ -71,7 +38,6 @@ export interface StudentProfileView {
   nombres: string;
   apellidos: string;
   fechaNacimiento: string;
-  ranking: StudentRankingView;
   recentSessions: StudentSessionView[];
   membership: MembershipView | null;
   representante: { nombres: string; apellidos: string } | null;
@@ -174,7 +140,7 @@ export interface StudentPortalView {
  */
 const RECENT_SESSIONS_LIMIT = 30;
 
-/** Most recent attendance records first, capped — real activity used as an honest substitute for "upcoming sessions" (see attendance-adapter.ts's doc comment: Horario has no link to which persona/nivel it serves, so a real future schedule can't be derived per-student). */
+/** Most recent attendance records first, capped — real activity used as an honest substitute for "upcoming sessions" (see attendance-adapter.ts's doc comment: Horario has no link to which persona it serves, so a real future schedule can't be derived per-student). */
 export function buildRecentSessions(
   historial: BackendAsistencia[],
   horariosById: Map<number, BackendHorario>,
@@ -194,7 +160,6 @@ export function buildRecentSessions(
 
 export function buildStudentProfileView(
   persona: BackendPersonaFull,
-  ranking: StudentRankingView,
   recentSessions: StudentSessionView[],
   membership: MembershipView | null = null,
   representante: { nombres: string; apellidos: string } | null = null,
@@ -204,18 +169,9 @@ export function buildStudentProfileView(
     nombres: persona.nombres,
     apellidos: persona.apellidos,
     fechaNacimiento: persona.fechaNacimiento,
-    ranking,
     recentSessions,
     membership,
     representante,
     representanteId: persona.representanteId,
-  };
-}
-
-export function buildRankingView(perfil: BackendPerfilRanking): StudentRankingView {
-  return {
-    status: "available",
-    nivelRankingId: perfil.nivelRankingId,
-    nivelNombre: perfil.nivelRankingNombre,
   };
 }

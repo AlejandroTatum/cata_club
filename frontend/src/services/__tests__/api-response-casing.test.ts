@@ -8,13 +8,9 @@
  * `res.json()`, so declaring a snake_case field compiles perfectly and simply
  * evaluates to `undefined` at runtime.
  *
- * That failure mode is worse than a crash. `/ranking` read `persona_id` and
- * `nivel_ranking_id` off `/ranking/alumnos-con-nivel`; every field came back
- * `undefined`, and because `undefined !== null` counted a student as ASSIGNED
- * while `undefined === nivel.id` matched no level, the page reported
- * "68 de 68 asignados" spread over eleven levels that all read "Sin
- * estudiantes". Nothing threw, nothing logged, and the numbers looked
- * plausible.
+ * That failure mode is worse than a crash: a misspelled response key
+ * silently evaluates to `undefined` instead of throwing, and looks plausible
+ * downstream. Nothing throws, nothing logs, and the numbers look real.
  *
  * So these tests assert against the EXACT bodies the live backend returns, and
  * assert the negative too: fed the snake_case shape, the mapper must not
@@ -24,7 +20,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchAlumnosConNivel, fetchInstituciones } from "../api";
+import { fetchInstituciones } from "../api";
 
 function okResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -46,66 +42,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-describe("fetchAlumnosConNivel — GET /api/ranking/alumnos-con-nivel", () => {
-  /** Verbatim from the live backend: the paginated envelope (issue #7) with
-   * camelCase rows (`AlumnoConNivelDTO extends ResponseBase`). */
-  const WIRE = {
-    items: [
-      { personaId: 4, nombres: "Sofia", apellidos: "Vera Loaiza", nivelRankingId: 4 },
-      { personaId: 9, nombres: "Kevin", apellidos: "Sabando", nivelRankingId: null },
-    ],
-    total: 2,
-    skip: 0,
-    limit: 200,
-  };
-
-  it("reads the camelCase keys the backend actually sends", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(WIRE));
-
-    const result = await fetchAlumnosConNivel();
-
-    expect(result).toEqual([
-      { personaId: 4, nombres: "Sofia", apellidos: "Vera Loaiza", nivelRankingId: 4 },
-      { personaId: 9, nombres: "Kevin", apellidos: "Sabando", nivelRankingId: null },
-    ]);
-    result.forEach(expectNoUndefinedValues);
-  });
-
-  it("distinguishes an unassigned student from a missing field", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(WIRE));
-
-    const result = await fetchAlumnosConNivel();
-
-    // `null` means "no level yet" and drives the "Sin nivel asignado" block.
-    // `undefined` would mean "we failed to read the field" — and would be
-    // counted as ASSIGNED by `student.nivelRankingId !== null`.
-    expect(result[1].nivelRankingId).toBeNull();
-    expect(result.filter((student) => student.nivelRankingId !== null)).toHaveLength(1);
-  });
-
-  it("does NOT silently accept a snake_case body", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(
-      okResponse({
-        items: [{ persona_id: 4, nombres: "Sofia", apellidos: "Vera", nivel_ranking_id: 4 }],
-        total: 1,
-        skip: 0,
-        limit: 200,
-      }),
-    );
-
-    const [student] = await fetchAlumnosConNivel();
-
-    // This is the shape of the bug, pinned: if the mapper were ever pointed
-    // back at snake_case keys, the camelCase assertions above would fail —
-    // and here the ids are unreadable, which is exactly what must not pass
-    // for real data.
-    expect(student.personaId).toBeUndefined();
-    // The level still normalises to null rather than undefined, so a broken
-    // read can never masquerade as "assigned".
-    expect(student.nivelRankingId).toBeNull();
-  });
 });
 
 describe("fetchInstituciones — GET /api/personas/instituciones", () => {

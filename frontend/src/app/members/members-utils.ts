@@ -6,7 +6,6 @@
  */
 
 import type {
-  Grupo,
   TipoMembresia,
   EstadoMembresia,
 } from "@/types/domain";
@@ -40,8 +39,6 @@ export interface MemberStudentSummary {
    */
   email?: string;
   telefono?: string;
-  /** The group this student belongs to (if assigned). Technical level is carried by the group, not the student. */
-  grupoId: string | null;
   fechaNacimiento?: string;
   activo: boolean;
   membresia: {
@@ -101,7 +98,7 @@ export interface MemberStats {
 export const MEMBERS_AGGREGATE_LIMIT = 200;
 
 // Mock data has moved to src/mocks/members.ts.
-// Import MOCK_MEMBER_ACCOUNTS and MOCK_GRUPOS from @/mocks/members.
+// Import MOCK_MEMBER_ACCOUNTS from @/mocks/members.
 
 // ---------------------------------------------------------------------------
 // Configuration maps
@@ -150,40 +147,6 @@ export const MEMBERSHIP_TYPE_LABELS: Record<TipoMembresia, string> = {
   semestral: "Semestral",
   anual: "Anual",
 };
-
-// ---------------------------------------------------------------------------
-// Group helpers — technical level is carried by the group, not the student.
-// ---------------------------------------------------------------------------
-
-/**
- * Look up a mock group by ID.
- */
-export function getGrupoById(
-  grupoId: string | null,
-  grupos: Grupo[],
-): Grupo | undefined {
-  if (!grupoId) return undefined;
-  return grupos.find((g) => g.id === grupoId);
-}
-
-/**
- * Get the human-readable technical-level label for a student based on their
- * group assignment. Returns `null` when the student has no group (level
- * pending evaluation).
- */
-export function getNivelLabelFromGrupo(
-  grupoId: string | null,
-  grupos: Grupo[],
-): string | null {
-  const grupo = getGrupoById(grupoId, grupos);
-  if (!grupo) return null;
-  return capitalize(grupo.nivel);
-}
-
-function capitalize(s: string): string {
-  if (!s) return s;
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
 
 import type { BadgeTone } from "@/components/ui/Badge";
 
@@ -320,7 +283,7 @@ export function filterAccounts(
  * Quick-filter chips shown above the members table
  * (design/admin-members-mockup-v1.html's `.chip-filters`).
  */
-export type MemberFilterFlag = "all" | "vencida" | "pendiente" | "sin-grupo";
+export type MemberFilterFlag = "all" | "vencida" | "pendiente";
 
 /**
  * Does this account have at least one student matching the given filter
@@ -338,8 +301,6 @@ export function accountMatchesFlag(
       return account.estudiantes.some((s) => s.membresia?.estado === "vencida");
     case "pendiente":
       return account.estudiantes.some((s) => s.ultimoPago?.estado === "pendiente_validacion");
-    case "sin-grupo":
-      return account.estudiantes.some((s) => !s.grupoId);
   }
 }
 
