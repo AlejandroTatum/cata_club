@@ -165,7 +165,6 @@ const SELF: StudentProfileSummary = {
     montoAplicado: "25.00",
     categoria: "Mensual Infantil",
     modalidad: "MENSUAL",
-    franjaHoraria: "15:00-18:00",
     fechaActivacion: "2026-07-22T20:51:01",
     // Declared on the client type but never produced by the adapter — the
     // screen must not read it. Set to a conspicuous date so a regression that

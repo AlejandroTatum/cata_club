@@ -75,8 +75,12 @@ const PAYMENT_STATUS_BY_ESTADO_PAGO: Record<BackendEstadoPago, PaymentStatus> = 
 // Builders
 // ---------------------------------------------------------------------------
 
+// The plan's name alone. It used to read "Mensual Adultos (20:00-21:00)",
+// pairing the plan with a hand-typed franja that drifted from the club's real
+// hours; a membership type is a price, and the hours belong to the horarios
+// the club assigns each student.
 function buildMembershipTypeLabel(tipo: BackendTipoMembresia | undefined): string {
-  return tipo ? `${tipo.categoria} (${tipo.franjaHoraria})` : "Sin tipo";
+  return tipo ? tipo.categoria : "Sin tipo";
 }
 
 function buildMemberStudentSummary(

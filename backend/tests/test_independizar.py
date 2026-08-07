@@ -84,7 +84,6 @@ def _crear_representante(db_session, *, cedula: str = "1790012345") -> Persona:
 def _crear_tipo_membresia(db_session) -> TipoMembresia:
     tm = TipoMembresia(
         categoria="Formativo",
-        franja_horaria="06:00-08:00",
         precio=Decimal("50.00"),
         modalidad=TipoModalidad.MENSUAL,
     )

@@ -60,7 +60,7 @@ async def crear_tipo_membresia(datos: TipoMembresiaCreateDTO, db: Session = Depe
 
 # Tipos de membresía son datos de catálogo: lectura para cualquier autenticado.
 # Deliberadamente SIN paginar: es un catálogo chico y de baja frecuencia de
-# cambio (categoría × franja horaria del club), no una tabla que crezca con
+# cambio (una entrada por plan comercial del club), no una tabla que crezca con
 # el padrón -- traerlo completo es barato (ver
 # `frontend/src/app/api/payments/[id]/route.ts:98-101`).
 @router.get(

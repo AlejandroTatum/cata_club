@@ -596,8 +596,8 @@ describe("describePaymentSituation", () => {
 //
 // The one place the portal is allowed to state a FUTURE session from. The
 // rows are `AlumnoHorario` — the assignment an admin makes in `/groups` — so
-// nothing here is projected off the membership's `franjaHoraria`, which is a
-// time range with no weekday in it.
+// nothing here is projected off the membership plan, which carries a price
+// and no weekday at all.
 // ---------------------------------------------------------------------------
 
 function asignacion(horarioDia: string, horarioHoraInicio: string, horarioHoraFin: string) {

@@ -58,7 +58,7 @@ def escenario_vencimiento_real(motor_test):
     usuario = Usuario(correo=correo, contrasenia="hash", persona_id=persona.id)
     sesion.add(usuario)
     tipo = TipoMembresia(
-        categoria="Vencimiento Real", franja_horaria="18:00-19:00",
+        categoria="Vencimiento Real",
         precio=Decimal("35.00"), modalidad=TipoModalidad.MENSUAL,
     )
     sesion.add(tipo)
@@ -162,7 +162,7 @@ def _crear_usuario(db, persona: Persona, correo: str) -> Usuario:
 
 def _crear_membresia_con_pago(db, persona: Persona, fecha_fin: date) -> tuple[Membresia, Pago]:
     tipo = TipoMembresia(
-        categoria="Mensual Adultos", franja_horaria="18:00-19:00",
+        categoria="Mensual Adultos",
         precio=Decimal("35.00"), modalidad=TipoModalidad.MENSUAL,
     )
     db.add(tipo)

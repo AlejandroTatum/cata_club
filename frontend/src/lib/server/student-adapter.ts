@@ -82,14 +82,13 @@ export interface StudentProfileView {
  * `TipoMembresiaResponseDTO` (see backend
  * app/presentacion/schemas/membresia_pago_schemas.py) — unlike
  * payments-adapter.ts's `BackendTipoMembresia` (which only needs
- * `categoria`/`franjaHoraria` to label an existing payment), this carries
+ * `categoria` to label an existing payment), this carries
  * the full catalog fields needed to show real plan options on the "pending
  * enrollment" screen instead of the old hardcoded `membershipPlans` array.
  */
 export interface BackendTipoMembresiaCatalogo {
   id: number;
   categoria: string;
-  franjaHoraria: string;
   precio: string;
   modalidad: string;
 }
@@ -98,7 +97,6 @@ export interface MembershipPlanView {
   id: string;
   nombre: string;
   precio: number;
-  franjaHoraria: string;
   modalidad: string;
 }
 
@@ -125,7 +123,6 @@ export interface MembershipView {
   montoAplicado: string | null;
   categoria: string | null;
   modalidad: string | null;
-  franjaHoraria: string | null;
   fechaActivacion: string | null;
 }
 
@@ -141,7 +138,6 @@ export function buildMembershipView(
     montoAplicado: mem.montoAplicado ?? null,
     categoria: tipo?.categoria ?? null,
     modalidad: tipo?.modalidad ?? null,
-    franjaHoraria: tipo?.franjaHoraria ?? null,
     fechaActivacion: mem.fechaActivacion ?? null,
   };
 }
@@ -151,7 +147,6 @@ export function buildMembershipPlans(tipos: BackendTipoMembresiaCatalogo[]): Mem
     id: String(tipo.id),
     nombre: tipo.categoria,
     precio: Number(tipo.precio),
-    franjaHoraria: tipo.franjaHoraria,
     modalidad: tipo.modalidad,
   }));
 }

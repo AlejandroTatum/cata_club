@@ -29,7 +29,7 @@ def _crear_persona_y_membresia(db, estado_membresia: EstadoMembresia) -> tuple[P
     db.flush()
 
     tipo = TipoMembresia(
-        categoria="Mensual Adultos", franja_horaria="18:00-19:00",
+        categoria="Mensual Adultos",
         precio=35.00, modalidad=TipoModalidad.MENSUAL,
     )
     db.add(tipo)

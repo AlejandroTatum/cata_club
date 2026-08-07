@@ -805,7 +805,6 @@ export interface MembershipSummary {
   montoAplicado: string | null;
   categoria: string | null;
   modalidad: string | null;
-  franjaHoraria: string | null;
   /** Activation date, i.e. "socio desde". Null when the backend omits it. */
   fechaActivacion: string | null;
   /** End of the paid period — drives the "Vigente hasta"/"Venció" state. */
@@ -817,7 +816,6 @@ export interface MembershipPlanSummary {
   id: string;
   nombre: string;
   precio: number;
-  franjaHoraria: string;
   modalidad: string;
 }
 
@@ -1053,7 +1051,6 @@ export interface MembresiaPorPersona {
   tipo?: {
     id: number;
     categoria: string;
-    franjaHoraria: string;
     precio: string;
     modalidad: "PERSONALIZADA" | "MENSUAL";
   };
@@ -1156,7 +1153,6 @@ export async function subirVoucherPago(pagoId: number, archivo: File): Promise<P
 export interface TipoMembresiaCatalogo {
   id: number;
   categoria: string;
-  franjaHoraria: string;
   precio: string;
   modalidad: "PERSONALIZADA" | "MENSUAL";
 }

@@ -64,25 +64,6 @@ La severidad indica **consecuencia**, no esfuerzo:
 
 ### Datos incorrectos
 
-- [ ] **`tipo_membresia.franja_horaria` es texto libre desincronizado del
-  horario real.** (Alta)
-  - **Qué está mal:** la franja que ve el alumno (carnet, catálogo) es un
-    `String(80)` sin constraint, sin FK y sin validación, mientras los
-    horarios reales viven en `horario_entrenamiento` con `Time` de verdad.
-    Nada las vincula: el carnet puede decir 21:00 con el entrenamiento a
-    las 21:15, y ningún cambio de horario actualiza la franja. Los propios
-    fixtures mezclan formatos: `"18:00-19:00"`, `"AM"`, `"TARDE"`, `"mañana"`.
-  - **Dónde:** `backend/app/dominio/modelos.py:266` (la columna);
-    `backend/app/dominio/modelos.py:493-502` (`HorarioEntrenamiento` con
-    `hora_inicio`/`hora_fin` reales); DTO pasa-manos en
-    `backend/app/presentacion/schemas/membresia_pago_schemas.py:14`.
-  - **Cómo se verificó:** `rg -n "franja_horaria" backend/app` — cero
-    validaciones, cero joins con `horario_entrenamiento`.
-  - **Qué test lo cerraría:** el que hoy no puede escribirse: uno que afirme
-    que toda franja publicada se deriva de (o valida contra)
-    `horario_entrenamiento`. Exige primero decidir el mecanismo (FK, enum
-    derivado, o validación en el servicio).
-
 - [ ] **El mensaje del 408 no puede salir nunca, y en su lugar el usuario lee
   que la operación «se canceló».** (Alta)
   - **Qué está mal:** `STATUS_MESSAGES` promete «La operación tardó demasiado.
@@ -545,6 +526,7 @@ backend: `cd backend && pytest "<archivo>::<test>"`.
 
 | Ítem | Cierre | Candado |
 |---|---|---|
+| `tipo_membresia.franja_horaria` era texto libre desincronizado del horario real | La columna se eliminó (`d1a5f8c30b72`, un `DROP COLUMN`), junto con su campo en el DTO, el seed y las 15 fábricas de test que la cargaban. La franja del carnet se deriva ahora de los `alumno_horario` del alumno vía `describeAssignedWindows` (`frontend/src/app/student/student-utils.ts:429`), que llama a la MISMA `buildWeeklyTrainingSchedule` de la que sale el listado de próximos entrenamientos — por construcción no pueden discrepar. Los rótulos de admin (`members-adapter.ts:82`, `payments-adapter.ts:147`) pasan de `"Mensual Adultos (20:00-21:00)"` a `"Mensual Adultos"`: un plan es un precio, no un horario. **Ojo con la premisa que no se sostuvo:** no existe «la categoría del alumno» en singular — en la QA real 4 de 7 alumnos están en FORMATIVO+INFANTIL+JUVENIL a la vez y 2 en ninguna, y `AsistenciaServicio.asignar_alumno_a_horario` no valida coherencia. Por eso la derivación lista ventanas distintas en vez de colapsarlas a un rango: 15:00–16:00 más 20:00–21:15 no es «de 15:00 a 21:15» | `frontend/src/app/student/__tests__/StudentPage.test.tsx` — «the carnet's franja agrees with the assigned schedule» · 4/4, de coherencia y no de existencia: lee la ventana del panel y le exige al carnet la misma cadena. Rojo antes (3/4 fallando, el carnet decía 21:00), verde después. Más `backend/tests/test_migracion_drop_franja_horaria.py` · 3/3 (upgrade con datos, downgrade real) y el drift genérico `test_drift_migraciones.py`. Corridos el 6 de agosto de 2026: 906 backend, 2564 frontend, `alembic upgrade head` desde base vacía en verde |
 | Los errores al usuario salían en inglés cuando el backend peor se portaba | #153 y #155. El default del cliente pasó de `Request failed with status N` a `GENERIC_FAILURE` en español (`frontend/src/services/api.ts:340`; el inglés sobrevive solo en el comentario que documenta la historia, `:336`), y los 27 sitios que renderizaban `err.message` crudo pasaron por `toUserMessage`: hoy 30 llamadas en 17 archivos y cero lecturas crudas en `.tsx` (`rg -n 'err(or)?\.message' --glob '*.tsx' --glob '!**/__tests__/**' frontend/src` → sin resultados). Quedan tres observaciones del traductor en abiertos —el 408 inalcanzable, `GENERIC_FAILURE` cruzando la compuerta 2 y el encabezado ya falso—: son defectos del traductor nuevo, no la recaída de este ítem | `frontend/src/lib/__tests__/error-message.test.ts` · 19/19 y el guardián que pedía este ítem, `frontend/src/lib/__tests__/error-message-usage.test.ts` — «only the translator reads an error's message» · 5/5. Corridos el 6 de agosto de 2026 sobre `fa13172` |
 | El panel contaba «por regularizar» a quien no tenía NINGUNA membresía, y usaba todo el padrón como denominador de «membresías activas» | Dos mitades, dos PRs. #150 (backend): el `NOT EXISTS` exige estado `ACTIVA` y filtra por rol alumno, y nace `total_alumnos` junto a `total_personas` porque son dos preguntas distintas (`backend/app/presentacion/schemas/dashboard_schemas.py:11`). Este PR (frontend): el campo se declara en las dos copias de `DashboardStats` (`frontend/src/app/api/dashboard/route.ts:23`, `frontend/src/services/api.ts:842`) y la pantalla lo lee — el `%` y el «de N» pasan a `totalAlumnos` (`frontend/src/app/dashboard/page.tsx:128,226`), la tarjeta «Miembros» se queda en `totalPersonas` porque dice «personas registradas» y son todas | `backend/tests/test_dashboard_stats.py::test_total_alumnos_es_el_denominador_y_total_personas_cuenta_a_todos` + `::test_alumno_con_membresia_vencida_cuenta_como_por_regularizar`, `::test_alumno_con_membresia_inactiva_cuenta_como_por_regularizar`, `::test_staff_sin_membresia_no_cuenta_como_por_regularizar` · `frontend/src/app/dashboard/__tests__/DashboardPage.test.tsx` — «counts active memberships against the alumnos, and Miembros against the whole padrón» · 18/18. El del contrato es de tipos, no de runtime: la route es passthrough y el campo ya viajaba, así que `frontend/src/app/api/dashboard/__tests__/route.test.ts` — «declares and carries totalAlumnos» se pone rojo bajo `cd frontend && npm run type-check` (TS2353), no bajo vitest |
 | La selección de dependiente se perdía al navegar | Ya estaba en el código al corte anterior: `?alumno=` en la URL + `sessionStorage` por cuenta (`frontend/src/app/student/ManagedStudentPicker.tsx:43-150`); Pagos, Asistencia y Mi cuenta leen la misma fuente | `frontend/src/app/student/payments/__tests__/StudentPaymentsPage.test.tsx` — «the dependent selection survives navigation» y 3 hermanos · 27/27 |

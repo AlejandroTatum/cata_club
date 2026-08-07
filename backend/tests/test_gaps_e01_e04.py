@@ -109,7 +109,7 @@ def test_alumno_se_asigna_automaticamente_al_matricularse(client):
 
     tipo = client.post(
         "/api/v1/membresias/tipos",
-        json={"categoria": "adulto", "franja_horaria": "mañana", "modalidad": "MENSUAL", "precio": "35.00"},
+        json={"categoria": "adulto", "modalidad": "MENSUAL", "precio": "35.00"},
     ).json()
     client.post(
         "/api/v1/membresias/",
@@ -326,7 +326,7 @@ def test_menor_no_puede_registrar_su_propio_pago(client):
 
     tipo = client.post(
         "/api/v1/membresias/tipos",
-        json={"categoria": "niño", "franja_horaria": "tarde", "modalidad": "MENSUAL", "precio": "30.00"},
+        json={"categoria": "niño", "modalidad": "MENSUAL", "precio": "30.00"},
     ).json()
     membresia = client.post(
         "/api/v1/membresias/",
@@ -360,7 +360,7 @@ def test_representante_si_puede_registrar_pago_del_representado(client):
 
     tipo = client.post(
         "/api/v1/membresias/tipos",
-        json={"categoria": "niño", "franja_horaria": "tarde", "modalidad": "MENSUAL", "precio": "30.00"},
+        json={"categoria": "niño", "modalidad": "MENSUAL", "precio": "30.00"},
     ).json()
     membresia = client.post(
         "/api/v1/membresias/",

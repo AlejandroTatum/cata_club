@@ -50,7 +50,7 @@ const pagoListItem = {
   voucherFormato: "application/pdf",
 };
 
-const tipos = [{ id: 5, categoria: "Mensual", franjaHoraria: "Mañana" }];
+const tipos = [{ id: 5, categoria: "Mensual" }];
 const membresia = { id: 1, estado: "VENCIDA", tipoMembresiaId: 5 };
 
 beforeEach(() => {
@@ -105,7 +105,7 @@ describe("GET /api/payments", () => {
         id: "1",
         studentName: "Sofia Alumna",
         membershipPeriod: "01/07/2026 – 31/07/2026",
-        membershipType: "Mensual (Mañana)",
+        membershipType: "Mensual",
         expectedAmount: 85,
         paymentMethod: "Transferencia",
         uploadedAt: "2026-06-28T10:30:00Z",

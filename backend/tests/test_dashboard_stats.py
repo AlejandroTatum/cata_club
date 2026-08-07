@@ -73,7 +73,7 @@ def _obtener_o_crear_rol(db, tipo_rol: TipoRol) -> Rol:
 
 def _crear_membresia(db, persona: Persona, estado: EstadoMembresia) -> Membresia:
     tipo = TipoMembresia(
-        categoria=f"Dash {persona.cedula}", franja_horaria="18:00-19:00",
+        categoria=f"Dash {persona.cedula}",
         precio=Decimal("35.00"), modalidad=TipoModalidad.MENSUAL,
     )
     db.add(tipo)

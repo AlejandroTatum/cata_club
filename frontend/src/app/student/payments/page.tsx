@@ -164,7 +164,6 @@ function MembershipCard({
   if (membership?.montoAplicado) {
     facts.push({ label: "Valor mensual", value: formatCurrency(membership.montoAplicado) });
   }
-  if (membership?.franjaHoraria) facts.push({ label: "Franja", value: membership.franjaHoraria });
 
   return (
     <section

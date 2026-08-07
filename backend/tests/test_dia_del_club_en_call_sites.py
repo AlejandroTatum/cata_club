@@ -36,7 +36,7 @@ def _persona(db, cedula="1002003001") -> Persona:
 
 def _membresia_con_pago(db, persona: Persona, fecha_fin: date) -> Membresia:
     tipo = TipoMembresia(
-        categoria="Mensual Adultos", franja_horaria="18:00-19:00",
+        categoria="Mensual Adultos",
         precio=35.00, modalidad=TipoModalidad.MENSUAL,
     )
     db.add(tipo)

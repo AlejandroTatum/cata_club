@@ -85,7 +85,6 @@ export interface BackendMembresia {
 export interface BackendTipoMembresia {
   id: number;
   categoria: string;
-  franjaHoraria: string;
 }
 
 /** Fields of `PersonaResponseDTO` this feature needs — `PagoResponseDTO` (returned by the validar endpoint) doesn't carry the student's name, unlike `PagoListItemDTO`. */
@@ -145,7 +144,7 @@ export function buildPaymentValidationRequest(
     // strings, which `formatDateRange` anchors at noon UTC — the rendered
     // calendar day is the same whether Node runs in UTC or America/Guayaquil.
     membershipPeriod: formatDateRange(pago.fechaInicio, pago.fechaFin),
-    membershipType: tipoMembresia ? `${tipoMembresia.categoria} (${tipoMembresia.franjaHoraria})` : "Sin tipo",
+    membershipType: tipoMembresia ? tipoMembresia.categoria : "Sin tipo",
     expectedAmount: Number(pago.monto),
     paymentMethod: PAYMENT_METHOD_BY_TIPO_PAGO[pago.tipoPago],
     uploadedAt: pago.fechaRegistro,

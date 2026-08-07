@@ -133,12 +133,12 @@ describe("buildStudentProfileView", () => {
 describe("buildMembershipPlans", () => {
   it("maps the real TipoMembresia catalog into display plans", () => {
     const tipos: BackendTipoMembresiaCatalogo[] = [
-      { id: 1, categoria: "Mensual", franjaHoraria: "Tarde", precio: "85.00", modalidad: "MENSUAL" },
-      { id: 2, categoria: "Personalizado", franjaHoraria: "Mañana", precio: "120.50", modalidad: "PERSONALIZADA" },
+      { id: 1, categoria: "Mensual", precio: "85.00", modalidad: "MENSUAL" },
+      { id: 2, categoria: "Personalizado", precio: "120.50", modalidad: "PERSONALIZADA" },
     ];
     expect(buildMembershipPlans(tipos)).toEqual([
-      { id: "1", nombre: "Mensual", precio: 85, franjaHoraria: "Tarde", modalidad: "MENSUAL" },
-      { id: "2", nombre: "Personalizado", precio: 120.5, franjaHoraria: "Mañana", modalidad: "PERSONALIZADA" },
+      { id: "1", nombre: "Mensual", precio: 85, modalidad: "MENSUAL" },
+      { id: "2", nombre: "Personalizado", precio: 120.5, modalidad: "PERSONALIZADA" },
     ]);
   });
 
