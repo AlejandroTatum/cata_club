@@ -57,7 +57,7 @@ class PagoCreateDTO(BaseModel):
     @model_validator(mode="after")
     def _orden_fechas(self) -> "PagoCreateDTO":
         if self.fecha_inicio >= self.fecha_fin:
-            raise ValueError("fecha_inicio debe ser menor que fecha_fin")
+            raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
         return self
 
 
@@ -71,12 +71,12 @@ class PagoValidarDTO(BaseModel):
     def _validar_campos(self) -> "PagoValidarDTO":
         if self.estado_pago == EstadoPago.RECHAZADO:
             if self.motivo_rechazo is None or not self.motivo_rechazo.strip():
-                raise ValueError("motivo_rechazo es obligatorio al rechazar un pago")
+                raise ValueError("Debe indicar el motivo del rechazo.")
         if (self.fecha_inicio is None) != (self.fecha_fin is None):
-            raise ValueError("fecha_inicio y fecha_fin deben proporcionarse juntas")
+            raise ValueError("Indique la fecha de inicio y la de fin, o ninguna de las dos.")
         if self.fecha_inicio is not None and self.fecha_fin is not None:
             if self.fecha_inicio >= self.fecha_fin:
-                raise ValueError("fecha_inicio debe ser menor que fecha_fin")
+                raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
         return self
 
 

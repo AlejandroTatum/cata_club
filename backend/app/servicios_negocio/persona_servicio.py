@@ -61,8 +61,9 @@ class PersonaServicio:
             )
         if EDAD_MINIMA_ALUMNO <= edad < EDAD_MAYORIA_EDAD and not datos.representante_id:
             raise OperacionInvalida(
-                "El alumno es menor de edad (5-17 años): los datos del Representante/"
-                "Tutor legal (representante_id) son obligatorios."
+                "El alumno es menor de edad (5 a 17 años): debe indicar los datos "
+                "del representante o tutor legal.",
+                detalle_tecnico="falta representante_id en un alta de alumno menor",
             )
 
         if datos.representante_id:

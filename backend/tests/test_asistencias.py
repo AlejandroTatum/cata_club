@@ -204,7 +204,10 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_insercion(client):
         },
     )
     assert resp.status_code == 400
-    assert str(alumno["id"]) in resp.json()["detail"]
+    # El mensaje identifica al alumno por su NOMBRE, no por su id: el id era
+    # inútil para quien lee la pantalla y ahora viaja al log, en
+    # `detalle_tecnico`.
+    assert "Ana Torres" in resp.json()["detail"]
 
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
     assert historial.json() == []
@@ -242,7 +245,7 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_actualizacion(client):
 
     segunda = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
     assert segunda.status_code == 400
-    assert str(alumno["id"]) in segunda.json()["detail"]
+    assert "Ana Torres" in segunda.json()["detail"]
 
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
     registros = [r for r in historial.json() if r["horarioId"] == horario["id"]]

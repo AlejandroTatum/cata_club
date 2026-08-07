@@ -9,9 +9,32 @@ al código HTTP correspondiente, así los routers no necesitan try/except.
 
 
 class ErrorDominio(Exception):
-    """Excepción base para toda regla de negocio violada."""
-    def __init__(self, mensaje: str):
+    """Excepción base para toda regla de negocio violada.
+
+    Lleva DOS textos, y esa es una decisión de diseño, no una comodidad.
+
+    `mensaje` es lo que sale por la API y lo lee un socio del club.
+    `detalle_tecnico` es lo que se registra en el log y lo lee quien diagnostica.
+
+    El motivo de que sean dos: reescribir "el alumno 47 ya está asignado al
+    horario 12" como "Martín Vera ya figura en ese horario" mejora lo que lee
+    la persona y a la vez BORRA los dos identificadores con los que se
+    reproduce el caso. Con un solo campo hay que elegir a quién dejar sin
+    información -- al socio, que no sabe qué es un `horario_id`, o a quien
+    revisa el log, que necesita justamente eso. Con dos campos no hay que
+    elegir: el socio lee una frase y el log conserva los ids.
+
+    `detalle_tecnico` es opcional a propósito. La mayoría de los mensajes no
+    pierden nada al escribirse bien ("El menor requiere un representante
+    legal" no oculta ningún dato), y exigirlo siempre llenaría el log de
+    líneas que repiten el mensaje con otras palabras.
+
+    Lo registra el manejador global de `main.py`, así ningún servicio tiene
+    que acordarse de loguear.
+    """
+    def __init__(self, mensaje: str, detalle_tecnico: str | None = None):
         self.mensaje = mensaje
+        self.detalle_tecnico = detalle_tecnico
         super().__init__(mensaje)
 
 

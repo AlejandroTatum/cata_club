@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Usuario
 from app.dominio.enums import TipoRol
+from app.dominio.etiquetas import rol_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -34,8 +35,9 @@ class RolServicio:
         usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
         if not usuario:
             raise OperacionInvalida(
-                "Esta persona todavía no registró sus credenciales "
-                "(POST /auth/registro); no se le puede asignar un rol hasta que lo haga"
+                "Esta persona todavía no creó su usuario y contraseña; no se le "
+                "puede asignar un rol hasta que lo haga.",
+                detalle_tecnico="sin Usuario asociado; se crea con POST /auth/registro",
             )
         return usuario
 
@@ -50,7 +52,10 @@ class RolServicio:
     def asignar_rol(self, persona_id: int, tipo_rol: TipoRol) -> Usuario:
         usuario = self._obtener_usuario_de_persona(persona_id)
         if any(r.tipo_rol == tipo_rol for r in usuario.roles):
-            raise OperacionInvalida(f"Esta persona ya tiene el rol {tipo_rol.value}")
+            raise OperacionInvalida(
+                f"Esta persona ya tiene el rol de {rol_en_castellano(tipo_rol)}.",
+                detalle_tecnico=f"tipo_rol={tipo_rol.value} ya asignado",
+            )
         rol = self.repo_rol.obtener_o_crear(tipo_rol)
         usuario.roles.append(rol)
         self.db.commit()
@@ -79,8 +84,11 @@ class RolServicio:
             return
         raise OperacionInvalida(
             f"No se puede {accion}: es el último administrador activo del "
-            "sistema y quedaría sin acceso de administración. Asigne el rol "
-            "ADMINISTRADOR a otra cuenta activa antes de continuar."
+            "sistema y quedaría sin acceso de administración. Asigne ese rol "
+            "a otra cuenta activa antes de continuar.",
+            detalle_tecnico=(
+                f"contar_administradores_activos(excluir={usuario.id}) == 0"
+            ),
         )
 
     def _asegurar_que_no_se_quita_a_si_mismo(
@@ -91,9 +99,10 @@ class RolServicio:
         if usuario.persona_id != persona_id_solicitante:
             return
         raise OperacionInvalida(
-            "No puede quitarse a sí mismo el rol ADMINISTRADOR: perdería el "
+            "No puede quitarse a sí mismo el rol de administrador: perdería el "
             "acceso de administración de inmediato. Pídale a otro "
-            "administrador que lo haga."
+            "administrador que lo haga.",
+            detalle_tecnico=f"solicitante persona_id={persona_id_solicitante} es el titular",
         )
 
     def quitar_rol(
@@ -111,10 +120,13 @@ class RolServicio:
             # mensaje: el frontend solo confía en el `detail` de 400/409/422
             # (ver frontend/src/lib/error-message.ts), así que el modal de
             # roles perdía la frase con la que reconcilia su checkbox.
-            raise OperacionInvalida(f"Esta persona no tiene el rol {tipo_rol.value}")
+            raise OperacionInvalida(
+                f"Esta persona no tiene el rol de {rol_en_castellano(tipo_rol)}.",
+                detalle_tecnico=f"tipo_rol={tipo_rol.value} no está asignado",
+            )
         if tipo_rol == TipoRol.ADMINISTRADOR:
             self._asegurar_que_no_se_quita_a_si_mismo(usuario, persona_id_solicitante)
-            self._asegurar_que_queda_otro_administrador(usuario, "quitar el rol ADMINISTRADOR")
+            self._asegurar_que_queda_otro_administrador(usuario, "quitar el rol de administrador")
         usuario.roles.remove(rol)
         # Criterio unificado (issue #4): el access token lleva los roles
         # embebidos, así que un token emitido antes de esta operación conserva
