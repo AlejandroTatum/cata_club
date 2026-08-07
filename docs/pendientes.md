@@ -304,6 +304,47 @@ La severidad indica **consecuencia**, no esfuerzo:
 
 ### Baja
 
+- [ ] **36 mensajes de 404 siguen nombrando la implementación; y el 422 tiene
+  dos bloqueos, no uno.**
+  - **Qué está mal:** el PR que sacó el vocabulario de implementación de los
+    mensajes visibles se limitó a los status de entrada (400/409/422), que son
+    los únicos cuyo `detail` el frontend deja pasar. Los `EntidadNoEncontrada`
+    quedaron como estaban: 36 mensajes que dicen «Persona con id 47 no
+    encontrada», con el identificador crudo adentro.
+  - **Consecuencia hoy, ninguna — por eso Baja:** un 404 se explica solo, así
+    que `toUserMessage` lo reemplaza por la frase del propio frontend
+    (`STATUS_MESSAGES`) y el `detail` del backend nunca se lee. Es deuda de
+    forma, no un defecto vivo. Se vuelve vivo el día que alguien remapee
+    `EntidadNoEncontrada` a 400 en `_MAPA_EXCEPCIONES` — y ese día
+    `backend/tests/test_vocabulario_en_mensajes_de_usuario.py` se pone rojo
+    solo, porque deriva su alcance de ese mapa en vez de listar excepciones.
+  - **Lo del 422 es aparte y son dos bloqueos independientes:** los cuatro
+    `ValueError` de `membresia_pago_schemas.py` ya están reescritos, pero su
+    texto igual no llega. Primero, FastAPI emite el 422 con `detail` ARREGLO, y
+    las dos puertas del cliente exigen string (`isApiErrorBody` en
+    `services/api.ts:747`, `passthroughBackendError` en
+    `lib/server/backend-client.ts:130`), así que las dos caen al fallback.
+    Segundo, aunque se arreglara la forma, Pydantic antepone `"Value error, "`
+    al mensaje, y ese prefijo dispara solo el patrón de inglés de
+    `IMPLEMENTATION_VOCABULARY`. Arreglar uno sin el otro no muestra nada.
+  - **Dónde:** los 36, en `app/servicios_negocio/` (los concentran
+    `asistencia_servicio.py` con 9, `membresia_pago_servicio.py` con 8 y
+    `geografia_servicio.py` con 5). El doble bloqueo del 422, en los dos
+    archivos citados arriba.
+  - **Cómo se verificó:** el conteo sale del mismo barrido que la guarda, con
+    el alcance invertido (`STATUS_DE_ENTRADA` → su complemento); da 36, todos
+    404, y cero en 401/403/503. El `detail` arreglo se observó contra la app
+    real: `PATCH /api/v1/membresias/pagos/1/validar` con
+    `{"estado_pago": "RECHAZADO"}` devuelve
+    `{'detail': [{'type': 'value_error', ..., 'msg': 'Value error, Debe indicar
+    el motivo del rechazo.'}]}`. Que ese texto con prefijo no pasa la compuerta
+    se verificó importando `isUserFacingText` y evaluándolo.
+  - **Qué test lo cerraría:** ampliar `STATUS_DE_ENTRADA` en
+    `test_vocabulario_en_mensajes_de_usuario.py` a todos los status y borrar el
+    recorte — la guarda ya cubre estos 36 sitios sin tocar nada más. Para el
+    422 hacen falta dos: uno de backend que fije la forma del cuerpo, y uno de
+    frontend sobre el prefijo de Pydantic, que es de otro PR.
+
 - [ ] **El patrón MIME de la compuerta 2 incluye `audio` y `video`, que son
   palabras españolas.**
   - **Qué está mal:** el comentario funda la lista cerrada de los nueve tipos

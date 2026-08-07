@@ -8,6 +8,7 @@ from app.dominio.modelos import (
     Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion, DescuentoAplicado,
 )
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion
+from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio, TipoMembresiaRepositorio
@@ -507,7 +508,9 @@ class PagoServicio:
         if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
             raise OperacionInvalida(
                 "Solo un pago pendiente de validación puede aprobarse o "
-                f"rechazarse; este pago ya está en estado {pago.estado_pago.value}"
+                f"rechazarse; este pago ya está "
+                f"{estado_de_pago_en_castellano(pago.estado_pago)}.",
+                detalle_tecnico=f"pago_id={pago_id} estado_pago={pago.estado_pago.value}",
             )
 
         pago.estado_pago = datos.estado_pago

@@ -88,7 +88,8 @@ class AdminCuentaServicio:
             if edad >= EDAD_MAYORIA_EDAD:
                 raise OperacionInvalida(
                     f"La persona es mayor de edad ({edad} años). "
-                    f"Use tipo_cuenta JUGADOR o REPRESENTANTE."
+                    "Registre la cuenta como jugador o como representante.",
+                    detalle_tecnico=f"tipo_cuenta=MENOR con edad calculada {edad}",
                 )
             if edad < EDAD_MINIMA_ALUMNO:
                 raise OperacionInvalida(
@@ -97,7 +98,8 @@ class AdminCuentaServicio:
                 )
             if not datos.representante_id:
                 raise OperacionInvalida(
-                    "El menor requiere un representante legal (representante_id)."
+                    "El menor requiere un representante legal.",
+                    detalle_tecnico="falta representante_id en una cuenta de tipo menor",
                 )
 
         # 4. Validar representante si aplica

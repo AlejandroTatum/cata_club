@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario
 from app.dominio.enums import Categoria
 from app.dominio.categoria_metadata import CATEGORIA_METADATA
+from app.dominio.etiquetas import categoria_en_castellano, dia_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.asistencia_repositorio import (
@@ -32,8 +33,12 @@ class AsistenciaServicio:
         info = CATEGORIA_METADATA[horario.categoria]
         if horario.dia_semana not in info.dias:
             raise OperacionInvalida(
-                f"El día {horario.dia_semana.value} no está permitido para "
-                f"la categoría {horario.categoria.value}"
+                f"El día {dia_en_castellano(horario.dia_semana)} no está permitido "
+                f"para la categoría {categoria_en_castellano(horario.categoria)}.",
+                detalle_tecnico=(
+                    f"dia_semana={horario.dia_semana.value} "
+                    f"fuera de los días de categoria={horario.categoria.value}"
+                ),
             )
         horario.hora_inicio = info.hora_inicio
         horario.hora_fin = info.hora_fin
@@ -77,7 +82,10 @@ class AsistenciaServicio:
         "Tomar asistencia") actualiza el registro existente en vez de crear
         uno duplicado -- no hay constraint único en BD, así que la
         deduplicación se hace explícitamente aquí."""
-        if not self.repo_persona.obtener_por_id(datos.persona_id):
+        # La persona se ata a un nombre en vez de descartarse: el mensaje de
+        # más abajo la nombra, y esta consulta ya se estaba haciendo.
+        persona = self.repo_persona.obtener_por_id(datos.persona_id)
+        if not persona:
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
         if not self.repo_horario.obtener_por_id(datos.horario_id):
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
@@ -94,7 +102,12 @@ class AsistenciaServicio:
             datos.persona_id, datos.horario_id
         ):
             raise OperacionInvalida(
-                f"La persona {datos.persona_id} no está inscrita en el horario {datos.horario_id}"
+                f"{persona.nombres} {persona.apellidos} no está en la lista de "
+                "alumnos de ese horario.",
+                detalle_tecnico=(
+                    f"sin AlumnoHorario para persona_id={datos.persona_id} "
+                    f"horario_id={datos.horario_id}"
+                ),
             )
 
         existente = self.repo.buscar_por_persona_horario_fecha(
@@ -127,7 +140,9 @@ class AsistenciaServicio:
     # --- Asignación directa Alumno ↔ Horario ---------------------------------
     def asignar_alumno_a_horario(self, datos: AlumnoHorarioCreateDTO) -> AlumnoHorarioDetalleDTO:
         """Asigna un alumno a un horario específico de forma directa."""
-        if not self.repo_persona.obtener_por_id(datos.persona_id):
+        # Igual que en `registrar_asistencia`: el nombre ya está a mano.
+        persona = self.repo_persona.obtener_por_id(datos.persona_id)
+        if not persona:
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
         if not self.repo_horario.obtener_por_id(datos.horario_id):
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
@@ -137,7 +152,11 @@ class AsistenciaServicio:
         )
         if existente:
             raise OperacionInvalida(
-                f"El alumno {datos.persona_id} ya está asignado al horario {datos.horario_id}"
+                f"{persona.nombres} {persona.apellidos} ya figura en ese horario.",
+                detalle_tecnico=(
+                    f"AlumnoHorario ya existe para persona_id={datos.persona_id} "
+                    f"horario_id={datos.horario_id}"
+                ),
             )
 
         alumno_horario = AlumnoHorario(

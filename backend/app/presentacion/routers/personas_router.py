@@ -456,7 +456,13 @@ async def crear_antecedentes_club(
 ):
     if datos.persona_id != persona_id:
         from app.dominio.excepciones import OperacionInvalida
-        raise OperacionInvalida("El persona_id del cuerpo no coincide con el de la URL")
+        raise OperacionInvalida(
+            "Los datos enviados no corresponden a la persona indicada.",
+            detalle_tecnico=(
+                f"persona_id del cuerpo ({datos.persona_id}) "
+                f"distinto del de la URL ({persona_id})"
+            ),
+        )
     return AntecedentesClubServicio(db).crear(datos)
 
 

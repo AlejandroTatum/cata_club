@@ -73,6 +73,22 @@ _MAPA_EXCEPCIONES = {
 for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
     def _crear_handler(codigo):
         async def _handler(request: Request, exc):
+            # `detalle_tecnico` es lo que el mensaje NO puede decir sin dejar
+            # de estar escrito para un socio: los ids con los que se reproduce
+            # el caso, el enum crudo, la ruta que falta llamar. Se registra
+            # acá, en un solo lugar, así ningún servicio tiene que acordarse.
+            # Nivel `info` y no `warning`: un 400 es el cliente mandando algo
+            # que la regla no admite, no una falla del servidor.
+            detalle = getattr(exc, "detalle_tecnico", None)
+            if detalle:
+                _log.info(
+                    "%s en %s %s [request_id=%s]: %s",
+                    type(exc).__name__,
+                    request.method,
+                    request.url.path,
+                    getattr(request.state, "request_id", "-"),
+                    detalle,
+                )
             return _respuesta_error(codigo, exc.mensaje)
         return _handler
     app.add_exception_handler(_excepcion, _crear_handler(_codigo))

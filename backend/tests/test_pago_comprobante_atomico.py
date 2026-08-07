@@ -135,7 +135,9 @@ def test_reaprobar_pago_aprobado_devuelve_400_sin_repetir_efectos(
 
     resp_2 = _validar(client, pago["id"], "APROBADO")
     assert resp_2.status_code == 400
-    assert "APROBADO" in resp_2.json()["detail"]
+    # El mensaje nombra el estado en castellano, no el literal del enum: el
+    # `EstadoPago.APROBADO` crudo ahora va al log, en `detalle_tecnico`.
+    assert "ya está aprobado" in resp_2.json()["detail"]
 
     # Ningún efecto repetido.
     assert espia_disparo == [pago["id"]]
@@ -153,7 +155,7 @@ def test_rechazar_pago_ya_aprobado_devuelve_400(client, db_session, espia_dispar
 
     resp = _validar(client, pago["id"], "RECHAZADO", motivo="Cambio de opinión")
     assert resp.status_code == 400
-    assert "APROBADO" in resp.json()["detail"]
+    assert "ya está aprobado" in resp.json()["detail"]
 
     pago_actual = client.get(f"/api/v1/membresias/pagos/{pago['id']}").json()
     assert pago_actual["estadoPago"] == "APROBADO"
@@ -171,7 +173,7 @@ def test_aprobar_pago_rechazado_devuelve_400(client, db_session, espia_disparo):
 
     resp = _validar(client, pago["id"], "APROBADO")
     assert resp.status_code == 400
-    assert "RECHAZADO" in resp.json()["detail"]
+    assert "ya está rechazado" in resp.json()["detail"]
 
     assert espia_disparo == []
     assert client.get(
