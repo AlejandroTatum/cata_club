@@ -19,7 +19,6 @@ from app.dominio.modelos import (
     Membresia,
     Pago,
     Persona,
-    Ranking,
     TipoMembresia,
     Usuario,
 )
@@ -219,7 +218,7 @@ def test_se_conserva_al_menos_un_alumno_autogestionado_menor_de_edad():
     assert menores
 
 
-def test_main_persiste_un_alumno_adulto_sin_representante_con_membresia_y_ranking():
+def test_main_persiste_un_alumno_adulto_sin_representante_con_membresia():
     modulo = _cargar_modulo_seed()
     SessionLocal = _motor_en_memoria(modulo)
 
@@ -246,11 +245,6 @@ def test_main_persiste_un_alumno_adulto_sin_representante_con_membresia_y_rankin
         ).scalar_one()
         assert tipo.categoria == adulto["membresia_categoria"]
 
-        ranking = verificacion.execute(
-            select(Ranking).where(Ranking.persona_id == persona.id)
-        ).scalar_one()
-        assert ranking.nivel_ranking_id == adulto["nivel_ranking_id"]
-
 
 def test_el_primer_representante_declara_varios_hijos_y_el_resto_uno():
     """El selector de dependiente solo se muestra con 2+ perfiles, pero el
@@ -264,14 +258,13 @@ def test_el_primer_representante_declara_varios_hijos_y_el_resto_uno():
 
 
 def test_los_hijos_de_un_mismo_representante_tienen_datos_distintos():
-    """Con datos idénticos el selector no probaría nada: edad, nivel y
-    categoría de membresía deben diferir entre hermanos."""
+    """Con datos idénticos el selector no probaría nada: edad y categoría de
+    membresía deben diferir entre hermanos."""
     modulo = _cargar_modulo_seed()
 
     hijos = modulo.REPRESENTANTES[0]["hijos"]
 
     assert len({h["edad_anios"] for h in hijos}) == len(hijos)
-    assert len({h["nivel_ranking_id"] for h in hijos}) == len(hijos)
     assert len({h["membresia_categoria"] for h in hijos}) > 1
 
 
@@ -305,7 +298,7 @@ def test_main_persiste_todos_los_representados_del_primer_representante():
             ).scalar_one() is not None
 
 
-def test_main_es_idempotente_para_personas_membresias_pagos_y_rankings():
+def test_main_es_idempotente_para_personas_membresias_y_pagos():
     """El script se re-ejecuta en cada arranque del contenedor: la segunda
     corrida no debe duplicar ninguna fila."""
     modulo = _cargar_modulo_seed()
@@ -315,7 +308,7 @@ def test_main_es_idempotente_para_personas_membresias_pagos_y_rankings():
         with SessionLocal() as sesion:
             return {
                 modelo.__name__: len(list(sesion.execute(select(modelo)).scalars().all()))
-                for modelo in (Persona, Usuario, Membresia, Pago, Ranking, AlumnoHorario)
+                for modelo in (Persona, Usuario, Membresia, Pago, AlumnoHorario)
             }
 
     modulo.main()

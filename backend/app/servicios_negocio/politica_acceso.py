@@ -26,8 +26,7 @@ ROL_ENTRENADOR = "ENTRENADOR"
 SOLO_ADMINISTRADOR = (ROL_ADMINISTRADOR,)
 
 #: El Entrenador también, para lo que necesita en su operación diaria
-#: (roster, horarios, ranking). Ya era el criterio de `listar_representados`
-#: y de `GET /ranking/{persona_id}/perfil`.
+#: (roster, horarios). Ya era el criterio de `listar_representados`.
 ADMINISTRADOR_O_ENTRENADOR = (ROL_ADMINISTRADOR, ROL_ENTRENADOR)
 
 

@@ -14,7 +14,7 @@ from app.infraestructura.repositorios.persona_repositorio import PersonaReposito
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio, TipoMembresiaRepositorio
 from app.infraestructura.repositorios.pago_repositorio import PagoRepositorio, ComprobantePagoRepositorio
 from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
-from app.infraestructura.repositorios.ranking_repositorio import NotificacionRepositorio
+from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.soporte_transversal.firma_archivos import es_firma_valida

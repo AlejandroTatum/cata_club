@@ -11,10 +11,6 @@ class HorarioCreateDTO(BaseModel):
     deriva server-side de `CATEGORIA_METADATA[categoria]` para que el
     contrato nunca pueda desviarse de los 5 horarios fijos de negocio.
 
-    El nivel de ranking NO vive en el horario: horario y nivel son
-    independientes (un alumno puede trained en cualquier horario sin que
-    medie su nivel, y el nivel se asigna por `Ranking.nivel_ranking_id`).
-
     Sin `entrenador_id`: el club no asigna entrenadores a horarios -- la
     clase la da el entrenador disponible (issue #13,
     docs/concepto-alcance-modelo.md §4)."""

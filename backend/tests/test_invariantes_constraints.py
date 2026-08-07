@@ -2,7 +2,7 @@
 Invariantes de negocio garantizados EN LA BASE (auditoría hallazgo 7 +
 adenda A y B, issue #8).
 
-Los cuatro invariantes se protegían solo con el patrón leer-luego-escribir de
+Los tres invariantes se protegían solo con el patrón leer-luego-escribir de
 los servicios: dos peticiones concurrentes podían pasar las dos el chequeo y
 violar el invariante. Criterio unificado:
 
@@ -13,9 +13,7 @@ violar el invariante. Criterio unificado:
          (`uq_membresia_activa_por_persona`).
   - Con forma de CONTEO -> `SELECT ... FOR UPDATE` que serializa el
     leer-luego-escribir:
-      3. Capacidad máxima de un nivel de ranking (lock sobre la fila del
-         nivel).
-      4. Debe quedar al menos un administrador activo (lock sobre la fila
+      3. Debe quedar al menos un administrador activo (lock sobre la fila
          del catálogo `rol` de ADMINISTRADOR).
 
 Los chequeos de servicio existentes SIGUEN siendo el camino primario de error
@@ -23,12 +21,12 @@ Los chequeos de servicio existentes SIGUEN siendo el camino primario de error
 el chequeo no vio (carrera), la API debe responder EL MISMO error de dominio
 que respondería el chequeo (ver las pruebas de paridad al final).
 
-Las pruebas de concurrencia siguen el patrón de `test_ranking_concurrencia.py`:
-sesiones independientes sobre `motor_test`, commits reales y limpieza en el
-`finally` de la fixture, con una `threading.Barrier` que hace determinística
-la carrera. La espera es tolerante (`BrokenBarrierError` se ignora) a
-propósito: con el lock puesto, uno de los dos hilos queda serializado ANTES
-de llegar a la barrera, así que el otro debe poder continuar solo.
+Las pruebas de concurrencia usan sesiones independientes sobre `motor_test`,
+commits reales y limpieza en el `finally` de la fixture, con una
+`threading.Barrier` que hace determinística la carrera. La espera es
+tolerante (`BrokenBarrierError` se ignora) a propósito: con el lock puesto,
+uno de los dos hilos queda serializado ANTES de llegar a la barrera, así que
+el otro debe poder continuar solo.
 """
 import threading
 from datetime import date, datetime, timezone
@@ -43,12 +41,9 @@ from app.dominio.enums import (
 )
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import (
-    Membresia, NivelRanking, Persona, Ranking, Rol, Usuario,
+    Membresia, Persona, Rol, Usuario,
 )
-from app.infraestructura.repositorios import (
-    ranking_repositorio, usuario_ficha_repositorio,
-)
-from app.servicios_negocio.ranking_servicio import RankingServicio
+from app.infraestructura.repositorios import usuario_ficha_repositorio
 from app.servicios_negocio.rol_servicio import RolServicio
 
 # Fábricas mínimas compartidas (ORM directo: estas pruebas BURLAN los chequeos
@@ -129,45 +124,6 @@ def test_membresias_historicas_coexisten_con_la_activa(db_session):
     db_session.flush()  # no debe lanzar
 
 
-# ---------------------------------------------------------------------------
-# Invariante 3: capacidad máxima del nivel bajo concurrencia real.
-# ---------------------------------------------------------------------------
-@pytest.fixture()
-def escenario_capacidad(motor_test):
-    """Nivel con UN solo cupo + dos personas, commiteados de verdad (dos
-    conexiones distintas deben poder verlos a la vez)."""
-    sesion = Session(bind=motor_test)
-    nivel = NivelRanking(
-        numero_nivel=903, nombre="Capacidad concurrente", capacidad_maxima=1,
-    )
-    persona_1 = Persona(
-        nombres="Cupo", apellidos="Uno", cedula="1799000903",
-        fecha_nacimiento=date(1990, 1, 1), telefono="0990000903",
-    )
-    persona_2 = Persona(
-        nombres="Cupo", apellidos="Dos", cedula="1799000904",
-        fecha_nacimiento=date(1990, 1, 1), telefono="0990000904",
-    )
-    sesion.add_all([nivel, persona_1, persona_2])
-    sesion.commit()
-    ids = (nivel.id, persona_1.id, persona_2.id)
-    sesion.close()
-
-    try:
-        yield ids
-    finally:
-        limpieza = Session(bind=motor_test)
-        limpieza.query(Ranking).filter(
-            Ranking.persona_id.in_([ids[1], ids[2]])
-        ).delete(synchronize_session=False)
-        limpieza.query(Persona).filter(
-            Persona.id.in_([ids[1], ids[2]])
-        ).delete(synchronize_session=False)
-        limpieza.query(NivelRanking).filter(NivelRanking.id == ids[0]).delete()
-        limpieza.commit()
-        limpieza.close()
-
-
 def _esperar_tolerante(barrera: threading.Barrier) -> None:
     """Con el lock puesto, uno de los dos hilos queda serializado ANTES de
     llegar a la barrera: el que sí llegó debe poder continuar solo cuando la
@@ -178,74 +134,8 @@ def _esperar_tolerante(barrera: threading.Barrier) -> None:
         pass
 
 
-def test_dos_asignaciones_concurrentes_no_exceden_la_capacidad_del_nivel(
-    motor_test, escenario_capacidad
-):
-    """Dos personas compiten por el ÚNICO cupo del nivel. Sin serialización,
-    las dos cuentan la misma ocupación (0), las dos pasan el chequeo y el
-    nivel queda con 2/1. Con el `FOR UPDATE` sobre la fila del nivel,
-    exactamente una gana y la otra recibe el error de capacidad."""
-    nivel_id, persona_1_id, persona_2_id = escenario_capacidad
-
-    barrera = threading.Barrier(2, timeout=3)
-    contar_original = ranking_repositorio.NivelRankingRepositorio.contar_personas_en_nivel
-    local = threading.local()
-
-    def contar_sincronizado(self, nivel_id_arg):
-        # Solo la PRIMERA cuenta de cada hilo espera: es la que decide si hay
-        # cupo. Que ambos hilos cuenten a la vez es lo que hace la carrera
-        # determinística (sin el lock); con el lock, el hilo serializado ni
-        # siquiera llega aquí hasta que el otro commitea.
-        if not getattr(local, "ya_espero", False):
-            local.ya_espero = True
-            _esperar_tolerante(barrera)
-        return contar_original(self, nivel_id_arg)
-
-    resultados: list = [None, None]
-
-    def trabajo(indice: int, persona_id: int):
-        sesion = Session(bind=motor_test)
-        try:
-            resultados[indice] = RankingServicio(sesion).asignar_nivel(persona_id, nivel_id)
-        except BaseException as error:  # noqa: BLE001 -- el test inspecciona el fallo
-            resultados[indice] = error
-            barrera.abort()
-        finally:
-            sesion.close()
-
-    ranking_repositorio.NivelRankingRepositorio.contar_personas_en_nivel = contar_sincronizado
-    try:
-        hilos = [
-            threading.Thread(target=trabajo, args=(0, persona_1_id)),
-            threading.Thread(target=trabajo, args=(1, persona_2_id)),
-        ]
-        for hilo in hilos:
-            hilo.start()
-        for hilo in hilos:
-            hilo.join(timeout=30)
-    finally:
-        ranking_repositorio.NivelRankingRepositorio.contar_personas_en_nivel = contar_original
-
-    errores = [r for r in resultados if isinstance(r, BaseException)]
-    exitos = [r for r in resultados if isinstance(r, Ranking)]
-    assert len(exitos) == 1 and len(errores) == 1, (
-        f"exactamente una de las dos debía ganar el cupo: {resultados}"
-    )
-    assert isinstance(errores[0], OperacionInvalida)
-    assert "capacidad máxima" in str(errores[0])
-
-    sesion = Session(bind=motor_test)
-    try:
-        ocupacion = (
-            sesion.query(Ranking).filter(Ranking.nivel_ranking_id == nivel_id).count()
-        )
-    finally:
-        sesion.close()
-    assert ocupacion == 1
-
-
 # ---------------------------------------------------------------------------
-# Invariante 4: siempre queda al menos un administrador activo.
+# Invariante 3: siempre queda al menos un administrador activo.
 # ---------------------------------------------------------------------------
 @pytest.fixture()
 def escenario_ultimo_admin(motor_test):
