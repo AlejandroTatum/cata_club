@@ -369,6 +369,49 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     expect(sabado?.dataset.active).toBe("true");
   });
 
+  /**
+   * Regression guard for `DiaTrack`'s dashed/outlined marker.
+   *
+   * Every other fixture in this describe block either covers all of its
+   * categoría's permitted días (no dashed markers ever render) or only skips
+   * Sábado on a LUN_SAB categoría (COMPETITIVO), which reads as "the usual
+   * weekly exception" rather than a genuinely missing weekday. Neither shape
+   * proves the dashed marker still works, so a reviewer skimming the diff
+   * could mistake `DiaTrack`'s outlined branch for dead code and delete it —
+   * the prose line (`formatDiaSet`) never mentions the days a categoría
+   * skips, only the ones it uses.
+   *
+   * FORMATIVO permits Monday–Friday; this fixture drops a plain weekday
+   * (Miércoles) from the middle of that range, so the only way the dashed
+   * marker can be absent is if someone actually removes it.
+   */
+  it("marks a permitted weekday the categoria doesn't use as a dashed marker, not a missing one", async () => {
+    mockFetchHorarios.mockResolvedValue(
+      ["LUNES", "MARTES", "JUEVES", "VIERNES"].map((dia, i) => ({
+        id: 120 + i,
+        diaSemana: dia,
+        horaInicio: "15:00",
+        horaFin: "16:00",
+        categoria: "FORMATIVO",
+      })),
+    );
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const card = screen.getAllByTestId("horario-card")[0];
+    const markers = within(card).getAllByTestId("dia-marker");
+
+    expect(markers.map((marker) => marker.dataset.dia)).toEqual([
+      "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES",
+    ]);
+    const miercoles = markers.find((marker) => marker.dataset.dia === "MIERCOLES");
+    expect(miercoles?.dataset.active).toBe("false");
+    expect(
+      markers.filter((marker) => marker.dataset.dia !== "MIERCOLES"),
+    ).toSatisfy((rest: HTMLElement[]) => rest.every((marker) => marker.dataset.active === "true"));
+  });
+
   it("names every column inside the row, not only in the strip above it", async () => {
     // The strip above the list is `aria-hidden` — correctly, since announcing
     // it too would read each column name twice per row. So the names assistive
