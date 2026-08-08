@@ -209,7 +209,9 @@ test.describe("Back navigation + toasts", () => {
 
     // The detail view carries its own way back to the queue, and a failed
     // rejection must leave the payment where it was rather than swallow it.
-    await page.getByRole("button", { name: /volver a la cola/i }).click();
+    // It is a real `BackLink` (a link, not a button) since the redesign put
+    // the control through the design system's shared back-navigation piece.
+    await page.getByRole("link", { name: /volver a la cola/i }).click();
     await expect(openRequest).toBeVisible();
 
     await home.click();

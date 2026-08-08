@@ -18,10 +18,17 @@
  * Placement is a page convention, not a CSS position: it renders above and to
  * the left of the page title, directly before `PageHeader` in the page's own
  * markup — same document flow every other page furniture uses.
+ *
+ * `onClick` is optional and additive to the navigation, not a replacement for
+ * `href` — mirroring the guard the legacy `components/BackLink.tsx` already
+ * exposed. It exists for the master-detail screens where "back" is an in-page
+ * state reset rather than a route change (e.g. payments' queue ⇄ detail
+ * swap): `href` still names a real, keyboard- and screen-reader-reachable
+ * fallback destination, while `onClick` does the actual state change.
  */
 
 import Link from "next/link";
-import type { ReactElement } from "react";
+import type { MouseEvent, ReactElement } from "react";
 import { ArrowLeft } from "lucide-react";
 import { buttonClasses } from "./Button";
 import { ICON } from "@/lib/icon-size";
@@ -33,9 +40,16 @@ export interface BackLinkProps {
   /** Must name the destination — see the module doc for the bare-"Volver" guard. */
   label: string;
   className?: string;
+  /** Runs alongside the navigation — see the module doc. */
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }
 
-export default function BackLink({ href, label, className }: BackLinkProps): ReactElement {
+export default function BackLink({
+  href,
+  label,
+  className,
+  onClick,
+}: BackLinkProps): ReactElement {
   if (process.env.NODE_ENV !== "production") {
     const bare = label.trim().toLowerCase();
     if (bare === "" || bare === "volver") {
@@ -47,7 +61,11 @@ export default function BackLink({ href, label, className }: BackLinkProps): Rea
   }
 
   return (
-    <Link href={href} className={buttonClasses("secondary", "sm", cn("gap-1.5", className))}>
+    <Link
+      href={href}
+      onClick={onClick}
+      className={buttonClasses("secondary", "sm", cn("gap-1.5", className))}
+    >
       <ArrowLeft size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
       {label}
     </Link>

@@ -6,8 +6,8 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import BackLink from "@/components/ui/BackLink";
 
 describe("BackLink — destination", () => {
@@ -66,5 +66,25 @@ describe("BackLink — icon is decorative", () => {
     const link = screen.getByRole("link", { name: /volver a la cola/i });
     const icon = link.querySelector("svg");
     expect(icon).toHaveAttribute("aria-hidden", "true");
+  });
+});
+
+describe("BackLink — optional onClick", () => {
+  // Some screens use BackLink for an in-page state reset rather than a
+  // route change (e.g. a master-detail view whose "back" is local state, not
+  // a URL) — `href` still names a real fallback destination, but the caller
+  // also needs its own handler to run on click, exactly like the legacy
+  // `components/BackLink.tsx` guard already does.
+  it("still calls a caller-supplied onClick alongside the navigation", () => {
+    const onClick = vi.fn();
+    render(<BackLink href="/payments" label="Volver a la cola" onClick={onClick} />);
+    fireEvent.click(screen.getByRole("link", { name: /volver a la cola/i }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps working with no onClick at all", () => {
+    expect(() =>
+      render(<BackLink href="/queue" label="Volver a la cola" />),
+    ).not.toThrow();
   });
 });

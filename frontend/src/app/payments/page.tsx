@@ -53,6 +53,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -65,7 +66,6 @@ import {
   DollarSign,
   FileText,
   Eye,
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -97,8 +97,10 @@ import {
   type BatchApprovalOutcome,
 } from "@/app/payments/payments-utils";
 import {
+  BackLink,
   Badge,
   Button,
+  DataBox,
   EmptyState,
   ErrorState,
   FilterPanel,
@@ -243,7 +245,7 @@ function ProofViewer({
             <a
               href={request.proofPreviewUrl}
               download
-              className="inline-flex font-semibold text-cata-red hover:underline"
+              className="inline-flex font-semibold text-state-bad hover:underline"
             >
               Descargar comprobante
             </a>
@@ -743,21 +745,50 @@ export default function PaymentsPage(): React.ReactElement {
   // -------------------------------------------------------------------------
 
   /**
+   * The reason an unreviewed payment's batch checkbox is disabled, shared by
+   * every such checkbox on the page via `aria-labelledby` (see
+   * `renderBatchCheckbox`) and rendered exactly once, above the list, by
+   * `renderBatchReviewReason` below.
+   *
+   * It used to live ONLY in the accessible name, which answered a sighted
+   * admin's "why can't I check this?" with nothing at all — the first defect.
+   * The fix then repeated this same sentence inline next to every unreviewed
+   * checkbox, which is real text but duplicated down a 52px-wide table
+   * column: one word per line, once per row, the second defect. Neither
+   * problem is the checklist's fault; both are about WHERE the explanation
+   * renders. It needs to render exactly once — sighted users read it there,
+   * every unreviewed checkbox still cites it by id, so the accessible name
+   * says the same thing the page shows instead of nothing at all.
+   */
+  const BATCH_REVIEW_REASON_ID = "batch-review-reason";
+  const BATCH_REVIEW_REASON_TEXT =
+    "Un pago se puede sumar a un lote recién después de revisarlo.";
+
+  /** Renders `BATCH_REVIEW_REASON_TEXT` once, only when it is needed. */
+  function renderBatchReviewReason(): React.ReactElement | null {
+    const hasUnreviewedPending = paginatedRequests.some(
+      (r) => r.validationStatus === "pendiente" && !reviewed[r.id],
+    );
+    if (!hasUnreviewedPending) return null;
+    return (
+      <p id={BATCH_REVIEW_REASON_ID} className="mb-2 text-xs text-ink-3">
+        {BATCH_REVIEW_REASON_TEXT}
+      </p>
+    );
+  }
+
+  /**
    * The per-row batch checkbox.
    *
    * Rendered — and disabled — rather than hidden for a pending payment nobody
-   * has reviewed yet: the affordance is what raises the question. The reason
-   * used to live ONLY in the accessible name, which answered a sighted admin's
-   * "why can't I check this?" with nothing at all. It is now real text next to
-   * the checkbox, and `aria-labelledby` points at it — but the reason text is
-   * SHARED across every unreviewed row, so with two or more unreviewed rows on
-   * screen it alone is not a unique name: a screen reader would announce the
-   * same control twice with no way to tell them apart. `aria-labelledby`
-   * accepts several ids, so it also points at the row's own name element —
-   * the same node the sighted admin already reads to know whose row this is —
-   * making the accessible name unique without duplicating that name in the
-   * visible reason text. A resolved payment gets no control at all, because
-   * there is nothing left to decide about it.
+   * has reviewed yet: the affordance is what raises the question, answered by
+   * `renderBatchReviewReason` above the list. `aria-labelledby` accepts
+   * several ids, so an unreviewed checkbox cites both that shared reason AND
+   * the row's own name element — the same node the sighted admin already
+   * reads to know whose row this is — which is what keeps two unreviewed
+   * checkboxes from sharing one accessible name even though the reason text
+   * itself is the same for both. A resolved payment gets no control at all,
+   * because there is nothing left to decide about it.
    */
   function renderBatchCheckbox(
     req: PaymentValidationRequest,
@@ -778,21 +809,15 @@ export default function PaymentsPage(): React.ReactElement {
       );
     }
 
-    const reasonId = `batch-checkbox-reason-${req.id}`;
     return (
-      <span className="flex items-center gap-1.5">
-        <input
-          type="checkbox"
-          checked={false}
-          disabled
-          onChange={() => toggleBatchSelection(req.id)}
-          aria-labelledby={`${nameId} ${reasonId}`}
-          className="h-[18px] w-[18px] flex-none accent-coal disabled:cursor-not-allowed disabled:opacity-40"
-        />
-        <span id={reasonId} className="text-2xs leading-tight text-ink-3">
-          Revisar antes de incluir en un lote
-        </span>
-      </span>
+      <input
+        type="checkbox"
+        checked={false}
+        disabled
+        onChange={() => toggleBatchSelection(req.id)}
+        aria-labelledby={`${nameId} ${BATCH_REVIEW_REASON_ID}`}
+        className="h-[18px] w-[18px] flex-none accent-coal disabled:cursor-not-allowed disabled:opacity-40"
+      />
     );
   }
 
@@ -919,7 +944,21 @@ export default function PaymentsPage(): React.ReactElement {
                   </span>
                 </>
               ) : (
-                `${reviewedPending.length} pagos revisados esperan aprobación. Elija cuáles aprobar juntos.`
+                /* The instructional half of the old copy ("Elija cuáles
+                   aprobar juntos") only repeated the button right below it.
+                   What is left to explain — how batch approval actually
+                   works — already has a full answer in Ayuda, so it is a
+                   link rather than more prose on a screen that is trying to
+                   carry less. */
+                <>
+                  {reviewedPending.length} pagos revisados esperan aprobación.{" "}
+                  <Link
+                    href="/ayuda#faq-si-es-administrador"
+                    className="font-semibold text-ink underline underline-offset-2"
+                  >
+                    Cómo funciona
+                  </Link>
+                </>
               )}
             </p>
             {batchTargets.length < reviewedPending.length && (
@@ -988,21 +1027,23 @@ export default function PaymentsPage(): React.ReactElement {
         )}
 
         {!loading && !error && filtered.length > 0 && (
-          <div className="card overflow-hidden">
+          <>
+            {renderBatchReviewReason()}
+            <div className="card overflow-hidden">
             {/* Desktop: the five columns that carry a decision. */}
             <div data-testid="payments-table" className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableHeaderCell className="w-[52px] pr-0">
+                    <TableHeaderCell type="text" className="w-[52px] pr-0">
                       <span className="sr-only">Selección para el lote</span>
                     </TableHeaderCell>
-                    <TableHeaderCell>Estudiante</TableHeaderCell>
-                    <TableHeaderCell>Período</TableHeaderCell>
-                    <TableHeaderCell align="right">Monto</TableHeaderCell>
-                    <TableHeaderCell>Método</TableHeaderCell>
-                    <TableHeaderCell>Estado</TableHeaderCell>
-                    <TableHeaderCell align="right">
+                    <TableHeaderCell type="text">Estudiante</TableHeaderCell>
+                    <TableHeaderCell type="text">Período</TableHeaderCell>
+                    <TableHeaderCell type="number">Monto</TableHeaderCell>
+                    <TableHeaderCell type="text">Método</TableHeaderCell>
+                    <TableHeaderCell type="text">Estado</TableHeaderCell>
+                    <TableHeaderCell type="action">
                       <span className="sr-only">Acción</span>
                     </TableHeaderCell>
                   </TableRow>
@@ -1017,12 +1058,10 @@ export default function PaymentsPage(): React.ReactElement {
                         name={<span id={desktopNameId}>{req.studentName}</span>}
                         sub={payerLabel(req)}
                       />
-                      <TableCell>{humanizePaymentPeriod(req.membershipPeriod)}</TableCell>
-                      <TableCell align="right" className="font-semibold tabular-nums text-ink">
-                        {formatCurrency(req.expectedAmount)}
-                      </TableCell>
-                      <TableCell>{req.paymentMethod}</TableCell>
-                      <TableCell>
+                      <TableCell type="text">{humanizePaymentPeriod(req.membershipPeriod)}</TableCell>
+                      <TableCell type="number">{formatCurrency(req.expectedAmount)}</TableCell>
+                      <TableCell type="text">{req.paymentMethod}</TableCell>
+                      <TableCell type="badge">
                         <div className="flex flex-wrap items-center gap-1.5">
                           {/* The active tab already filters to one status, so
                               repeating it per row would only echo the tab —
@@ -1037,7 +1076,7 @@ export default function PaymentsPage(): React.ReactElement {
                           {reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
                         </div>
                       </TableCell>
-                      <TableCell align="right">
+                      <TableCell type="action">
                         <Button
                           size="sm"
                           variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
@@ -1086,9 +1125,7 @@ export default function PaymentsPage(): React.ReactElement {
                     {humanizePaymentPeriod(req.membershipPeriod)} · {req.paymentMethod}
                   </p>
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-base font-bold tabular-nums text-ink">
-                      {formatCurrency(req.expectedAmount)}
-                    </span>
+                    <DataBox variant="numeric">{formatCurrency(req.expectedAmount)}</DataBox>
                     <Button
                       size="sm"
                       variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
@@ -1116,7 +1153,8 @@ export default function PaymentsPage(): React.ReactElement {
                 itemNounPlural="solicitudes"
               />
             )}
-          </div>
+            </div>
+          </>
         )}
       </>
     );
@@ -1133,10 +1171,22 @@ export default function PaymentsPage(): React.ReactElement {
     return (
       <div>
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          <Button variant="ghost" className="-ml-2" onClick={() => setSelectedId(null)}>
-            <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Volver a la cola
-          </Button>
+          {/* A view swap, not a route: `selectedId` is local state, so the
+              detail and the queue share one URL. `href` still names a real
+              fallback destination for a screen reader or a "open in new
+              tab" — but the actual "back" is the `onClick` state reset.
+              `preventDefault` stops `next/link` from also pushing a second
+              history entry for the SAME url, which — left unstopped — would
+              make the browser's own Back button need an extra press per
+              queue⇄detail round trip to actually leave the page. */}
+          <BackLink
+            href="/payments"
+            label="Volver a la cola"
+            onClick={(e) => {
+              e.preventDefault();
+              setSelectedId(null);
+            }}
+          />
           <span className="flex-1" />
           {queue.position > 0 && (
             <>
@@ -1214,16 +1264,26 @@ export default function PaymentsPage(): React.ReactElement {
               {/* Everything else, paired two-up: still every field, at a third
                   of the height and with no gutter to read across. */}
               <dl className="grid gap-px bg-line sm:grid-cols-2">
+                {/* Estudiante and Responsable stay plain text — an identity,
+                    not a value: the same rule `DataRow` already draws
+                    between a name and its boxed metadata. Método, Subido el
+                    and Tipo are values, so they get the box. */}
                 <DetailCell label="Estudiante">{request.studentName}</DetailCell>
                 <DetailCell label="Responsable de pago">{payer}</DetailCell>
-                <DetailCell label="Método">{request.paymentMethod}</DetailCell>
-                <DetailCell label="Subido el">{formatDateTime(request.uploadedAt)}</DetailCell>
+                <DetailCell label="Método">
+                  <DataBox>{request.paymentMethod}</DataBox>
+                </DetailCell>
+                <DetailCell label="Subido el">
+                  <DataBox>{formatDateTime(request.uploadedAt)}</DataBox>
+                </DetailCell>
                 <DetailCell label="Membresía">
                   <Badge tone={MEMBERSHIP_STATUS_TONES[request.currentMembershipStatus]}>
                     {MEMBERSHIP_STATUS_LABELS[request.currentMembershipStatus]}
                   </Badge>
                 </DetailCell>
-                <DetailCell label="Tipo">{request.membershipType}</DetailCell>
+                <DetailCell label="Tipo">
+                  <DataBox>{request.membershipType}</DataBox>
+                </DetailCell>
               </dl>
             </section>
 
@@ -1330,8 +1390,13 @@ export default function PaymentsPage(): React.ReactElement {
                       {/* The only door into a batch: a payment can be added to
                           one solely from here, with its own checklist complete,
                           which is what keeps "Aprobar N pagos" from becoming a
-                          way around the review. */}
+                          way around the review. `ghost`, not `secondary`: three
+                          same-weight buttons next to each other read as "too
+                          many buttons" — Aprobar and Rechazar are the two
+                          decisions this screen exists for, so they keep the
+                          weight; parking for later is the less-common path. */}
                       <Button
+                        variant="ghost"
                         disabled={!checklistComplete || actionLoading !== null}
                         onClick={handleMarkReviewed}
                       >
@@ -1351,12 +1416,14 @@ export default function PaymentsPage(): React.ReactElement {
                           : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`}
                       </p>
                     )}
-                    {reviewed[request.id] && (
-                      <p className="text-xs text-ink-3">
-                        Este pago ya está marcado como revisado y espera en la cola para aprobarse
-                        en lote.
-                      </p>
-                    )}
+                    {/* Was a full sentence explaining how batch approval
+                        works — the density rule (design review) caps a
+                        screen at one line of prose, and that explanation
+                        already lives in Ayuda (see the batch bar's "Cómo
+                        funciona" link). A compact badge, matching the same
+                        "Revisado" mark the queue already shows, states the
+                        fact without re-explaining the mechanism. */}
+                    {reviewed[request.id] && <Badge tone="ok">Revisado, en el lote</Badge>}
                   </>
                 ) : (
                   <div className="flex flex-col gap-4">
@@ -1369,7 +1436,7 @@ export default function PaymentsPage(): React.ReactElement {
 
                     <fieldset className="flex flex-col gap-2">
                       <legend className="mb-1 text-2xs font-bold uppercase text-ink-3">
-                        Motivo <span className="text-cata-red">*</span>
+                        Motivo <span className="text-state-bad">*</span>
                       </legend>
                       {REJECTION_REASONS.map((reason) => (
                         <label
