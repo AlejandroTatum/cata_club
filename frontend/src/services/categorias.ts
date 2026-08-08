@@ -15,7 +15,6 @@ export type Categoria = "FORMATIVO" | "INFANTIL" | "JUVENIL" | "COMPETITIVO" | "
 
 export interface CategoriaInfo {
   label: string;
-  rango_edad: string;
   horaInicio: string;
   horaFin: string;
   dias: string[];
@@ -27,35 +26,30 @@ const LUN_SAB = [...LUN_VIE, "SABADO"];
 export const CATEGORIA_METADATA: Record<Categoria, CategoriaInfo> = {
   FORMATIVO: {
     label: "Formativo",
-    rango_edad: "5 a 10 años",
     horaInicio: "15:00",
     horaFin: "16:00",
     dias: LUN_VIE,
   },
   INFANTIL: {
     label: "Infantil",
-    rango_edad: "8 a 12 años",
     horaInicio: "16:00",
     horaFin: "17:00",
     dias: LUN_VIE,
   },
   JUVENIL: {
     label: "Juvenil",
-    rango_edad: "Mayores de 12 años",
     horaInicio: "17:00",
     horaFin: "18:00",
     dias: LUN_VIE,
   },
   COMPETITIVO: {
     label: "Competitivo",
-    rango_edad: "Selección",
     horaInicio: "18:00",
     horaFin: "20:00",
     dias: LUN_SAB,
   },
   ADULTOS: {
     label: "Adultos",
-    rango_edad: "Mayores de 18 años",
     horaInicio: "20:00",
     horaFin: "21:15",
     dias: LUN_VIE,

@@ -23,10 +23,9 @@ describe("categorias metadata", () => {
     expect(CATEGORIA_OPTIONS).toEqual(["FORMATIVO", "INFANTIL", "JUVENIL", "COMPETITIVO", "ADULTOS"]);
   });
 
-  it("gives FORMATIVO the confirmed audience, time range, and Lun-Vie days", () => {
+  it("gives FORMATIVO the confirmed time range and Lun-Vie days", () => {
     expect(CATEGORIA_METADATA.FORMATIVO).toEqual({
       label: "Formativo",
-      rango_edad: "5 a 10 años",
       horaInicio: "15:00",
       horaFin: "16:00",
       dias: LUN_VIE,
@@ -36,7 +35,6 @@ describe("categorias metadata", () => {
   it("gives ADULTOS the confirmed 20:00-21:15 Lun-Vie schedule (seed-data correction)", () => {
     expect(CATEGORIA_METADATA.ADULTOS).toEqual({
       label: "Adultos",
-      rango_edad: "Mayores de 18 años",
       horaInicio: "20:00",
       horaFin: "21:15",
       dias: LUN_VIE,
@@ -46,7 +44,6 @@ describe("categorias metadata", () => {
   it("gives COMPETITIVO Lun-Sáb (includes Sábado, unlike the other 4 categories)", () => {
     expect(CATEGORIA_METADATA.COMPETITIVO).toEqual({
       label: "Competitivo",
-      rango_edad: "Selección",
       horaInicio: "18:00",
       horaFin: "20:00",
       dias: LUN_SAB,

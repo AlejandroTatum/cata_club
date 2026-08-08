@@ -24,7 +24,6 @@ _LUN_SAB: frozenset[DiaSemana] = _LUN_VIE | {DiaSemana.SABADO}
 @dataclass(frozen=True)
 class CategoriaInfo:
     label: str
-    rango_edad: str
     hora_inicio: time
     hora_fin: time
     dias: frozenset[DiaSemana]
@@ -32,23 +31,23 @@ class CategoriaInfo:
 
 CATEGORIA_METADATA: dict[Categoria, CategoriaInfo] = {
     Categoria.FORMATIVO: CategoriaInfo(
-        label="Formativo", rango_edad="5 a 10 años",
+        label="Formativo",
         hora_inicio=time(15, 0), hora_fin=time(16, 0), dias=_LUN_VIE,
     ),
     Categoria.INFANTIL: CategoriaInfo(
-        label="Infantil", rango_edad="8 a 12 años",
+        label="Infantil",
         hora_inicio=time(16, 0), hora_fin=time(17, 0), dias=_LUN_VIE,
     ),
     Categoria.JUVENIL: CategoriaInfo(
-        label="Juvenil", rango_edad="Mayores de 12 años",
+        label="Juvenil",
         hora_inicio=time(17, 0), hora_fin=time(18, 0), dias=_LUN_VIE,
     ),
     Categoria.COMPETITIVO: CategoriaInfo(
-        label="Competitivo", rango_edad="Selección",
+        label="Competitivo",
         hora_inicio=time(18, 0), hora_fin=time(20, 0), dias=_LUN_SAB,
     ),
     Categoria.ADULTOS: CategoriaInfo(
-        label="Adultos", rango_edad="Mayores de 18 años",
+        label="Adultos",
         hora_inicio=time(20, 0), hora_fin=time(21, 15), dias=_LUN_VIE,
     ),
 }

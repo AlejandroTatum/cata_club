@@ -1,15 +1,18 @@
 """
 Pruebas del catálogo de descuentos y su aplicación a pagos (issue #11).
 
-Modelo firmado (docs/concepto-alcance-modelo.md §4):
+Modelo firmado (docs/concepto-alcance-modelo.md §4), colapsado a columnas de
+`Pago`: el dueño confirmó que un pago lleva UN solo descuento, así que
+`descuento_aplicado` como tabla 1:N no tenía cardinalidad que la justificara.
 - `Descuento`: catálogo vivo administrado por el club (CRUD solo admin);
   porcentaje O monto fijo, nunca ambos; baja SUAVE vía `activo` (la misma
   filosofía de conservar historia que rige al resto del sistema).
-- `DescuentoAplicado`: hecho histórico por pago con el valor CONGELADO al
-  momento de aplicar. Cambios posteriores al catálogo NO alteran pagos ya
-  registrados.
-- Invariantes: descuento total de un pago <= 100 % (no hay pagos negativos);
-  un descuento inactivo no puede aplicarse; el becado 100 % registra su pago
+- `Pago.descuento_*`: el hecho histórico del descuento aplicado, con el valor
+  CONGELADO al momento de aplicar. Cambios posteriores al catálogo NO alteran
+  pagos ya registrados.
+- Invariantes: el descuento de un pago <= 100 % de su monto base (no hay
+  pagos negativos); un descuento inactivo no puede aplicarse; un pago admite
+  UN solo descuento (más de un id es 400); el becado 100 % registra su pago
   de $0 por el flujo NORMAL de registro + aprobación (no es estado especial).
 
 Fábricas del grafo persona -> tipo -> membresía -> pago: `fabricas_pagos`
@@ -18,8 +21,13 @@ Fábricas del grafo persona -> tipo -> membresía -> pago: `fabricas_pagos`
 from datetime import date
 from decimal import Decimal
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
+from app.dominio.enums import EstadoMembresia, EstadoPago
 from tests.fabricas_pagos import (
     crear_membresia_orm,
+    crear_pago_orm,
     crear_persona_orm,
     crear_tipo_membresia_orm,
     escenario_membresia_sin_pago_api,
@@ -148,19 +156,10 @@ def test_catalogo_sin_token_responde_401(client_sin_token):
 
 # --- Aplicación al registrar un pago -----------------------------------------
 
-def _obtener_aplicaciones(sesion, pago_id: int):
-    from app.dominio.modelos import DescuentoAplicado
-    return (
-        sesion.query(DescuentoAplicado)
-        .filter(DescuentoAplicado.pago_id == pago_id)
-        .all()
-    )
-
-
 def test_pago_con_descuento_porcentual_congela_valor_y_autor(client, db_session):
-    """El servicio resuelve el valor VIGENTE del catálogo, lo congela en
-    DescuentoAplicado y descuenta el monto final; queda registrado a quién se
-    aplicó y qué admin lo autorizó (persona_id 1 del token de `client`)."""
+    """El servicio resuelve el valor VIGENTE del catálogo, lo congela en las
+    columnas `descuento_*` de Pago y descuenta el monto final; queda
+    registrado qué admin lo autorizó (persona_id 1 del token de `client`)."""
     persona, membresia = escenario_membresia_sin_pago_api(client)
     descuento = crear_descuento_api(client, "Media beca", porcentaje="50").json()
 
@@ -171,19 +170,17 @@ def test_pago_con_descuento_porcentual_congela_valor_y_autor(client, db_session)
     pago = respuesta.json()
     assert Decimal(str(pago["monto"])) == Decimal("17.50")
 
-    aplicaciones = _obtener_aplicaciones(db_session, pago["id"])
-    assert len(aplicaciones) == 1
-    aplicacion = aplicaciones[0]
-    assert aplicacion.descuento_id == descuento["id"]
-    assert aplicacion.valor_aplicado == Decimal("17.50")
-    assert aplicacion.porcentaje_aplicado == Decimal("50")
-    assert aplicacion.persona_id == persona["id"]
-    assert aplicacion.autorizado_por_persona_id == 1
+    from app.dominio.modelos import Pago
+    fila = db_session.get(Pago, pago["id"])
+    assert fila.descuento_id == descuento["id"]
+    assert fila.descuento_valor_aplicado == Decimal("17.50")
+    assert fila.descuento_porcentaje_aplicado == Decimal("50")
+    assert fila.descuento_autorizado_por_persona_id == 1
 
-    # La respuesta del endpoint también expone el registro congelado
+    # La respuesta del endpoint también expone el descuento congelado
     # (claves camelCase: ver alias_generator de ResponseBase).
-    assert len(pago["descuentosAplicados"]) == 1
-    assert Decimal(str(pago["descuentosAplicados"][0]["valorAplicado"])) == Decimal("17.50")
+    assert pago["descuentoId"] == descuento["id"]
+    assert Decimal(str(pago["descuentoValorAplicado"])) == Decimal("17.50")
 
 
 def test_pago_con_descuento_de_monto_fijo(client, db_session):
@@ -197,23 +194,47 @@ def test_pago_con_descuento_de_monto_fijo(client, db_session):
     pago = respuesta.json()
     assert Decimal(str(pago["monto"])) == Decimal("25.00")
 
-    (aplicacion,) = _obtener_aplicaciones(db_session, pago["id"])
-    assert aplicacion.valor_aplicado == Decimal("10.00")
-    assert aplicacion.porcentaje_aplicado is None
+    from app.dominio.modelos import Pago
+    fila = db_session.get(Pago, pago["id"])
+    assert fila.descuento_valor_aplicado == Decimal("10.00")
+    assert fila.descuento_porcentaje_aplicado is None
 
 
 def test_descuento_total_no_puede_superar_el_100_por_ciento(client, db_session):
-    """Tope firmado: no existen pagos negativos. Dos descuentos que suman
-    110 % se rechazan y NO queda registrado ningún pago."""
+    """Tope firmado: no existen pagos negativos. Bajo la regla nueva (un pago
+    admite UN solo descuento) el tope ya no se prueba sumando dos ids -- eso
+    ahora lo rechaza `_congelar_descuento` con otro motivo (ver
+    `test_mas_de_un_descuento_es_rechazado` más abajo). Un porcentual nunca
+    puede solo excederlo: el catálogo ya limita `porcentaje <= 100`
+    (`ck_descuento_porcentaje_en_rango`), así que a lo sumo iguala el monto
+    base. La única forma real de que un ÚNICO descuento supere el 100 % es
+    uno de monto FIJO mayor que el monto base del pago -- exactamente lo que
+    se ejercita acá."""
     persona, membresia = escenario_membresia_sin_pago_api(client)
-    d1 = crear_descuento_api(client, "Beca parcial", porcentaje="60").json()
-    d2 = crear_descuento_api(client, "Familiar", porcentaje="50").json()
+    descuento = crear_descuento_api(client, "Convenio excesivo", monto="40.00").json()
+
+    respuesta = registrar_pago_api(
+        client, persona["id"], membresia["id"], descuento_ids=[descuento["id"]],
+    )
+    assert respuesta.status_code == 400
+    assert "100" in respuesta.json()["detail"]
+
+    from app.dominio.modelos import Pago
+    assert db_session.query(Pago).count() == 0
+
+
+def test_mas_de_un_descuento_es_rechazado(client, db_session):
+    """Colapsado a columnas de Pago (el dueño confirmó: un pago lleva UN solo
+    descuento): enviar más de un id ya no sirve para acumular descuentos,
+    se rechaza directo con 400 y no queda ningún pago registrado."""
+    persona, membresia = escenario_membresia_sin_pago_api(client)
+    d1 = crear_descuento_api(client, "Beca parcial", porcentaje="30").json()
+    d2 = crear_descuento_api(client, "Familiar", porcentaje="20").json()
 
     respuesta = registrar_pago_api(
         client, persona["id"], membresia["id"], descuento_ids=[d1["id"], d2["id"]],
     )
     assert respuesta.status_code == 400
-    assert "100" in respuesta.json()["detail"]
 
     from app.dominio.modelos import Pago
     assert db_session.query(Pago).count() == 0
@@ -312,7 +333,7 @@ def test_beca_total_registra_pago_de_cero_por_el_flujo_normal(client, monkeypatc
 def test_editar_el_catalogo_no_altera_descuentos_ya_aplicados(client, db_session):
     """Invariante firmado: cambios al catálogo NUNCA alteran pagos históricos.
     Tras aplicar un 50 %, se cambia el descuento a 10 %, se renombra y se
-    desactiva: la fila de DescuentoAplicado y el monto del pago no se mueven."""
+    desactiva: las columnas `descuento_*` del pago y su monto no se mueven."""
     persona, membresia = escenario_membresia_sin_pago_api(client)
     descuento = crear_descuento_api(client, "Media beca", porcentaje="50").json()
 
@@ -328,9 +349,28 @@ def test_editar_el_catalogo_no_altera_descuentos_ya_aplicados(client, db_session
     )
     assert edicion.status_code == 200
 
-    (aplicacion,) = _obtener_aplicaciones(db_session, pago["id"])
-    assert aplicacion.valor_aplicado == Decimal("17.50")
-    assert aplicacion.porcentaje_aplicado == Decimal("50")
-
     from app.dominio.modelos import Pago
-    assert db_session.get(Pago, pago["id"]).monto == Decimal("17.50")
+    fila = db_session.get(Pago, pago["id"])
+    assert fila.descuento_valor_aplicado == Decimal("17.50")
+    assert fila.descuento_porcentaje_aplicado == Decimal("50")
+    assert fila.monto == Decimal("17.50")
+
+
+# --- El CHECK es el espejo del chequeo del servicio (colapsado a columnas) ---
+
+def test_pago_con_descuento_id_pero_sin_valor_congelado_viola_el_check(db_session):
+    """`PagoServicio._congelar_descuento` siempre asigna `descuento_id` y
+    `descuento_valor_aplicado` juntos, o ninguno de los dos -- pero un INSERT
+    que se lo salte (directo por ORM, como acá) debe seguir rechazado por
+    `ck_pago_descuento_valor_congelado`: el servicio es el camino primario de
+    error, la base es la red de seguridad."""
+    persona = crear_persona_orm(db_session, "1710034071")
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.INACTIVA)
+    descuento = crear_descuento_orm(db_session, porcentaje=Decimal("50"))
+    pago = crear_pago_orm(db_session, persona, membresia, EstadoPago.PENDIENTE_VALIDACION)
+
+    pago.descuento_id = descuento.id
+    # `descuento_valor_aplicado` se deja NULL a propósito: viola el CHECK.
+    with pytest.raises(IntegrityError):
+        db_session.flush()
