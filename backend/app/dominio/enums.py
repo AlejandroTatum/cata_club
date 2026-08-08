@@ -47,9 +47,10 @@ class DiaSemana(str, enum.Enum):
 
 class Categoria(str, enum.Enum):
     """
-    5 categorías fijas de horario (edad/audiencia, franja horaria y días
-    permitidos), definidas como constantes de negocio no editables por el
-    administrador -- ver `app.dominio.categoria_metadata.CATEGORIA_METADATA`.
+    Códigos de categoría de horario aceptados por la API hoy (edad/audiencia,
+    franja horaria y días permitidos); no editables por el administrador
+    todavía -- ver la tabla `categoria_horario`, la fuente real de
+    `hora_inicio`/`hora_fin`/días permitidos (`app.dominio.modelos.CategoriaHorario`).
     """
     FORMATIVO = "FORMATIVO"
     INFANTIL = "INFANTIL"

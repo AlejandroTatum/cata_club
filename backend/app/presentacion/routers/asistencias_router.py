@@ -9,7 +9,8 @@ from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.asistencia_schemas import (
-    AsistenciaCreateDTO, AsistenciaResponseDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
+    AsistenciaCreateDTO, AsistenciaResponseDTO, CategoriaResponseDTO,
+    HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
@@ -40,6 +41,18 @@ def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[d
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="La fecha de inicio debe ser anterior a la fecha de fin.",
         )
+
+
+# Catálogo de categorías (M1): el frontend lo consulta acá en vez de
+# espejarlo a mano (ver `frontend/src/services/categorias.ts`). Lectura para
+# cualquier autenticado, igual que `/horarios` -- no hay alta/edición todavía.
+@router.get(
+    "/categorias",
+    response_model=List[CategoriaResponseDTO],
+    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+)
+def listar_categorias(db: Session = Depends(obtener_sesion)):
+    return AsistenciaServicio(db).listar_categorias()
 
 
 @router.post("/horarios", response_model=HorarioResponseDTO, status_code=status.HTTP_201_CREATED,

@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.dominio.modelos import AlumnoHorario, Asistencia, Base
+from tests._categoria_seed import sembrar_categorias
 
 SEED_SCRIPT = Path(__file__).parents[1] / "scripts" / "seed_dev_bulk.py"
 BASE_SEED_SCRIPT = Path(__file__).parents[1] / "scripts" / "seed_dev_base.py"
@@ -41,6 +42,8 @@ def _motor_en_memoria(*modulos):
     )
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    sembrar_categorias(TestingSessionLocal)
+
     for modulo in modulos:
         modulo.SessionLocal = TestingSessionLocal
     return TestingSessionLocal

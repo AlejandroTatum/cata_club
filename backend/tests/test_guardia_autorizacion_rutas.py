@@ -133,6 +133,7 @@ RUTAS_PUBLICAS = {
 #       o un chequeo equivalente contra `token_payload["persona_id"]`.
 RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/asistencias/alumnos/{persona_id}/horarios"),      # (b)
+    ("GET", "/asistencias/categorias"),                          # (a)
     ("GET", "/asistencias/horarios"),                           # (a)
     ("GET", "/asistencias/persona/{persona_id}"),                # (b)
     ("GET", "/auth/me"),                                         # (b) - propio via `sub`

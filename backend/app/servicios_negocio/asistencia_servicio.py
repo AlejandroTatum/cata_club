@@ -4,15 +4,15 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario
 from app.dominio.enums import Categoria
-from app.dominio.categoria_metadata import CATEGORIA_METADATA
 from app.dominio.etiquetas import categoria_en_castellano, dia_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
+from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.asistencia_repositorio import (
     AsistenciaRepositorio, HorarioRepositorio, AlumnoHorarioRepositorio
 )
 from app.presentacion.schemas.asistencia_schemas import (
-    AsistenciaCreateDTO, HorarioCreateDTO, HorarioUpdateDTO,
+    AsistenciaCreateDTO, CategoriaResponseDTO, HorarioCreateDTO, HorarioUpdateDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO
 )
 from app.servicios_negocio.persona_servicio import _calcular_edad
@@ -24,32 +24,54 @@ class AsistenciaServicio:
         self.repo_horario = HorarioRepositorio(db)
         self.repo_persona = PersonaRepositorio(db)
         self.repo_alumno_horario = AlumnoHorarioRepositorio(db)
+        self.repo_categoria = CategoriaRepositorio(db)
 
     def _validar_dia_y_derivar_horas(self, horario: HorarioEntrenamiento) -> None:
         """`hora_inicio`/`hora_fin` nunca los envía el cliente: siempre se
-        derivan de `CATEGORIA_METADATA[categoria]`. `dia_semana` debe estar
-        en el conjunto de días permitido por esa categoría (ej. Competitivo
-        admite Sábado, las otras 4 solo Lun-Vie)."""
-        info = CATEGORIA_METADATA[horario.categoria]
-        if horario.dia_semana not in info.dias:
+        derivan de la fila `categoria_horario` de `horario.categoria`.
+        `dia_semana` debe estar en el conjunto de días permitido por esa
+        categoría (ej. Competitivo admite Sábado, las otras 4 solo Lun-Vie)."""
+        categoria = self.repo_categoria.obtener_por_codigo(horario.categoria)
+        if categoria is None:
+            raise EntidadNoEncontrada(f"Categoria {horario.categoria} no encontrada")
+        dias_permitidos = {d.dia_semana for d in categoria.dias_permitidos}
+        if horario.dia_semana not in dias_permitidos:
             raise OperacionInvalida(
                 f"El día {dia_en_castellano(horario.dia_semana)} no está permitido "
                 f"para la categoría {categoria_en_castellano(horario.categoria)}.",
                 detalle_tecnico=(
                     f"dia_semana={horario.dia_semana.value} "
-                    f"fuera de los días de categoria={horario.categoria.value}"
+                    f"fuera de los días de categoria={horario.categoria}"
                 ),
             )
-        horario.hora_inicio = info.hora_inicio
-        horario.hora_fin = info.hora_fin
+        horario.hora_inicio = categoria.hora_inicio
+        horario.hora_fin = categoria.hora_fin
+
+    @staticmethod
+    def _codigo_de(categoria: Categoria | str) -> str:
+        """Normaliza `Categoria.ALGO` (o el string que ya sea) al `str` liso
+        que espera la columna FK -- ver el comentario en
+        `HorarioEntrenamiento.categoria` sobre por qué ya no es un enum."""
+        return Categoria(categoria).value
 
     def crear_horario(self, datos: HorarioCreateDTO) -> HorarioEntrenamiento:
         horario = HorarioEntrenamiento(**datos.model_dump())
+        horario.categoria = self._codigo_de(horario.categoria)
         self._validar_dia_y_derivar_horas(horario)
         return self.repo_horario.crear(horario)
 
     def listar_horarios(self, categoria: Optional[Categoria] = None) -> list[HorarioEntrenamiento]:
-        return self.repo_horario.listar(categoria)
+        return self.repo_horario.listar(self._codigo_de(categoria) if categoria else None)
+
+    def listar_categorias(self) -> list[CategoriaResponseDTO]:
+        return [
+            CategoriaResponseDTO(
+                codigo=c.codigo, label=c.label,
+                hora_inicio=c.hora_inicio, hora_fin=c.hora_fin,
+                dias=[d.dia_semana for d in c.dias_permitidos],
+            )
+            for c in self.repo_categoria.listar()
+        ]
 
     def actualizar_horario(self, horario_id: int, datos: HorarioUpdateDTO) -> HorarioEntrenamiento:
         horario = self.repo_horario.obtener_por_id(horario_id)
@@ -59,6 +81,8 @@ class AsistenciaServicio:
         if not update_data:
             raise OperacionInvalida("No se proporcionaron campos para actualizar")
         for key, value in update_data.items():
+            if key == "categoria":
+                value = self._codigo_de(value)
             setattr(horario, key, value)
         # Sin `entrenador_id` (issue #13), categoria y dia_semana son los
         # únicos campos actualizables y ambos re-derivan las horas: se

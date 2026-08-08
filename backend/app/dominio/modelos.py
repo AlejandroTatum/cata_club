@@ -26,7 +26,7 @@ from app.dominio.enums import (
     TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
     TipoPago, EstadoAsistencia, TipoEscuela, NivelTecnicoAlumno, TipoSangre, DiaSemana,
     TipoNotificacion,
-    TipoManoDominante, Categoria,
+    TipoManoDominante,
 )
 
 
@@ -462,11 +462,12 @@ class CategoriaHorario(Base):
     `app.dominio.categoria_metadata.CATEGORIA_METADATA`, movido a tabla para
     que el club pueda sumar una categoría nueva sin un deploy de código).
 
-    Paso 1 de 2 (expand): esta tabla existe y está poblada, pero
-    `HorarioEntrenamiento.categoria` TODAVÍA es el enum viejo -- nada lee de
-    acá todavía. El cutover (leer `hora_inicio`/`hora_fin`/días permitidos
-    de esta fila en vez del enum) es el PR siguiente, a propósito: este PR
-    es aditivo puro y no cambia ningún comportamiento existente.
+    Esta es la ÚNICA fuente de `hora_inicio`/`hora_fin`/días permitidos:
+    `HorarioEntrenamiento.hora_inicio`/`hora_fin` siempre se derivan de acá
+    y el cliente nunca puede enviarlos directamente (ver
+    `asistencia_schemas.HorarioCreateDTO` y
+    `AsistenciaServicio._validar_dia_y_derivar_horas`) -- la garantía que ya
+    existía con el enum no cambia, solo cambia de dónde se lee.
 
     Sin pantalla de alta/edición todavía (fuera de alcance de este cambio):
     hoy las filas solo las siembra la migración que creó esta tabla.
@@ -507,32 +508,26 @@ class HorarioEntrenamiento(Base):
     """
     __tablename__ = "horario_entrenamiento"
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Categoría fija de negocio (Formativo/Infantil/Juvenil/Competitivo/Adultos)
-    # que bloquea dia_semana/hora_inicio/hora_fin a los valores canónicos de
-    # `app.dominio.categoria_metadata.CATEGORIA_METADATA` -- ver validación en
-    # `AsistenciaServicio.crear_horario`/`actualizar_horario`.
-    categoria: Mapped[Categoria] = mapped_column(SAEnum(Categoria))
+    # FK a `categoria_horario.codigo` (cutover: hasta acá era un
+    # `SAEnum(Categoria)` directo, con la columna de transición
+    # `categoria_codigo` viviendo en paralelo desde el paso "expand" --
+    # ver `a4e7c2f9b1d8`). Bloquea dia_semana/hora_inicio/hora_fin a los
+    # valores canónicos de la fila de categoría -- ver validación en
+    # `AsistenciaServicio.crear_horario`/`actualizar_horario`. Se guarda
+    # como `str` liso (no `Mapped[Categoria]`): `Categoria` sigue
+    # existiendo como el enum que hoy gatea qué códigos acepta la API
+    # (alta/edición de categorías queda fuera de este cambio), pero la
+    # columna en sí ya no depende de un tipo Postgres enum fijo.
+    categoria: Mapped[str] = mapped_column(String(20), ForeignKey("categoria_horario.codigo"))
     dia_semana: Mapped[DiaSemana] = mapped_column(SAEnum(DiaSemana))
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time] = mapped_column(Time)
-    # Paso "expand" (ver `CategoriaHorario`): FK nueva a `categoria_horario`,
-    # ya backfilleada para toda fila existente, pero TODAVÍA sin uso -- ni
-    # `AsistenciaServicio` ni ningún schema la leen o la escriben en este PR.
-    # Nullable a propósito: una fila creada por el camino viejo (que no la
-    # setea) no puede violar NOT NULL. Mapeada acá solo para que
-    # `Base.metadata` coincida con lo que la migración `a4e7c2f9b1d8`
-    # realmente crea (`test_drift_migraciones.py`). El cutover real
-    # -- reemplazar `categoria` por esta columna y volverla NOT NULL -- es
-    # el PR siguiente.
-    categoria_codigo: Mapped[Optional[str]] = mapped_column(
-        String(20), ForeignKey("categoria_horario.codigo"), nullable=True
-    )
 
     asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="horario")
     alumno_horarios: Mapped[List["AlumnoHorario"]] = relationship(back_populates="horario")
 
     __table_args__ = (
-        Index("ix_horario_entrenamiento_categoria_codigo", "categoria_codigo"),
+        Index("ix_horario_entrenamiento_categoria", "categoria"),
     )
 
 

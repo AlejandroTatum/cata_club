@@ -51,7 +51,7 @@ from app.dominio.enums import (
     EstadoPago,
     TipoPago,
 )
-from app.dominio.categoria_metadata import CATEGORIA_METADATA, dias_permitidos as dias_para
+from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -66,17 +66,12 @@ TRAINER_CEDULA = "0000000002"
 TRAINER_CORREO = "entrenador@cataclub.com"
 TRAINER_CONTRASENIA = "trainer12345"
 
-# ---------------------------------------------------------------------------
-# Horarios (5 categorías fijas de negocio; días permitidos varían por
-# categoría -- Competitivo corre Lun-Sáb, las otras 4 solo Lun-Vie -- ver
-# `app.dominio.categoria_metadata.CATEGORIA_METADATA`, única fuente de
-# verdad para hora_inicio/hora_fin/días. 4 categorías x 5 días + Competitivo
-# x 6 días (agrega Sábado) = 26 horarios en total).
-# ---------------------------------------------------------------------------
-HORARIOS = [
-    (categoria, info.hora_inicio, info.hora_fin)
-    for categoria, info in CATEGORIA_METADATA.items()
-]
+# Horarios: 5 categorías fijas de negocio; días permitidos varían por
+# categoría -- Competitivo corre Lun-Sáb, las otras 4 solo Lun-Vie. 4
+# categorías x 5 días + Competitivo x 6 días (agrega Sábado) = 26 horarios en
+# total. `hora_inicio`/`hora_fin`/días ya no son un `dict` en memoria (M1):
+# se leen de la tabla `categoria_horario` dentro de `main()`, donde ya hay
+# una sesión de base de datos disponible.
 
 # ---------------------------------------------------------------------------
 # TipoMembresia
@@ -309,9 +304,12 @@ def main() -> None:
         # Sin entrenador titular (issue #13): el horario es solo categoría,
         # día y hora; la clase la da el entrenador disponible.
         # ==================================================================
+        filas_categoria_horario = CategoriaRepositorio(db).listar()
         horario_count = 0
-        for categoria, h_inicio, h_fin in HORARIOS:
-            for dia in dias_para(categoria):
+        for fila_categoria in filas_categoria_horario:
+            categoria = fila_categoria.codigo
+            h_inicio, h_fin = fila_categoria.hora_inicio, fila_categoria.hora_fin
+            for dia in [d.dia_semana for d in fila_categoria.dias_permitidos]:
                 _, created = _obtener_o_crear(
                     db, HorarioEntrenamiento,
                     (
@@ -530,8 +528,8 @@ def main() -> None:
         #   - "Mensual Infantil" → FORMATIVO, INFANTIL, JUVENIL.
         #   - "Mensual Adultos" → ADULTOS.
         # El mapeo va del nombre del plan a categorías de horario, no a horas:
-        # las horas de cada categoría salen de `CATEGORIA_METADATA` y son lo
-        # único que el portal del alumno muestra.
+        # las horas de cada categoría salen de la tabla `categoria_horario` y
+        # son lo único que el portal del alumno muestra.
         # Idempotente: usa _obtener_o_crear con el unique (persona_id,
         # horario_id) para no duplicar al re-ejecutar el seed.
         # ==================================================================
@@ -547,9 +545,9 @@ def main() -> None:
 
         horarios_por_categoria: dict[Categoria, list[HorarioEntrenamiento]] = {
             cat: db.query(HorarioEntrenamiento).filter(
-                HorarioEntrenamiento.categoria == cat
+                HorarioEntrenamiento.categoria == cat.value
             ).all()
-            for cat in CATEGORIA_METADATA.keys()
+            for cat in Categoria
         }
 
         asignaciones_creadas = 0
