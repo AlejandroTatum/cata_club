@@ -1,8 +1,8 @@
 # Pendientes — índice de candados — Cata Club
 
-- **Fecha:** 6 de agosto de 2026
-- **Verificado contra:** `main` en `51a6de9`
-- **Re-derivado después, en tres tandas:**
+- **Fecha:** 8 de agosto de 2026
+- **Verificado contra:** `main` en `b475881`
+- **Re-derivado después, en cuatro tandas:**
   - El ítem del conteo del panel, contra `ad57c31` (PR #150, que cerró la mitad
     de backend) y el cableado de frontend de #152.
   - Contra `fa13172` (6 de agosto): los seis ítems nuevos que abre este PR, y el
@@ -12,12 +12,32 @@
     PR #160 y que hasta ahora vivían solo en el cuerpo de ese PR — el fallo de
     red que el carnet imprime igual que «sin horario asignado», y la franja que
     `/student/payments` dejó de mostrar.
+  - Contra `b475881` (8 de agosto): doce cierres de la tanda de trabajo
+    #163–#185 (eco de los listados, ranking/nivel, colapso del descuento,
+    `rango_edad`, la fuga de `localStorage` en CI, la doble conversión de la
+    ficha médica, el formulario de descuentos, la regla del efectivo, la
+    inscripción por mes, categoría de enum a tabla (M1), los seis componentes
+    del sistema visual y el carnet como identidad del perfil); siete ítems
+    nuevos que un relevamiento proponía y que sí reprodujeron contra el
+    código (`categoria_horario`, `Pago` sin registrador de efectivo, la deuda
+    del colapso del descuento, cuatro colisiones de nombres, 31 migraciones
+    con tres merges de heads, el `afterEach` de `test-setup.ts`, el mock de
+    `next/image` duplicado); un ítem agrupado de ocho pantallas sin el
+    sistema visual nuevo; y un octavo ítem propuesto —tres specs E2E
+    dependientes del día real, fallando todos los lunes— que **no entró**
+    porque no reprodujo: los dos specs de `trainer-attendance` que se citaban
+    ya fijan el reloj (`page.clock.setFixedTime`) desde antes de esta sesión,
+    con comentario propio documentando el bug de lunes y su fix; el método
+    completo, más esta clase de discrepancias, vive en
+    `docs/como-trabajamos.md`.
 
-  **El resto de la lista no se re-verificó** y sigue apoyado en `51a6de9`: vale
-  el punto 1 de abajo, es hipótesis hasta re-derivarlo.
+  **El resto de la lista no se re-verificó** en esta tanda y sigue apoyado en
+  `930a5c5`: vale el punto 1 de abajo, es hipótesis hasta re-derivarlo.
 - **Propósito:** una sola lista de lo que sigue abierto, con su evidencia, el
   comando que la reproduce y el test que lo cerraría; y una sola tabla de lo
-  cerrado, cada fila sostenida por un candado ejecutable.
+  cerrado, cada fila sostenida por un candado ejecutable. Cómo se llegó a
+  estos cierres —el método, no los defectos— está en
+  [`docs/como-trabajamos.md`](./como-trabajamos.md).
 
 Este documento ya mintió tres veces: dos que él mismo documentaba, y una
 tercera detectada el 5 de agosto — nueve ítems figuraban abiertos estando
@@ -35,7 +55,7 @@ Un documento que no explica cómo re-verificarse vuelve a podrirse en silencio.
 El procedimiento completo:
 
 1. **Fijar la base.** `git fetch origin && git rev-parse origin/main`. Si el
-   sha no es `51a6de9`, todo lo de abajo es hipótesis hasta re-derivarlo.
+   sha no es `b475881`, todo lo de abajo es hipótesis hasta re-derivarlo.
 2. **Cada ítem abierto** lleva su comando en «Cómo se verificó». Correrlo desde
    la raíz del repo. Si ya no reproduce la evidencia, el ítem cambió: se
    actualiza acá, en el mismo PR que el cambio de código o en uno de docs
@@ -50,8 +70,11 @@ El procedimiento completo:
    cerraría. Sin los cuatro, no entra.
 5. Los tests de frontend citados abajo se corrieron el 5 de agosto de 2026
    sobre `71736d4`; entre `71736d4` y `51a6de9` no cambió ningún archivo de
-   `frontend/` (`git diff --stat 71736d4..51a6de9`), así que los resultados
-   valen para la base declarada.
+   `frontend/` (`git diff --stat 71736d4..51a6de9`), así que esos resultados
+   valían para la base de esa tanda. **Ya no valen para `b475881`**: entre
+   `51a6de9` y `b475881` sí cambió `frontend/` (PRs #163–#185). Cada candado
+   citado en la tabla de Cerrados a partir de esta tanda lleva su propia
+   corrida, no esta nota.
 
 La severidad indica **consecuencia**, no esfuerzo:
 
@@ -322,7 +345,258 @@ La severidad indica **consecuencia**, no esfuerzo:
     toda variable consumida por compose o settings figura en el example que
     corresponde.
 
+- [ ] **`categoria_horario` promete más de lo que entrega: el enum `Categoria`
+  sigue atando el sistema a cinco valores en otros dos lugares.**
+  - **Qué está mal:** el docstring de `CategoriaHorario` dice que la categoría
+    «se movió a tabla para que el club pueda sumar una categoría nueva sin un
+    deploy de código», y es cierto para horas/días. No lo es para filtrar ni
+    para mostrar: el filtro de listado sigue tipado contra el enum Python
+    `Categoria`, así que FastAPI rechaza con 422 cualquier código que no sea
+    uno de los cinco ya conocidos; y `categoria_en_castellano` hace
+    `_CATEGORIAS[Categoria(categoria)]`, que **lanza** `ValueError` —no
+    devuelve un genérico— para un código fuera del enum. Una categoría nueva
+    sembrada solo en `categoria_horario` no sería filtrable por el listado ni
+    tendría nombre para mostrar; reventaría con un error, no con un dato
+    incompleto.
+  - **Dónde:** `backend/app/presentacion/routers/asistencias_router.py:83`
+    (`categoria: Optional[Categoria] = Query(default=None)`);
+    `backend/app/dominio/etiquetas.py:50-56,71-72` (`_CATEGORIAS` y
+    `categoria_en_castellano`); el docstring que promete lo contrario en
+    `backend/app/dominio/modelos.py:461-463` (`CategoriaHorario`).
+  - **Cómo se verificó:**
+    `rg -n "categoria: Optional\[Categoria\]" backend/app/presentacion/routers/asistencias_router.py`
+    → línea 83; `rg -n "_CATEGORIAS: dict\[Categoria, str\]|def categoria_en_castellano" backend/app/dominio/etiquetas.py`
+    → líneas 50 y 71-72, con `Categoria(categoria)` sin `try` alrededor.
+  - **Qué test lo cerraría:** uno de backend que siembre una sexta fila en
+    `categoria_horario` con un código fuera del enum `Categoria` y afirme dos
+    cosas hoy falsas: que `GET /asistencias/horarios?categoria=<nueva>` no
+    responde 422, y que `categoria_en_castellano("<nueva>")` devuelve un
+    nombre en vez de lanzar.
+
+- [ ] **La regla «solo el socio registra efectivo» no tiene red en la base:
+  `Pago` no registra quién lo creó.**
+  - **Qué está mal:** la regla de #175 (`membresia_pago_servicio.py:252-260`,
+    «un pago EFECTIVO es la declaración de quien entregó el dinero») vive
+    solo en el servicio. `Pago` no tiene una columna de quién lo registró
+    —`persona_id` es el titular al que se le imputa el pago, no quien lo
+    escribió—, así que no hay forma de reconstruir después, desde la base,
+    quién declaró un efectivo, ni de respaldar la regla con un `CHECK` o una
+    auditoría si un INSERT la esquivara. Incremental respecto de la regla ya
+    en el servicio: el patrón que este documento ya aplicó para invariantes
+    financieras (índices y `CHECK` como red bajo el chequeo del servicio,
+    ver `ck_pago_descuento_valor_congelado` más abajo) no existe acá.
+  - **Dónde:** `backend/app/dominio/modelos.py:357-373` (`Pago`, sin columna
+    de creador); la regla que quedaría sin red,
+    `backend/app/servicios_negocio/membresia_pago_servicio.py:252-260`.
+  - **Cómo se verificó:**
+    `rg -n "class Pago" -A 50 backend/app/dominio/modelos.py | rg "Mapped"`
+    → ninguna columna de tipo `registrado_por`/`creado_por_persona_id`.
+  - **Qué test lo cerraría:** ninguno hoy —no hay dato que auditar—; si la
+    regla importa lo suficiente para respaldarla en la base, el cierre es
+    agregar la columna y un test de integración que la haga NOT NULL en el
+    camino de EFECTIVO.
+
+- [ ] **Deuda del colapso del descuento (#166): tres huecos que la migración y
+  el modelo dejaron abiertos.**
+  - **Qué está mal, en tres partes:**
+    1. El backfill de `ade8e3c117ca` asume «un pago tiene a lo sumo una fila
+       en `descuento_aplicado`» apoyado solo en el docstring de la migración
+       («ya verificado contra la base sembrada»); no hay un test que reproduzca
+       un `Pago` con dos `DescuentoAplicado` y afirme qué hace el backfill con
+       él (hoy sería no determinístico, y la migración lo dice, pero nada lo
+       ejercita).
+    2. `descuento_autorizado_por_persona_id` quedó `Mapped[Optional[int]]`
+       (nullable) en `Pago`, cuando el `autorizado_por_persona_id` de la
+       `DescuentoAplicado` que reemplazó era `Mapped[int]` (`NOT NULL`): la
+       migración aflojó una restricción que existía, sin que conste si fue
+       deliberado.
+    3. El `CHECK ck_pago_descuento_valor_congelado` es asimétrico: cubre
+       «hay `descuento_id` sin `descuento_valor_aplicado`» pero no el inverso
+       —un INSERT con `descuento_valor_aplicado` puesto y `descuento_id` en
+       `NULL` pasa el `CHECK` igual.
+  - **Dónde:**
+    `backend/alembic/versions/ade8e3c117ca_congelar_descuento_en_columnas_de_pago.py:7-10,59-64`
+    (el docstring y el comentario del backfill);
+    `backend/app/dominio/modelos.py:401-403` (la columna nullable) contra
+    `git show df13b8a -- backend/app/dominio/modelos.py` línea 173 del diff
+    (`autorizado_por_persona_id: Mapped[int]`, la que se reemplazó);
+    `backend/app/dominio/modelos.py:351-354` (el `CHECK`).
+  - **Cómo se verificó:** lectura directa de la migración y del modelo;
+    `rg -n "descuento_autorizado_por_persona_id: Mapped" backend/app/dominio/modelos.py`
+    → `Optional[int]`; `git show df13b8a -- backend/app/dominio/modelos.py | rg "autorizado_por_persona_id: Mapped"`
+    → el `Mapped[int]` que se borró; `rg -ln "descuento_aplicado" backend/tests/`
+    → ningún test de migración con más de una fila por pago.
+  - **Qué test lo cerraría:** tres, uno por punto: (1) un test de migración
+    que siembre un `Pago` con dos `descuento_aplicado` antes de
+    `ade8e3c117ca` y afirme el comportamiento del backfill, documentado en
+    vez de accidental; (2) la decisión registrada sobre si
+    `descuento_autorizado_por_persona_id` debe ser `NOT NULL` cuando
+    `descuento_id` no es nulo, con su `CHECK` si la respuesta es sí; (3) un
+    `CHECK` simétrico o un test que afirme por qué no hace falta.
+
+- [ ] **Cuatro colisiones de nombres que ya mordieron o pueden morder.**
+  - **Qué está mal, las cuatro:**
+    1. `TipoMembresia.categoria` (`String(80)` de texto libre, «categoría
+       comercial») contra `HorarioEntrenamiento.categoria` (FK a
+       `categoria_horario.codigo`, la fuente real de horarios). Esta ya
+       produjo un defecto real: el propio docstring de `TipoMembresia` lo
+       documenta —declaraba «20:00-21:00» para Adultos cuando el horario real
+       termina a las 21:15— y es la razón por la que #160 eliminó
+       `franja_horaria`.
+    2. `ServicioNotificaciones` (`backend/app/infraestructura/notificaciones_servicio.py:41`,
+       adaptador SMTP de infraestructura) contra `NotificacionServicio`
+       (`backend/app/servicios_negocio/notificacion_servicio.py:18`, el feed
+       de notificaciones in-app, capa de negocio). Nombres casi idénticos para
+       capas y responsabilidades opuestas.
+    3. `MembershipStatus` (`frontend/src/services/api.ts:49`, `"activa" |
+       "vencida" | "suspendida"`) duplica bajo otro nombre a `EstadoMembresia`
+       (`frontend/src/types/domain.ts:94`, los mismos tres valores) —el propio
+       comentario de `api.ts:46` dice «aligns with `EstadoMembresia`», o sea
+       que la sincronía es manual, no un alias de TypeScript—. Y `"suspendida"`
+       es rama muerta en ambos: el enum de backend
+       (`backend/app/dominio/enums.py:29-31`) solo tiene `INACTIVA`, `ACTIVA`,
+       `VENCIDA` —nunca `SUSPENDIDA`— y el único punto de traducción,
+       `MEMBERSHIP_STATUS_BY_ESTADO`
+       (`frontend/src/lib/membership-status.ts:14-18`), jamás produce
+       `"suspendida"`, aunque `members-utils.ts:355` la lee como si pudiera
+       ocurrir.
+    4. `STAT_GRID` (`frontend/src/components/ui/StatCard.tsx:36`, una cadena
+       de clases CSS) contra `StatGrid` (`frontend/src/components/ui/StatGrid.tsx:44`,
+       un componente React) — las dos se exportan desde el mismo barrel,
+       `frontend/src/components/ui/index.ts:56,61`.
+  - **Cómo se verificó:** lectura directa de cada docstring y definición
+    citada arriba; `rg -n "class ServicioNotificaciones|class NotificacionServicio" backend/app`;
+    `rg -n "type EstadoMembresia" frontend/src` → un único resultado (no está
+    duplicado bajo el mismo nombre, ver nota abajo);
+    `rg -n "STAT_GRID|export.*StatGrid" frontend/src/components/ui/*.ts frontend/src/components/ui/*.tsx frontend/src/components/ui/index.ts`.
+  - **Ojo con el enunciado de la colisión 3:** no es que `EstadoMembresia` esté
+    definido dos veces bajo el mismo nombre —hay un solo
+    `export type EstadoMembresia`—; es que `MembershipStatus` es una segunda
+    definición, mismos valores, otro nombre, sin alias de tipo que las ate.
+  - **Qué test lo cerraría:** para la 3, uno que afirme
+    `MEMBERSHIP_STATUS_BY_ESTADO` nunca produce `"suspendida"` **hoy**, para
+    que decidir borrarla o cablearla sea explícito y no un olvido; para las
+    otras tres, ninguno barato —son de nombres, no de comportamiento—, así
+    que el cierre realista es un renombre cada una, no un candado.
+
+- [ ] **29 migraciones… en realidad 31, con tres merges de heads, no dos.**
+  - **Qué está mal:** `ls backend/alembic/versions/*.py` da 31 archivos, y
+    tres de ellos tienen `down_revision` tupla (dos heads fusionados en una
+    migración): `a1b2c3d4e5f6` (`remover_beca` × `tipos_notificacion_pago`),
+    `9a8b7c6d5e4f` (`categoria_horario` × `vencimiento_tiponotificacion`) y
+    `0756dd06d542` (`alumno_horario` × `observaciones_justificativo`). Cada
+    fusión es evidencia de dos ramas de trabajo que tocaron el esquema en
+    paralelo sin coordinarse. No es un defecto puntual —cada migración
+    individual es correcta—, es una tendencia a vigilar: planificar las
+    próximas migraciones de una feature como una secuencia lineal única desde
+    el diseño, no como fusiones a posteriori.
+  - **Dónde:** `backend/alembic/versions/` (31 archivos);
+    `a1b2c3d4e5f6_merge_beca_y_notificacion_heads.py`,
+    `9a8b7c6d5e4f_merge_b7f3_y_a3b4_heads.py`,
+    `0756dd06d542_merge_alumno_horario_y_observaciones_.py`.
+  - **Cómo se verificó:** `ls backend/alembic/versions/*.py | wc -l` → 31;
+    `rg -n "down_revision: Union\[str, Sequence\[str\], None\] = \(" backend/alembic/versions/*.py`
+    → los tres archivos de merge, cada uno con dos revisiones en la tupla.
+  - **Qué test lo cerraría:** ninguno razonable retroactivo. Hacia adelante,
+    el hábito lo sostiene la revisión de PR, no un test; si se quiere un
+    candado, uno que cuente los heads de `alembic heads` y falle si supera 1
+    fuera de una ventana corta post-merge no es descabellado, pero es nuevo
+    tooling, no un test existente que extender.
+
+### Pantallas sin el sistema visual nuevo
+
+- [ ] **Ocho pantallas todavía no aplican `DataBox`/`DataRow`/`StatGrid`/
+  `MemberCard`/`BackLink` (#176-#180); 32 archivos siguen en `cata-*`.**
+  - **Qué está mal:** el sistema visual nuevo tiene seis componentes con test
+    propio (`DataBox`, `BackLink`, `DataRow`, `Table` extendida, `StatGrid`,
+    `MemberCard`) y ya se aplicó a `/members`, `/profile` y `/groups`. Ocho
+    pantallas quedan pendientes:
+    1. **Dashboard de entrenador** (`frontend/src/app/trainer/page.tsx`) —
+       importa `Badge, Button, EmptyState, ErrorState, LoadingState` pero
+       ningún primitivo de tarjetas/grilla (`trainer/page.tsx:43`); el
+       dashboard de admin ya agrupa sus métricas en `StatCard`/`STAT_GRID`
+       (`frontend/src/app/dashboard/page.tsx:46-48,210`) como referencia de
+       forma, aunque tampoco migró todavía al `StatGrid` nuevo.
+    2. **Dashboard de alumno** (`frontend/src/app/student/page.tsx`) — el
+       dueño pidió reducirlo a la card de membresía y accesos rápidos, no
+       trasladar el resto; es un recorte de información, no una migración de
+       componentes.
+    3. **`/student/payments`** (`frontend/src/app/student/payments/page.tsx`).
+    4. **`/student/attendance`** (`frontend/src/app/student/attendance/page.tsx`).
+    5. **Preguntas frecuentes** (`frontend/src/app/ayuda/page.tsx`) — además
+       importa el `BackLink` VIEJO (`@/components/BackLink`), no el nuevo de
+       `ui/` («the one back control for the whole system», con test propio y
+       cero consumidores hoy: `rg -ln 'from "@/components/ui/BackLink"' frontend/src`
+       da vacío contra seis archivos que todavía importan el viejo).
+    6. **La confirmación de asistencia** — los cuatro conteos (presentes/
+       ausentes/justificados/sin revisar) se renderizan como `Badge` en un
+       `flex flex-wrap`, no en `StatGrid`
+       (`frontend/src/app/trainer/attendance/page.tsx:1308-1319`).
+    7. **El botón de agregar horario en `/groups`** («Nuevo Horario»,
+       `frontend/src/app/groups/page.tsx:721,1017`) sin auditar contra el
+       sistema nuevo.
+    8. **Casos borde de reportes**: de los cuatro pedidos —sin datos, un solo
+       alumno, rango sin asistencias, nombres largos— dos ya tienen test
+       (`frontend/src/app/reports/__tests__/ReportsPage.test.tsx:213,244`,
+       estado vacío inicial y rango sin resultados) y dos no
+       (`rg -n 'it\(' frontend/src/app/reports/__tests__/ReportsPage.test.tsx`
+       → ningún caso de un solo alumno ni de nombre largo).
+  - **Dónde:** los ocho ítems de arriba.
+  - **Cómo se verificó:** lectura de cada archivo citado;
+    `rg -o '\b(?:bg|text|border|ring|from|via|to|divide|fill|stroke|hover:bg|hover:border|hover:text)-cata-[a-z0-9-]+' frontend/src --glob '!**/__tests__/**' -l | wc -l`
+    → 32 archivos (baja de los 37 de la última verificación, ver el ítem de
+    tokens en Deuda), y sigue bajando a medida que cada pantalla de esta
+    lista se convierte.
+  - **Qué test lo cerraría:** uno por pantalla, siguiendo el patrón que ya
+    dejaron `#176`-`#180` (`DataBox.test.tsx`, `BackLink.test.tsx`,
+    `DataRow.test.tsx`, `Table.test.tsx`, `StatGrid.test.tsx`,
+    `MemberCard.test.tsx`); para reportes, los dos casos borde que faltan en
+    `ReportsPage.test.tsx`.
+
 ### Baja
+
+- [ ] **El `afterEach` de `test-setup.ts` limpia TODO `localStorage`, no solo
+  las claves de preferencia, y su `catch` se traga cualquier error.**
+  - **Qué está mal:** el hook que #168 agregó para cortar la fuga entre tests
+    (ver el cierre de la fuga de `localStorage` más abajo) hace
+    `window.localStorage.clear()` — borra cualquier clave, no solo las
+    `cata:pref:*` que motivaron el fix. Si algún test llega a depender de otra
+    clave sobreviviendo entre pasos del mismo archivo, este `afterEach` la
+    destruye igual, en silencio. Y el `catch` que lo envuelve está vacío para
+    cualquier excepción, no solo la de Node 26 documentada en el comentario
+    de al lado: un error real de `localStorage` en Node 20/CI —no solo la
+    ausencia esperada— se tragaría igual, sin log.
+  - **Dónde:** `frontend/src/test-setup.ts:30` (`window.localStorage.clear()`,
+    sin filtrar por prefijo), `:31-34` (el `catch` vacío sin discriminar el
+    tipo de error).
+  - **Cómo se verificó:** lectura directa de `frontend/src/test-setup.ts`,
+    agregado en el mismo PR que este documento cita como cierre de la fuga
+    (#168, commit `71f3a53`).
+  - **Qué test lo cerraría:** uno que siembre una clave fuera de `cata:pref:*`
+    antes del `afterEach` y afirme que sigue viva después; y uno que fuerce un
+    error de `localStorage` que NO sea el de Node 26 y afirme que se
+    re-lanza en vez de tragarse.
+
+- [ ] **El mock de `next/image` está duplicado, casi idéntico, en 19 archivos
+  de test.**
+  - **Qué está mal:** 19 archivos bajo `__tests__/` repiten su propio
+    `vi.mock("next/image", () => ({ default: ... }))`, con variaciones
+    menores (algunos tipan `alt`, otros no; algunos deshabilitan el lint de
+    `@next/next/no-img-element`, otros no). Es la misma clase de duplicación
+    que `test-setup.ts` ya resuelve para los matchers de `jest-dom` y el
+    polyfill de `<dialog>` — candidato natural a sumarse ahí, junto al
+    `afterEach` de `localStorage`.
+  - **Dónde:** 19 archivos, entre ellos
+    `frontend/src/app/discounts/__tests__/DiscountsPage.test.tsx:36-37`,
+    `frontend/src/app/trainer/__tests__/TrainerPage.test.tsx:46-50`,
+    `frontend/src/app/profile/__tests__/ProfilePage.test.tsx:39-43`.
+  - **Cómo se verificó:**
+    `rg -l 'vi\.mock\("next/image"' frontend/src --glob '**/__tests__/**' | wc -l`
+    → 19.
+  - **Qué test lo cerraría:** ninguno —es duplicación, no comportamiento
+    distinto—; el cierre es moverlo a `test-setup.ts` una sola vez y borrar
+    las 19 copias, con la suite completa en verde como evidencia de que
+    ningún test dependía de una variación puntual del mock.
 
 - [ ] **36 mensajes de 404 siguen nombrando la implementación; y el 422 tiene
   dos bloqueos, no uno.**
@@ -591,6 +865,18 @@ backend: `cd backend && pytest "<archivo>::<test>"`.
 
 | Ítem | Cierre | Candado |
 |---|---|---|
+| El eco de los listados: la insignia de estado de pagos repetía la pestaña ya filtrada, y el hint de miembros repetía el conteo de alumnos en la misma fila | #163: la insignia por fila solo se muestra cuando la pestaña activa NO fija ya un único estado; el checkbox de lote de una fila sin revisar gana `aria-labelledby` propio con el nombre del alumno (antes compartía nombre accesible con otras filas sin revisar); guarda de regresión para el marcador punteado de `/groups` | `frontend/src/app/payments/__tests__/PaymentsPage.test.tsx` — «PaymentsPage — the status badge doesn't echo the active tab» (2 tests) y «PaymentsPage — unreviewed batch checkboxes keep distinct accessible names» · `frontend/src/app/members/__tests__/MembersPage.test.tsx` — «MembersPage — the stats row doesn't repeat the student count» · `frontend/src/app/groups/__tests__/GroupsPage.test.tsx` — el caso del marcador punteado |
+| La función Ranking/Nivel, fuera del alcance del MVP, seguía viva en frontend y backend | #164 (frontend): borra pantallas, rutas BFF, adapters y el concepto de capacidad de grupo de la era mock. #165 (backend): borra router, schemas, servicio, repositorio y los modelos `Ranking`/`NivelRanking` — `Persona.ranking` incluido —, con migración `7e8032f48249` (drop de ambas tablas, downgrade reconstruye la estructura). El feed de notificaciones in-app se extrae a `notificacion_servicio.py` propio porque solo compartía módulo con ranking por historia, no por dominio; `/ranking/notificaciones/*` se mantiene a propósito para no romper al frontend dos veces. #169 limpia los últimos restos muertos de los fixtures E2E | Ninguna clase `Ranking`/`NivelRanking` queda en `backend/app/dominio/modelos.py` (`rg -n "class Ranking" backend/app/dominio/modelos.py` → vacío); `test_ranking.py`, `test_ranking_alumnos_con_nivel.py`, `test_ranking_concurrencia.py`, `LevelChip.tsx`/`.test.tsx` y `NivelLadder*` se borraron enteros junto con la función; `backend/tests/test_drift_migraciones.py::test_no_hay_drift_entre_modelos_y_migraciones` se pone rojo si las tablas reaparecen sin migración |
+| Un pago llevaba su descuento en una tabla 1:N (`descuento_aplicado`) sin cardinalidad real que lo justificara | #166, dos migraciones lineales: `ade8e3c117ca` agrega cuatro columnas congeladas a `pago` y backfillea desde `descuento_aplicado`; `b8dacaddb73b` recién ahí la dropea. El picker de descuentos en el form de pago pasa de checkbox múltiple a single-select con «Sin descuento» — el backend ya rechazaba más de un `descuento_id` con 400 | `backend/tests/test_descuentos.py::test_mas_de_un_descuento_es_rechazado`, `::test_pago_con_descuento_id_pero_sin_valor_congelado_viola_el_check` · `frontend/src/app/members/__tests__/MembersPage.test.tsx` — «only allows one discount selected at a time (regression: backend rejects more than one)» |
+| `CategoriaInfo.rango_edad` era copy de orientación («5 a 10 años») que el dominio trataba como si fuera una regla | #166, junto con el colapso del descuento: se elimina `rango_edad` del dominio, su espejo en frontend y el badge que lo renderizaba. `AsistenciaServicio.asignar_alumno_a_horario` nunca validó edad contra él —era decorativo—, así que borrarlo no cambia comportamiento, solo saca la tentación de tratarlo como validación | `rg -ni "rango.edad" backend frontend` (cubre `rango_edad` y `rangoEdad`) → sin resultados en ningún archivo de producción; `frontend/src/services/__tests__/categorias.test.ts` no lo ejercita más; el `CategoriaInfo` sin el campo se sostiene por tipos (`npm run type-check` rojo si reaparece) |
+| CI daba rojo (`f1f1912`, `278a609`, `8354ac4`) mientras la suite local quedaba verde, por una fuga de `localStorage` entre tests | #168: dos causas compuestas. `findByTestId("payments-table")` resolvía antes de que el filtro asentara, y dos asserts de ausencia corrían contra un DOM todavía no asentado — ganaban la carrera en local, la perdían bajo el scheduler de CI. Además `usePersistentPreference` persiste el filtro de estado en `localStorage`, y nada lo reseteaba entre tests del mismo archivo: un test heredaba el filtro que dejó el anterior. Por qué no se veía en local: Node 26 expone un `localStorage` que tira sin `--localstorage-file`, y el propio `catch` del hook se lo tragaba, aislando cada test por accidente; Node 20 (el de CI) da un `localStorage` que funciona, así que la fuga era real ahí | `frontend/src/app/payments/__tests__/PaymentsPage.test.tsx` — «PaymentsPage — opens on the pending queue» y «PaymentsPage — the status badge doesn't echo the active tab» esperan primero el conteo de filas filtradas; `frontend/src/test-setup.ts` resetea `localStorage` en `afterEach` (con las dos limitaciones que quedan abiertas arriba, en Baja). Reproducido bajo Node 20 en contenedor: rojo antes, verde después |
+| `actualizarFichaMedica` convertía a snake_case antes de mandarlo al BFF, que volvía a convertir y perdía `tipoSangre`/`contactoEmergencia`/`telefonoEmergencia` | #174: la conversión pasa a ocurrir una sola vez, en la ruta BFF; el cliente manda camelCase tal cual | `frontend/src/services/__tests__/api-bff-route-contract.test.ts` — «actualizarFichaMedica's five fields are accepted and translated by PATCH /api/fichas-medicas/persona/[id]» |
+| El form de alta/edición de descuentos forzaba Nombre/Tipo/Valor en `sm:grid-cols-3` dentro del `PAGE_RAIL` de 340px, cortando placeholders y valores a mitad de palabra | #174: single-column siempre — el form nunca renderiza fuera del rail | `frontend/src/app/discounts/__tests__/DiscountsPage.test.tsx` — «does not cram Nombre/Tipo/Valor into a three-column grid inside the 340px rail», «gives every field the full input width, so a long name has room to render» |
+| Un administrador podía registrar un pago en EFECTIVO en nombre de un tercero que no presenció la entrega | #175: solo el propio alumno o su representante pueden declarar EFECTIVO; el admin conserva TRANSFERENCIA para terceros; el form de `/members` deja de ofrecer EFECTIVO como método | `backend/tests/test_efectivo_solo_por_socio.py` (85 líneas de casos) · `frontend/src/app/members/__tests__/MembersPage.test.tsx` |
+| Un alumno podía quedar inscripto en un subconjunto de los días de su categoría en vez de en el mes completo | #182: «the club enrolls by full month, never by a loose weekday» — `asignar_alumno_a_horario`/`desasignar_alumno_de_horario` pasan a abarcar TODOS los `HorarioEntrenamiento` de la categoría del alumno en una sola transacción; `eliminar_horario` gana un fix hermano para no desasignar de toda la categoría al borrar un solo día. #183 adapta `/groups` para consumir la inscripción atómica | `backend/tests/test_inscripcion_por_categoria.py` — 7 tests (`test_asignar_alumno_lo_inscribe_en_todos_los_horarios_de_la_categoria`, `test_asignar_alumno_no_deja_forma_de_quedar_en_un_subconjunto` y 5 hermanos) · `frontend/src/app/groups/__tests__/GroupsPage.test.tsx` |
+| M1: la categoría de horario pasó de enum fijo a tabla, en tres pasos expand/migrate/(casi)contract | #170 (expand): crea `categoria_horario`/`categoria_horario_dia`, siembra las 5 filas, agrega `categoria_codigo` nullable en paralelo — sin cambio de comportamiento. #173 (cutover): modelo/servicio/schemas/router leen horas y días desde la tabla, no del dict `CATEGORIA_METADATA` (que se borra); la migración vuelve `categoria_codigo` NOT NULL, dropea el enum Postgres viejo y lo renombra a `categoria`; nace `GET /asistencias/categorias`. #179 (frontend): deja de hardcodear un mirror estático y lo trae vivo desde el backend, con degradación no bloqueante si falla. El enum Python `Categoria` sigue existiendo — ver el ítem abierto de arriba sobre lo que todavía le falta a este M1 | `backend/tests/test_categoria_repositorio.py` (5 tests) · `backend/tests/test_horario_categoria.py` + `test_drift_enums_postgres.py` (actualizados por el cutover) · `frontend/src/app/api/attendance/categories/__tests__/route.test.ts`, `frontend/src/services/__tests__/categorias.test.ts`, `frontend/src/app/groups/__tests__/GroupsPage.test.tsx` |
+| Faltaban seis primitivos del sistema visual nuevo: `DataBox`, `BackLink`, `DataRow`, `Table` con columnas tipadas, `StatGrid`, `MemberCard` | #176 (`DataBox`, `BackLink`), #177 (`DataRow`, extensión de `Table`), #178 (`StatGrid`, `MemberCard`) — los seis, con test unitario propio desde el commit que los crea | `frontend/src/components/ui/__tests__/DataBox.test.tsx`, `BackLink.test.tsx`, `DataRow.test.tsx`, `Table.test.tsx`, `StatGrid.test.tsx`, `MemberCard.test.tsx` |
+| El perfil no usaba el carnet (`MemberCard`) como bloque de identidad | #180: `/profile` adopta `MemberCard` como el bloque de identidad de la pantalla | `frontend/src/app/profile/__tests__/ProfilePage.test.tsx` (reescrito, +150 líneas) · `frontend/src/components/ui/__tests__/MemberCard.test.tsx` |
 | `tipo_membresia.franja_horaria` era texto libre desincronizado del horario real | La columna se eliminó (`d1a5f8c30b72`, un `DROP COLUMN`), junto con su campo en el DTO, el seed y las 15 fábricas de test que la cargaban. La franja del carnet se deriva ahora de los `alumno_horario` del alumno vía `describeAssignedWindows` (`frontend/src/app/student/student-utils.ts:429`), que llama a la MISMA `buildWeeklyTrainingSchedule` de la que sale el listado de próximos entrenamientos — por construcción no pueden discrepar. Los rótulos de admin (`members-adapter.ts:82`, `payments-adapter.ts:147`) pasan de `"Mensual Adultos (20:00-21:00)"` a `"Mensual Adultos"`: un plan es un precio, no un horario. **Ojo con la premisa que no se sostuvo:** no existe «la categoría del alumno» en singular — en la QA real 4 de 7 alumnos están en FORMATIVO+INFANTIL+JUVENIL a la vez y 2 en ninguna, y `AsistenciaServicio.asignar_alumno_a_horario` no valida coherencia. Por eso la derivación lista ventanas distintas en vez de colapsarlas a un rango: 15:00–16:00 más 20:00–21:15 no es «de 15:00 a 21:15» | `frontend/src/app/student/__tests__/StudentPage.test.tsx` — «the carnet's franja agrees with the assigned schedule» · 4/4, de coherencia y no de existencia: lee la ventana del panel y le exige al carnet la misma cadena. Rojo antes (3/4 fallando, el carnet decía 21:00), verde después. Más `backend/tests/test_migracion_drop_franja_horaria.py` · 3/3 (upgrade con datos, downgrade real) y el drift genérico `test_drift_migraciones.py`. Corridos el 6 de agosto de 2026: 906 backend, 2564 frontend, `alembic upgrade head` desde base vacía en verde |
 | Los errores al usuario salían en inglés cuando el backend peor se portaba | #153 y #155. El default del cliente pasó de `Request failed with status N` a `GENERIC_FAILURE` en español (`frontend/src/services/api.ts:340`; el inglés sobrevive solo en el comentario que documenta la historia, `:336`), y los 27 sitios que renderizaban `err.message` crudo pasaron por `toUserMessage`: hoy 30 llamadas en 17 archivos y cero lecturas crudas en `.tsx` (`rg -n 'err(or)?\.message' --glob '*.tsx' --glob '!**/__tests__/**' frontend/src` → sin resultados). Quedan tres observaciones del traductor en abiertos —el 408 inalcanzable, `GENERIC_FAILURE` cruzando la compuerta 2 y el encabezado ya falso—: son defectos del traductor nuevo, no la recaída de este ítem | `frontend/src/lib/__tests__/error-message.test.ts` · 19/19 y el guardián que pedía este ítem, `frontend/src/lib/__tests__/error-message-usage.test.ts` — «only the translator reads an error's message» · 5/5. Corridos el 6 de agosto de 2026 sobre `fa13172` |
 | El panel contaba «por regularizar» a quien no tenía NINGUNA membresía, y usaba todo el padrón como denominador de «membresías activas» | Dos mitades, dos PRs. #150 (backend): el `NOT EXISTS` exige estado `ACTIVA` y filtra por rol alumno, y nace `total_alumnos` junto a `total_personas` porque son dos preguntas distintas (`backend/app/presentacion/schemas/dashboard_schemas.py:11`). Este PR (frontend): el campo se declara en las dos copias de `DashboardStats` (`frontend/src/app/api/dashboard/route.ts:23`, `frontend/src/services/api.ts:842`) y la pantalla lo lee — el `%` y el «de N» pasan a `totalAlumnos` (`frontend/src/app/dashboard/page.tsx:128,226`), la tarjeta «Miembros» se queda en `totalPersonas` porque dice «personas registradas» y son todas | `backend/tests/test_dashboard_stats.py::test_total_alumnos_es_el_denominador_y_total_personas_cuenta_a_todos` + `::test_alumno_con_membresia_vencida_cuenta_como_por_regularizar`, `::test_alumno_con_membresia_inactiva_cuenta_como_por_regularizar`, `::test_staff_sin_membresia_no_cuenta_como_por_regularizar` · `frontend/src/app/dashboard/__tests__/DashboardPage.test.tsx` — «counts active memberships against the alumnos, and Miembros against the whole padrón» · 18/18. El del contrato es de tipos, no de runtime: la route es passthrough y el campo ya viajaba, así que `frontend/src/app/api/dashboard/__tests__/route.test.ts` — «declares and carries totalAlumnos» se pone rojo bajo `cd frontend && npm run type-check` (TS2353), no bajo vitest |
