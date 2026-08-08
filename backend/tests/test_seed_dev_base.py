@@ -12,7 +12,8 @@ que sigue viviendo acá es el smoke end-to-end: que `main()` REALMENTE
 persiste 26 horarios con esos datos. Como `Base.metadata.create_all()` (a
 diferencia de `alembic upgrade head`) no corre el data-seed de la migración,
 `_motor_en_memoria` siembra `categoria_horario`/`categoria_horario_dia` a
-mano antes de invocar `main()`."""
+mano (vía `tests._categoria_seed`, compartido con `test_seed_dev_bulk.py`)
+antes de invocar `main()`."""
 import importlib.util
 from datetime import date, time
 from pathlib import Path
@@ -25,8 +26,6 @@ from app.dominio.enums import Categoria, DiaSemana, TipoRol
 from app.dominio.modelos import (
     AlumnoHorario,
     Base,
-    CategoriaHorario,
-    CategoriaHorarioDia,
     HorarioEntrenamiento,
     Membresia,
     Pago,
@@ -34,24 +33,9 @@ from app.dominio.modelos import (
     TipoMembresia,
     Usuario,
 )
+from tests._categoria_seed import LUN_SAB, sembrar_categorias
 
 SEED_SCRIPT = Path(__file__).parents[1] / "scripts" / "seed_dev_base.py"
-
-_LUN_VIE = (
-    DiaSemana.LUNES, DiaSemana.MARTES, DiaSemana.MIERCOLES,
-    DiaSemana.JUEVES, DiaSemana.VIERNES,
-)
-_LUN_SAB = _LUN_VIE + (DiaSemana.SABADO,)
-
-# Misma copia literal de `categoria_metadata.py:33-54` que sembró
-# `a4e7c2f9b1d8` -- ver esa migración para la fuente real en Postgres.
-_CATEGORIAS_SEED = [
-    ("FORMATIVO", "Formativo", time(15, 0), time(16, 0), _LUN_VIE),
-    ("INFANTIL", "Infantil", time(16, 0), time(17, 0), _LUN_VIE),
-    ("JUVENIL", "Juvenil", time(17, 0), time(18, 0), _LUN_VIE),
-    ("COMPETITIVO", "Competitivo", time(18, 0), time(20, 0), _LUN_SAB),
-    ("ADULTOS", "Adultos", time(20, 0), time(21, 15), _LUN_VIE),
-]
 
 
 def _cargar_modulo_seed():
@@ -72,15 +56,7 @@ def _motor_en_memoria(modulo):
     )
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    with TestingSessionLocal() as sesion:
-        for codigo, label, hora_inicio, hora_fin, dias in _CATEGORIAS_SEED:
-            sesion.add(CategoriaHorario(
-                codigo=codigo, label=label, hora_inicio=hora_inicio, hora_fin=hora_fin,
-            ))
-            for dia in dias:
-                sesion.add(CategoriaHorarioDia(categoria_codigo=codigo, dia_semana=dia))
-        sesion.commit()
+    sembrar_categorias(TestingSessionLocal)
 
     modulo.SessionLocal = TestingSessionLocal
     return TestingSessionLocal
@@ -107,7 +83,7 @@ def test_main_persiste_26_horarios_con_categoria_adultos_21_15_y_competitivo_sab
         assert all(h.hora_fin == time(21, 15) for h in adultos)
 
         competitivo_dias = {h.dia_semana for h in horarios if h.categoria == Categoria.COMPETITIVO}
-        assert competitivo_dias == set(_LUN_SAB)
+        assert competitivo_dias == set(LUN_SAB)
         assert DiaSemana.SABADO in competitivo_dias
 
 
