@@ -55,7 +55,6 @@ function dependent(personaId: string, nombres: string, fechaNacimiento: string) 
     nombres,
     apellidos: "Vera",
     fechaNacimiento,
-    ranking: { status: "unavailable" as const, reason: "error" as const },
     recentSessions: [],
     membership: {
       id: Number(personaId),

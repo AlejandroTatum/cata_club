@@ -40,7 +40,7 @@ async function mockMembersRuntime(page: Page, accounts = [ACCOUNT], personasCapp
     roles: ["ADMINISTRADOR"],
     loggedInAt: "2026-07-21T00:00:00.000Z",
   }));
-  await page.route("**/api/members", (route: Route) => fulfillJson(route, { accounts, niveles: [], personasCapped }));
+  await page.route("**/api/members", (route: Route) => fulfillJson(route, { accounts, personasCapped }));
   await page.route("**/api/ranking/notificaciones/mias", (route: Route) => fulfillJson(route, []));
 }
 

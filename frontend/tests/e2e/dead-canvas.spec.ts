@@ -204,7 +204,6 @@ const SCHEDULES = [
     diaSemana: "lun",
     horaInicio: "18:00",
     horaFin: "19:00",
-    nivelRankingId: null,
     categoria: "FORMATIVO",
   },
 ];
@@ -309,9 +308,8 @@ async function mockGroups(page: Page, n: number): Promise<void> {
   await mockSession(page, "admin");
   await page.route("**/api/groups/horarios", (r) => fulfillJson(r, SCHEDULES));
   await page.route("**/api/groups/horarios/*/alumnos*", (r) => fulfillJson(r, alumnos(n)));
-  await page.route("**/api/ranking/niveles", (r) => fulfillJson(r, []));
   await page.route("**/api/members", (r) =>
-    fulfillJson(r, { accounts: [], niveles: [], personasCapped: false }),
+    fulfillJson(r, { accounts: [], personasCapped: false }),
   );
   await page.goto("/groups");
 }
@@ -332,7 +330,7 @@ const SCREENS: Screen[] = [
     open: async (page, n) => {
       await mockSession(page, "admin");
       await page.route("**/api/members", (r) =>
-        fulfillJson(r, { accounts: accounts(n), niveles: [], personasCapped: false }),
+        fulfillJson(r, { accounts: accounts(n), personasCapped: false }),
       );
       await page.goto("/members");
       await expect(page.locator("table tbody tr").first()).toBeVisible({ timeout: 20_000 });

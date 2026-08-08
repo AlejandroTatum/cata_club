@@ -122,7 +122,7 @@ async function mockAdminMembers(page: Page): Promise<void> {
     }),
   );
   await page.route("**/api/members", (route: Route): Promise<void> =>
-    fulfillJson(route, { accounts: ACCOUNTS, niveles: [], personasCapped: false }),
+    fulfillJson(route, { accounts: ACCOUNTS, personasCapped: false }),
   );
 }
 
