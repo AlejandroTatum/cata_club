@@ -267,6 +267,97 @@ describe("MembersPage — Editar member modal", () => {
     expect(within(card).getByText(/activo|sin membresía|vencida|pendiente/i)).toBeInTheDocument();
   });
 
+  // -------------------------------------------------------------------------
+  // Visual system: table column set/alignment, DataRow/DataBox adoption.
+  // -------------------------------------------------------------------------
+
+  it("drops the Contacto column and keeps Responsable de pago / Estudiantes / Membresía / Editar", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const table = row.closest("table") as HTMLElement;
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent?.trim());
+
+    expect(headers).not.toContain("Contacto");
+    expect(headers[0]).toBe("Responsable de pago");
+  });
+
+  it("right-aligns the Estudiantes column (header and body alike) and boxes the count", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const table = row.closest("table") as HTMLElement;
+    const header = within(table).getByRole("columnheader", { name: "Estudiantes" });
+    expect(header.className).toContain("text-right");
+
+    const countText = within(row).getByText(String(ACCOUNT.estudiantes.length));
+    // `TableCell type="number"` boxes the value in a numeric `DataBox`.
+    expect(countText.closest("span")?.className).toContain("font-mono");
+    expect(countText.closest("td")?.className).toContain("text-right");
+  });
+
+  it("aligns Membresía left and Editar right, matching header to body — never centered", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const table = row.closest("table") as HTMLElement;
+
+    const membresiaHeader = within(table).getByRole("columnheader", { name: "Membresía" });
+    expect(membresiaHeader.className).toContain("text-left");
+
+    const columnheaders = within(table).getAllByRole("columnheader");
+    const editarHeader = columnheaders[columnheaders.length - 1];
+    expect(editarHeader.className).toContain("text-right");
+  });
+
+  it("renders the mobile account list through the DataRow primitive, not a hand-rolled <li>", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const card = await findAccountCard();
+    // `DataRow`'s own dense layout: identity in semibold, boxed metadata,
+    // status, actions — instead of a bespoke flex/dl card.
+    expect(card.className).toContain("items-center");
+    const list = card.closest("ul") as HTMLElement;
+    expect(list.className).toContain("divide-y");
+  });
+
+  it("boxes a student's age instead of leaving it as bare running text", async () => {
+    mockFetchMembers.mockResolvedValue({
+      accounts: [
+        {
+          ...ACCOUNT,
+          estudiantes: [{ ...ACCOUNT.estudiantes[0], fechaNacimiento: "2010-01-01" }],
+        },
+      ],
+    });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    const ageText = within(dialog).getByText(/\d+ años/);
+    // `DataBox`'s own shape: a sunken fill and a hairline border, not a bare <p>.
+    expect(ageText.closest("span")?.className).toContain("bg-sunken");
+  });
+
   it("opens exactly one dialog, however many renderings of the account exist", async () => {
     render(
       <ToastProvider>

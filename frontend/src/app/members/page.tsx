@@ -24,6 +24,8 @@ import {
   Badge,
   Button,
   buttonClasses,
+  DataBox,
+  DataRow,
   EmptyState,
   ErrorState,
   FilterPanel,
@@ -50,7 +52,6 @@ import {
   ShieldCheck,
   Search,
   User,
-  Phone,
   Mail,
   GraduationCap,
   CheckCircle2,
@@ -384,18 +385,18 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
   }
 
   return (
-    <div className="rounded-xl border border-cata-border bg-white p-4">
+    <li className="py-4 first:pt-0 last:pb-0">
       {/* Identity */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cata-bg text-sm font-bold text-cata-text/70">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunken text-sm font-bold text-ink-2">
             {getUserInitials(`${student.nombres} ${student.apellidos}`)}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-cata-text">
+            <p className="truncate text-sm font-semibold text-ink">
               {student.nombres} {student.apellidos}
             </p>
-            {age !== null && <p className="text-xs text-cata-text/55">{age} años</p>}
+            {age !== null && <DataBox className="mt-1">{age} años</DataBox>}
           </div>
         </div>
       </div>
@@ -403,9 +404,9 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
       {/* Ficha — full-width row (card is now the modal's full content width,
           not squeezed into a half-width grid column), four stats side by
           side on larger screens instead of a cramped two-up layout. */}
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-section border-t border-cata-border pt-3 text-xs sm:grid-cols-3">
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-section border-t border-line pt-3 text-xs sm:grid-cols-3">
         <div>
-          <dt className="text-cata-text/50">Estado</dt>
+          <dt className="text-ink-3">Estado</dt>
           <dd className="mt-1">
             <Badge tone={student.activo ? "ok" : "bad"}>
               {student.activo ? "Activo" : "Inactivo"}
@@ -413,52 +414,58 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
           </dd>
         </div>
         <div>
-          <dt className="text-cata-text/50">Membresía</dt>
+          <dt className="text-ink-3">Membresía</dt>
           <dd className="mt-1">
             {student.membresia ? (
               <Badge tone={membershipTone}>{membershipLabel}</Badge>
             ) : (
-              <span className="text-cata-text/40">Sin membresía</span>
+              <span className="text-ink-3">Sin membresía</span>
             )}
           </dd>
         </div>
         <div>
-          <dt className="text-cata-text/50">Último pago</dt>
+          <dt className="text-ink-3">Último pago</dt>
           <dd className="mt-1">
             {student.ultimoPago ? (
               <Badge tone={paymentTone}>{paymentLabel}</Badge>
             ) : (
-              <span className="text-cata-text/40">No registrado</span>
+              <span className="text-ink-3">No registrado</span>
             )}
           </dd>
         </div>
       </dl>
 
+      {/* Each figure is a value that matters (a plan, a period, an amount),
+          so each gets its own box rather than one run-on sentence stitched
+          together with middots. */}
       {student.membresia && (
-        <p className="mt-1.5 text-2xs tracking-flat text-cata-text/55">
-          {student.membresia.tipo} &middot;{" "}
-          {formatMembershipPeriod(student.membresia.fechaInicio, student.membresia.fechaFin)}
-          {" "}&middot; {formatCurrency(student.membresia.monto)}
-        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <DataBox>{student.membresia.tipo}</DataBox>
+          <DataBox>
+            {formatMembershipPeriod(student.membresia.fechaInicio, student.membresia.fechaFin)}
+          </DataBox>
+          <DataBox>{formatCurrency(student.membresia.monto)}</DataBox>
+        </div>
       )}
       {student.ultimoPago && (
-        <p className="mt-0.5 text-2xs tracking-flat text-cata-text/55">
-          {formatCurrency(student.ultimoPago.monto)} &middot; {student.ultimoPago.periodo}
-        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <DataBox>{formatCurrency(student.ultimoPago.monto)}</DataBox>
+          <DataBox>{student.ultimoPago.periodo}</DataBox>
+        </div>
       )}
 
       {!student.membresia &&
         (membershipSuccess ? (
-          <p className="mt-2 flex items-center gap-1 text-xs text-cata-state-ok">
+          <p className="mt-2 flex items-center gap-1 text-xs text-state-ok">
             <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Membresía creada.
           </p>
         ) : showCreateMembership ? (
-          <div className="mt-2.5 space-y-field rounded-lg bg-cata-bg/60 p-2.5">
+          <div className="mt-2.5 space-y-section rounded-ctl border border-line bg-sunken p-3">
             <select
               value={selectedTipoId}
               onChange={(e) => setSelectedTipoId(e.target.value ? Number(e.target.value) : "")}
-              className="w-full rounded-lg border border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text"
+              className="input-field text-xs"
             >
               <option value="">Seleccionar tipo…</option>
               {tiposMembresia.map((tipo) => (
@@ -467,7 +474,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                 </option>
               ))}
             </select>
-            {membershipError && <p className="text-xs text-cata-red">{membershipError}</p>}
+            {membershipError && <p className="text-xs text-state-bad">{membershipError}</p>}
             <div className="flex flex-wrap gap-1.5">
               <button
                 type="button"
@@ -485,7 +492,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
               <button
                 type="button"
                 onClick={() => setShowCreateMembership(false)}
-                className="rounded-lg border border-cata-border px-2.5 py-1 text-xs text-cata-text/65 transition-colors hover:bg-cata-surface"
+                className="rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper"
               >
                 Cancelar
               </button>
@@ -506,14 +513,14 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
       {student.membresia && (
         <div className="mt-2.5">
           {paymentSuccess ? (
-            <p className="flex items-center gap-1 text-xs text-cata-state-ok">
+            <p className="flex items-center gap-1 text-xs text-state-ok">
               <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               Pago registrado. Recarga para verlo.
             </p>
           ) : showPaymentForm ? (
-            <div className="space-y-field rounded-lg bg-cata-bg/60 p-2.5">
+            <div className="space-y-field rounded-ctl border border-line bg-sunken p-3">
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs font-semibold text-cata-text/65">
+                <label className="text-xs font-semibold text-ink-2">
                   Monto
                   <input
                     type="number"
@@ -521,32 +528,32 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                     min="0"
                     value={paymentMonto}
                     onChange={(e) => handlePaymentMontoChange(e.target.value)}
-                    className="mt-0.5 w-full rounded-lg border border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text"
+                    className="mt-0.5 w-full rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-ink"
                     placeholder="0.00"
                   />
                 </label>
                 {/* No picker: EFECTIVO is not offered here (see the state
                     comment above), so there is nothing for the admin to
                     choose between. */}
-                <div className="text-xs font-semibold text-cata-text/65">
+                <div className="text-xs font-semibold text-ink-2">
                   Método
-                  <p className="mt-0.5 w-full rounded-lg border border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text">
+                  <p className="mt-0.5 w-full rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-ink">
                     Transferencia
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 rounded-lg border border-cata-border/50 bg-cata-surface/50 px-2.5 py-2">
+              <div className="grid grid-cols-2 gap-2 rounded-ctl border border-line bg-paper px-2.5 py-2">
                 <div className="text-xs">
-                  <span className="text-cata-text/45">Inicio: </span>
-                  <span className="font-semibold text-cata-text">{paymentFechaInicio || "—"}</span>
+                  <span className="text-ink-3">Inicio: </span>
+                  <span className="font-semibold text-ink">{paymentFechaInicio || "—"}</span>
                 </div>
                 <div className="text-xs">
-                  <span className="text-cata-text/45">Fin: </span>
-                  <span className="font-semibold text-cata-text">{paymentFechaFin || "—"}</span>
+                  <span className="text-ink-3">Fin: </span>
+                  <span className="font-semibold text-ink">{paymentFechaFin || "—"}</span>
                 </div>
               </div>
               {paymentMonthlyPrice > 0 && Number(paymentMonto) > 0 && (
-                <p className="text-2xs tracking-flat text-cata-text/45">
+                <p className="text-2xs tracking-flat text-ink-3">
                   {Number(paymentMonto) / paymentMonthlyPrice} meses de vigencia (precio mensual: ${paymentMonthlyPrice})
                 </p>
               )}
@@ -557,37 +564,44 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                   uno con 400), así que esto es un grupo de radios — nunca
                   checkboxes — con "Sin descuento" como opción normal. */}
               {descuentosOfrecidos.length > 0 && (
-                <fieldset className="rounded-lg border border-cata-border/50 bg-cata-surface/50 px-2.5 py-2">
-                  <legend className="px-1 text-xs font-semibold text-cata-text/65">Descuento</legend>
+                <fieldset className="rounded-ctl border border-line bg-paper p-3">
+                  <legend className="px-1 text-xs font-semibold text-ink-2">Descuento</legend>
+                  {/* Single-select: exactly one radio group, "Sin descuento"
+                      first as the default — never checkboxes, a payment
+                      admits at most one discount (the backend rejects more
+                      than one with a 400). */}
                   <div className="space-y-field">
-                    <label className="flex items-center gap-2 text-xs text-cata-text">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-ctl px-2 py-1.5 text-xs text-ink transition-colors hover:bg-sunken">
                       <input
                         type="radio"
                         name={`descuento-${personaId}`}
                         checked={selectedDescuentoId === null}
                         onChange={() => setSelectedDescuentoId(null)}
-                        className="h-3.5 w-3.5 border-cata-border"
+                        className="h-3.5 w-3.5 accent-coal"
                       />
                       <span>Sin descuento</span>
                     </label>
                     {descuentosOfrecidos.map((descuento) => (
-                      <label key={descuento.id} className="flex items-center gap-2 text-xs text-cata-text">
+                      <label
+                        key={descuento.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-ctl px-2 py-1.5 text-xs text-ink transition-colors hover:bg-sunken"
+                      >
                         <input
                           type="radio"
                           name={`descuento-${personaId}`}
                           checked={selectedDescuentoId === descuento.id}
                           onChange={() => setSelectedDescuentoId(descuento.id)}
-                          className="h-3.5 w-3.5 border-cata-border"
+                          className="h-3.5 w-3.5 accent-coal"
                         />
                         <span>
                           {descuento.nombre}
-                          <span className="text-cata-text/45"> · {descuentoValorLabel(descuento)}</span>
+                          <span className="text-ink-3"> · {descuentoValorLabel(descuento)}</span>
                         </span>
                       </label>
                     ))}
                   </div>
                   {descuentosSeleccionados.length > 0 && (
-                    <p className="mt-1.5 border-t border-cata-border/50 pt-1.5 text-xs font-semibold text-cata-text">
+                    <p className="mt-1.5 border-t border-line pt-1.5 text-xs font-semibold text-ink">
                       Monto final con descuento: {formatCurrency(montoFinalPreview)}
                     </p>
                   )}
@@ -595,7 +609,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
               )}
               {/* TRANSFERENCIA is the only method, so the voucher is
                   always required (see the check in handleSubmitPayment). */}
-              <label className="block text-xs font-semibold text-cata-text/65">
+              <label className="block text-xs font-semibold text-ink-2">
                 Comprobante
                 <div className="mt-0.5 flex items-center gap-2">
                   <input
@@ -608,7 +622,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                   <button
                     type="button"
                     onClick={() => paymentFileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 rounded-lg border border-dashed border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text/65 transition-colors hover:border-cata-red/30 hover:text-cata-text"
+                    className="flex items-center gap-1.5 rounded-lg border border-dashed border-line bg-paper px-2.5 py-1.5 text-xs text-ink-2 transition-colors hover:border-cata-red/30 hover:text-ink"
                   >
                     <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                     {paymentVoucherFile ? paymentVoucherFile.name : "Seleccionar archivo"}
@@ -617,14 +631,14 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                     <button
                       type="button"
                       onClick={() => setPaymentVoucherFile(null)}
-                      className="text-2xs tracking-flat text-cata-text/45 hover:text-cata-red"
+                      className="text-2xs tracking-flat text-ink-3 hover:text-state-bad"
                     >
                       Quitar
                     </button>
                   )}
                 </div>
               </label>
-              {paymentError && <p className="text-xs text-cata-red">{paymentError}</p>}
+              {paymentError && <p className="text-xs text-state-bad">{paymentError}</p>}
               <div className="flex gap-1.5">
                 <button
                   type="button"
@@ -638,7 +652,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                 <button
                   type="button"
                   onClick={() => { setShowPaymentForm(false); setPaymentVoucherFile(null); }}
-                  className="rounded-lg border border-cata-border px-2.5 py-1 text-xs text-cata-text/65 transition-colors hover:bg-cata-surface"
+                  className="rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper"
                 >
                   Cancelar
                 </button>
@@ -658,7 +672,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
       )}
 
       {/* Actions */}
-      <div className="mt-3 flex flex-wrap gap-2 border-t border-cata-border pt-3">
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
         <button
           type="button"
           onClick={() => setShowMedical((v) => !v)}
@@ -670,7 +684,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
       </div>
 
       {showMedical && <MedicalRecordEditor personaId={personaId} />}
-    </div>
+    </li>
   );
 }
 
@@ -720,19 +734,11 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
         name={`${account.nombres} ${account.apellidos}`}
         sub={getPayerTypeLabel(account.role)}
       />
-      <TableCell>
-        <span className="block">{account.telefono}</span>
-        {account.email ? (
-          <span className="mt-px block truncate text-2xs tracking-flat text-ink-3">{account.email}</span>
-        ) : null}
-      </TableCell>
-      <TableCell align="right" className="tabular-nums">
-        {account.estudiantes.length}
-      </TableCell>
-      <TableCell>
+      <TableCell type="number">{account.estudiantes.length}</TableCell>
+      <TableCell type="badge">
         <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
       </TableCell>
-      <TableCell align="right">
+      <TableCell type="action">
         <Button
           size="sm"
           // Focus the trigger explicitly: the dialog restores focus to
@@ -756,17 +762,22 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
   const statusBadge = getAccountStatusBadge(account);
 
   return (
-    <li className="flex flex-col gap-2 border-b border-line px-4 py-3.5 last:border-b-0">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ink">
-            {account.nombres} {account.apellidos}
-          </p>
-          <p className="text-2xs tracking-flat text-ink-3">{getPayerTypeLabel(account.role)}</p>
-        </div>
+    <DataRow
+      name={`${account.nombres} ${account.apellidos}`}
+      meta={
+        <>
+          <DataBox>{getPayerTypeLabel(account.role)}</DataBox>
+          <DataBox>{account.telefono}</DataBox>
+          {account.email ? (
+            <DataBox className="max-w-[10rem] truncate">{account.email}</DataBox>
+          ) : null}
+          <DataBox variant="numeric">{account.estudiantes.length}</DataBox>
+        </>
+      }
+      status={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
+      actions={
         <Button
           size="sm"
-          className="flex-none"
           onClick={(event) => {
             event.currentTarget.focus();
             onEdit();
@@ -775,30 +786,8 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
         >
           Editar
         </Button>
-      </div>
-      <dl className="flex flex-wrap items-center gap-x-4 gap-y-field text-xs text-ink-2">
-        <div className="flex items-center gap-1.5">
-          <dt className="sr-only">Teléfono</dt>
-          <Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          <dd>{account.telefono}</dd>
-        </div>
-        {account.email ? (
-          <div className="flex min-w-0 items-center gap-1.5">
-            <dt className="sr-only">Correo</dt>
-            <Mail size={ICON.sm} strokeWidth={1.5} className="flex-none" aria-hidden="true" />
-            <dd className="truncate">{account.email}</dd>
-          </div>
-        ) : null}
-        <div className="flex items-center gap-1.5">
-          <dt className="sr-only">Estudiantes</dt>
-          <GraduationCap size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          <dd className="tabular-nums">{account.estudiantes.length}</dd>
-        </div>
-      </dl>
-      <Badge tone={statusBadge.tone} className="self-start">
-        {statusBadge.label}
-      </Badge>
-    </li>
+      }
+    />
   );
 }
 
@@ -1001,29 +990,39 @@ function MemberEditDialog({
             aria-modal="true"
             aria-labelledby={`edit-member-title-${account.id}`}
             onCancel={(event) => event.preventDefault()}
-            className="fixed inset-0 z-50 m-auto flex h-fit max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-cata-border bg-white p-0 shadow-elevated backdrop:bg-cata-black/40"
+            className="fixed inset-0 z-50 m-auto flex h-fit max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-paper p-0 shadow-elevated backdrop:bg-coal/40"
           >
-            {/* Header — avatar, name, phone, status badge, close */}
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-cata-border px-5 py-4">
+            {/* Header — avatar, name, phone, status badge, close. Sits on
+                `sunken` rather than flush `paper`: the body below is `canvas`,
+                so a plain white band between two greys was the "very flat"
+                header — one more step on the surface ladder gives it its own
+                plane, the same way a card reads as an object against the page. */}
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-sunken px-5 py-4">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cata-red/15 text-sm font-bold text-cata-red">
+                {/* Identity accent, not a status or a CTA — `coal`, never the
+                    brand red reserved for primary actions and destructive
+                    intent (see `cata.red`'s own doc comment in
+                    tailwind.config.ts). */}
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-coal/[0.08] text-base font-bold text-coal">
                   {getUserInitials(`${account.nombres} ${account.apellidos}`)}
                 </div>
                 <div className="min-w-0">
                   <h2
                     id={`edit-member-title-${account.id}`}
-                    className="truncate text-lg font-bold leading-tight text-cata-text"
+                    className="truncate text-lg font-bold leading-tight text-ink"
                   >
                     {account.nombres} {account.apellidos}
                   </h2>
-                  <p className="text-sm text-cata-text/65">{account.telefono}</p>
-                  <p className="mt-0.5 text-xs text-cata-text/50">{getPayerTypeLabel(account.role)}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <DataBox>{account.telefono}</DataBox>
+                    <span className="text-xs text-ink-3">{getPayerTypeLabel(account.role)}</span>
+                  </div>
                   {/* This used to read "Los cambios se guardan al instante",
                       which was true of roles and estado and false of the
                       identity fields and the membership form. Each group now
                       states its own contract in its own header, so the header
                       only says where to look. */}
-                  <p className="mt-1 text-xs text-cata-text/65">
+                  <p className="mt-1.5 text-xs text-ink-2">
                     Cada bloque indica si se guarda solo o si necesita un botón.
                   </p>
                 </div>
@@ -1040,7 +1039,7 @@ function MemberEditDialog({
                   // named buttons in one dialog give screen-reader users no
                   // way to tell them apart in a controls list.
                   aria-label="Cerrar ventana"
-                  className="rounded-lg p-1.5 text-cata-text/50 transition-colors hover:bg-cata-bg hover:text-cata-text"
+                  className="rounded-lg p-1.5 text-ink-3 transition-colors hover:bg-sunken hover:text-ink"
                 >
                   <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                 </button>
@@ -1254,7 +1253,11 @@ function MemberEditDialog({
 
               {account.estudiantes.length > 0 && (
                 <ModalSection title="Estudiantes a cargo" saveMode="manual">
-                  <div className="space-y-section">
+                  {/* A list of people, so it takes the same divider hairlines
+                      every other list of people in the product uses — not
+                      `DataRowList`'s own outer border, which would nest a
+                      second box inside this section's card. */}
+                  <ul className="divide-y divide-line">
                     {account.estudiantes.map((estudiante) => (
                       <StudentEditPanel
                         key={estudiante.id}
@@ -1262,7 +1265,7 @@ function MemberEditDialog({
                         onMembershipCreated={onMembershipCreated}
                       />
                     ))}
-                  </div>
+                  </ul>
                 </ModalSection>
               )}
             </div>
@@ -1464,12 +1467,12 @@ export default function MembersPage(): React.ReactElement {
           </div>
         ) : filteredAccounts.length > 0 ? (
           <div className="card overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cata-border px-4 py-3 text-xs text-cata-text/65">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 text-xs text-ink-2">
               <p role="status" aria-label="Resultados mostrados">
                 {filteredAccounts.length} resultados mostrados
               </p>
               {aggregateIsCapped && (
-                <p role="alert" className="max-w-md text-cata-red">
+                <p role="alert" className="max-w-md text-state-bad">
                   La fuente devuelve hasta {MEMBERS_AGGREGATE_LIMIT} registros; este listado puede estar incompleto.
                 </p>
               )}
@@ -1477,9 +1480,14 @@ export default function MembersPage(): React.ReactElement {
             {/* Below `sm` the table used to hide Contacto/Estudiantes/Estado
                 /Editar behind `hidden sm:table-cell`, leaving a one-column
                 list with a second, duplicated edit button crammed under each
-                name. A phone gets a real card per account instead — same data,
-                one edit trigger, nothing hidden. */}
-            <ul className="sm:hidden">
+                name. A phone gets a real row per account instead — same data,
+                one edit trigger, nothing hidden — through the same `DataRow`
+                primitive every other list of people in the product uses,
+                rather than a hand-rolled `<li>` card. Divider hairlines are
+                applied directly (instead of via `DataRowList`) because this
+                list already sits inside the card's own border below — a
+                second border here would nest a box inside a box. */}
+            <ul className="divide-y divide-line sm:hidden">
               {paginatedAccounts.map((account) => (
                 <AccountCard
                   key={account.id}
@@ -1494,10 +1502,9 @@ export default function MembersPage(): React.ReactElement {
                 <TableHead>
                   <TableRow>
                     <TableHeaderCell>Responsable de pago</TableHeaderCell>
-                    <TableHeaderCell>Contacto</TableHeaderCell>
-                    <TableHeaderCell align="right">Estudiantes</TableHeaderCell>
-                    <TableHeaderCell>Membresía</TableHeaderCell>
-                    <TableHeaderCell align="right">
+                    <TableHeaderCell type="number">Estudiantes</TableHeaderCell>
+                    <TableHeaderCell type="badge">Membresía</TableHeaderCell>
+                    <TableHeaderCell type="action">
                       <span className="sr-only">Editar</span>
                     </TableHeaderCell>
                   </TableRow>
