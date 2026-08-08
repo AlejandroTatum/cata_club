@@ -40,6 +40,9 @@ export { PAGE_RAIL } from "./layout";
 export { default as LoadingState } from "./LoadingState";
 export type { LoadingStateProps } from "./LoadingState";
 
+export { default as MemberCard } from "./MemberCard";
+export type { MemberCardProps } from "./MemberCard";
+
 export { default as Pagination } from "./Pagination";
 export type { PaginationProps } from "./Pagination";
 
@@ -54,6 +57,9 @@ export { STAT_GRID } from "./StatCard";
 export { ActivityList, ActivityListHeader, ActivityItem } from "./ActivityList";
 export type { ActivityItemProps } from "./ActivityList";
 export type { StatCardProps, StatCardVariant } from "./StatCard";
+
+export { default as StatGrid } from "./StatGrid";
+export type { StatGridItem, StatGridProps } from "./StatGrid";
 
 export { default as Stepper } from "./Stepper";
 export type { StepperProps } from "./Stepper";
