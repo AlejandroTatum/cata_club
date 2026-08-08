@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.dominio.modelos import (
     Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion,
 )
-from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion
+from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -248,6 +248,26 @@ class PagoServicio:
             raise PermisosInsuficientes(
                 "Solo un administrador puede aplicar descuentos al registrar un pago"
             )
+
+        # Un pago EFECTIVO es la declaración de quien entregó el dinero -- el
+        # dueño del club confirmó (observación de su propio docente) que solo
+        # esa persona, o quien paga en su representación, puede hacerla. Un
+        # ADMINISTRADOR conserva la vía de TRANSFERENCIA para registrar en
+        # nombre de un tercero, pero no puede declarar una entrega de efectivo
+        # que no presenció. `es_representante` puede no estar resuelto todavía
+        # (el chequeo de arriba lo saltea cuando `es_admin` ya autorizaba de
+        # entrada por sí solo), así que se resuelve acá si hace falta.
+        if datos.tipo_pago == TipoPago.EFECTIVO and not es_duenio and not es_representante:
+            if persona_id_solicitante is not None:
+                persona_objetivo = self.repo_persona.obtener_por_id(datos.persona_id)
+                es_representante = bool(
+                    persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
+                )
+            if not es_representante:
+                raise PermisosInsuficientes(
+                    "El pago en efectivo solo puede registrarlo el propio socio "
+                    "o su representante"
+                )
 
         # Recién aquí (ya autorizado) se resuelve existencia real y, si
         # corresponde, el chequeo de solo-lectura financiera para menores

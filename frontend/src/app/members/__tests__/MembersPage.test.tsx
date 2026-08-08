@@ -114,6 +114,7 @@ const mockActualizarFichaMedica = vi.fn();
 const mockFetchTiposMembresia = vi.fn().mockResolvedValue([]);
 const mockCrearMembresia = vi.fn();
 const mockRegistrarPago = vi.fn();
+const mockSubirVoucherPago = vi.fn().mockResolvedValue({ voucherUrl: "https://example.test/voucher.pdf" });
 const mockFetchDescuentos = vi.fn().mockResolvedValue([]);
 const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
@@ -139,6 +140,7 @@ vi.mock("@/services/api", () => {
     fetchTiposMembresia: () => mockFetchTiposMembresia(),
     crearMembresia: (data: unknown) => mockCrearMembresia(data),
     registrarPago: (data: unknown) => mockRegistrarPago(data),
+    subirVoucherPago: (pagoId: number, archivo: File) => mockSubirVoucherPago(pagoId, archivo),
     fetchDescuentos: () => mockFetchDescuentos(),
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
@@ -787,6 +789,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     mockFetchMembers.mockReset();
     mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
     mockRegistrarPago.mockReset();
+    mockSubirVoucherPago.mockReset().mockResolvedValue({ voucherUrl: "https://example.test/voucher.pdf" });
     mockFetchDescuentos.mockReset().mockResolvedValue([]);
   });
 
@@ -846,12 +849,17 @@ describe("MembersPage — Registrar pago inline form", () => {
     fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
   }
 
-  /** When: the admin switches payment method to EFECTIVO — so no voucher is
-   *  required — and submits. The shared last step before every test asserts
-   *  on what reached `registrarPago`. */
-  function submitAsEfectivo(dialog: HTMLElement): void {
-    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
-    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
+  /** When: the admin attaches a voucher and submits. TRANSFERENCIA is the
+   *  only payment method this form offers — the admin can no longer declare
+   *  a cash payment on someone else's behalf (see
+   *  `test_efectivo_solo_por_socio.py`), so every submission here needs a
+   *  voucher. The shared last step before every test asserts on what
+   *  reached `registrarPago`. */
+  function submitPaymentWithVoucher(dialog: HTMLElement): void {
+    const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: { files: [new File(["x"], "comprobante.pdf", { type: "application/pdf" })] },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
   }
 
@@ -871,6 +879,21 @@ describe("MembersPage — Registrar pago inline form", () => {
     expect(registrarBtn).toBeInTheDocument();
   });
 
+  /**
+   * Business rule: cash payments are declared only by the payer or their
+   * representative (see `test_efectivo_solo_por_socio.py`), never by an
+   * administrator on someone else's behalf. This form is exactly that
+   * "administrator on someone else's behalf" path, so it must not offer
+   * EFECTIVO as a choice at all — TRANSFERENCIA is the only method.
+   */
+  it("does not offer EFECTIVO as a payment method", async () => {
+    const dialog = await openMemberDialog();
+    await openPaymentForm(dialog);
+
+    expect(within(dialog).queryByText(/efectivo/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Transferencia")).toBeInTheDocument();
+  });
+
   it("opens the payment form with monto/tipo/fechas, calls registrarPago on submit, shows success", async () => {
     const dialog = await openMemberDialog();
     await openPaymentForm(dialog);
@@ -880,7 +903,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     expect(await within(dialog).findByText(/Inicio:/)).toBeInTheDocument();
     expect(await within(dialog).findByText(/Fin:/)).toBeInTheDocument();
 
-    submitAsEfectivo(dialog);
+    submitPaymentWithVoucher(dialog);
 
     await waitFor(() => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
@@ -889,6 +912,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       personaId: 10,
       membresiaId: 42,
       monto: 85,
+      tipoPago: "TRANSFERENCIA",
     });
     await waitFor(() => {
       expect(within(dialog).getByText(/pago registrado/i)).toBeInTheDocument();
@@ -915,7 +939,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     expect(await within(dialog).findByText(/monto final/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/42,50/)).toBeInTheDocument();
 
-    submitAsEfectivo(dialog);
+    submitPaymentWithVoucher(dialog);
 
     await waitFor(() => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
@@ -939,7 +963,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     // is the normal case and must stay reachable without touching any radio.
     expect(within(dialog).getByRole("radio", { name: /sin descuento/i })).toBeChecked();
 
-    submitAsEfectivo(dialog);
+    submitPaymentWithVoucher(dialog);
 
     await waitFor(() => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
@@ -972,7 +996,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     expect(becaParcial).not.toBeChecked();
     expect(sinDescuento).not.toBeChecked();
 
-    submitAsEfectivo(dialog);
+    submitPaymentWithVoucher(dialog);
 
     await waitFor(() => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
@@ -993,7 +1017,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     await openPaymentForm(dialog);
 
     fireEvent.click(await within(dialog).findByRole("radio", { name: /beca completa\+/i }));
-    submitAsEfectivo(dialog);
+    submitPaymentWithVoucher(dialog);
 
     expect(
       await within(dialog).findByText("El descuento total no puede superar el 100% del monto"),
