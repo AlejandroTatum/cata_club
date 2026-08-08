@@ -416,7 +416,10 @@ const SCREENS: Screen[] = [
       // list, so waiting on "a list item" would measure the page before the
       // accordion had drawn anything.
       await expect(page.getByText(`Alumnos asignados (${n})`)).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByText(/· \d+ años/).first()).toBeVisible({ timeout: 20_000 });
+      // The roster row's age used to render as "Nombre · N años" in one text
+      // node; converting the row to DataRow/DataBox split it into a separate
+      // element holding just "N años" (no "· " prefix survives it).
+      await expect(page.getByText(/\d+ años/).first()).toBeVisible({ timeout: 20_000 });
     },
   },
   {
