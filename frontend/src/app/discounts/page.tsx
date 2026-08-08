@@ -173,7 +173,15 @@ export default function DiscountsPage(): React.ReactElement {
         <h2 className="text-sm font-semibold text-ink">
           {isEditing ? "Editar descuento" : "Nuevo descuento"}
         </h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {/*
+         * Single column, always — this form only ever renders inside the
+         * 340px `PAGE_RAIL` (see `discounts-rail` below), never full-width.
+         * A `sm:grid-cols-3` here split that 340px three ways (~90px per
+         * field, minus the card's padding and gaps), cutting off
+         * "Beca municipal" and "Porcentaje (%)" mid-word. Stacked, each
+         * field gets the rail's full width.
+         */}
+        <div className="mt-3 flex flex-col gap-3">
           <label className="text-xs font-semibold text-cata-text/65">
             Nombre
             <input

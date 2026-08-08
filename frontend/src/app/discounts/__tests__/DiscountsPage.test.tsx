@@ -313,3 +313,40 @@ describe("DiscountsPage — la segunda columna", () => {
     expect(screen.queryByText(/Cómo funciona el catálogo/i)).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// The form's field layout
+// ---------------------------------------------------------------------------
+
+describe("DiscountsPage — el formulario de alta/edición", () => {
+  it("does not cram Nombre/Tipo/Valor into a three-column grid inside the 340px rail", async () => {
+    // The rail is a fixed 340px (PAGE_RAIL). A `sm:grid-cols-3` inside it
+    // gives each field ~90px — not enough for "Beca municipal" or
+    // "Porcentaje (%)" to render without being cut off. The fields must
+    // stack in a single column so each one gets the rail's full width.
+    renderPage();
+    await screen.findByText("Beca municipal");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
+    const nombreLabel = screen.getByLabelText(/nombre/i).closest("label");
+    const fieldsContainer = nombreLabel?.parentElement;
+
+    expect(fieldsContainer?.className).not.toMatch(/grid-cols-3/);
+  });
+
+  it("gives every field the full input width, so a long name has room to render", async () => {
+    renderPage();
+    await screen.findByText("Beca municipal");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
+    const nombreInput = screen.getByLabelText(/nombre/i);
+    fireEvent.change(nombreInput, {
+      target: { value: "Beca municipal completa para hijos de socios fundadores" },
+    });
+
+    expect((nombreInput as HTMLInputElement).value).toBe(
+      "Beca municipal completa para hijos de socios fundadores",
+    );
+    expect(nombreInput.className).toMatch(/w-full/);
+  });
+});

@@ -23,6 +23,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/groups/horarios/route";
 import { PUT } from "@/app/api/groups/horarios/[id]/route";
 import { POST as POST_PAGO } from "@/app/api/membresias/pagos/route";
+import { PATCH as PATCH_FICHA_MEDICA } from "@/app/api/fichas-medicas/persona/[id]/route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 import {
   obtenerRolesDePersona,
@@ -366,5 +367,51 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
 
     expect(response.status).not.toBe(400);
     expect(forwardedToBackend().descuento_ids).toEqual([1, 2]);
+  });
+
+  /**
+   * The medical record seam: `actualizarFichaMedica` used to translate its
+   * camelCase payload into snake_case itself, then the handler tried to
+   * translate the (already snake_case) body a second time by reading its
+   * camelCase keys — which no longer existed. `tipoSangre`,
+   * `contactoEmergencia` and `telefonoEmergencia` silently vanished;
+   * `enfermedades`/`alergias` only survived because they are spelled the
+   * same in both cases. All five fields must reach the backend.
+   */
+  it("actualizarFichaMedica's five fields are accepted and translated by PATCH /api/fichas-medicas/persona/[id]", async () => {
+    const clientBody = await captureBody(() =>
+      actualizarFichaMedica(2, {
+        tipoSangre: "O_POSITIVO",
+        enfermedades: ["Asma"],
+        alergias: "Ninguna",
+        contactoEmergencia: "María Pérez",
+        telefonoEmergencia: "0997654321",
+      }),
+    );
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: 2 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await PATCH_FICHA_MEDICA(
+      new NextRequest("http://localhost/api/fichas-medicas/persona/2", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
+        body: JSON.stringify(clientBody),
+      }),
+      { params: { id: "2" } },
+    );
+
+    expect(response.status).not.toBe(400);
+    expect(forwardedToBackend()).toEqual({
+      tipo_sangre: "O_POSITIVO",
+      enfermedades: ["Asma"],
+      alergias: "Ninguna",
+      contacto_emergencia: "María Pérez",
+      telefono_emergencia: "0997654321",
+    });
   });
 });
