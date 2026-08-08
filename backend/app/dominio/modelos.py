@@ -457,6 +457,49 @@ class ComprobantePago(Base):
 # ---------------------------------------------------------------------------
 # Asistencia y Horarios
 # ---------------------------------------------------------------------------
+class CategoriaHorario(Base):
+    """Catálogo de categorías de horario (antes un `dict` congelado en
+    `app.dominio.categoria_metadata.CATEGORIA_METADATA`, movido a tabla para
+    que el club pueda sumar una categoría nueva sin un deploy de código).
+
+    Paso 1 de 2 (expand): esta tabla existe y está poblada, pero
+    `HorarioEntrenamiento.categoria` TODAVÍA es el enum viejo -- nada lee de
+    acá todavía. El cutover (leer `hora_inicio`/`hora_fin`/días permitidos
+    de esta fila en vez del enum) es el PR siguiente, a propósito: este PR
+    es aditivo puro y no cambia ningún comportamiento existente.
+
+    Sin pantalla de alta/edición todavía (fuera de alcance de este cambio):
+    hoy las filas solo las siembra la migración que creó esta tabla.
+    """
+    __tablename__ = "categoria_horario"
+    codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
+    label: Mapped[str] = mapped_column(String(50))
+    hora_inicio: Mapped[time] = mapped_column(Time)
+    hora_fin: Mapped[time] = mapped_column(Time)
+
+    dias_permitidos: Mapped[List["CategoriaHorarioDia"]] = relationship(
+        back_populates="categoria", cascade="all, delete-orphan"
+    )
+
+
+class CategoriaHorarioDia(Base):
+    """Un día de semana permitido para una `CategoriaHorario`.
+
+    Tabla relacional (no una columna array) a propósito: reutiliza el mismo
+    tipo enum Postgres `diasemana` que ya respalda
+    `HorarioEntrenamiento.dia_semana`, así que cada fila queda tan
+    consultable y restringida por tipo como el resto del esquema en vez de
+    depender de que el array nunca reciba un valor fuera de `DiaSemana`.
+    """
+    __tablename__ = "categoria_horario_dia"
+    categoria_codigo: Mapped[str] = mapped_column(
+        String(20), ForeignKey("categoria_horario.codigo"), primary_key=True
+    )
+    dia_semana: Mapped[DiaSemana] = mapped_column(SAEnum(DiaSemana), primary_key=True)
+
+    categoria: Mapped["CategoriaHorario"] = relationship(back_populates="dias_permitidos")
+
+
 class HorarioEntrenamiento(Base):
     """
     Sin entrenador titular: el club no asigna entrenadores a horarios -- la
@@ -472,9 +515,25 @@ class HorarioEntrenamiento(Base):
     dia_semana: Mapped[DiaSemana] = mapped_column(SAEnum(DiaSemana))
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time] = mapped_column(Time)
+    # Paso "expand" (ver `CategoriaHorario`): FK nueva a `categoria_horario`,
+    # ya backfilleada para toda fila existente, pero TODAVÍA sin uso -- ni
+    # `AsistenciaServicio` ni ningún schema la leen o la escriben en este PR.
+    # Nullable a propósito: una fila creada por el camino viejo (que no la
+    # setea) no puede violar NOT NULL. Mapeada acá solo para que
+    # `Base.metadata` coincida con lo que la migración `a4e7c2f9b1d8`
+    # realmente crea (`test_drift_migraciones.py`). El cutover real
+    # -- reemplazar `categoria` por esta columna y volverla NOT NULL -- es
+    # el PR siguiente.
+    categoria_codigo: Mapped[Optional[str]] = mapped_column(
+        String(20), ForeignKey("categoria_horario.codigo"), nullable=True
+    )
 
     asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="horario")
     alumno_horarios: Mapped[List["AlumnoHorario"]] = relationship(back_populates="horario")
+
+    __table_args__ = (
+        Index("ix_horario_entrenamiento_categoria_codigo", "categoria_codigo"),
+    )
 
 
 class Asistencia(Base):
