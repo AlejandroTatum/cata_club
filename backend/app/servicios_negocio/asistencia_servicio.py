@@ -94,6 +94,13 @@ class AsistenciaServicio:
         horario = self.repo_horario.obtener_por_id(horario_id)
         if not horario:
             raise EntidadNoEncontrada(f"Horario con id {horario_id} no encontrado")
+        # Dropping this one día from the categoria's schedule unassigns
+        # students from exactly this row -- narrow by design, unlike
+        # `desasignar_alumno_de_horario`'s categoria-wide fan-out, which
+        # answers a different question (unenroll a student from the whole
+        # categoria). A horario with attendance history still blocks deletion
+        # (`repo_horario.eliminar` below) -- that data is never auto-cleaned.
+        self.repo_alumno_horario.eliminar_por_horario(horario_id)
         self.repo_horario.eliminar(horario)
 
     def registrar_asistencia(self, datos: AsistenciaCreateDTO) -> Asistencia:
@@ -161,51 +168,72 @@ class AsistenciaServicio:
             fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
         )
 
-    # --- Asignación directa Alumno ↔ Horario ---------------------------------
-    def asignar_alumno_a_horario(self, datos: AlumnoHorarioCreateDTO) -> AlumnoHorarioDetalleDTO:
-        """Asigna un alumno a un horario específico de forma directa."""
+    # --- Asignación directa Alumno ↔ Categoria (todos sus horarios) --------
+    def asignar_alumno_a_horario(
+        self, datos: AlumnoHorarioCreateDTO
+    ) -> list[AlumnoHorarioDetalleDTO]:
+        """Enrolls a student into the WHOLE training categoria, not just the
+        single `horario_id` in the request. The club enrolls by full month —
+        never by a loose weekday — so `horario_id` only anchors which
+        categoria is meant; every one of that categoria's current horario
+        rows (e.g. Lunes-Sábado for COMPETITIVO, Lunes-Viernes for the other
+        four) lands in one atomic transaction, or none of them do."""
         # Igual que en `registrar_asistencia`: el nombre ya está a mano.
         persona = self.repo_persona.obtener_por_id(datos.persona_id)
         if not persona:
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
-        if not self.repo_horario.obtener_por_id(datos.horario_id):
+        horario = self.repo_horario.obtener_por_id(datos.horario_id)
+        if not horario:
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
 
-        existente = self.repo_alumno_horario.obtener_por_persona_y_horario(
-            datos.persona_id, datos.horario_id
-        )
-        if existente:
+        horarios_de_la_categoria = self.repo_horario.listar(horario.categoria)
+        ya_asignados = {
+            a.horario_id
+            for a in self.repo_alumno_horario.listar_por_persona(datos.persona_id)
+        }
+        pendientes = [h for h in horarios_de_la_categoria if h.id not in ya_asignados]
+        if not pendientes:
             raise OperacionInvalida(
-                f"{persona.nombres} {persona.apellidos} ya figura en ese horario.",
+                f"{persona.nombres} {persona.apellidos} ya figura en esa categoría.",
                 detalle_tecnico=(
-                    f"AlumnoHorario ya existe para persona_id={datos.persona_id} "
-                    f"horario_id={datos.horario_id}"
+                    f"persona_id={datos.persona_id} ya tiene AlumnoHorario para "
+                    f"cada horario de categoria={horario.categoria}"
                 ),
             )
 
-        alumno_horario = AlumnoHorario(
-            persona_id=datos.persona_id,
-            horario_id=datos.horario_id,
-        )
-        # Devuelve el DTO de la asignación recién creada. Antes el router
-        # relistaba el horario entero y tomaba `[-1]`: con el roster ordenado
-        # por apellidos eso ni siquiera garantizaba devolver al recién
-        # asignado, y con el listado paginado (issue #7) directamente dejó de
-        # tener sentido pedir una página para encontrar UNA fila conocida.
-        return self._a_detalle_dto(self.repo_alumno_horario.crear(alumno_horario))
+        # Devuelve los DTOs de las asignaciones recién creadas. Antes el
+        # router relistaba el horario entero y tomaba `[-1]`: con el roster
+        # ordenado por apellidos eso ni siquiera garantizaba devolver al
+        # recién asignado, y con el listado paginado (issue #7) directamente
+        # dejó de tener sentido pedir una página para encontrar UNA fila
+        # conocida.
+        nuevas = self.repo_alumno_horario.crear_muchos([
+            AlumnoHorario(persona_id=datos.persona_id, horario_id=h.id)
+            for h in pendientes
+        ])
+        return [self._a_detalle_dto(a) for a in nuevas]
 
     def desasignar_alumno_de_horario(
         self, persona_id: int, horario_id: int
     ) -> None:
-        """Elimina la asignación directa de un alumno a un horario."""
-        asignacion = self.repo_alumno_horario.obtener_por_persona_y_horario(
-            persona_id, horario_id
-        )
-        if not asignacion:
+        """Mirror of `asignar_alumno_a_horario`: unassigns the student from
+        every horario of the categoria `horario_id` belongs to, in one
+        atomic transaction. There is no operation that leaves a student
+        enrolled in only part of a categoria."""
+        horario = self.repo_horario.obtener_por_id(horario_id)
+        if not horario:
+            raise EntidadNoEncontrada(f"Horario con id {horario_id} no encontrado")
+
+        ids_de_la_categoria = {h.id for h in self.repo_horario.listar(horario.categoria)}
+        asignaciones = [
+            a for a in self.repo_alumno_horario.listar_por_persona(persona_id)
+            if a.horario_id in ids_de_la_categoria
+        ]
+        if not asignaciones:
             raise EntidadNoEncontrada(
-                f"No existe asignación del alumno {persona_id} al horario {horario_id}"
+                f"No existe asignación del alumno {persona_id} a esa categoría"
             )
-        self.repo_alumno_horario.eliminar(asignacion)
+        self.repo_alumno_horario.eliminar_muchos(asignaciones)
 
     @staticmethod
     def _a_detalle_dto(a: AlumnoHorario) -> AlumnoHorarioDetalleDTO:

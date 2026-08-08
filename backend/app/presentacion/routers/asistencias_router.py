@@ -187,20 +187,20 @@ async def reporte_asistencia_pdf(
     return construir_respuesta_pdf(pdf_bytes, f"reporte-asistencia_{fecha_iso}.pdf")
 
 
-# --- Asignación directa Alumno ↔ Horario ------------------------------------
+# --- Asignación directa Alumno ↔ Categoria (todos sus horarios) ------------
+# El club inscribe por mes completo, nunca por día suelto: `horario_id` en el
+# body solo ancla la categoria, y el servicio inscribe al alumno en TODOS los
+# horarios vigentes de esa categoria en una única transacción. Por eso la
+# respuesta es una lista (una fila por horario) y no un único DTO.
 @router.post(
     "/asignar-alumno",
-    response_model=AlumnoHorarioDetalleDTO,
+    response_model=List[AlumnoHorarioDetalleDTO],
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
 )
 async def asignar_alumno_a_horario(
     datos: AlumnoHorarioCreateDTO, db: Session = Depends(obtener_sesion)
 ):
-    # El servicio devuelve el DTO de la asignación creada. Antes acá se
-    # relistaba el horario y se tomaba `[-1]`, que con el roster ordenado por
-    # apellidos no era necesariamente el recién asignado, y con el listado
-    # paginado (issue #7) habría devuelto la última fila de una página.
     return AsistenciaServicio(db).asignar_alumno_a_horario(datos)
 
 

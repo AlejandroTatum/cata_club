@@ -117,6 +117,38 @@ class AlumnoHorarioRepositorio:
         self.db.delete(alumno_horario)
         self.db.commit()
 
+    def crear_muchos(self, alumnos_horario: List[AlumnoHorario]) -> List[AlumnoHorario]:
+        """Persists every row in ONE transaction: the club enrolls a student
+        into a whole training categoria at once (full month, never a loose
+        weekday), so this either lands every row or none of them -- a single
+        commit instead of one per row, which would leave the categoria
+        half-enrolled if a later row failed."""
+        self.db.add_all(alumnos_horario)
+        self.db.commit()
+        for alumno_horario in alumnos_horario:
+            self.db.refresh(alumno_horario)
+        return alumnos_horario
+
+    def eliminar_muchos(self, alumnos_horario: List[AlumnoHorario]) -> None:
+        """Mirror of `crear_muchos`: removes every row in ONE transaction."""
+        for alumno_horario in alumnos_horario:
+            self.db.delete(alumno_horario)
+        self.db.commit()
+
+    def eliminar_por_horario(self, horario_id: int) -> None:
+        """Removes every AlumnoHorario row pinned to this ONE horario_id --
+        used when the row itself is about to be deleted (e.g. an admin drops
+        one día from a categoria's schedule). Deliberately narrower than
+        `eliminar_muchos`/the categoria-wide fan-out in
+        `AsistenciaServicio.desasignar_alumno_de_horario`: unenrolling a
+        student because their whole categoria was chosen is a different
+        question from cleaning up the one row that is being deleted."""
+        stmt = select(AlumnoHorario).where(AlumnoHorario.horario_id == horario_id)
+        filas = list(self.db.execute(stmt).scalars().all())
+        for fila in filas:
+            self.db.delete(fila)
+        self.db.commit()
+
     def obtener_por_persona_y_horario(
         self, persona_id: int, horario_id: int
     ) -> Optional[AlumnoHorario]:
