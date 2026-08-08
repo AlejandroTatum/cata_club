@@ -237,6 +237,13 @@ describe("PaymentsPage — opens on the pending queue", () => {
     renderPage();
 
     await screen.findByTestId("payments-table");
+    // `findByTestId` resolves the instant the table SHELL mounts, not once
+    // its rows have finished rendering under the "pendiente" filter — an
+    // absence assertion right after it races an unsettled DOM. The row count
+    // (header + the one pending row) is a positive, deterministic signal
+    // that the filtered render is done, so the absence check that follows it
+    // means something.
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
     expect(within(queueTable()).getByText("Juan Pérez")).toBeInTheDocument();
     expect(within(queueTable()).queryByText("Kevin Sabando")).not.toBeInTheDocument();
 
@@ -257,10 +264,21 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     // "Pendientes" is the default tab: every visible row is already pending,
     // so a per-row "Pendiente" badge would only restate the tab.
     await screen.findByTestId("payments-table");
+    // `findByTestId` resolves the instant the table SHELL mounts, not once
+    // its rows have finished rendering under the "pendiente" filter (only 1
+    // of the 2 fetched requests is pending). Asserting the badge's absence
+    // right after `findByTestId` races that unsettled DOM: locally the row
+    // always wins the race, but under CI's worker scheduling the stale
+    // (unfiltered) render can still be on screen, badge and all. Waiting for
+    // the exact filtered row count first is a positive, deterministic signal
+    // that the filtered render has settled, so the absence check that
+    // follows it means something instead of getting lucky on timing.
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
     expect(within(queueTable()).queryByText("Pendiente")).not.toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("payments-cards")).queryByText("Pendiente"),
-    ).not.toBeInTheDocument();
+
+    const cards = screen.getByTestId("payments-cards");
+    await waitFor(() => expect(within(cards).getAllByRole("listitem")).toHaveLength(1));
+    expect(within(cards).queryByText("Pendiente")).not.toBeInTheDocument();
   });
 
   it("shows the per-row status badge once the tab stops fixing a single status", async () => {
