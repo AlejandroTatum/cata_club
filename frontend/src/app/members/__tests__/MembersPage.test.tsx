@@ -13,7 +13,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import MembersPage from "@/app/members/page";
-import type { MemberAccount } from "@/app/members/members-utils";
+import type { MemberAccount, MemberStudentSummary } from "@/app/members/members-utils";
+import type { DescuentoCatalogo } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
 
 vi.mock("@/components/ProtectedRoute", () => ({
@@ -789,24 +790,44 @@ describe("MembersPage — Registrar pago inline form", () => {
     mockFetchDescuentos.mockReset().mockResolvedValue([]);
   });
 
-  it("renders a 'Registrar pago' button inside the student card when the student has a membership", async () => {
+  type Membresia = NonNullable<MemberStudentSummary["membresia"]>;
+
+  /** The membership most tests below render against: vencida, $85/month, a
+   *  June period gone by — due for a renewal. */
+  const MEMBRESIA_VENCIDA: Membresia = {
+    tipo: "Mensual (Tarde)",
+    estado: "vencida",
+    fechaInicio: "2026-06-01",
+    fechaFin: "2026-06-30",
+    monto: 85,
+    id: 42,
+  };
+
+  /**
+   * Given a member whose student carries `membresia` and a discount catalog
+   * of `descuentos` (and, when the backend is meant to reject the payment,
+   * `registrarPagoRejects`): renders MembersPage, opens the account's edit
+   * modal and returns its dialog. Every test below starts from "the modal is
+   * open" and picks its own when/then from there.
+   */
+  async function openMemberDialog(
+    options: {
+      membresia?: Membresia;
+      descuentos?: DescuentoCatalogo[];
+      registrarPagoRejects?: Error;
+    } = {},
+  ): Promise<HTMLElement> {
     const cuentaConMembresia: MemberAccount = {
       ...ACCOUNT,
-      estudiantes: [
-        {
-          ...ACCOUNT.estudiantes[0],
-          membresia: {
-            tipo: "Mensual (Tarde)",
-            estado: "activa",
-            fechaInicio: "2026-07-01",
-            fechaFin: "2026-07-31",
-            monto: 85,
-            id: 42,
-          },
-        },
-      ],
+      estudiantes: [{ ...ACCOUNT.estudiantes[0], membresia: options.membresia ?? MEMBRESIA_VENCIDA }],
     };
     mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
+    mockFetchDescuentos.mockResolvedValue(options.descuentos ?? []);
+    if (options.registrarPagoRejects) {
+      mockRegistrarPago.mockRejectedValueOnce(options.registrarPagoRejects);
+    } else {
+      mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
+    }
 
     render(
       <ToastProvider>
@@ -815,55 +836,51 @@ describe("MembersPage — Registrar pago inline form", () => {
     );
     const row = await findAccountRow();
     fireEvent.click(getEditButton(row));
+    return screen.getByRole("dialog");
+  }
 
-    const dialog = screen.getByRole("dialog");
+  /** When: the admin clicks "Registrar pago" inside an already-open edit
+   *  dialog — the step every test past the button-presence check takes right
+   *  after `openMemberDialog`. */
+  async function openPaymentForm(dialog: HTMLElement): Promise<void> {
+    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+  }
+
+  /** When: the admin switches payment method to EFECTIVO — so no voucher is
+   *  required — and submits. The shared last step before every test asserts
+   *  on what reached `registrarPago`. */
+  function submitAsEfectivo(dialog: HTMLElement): void {
+    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
+    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+  }
+
+  it("renders a 'Registrar pago' button inside the student card when the student has a membership", async () => {
+    const dialog = await openMemberDialog({
+      membresia: {
+        tipo: "Mensual (Tarde)",
+        estado: "activa",
+        fechaInicio: "2026-07-01",
+        fechaFin: "2026-07-31",
+        monto: 85,
+        id: 42,
+      },
+    });
+
     const registrarBtn = await within(dialog).findByRole("button", { name: /registrar pago/i });
     expect(registrarBtn).toBeInTheDocument();
   });
 
   it("opens the payment form with monto/tipo/fechas, calls registrarPago on submit, shows success", async () => {
-    const cuentaConMembresia: MemberAccount = {
-      ...ACCOUNT,
-      estudiantes: [
-        {
-          ...ACCOUNT.estudiantes[0],
-          membresia: {
-            tipo: "Mensual (Tarde)",
-            estado: "vencida",
-            fechaInicio: "2026-06-01",
-            fechaFin: "2026-06-30",
-            monto: 85,
-            id: 42,
-          },
-        },
-      ],
-    };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
-    mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
-
-    const dialog = screen.getByRole("dialog");
-    const registrarBtn = await within(dialog).findByRole("button", { name: /registrar pago/i });
-    fireEvent.click(registrarBtn);
+    const dialog = await openMemberDialog();
+    await openPaymentForm(dialog);
 
     const montoInput = await within(dialog).findByDisplayValue("85");
     expect(montoInput).toBeInTheDocument();
     expect(await within(dialog).findByText(/Inicio:/)).toBeInTheDocument();
     expect(await within(dialog).findByText(/Fin:/)).toBeInTheDocument();
 
-    // Switch payment method to EFECTIVO so no voucher is required
-    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
-    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
-
-    const submitBtn = within(dialog).getByRole("button", { name: /registrar pago/i });
-    fireEvent.click(submitBtn);
+    submitAsEfectivo(dialog);
 
     await waitFor(() => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
@@ -879,39 +896,13 @@ describe("MembersPage — Registrar pago inline form", () => {
   });
 
   it("offers active discounts, previews the final amount and submits descuentoIds (issue #12)", async () => {
-    const cuentaConMembresia: MemberAccount = {
-      ...ACCOUNT,
-      estudiantes: [
-        {
-          ...ACCOUNT.estudiantes[0],
-          membresia: {
-            tipo: "Mensual (Tarde)",
-            estado: "vencida",
-            fechaInicio: "2026-06-01",
-            fechaFin: "2026-06-30",
-            monto: 85,
-            id: 42,
-          },
-        },
+    const dialog = await openMemberDialog({
+      descuentos: [
+        { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
+        { id: 2, nombre: "Beca vieja", porcentaje: "100", monto: null, activo: false },
       ],
-    };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
-    mockFetchDescuentos.mockResolvedValue([
-      { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
-      { id: 2, nombre: "Beca vieja", porcentaje: "100", monto: null, activo: false },
-    ]);
-    mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
-
-    const dialog = screen.getByRole("dialog");
-    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+    });
+    await openPaymentForm(dialog);
 
     // Only ACTIVE discounts are offered for application; the inactive one
     // stays visible in the catalog screen but never here.
@@ -924,9 +915,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     expect(await within(dialog).findByText(/monto final/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/42,50/)).toBeInTheDocument();
 
-    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
-    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+    submitAsEfectivo(dialog);
 
     await waitFor(() => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
@@ -940,47 +929,17 @@ describe("MembersPage — Registrar pago inline form", () => {
   });
 
   it("omits descuentoIds when no discount is selected", async () => {
-    const cuentaConMembresia: MemberAccount = {
-      ...ACCOUNT,
-      estudiantes: [
-        {
-          ...ACCOUNT.estudiantes[0],
-          membresia: {
-            tipo: "Mensual (Tarde)",
-            estado: "vencida",
-            fechaInicio: "2026-06-01",
-            fechaFin: "2026-06-30",
-            monto: 85,
-            id: 42,
-          },
-        },
-      ],
-    };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
-    mockFetchDescuentos.mockResolvedValue([
-      { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
-    ]);
-    mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
-
-    const dialog = screen.getByRole("dialog");
-    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+    const dialog = await openMemberDialog({
+      descuentos: [{ id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true }],
+    });
+    await openPaymentForm(dialog);
     await within(dialog).findByRole("radio", { name: /media beca/i });
 
     // "Sin descuento" is the default selection — a payment with no discount
     // is the normal case and must stay reachable without touching any radio.
     expect(within(dialog).getByRole("radio", { name: /sin descuento/i })).toBeChecked();
 
-    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
-    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+    submitAsEfectivo(dialog);
 
     await waitFor(() => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
@@ -989,39 +948,13 @@ describe("MembersPage — Registrar pago inline form", () => {
   });
 
   it("only allows one discount selected at a time (regression: backend rejects more than one)", async () => {
-    const cuentaConMembresia: MemberAccount = {
-      ...ACCOUNT,
-      estudiantes: [
-        {
-          ...ACCOUNT.estudiantes[0],
-          membresia: {
-            tipo: "Mensual (Tarde)",
-            estado: "vencida",
-            fechaInicio: "2026-06-01",
-            fechaFin: "2026-06-30",
-            monto: 85,
-            id: 42,
-          },
-        },
+    const dialog = await openMemberDialog({
+      descuentos: [
+        { id: 1, nombre: "Beca parcial", porcentaje: "30", monto: null, activo: true },
+        { id: 2, nombre: "Familiar", porcentaje: "20", monto: null, activo: true },
       ],
-    };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
-    mockFetchDescuentos.mockResolvedValue([
-      { id: 1, nombre: "Beca parcial", porcentaje: "30", monto: null, activo: true },
-      { id: 2, nombre: "Familiar", porcentaje: "20", monto: null, activo: true },
-    ]);
-    mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
-
-    const dialog = screen.getByRole("dialog");
-    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+    });
+    await openPaymentForm(dialog);
 
     const becaParcial = await within(dialog).findByRole("radio", { name: /beca parcial/i });
     const familiar = within(dialog).getByRole("radio", { name: /^familiar/i });
@@ -1039,9 +972,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     expect(becaParcial).not.toBeChecked();
     expect(sinDescuento).not.toBeChecked();
 
-    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
-    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+    submitAsEfectivo(dialog);
 
     await waitFor(() => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
@@ -1051,50 +982,18 @@ describe("MembersPage — Registrar pago inline form", () => {
   });
 
   it("surfaces the backend cap-exceeded 400 as a normal form error", async () => {
-    const cuentaConMembresia: MemberAccount = {
-      ...ACCOUNT,
-      estudiantes: [
-        {
-          ...ACCOUNT.estudiantes[0],
-          membresia: {
-            tipo: "Mensual (Tarde)",
-            estado: "vencida",
-            fechaInicio: "2026-06-01",
-            fechaFin: "2026-06-30",
-            monto: 85,
-            id: 42,
-          },
-        },
-      ],
-    };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
-    // A single FIXED discount larger than the base amount is enough to hit
-    // the backend's 100% cap — the old two-checkbox setup that summed two
-    // discounts no longer applies now that only one can be selected.
-    mockFetchDescuentos.mockResolvedValue([
-      { id: 1, nombre: "Beca completa+", porcentaje: null, monto: "200", activo: true },
-    ]);
     const { ApiClientError } = await import("@/services/api");
-    mockRegistrarPago.mockRejectedValueOnce(
-      new ApiClientError("El descuento total no puede superar el 100% del monto", 400),
-    );
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
-
-    const dialog = screen.getByRole("dialog");
-    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+    const dialog = await openMemberDialog({
+      // A single FIXED discount larger than the base amount is enough to hit
+      // the backend's 100% cap — the old two-checkbox setup that summed two
+      // discounts no longer applies now that only one can be selected.
+      descuentos: [{ id: 1, nombre: "Beca completa+", porcentaje: null, monto: "200", activo: true }],
+      registrarPagoRejects: new ApiClientError("El descuento total no puede superar el 100% del monto", 400),
+    });
+    await openPaymentForm(dialog);
 
     fireEvent.click(await within(dialog).findByRole("radio", { name: /beca completa\+/i }));
-
-    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
-    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+    submitAsEfectivo(dialog);
 
     expect(
       await within(dialog).findByText("El descuento total no puede superar el 100% del monto"),
