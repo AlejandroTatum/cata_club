@@ -198,7 +198,11 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
   // Payment registration state
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentMonto, setPaymentMonto] = useState<string>(student.membresia?.monto != null ? String(student.membresia.monto) : "");
-  const [paymentTipoPago, setPaymentTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
+  // No method picker here on purpose: a cash payment is a declaration by
+  // whoever handed over the money, so only the payer (or their
+  // representative) can register one -- an administrator registering on
+  // someone else's behalf, which is exactly this form, no longer offers it.
+  // TRANSFERENCIA is therefore the only method this form can submit.
   const [paymentFechaInicio, setPaymentFechaInicio] = useState<string>(() => clubIsoDate());
   const [paymentFechaFin, setPaymentFechaFin] = useState<string>("");
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -342,7 +346,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
       setPaymentError("No se encontró la membresía.");
       return;
     }
-    if (paymentTipoPago === "TRANSFERENCIA" && !paymentVoucherFile) {
+    if (!paymentVoucherFile) {
       setPaymentError("El comprobante de transferencia es obligatorio.");
       return;
     }
@@ -354,7 +358,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
         // resolves and freezes the catalog values and computes the final
         // amount itself (the preview shown in the form is display-only).
         monto: montoNum,
-        tipoPago: paymentTipoPago,
+        tipoPago: "TRANSFERENCIA",
         fechaInicio: paymentFechaInicio,
         fechaFin: paymentFechaFin,
         personaId,
@@ -521,17 +525,15 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                     placeholder="0.00"
                   />
                 </label>
-                <label className="text-xs font-semibold text-cata-text/65">
+                {/* No picker: EFECTIVO is not offered here (see the state
+                    comment above), so there is nothing for the admin to
+                    choose between. */}
+                <div className="text-xs font-semibold text-cata-text/65">
                   Método
-                  <select
-                    value={paymentTipoPago}
-                    onChange={(e) => setPaymentTipoPago(e.target.value as "EFECTIVO" | "TRANSFERENCIA")}
-                    className="mt-0.5 w-full rounded-lg border border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text"
-                  >
-                    <option value="TRANSFERENCIA">Transferencia</option>
-                    <option value="EFECTIVO">Efectivo</option>
-                  </select>
-                </label>
+                  <p className="mt-0.5 w-full rounded-lg border border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text">
+                    Transferencia
+                  </p>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2 rounded-lg border border-cata-border/50 bg-cata-surface/50 px-2.5 py-2">
                 <div className="text-xs">
@@ -591,37 +593,37 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                   )}
                 </fieldset>
               )}
-              {paymentTipoPago === "TRANSFERENCIA" && (
-                <label className="block text-xs font-semibold text-cata-text/65">
-                  Comprobante
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <input
-                      ref={paymentFileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/png,application/pdf"
-                      onChange={(e) => setPaymentVoucherFile(e.target.files?.[0] ?? null)}
-                      className="hidden"
-                    />
+              {/* TRANSFERENCIA is the only method, so the voucher is
+                  always required (see the check in handleSubmitPayment). */}
+              <label className="block text-xs font-semibold text-cata-text/65">
+                Comprobante
+                <div className="mt-0.5 flex items-center gap-2">
+                  <input
+                    ref={paymentFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,application/pdf"
+                    onChange={(e) => setPaymentVoucherFile(e.target.files?.[0] ?? null)}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => paymentFileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 rounded-lg border border-dashed border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text/65 transition-colors hover:border-cata-red/30 hover:text-cata-text"
+                  >
+                    <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                    {paymentVoucherFile ? paymentVoucherFile.name : "Seleccionar archivo"}
+                  </button>
+                  {paymentVoucherFile && (
                     <button
                       type="button"
-                      onClick={() => paymentFileInputRef.current?.click()}
-                      className="flex items-center gap-1.5 rounded-lg border border-dashed border-cata-border bg-cata-surface px-2.5 py-1.5 text-xs text-cata-text/65 transition-colors hover:border-cata-red/30 hover:text-cata-text"
+                      onClick={() => setPaymentVoucherFile(null)}
+                      className="text-2xs tracking-flat text-cata-text/45 hover:text-cata-red"
                     >
-                      <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                      {paymentVoucherFile ? paymentVoucherFile.name : "Seleccionar archivo"}
+                      Quitar
                     </button>
-                    {paymentVoucherFile && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentVoucherFile(null)}
-                        className="text-2xs tracking-flat text-cata-text/45 hover:text-cata-red"
-                      >
-                        Quitar
-                      </button>
-                    )}
-                  </div>
-                </label>
-              )}
+                  )}
+                </div>
+              </label>
               {paymentError && <p className="text-xs text-cata-red">{paymentError}</p>}
               <div className="flex gap-1.5">
                 <button

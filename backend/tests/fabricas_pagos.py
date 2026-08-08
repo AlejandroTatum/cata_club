@@ -138,13 +138,14 @@ def registrar_pago_api(
     membresia_id: int,
     *,
     monto: str = "35.00",
+    tipo_pago: str = "TRANSFERENCIA",
     descuento_ids: Optional[list[int]] = None,
 ):
     """POST /membresias/pagos devolviendo la Response CRUDA (no .json()):
     las pruebas de descuentos (issue #11) necesitan asertar también los
     códigos de error (400/403/404), no solo el cuerpo del caso feliz."""
     payload = {
-        "monto": monto, "tipo_pago": "TRANSFERENCIA",
+        "monto": monto, "tipo_pago": tipo_pago,
         "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
         "persona_id": persona_id, "membresia_id": membresia_id,
     }
