@@ -29,6 +29,7 @@ import {
   crearHorario,
   actualizarHorario,
   eliminarHorario,
+  fetchCategoriasCatalogo,
   fetchAlumnosPorHorario,
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
@@ -635,6 +636,20 @@ describe("eliminarHorario", () => {
 
 // `fetchEntrenadores` tests removed with the trainer–schedule relation
 // (issue #13): the endpoint and the client function no longer exist.
+
+describe("fetchCategoriasCatalogo", () => {
+  it("GETs /api/attendance/categories and returns the parsed catalog", async () => {
+    const catalogo = [
+      { codigo: "FORMATIVO", label: "Formativo", horaInicio: "15:00", horaFin: "16:00", dias: ["lun", "mar", "mie", "jue", "vie"] },
+    ];
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(catalogo));
+
+    const result = await fetchCategoriasCatalogo();
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/attendance/categories", expect.anything());
+    expect(result).toEqual(catalogo);
+  });
+});
 
 describe("fetchAlumnosPorHorario", () => {
   // Paginated backend (issue #7): the endpoint answers the standard

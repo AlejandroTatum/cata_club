@@ -23,9 +23,10 @@
  * later removed from the MVP entirely (see the "ranking / nivel" removal).
  *
  * v2 (Gestión de Horarios): once a `categoria` is picked, its day-set and
- * time range are LOCKED (not just pre-filled) — see
- * `backend/app/dominio/categoria_metadata.py` for the single source of
- * truth this mirrors via `@/services/categorias`. The backend derives and
+ * time range are LOCKED (not just pre-filled) — sourced live from the
+ * backend's `categoria_horario` table via `@/services/categorias`
+ * (`cargarCategorias`, fetched in `loadData` alongside `horarios`/
+ * `allStudents`), not from a static frontend copy. The backend derives and
  * validates `hora_inicio`/`hora_fin`/`dia_semana` server-side; the client
  * never submits them as freeform values anymore.
  *
@@ -94,7 +95,7 @@ import {
   type HorarioGroup,
   type HorarioGroupRow,
 } from "@/lib/groups-utils";
-import { CATEGORIA_METADATA, CATEGORIA_OPTIONS, diasPermitidos, horarioDe, type Categoria } from "@/services/categorias";
+import { cargarCategorias, CATEGORIA_OPTIONS, diasPermitidos, horarioDe, type Categoria, type CategoriaInfo } from "@/services/categorias";
 import {
   countUniqueAlumnos,
   buildCategoriaCards,
@@ -116,16 +117,6 @@ function formatTime(timeStr: string): string {
 /** Short (3-letter) día label, e.g. "Lun", "Mié", "Vie". Used in confirmations. */
 function shortDiaLabel(dia: string): string {
   return (DIA_LABELS[dia] ?? dia).slice(0, 3);
-}
-
-/** The categoría's label, falling back to its raw value for an unknown one. */
-function categoriaLabel(categoria: string): string {
-  return CATEGORIA_METADATA[categoria as Categoria]?.label ?? categoria;
-}
-
-/** Card title, e.g. "Formativo · 15:00 — 16:00", used for accessible names. */
-function cardTitle(card: CategoriaCard): string {
-  return `${categoriaLabel(card.categoria)} · ${formatTime(card.horaInicio)} — ${formatTime(card.horaFin)}`;
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -270,8 +261,25 @@ const EMPTY_FORM: HorarioFormData = {
 export default function GroupsPage(): React.ReactElement {
   const [horarios, setHorarios] = useState<Horario[]>([]);
   const [allStudents, setAllStudents] = useState<StudentRef[]>([]);
+  // The categoria catalog (hours/label/allowed días), fetched live from
+  // `@/services/categorias` — see `loadData` below. Partial: a categoria the
+  // catalog hasn't answered for yet (still loading, or an unrecognized code)
+  // has no entry, which `diasPermitidos`/`horarioDe` and the lookups below
+  // all degrade for instead of throwing.
+  const [categorias, setCategorias] = useState<Partial<Record<Categoria, CategoriaInfo>>>({});
   const [loading, setLoading] = useState(true);
   const { showSuccess, showError } = useToast();
+
+  /** The categoría's label, falling back to its raw value for an unknown one
+   *  (or while the catalog is still loading). */
+  function categoriaLabel(categoria: string): string {
+    return categorias[categoria as Categoria]?.label ?? categoria;
+  }
+
+  /** Card title, e.g. "Formativo · 15:00 — 16:00", used for accessible names. */
+  function cardTitle(card: CategoriaCard): string {
+    return `${categoriaLabel(card.categoria)} · ${formatTime(card.horaInicio)} — ${formatTime(card.horaFin)}`;
+  }
 
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -439,9 +447,21 @@ export default function GroupsPage(): React.ReactElement {
     setLoading(true);
     setLoadError(null);
     try {
-      const [horariosData, membersData] = await Promise.all([
+      // The categoria catalog fetch is isolated with its own `.catch` so it
+      // can never reject this `Promise.all`: unlike `horarios`/`members`,
+      // whose failure legitimately blanks this screen (there is nothing
+      // useful to show without them), a categoria-catalog outage should not
+      // take down a Horarios list that loaded fine. On failure it resolves
+      // to `{}` (the same "not loaded yet" shape callers already handle —
+      // raw codes, blank locked horario, no día checkboxes) and surfaces a
+      // non-blocking toast instead of the full-page `ErrorState`.
+      const [horariosData, membersData, categoriasData] = await Promise.all([
         fetchHorarios(),
         fetchMembers(),
+        cargarCategorias().catch(() => {
+          showError("No se pudo cargar el catálogo de categorías.");
+          return {} as Partial<Record<Categoria, CategoriaInfo>>;
+        }),
       ]);
       setHorarios(horariosData);
       const students: StudentRef[] = membersData.accounts.flatMap((account) =>
@@ -453,12 +473,13 @@ export default function GroupsPage(): React.ReactElement {
         })),
       );
       setAllStudents(students);
+      setCategorias(categoriasData);
     } catch {
       setLoadError("No se pudieron cargar los horarios. Intente nuevamente.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showError]);
 
   useEffect(() => {
     void loadData();
@@ -594,8 +615,8 @@ export default function GroupsPage(): React.ReactElement {
       const group: HorarioGroup = editingGroup ?? {
         key: "",
         categoria: shared.categoria,
-        horaInicio: horarioDe(shared.categoria).horaInicio,
-        horaFin: horarioDe(shared.categoria).horaFin,
+        horaInicio: horarioDe(categorias, shared.categoria).horaInicio,
+        horaFin: horarioDe(categorias, shared.categoria).horaFin,
         rows: [],
       };
       const diff = diffGroupSave(group, selectedDias);
@@ -739,14 +760,14 @@ export default function GroupsPage(): React.ReactElement {
                 const categoria = e.target.value as Categoria;
                 setFormData((prev) => ({ ...prev, categoria }));
                 setSelectedDias((prev) => {
-                  const permitidos = new Set(diasPermitidos(categoria));
+                  const permitidos = new Set(diasPermitidos(categorias, categoria));
                   return new Set([...prev].filter((dia) => permitidos.has(dia)));
                 });
               }}
               required
             >
               {CATEGORIA_OPTIONS.map((cat) => (
-                <option key={cat} value={cat}>{CATEGORIA_METADATA[cat].label}</option>
+                <option key={cat} value={cat}>{categorias[cat]?.label ?? cat}</option>
               ))}
             </select>
           </div>
@@ -758,7 +779,7 @@ export default function GroupsPage(): React.ReactElement {
               className="input-field flex w-full items-center text-cata-text/70"
               aria-readonly="true"
             >
-              {horarioDe(formData.categoria).horaInicio} – {horarioDe(formData.categoria).horaFin}
+              {horarioDe(categorias, formData.categoria).horaInicio} – {horarioDe(categorias, formData.categoria).horaFin}
             </p>
           </div>
           <div className="sm:col-span-2 lg:col-span-4">
@@ -766,7 +787,7 @@ export default function GroupsPage(): React.ReactElement {
               Días de la semana
             </span>
             <div className="flex flex-wrap gap-3">
-              {diasPermitidos(formData.categoria).map((dia) => (
+              {diasPermitidos(categorias, formData.categoria).map((dia) => (
                 <label key={dia} className="inline-flex items-center gap-1.5 text-xs text-cata-text">
                   <input
                     type="checkbox"
@@ -1005,7 +1026,13 @@ export default function GroupsPage(): React.ReactElement {
          */
         measure="short"
         actions={
-          <Button variant="dark" onClick={openCreateForm}>
+          // Disabled while `categorias` (part of `loadData`'s Promise.all,
+          // same as `horarios`/`allStudents`) hasn't loaded yet — the create
+          // form's categoría <select>/locked horario/día checkboxes all read
+          // from it, so opening the form before it answers would show a
+          // blank/raw-code categoría instead of waiting for it like the rest
+          // of the screen does.
+          <Button variant="dark" onClick={openCreateForm} disabled={loading}>
             <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Nuevo horario
           </Button>
@@ -1072,7 +1099,7 @@ export default function GroupsPage(): React.ReactElement {
                 // one of its día rows — so the categoría's row busies out.
                 const isDeleting = card.rows.some((row) => row.id === deletingId);
                 const isExpanded = expandedGroup?.key === card.categoria;
-                const metadata = CATEGORIA_METADATA[card.categoria as Categoria];
+                const metadata = categorias[card.categoria as Categoria];
                 // An unrecognized `categoria` has no metadata, so the track
                 // falls back to the días the rows themselves carry.
                 const diaTrack = buildDiaTrack(metadata?.dias ?? [], card.dias);

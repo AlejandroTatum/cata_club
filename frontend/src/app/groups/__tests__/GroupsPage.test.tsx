@@ -15,6 +15,7 @@ import { ApiClientError } from "@/services/api";
 import type { AlumnoHorario } from "@/services/api";
 import type { MemberAccount } from "@/app/members/members-utils";
 import { ToastProvider } from "@/contexts/ToastContext";
+import ToastContainer from "@/components/ToastContainer";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -73,6 +74,22 @@ const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockAsignarAlumnoAHorario = vi.fn();
 const mockDesasignarAlumnoDeHorario = vi.fn();
 
+// Stand-in for the live categoria catalog `@/services/categorias` now fetches
+// via `fetchCategoriasCatalogo` (`GET /api/attendance/categories`) instead of
+// the static `CATEGORIA_METADATA` mirror this page used to import directly.
+// `dias` here is the BFF route's actual wire shape (frontend `DiaSemana`
+// codes) — `cargarCategorias` converts it back to the backend day format
+// this page's checkboxes/labels use, same as before.
+const LUN_VIE_DIAS = ["lun", "mar", "mie", "jue", "vie"];
+const DEFAULT_CATEGORIA_CATALOG = [
+  { codigo: "FORMATIVO", label: "Formativo", horaInicio: "15:00", horaFin: "16:00", dias: LUN_VIE_DIAS },
+  { codigo: "INFANTIL", label: "Infantil", horaInicio: "16:00", horaFin: "17:00", dias: LUN_VIE_DIAS },
+  { codigo: "JUVENIL", label: "Juvenil", horaInicio: "17:00", horaFin: "18:00", dias: LUN_VIE_DIAS },
+  { codigo: "COMPETITIVO", label: "Competitivo", horaInicio: "18:00", horaFin: "20:00", dias: [...LUN_VIE_DIAS, "sab"] },
+  { codigo: "ADULTOS", label: "Adultos", horaInicio: "20:00", horaFin: "21:15", dias: LUN_VIE_DIAS },
+];
+const mockFetchCategoriasCatalogo = vi.fn().mockResolvedValue(DEFAULT_CATEGORIA_CATALOG);
+
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
     status: number;
@@ -93,6 +110,7 @@ vi.mock("@/services/api", () => {
     fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
     asignarAlumnoAHorario: (dto: unknown) => mockAsignarAlumnoAHorario(dto),
     desasignarAlumnoDeHorario: (personaId: number, horarioId: number) => mockDesasignarAlumnoDeHorario(personaId, horarioId),
+    fetchCategoriasCatalogo: () => mockFetchCategoriasCatalogo(),
     ApiClientError: MockApiClientError,
   };
 });
@@ -1258,5 +1276,48 @@ describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
 
     await screen.findByRole("heading", { name: "Editar Horario" });
     expect(screen.queryByLabelText("Entrenador")).not.toBeInTheDocument();
+  });
+});
+
+describe("GroupsPage — categoria catalog fetch failure does not blank the page (resilience fix)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchHorarios.mockReset();
+    mockFetchCategoriasCatalogo.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
+    mockFetchHorarios.mockResolvedValue([
+      { id: 1, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO" },
+    ]);
+    mockFetchCategoriasCatalogo.mockRejectedValue(new Error("network error"));
+  });
+
+  it("still renders the horarios list when only the categoria catalog fetch fails", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    // The schedule list loaded fine — an outage of the categoria catalog
+    // alone must not replace it with the full-page ErrorState.
+    expect(screen.getAllByTestId("horario-card").length).toBeGreaterThan(0);
+    expect(screen.queryByText("No se pudieron cargar los horarios. Intente nuevamente.")).not.toBeInTheDocument();
+  });
+
+  it("shows a non-blocking toast for the categoria catalog failure", async () => {
+    render(
+      <ToastProvider>
+        <GroupsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await waitForHorarios();
+
+    expect(await screen.findByText("No se pudo cargar el catálogo de categorías.")).toBeInTheDocument();
+  });
+
+  it("degrades the categoría label to the raw code instead of crashing while the catalog is unavailable", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const card = screen.getAllByTestId("horario-card")[0];
+    expect(card).toHaveTextContent("FORMATIVO");
   });
 });

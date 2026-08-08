@@ -31,6 +31,7 @@ import type {
   Notificacion,
   PerfilPropio,
   ActualizarPerfilPropioPayload,
+  DiaSemana,
 } from "@/types/domain";
 import type { EnrollmentRequest, EnrollmentResponse } from "@/types/enrollment";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
@@ -432,6 +433,26 @@ export async function fetchTrainingSchedules(): Promise<TrainingSchedule[]> {
   return request<TrainingSchedule[]>(apiEndpoint("/attendance/schedules"));
 }
 
+/**
+ * One entry of the live categoria catalog (`categoria_horario`), as
+ * translated by `/api/attendance/categories` (see that Route Handler for the
+ * backend DTO it proxies). Replaces the frontend's old static
+ * `CATEGORIA_METADATA` mirror — see `@/services/categorias`, which is the
+ * only consumer of `fetchCategoriasCatalogo` below.
+ */
+export interface CategoriaCatalogEntry {
+  codigo: string;
+  label: string;
+  horaInicio: string;
+  horaFin: string;
+  dias: DiaSemana[];
+}
+
+/** Fetch the live categoria catalog (hours/label/allowed días per categoria). */
+export async function fetchCategoriasCatalogo(): Promise<CategoriaCatalogEntry[]> {
+  return request<CategoriaCatalogEntry[]>(apiEndpoint("/attendance/categories"));
+}
+
 /** Fetch attendance records (Asistencia), optionally filtered by date range/horario/persona. */
 export async function fetchAttendanceRecords(params?: {
   fechaInicio?: string;
@@ -462,10 +483,10 @@ export async function registerAttendance(data: RegisterAttendanceRequest): Promi
 
 /**
  * A persisted training schedule. `horaInicio`/`horaFin` are always
- * server-derived from `categoria` (see `CATEGORIA_METADATA` in
- * `@/services/categorias`) — the response still carries them for display,
- * but `CrearHorarioDTO`/`ActualizarHorarioDTO` below no longer accept them
- * as client input.
+ * server-derived from `categoria` (see the live categoria catalog fetched by
+ * `@/services/categorias`, `GET /api/attendance/categories`) — the response
+ * still carries them for display, but `CrearHorarioDTO`/`ActualizarHorarioDTO`
+ * below no longer accept them as client input.
  *
  * There is no `entrenadorId` either: the club does not assign trainers to
  * schedules — whoever is available teaches the class. The backing column was

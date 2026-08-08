@@ -91,7 +91,11 @@ export const ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND: Record<EstadoAsistencia, Bac
 // Helpers
 // ---------------------------------------------------------------------------
 
-function trimSeconds(hhmmss: string): string {
+/** Truncates a backend `"HH:MM:SS"` time string down to `"HH:MM"` — shared
+ *  by every attendance/categoria adapter that reads a raw backend time
+ *  field (see `buildTrainingSchedule` below and
+ *  `src/app/api/attendance/categories/route.ts`). */
+export function trimSeconds(hhmmss: string): string {
   return hhmmss.slice(0, 5);
 }
 
