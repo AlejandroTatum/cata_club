@@ -20,6 +20,9 @@ export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
 export { default as DataBox } from "./DataBox";
 export type { DataBoxProps, DataBoxVariant } from "./DataBox";
 
+export { default as DataRow, DataRowList } from "./DataRow";
+export type { DataRowProps, DataRowVariant } from "./DataRow";
+
 export { default as EmptyState } from "./EmptyState";
 export type { EmptyStateProps } from "./EmptyState";
 
@@ -64,6 +67,11 @@ export {
   TableNameCell,
   TableRow,
 } from "./Table";
-export type { TableCellProps, TableHeaderCellProps, TableNameCellProps } from "./Table";
+export type {
+  ColumnType,
+  TableCellProps,
+  TableHeaderCellProps,
+  TableNameCellProps,
+} from "./Table";
 
 export { cn } from "./cn";

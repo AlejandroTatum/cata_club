@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/Table";
 import { committedHeight } from "./ui-test-utils";
+import type { ColumnType } from "@/components/ui/Table";
 
 function renderTable() {
   return render(
@@ -160,5 +161,152 @@ describe("TableRow — what it forwards", () => {
 
     fireEvent.click(screen.getByText("Fila").closest("tr") as HTMLElement);
     expect(onClick).toHaveBeenCalledOnce();
+  });
+});
+
+/**
+ * `type` centralizes the alignment decision: a column's data kind, not a
+ * per-screen choice of `align`. There are only two other tables in the
+ * product's convention (text/badge → left, number/action → right), and
+ * `ColumnType` has no "center" member at all — a data table cannot be asked
+ * to center a column because the type it would have to name does not exist.
+ */
+describe("TableHeaderCell / TableCell — type-driven alignment", () => {
+  const LEFT: ColumnType[] = ["text", "badge"];
+  const RIGHT: ColumnType[] = ["number", "action"];
+
+  it("derives left alignment for text and badge columns", () => {
+    for (const type of LEFT) {
+      const { unmount } = render(
+        <table>
+          <thead>
+            <tr>
+              <TableHeaderCell type={type}>Col</TableHeaderCell>
+            </tr>
+          </thead>
+        </table>,
+      );
+      expect(screen.getByRole("columnheader")).toHaveClass("text-left");
+      expect(screen.getByRole("columnheader")).not.toHaveClass("text-right");
+      unmount();
+    }
+  });
+
+  it("derives right alignment for number and action columns", () => {
+    for (const type of RIGHT) {
+      const { unmount } = render(
+        <table>
+          <thead>
+            <tr>
+              <TableHeaderCell type={type}>Col</TableHeaderCell>
+            </tr>
+          </thead>
+        </table>,
+      );
+      expect(screen.getByRole("columnheader")).toHaveClass("text-right");
+      expect(screen.getByRole("columnheader")).not.toHaveClass("text-left");
+      unmount();
+    }
+  });
+
+  it("matches the body cell's alignment to the same rule", () => {
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <TableCell type="number">42</TableCell>
+            <TableCell type="text">Ana</TableCell>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    expect(screen.getByText("42").closest("td")).toHaveClass("text-right");
+    expect(screen.getByText("Ana").closest("td")).toHaveClass("text-left");
+  });
+
+  it("lets type override a stale align prop instead of the two disagreeing silently", () => {
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <TableCell align="left" type="number">
+              7
+            </TableCell>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    expect(screen.getByText("7").closest("td")).toHaveClass("text-right");
+  });
+
+  it("still honors align on its own — the deprecated path keeps working", () => {
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <TableCell align="right">Editar</TableCell>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    expect(screen.getByText("Editar").closest("td")).toHaveClass("text-right");
+  });
+
+  it("lets type override a stale align prop on the header too — the same claim TableCell makes", () => {
+    render(
+      <table>
+        <thead>
+          <tr>
+            <TableHeaderCell align="left" type="number">
+              Col
+            </TableHeaderCell>
+          </tr>
+        </thead>
+      </table>,
+    );
+    expect(screen.getByRole("columnheader")).toHaveClass("text-right");
+  });
+
+  it("still honors align on its own on the header — the deprecated path keeps working there too", () => {
+    render(
+      <table>
+        <thead>
+          <tr>
+            <TableHeaderCell align="right">Acciones</TableHeaderCell>
+          </tr>
+        </thead>
+      </table>,
+    );
+    expect(screen.getByRole("columnheader")).toHaveClass("text-right");
+  });
+
+  it("wraps a number cell's value in a numeric DataBox automatically", () => {
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <TableCell type="number">86</TableCell>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    expect(screen.getByText("86")).toHaveClass("font-mono", "tabular-nums", "bg-sunken");
+  });
+
+  it("leaves text, badge and action cells exactly as given, unboxed", () => {
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <TableCell type="text">Ana</TableCell>
+            <TableCell type="badge">Activa</TableCell>
+            <TableCell type="action">Editar</TableCell>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    for (const text of ["Ana", "Activa", "Editar"]) {
+      expect(screen.getByText(text).className).not.toMatch(/font-mono|bg-sunken/);
+    }
   });
 });

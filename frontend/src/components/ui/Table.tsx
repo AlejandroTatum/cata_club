@@ -27,6 +27,30 @@ import type {
   ThHTMLAttributes,
 } from "react";
 import { cn } from "./cn";
+import DataBox from "./DataBox";
+
+/**
+ * The column kinds a data table draws, and the ONLY alignment vocabulary that
+ * exists for them — there is no "center" member, so a data table cannot be
+ * asked to center a column: the type that would say so does not exist.
+ *
+ *   text   → left   (reading order)
+ *   number → right  (lining up digits is what lets a reader compare without
+ *                    reading — TableCell also boxes the value, see below)
+ *   badge  → left   (a status pill reads with the row, not against it)
+ *   action → right  (the product's own convention for the trailing column)
+ *
+ * The header of a column must be aligned the same as its body — pass the same
+ * `type` to both `TableHeaderCell` and `TableCell`.
+ */
+export type ColumnType = "text" | "number" | "badge" | "action";
+
+const ALIGN_FOR_TYPE: Record<ColumnType, "left" | "right"> = {
+  text: "left",
+  number: "right",
+  badge: "left",
+  action: "right",
+};
 
 export function Table({
   className,
@@ -79,23 +103,34 @@ export function TableRow({
 }
 
 export interface TableHeaderCellProps extends ThHTMLAttributes<HTMLTableCellElement> {
-  /** Right-aligns the column, matching `.tbl .rt`. */
+  /**
+   * Right-aligns the column, matching `.tbl .rt`.
+   *
+   * @deprecated Prefer `type` — the point of a `ColumnType` is that alignment
+   * follows from what the column holds instead of being a per-screen choice.
+   * Kept so existing call sites keep compiling; `type` overrides it when both
+   * are given.
+   */
   align?: "left" | "right";
+  /** Derives the column's alignment from its data kind. See `ColumnType`. */
+  type?: ColumnType;
 }
 
 export function TableHeaderCell({
   align = "left",
+  type,
   className,
   children,
   ...rest
 }: TableHeaderCellProps): ReactElement {
+  const resolvedAlign = type ? ALIGN_FOR_TYPE[type] : align;
   return (
     <th
       scope="col"
       className={cn(
         "h-thead whitespace-nowrap border-b border-line bg-sunken px-4",
         "text-2xs font-bold uppercase text-ink-3-strong",
-        align === "right" ? "text-right" : "text-left",
+        resolvedAlign === "right" ? "text-right" : "text-left",
         className,
       )}
       {...rest}
@@ -106,25 +141,34 @@ export function TableHeaderCell({
 }
 
 export interface TableCellProps extends TdHTMLAttributes<HTMLTableCellElement> {
+  /** @deprecated Prefer `type` — see `TableHeaderCellProps.align`. */
   align?: "left" | "right";
+  /**
+   * Derives the column's alignment from its data kind. `type="number"` also
+   * boxes the cell's own value in a numeric `DataBox` — a table number is
+   * still a value nobody should read as running prose.
+   */
+  type?: ColumnType;
 }
 
 export function TableCell({
   align = "left",
+  type,
   className,
   children,
   ...rest
 }: TableCellProps): ReactElement {
+  const resolvedAlign = type ? ALIGN_FOR_TYPE[type] : align;
   return (
     <td
       className={cn(
         "h-row border-b border-line px-4 text-sm text-ink-2",
-        align === "right" ? "text-right" : "text-left",
+        resolvedAlign === "right" ? "text-right" : "text-left",
         className,
       )}
       {...rest}
     >
-      {children}
+      {type === "number" ? <DataBox variant="numeric">{children}</DataBox> : children}
     </td>
   );
 }
