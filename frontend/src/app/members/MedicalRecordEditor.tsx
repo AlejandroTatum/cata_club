@@ -118,9 +118,9 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
   }
 
   return (
-    <div className="mt-3 rounded-2xl border border-cata-border bg-cata-surface p-3 sm:p-4">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-cata-text">
-        <Stethoscope size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
+    <div className="mt-3 rounded-2xl border border-line bg-paper p-3 sm:p-4">
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
+        <Stethoscope size={ICON.sm} strokeWidth={1.5} className="text-state-bad" aria-hidden="true" />
         Ficha médica
         {state.isNew && (
           <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-2xs tracking-flat font-semibold text-blue-700">
@@ -132,7 +132,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
-          <label htmlFor={`tipo-sangre-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
+          <label htmlFor={`tipo-sangre-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
             Tipo de sangre
           </label>
           <select
@@ -149,7 +149,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           </select>
         </div>
         <div className="sm:col-span-2 lg:col-span-2">
-          <label htmlFor={`enfermedades-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
+          <label htmlFor={`enfermedades-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
             Enfermedades (separadas por coma)
           </label>
           <input
@@ -160,12 +160,12 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
             placeholder="Ej: Asma, Diabetes"
             className="input-field w-full"
           />
-          <p className="mt-1 text-2xs tracking-flat text-cata-text/45">
+          <p className="mt-1 text-2xs tracking-flat text-ink-3">
             Al guardar se reemplaza la lista completa. Dejar vacío borra todas las enfermedades.
           </p>
         </div>
         <div>
-          <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
+          <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
             Alergias
           </label>
           <input
@@ -177,7 +177,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           />
         </div>
         <div>
-          <label htmlFor={`contacto-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
+          <label htmlFor={`contacto-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
             Contacto de emergencia
           </label>
           <input
@@ -189,7 +189,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           />
         </div>
         <div>
-          <label htmlFor={`telefono-${personaId}`} className="mb-1 block text-xs font-semibold text-cata-text/65">
+          <label htmlFor={`telefono-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
             Teléfono de emergencia
           </label>
           <input
@@ -217,12 +217,12 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
           {saving ? "Guardando…" : "Guardar ficha médica"}
         </button>
         {saveError && (
-          <p className="text-sm text-cata-red" role="alert">
+          <p className="text-sm text-state-bad" role="alert">
             {saveError}
           </p>
         )}
         {saveSuccess && (
-          <p className="flex items-center gap-1 text-sm text-cata-state-ok" role="status">
+          <p className="flex items-center gap-1 text-sm text-state-ok" role="status">
             <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Ficha médica guardada.
           </p>
