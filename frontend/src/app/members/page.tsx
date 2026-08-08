@@ -206,12 +206,17 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const paymentFileInputRef = useRef<HTMLInputElement>(null);
   const [paymentVoucherFile, setPaymentVoucherFile] = useState<File | null>(null);
-  // Discounts to apply on THIS registration (issue #12). The catalog is
+  // Discount to apply on THIS registration (issue #12). The catalog is
   // fetched lazily when the form opens; only ACTIVE discounts are offered.
   // `null` = not fetched yet (or fetch failed: the form degrades to the
   // pre-discount behavior — the backend is the authority anyway).
+  //
+  // A payment carries at most ONE discount (the backend rejects more than
+  // one with a 400 — see `_congelar_descuento`), so selection is single, with
+  // "Sin descuento" (no payment discount) as the normal, default choice —
+  // never a plural array of ids.
   const [descuentosCatalogo, setDescuentosCatalogo] = useState<DescuentoCatalogo[] | null>(null);
-  const [selectedDescuentoIds, setSelectedDescuentoIds] = useState<number[]>([]);
+  const [selectedDescuentoId, setSelectedDescuentoId] = useState<number | null>(null);
 
   const membershipLabel = student.membresia
     ? MEMBERSHIP_STATUS_LABELS[student.membresia.estado]
@@ -234,14 +239,8 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
   // Active discounts offered in the payment form, and the DISPLAY-ONLY final
   // amount preview (the backend freezes values and recomputes on register).
   const descuentosOfrecidos = descuentosActivos(descuentosCatalogo ?? []);
-  const descuentosSeleccionados = descuentosOfrecidos.filter((d) => selectedDescuentoIds.includes(d.id));
+  const descuentosSeleccionados = descuentosOfrecidos.filter((d) => d.id === selectedDescuentoId);
   const montoFinalPreview = computeMontoFinal(Number(paymentMonto) || 0, descuentosSeleccionados);
-
-  function toggleDescuento(id: number): void {
-    setSelectedDescuentoIds((prev) =>
-      prev.includes(id) ? prev.filter((selected) => selected !== id) : [...prev, id],
-    );
-  }
 
   async function handleOpenCreateMembership(): Promise<void> {
     setShowCreateMembership(true);
@@ -305,7 +304,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
     setPaymentError(null);
     setPaymentSuccess(false);
     setPaymentVoucherFile(null);
-    setSelectedDescuentoIds([]);
+    setSelectedDescuentoId(null);
     if (descuentosCatalogo === null) {
       fetchDescuentos()
         .then((catalogo) => setDescuentosCatalogo(catalogo))
@@ -360,7 +359,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
         fechaFin: paymentFechaFin,
         personaId,
         membresiaId: student.membresia.id,
-        ...(selectedDescuentoIds.length > 0 ? { descuentoIds: selectedDescuentoIds } : {}),
+        ...(selectedDescuentoId != null ? { descuentoIds: [selectedDescuentoId] } : {}),
       };
       const nuevoPago = await registrarPago(input);
       if (paymentVoucherFile && nuevoPago?.id) {
@@ -549,20 +548,34 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                   {Number(paymentMonto) / paymentMonthlyPrice} meses de vigencia (precio mensual: ${paymentMonthlyPrice})
                 </p>
               )}
-              {/* Descuentos del catálogo (issue #12): decisión del admin al
+              {/* Descuento del catálogo (issue #12): decisión del admin al
                   registrar. Solo se ofrecen los ACTIVOS; el monto final es
-                  una vista previa — el backend congela valores y recalcula. */}
+                  una vista previa — el backend congela valores y recalcula.
+                  Un pago admite UN solo descuento (el backend rechaza más de
+                  uno con 400), así que esto es un grupo de radios — nunca
+                  checkboxes — con "Sin descuento" como opción normal. */}
               {descuentosOfrecidos.length > 0 && (
                 <fieldset className="rounded-lg border border-cata-border/50 bg-cata-surface/50 px-2.5 py-2">
-                  <legend className="px-1 text-xs font-semibold text-cata-text/65">Descuentos</legend>
+                  <legend className="px-1 text-xs font-semibold text-cata-text/65">Descuento</legend>
                   <div className="space-y-field">
+                    <label className="flex items-center gap-2 text-xs text-cata-text">
+                      <input
+                        type="radio"
+                        name={`descuento-${personaId}`}
+                        checked={selectedDescuentoId === null}
+                        onChange={() => setSelectedDescuentoId(null)}
+                        className="h-3.5 w-3.5 border-cata-border"
+                      />
+                      <span>Sin descuento</span>
+                    </label>
                     {descuentosOfrecidos.map((descuento) => (
                       <label key={descuento.id} className="flex items-center gap-2 text-xs text-cata-text">
                         <input
-                          type="checkbox"
-                          checked={selectedDescuentoIds.includes(descuento.id)}
-                          onChange={() => toggleDescuento(descuento.id)}
-                          className="h-3.5 w-3.5 rounded border-cata-border"
+                          type="radio"
+                          name={`descuento-${personaId}`}
+                          checked={selectedDescuentoId === descuento.id}
+                          onChange={() => setSelectedDescuentoId(descuento.id)}
+                          className="h-3.5 w-3.5 border-cata-border"
                         />
                         <span>
                           {descuento.nombre}
@@ -573,7 +586,7 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
                   </div>
                   {descuentosSeleccionados.length > 0 && (
                     <p className="mt-1.5 border-t border-cata-border/50 pt-1.5 text-xs font-semibold text-cata-text">
-                      Monto final con descuentos: {formatCurrency(montoFinalPreview)}
+                      Monto final con descuento: {formatCurrency(montoFinalPreview)}
                     </p>
                   )}
                 </fieldset>

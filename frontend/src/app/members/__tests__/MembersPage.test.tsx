@@ -915,8 +915,8 @@ describe("MembersPage — Registrar pago inline form", () => {
 
     // Only ACTIVE discounts are offered for application; the inactive one
     // stays visible in the catalog screen but never here.
-    const mediaBeca = await within(dialog).findByRole("checkbox", { name: /media beca/i });
-    expect(within(dialog).queryByRole("checkbox", { name: /beca vieja/i })).not.toBeInTheDocument();
+    const mediaBeca = await within(dialog).findByRole("radio", { name: /media beca/i });
+    expect(within(dialog).queryByRole("radio", { name: /beca vieja/i })).not.toBeInTheDocument();
 
     fireEvent.click(mediaBeca);
 
@@ -972,7 +972,11 @@ describe("MembersPage — Registrar pago inline form", () => {
 
     const dialog = screen.getByRole("dialog");
     fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
-    await within(dialog).findByRole("checkbox", { name: /media beca/i });
+    await within(dialog).findByRole("radio", { name: /media beca/i });
+
+    // "Sin descuento" is the default selection — a payment with no discount
+    // is the normal case and must stay reachable without touching any radio.
+    expect(within(dialog).getByRole("radio", { name: /sin descuento/i })).toBeChecked();
 
     const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
     fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
@@ -982,6 +986,68 @@ describe("MembersPage — Registrar pago inline form", () => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
     });
     expect("descuentoIds" in (mockRegistrarPago.mock.calls[0][0] as Record<string, unknown>)).toBe(false);
+  });
+
+  it("only allows one discount selected at a time (regression: backend rejects more than one)", async () => {
+    const cuentaConMembresia: MemberAccount = {
+      ...ACCOUNT,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            tipo: "Mensual (Tarde)",
+            estado: "vencida",
+            fechaInicio: "2026-06-01",
+            fechaFin: "2026-06-30",
+            monto: 85,
+            id: 42,
+          },
+        },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Beca parcial", porcentaje: "30", monto: null, activo: true },
+      { id: 2, nombre: "Familiar", porcentaje: "20", monto: null, activo: true },
+    ]);
+    mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+
+    const becaParcial = await within(dialog).findByRole("radio", { name: /beca parcial/i });
+    const familiar = within(dialog).getByRole("radio", { name: /^familiar/i });
+    const sinDescuento = within(dialog).getByRole("radio", { name: /sin descuento/i });
+
+    // Picking a discount is mutually exclusive with the others — there is no
+    // way, through this UI, to have two selected at once.
+    fireEvent.click(becaParcial);
+    expect(becaParcial).toBeChecked();
+    expect(familiar).not.toBeChecked();
+    expect(sinDescuento).not.toBeChecked();
+
+    fireEvent.click(familiar);
+    expect(familiar).toBeChecked();
+    expect(becaParcial).not.toBeChecked();
+    expect(sinDescuento).not.toBeChecked();
+
+    const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
+    fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+
+    await waitFor(() => {
+      expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
+    });
+    // Exactly one id travels — never both.
+    expect(mockRegistrarPago.mock.calls[0][0]).toMatchObject({ descuentoIds: [2] });
   });
 
   it("surfaces the backend cap-exceeded 400 as a normal form error", async () => {
@@ -1002,9 +1068,11 @@ describe("MembersPage — Registrar pago inline form", () => {
       ],
     };
     mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
+    // A single FIXED discount larger than the base amount is enough to hit
+    // the backend's 100% cap — the old two-checkbox setup that summed two
+    // discounts no longer applies now that only one can be selected.
     mockFetchDescuentos.mockResolvedValue([
-      { id: 1, nombre: "Beca parcial", porcentaje: "60", monto: null, activo: true },
-      { id: 2, nombre: "Familiar", porcentaje: "50", monto: null, activo: true },
+      { id: 1, nombre: "Beca completa+", porcentaje: null, monto: "200", activo: true },
     ]);
     const { ApiClientError } = await import("@/services/api");
     mockRegistrarPago.mockRejectedValueOnce(
@@ -1022,8 +1090,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     const dialog = screen.getByRole("dialog");
     fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
 
-    fireEvent.click(await within(dialog).findByRole("checkbox", { name: /beca parcial/i }));
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: /familiar/i }));
+    fireEvent.click(await within(dialog).findByRole("radio", { name: /beca completa\+/i }));
 
     const metodoSelect = within(dialog).getByDisplayValue("Transferencia");
     fireEvent.change(metodoSelect, { target: { value: "EFECTIVO" } });
