@@ -11,8 +11,14 @@
 export { default as Badge } from "./Badge";
 export type { BadgeProps, BadgeTone } from "./Badge";
 
+export { default as BackLink } from "./BackLink";
+export type { BackLinkProps } from "./BackLink";
+
 export { default as Button, buttonClasses } from "./Button";
 export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
+
+export { default as DataBox } from "./DataBox";
+export type { DataBoxProps, DataBoxVariant } from "./DataBox";
 
 export { default as EmptyState } from "./EmptyState";
 export type { EmptyStateProps } from "./EmptyState";
