@@ -73,7 +73,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Badge, Button, EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
+import { Button, EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import {
   fetchHorarios,
@@ -1073,7 +1073,6 @@ export default function GroupsPage(): React.ReactElement {
                 const isDeleting = card.rows.some((row) => row.id === deletingId);
                 const isExpanded = expandedGroup?.key === card.categoria;
                 const metadata = CATEGORIA_METADATA[card.categoria as Categoria];
-                const rangoEdad = metadata?.rango_edad;
                 // An unrecognized `categoria` has no metadata, so the track
                 // falls back to the días the rows themselves carry.
                 const diaTrack = buildDiaTrack(metadata?.dias ?? [], card.dias);
@@ -1114,7 +1113,6 @@ export default function GroupsPage(): React.ReactElement {
                           <b className="text-base text-ink">
                             {categoriaLabel(card.categoria)}
                           </b>
-                          {rangoEdad ? <Badge>{rangoEdad}</Badge> : null}
                         </div>
                       </div>
 

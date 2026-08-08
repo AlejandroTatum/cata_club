@@ -1,11 +1,12 @@
 import logging
+from dataclasses import dataclass
 from datetime import datetime, date, timezone
 from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
-    Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion, DescuentoAplicado,
+    Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion,
 )
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion
 from app.dominio.etiquetas import estado_de_pago_en_castellano
@@ -54,6 +55,14 @@ MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
 )
 
 logger = logging.getLogger("cataclub.servicios.pagos")
+
+
+# --- Issue #11: descuento congelado, previo a volcarse en columnas de Pago --
+@dataclass(frozen=True)
+class _DescuentoCongelado:
+    descuento_id: int
+    valor_aplicado: Decimal
+    porcentaje_aplicado: Decimal | None
 
 
 class MembresiaServicio:
@@ -282,18 +291,23 @@ class PagoServicio:
                 f"(${precio_mensual})."
             )
 
-        # Issue #11: resolver los valores VIGENTES del catálogo, congelarlos
-        # y descontar el monto base. `aplicaciones` viaja por la relación del
-        # pago para que el INSERT de todo (pago + filas congeladas) sea una
-        # sola transacción: no puede quedar un pago descontado sin su detalle.
-        aplicaciones, monto_final = self._congelar_descuentos(datos, persona_id_solicitante)
+        # Issue #11: resolver el valor VIGENTE del catálogo, congelarlo y
+        # descontar el monto base. Las columnas congeladas se asignan al MISMO
+        # `Pago` (issue #11 colapsado a columnas: un pago lleva un solo
+        # descuento) para que el INSERT sea una sola transacción: no puede
+        # quedar un pago descontado sin su detalle.
+        descuento_congelado, monto_final = self._congelar_descuento(datos)
 
         pago = Pago(
             **datos.model_dump(exclude={"descuento_ids"}),
             estado_pago=EstadoPago.PENDIENTE_VALIDACION,
         )
         pago.monto = monto_final
-        pago.descuentos_aplicados = aplicaciones
+        if descuento_congelado is not None:
+            pago.descuento_id = descuento_congelado.descuento_id
+            pago.descuento_valor_aplicado = descuento_congelado.valor_aplicado
+            pago.descuento_porcentaje_aplicado = descuento_congelado.porcentaje_aplicado
+            pago.descuento_autorizado_por_persona_id = persona_id_solicitante
         # Red de seguridad del invariante 1 (issue #8): si otra petición
         # concurrente registró su pendiente ENTRE el chequeo de arriba y este
         # INSERT, el índice `uq_pago_pendiente_por_membresia` lo rechaza y se
@@ -308,62 +322,61 @@ class PagoServicio:
                 raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO) from error
             raise
 
-    # --- Issue #11: descuentos aplicados al registrar --------------------------
-    def _congelar_descuentos(
-        self, datos: PagoCreateDTO, autorizado_por_persona_id: int | None,
-    ) -> tuple[list[DescuentoAplicado], Decimal]:
-        """Resuelve cada descuento solicitado contra el catálogo VIGENTE y
-        devuelve (filas congeladas, monto final del pago).
+    # --- Issue #11: descuento aplicado al registrar -----------------------
+    def _congelar_descuento(
+        self, datos: PagoCreateDTO,
+    ) -> tuple[_DescuentoCongelado | None, Decimal]:
+        """Resuelve el descuento solicitado contra el catálogo VIGENTE y
+        devuelve (descuento congelado o `None`, monto final del pago).
+        Quién autoriza NO viaja acá: `registrar_pago` ya lo tiene
+        (`persona_id_solicitante`) y lo asigna directo a la columna, sin
+        necesidad de un tercer valor de retorno.
 
-        Invariantes firmados (docs/concepto-alcance-modelo.md §4):
-        - Valor congelado: cada `DescuentoAplicado` copia el valor calculado
-          HOY (y el porcentaje vigente, si aplica). Cambios posteriores al
-          catálogo no alteran estas filas -- son el hecho histórico.
-        - Tope: la suma de descuentos no supera el monto base (100 %); no
-          existen pagos negativos. Un pago de $0 (beca total) es válido y
-          sigue el flujo normal de registro + aprobación.
+        Invariantes firmados (docs/concepto-alcance-modelo.md §4, colapsado a
+        columnas de `Pago` -- el dueño confirmó que un pago lleva UN solo
+        descuento):
+        - Valor congelado: se copia el valor calculado HOY (y el porcentaje
+          vigente, si aplica). Cambios posteriores al catálogo no alteran
+          estas columnas -- son el hecho histórico.
+        - Tope: el descuento no supera el monto base (100 %); no existen
+          pagos negativos. Un pago de $0 (beca total) es válido y sigue el
+          flujo normal de registro + aprobación.
         - Un descuento inactivo no puede aplicarse (el catálogo es vivo,
           pero solo su presente ofrece; su pasado ya quedó congelado).
         """
         if not datos.descuento_ids:
-            return [], datos.monto
+            return None, datos.monto
 
-        if len(set(datos.descuento_ids)) != len(datos.descuento_ids):
-            raise OperacionInvalida("La solicitud repite un mismo descuento")
+        if len(datos.descuento_ids) > 1:
+            raise OperacionInvalida("Un pago admite un único descuento")
 
-        total = Decimal("0.00")
-        aplicaciones: list[DescuentoAplicado] = []
-        for descuento_id in datos.descuento_ids:
-            descuento = self.repo_descuento.obtener_por_id(descuento_id)
-            if not descuento:
-                raise EntidadNoEncontrada(f"Descuento con id {descuento_id} no encontrado")
-            if not descuento.activo:
-                raise OperacionInvalida(
-                    f"El descuento '{descuento.nombre}' está inactivo y no puede aplicarse"
-                )
-            if descuento.porcentaje is not None:
-                valor = (datos.monto * descuento.porcentaje / Decimal("100")).quantize(
-                    Decimal("0.01")
-                )
-            else:
-                valor = descuento.monto
-            total += valor
-            aplicaciones.append(
-                DescuentoAplicado(
-                    descuento_id=descuento.id,
-                    persona_id=datos.persona_id,
-                    autorizado_por_persona_id=autorizado_por_persona_id,
-                    valor_aplicado=valor,
-                    porcentaje_aplicado=descuento.porcentaje,
-                )
-            )
-
-        if total > datos.monto:
+        descuento = self.repo_descuento.obtener_por_id(datos.descuento_ids[0])
+        if not descuento:
+            raise EntidadNoEncontrada(f"Descuento con id {datos.descuento_ids[0]} no encontrado")
+        if not descuento.activo:
             raise OperacionInvalida(
-                "El descuento total no puede superar el 100% del monto del pago "
-                f"(monto base ${datos.monto}, descuentos ${total})"
+                f"El descuento '{descuento.nombre}' está inactivo y no puede aplicarse"
             )
-        return aplicaciones, datos.monto - total
+        if descuento.porcentaje is not None:
+            valor = (datos.monto * descuento.porcentaje / Decimal("100")).quantize(
+                Decimal("0.01")
+            )
+        else:
+            valor = descuento.monto
+
+        if valor > datos.monto:
+            raise OperacionInvalida(
+                "El descuento no puede superar el 100% del monto del pago "
+                f"(monto base ${datos.monto}, descuento ${valor})"
+            )
+        return (
+            _DescuentoCongelado(
+                descuento_id=descuento.id,
+                valor_aplicado=valor,
+                porcentaje_aplicado=descuento.porcentaje,
+            ),
+            datos.monto - valor,
+        )
 
     def obtener_pago(
         self,

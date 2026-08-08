@@ -5,7 +5,6 @@ El invariante "porcentaje O monto fijo, nunca ambos ni ninguno" se valida
 aquí como camino primario de error (422 con mensaje claro); el CHECK
 `ck_descuento_porcentaje_o_monto` de la base es la red de seguridad.
 """
-from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -49,16 +48,3 @@ class DescuentoResponseDTO(ResponseBase, BaseModel):
     porcentaje: Optional[Decimal] = None
     monto: Optional[Decimal] = None
     activo: bool
-
-
-class DescuentoAplicadoResponseDTO(ResponseBase, BaseModel):
-    """Registro histórico congelado: lo que se descontó, con qué porcentaje
-    vigente (si era porcentual), a quién y con qué autorización."""
-    id: int
-    valor_aplicado: Decimal
-    porcentaje_aplicado: Optional[Decimal] = None
-    fecha: datetime
-    pago_id: int
-    descuento_id: int
-    persona_id: int
-    autorizado_por_persona_id: int

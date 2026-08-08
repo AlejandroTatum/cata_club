@@ -231,7 +231,13 @@ class Persona(Base):
     # --- Relaciones 1 a muchos ---
     # Como alumno:
     asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="persona")
-    pagos: Mapped[List["Pago"]] = relationship(back_populates="persona")
+    # `foreign_keys` explícito: `Pago` ahora tiene DOS FKs a `persona.id`
+    # (`persona_id` y `descuento_autorizado_por_persona_id`, issue #11
+    # colapsado a columnas) -- sin esto, SQLAlchemy no puede elegir cuál usar
+    # para esta relación y falla con `AmbiguousForeignKeysError`.
+    pagos: Mapped[List["Pago"]] = relationship(
+        back_populates="persona", foreign_keys="Pago.persona_id",
+    )
     membresias: Mapped[List["Membresia"]] = relationship(back_populates="persona")
     notificaciones: Mapped[List["Notificacion"]] = relationship(back_populates="persona")
 
@@ -335,6 +341,17 @@ class Pago(Base):
         ),
         Index("ix_pago_persona_id", "persona_id"),
         Index("ix_pago_membresia_id", "membresia_id"),
+        Index("ix_pago_descuento_id", "descuento_id"),
+        Index("ix_pago_descuento_autorizado_por_persona_id", "descuento_autorizado_por_persona_id"),
+        # Espejo en la base del invariante que `PagoServicio._congelar_descuento`
+        # ya respeta: un descuento congelado sin su valor sería un hecho
+        # histórico incompleto. El servicio sigue siendo el camino primario de
+        # error (mensaje claro); esto es la red de seguridad ante un INSERT que
+        # lo esquive (mismo criterio que los CHECK de `Descuento` más abajo).
+        CheckConstraint(
+            "descuento_id IS NULL OR descuento_valor_aplicado IS NOT NULL",
+            name="ck_pago_descuento_valor_congelado",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -348,7 +365,9 @@ class Pago(Base):
     fecha_fin: Mapped[date] = mapped_column(Date)
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
-    persona: Mapped["Persona"] = relationship(back_populates="pagos")
+    # `foreign_keys` explícito: ver el comentario en `Persona.pagos` -- misma
+    # ambigüedad, mismo motivo.
+    persona: Mapped["Persona"] = relationship(back_populates="pagos", foreign_keys=[persona_id])
 
     membresia_id: Mapped[int] = mapped_column(ForeignKey("membresia.id"))
     membresia: Mapped["Membresia"] = relationship(back_populates="pagos")
@@ -364,19 +383,33 @@ class Pago(Base):
 
     comprobante: Mapped[Optional["ComprobantePago"]] = relationship(back_populates="pago", uselist=False)
 
-    # Descuentos aplicados a ESTE pago con su valor congelado (issue #11).
-    descuentos_aplicados: Mapped[List["DescuentoAplicado"]] = relationship(back_populates="pago")
+    # --- Descuento aplicado a ESTE pago, congelado al momento de registrar
+    # (issue #11, colapsado a columnas de Pago: el dueño confirmó que un pago
+    # lleva UN solo descuento, así que `descuento_aplicado` como tabla aparte
+    # no tenía cardinalidad que justificarla). Las cuatro columnas son
+    # nullable: un pago puede no llevar descuento. El congelamiento es el
+    # punto de todo esto -- `descuento_valor_aplicado`/`_porcentaje_aplicado`
+    # copian el valor vigente en `Descuento` al aplicar, así que cambios
+    # posteriores al catálogo jamás alteran pagos ya registrados.
+    descuento_id: Mapped[Optional[int]] = mapped_column(ForeignKey("descuento.id"), nullable=True)
+    descuento_valor_aplicado: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    # Porcentaje vigente al aplicar (NULL si el descuento era de monto fijo);
+    # también congelado, para poder auditar "era el 50 % de entonces".
+    descuento_porcentaje_aplicado: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    # Auditoría de quién autorizó el descuento (issue #11: "el admin decide,
+    # el sistema registra" -- ver `PagoServicio.registrar_pago`).
+    descuento_autorizado_por_persona_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Descuentos (issue #11, modelo firmado docs/concepto-alcance-modelo.md §4)
+# Descuento (issue #11, modelo firmado docs/concepto-alcance-modelo.md §4)
 #
-# Dos entidades deliberadamente separadas:
-#   - `Descuento`: catálogo VIVO administrado por el club (CRUD del admin).
-#     Sin motor de reglas: el sistema no calcula elegibilidad, el admin decide.
-#   - `DescuentoAplicado`: hecho HISTÓRICO por pago, con el valor congelado
-#     al momento de aplicar. Cambios posteriores al catálogo jamás alteran
-#     pagos ya registrados -- eso es exactamente lo que garantiza la copia.
+# Catálogo VIVO administrado por el club (CRUD del admin). Sin motor de
+# reglas: el sistema no calcula elegibilidad, el admin decide. La aplicación
+# a un pago concreto, con su valor congelado, vive en las columnas
+# `descuento_*` de `Pago` de arriba -- no en una tabla de aplicaciones aparte.
 # ---------------------------------------------------------------------------
 class Descuento(Base):
     __tablename__ = "descuento"
@@ -405,47 +438,9 @@ class Descuento(Base):
     porcentaje: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
     monto: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     # Baja SUAVE: un descuento que deja de ofrecerse se DESACTIVA, nunca se
-    # borra -- sus aplicaciones históricas lo referencian por FK y el club
+    # borra -- los pagos que lo aplicaron lo referencian por FK y el club
     # conserva la historia (misma filosofía que `Persona.activo`).
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
-
-    aplicaciones: Mapped[List["DescuentoAplicado"]] = relationship(back_populates="descuento")
-
-
-class DescuentoAplicado(Base):
-    __tablename__ = "descuento_aplicado"
-    __table_args__ = (
-        Index("ix_descuento_aplicado_pago_id", "pago_id"),
-        Index("ix_descuento_aplicado_descuento_id", "descuento_id"),
-        Index("ix_descuento_aplicado_persona_id", "persona_id"),
-        Index("ix_descuento_aplicado_autorizado_por_persona_id", "autorizado_por_persona_id"),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    # Valor CONGELADO en dinero al momento de aplicar (para un descuento
-    # porcentual, el resultado de aplicar el porcentaje vigente al monto base
-    # del pago; para uno de monto fijo, ese monto). Es la única fuente de
-    # verdad histórica: el catálogo puede cambiar después sin tocar esto.
-    valor_aplicado: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    # Porcentaje vigente al aplicar (NULL si el descuento era de monto fijo);
-    # también congelado, para poder auditar "era el 50 % de entonces".
-    porcentaje_aplicado: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
-    fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
-
-    pago_id: Mapped[int] = mapped_column(ForeignKey("pago.id"))
-    pago: Mapped["Pago"] = relationship(back_populates="descuentos_aplicados")
-
-    descuento_id: Mapped[int] = mapped_column(ForeignKey("descuento.id"))
-    descuento: Mapped["Descuento"] = relationship(back_populates="aplicaciones")
-
-    # A quién se le aplicó y qué administrador lo autorizó. Dos FKs a Persona
-    # sin back_populates: Persona no necesita navegar sus descuentos (se
-    # consultan siempre desde el pago).
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
-    persona: Mapped["Persona"] = relationship(foreign_keys=[persona_id])
-
-    autorizado_por_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
-    autorizado_por: Mapped["Persona"] = relationship(foreign_keys=[autorizado_por_persona_id])
 
 
 class ComprobantePago(Base):

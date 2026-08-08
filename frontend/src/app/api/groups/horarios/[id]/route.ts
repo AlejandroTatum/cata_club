@@ -24,8 +24,9 @@ import {
 
 /** `hora_inicio`/`hora_fin` are absent on purpose: the backend derives them
  *  server-side from `CATEGORIA_METADATA[categoria]`, so they are not input.
- *  `nivel_ranking_id` is not part of the schedule either — ranking level lives
- *  on `Ranking`. Forwarding any of them makes FastAPI reject the request. */
+ *  `nivel_ranking_id` is not part of the schedule either — the ranking/nivel
+ *  feature was removed entirely. Forwarding any of them makes FastAPI reject
+ *  the request. */
 interface ActualizarHorarioBody {
   categoria?: unknown;
   dia_semana?: unknown;
