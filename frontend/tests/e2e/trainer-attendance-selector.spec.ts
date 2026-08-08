@@ -70,7 +70,6 @@ async function mockTrainerAttendanceRuntime(page: Page): Promise<void> {
       diaSemana: "lun",
       horaInicio: "18:00",
       horaFin: "19:00",
-      nivelRankingId: null,
     },
   ]));
   // Paginated endpoint (issue #7): the client appends `?limit=200` (hence the

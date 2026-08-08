@@ -44,7 +44,7 @@ async function loginAsAdmin(page: Page): Promise<void> {
     return fulfillJson(route, {});
   });
   await page.route("**/api/members", (route) =>
-    fulfillJson(route, { accounts: [], niveles: [], personasCapped: false }),
+    fulfillJson(route, { accounts: [], personasCapped: false }),
   );
   await page.route("**/api/auth/session", (route: Route): Promise<void> =>
     authenticated
