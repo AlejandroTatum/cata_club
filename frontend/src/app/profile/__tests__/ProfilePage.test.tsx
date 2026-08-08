@@ -207,24 +207,29 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
       </ToastProvider>,
     );
 
-    // Full name and correo appear twice by design (hero card + "Información
-    // personal" column) — assert both occurrences exist. Scoped to <main>
-    // since the session name ("Ana Admin") also appears once more in the
-    // AppShell sidebar footer, which is unrelated shell chrome.
+    // Full name appears twice by design (member card + "Datos personales"
+    // column) — assert both occurrences exist. Scoped to <main> since the
+    // session name ("Ana Admin") also appears once more in the AppShell
+    // sidebar footer, which is unrelated shell chrome.
+    //
+    // Correo appears ONLY ONCE now — on the member card. The old
+    // "Datos personales" row repeating it was the exact defect this redesign
+    // fixes (owner: "el correo aparece DOS VECES ... que quede una sola vez").
     await waitForStaffProfile();
     const main = screen.getByRole("main");
     expect(within(main).getAllByText("Ana Admin").length).toBe(2);
-    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(2);
+    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(1);
     expect(screen.getByText("099111222")).toBeInTheDocument();
     // The role reads as Spanish prose on the identity card, not as the raw
     // backend enum ("ADMINISTRADOR") the old status column printed.
     expect(within(main).getByText("Administrador")).toBeInTheDocument();
     expect(within(main).queryByText("ADMINISTRADOR")).not.toBeInTheDocument();
-    // "Miembro desde" is now a single 56px row, not duplicated between a hero
-    // block and a "Fecha de registro" row saying the same thing.
+    // "Miembro desde" now lives on the member card's own fact, as one string
+    // — not a separate label/value pair, and not duplicated by a
+    // "Fecha de registro" row saying the same thing.
     expect(screen.getByText(/miembro desde/i)).toBeInTheDocument();
     expect(screen.queryByText(/fecha de registro/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText("10/03/2024").length).toBe(1);
+    expect(screen.getAllByText("Miembro desde 10/03/2024").length).toBe(1);
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -265,7 +270,10 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
 
     await waitForStaffProfile();
     const main = within(screen.getByRole("main"));
-    expect(main.getByText("Rol")).toBeInTheDocument();
+    // A single role is the member card's own fact — no separate "Rol" label
+    // row exists for it; that rail only earns its place when there is more
+    // than one role to disambiguate (see the multi-role test above).
+    expect(main.getByText("Administrador")).toBeInTheDocument();
     expect(main.queryByText("Roles asignados")).not.toBeInTheDocument();
     expect(main.queryByText(/rol activo en esta sesión/i)).not.toBeInTheDocument();
   });
@@ -289,11 +297,11 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     );
 
     expect((await screen.findAllByText("Carla Entrenadora")).length).toBe(2);
-    expect(screen.getAllByText("carla.entrenadora@cataclub.com").length).toBe(2);
+    expect(screen.getAllByText("carla.entrenadora@cataclub.com").length).toBe(1);
     expect(within(screen.getByRole("main")).getByText("Entrenador")).toBeInTheDocument();
     // Different fechaCreacion than the admin fixture — proves the date is
     // computed from `perfil.fechaCreacion`, not hardcoded.
-    expect(screen.getAllByText("02/11/2025").length).toBe(1);
+    expect(screen.getAllByText("Miembro desde 02/11/2025").length).toBe(1);
   });
 
   it("does not render nombres/apellidos/roles as editable inputs", async () => {
@@ -576,7 +584,7 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
 
     expect(screen.queryByLabelText(/correo electrónico/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(2);
+    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(1);
   });
 
   it("surfaces an error and reverts the teléfono when the save fails", async () => {
@@ -693,10 +701,14 @@ describe("ProfilePage — unified layout structure", () => {
 
     await waitForStaffProfile();
     expect(screen.getByRole("heading", { level: 1, name: "Perfil" })).toBeInTheDocument();
+    // The generic subtitle ("Gestione su información y consulte su estado en
+    // el club.") was filler — it restated what being on a profile page
+    // already says, and a screen only gets the one line of prose if it earns
+    // it. The member card now carries the identity, so the header stays to
+    // just the title.
     expect(
-      // Usted, not tú: the marketing voice stops at the auth screens.
-      screen.getByText("Gestione su información y consulte su estado en el club."),
-    ).toBeInTheDocument();
+      screen.queryByText("Gestione su información y consulte su estado en el club."),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("profile-hero")).toBeInTheDocument();
     expect(screen.getByTestId("profile-column-info")).toBeInTheDocument();
     expect(screen.getByTestId("profile-column-status")).toBeInTheDocument();
@@ -1001,33 +1013,119 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(screen.queryByRole("link", { name: /volver al panel/i })).not.toBeInTheDocument();
   });
 
-  it("gives the identity card the account facts it can prove, on its right", async () => {
+  it("reads identity as a member card, not a header with facts beside it", async () => {
     await renderAdmin();
 
     const hero = screen.getByTestId("profile-hero");
+    // The identity object: name, correo (once — see the dedicated dedupe
+    // test below), role and "member since" all live on the carnet, aria-
+    // labelled by the member's own name (MemberCard's contract).
+    expect(within(hero).getByRole("region", { name: /ana admin/i })).toBeInTheDocument();
     expect(within(hero).getByText("Ana Admin")).toBeInTheDocument();
     expect(within(hero).getByText("ana.admin@cataclub.com")).toBeInTheDocument();
-    // The meta rail — every value real and already fetched.
-    expect(within(hero).getByText("Rol")).toBeInTheDocument();
     expect(within(hero).getByText("Administrador")).toBeInTheDocument();
-    expect(within(hero).getByText("Miembro desde")).toBeInTheDocument();
-    expect(within(hero).getByText("10/03/2024")).toBeInTheDocument();
-    // Contact data still belongs to the 56px rows, not to the card.
+    expect(within(hero).getByText("Miembro desde 10/03/2024")).toBeInTheDocument();
+    // Contact data still belongs to the rows below, not to the card.
     expect(within(hero).queryByText("099111222")).not.toBeInTheDocument();
+  });
+
+  it("shows the correo exactly once on the whole page — the duplication defect this redesign fixes", async () => {
+    await renderAdmin();
+
+    expect(screen.getAllByText("ana.admin@cataclub.com")).toHaveLength(1);
+    // The old, now-removed "Datos personales" row for correo took the note
+    // explaining it isn't editable with it — the note has to survive
+    // SOMEWHERE, next to the identity that owns it.
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText(/lo gestiona el club/i)).toBeInTheDocument();
+  });
+
+  it("wraps the teléfono value in a DataBox instead of leaving it as loose text", async () => {
+    await renderAdmin();
+
+    const info = screen.getByTestId("profile-column-info");
+    const value = within(info).getByText("099111222");
+    // DataBox's own signature: sunken fill, line border, 3px corner.
+    expect(value.closest("span")).toHaveClass("bg-sunken", "border-line", "rounded-[3px]");
   });
 
   it("lays personal data out as one datum per row, never as a data grid", async () => {
     await renderAdmin();
 
     const info = screen.getByTestId("profile-column-info");
-    for (const label of ["Nombres", "Correo", "Teléfono"]) {
+    for (const label of ["Nombres", "Teléfono"]) {
       expect(within(info).getByText(label)).toBeInTheDocument();
     }
-    // "Miembro desde" is account metadata, not personal data: it moved to the
-    // identity card's rail and must NOT also be repeated as a row.
+    // Correo moved to the member card entirely — it is not repeated as a row
+    // anymore (that repetition was the defect this redesign fixes).
+    expect(within(info).queryByText("Correo")).not.toBeInTheDocument();
+    // "Miembro desde" is account metadata, not personal data: it lives on the
+    // member card and must NOT also be repeated as a row.
     expect(within(info).queryByText("Miembro desde")).not.toBeInTheDocument();
-    // The correo note sits inline on the right of its own row.
-    expect(within(info).getByText(/lo gestiona el club/i)).toBeInTheDocument();
+  });
+
+  it("keeps row labels legible without shouting — no bold uppercase caps competing with the value", async () => {
+    await renderAdmin();
+
+    const info = screen.getByTestId("profile-column-info");
+    const label = within(info).getByText("Nombres");
+    expect(label).not.toHaveClass("uppercase");
+    expect(label).not.toHaveClass("font-bold");
+    expect(label).toHaveClass("text-ink-3");
+    // The value is still what carries the weight.
+    const value = within(info).getByText("Ana Admin");
+    expect(value.closest("span")).toHaveClass("font-semibold", "text-ink");
+  });
+
+  it("lowers the row height instead of the old fixed 56px (min-h-drow) floor", async () => {
+    await renderAdmin();
+
+    const info = screen.getByTestId("profile-column-info");
+    const row = within(info).getByText("Nombres").closest("div");
+    expect(row).not.toHaveClass("min-h-drow");
+    // Not just the absence of the old floor — the actual replacement padding
+    // that lets the row size to its own content.
+    expect(row).toHaveClass("py-2");
+  });
+
+  it("falls back to the plain role label when the account has zero assigned roles (edge case: `roles: []`)", async () => {
+    // `assignedRoles.length === 0` used to render `<Badge>{roleLabel}</Badge>`
+    // explicitly. That branch is gone now — the member card's own `role` prop
+    // (plain text, not a Badge) is what a zero-role account falls through to.
+    // This proves that's a deliberate, non-regressive choice, not a silent
+    // gap: no "Roles asignados" rail, and the role label still reads plainly.
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, roles: [] });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText("Administrador")).toBeInTheDocument();
+    expect(within(hero).queryByText("Roles asignados")).not.toBeInTheDocument();
+  });
+
+  it("falls back to 'Miembro desde —' when fechaCreacion is falsy", async () => {
+    // `MemberCard.memberSince` is a required string — there is no longer a
+    // way to simply omit the fact the way the old `{fechaCreacion && (...)}`
+    // conditional did. This proves the fallback text renders instead of an
+    // empty/undefined string reaching the card.
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, fechaCreacion: "" });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText("Miembro desde —")).toBeInTheDocument();
   });
 
   it("never shows a cédula row — no endpoint the account itself can call returns one", async () => {
