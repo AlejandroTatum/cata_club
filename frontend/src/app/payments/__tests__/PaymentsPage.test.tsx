@@ -377,9 +377,9 @@ describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
   it("returns focus to the row action it came from", async () => {
     renderPage();
     await openRequest("Juan Pérez");
-    await screen.findByRole("button", { name: /volver a la cola/i });
+    await screen.findByRole("link", { name: /volver a la cola/i });
 
-    fireEvent.click(screen.getByRole("button", { name: /volver a la cola/i }));
+    fireEvent.click(screen.getByRole("link", { name: /volver a la cola/i }));
 
     await screen.findByTestId("payments-table");
     const action = within(queueTable()).getByRole("button", {
@@ -391,13 +391,41 @@ describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
   it("does not pretend to be a modal", async () => {
     renderPage();
     await openRequest("Juan Pérez");
-    await screen.findByRole("button", { name: /volver a la cola/i });
+    await screen.findByRole("link", { name: /volver a la cola/i });
 
     // An in-page view swap, not a dialog: no `role="dialog"`, no `aria-modal`,
     // no focus trap. Calling it a dialog would promise a background that is
     // still there and an Escape key that closes it.
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.querySelector("[aria-modal]")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2c. No standalone value sits as bare text — the DataBox rule
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — detail values that matter are boxed, not bare text", () => {
+  /** DataBox's own signature classes (`DataBox.tsx`) — not `.tagName`, since
+   *  the value itself is what has to carry the box, wherever it renders. */
+  function isDataBoxed(el: Element | null): boolean {
+    return !!el && /\bbg-sunken\b/.test(el.className) && /\bborder-line\b/.test(el.className);
+  }
+
+  it("boxes the payment method instead of leaving it as running prose", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    const value = await screen.findByText("Transferencia");
+    expect(isDataBoxed(value)).toBe(true);
+  });
+
+  it("boxes the membership type the same way", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    const value = screen.getByText("Mensual");
+    expect(isDataBoxed(value)).toBe(true);
   });
 });
 
@@ -757,20 +785,25 @@ describe("PaymentsPage — batch approval", () => {
   }
 
   it("cannot select a payment that was never reviewed, and says why on screen", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, SECOND_PENDING]);
     renderPage();
     await screen.findByTestId("payments-table");
 
     const checkbox = batchCheckbox("Juan Pérez");
     expect(checkbox).toBeDisabled();
-    // The reason is real text next to the checkbox now, not only an
-    // aria-label a sighted admin never hears — and it is part of the
-    // accessible name via `aria-labelledby`, alongside the row's own student
-    // name, so the visible copy and the accessible name cannot say different
-    // things. Both pending rows are unreviewed, so the reason alone would not
-    // be a unique name; the student name is what disambiguates them.
-    const reason = "Revisar antes de incluir en un lote";
+    // The reason used to be duplicated inline next to every unreviewed
+    // checkbox, which is what stacked one word per line in the batch
+    // column's 52px width. It now reads once, above the list, and every
+    // unreviewed checkbox's accessible name is composed from that single
+    // node plus the row's own student name — real text a sighted admin can
+    // read, and the same text a screen reader announces, never duplicated
+    // per row. Both pending rows here are unreviewed, so the shared reason
+    // alone would not be a unique name; the student name is what
+    // disambiguates them.
+    const reason = "Un pago se puede sumar a un lote recién después de revisarlo.";
+    expect(screen.getAllByText(reason)).toHaveLength(1);
     const row = checkbox.closest("tr") as HTMLElement;
-    expect(within(row).getByText(reason)).toBeInTheDocument();
+    expect(within(row).queryByText(reason)).not.toBeInTheDocument();
     expect(checkbox).toHaveAccessibleName(`Juan Pérez ${reason}`);
     expect(screen.queryByRole("group", { name: /aprobación por lote/i })).not.toBeInTheDocument();
   });
@@ -804,6 +837,44 @@ describe("PaymentsPage — batch approval", () => {
     expect(bar.textContent).toContain("$75,00");
     expect(batchCheckbox("Juan Pérez")).toBeEnabled();
     expect(within(queueTable()).getAllByText("Revisado")).toHaveLength(2);
+  });
+
+  // The density rule from design review: a screen keeps one line of prose at
+  // most, and anything that explains how the system works moves to Ayuda. The
+  // "N pagos revisados esperan aprobación. Elija cuáles aprobar juntos." copy
+  // repeated the "Seleccionar los N revisados" button right below it, so the
+  // instructional half is gone — replaced by a link to the FAQ answer that
+  // already covers batch approval, for whoever still wants the explanation.
+  it("keeps the parked-batch prompt to one short line, with a link to the explanation instead of prose", async () => {
+    // A single pending payment: parking it has nothing left to advance to, so
+    // it returns straight to the queue with the batch bar visible. Parking
+    // pre-selects it into the batch, so "nothing selected" — the copy under
+    // test — only shows once that selection is explicitly cleared.
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST]);
+    renderPage();
+    await reviewForBatch("Juan Pérez");
+    const bar = await screen.findByRole("group", { name: /aprobación por lote/i });
+    fireEvent.click(within(bar).getByRole("button", { name: /limpiar selección/i }));
+
+    expect(bar.textContent).toContain("1 pagos revisados esperan aprobación.");
+    expect(bar.textContent).not.toMatch(/elija cuáles aprobar juntos/i);
+    const helpLink = within(bar).getByRole("link", { name: /cómo funciona/i });
+    expect(helpLink).toHaveAttribute("href", "/ayuda#faq-si-es-administrador");
+  });
+
+  it("marks a parked payment's own detail with a compact badge, not a sentence explaining the batch", async () => {
+    renderPage();
+    // Parking Juan auto-advances to Sofia's detail — back to the queue, then
+    // reopen Juan's own detail to see how a parked payment reads there.
+    await reviewForBatch("Juan Pérez");
+    fireEvent.click(await screen.findByRole("link", { name: /volver a la cola/i }));
+    await openRequest("Juan Pérez");
+
+    await screen.findByRole("heading", { name: /detalle de la solicitud/i });
+    expect(
+      screen.queryByText(/ya está marcado como revisado y espera en la cola/i),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/revisado.*lote/i)).toBeInTheDocument();
   });
 
   it("names the payments in the confirmation before approving any of them", async () => {
@@ -883,7 +954,7 @@ describe("PaymentsPage — batch approval", () => {
 
     await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1));
     // The approval auto-advances back to Juan's detail; return to the queue.
-    fireEvent.click(await screen.findByRole("button", { name: /volver a la cola/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /volver a la cola/i }));
 
     // Juan is the only one left in the batch; the resolved payment left it.
     const bar = await screen.findByRole("group", { name: /aprobación por lote/i });
@@ -895,11 +966,11 @@ describe("PaymentsPage — batch approval", () => {
 // ---------------------------------------------------------------------------
 // An unreviewed batch checkbox's accessible name must stay unique per row.
 //
-// The visible reason ("Revisar antes de incluir en un lote") is shared text
-// pointed at by every unreviewed checkbox's `aria-labelledby`. With two
-// unreviewed rows on screen, a screen reader that only heard the shared
-// reason would announce two controls with the identical name and give the
-// admin no way to tell them apart.
+// The visible reason is one sentence shared above the whole list, pointed at
+// by every unreviewed checkbox's `aria-labelledby`. With two unreviewed rows
+// on screen, a screen reader that only heard the shared reason would
+// announce two controls with the identical name and give the admin no way
+// to tell them apart.
 // ---------------------------------------------------------------------------
 
 describe("PaymentsPage — unreviewed batch checkboxes keep distinct accessible names", () => {
