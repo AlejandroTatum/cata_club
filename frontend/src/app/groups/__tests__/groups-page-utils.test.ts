@@ -11,7 +11,6 @@ import {
   buildCategoriaCards,
   formatDiaSet,
   countInscriptos,
-  countInscriptosParciales,
   buildDiaTrack,
   DIA_ORDER,
 } from "../groups-page-utils";
@@ -203,25 +202,6 @@ describe("countInscriptos", () => {
 
   it("returns 0 for a categoria whose every día is empty", () => {
     expect(countInscriptos(rows, { 1: [], 2: [] })).toBe(0);
-  });
-});
-
-describe("countInscriptosParciales", () => {
-  const rows = [
-    { id: 1, diaSemana: "LUNES" },
-    { id: 2, diaSemana: "MARTES" },
-  ];
-
-  it("counts the students who are missing from at least one día", () => {
-    expect(countInscriptosParciales(rows, { 1: [10, 11, 12], 2: [10, 11] })).toBe(1);
-  });
-
-  it("counts nobody when every student attends every día", () => {
-    expect(countInscriptosParciales(rows, { 1: [10, 11], 2: [11, 10] })).toBe(0);
-  });
-
-  it("claims nothing while a row's roster is still missing", () => {
-    expect(countInscriptosParciales(rows, { 1: [10, 11] })).toBe(0);
   });
 });
 

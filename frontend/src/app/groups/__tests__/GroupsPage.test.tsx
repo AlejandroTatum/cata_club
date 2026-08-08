@@ -397,7 +397,12 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     expect(screen.queryByText("6 inscriptos")).not.toBeInTheDocument();
   });
 
-  it("reports the students who are not enrolled in every día of the categoria", async () => {
+  it("never shows a partial-enrollment footnote (full-month enrollment, v5): even mismatched rosters across días render no such message", async () => {
+    // Full-month enrollment is now enforced atomically on the backend, so
+    // this per-día mismatch should not occur in practice — but the footnote
+    // that used to flag it is gone with the state it described, and this
+    // guards that it stays gone even if stale/inconsistent rosters ever
+    // reach the client.
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
     mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
       Promise.resolve(
@@ -411,9 +416,7 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     await waitForHorarios();
 
     expect(await screen.findByText("2 inscriptos")).toBeInTheDocument();
-    expect(
-      screen.getByText("1 alumno no está inscripto en todos los días."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/no está inscript[oa]/i)).not.toBeInTheDocument();
   });
 
   it("omits the headcount rather than undercounting when a roster request fails", async () => {
@@ -640,7 +643,7 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
     expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
   });
 
-  it("confirming the pending deletion desasigna every enrolled student before eliminarHorario", async () => {
+  it("confirming the pending deletion calls eliminarHorario, which unassigns that ONE row's students server-side (not desasignarAlumnoDeHorario, which would unenroll them from the whole categoria)", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([
       { id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", horarioId: 303, horarioDia: "MIERCOLES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
     ]);
@@ -655,10 +658,10 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
     await waitFor(() => {
       expect(mockEliminarHorario).toHaveBeenCalledWith(303);
     });
-    expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledWith(10, 303);
-    const desasignarOrder = mockDesasignarAlumnoDeHorario.mock.invocationCallOrder[0];
-    const eliminarOrder = mockEliminarHorario.mock.invocationCallOrder[0];
-    expect(desasignarOrder).toBeLessThan(eliminarOrder);
+    // NOT desasignarAlumnoDeHorario: since it now fans out to the whole
+    // categoria server-side, calling it here would wrongly unenroll Ana from
+    // every OTHER día of the group too, just because Miércoles is dropped.
+    expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
   });
 });
 
@@ -838,8 +841,10 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
 
-    expect(await screen.findByText("Ana Pérez · 12 años")).toBeInTheDocument();
-    expect(await screen.findByText("Bruno Díaz · 15 años")).toBeInTheDocument();
+    expect(await screen.findByText("Ana Pérez")).toBeInTheDocument();
+    expect(screen.getByText("12 años")).toBeInTheDocument();
+    expect(await screen.findByText("Bruno Díaz")).toBeInTheDocument();
+    expect(screen.getByText("15 años")).toBeInTheDocument();
   });
 
   it("renders the deduplicated union of every día's roster, not just one día (bugfix)", async () => {
@@ -856,8 +861,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     // Ana (personaId 20) appears on both LUNES and MIERCOLES rows but only
     // once in the rendered roster — deduplicated by personaId.
     expect(await screen.findByText("Alumnos asignados (2)")).toBeInTheDocument();
-    expect(screen.getAllByText("Ana Pérez · 12 años")).toHaveLength(1);
-    expect(screen.getByText("Bruno Díaz · 15 años")).toBeInTheDocument();
+    expect(screen.getAllByText("Ana Pérez")).toHaveLength(1);
+    expect(screen.getByText("Bruno Díaz")).toBeInTheDocument();
   });
 
   /** A roster of `size` distinct students on the LUNES row of Formativo. */
@@ -901,13 +906,13 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     expect(await screen.findByText("Alumnos asignados (25)")).toBeInTheDocument();
     expect(screen.getByText(/1–10 de 25 alumnos/)).toBeInTheDocument();
-    expect(screen.getByText("Alumno 01 · 10 años")).toBeInTheDocument();
-    expect(screen.queryByText("Alumno 11 · 10 años")).not.toBeInTheDocument();
+    expect(screen.getByText("Alumno 01")).toBeInTheDocument();
+    expect(screen.queryByText("Alumno 11")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
-    expect(await screen.findByText("Alumno 11 · 10 años")).toBeInTheDocument();
-    expect(screen.queryByText("Alumno 01 · 10 años")).not.toBeInTheDocument();
+    expect(await screen.findByText("Alumno 11")).toBeInTheDocument();
+    expect(screen.queryByText("Alumno 01")).not.toBeInTheDocument();
     expect(screen.getByText(/11–20 de 25 alumnos/)).toBeInTheDocument();
   });
 
@@ -946,7 +951,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(screen.queryByRole("button", { name: "Mié" })).not.toBeInTheDocument();
   });
 
-  it("assigning a student calls asignarAlumnoAHorario once per horario_id row of the group", async () => {
+  it("assigning a student calls asignarAlumnoAHorario ONCE, anchored on the first row of the group (backend enrolls the whole categoria atomically)", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
@@ -961,18 +966,14 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     await waitFor(() => {
       expect(mockAsignarAlumnoAHorario).toHaveBeenCalledWith({ persona_id: 70, horario_id: 601 });
-      expect(mockAsignarAlumnoAHorario).toHaveBeenCalledWith({ persona_id: 70, horario_id: 602 });
     });
-    expect(mockAsignarAlumnoAHorario).toHaveBeenCalledTimes(2);
+    expect(mockAsignarAlumnoAHorario).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/asignado correctamente/i)).toBeInTheDocument();
   });
 
-  it("assigning tolerates a per-row 400 (already assigned to that día) and still reports success if any row assigned", async () => {
+  it("shows a real error when the assign call fails (e.g. already enrolled in the whole categoria)", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
-    mockAsignarAlumnoAHorario.mockImplementation((dto: { horario_id: number }) =>
-      dto.horario_id === 601
-        ? Promise.reject(new ApiClientError("El alumno ya está asignado al horario.", 400))
-        : Promise.resolve({}),
-    );
+    mockAsignarAlumnoAHorario.mockRejectedValue(new ApiClientError("Diego Vega ya figura en esa categoría.", 400));
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
@@ -982,15 +983,23 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     fireEvent.change(screen.getByLabelText("Seleccionar alumno"), { target: { value: "70" } });
+    const rosterCallsBeforeAssign = mockFetchAlumnosPorHorario.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /^asignar$/i }));
 
     await waitFor(() => {
-      expect(mockAsignarAlumnoAHorario).toHaveBeenCalledTimes(2);
+      expect(mockAsignarAlumnoAHorario).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByText(/asignado correctamente/i)).toBeInTheDocument();
+    expect(await screen.findByText("Diego Vega ya figura en esa categoría.")).toBeInTheDocument();
+    expect(screen.queryByText(/asignado correctamente/i)).not.toBeInTheDocument();
+    // The roster still refreshes after a failed assign — the request may
+    // have landed server-side even though the client saw an error, so
+    // staying on stale data would be worse than a wasted refetch.
+    await waitFor(() => {
+      expect(mockFetchAlumnosPorHorario.mock.calls.length).toBeGreaterThan(rosterCallsBeforeAssign);
+    });
   });
 
-  it("shows a real error (not a false success) when every row fails with a non-400 error while assigning", async () => {
+  it("shows a real error (not a false success) on a server failure while assigning", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
     mockAsignarAlumnoAHorario.mockRejectedValue(new ApiClientError("Error de red al asignar el alumno.", 500));
     render(<ToastProvider><GroupsPage /></ToastProvider>);
@@ -1005,7 +1014,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     fireEvent.click(screen.getByRole("button", { name: /^asignar$/i }));
 
     await waitFor(() => {
-      expect(mockAsignarAlumnoAHorario).toHaveBeenCalledTimes(2);
+      expect(mockAsignarAlumnoAHorario).toHaveBeenCalledTimes(1);
     });
     // The mock was already faithful — a 500 from the assign endpoint. What
     // was fiction is the assertion: a 5xx `detail` describes the server's
@@ -1014,10 +1023,9 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
       await screen.findByText("El servidor no pudo completar la operación. Intente nuevamente en unos minutos."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/asignado correctamente/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/ya estaba asignado a este horario/i)).not.toBeInTheDocument();
   });
 
-  it("desasignating a student calls desasignarAlumnoDeHorario once per horario_id row of the group", async () => {
+  it("desasignating a student calls desasignarAlumnoDeHorario ONCE, anchored on the first row of the group (backend unassigns the whole categoria atomically)", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
@@ -1026,18 +1034,17 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
-    const anaRow = (await screen.findByText("Ana Pérez · 12 años")).closest("div") as HTMLElement;
+    const anaRow = (await screen.findByText("Ana Pérez")).closest("li") as HTMLElement;
     fireEvent.click(within(anaRow).getByTitle("Desasignar alumno"));
 
     await waitFor(() => {
       expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledWith(20, 601);
-      expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledWith(20, 602);
     });
-    expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(2);
+    expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(1);
     expect(await screen.findByText("Alumno desasignado del horario.")).toBeInTheDocument();
   });
 
-  it("shows a real error (not a false success) when every row fails with a non-404 error while desasignating", async () => {
+  it("shows a real error (not a false success) on a server failure while desasignating", async () => {
     mockDesasignarAlumnoDeHorario.mockRejectedValue(new ApiClientError("Error de red al desasignar el alumno.", 500));
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
@@ -1047,14 +1054,12 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
-    const anaRow = (await screen.findByText("Ana Pérez · 12 años")).closest("div") as HTMLElement;
+    const anaRow = (await screen.findByText("Ana Pérez")).closest("li") as HTMLElement;
     fireEvent.click(within(anaRow).getByTitle("Desasignar alumno"));
 
     await waitFor(() => {
-      expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(2);
+      expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(1);
     });
-    // Same as the assign case: the 500 mock was already faithful, only the
-    // expectation pinned the raw `detail`.
     expect(
       await screen.findByText("El servidor no pudo completar la operación. Intente nuevamente en unos minutos."),
     ).toBeInTheDocument();
@@ -1124,7 +1129,7 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
     expect(mockEliminarHorario).not.toHaveBeenCalled();
   });
 
-  it("confirming deletes EVERY día row and desasigna every enrolled alumno first, across the whole group", async () => {
+  it("confirming deletes EVERY día row of the whole group via eliminarHorario alone (each row's own students are unassigned server-side, not via desasignarAlumnoDeHorario)", async () => {
     mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) => {
       if (horarioId === 701) {
         return Promise.resolve([
@@ -1146,13 +1151,7 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
       expect(mockEliminarHorario).toHaveBeenCalledWith(702);
       expect(mockEliminarHorario).toHaveBeenCalledWith(703);
     });
-    // Only the LUNES row (701) had an enrolled alumno.
-    expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledWith(10, 701);
-    expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(1);
-    const desasignarOrder = mockDesasignarAlumnoDeHorario.mock.invocationCallOrder[0];
-    const eliminar701Order = mockEliminarHorario.mock.calls.findIndex((call) => call[0] === 701);
-    expect(eliminar701Order).toBeGreaterThanOrEqual(0);
-    expect(desasignarOrder).toBeLessThan(mockEliminarHorario.mock.invocationCallOrder[eliminar701Order]);
+    expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
   });
 
   it("canceling the confirmation makes no delete calls and does not resync data", async () => {

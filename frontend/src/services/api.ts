@@ -1455,17 +1455,24 @@ export interface AsignarAlumnoHorarioDTO {
   horario_id: number;
 }
 
-/** Assign a student directly to a schedule. */
-export async function asignarAlumnoAHorario(data: AsignarAlumnoHorarioDTO): Promise<AlumnoHorario> {
+/**
+ * Assign a student to the WHOLE training categoria `horario_id` belongs to.
+ * The club enrolls by full month, never by a loose weekday, so the backend
+ * enrolls the student into every horario row of that categoria in one
+ * atomic transaction and returns one `AlumnoHorario` per row created.
+ */
+export async function asignarAlumnoAHorario(data: AsignarAlumnoHorarioDTO): Promise<AlumnoHorario[]> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
-  return request<AlumnoHorario>(apiEndpoint("/groups/asignar-alumno"), {
+  return request<AlumnoHorario[]>(apiEndpoint("/groups/asignar-alumno"), {
     method: "POST",
     body: JSON.stringify(data),
     headers: mockHeaders,
   });
 }
 
-/** Unassign a student from a schedule. */
+/** Unassign a student from the WHOLE training categoria `horarioId` belongs
+ * to — mirror of `asignarAlumnoAHorario`, same atomic-by-categoria backend
+ * behavior. */
 export async function desasignarAlumnoDeHorario(personaId: number, horarioId: number): Promise<void> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   await request<unknown>(

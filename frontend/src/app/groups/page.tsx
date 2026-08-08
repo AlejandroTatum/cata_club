@@ -38,22 +38,27 @@
  * inscriptos", then the same for Martes, …) describing the same students five
  * times over. The weekday filter went with it: five cards do not need filtering.
  *
- * What the card must never do is round the data to the ideal. The day set, the
- * time range and the headcount are all derived from the rows that actually
- * exist — so the live Saturday `COMPETITIVO` row reads as "Lunes a viernes +
- * sábado", and a student enrolled in only some weekdays is reported instead of
- * averaged away. There is no entrenador anywhere on the card: the club does
- * not assign trainers to schedules (issue #13).
+ * What the card must never do is round the data to the ideal. The day set and
+ * time range are derived from the rows that actually exist — so the live
+ * Saturday `COMPETITIVO` row reads as "Lunes a viernes + sábado" rather than
+ * being rounded to the norm. There is no entrenador anywhere on the card: the
+ * club does not assign trainers to schedules (issue #13).
  *
  * v4 (full-width rows): five cards in an auto-fill grid left the screen mostly
  * empty — five small boxes across the top of a 1400px page. The collapse to five
  * groups was right; the container was not. The group is a full-width row now,
  * and the width it gains is spent on facts that were cramped or invisible
  * before: the categoría's whole week as día markers (so "Competitivo also trains
- * on Saturday" and "these rows skip Martes" are readable without parsing prose)
- * and the partial-enrolment note on its own footnote line. Below `xl` the five columns
- * stack and each one carries the label the header strip carries on desktop —
- * five columns on a 390px phone is five squashed columns.
+ * on Saturday" and "these rows skip Martes" are readable without parsing prose).
+ * Below `xl` the five columns stack and each one carries the label the header
+ * strip carries on desktop — five columns on a 390px phone is five squashed
+ * columns.
+ *
+ * v5 (full-month enrollment): the club enrolls by full month, never by a
+ * loose weekday (owner's rule). Assigning/unassigning a student now hits the
+ * categoría's horarios atomically on the backend — every row or none — so a
+ * student can no longer be enrolled in only SOME of a categoría's días, and
+ * the footnote that used to flag that state is gone with the state itself.
  */
 
 "use client";
@@ -74,7 +79,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Button, EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
+import { Button, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import {
   fetchHorarios,
@@ -85,7 +90,6 @@ import {
   fetchAlumnosPorHorario,
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
-  ApiClientError,
 } from "@/services/api";
 import type { Horario, CrearHorarioDTO, ActualizarHorarioDTO, AlumnoHorario } from "@/services/api";
 import {
@@ -101,7 +105,6 @@ import {
   buildCategoriaCards,
   formatDiaSet,
   countInscriptos,
-  countInscriptosParciales,
   buildDiaTrack,
   DIA_LABELS,
   type CategoriaCard,
@@ -364,81 +367,49 @@ export default function GroupsPage(): React.ReactElement {
     }
   }, [showNotification]);
 
-  /** Assigns the selected student to EVERY día row of the categoría — a student
-   * belongs to the whole grupo, not to one día. Per-row failures (e.g. an
-   * inconsistent prior assignment already covering that specific row) don't
-   * abort the loop; the outcome is reported as a normal success if at least
-   * one row newly assigned, or as "already assigned" if none did — but only
-   * when every failure was the benign "ya estaba asignado" case (HTTP 400).
-   * Any other failure (network, 404, etc.) is a real error and must never be
-   * swallowed into a success message. */
+  /**
+   * Assigns the selected student to the categoría the card represents. The
+   * backend now enrolls the student into EVERY horario row of that categoría
+   * in one atomic transaction — the club enrolls by full month, never by a
+   * loose weekday — so this only needs to anchor the request on any one row
+   * of the group (`rows[0]`); there is no longer a per-row loop to run or a
+   * benign-per-row-failure case to tolerate on this side.
+   */
   const handleAsignarAlumno = useCallback(async (rows: readonly HorarioGroupRow[]): Promise<void> => {
-    if (!alumnoSeleccionado) return;
+    if (!alumnoSeleccionado || rows.length === 0) return;
     setAsignandoAlumno(true);
     try {
-      let asignados = 0;
-      let primerErrorReal: unknown = null;
-      for (const row of rows) {
-        try {
-          await asignarAlumnoAHorario({ persona_id: alumnoSeleccionado, horario_id: row.id });
-          asignados++;
-        } catch (err) {
-          const esBenigno = err instanceof ApiClientError && err.status === 400;
-          if (!esBenigno && primerErrorReal === null) {
-            primerErrorReal = err;
-          }
-          // Benigno (400): ya estaba asignado a esta fila puntual — se
-          // continúa con el resto de los días del grupo. No benigno: se
-          // trackea el primero para reportarlo abajo, pero igual se sigue
-          // intentando el resto de las filas.
-        }
-      }
-      if (primerErrorReal !== null) {
-        const message = extractErrorMessage(primerErrorReal, "Error al asignar el alumno al horario.");
-        showNotification("error", message);
-        showError(message);
-      } else {
-        const message =
-          asignados > 0
-            ? "Alumno asignado correctamente al horario."
-            : "El alumno ya estaba asignado a este horario.";
-        showNotification("success", message);
-        showSuccess(message);
-        setAlumnoSeleccionado(null);
-      }
-      await cargarAlumnosDelGrupo(rows);
-    } finally {
-      setAsignandoAlumno(false);
-    }
-  }, [alumnoSeleccionado, cargarAlumnosDelGrupo, showNotification, showSuccess, showError]);
-
-  /** Unassigns the student from EVERY día row of the categoría, same all-días
-   * criterion as assignment. A per-row 404 ("no había asignación en esa
-   * fila") is the only benign outcome this endpoint can produce, so it's
-   * swallowed; any other failure is real and must surface as an error
-   * instead of the "desasignado" success message. */
-  const handleDesasignarAlumno = useCallback(async (rows: readonly HorarioGroupRow[], personaId: number): Promise<void> => {
-    let primerErrorReal: unknown = null;
-    for (const row of rows) {
-      try {
-        await desasignarAlumnoDeHorario(personaId, row.id);
-      } catch (err) {
-        const esBenigno = err instanceof ApiClientError && err.status === 404;
-        if (!esBenigno && primerErrorReal === null) {
-          primerErrorReal = err;
-        }
-        // Benigno (404): no estaba asignado a esta fila puntual — se
-        // continúa con el resto. No benigno: se trackea el primero para
-        // reportarlo abajo.
-      }
-    }
-    if (primerErrorReal !== null) {
-      const message = extractErrorMessage(primerErrorReal, "Error al desasignar el alumno del horario.");
+      await asignarAlumnoAHorario({ persona_id: alumnoSeleccionado, horario_id: rows[0].id });
+      const message = "Alumno asignado correctamente al horario.";
+      showNotification("success", message);
+      showSuccess(message);
+      setAlumnoSeleccionado(null);
+    } catch (err) {
+      const message = extractErrorMessage(err, "Error al asignar el alumno al horario.");
       showNotification("error", message);
       showError(message);
-    } else {
+    }
+    // Refreshed on both paths, mirroring handleDesasignarAlumno: an assign
+    // call can fail on the client side (network) after already landing on
+    // the server, so the roster must resync either way instead of only
+    // reflecting the last KNOWN-good state.
+    await cargarAlumnosDelGrupo(rows);
+    setAsignandoAlumno(false);
+  }, [alumnoSeleccionado, cargarAlumnosDelGrupo, showNotification, showSuccess, showError]);
+
+  /** Mirror of `handleAsignarAlumno`: the backend unassigns the student from
+   * every horario row of the categoría in one atomic transaction, so one
+   * call anchored on any row of the group is enough. */
+  const handleDesasignarAlumno = useCallback(async (rows: readonly HorarioGroupRow[], personaId: number): Promise<void> => {
+    if (rows.length === 0) return;
+    try {
+      await desasignarAlumnoDeHorario(personaId, rows[0].id);
       showNotification("success", "Alumno desasignado del horario.");
       showSuccess("Alumno desasignado del horario.");
+    } catch (err) {
+      const message = extractErrorMessage(err, "Error al desasignar el alumno del horario.");
+      showNotification("error", message);
+      showError(message);
     }
     await cargarAlumnosDelGrupo(rows);
   }, [cargarAlumnosDelGrupo, showNotification, showSuccess, showError]);
@@ -670,14 +641,19 @@ export default function GroupsPage(): React.ReactElement {
     }
   }
 
-  /** User confirmed: desasignar every affected alumno THEN delete each pending row (FK has no ON DELETE CASCADE). */
+  /**
+   * User confirmed: delete each pending row. `eliminarHorario` now unassigns
+   * that row's own students server-side before removing it (scoped to that
+   * ONE horario_id) — deliberately NOT the categoría-wide
+   * `desasignarAlumnoDeHorario`, which would incorrectly unenroll these
+   * students from every OTHER día of the categoría too. Dropping Miércoles
+   * from a 5-día group must leave enrolled students on the remaining 4, not
+   * unenroll them entirely.
+   */
   async function handleConfirmPendingDeletions(): Promise<void> {
     if (!pendingDeletions) return;
     try {
       for (const pending of pendingDeletions) {
-        for (const alumno of pending.alumnos) {
-          await desasignarAlumnoDeHorario(alumno.personaId, pending.id);
-        }
         await eliminarHorario(pending.id);
       }
       const message =
@@ -714,7 +690,7 @@ export default function GroupsPage(): React.ReactElement {
    * just `group.rows[0]` — reuses the same student-safety pending-deletion
    * flow as unticking días mid-edit (`fetchAlumnosPorHorario` per row,
    * `pendingDeletions` + confirmation dialog, `handleConfirmPendingDeletions`
-   * desasigna-then-elimina) instead of duplicating that logic.
+   * calling `eliminarHorario` per row) instead of duplicating that logic.
    */
   async function requestDeleteGroup(group: HorarioGroup): Promise<void> {
     setDeletingId(group.rows[0].id);
@@ -741,7 +717,7 @@ export default function GroupsPage(): React.ReactElement {
   function renderHorarioForm(): React.ReactElement {
     return (
       <>
-        <h3 className="mb-4 text-sm font-bold text-cata-text">
+        <h3 className="mb-4 text-sm font-bold text-ink">
           {editingGroup !== null ? "Editar Horario" : "Nuevo Horario"}
         </h3>
         {formError && (
@@ -749,7 +725,7 @@ export default function GroupsPage(): React.ReactElement {
         )}
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label htmlFor="horario-categoria" className="mb-1 block text-xs font-semibold text-cata-text/65">
+            <label htmlFor="horario-categoria" className="mb-1 block text-xs font-semibold text-ink-2">
               Categoría
             </label>
             <select
@@ -772,23 +748,23 @@ export default function GroupsPage(): React.ReactElement {
             </select>
           </div>
           <div>
-            <span className="mb-1 block text-xs font-semibold text-cata-text/65">
+            <span className="mb-1 block text-xs font-semibold text-ink-2">
               Horario (fijo según categoría)
             </span>
             <p
-              className="input-field flex w-full items-center text-cata-text/70"
+              className="input-field flex w-full items-center text-ink-2"
               aria-readonly="true"
             >
               {horarioDe(categorias, formData.categoria).horaInicio} – {horarioDe(categorias, formData.categoria).horaFin}
             </p>
           </div>
           <div className="sm:col-span-2 lg:col-span-4">
-            <span className="mb-1 block text-xs font-semibold text-cata-text/65">
+            <span className="mb-1 block text-xs font-semibold text-ink-2">
               Días de la semana
             </span>
             <div className="flex flex-wrap gap-3">
               {diasPermitidos(categorias, formData.categoria).map((dia) => (
-                <label key={dia} className="inline-flex items-center gap-1.5 text-xs text-cata-text">
+                <label key={dia} className="inline-flex items-center gap-1.5 text-xs text-ink">
                   <input
                     type="checkbox"
                     checked={selectedDias.has(dia)}
@@ -924,8 +900,8 @@ export default function GroupsPage(): React.ReactElement {
       <>
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <UserPlus size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-sm font-bold text-cata-text">
+            <UserPlus size={ICON.sm} strokeWidth={1.5} className="text-state-bad" aria-hidden="true" />
+            <h3 className="text-sm font-bold text-ink">
               Alumnos de {categoriaLabel(card.categoria)}
             </h3>
           </div>
@@ -937,7 +913,7 @@ export default function GroupsPage(): React.ReactElement {
         {/* Asignar first — before the roster, not after it. */}
         <div className="mb-4 flex items-end gap-3">
           <div className="flex-1">
-            <label htmlFor="alumno-select" className="mb-1 block text-xs font-semibold text-cata-text/65">
+            <label htmlFor="alumno-select" className="mb-1 block text-xs font-semibold text-ink-2">
               Seleccionar alumno
             </label>
             <select
@@ -976,24 +952,28 @@ export default function GroupsPage(): React.ReactElement {
         ) : (
           alumnosPorHorario.length > 0 && (
             <div className="border-t border-line pt-4">
-              <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-cata-text/40">
+              <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-ink-3-strong">
                 Alumnos asignados ({alumnosPorHorario.length})
               </p>
-              <div className="space-y-field">
+              <DataRowList>
                 {alumnosVisibles.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between rounded-lg bg-cata-bg px-3 py-2">
-                    <span className="text-sm text-cata-text">{a.personaNombreCompleto} · {a.edad} años</span>
-                    <button
-                      type="button"
-                      onClick={() => void handleDesasignarAlumno(rows, a.personaId)}
-                      className="rounded-lg border border-cata-border p-1 text-cata-text/50 transition-colors hover:bg-red-50 hover:text-cata-red"
-                      title="Desasignar alumno"
-                    >
-                      <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                    </button>
-                  </div>
+                  <DataRow
+                    key={a.id}
+                    name={a.personaNombreCompleto}
+                    meta={<DataBox>{a.edad} años</DataBox>}
+                    actions={
+                      <button
+                        type="button"
+                        onClick={() => void handleDesasignarAlumno(rows, a.personaId)}
+                        className="rounded-lg border border-line-2 p-1 text-ink-3 transition-colors hover:bg-red-50 hover:text-state-bad"
+                        title="Desasignar alumno"
+                      >
+                        <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                      </button>
+                    }
+                  />
                 ))}
-              </div>
+              </DataRowList>
               {alumnosPorHorario.length > ALUMNOS_PAGE_SIZE && (
                 <Pagination
                   page={currentPage}
@@ -1046,8 +1026,8 @@ export default function GroupsPage(): React.ReactElement {
           <div
             className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${
               notification.type === "success"
-                ? "border border-cata-state-ok/30 bg-cata-state-ok/10 text-cata-state-ok"
-                : "border border-cata-red/30 bg-cata-red/10 text-cata-red"
+                ? "border border-state-ok/30 bg-state-ok-bg text-state-ok"
+                : "border border-state-bad/30 bg-state-bad-bg text-state-bad"
             }`}
             role="alert"
           >
@@ -1104,7 +1084,6 @@ export default function GroupsPage(): React.ReactElement {
                 // falls back to the días the rows themselves carry.
                 const diaTrack = buildDiaTrack(metadata?.dias ?? [], card.dias);
                 const inscriptos = countInscriptos(card.rows, personasPorHorario);
-                const parciales = countInscriptosParciales(card.rows, personasPorHorario);
 
                 return (
                   /*
@@ -1195,21 +1174,6 @@ export default function GroupsPage(): React.ReactElement {
                         </Button>
                       </div>
                     </div>
-
-                    {/* Its own line under the whole row: the sentence is too long
-                        to sit inside a column without wrapping to three lines, and
-                        it qualifies the headcount rather than replacing it. */}
-                    {parciales > 0 && (
-                      <p className="mt-3 flex items-center gap-2 text-xs text-ink-3">
-                        <span
-                          aria-hidden="true"
-                          className="h-1.5 w-1.5 flex-none rounded-full bg-state-warn"
-                        />
-                        {parciales === 1
-                          ? "1 alumno no está inscripto en todos los días."
-                          : `${parciales} alumnos no están inscriptos en todos los días.`}
-                      </p>
-                    )}
 
                     {isExpanded && expandedGroup.tab === "editar" && (
                       <div className="mt-4 border-t border-line pt-4">{renderEditPanel(card)}</div>
