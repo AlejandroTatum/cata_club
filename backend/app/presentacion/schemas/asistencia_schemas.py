@@ -8,8 +8,8 @@ from app.presentacion.schemas.base import ResponseBase
 
 class HorarioCreateDTO(BaseModel):
     """`hora_inicio`/`hora_fin` NO son campos de entrada: el servicio los
-    deriva server-side de `CATEGORIA_METADATA[categoria]` para que el
-    contrato nunca pueda desviarse de los 5 horarios fijos de negocio.
+    deriva server-side de la fila `categoria_horario` de `categoria` para
+    que el contrato nunca pueda desviarse de los horarios fijos de negocio.
 
     Sin `entrenador_id`: el club no asigna entrenadores a horarios -- la
     clase la da el entrenador disponible (issue #13,
@@ -27,6 +27,16 @@ class HorarioResponseDTO(ResponseBase, HorarioCreateDTO):
     id: int
     hora_inicio: time
     hora_fin: time
+
+
+class CategoriaResponseDTO(ResponseBase, BaseModel):
+    """Una fila de `categoria_horario`: el frontend la consulta acá en vez
+    de espejarla a mano (ver `frontend/src/services/categorias.ts`)."""
+    codigo: str
+    label: str
+    hora_inicio: time
+    hora_fin: time
+    dias: list[DiaSemana]
 
 
 class AsistenciaCreateDTO(BaseModel):

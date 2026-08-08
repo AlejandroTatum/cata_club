@@ -59,6 +59,14 @@ _LABELS_HUERFANOS_CONOCIDOS: dict[str, set[str]] = {
     },
 }
 
+# `Categoria` dejó de respaldar una columna Postgres enum (M1): `categoria_horario`
+# -- una tabla real, no un tipo enum -- es ahora la fuente de verdad de
+# hora_inicio/hora_fin/días permitidos, y `HorarioEntrenamiento.categoria` es un
+# `String` con FK a esa tabla. `Categoria` sigue existiendo solo para gatear qué
+# códigos acepta hoy la API (alta/edición de categorías queda fuera de este
+# cambio), así que ya no hay ningún tipo Postgres que auditar acá.
+_ENUMS_SIN_COLUMNA_POSTGRES: set[str] = {"Categoria"}
+
 
 def _enums_del_dominio() -> dict[str, type[_enum.Enum]]:
     """Todas las clases `enum.Enum` DEFINIDAS en `app/dominio/enums.py`
@@ -112,8 +120,12 @@ def test_cada_enum_del_dominio_existe_en_postgres_con_todos_sus_labels(
     nombre_clase, motor_test, esquema_migrado
 ):
     """Dirección que causa el 500: un miembro declarado en Python que el tipo
-    de PostgreSQL no conoce. Sin exclusiones — cualquier miembro nuevo exige
-    su migración `ALTER TYPE ... ADD VALUE` en el mismo PR."""
+    de PostgreSQL no conoce. Sin exclusiones salvo `_ENUMS_SIN_COLUMNA_POSTGRES`
+    — cualquier miembro nuevo de un enum que sí respalda una columna exige su
+    migración `ALTER TYPE ... ADD VALUE` en el mismo PR."""
+    if nombre_clase in _ENUMS_SIN_COLUMNA_POSTGRES:
+        pytest.skip(f"`{nombre_clase}` no respalda ninguna columna Postgres (ver comentario)")
+
     clase = _enums_del_dominio()[nombre_clase]
     nombre_tipo = _tipo_pg_por_clase().get(clase)
     assert nombre_tipo is not None, (

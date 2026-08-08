@@ -4,7 +4,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario, Persona
-from app.dominio.enums import Categoria
 from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
 
 
@@ -15,7 +14,7 @@ class HorarioRepositorio:
     def obtener_por_id(self, horario_id: int) -> Optional[HorarioEntrenamiento]:
         return self.db.get(HorarioEntrenamiento, horario_id)
 
-    def listar(self, categoria: Optional[Categoria] = None) -> List[HorarioEntrenamiento]:
+    def listar(self, categoria: Optional[str] = None) -> List[HorarioEntrenamiento]:
         stmt = select(HorarioEntrenamiento)
         if categoria is not None:
             stmt = stmt.where(HorarioEntrenamiento.categoria == categoria)

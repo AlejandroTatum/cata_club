@@ -1,8 +1,18 @@
-"""Tests del seed script `seed_dev_base.py`: verificaciones estructurales de
-`HORARIOS` (leídas vía import, sin ejecutar `main()`, mismo patrón que
-`test_seed_dev_bulk.py`) más un smoke run de extremo a extremo de `main()`
-contra un motor SQLite en memoria, para probar que la fila realmente
-persiste `categoria` (y no solo que la estructura en memoria la contiene)."""
+"""Tests del seed script `seed_dev_base.py`: un smoke run de extremo a
+extremo de `main()` contra un motor SQLite en memoria, para probar que la
+fila realmente persiste `categoria` (y no solo que una estructura en
+memoria la contiene).
+
+`HORARIOS`/`dias_para` ya no existen como constantes importables (M1: las
+horas/días de cada categoría se leen de `categoria_horario` en runtime, vía
+`CategoriaRepositorio`, dentro de `main()`) -- la cobertura que antes vivía
+acá sobre "las 5 categorías tienen las horas/días correctos" ahora es
+`tests/test_categoria_repositorio.py`, contra la fuente de verdad real. Lo
+que sigue viviendo acá es el smoke end-to-end: que `main()` REALMENTE
+persiste 26 horarios con esos datos. Como `Base.metadata.create_all()` (a
+diferencia de `alembic upgrade head`) no corre el data-seed de la migración,
+`_motor_en_memoria` siembra `categoria_horario`/`categoria_horario_dia` a
+mano antes de invocar `main()`."""
 import importlib.util
 from datetime import date, time
 from pathlib import Path
@@ -15,6 +25,8 @@ from app.dominio.enums import Categoria, DiaSemana, TipoRol
 from app.dominio.modelos import (
     AlumnoHorario,
     Base,
+    CategoriaHorario,
+    CategoriaHorarioDia,
     HorarioEntrenamiento,
     Membresia,
     Pago,
@@ -25,6 +37,22 @@ from app.dominio.modelos import (
 
 SEED_SCRIPT = Path(__file__).parents[1] / "scripts" / "seed_dev_base.py"
 
+_LUN_VIE = (
+    DiaSemana.LUNES, DiaSemana.MARTES, DiaSemana.MIERCOLES,
+    DiaSemana.JUEVES, DiaSemana.VIERNES,
+)
+_LUN_SAB = _LUN_VIE + (DiaSemana.SABADO,)
+
+# Misma copia literal de `categoria_metadata.py:33-54` que sembró
+# `a4e7c2f9b1d8` -- ver esa migración para la fuente real en Postgres.
+_CATEGORIAS_SEED = [
+    ("FORMATIVO", "Formativo", time(15, 0), time(16, 0), _LUN_VIE),
+    ("INFANTIL", "Infantil", time(16, 0), time(17, 0), _LUN_VIE),
+    ("JUVENIL", "Juvenil", time(17, 0), time(18, 0), _LUN_VIE),
+    ("COMPETITIVO", "Competitivo", time(18, 0), time(20, 0), _LUN_SAB),
+    ("ADULTOS", "Adultos", time(20, 0), time(21, 15), _LUN_VIE),
+]
+
 
 def _cargar_modulo_seed():
     spec = importlib.util.spec_from_file_location("seed_dev_base", SEED_SCRIPT)
@@ -34,51 +62,9 @@ def _cargar_modulo_seed():
     return modulo
 
 
-def test_horarios_incluye_las_5_categorias_con_categoria_asignada():
-    modulo = _cargar_modulo_seed()
-
-    categorias = {categoria for categoria, _, _ in modulo.HORARIOS}
-
-    assert categorias == {
-        Categoria.FORMATIVO, Categoria.INFANTIL, Categoria.JUVENIL,
-        Categoria.COMPETITIVO, Categoria.ADULTOS,
-    }
-
-
-def test_adultos_termina_a_las_21_15():
-    modulo = _cargar_modulo_seed()
-
-    adultos = next(h for h in modulo.HORARIOS if h[0] == Categoria.ADULTOS)
-
-    assert adultos[2] == time(21, 15)
-
-
-def test_competitivo_corre_lunes_a_sabado_las_otras_solo_lunes_a_viernes():
-    modulo = _cargar_modulo_seed()
-
-    assert DiaSemana.SABADO in modulo.dias_para(Categoria.COMPETITIVO)
-    assert DiaSemana.SABADO not in modulo.dias_para(Categoria.FORMATIVO)
-    assert DiaSemana.SABADO not in modulo.dias_para(Categoria.INFANTIL)
-    assert DiaSemana.SABADO not in modulo.dias_para(Categoria.JUVENIL)
-    assert DiaSemana.SABADO not in modulo.dias_para(Categoria.ADULTOS)
-
-
-def test_total_de_filas_de_horario_generadas_es_26():
-    """4 categorías x 5 días (Lun-Vie) + Competitivo x 6 días (Lun-Sáb) = 26."""
-    modulo = _cargar_modulo_seed()
-
-    total = sum(len(modulo.dias_para(categoria)) for categoria, _, _ in modulo.HORARIOS)
-
-    assert total == 26
-
-
-def test_main_persiste_26_horarios_con_categoria_adultos_21_15_y_competitivo_sabado():
-    """Smoke run de extremo a extremo: ejecuta `main()` de verdad contra un
-    motor SQLite en memoria y verifica los datos REALMENTE persistidos (no
-    solo la estructura HORARIOS en memoria) -- cierra el hueco que el propio
-    diseño señaló como 'no verificado end-to-end' en el intento anterior."""
-    modulo = _cargar_modulo_seed()
-
+def _motor_en_memoria(modulo):
+    """Motor SQLite fresco con las tablas creadas y `categoria_horario` +
+    `categoria_horario_dia` ya sembradas, inyectado en el módulo del seed."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -86,11 +72,31 @@ def test_main_persiste_26_horarios_con_categoria_adultos_21_15_y_competitivo_sab
     )
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    with TestingSessionLocal() as sesion:
+        for codigo, label, hora_inicio, hora_fin, dias in _CATEGORIAS_SEED:
+            sesion.add(CategoriaHorario(
+                codigo=codigo, label=label, hora_inicio=hora_inicio, hora_fin=hora_fin,
+            ))
+            for dia in dias:
+                sesion.add(CategoriaHorarioDia(categoria_codigo=codigo, dia_semana=dia))
+        sesion.commit()
+
     modulo.SessionLocal = TestingSessionLocal
+    return TestingSessionLocal
+
+
+def test_main_persiste_26_horarios_con_categoria_adultos_21_15_y_competitivo_sabado():
+    """Smoke run de extremo a extremo: ejecuta `main()` de verdad contra un
+    motor SQLite en memoria y verifica los datos REALMENTE persistidos (no
+    solo la estructura en memoria) -- cierra el hueco que el propio diseño
+    señaló como 'no verificado end-to-end' en el intento anterior."""
+    modulo = _cargar_modulo_seed()
+    _motor_en_memoria(modulo)
 
     modulo.main()
 
-    with TestingSessionLocal() as verificacion:
+    with modulo.SessionLocal() as verificacion:
         horarios = list(verificacion.execute(select(HorarioEntrenamiento)).scalars().all())
 
         assert len(horarios) == 26
@@ -101,22 +107,8 @@ def test_main_persiste_26_horarios_con_categoria_adultos_21_15_y_competitivo_sab
         assert all(h.hora_fin == time(21, 15) for h in adultos)
 
         competitivo_dias = {h.dia_semana for h in horarios if h.categoria == Categoria.COMPETITIVO}
-        assert competitivo_dias == set(modulo.dias_para(Categoria.COMPETITIVO))
+        assert competitivo_dias == set(_LUN_SAB)
         assert DiaSemana.SABADO in competitivo_dias
-
-
-def _motor_en_memoria(modulo):
-    """Motor SQLite fresco con las tablas creadas, ya inyectado en el módulo
-    del seed (mismo montaje que el smoke run de arriba)."""
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    modulo.SessionLocal = TestingSessionLocal
-    return TestingSessionLocal
 
 
 def test_main_repara_representante_preexistente_sin_roles():

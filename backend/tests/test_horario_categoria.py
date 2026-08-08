@@ -1,6 +1,6 @@
 """Tests de la regla de negocio: `categoria` en `HorarioEntrenamiento` bloquea
-`hora_inicio`/`hora_fin` a los valores canónicos de `CATEGORIA_METADATA` y
-restringe `dia_semana` al conjunto de días permitido por la categoría."""
+`hora_inicio`/`hora_fin` a los valores canónicos de la tabla `categoria_horario`
+y restringe `dia_semana` al conjunto de días permitido por la categoría."""
 import pytest
 
 from app.dominio.enums import Categoria, DiaSemana

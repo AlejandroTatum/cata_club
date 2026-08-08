@@ -1,14 +1,33 @@
 import importlib.util
+from datetime import time
 from pathlib import Path
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.dominio.modelos import AlumnoHorario, Asistencia, Base
+from app.dominio.enums import DiaSemana
+from app.dominio.modelos import AlumnoHorario, Asistencia, Base, CategoriaHorario, CategoriaHorarioDia
 
 SEED_SCRIPT = Path(__file__).parents[1] / "scripts" / "seed_dev_bulk.py"
 BASE_SEED_SCRIPT = Path(__file__).parents[1] / "scripts" / "seed_dev_base.py"
+
+_LUN_VIE = (
+    DiaSemana.LUNES, DiaSemana.MARTES, DiaSemana.MIERCOLES,
+    DiaSemana.JUEVES, DiaSemana.VIERNES,
+)
+_LUN_SAB = _LUN_VIE + (DiaSemana.SABADO,)
+
+# Misma copia literal que siembra `a4e7c2f9b1d8` -- `seed_dev_base.main()`
+# depende de leer `categoria_horario` (M1), y `Base.metadata.create_all()`
+# (a diferencia de `alembic upgrade head`) no corre el data-seed.
+_CATEGORIAS_SEED = [
+    ("FORMATIVO", "Formativo", time(15, 0), time(16, 0), _LUN_VIE),
+    ("INFANTIL", "Infantil", time(16, 0), time(17, 0), _LUN_VIE),
+    ("JUVENIL", "Juvenil", time(17, 0), time(18, 0), _LUN_VIE),
+    ("COMPETITIVO", "Competitivo", time(18, 0), time(20, 0), _LUN_SAB),
+    ("ADULTOS", "Adultos", time(20, 0), time(21, 15), _LUN_VIE),
+]
 
 
 def _load_seed_module():
@@ -41,6 +60,16 @@ def _motor_en_memoria(*modulos):
     )
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    with TestingSessionLocal() as sesion:
+        for codigo, label, hora_inicio, hora_fin, dias in _CATEGORIAS_SEED:
+            sesion.add(CategoriaHorario(
+                codigo=codigo, label=label, hora_inicio=hora_inicio, hora_fin=hora_fin,
+            ))
+            for dia in dias:
+                sesion.add(CategoriaHorarioDia(categoria_codigo=codigo, dia_semana=dia))
+        sesion.commit()
+
     for modulo in modulos:
         modulo.SessionLocal = TestingSessionLocal
     return TestingSessionLocal
