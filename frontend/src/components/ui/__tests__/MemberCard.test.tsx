@@ -28,9 +28,32 @@ describe("MemberCard — identity reads as an object", () => {
     expect(screen.getByRole("region", { name: /laura vera/i })).toBeInTheDocument();
   });
 
-  it("renders the name in the display mono, not body text", () => {
+  it("renders the name in a mono weight distinct from body text", () => {
     renderCard();
-    expect(screen.getByText("Laura Vera")).toHaveClass("font-mono", "text-display");
+    expect(screen.getByText("Laura Vera")).toHaveClass("font-mono", "truncate");
+  });
+
+  // The card was calibrated against "Laura Vera" (10 chars) and never tried
+  // against a real long name in a compact card — `text-display` (46px) is
+  // sized for the auth headline, not for a carnet that shares its row with a
+  // 72px avatar. At that size "Jefferson Delgado Rivadeneira" (29 chars)
+  // would only leave a handful of characters visible before `truncate`
+  // clips it. `text-lg` is the scale's own "a name that leads a row" step
+  // (see tailwind.config.ts's fontSize.lg) — the one built for exactly this.
+  it("uses a size calibrated for a real long name in a compact card, not the 46px auth headline", () => {
+    render(
+      <MemberCard
+        name="Jefferson Delgado Rivadeneira"
+        email="jefferson@example.com"
+        role="Alumno"
+        memberSince="Socio desde mar 2024"
+      />,
+    );
+    const name = screen.getByText("Jefferson Delgado Rivadeneira");
+    expect(name).toHaveClass("text-lg");
+    expect(name).not.toHaveClass("text-display");
+    // truncate still guards whatever the viewport cannot fit.
+    expect(name).toHaveClass("truncate");
   });
 
   it("renders the email in a muted tone under the name", () => {

@@ -13,6 +13,22 @@
  * The footer (role, member-since) sits below its own hairline, the same
  * "identity above / facts below a rule" split the student carnet already
  * uses for its schedule facts.
+ *
+ * ## Name size — `text-lg`, not `text-display`
+ *
+ * This shipped with `font-mono text-display` (46px, the auth-headline step)
+ * and was never tried against a real long name in a compact card — it was
+ * built without a screen to apply it to. `/profile` puts this card beside a
+ * 72px avatar, and a 46px mono name like "Jefferson Delgado Rivadeneira"
+ * (29 characters, from the seeded fixtures) only leaves a handful of
+ * characters visible before `truncate` clips the rest — the identity a
+ * carnet exists to state becomes the LEAST legible thing on it.
+ *
+ * `text-lg` (20px) is the scale's own step for exactly this job — its own
+ * comment in `tailwind.config.ts` names it "a name that leads a row" — so
+ * this recalibrates onto a size the system already committed to rather than
+ * picking a new one by eye. `truncate` stays as the guard for whatever a
+ * narrow viewport still can't fit.
  */
 
 import type { ReactElement } from "react";
@@ -55,7 +71,7 @@ export default function MemberCard({
         </span>
       </div>
 
-      <p className="relative z-10 mt-4 truncate font-mono text-display leading-none text-white">
+      <p className="relative z-10 mt-4 truncate font-mono text-lg font-semibold leading-none text-white">
         {name}
       </p>
       <p className="relative z-10 mt-2.5 text-sm text-white/60">{email}</p>

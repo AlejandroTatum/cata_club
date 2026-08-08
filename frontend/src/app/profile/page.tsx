@@ -71,7 +71,16 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import type { StudentPortalSummary, StudentProfileSummary, MembershipSummary } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
 import { personInitials } from "@/app/student/student-utils";
-import { Badge, Button, ErrorState, LoadingState, PAGE_RAIL, buttonClasses } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  DataBox,
+  ErrorState,
+  LoadingState,
+  MemberCard,
+  PAGE_RAIL,
+  buttonClasses,
+} from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
 // Reused as-is (not duplicated) for consistency — this is the same
@@ -142,9 +151,17 @@ function DetailRow({
     // a wrap the value collapsed to one word per line while the button was
     // clipped by the card's own edge. The action now drops to a second line
     // and stays right-aligned; above `sm` nothing about the row changes.
-    <div className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-2.5 last:border-b-0">
+    //
+    // No `min-h-drow` (56px): that floor was sized for the shared dense-row
+    // primitive, not for a row holding one line of text — it left ~40px of
+    // dead air around a 20px value. The row now sizes to its own content.
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-2 last:border-b-0">
       {label && (
-        <span className="w-[110px] flex-none text-2xs font-bold uppercase text-ink-3 sm:w-[150px]">
+        // Grey and normal weight, not bold uppercase caps: the label only
+        // has to orient, the VALUE is what the reader came to read. Bold
+        // uppercase at the same size as the value made the two compete for
+        // attention instead of one leading the other.
+        <span className="w-[110px] flex-none text-xs text-ink-3 sm:w-[150px]">
           {label}
         </span>
       )}
@@ -171,13 +188,15 @@ function DetailRow({
 }
 
 /**
- * The shell every state of this page shares. Keeping the title and
- * subtitle in ONE place stops loading, error and the loaded layout from
- * drifting apart now that the loaded layout owns its own `AppShell` (it has
- * to, because the header's action depends on the layout's edit state).
+ * The shell every state of this page shares. Keeping the title in ONE place
+ * stops loading, error and the loaded layout from drifting apart now that
+ * the loaded layout owns its own `AppShell` (it has to, because the header's
+ * action depends on the layout's edit state).
  *
- * The voice is usted: the tú of the auth screens is marketing copy and stops
- * at the door.
+ * No subtitle: "Gestione su información y consulte su estado en el club."
+ * restated what being on a profile page already says — a screen earns its
+ * one line of prose, it doesn't default to it. The member card below now
+ * carries the identity that line used to gesture at.
  */
 function ProfileShell({
   actions,
@@ -187,23 +206,20 @@ function ProfileShell({
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <AppShell
-      title="Perfil"
-      subtitle="Gestione su información y consulte su estado en el club."
-      actions={actions}
-    >
+    <AppShell title="Perfil" actions={actions}>
       {children}
     </AppShell>
   );
 }
 
 /**
- * One fact on the identity card's right-hand rail: a 10.5px uppercase label
- * over the value, same label treatment as `.drow .k`.
+ * One fact beside the member card, for whatever it cannot itself express —
+ * today that is a multi-role breakdown and the membership state, the two
+ * facts that don't fit `MemberCard`'s single `role` string. Same grey,
+ * normal-weight label as `DetailRow`'s: it orients, it doesn't shout.
  *
- * The rail exists because the card used to be an avatar, a name, a correo and
- * a large white void to their right. Every item here is a value the page has
- * already fetched — a slot with no source is not rendered at all.
+ * Every item here is a value the page has already fetched — a slot with no
+ * source is not rendered at all.
  */
 function IdentityFact({
   label,
@@ -214,7 +230,7 @@ function IdentityFact({
 }): React.ReactElement {
   return (
     <div className="min-w-0">
-      <p className="mb-1 text-2xs font-bold uppercase text-ink-3">{label}</p>
+      <p className="mb-1 text-xs text-ink-3">{label}</p>
       <div className="flex items-center text-sm font-semibold text-ink">{children}</div>
     </div>
   );
@@ -447,6 +463,15 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     props.kind === "staff" ? props.perfil.telefono : (props.perfil?.telefono ?? "");
   const fechaCreacion = props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
 
+  /**
+   * `MemberCard.role` takes a single string, so a multi-role account cannot
+   * print all of them there — the full breakdown (including which role is
+   * active this session) moves to the `IdentityFact` rail beside the card
+   * instead, so the two never state the exact same fact twice.
+   */
+  const memberCardRole = assignedRoles.length > 1 ? `${assignedRoles.length} roles asignados` : roleLabel;
+  const memberCardSince = fechaCreacion ? `Miembro desde ${formatDate(fechaCreacion)}` : "Miembro desde —";
+
   // The page action lives in `PageHeader`'s own row (`.rowline` in
   // `25-perfil.html`), passed up through `AppShell`. It used to sit on a line
   // of its own below a "Volver al Panel" link, and those two rows together
@@ -484,13 +509,15 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           card spans the width it already wanted; below it the page splits into
           the data the reader came to check and the two account controls, which
           are a rail and never needed 820px of their own. */}
-      {/* 1 — `.idcard`: the identity on the left, the account facts it can
-          prove on the right. */}
+      {/* 1 — the identity block: the avatar (still the one place a photo is
+          uploaded) beside the member carnet, and — only when there is extra
+          information the carnet's own fixed shape cannot state — a small rail
+          for the multi-role breakdown and the membership state. */}
       <section
         data-testid="profile-hero"
-        className="card flex flex-col gap-5 px-6 py-[22px] sm:flex-row sm:items-center sm:gap-6"
+        className="card flex flex-col gap-5 px-6 py-[22px] sm:flex-row sm:items-start sm:gap-6"
       >
-        <div className="flex min-w-0 flex-1 items-center gap-[18px]">
+        <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:items-center sm:gap-[18px]">
         <div className="relative flex-none">
           <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-coal text-xl font-extrabold text-ball">
             {currentFotoUrl ? (
@@ -526,84 +553,94 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             data-testid="foto-perfil-input"
           />
         </div>
-        <div className="min-w-0">
-          <p className="text-lg font-bold text-ink">{fullName}</p>
-          <p className="mt-0.5 text-sm text-ink-3">{correoDisplay}</p>
+        <div className="min-w-0 flex-1">
+          {/* The identity object: name, correo, role and "member since" in
+              one carnet — not a header with facts scattered beside it.
+              Correo now appears HERE ONLY: the "Datos personales" row that
+              used to repeat it is gone (that repetition was the defect). */}
+          <MemberCard
+            name={fullName}
+            email={correoDisplay}
+            role={memberCardRole}
+            memberSince={memberCardSince}
+          />
+          {/* The note the removed correo row used to carry, kept because the
+              policy behind it ("Correo lo gestiona el club, no se edita
+              aquí") is still true and still worth saying once. */}
+          <p className="mt-2 text-xs text-ink-3">
+            El correo lo gestiona el club, no se edita aquí.
+          </p>
           {fotoError && (
-            <p role="alert" className="mt-2 text-xs text-cata-red">
+            <p role="alert" className="mt-2 text-xs text-state-bad">
               {fotoError}
             </p>
           )}
         </div>
         </div>
 
-        {/* The rail. Rol and Membresía keep their badge treatment — they are
-            states, not free text — while Miembro desde reads as a value.
-            Nothing here is derived or estimated: "Miembro desde" only
-            appears once `fetchMiPerfil()` has resolved.
+        {/* The rail — ONLY for facts the carnet's fixed shape cannot itself
+            state: which of several roles is active, and the membership
+            state. A single-role staff account renders none of this; its one
+            role already lives on the card.
 
             Two facts the prototype draws are still absent, for want of a
             source: "Cuenta activa" (no `activo` flag on `UsuarioMeResponseDTO`)
             and "Cédula" (admin-only, via `/personas/{id}`). */}
-        <div className="flex flex-wrap gap-x-8 gap-y-section border-t border-line pt-5 sm:flex-none sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
-          {/*
-              EVERY assigned role, not just the session's. `mapBackendRoleToUserRole`
-              collapses an account's backend roles to the single
-              highest-privilege one, so a person who is administrator AND
-              trainer AND representante AND alumno used to read "Rol ·
-              Administrador" here — and the other three appeared nowhere in the
-              product. The session's own role keeps the solid badge; the rest
-              are neutral, so "which one am I using right now" survives.
-          */}
-          <IdentityFact label={assignedRoles.length > 1 ? "Roles asignados" : "Rol"}>
-            {/* Capped, and wrapping. The rail is `flex-none`, so four badges
-                laid out in one line grew it far enough to break "Admin Dev"
-                across two lines — the same squeeze the membership fallback
-                below was already capped for. */}
-            <div className="flex max-w-[15rem] flex-wrap items-center gap-1.5">
-              {assignedRoles.length === 0 ? (
-                <Badge>{roleLabel}</Badge>
-              ) : (
-                assignedRoles.map((rol) => (
-                  <Badge key={rol} tone={rol === sessionBackendRole ? "ok" : "neutral"}>
-                    {getBackendRoleLabel(rol)}
-                    {rol === sessionBackendRole && assignedRoles.length > 1 && (
-                      <span className="sr-only"> — rol activo en esta sesión</span>
-                    )}
-                  </Badge>
-                ))
-              )}
-            </div>
-          </IdentityFact>
-          {props.kind === "student" && self && (
-            <IdentityFact label="Membresía">
-              {membership ? (
-                <Badge tone={membership.tone}>{membership.label}</Badge>
-              ) : (
-                // Capped measure: at its natural width this 45-character
-                // sentence is the widest thing in the rail, and the rail is
-                // `flex-none`, so it was squeezing the account holder's own
-                // name onto two lines beside it.
-                <span className="max-w-[22ch] text-xs font-normal text-ink-3">
-                  {NO_MEMBERSHIP_FALLBACK}
-                </span>
-              )}
-            </IdentityFact>
-          )}
-          {fechaCreacion && (
-            <IdentityFact label="Miembro desde">{formatDate(fechaCreacion)}</IdentityFact>
-          )}
-        </div>
+        {(assignedRoles.length > 1 || (props.kind === "student" && self)) && (
+          <div className="flex flex-wrap gap-x-8 gap-y-section border-t border-line pt-5 sm:flex-none sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+            {assignedRoles.length > 1 && (
+              // EVERY assigned role, not just the session's. `mapBackendRoleToUserRole`
+              // collapses an account's backend roles to the single
+              // highest-privilege one, so a person who is administrator AND
+              // trainer AND representante AND alumno used to read only
+              // "Administrador" here — and the other three appeared nowhere
+              // in the product. The session's own role keeps the solid
+              // badge; the rest are neutral, so "which one am I using right
+              // now" survives.
+              <IdentityFact label="Roles asignados">
+                {/* Capped, and wrapping. The rail is `flex-none`, so four
+                    badges laid out in one line grew it far enough to break
+                    "Admin Dev" across two lines — the same squeeze the
+                    membership fallback below was already capped for. */}
+                <div className="flex max-w-[15rem] flex-wrap items-center gap-1.5">
+                  {assignedRoles.map((rol) => (
+                    <Badge key={rol} tone={rol === sessionBackendRole ? "ok" : "neutral"}>
+                      {getBackendRoleLabel(rol)}
+                      {rol === sessionBackendRole && (
+                        <span className="sr-only"> — rol activo en esta sesión</span>
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+              </IdentityFact>
+            )}
+            {props.kind === "student" && self && (
+              <IdentityFact label="Membresía">
+                {membership ? (
+                  <Badge tone={membership.tone}>{membership.label}</Badge>
+                ) : (
+                  // Capped measure: at its natural width this 45-character
+                  // sentence is the widest thing in the rail, and the rail is
+                  // `flex-none`, so it was squeezing the account holder's own
+                  // name onto two lines beside it.
+                  <span className="max-w-[22ch] text-xs font-normal text-ink-3">
+                    {NO_MEMBERSHIP_FALLBACK}
+                  </span>
+                )}
+              </IdentityFact>
+            )}
+          </div>
+        )}
       </section>
 
       <div className={PAGE_RAIL}>
       <div className="flex min-w-0 flex-col gap-5">
-      {/* 2 — Datos personales, one datum per 56px row. */}
+      {/* 2 — Datos personales, one datum per row. Correo is NOT a row here
+          anymore: it lives on the member card only (see the hero section) —
+          repeating it was the exact duplication defect this redesign
+          fixes. */}
       <CardSection title="Datos personales" testId="profile-column-info">
         <DetailRow label="Nombres">{fullName}</DetailRow>
-        <DetailRow label="Correo" note="Lo gestiona el club, no se edita aquí">
-          {correoDisplay}
-        </DetailRow>
         <DetailRow label="Teléfono">
           {props.kind === "staff" && editing ? (
             <input
@@ -617,7 +654,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               className="input-field max-w-xs"
             />
           ) : (
-            telefonoDisplay || "—"
+            <DataBox>{telefonoDisplay || "—"}</DataBox>
           )}
         </DetailRow>
         {/* "Miembro desde" is NOT a row: it is account metadata, it lives on
@@ -632,7 +669,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           </p>
         )}
         {saveError && (
-          <p role="alert" className="border-t border-line px-5 py-3 text-sm text-cata-red">
+          <p role="alert" className="border-t border-line px-5 py-3 text-sm text-state-bad">
             {saveError}
           </p>
         )}
@@ -715,7 +752,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         </p>
       )}
       {sessionsError && (
-        <p role="alert" className="text-sm text-cata-red">
+        <p role="alert" className="text-sm text-state-bad">
           {sessionsError}
         </p>
       )}
@@ -737,7 +774,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         </p>
       )}
       {passwordError && (
-        <p role="alert" className="text-sm text-cata-red">
+        <p role="alert" className="text-sm text-state-bad">
           {passwordError}
         </p>
       )}
