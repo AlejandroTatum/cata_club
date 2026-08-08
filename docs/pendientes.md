@@ -263,6 +263,10 @@ La severidad indica **consecuencia**, no esfuerzo:
     `RAW_PALETTE_DEBT` que ya usa `color-contrast.test.ts:593`: lista
     congelada de archivos con `cata-*`, roja si aparece uno nuevo o si un
     archivo saneado recae.
+  - **No se cierra solo:** baja pantalla por pantalla, en la misma pasada que
+    el ítem de las ocho pantallas sin sistema visual. Este ítem es el único
+    lugar del documento donde vive el conteo; si necesitás el número,
+    re-derivalo con el comando de arriba en vez de copiarlo a otra parte.
 
 - [ ] **`GET /ranking/notificaciones/mias` devuelve `List[...]` sin paginar.**
   - **Qué está mal:** las notificaciones crecen monótonamente por usuario y el
@@ -506,7 +510,14 @@ La severidad indica **consecuencia**, no esfuerzo:
 ### Pantallas sin el sistema visual nuevo
 
 - [ ] **Ocho pantallas todavía no aplican `DataBox`/`DataRow`/`StatGrid`/
-  `MemberCard`/`BackLink` (#176-#180); 32 archivos siguen en `cata-*`.**
+  `MemberCard`/`BackLink` (#176-#180).**
+  - **Va en la misma pasada que el ítem de los dos sistemas de tokens.** Son
+    el mismo trabajo restante visto desde dos lados: cada pantalla que se
+    rediseña migra sus `cata-*` en el mismo PR. Hacerlos por separado
+    significa tocar cada línea dos veces. **El conteo de archivos con
+    `cata-*` vive solo en aquel ítem**, que trae el comando que lo re-deriva;
+    acá no se repite, para no tener dos números del mismo hecho
+    desincronizándose (que es la falla que este documento ya sufrió).
   - **Qué está mal:** el sistema visual nuevo tiene seis componentes con test
     propio (`DataBox`, `BackLink`, `DataRow`, `Table` extendida, `StatGrid`,
     `MemberCard`) y ya se aplicó a `/members`, `/profile` y `/groups`. Ocho
