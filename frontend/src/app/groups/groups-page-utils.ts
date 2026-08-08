@@ -208,31 +208,3 @@ export function countInscriptos(
   }
   return distinct.size;
 }
-
-/**
- * How many of the categoría's students are missing from at least one of its
- * weekdays — the club's own data has one such case (a Formativo student
- * enrolled on Monday only), and a single headcount would hide it.
- *
- * 0 while any roster is still missing: an incomplete picture must not report
- * an anomaly it cannot yet see.
- */
-export function countInscriptosParciales(
-  rows: readonly HorarioGroupRow[],
-  personas: PersonasPorHorario,
-): number {
-  const rosters: ReadonlySet<number>[] = [];
-  for (const row of rows) {
-    const roster = personas[row.id];
-    if (roster === undefined) return 0;
-    rosters.push(new Set(roster));
-  }
-  if (rosters.length === 0) return 0;
-
-  const distinct = new Set<number>(rosters.flatMap((roster) => Array.from(roster)));
-  let parciales = 0;
-  for (const personaId of distinct) {
-    if (!rosters.every((roster) => roster.has(personaId))) parciales++;
-  }
-  return parciales;
-}

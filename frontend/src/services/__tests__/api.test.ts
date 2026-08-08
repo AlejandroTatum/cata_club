@@ -687,8 +687,10 @@ describe("fetchAlumnosPorHorario", () => {
 });
 
 describe("asignarAlumnoAHorario", () => {
-  it("POSTs /api/groups/asignar-alumno", async () => {
-    const created = makeAlumnoHorario();
+  it("POSTs /api/groups/asignar-alumno and returns one row per horario the categoria enrolled", async () => {
+    // The backend enrolls the whole categoria atomically (full-month
+    // enrollment, never a loose weekday) and returns one row per horario.
+    const created = [makeAlumnoHorario({ horarioId: 1 }), makeAlumnoHorario({ id: 2, horarioId: 2 })];
     vi.mocked(global.fetch).mockResolvedValue(okResponse(created, { status: 201 }));
 
     const dto = { persona_id: 3, horario_id: 1 };
