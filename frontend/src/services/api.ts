@@ -1300,21 +1300,22 @@ export async function fetchFichaMedica(personaId: number): Promise<FichaMedicaEd
   return request<FichaMedicaEditable>(apiEndpoint(`/fichas-medicas/persona/${personaId}`));
 }
 
-/** Admin-only: update a person's medical record. `enfermedades` replaces the full list. */
+/**
+ * Admin-only: update a person's medical record. `enfermedades` replaces the
+ * full list.
+ *
+ * Sends `data` as-is (camelCase) — the BFF route is the single place that
+ * converts to the backend's snake_case. Converting here too used to rename
+ * `tipoSangre`/`contactoEmergencia`/`telefonoEmergencia` before the route
+ * could read them, silently dropping all three.
+ */
 export async function actualizarFichaMedica(
   personaId: number,
   data: FichaMedicaUpdatePayload,
 ): Promise<FichaMedicaEditable> {
-  const body: Record<string, unknown> = {};
-  if (data.tipoSangre !== undefined) body.tipo_sangre = data.tipoSangre;
-  if (data.enfermedades !== undefined) body.enfermedades = data.enfermedades;
-  if (data.alergias !== undefined) body.alergias = data.alergias;
-  if (data.contactoEmergencia !== undefined) body.contacto_emergencia = data.contactoEmergencia;
-  if (data.telefonoEmergencia !== undefined) body.telefono_emergencia = data.telefonoEmergencia;
-
   return request<FichaMedicaEditable>(apiEndpoint(`/fichas-medicas/persona/${personaId}`), {
     method: "PATCH",
-    body: JSON.stringify(body),
+    body: JSON.stringify(data),
   });
 }
 
