@@ -442,6 +442,27 @@ describe("timeout / abort", () => {
       vi.useRealTimers();
     }
   });
+
+  it("downloadBlob names its deadline even when the stalled body is an error body", async () => {
+    // The error branch reads the body too, and its catch exists to swallow a
+    // parse error. An abort is not one: swallowing it shipped the timeout as
+    // a server failure, the one sentence a slow PDF must not produce.
+    vi.useFakeTimers();
+    vi.mocked(global.fetch).mockImplementation((_url, opts) => {
+      const signal = opts?.signal as AbortSignal;
+      const stalled = new Promise((_resolve, reject) =>
+        signal.addEventListener("abort", () => queueMicrotask(() => reject(signal.reason))),
+      );
+      return Promise.resolve({ ok: false, status: 504, json: () => stalled } as unknown as Response);
+    });
+    try {
+      const settled = downloadBlob("/api/x/pdf", "x.pdf").catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(((await settled) as Error).name).toBe("TimeoutError");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

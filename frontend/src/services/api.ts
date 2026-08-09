@@ -884,8 +884,13 @@ export async function downloadBlob(endpoint: string, fallbackFilename: string): 
         if (isApiErrorBody(errorBody)) {
           message = errorBody.detail ?? errorBody.message ?? message;
         }
-      } catch {
-        // ignore parse errors — use default message
+      } catch (parseError: unknown) {
+        // A parse error is nothing to report — the status says enough. Our own
+        // deadline firing mid-read is NOT one, though: this read runs under the
+        // same signal, and swallowing it would ship a timeout as a server failure.
+        if (timedOut && parseError instanceof Error && parseError.name === "AbortError") {
+          throw parseError;
+        }
       }
       throw new ApiClientError(message, response.status);
     }
