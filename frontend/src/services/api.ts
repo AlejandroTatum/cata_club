@@ -12,9 +12,12 @@
  * header (see `isMockMode`/`getMockRoleHeader`) for the Route Handlers that
  * are still mock-backed. It no longer affects which URL this client calls.
  *
- * Timeout: every request aborts after 10 seconds by default (see `request`).
- *          If the caller provides their own `signal`, the caller manages
- *          timeout instead — so provide one if you need timeout guarantees.
+ * Timeout: every request that goes through `request()` aborts after 10
+ *          seconds by default. If the caller provides their own `signal`,
+ *          the caller manages timeout instead — so provide one if you need
+ *          timeout guarantees. `downloadBlob` (PDF report exports) is the
+ *          one function that bypasses `request()` — it sets its own, longer
+ *          deadline; see `PDF_DOWNLOAD_TIMEOUT_MS`.
  */
 
 import type {
@@ -824,37 +827,82 @@ export async function fetchNuevosPorPeriodo(
 // ---------------------------------------------------------------------------
 
 /**
+ * PDF generation is the product's slowest path — legitimately so, not a
+ * malfunction, so it does not reuse DEFAULT_TIMEOUT_MS (10s).
+ *
+ * The BFF route behind it (`proxyBackendPdfGet`, src/lib/server/backend-client.ts)
+ * has no PDF-specific bound of its own: it goes through the same
+ * `backendFetch` every authenticated call uses, whose own internal deadline —
+ * BACKEND_TIMEOUT_MS, 10s, see src/lib/server/auth.ts — was sized for an auth
+ * round-trip, not a report render. That BFF-side 10s fires regardless of what
+ * this client picks, so a client timeout anywhere near 10s would race it and
+ * usually win, turning what could have been a real, nameable 503 into a bare
+ * client-side abort. Sitting well past that 10s floor — mirroring the margin
+ * FOTO_PERFIL_UPLOAD_TIMEOUT_MS gives another slow, non-JSON transfer — lets
+ * the BFF's own abort answer first when it's the one that gives up.
+ *
+ * The BFF-side 10s bound being too tight for real report generation is a
+ * backend-adjacent gap this change does not fix — see issue #197.
+ */
+const PDF_DOWNLOAD_TIMEOUT_MS = 30_000;
+
+/**
  * Fetch a binary PDF from a same-origin BFF route and trigger a browser
  * download via a temporary `<a download>` click. Bypasses `request<T>`
  * (which unconditionally calls `.json()`) since a PDF export needs the raw
- * bytes, not a parsed JSON body. Reads the served filename from the
- * `Content-Disposition` header when present, falling back to
- * `fallbackFilename` otherwise.
+ * bytes, not a parsed JSON body — but still aborts on its own deadline
+ * (`PDF_DOWNLOAD_TIMEOUT_MS`), and still tells that abort apart from a
+ * caller-initiated cancellation exactly like `request()` does, throwing
+ * `ApiTimeoutError` (not a bare `AbortError`) so `toUserMessage` renders the
+ * timeout sentence instead of the cancellation one. Reads the served
+ * filename from the `Content-Disposition` header when present, falling back
+ * to `fallbackFilename` otherwise.
  */
 export async function downloadBlob(endpoint: string, fallbackFilename: string): Promise<void> {
-  const response = await fetch(endpoint);
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, PDF_DOWNLOAD_TIMEOUT_MS);
 
-  if (!response.ok) {
-    // The HTTP code used to be printed at the user here (`(status 504)`). It
-    // told them nothing they could act on and it is already on the error.
-    // Shares `GENERIC_FAILURE` with `request()` rather than its own wording:
-    // both are the client's placeholder for "the body carried nothing usable",
-    // and `error-message.ts` special-cases that exact string so it never beats
-    // a caller's own fallback (e.g. "No se pudo generar el PDF del reporte.").
-    // A second, differently-worded generic here would have re-opened that gap.
-    let message = GENERIC_FAILURE;
-    try {
-      const errorBody: unknown = await response.json();
-      if (isApiErrorBody(errorBody)) {
-        message = errorBody.detail ?? errorBody.message ?? message;
+  let response: Response;
+  let blob: Blob;
+  try {
+    response = await fetch(endpoint, { signal: controller.signal });
+    if (!response.ok) {
+      // The HTTP code used to be printed at the user here (`(status 504)`). It
+      // told them nothing they could act on and it is already on the error.
+      // Shares `GENERIC_FAILURE` with `request()` rather than its own wording:
+      // both are the client's placeholder for "the body carried nothing usable",
+      // and `error-message.ts` special-cases that exact string so it never beats
+      // a caller's own fallback (e.g. "No se pudo generar el PDF del reporte.").
+      // A second, differently-worded generic here would have re-opened that gap.
+      let message = GENERIC_FAILURE;
+      try {
+        const errorBody: unknown = await response.json();
+        if (isApiErrorBody(errorBody)) {
+          message = errorBody.detail ?? errorBody.message ?? message;
+        }
+      } catch {
+        // ignore parse errors — use default message
       }
-    } catch {
-      // ignore parse errors — use default message
+      throw new ApiClientError(message, response.status);
     }
-    throw new ApiClientError(message, response.status);
+
+    // `fetch()` settles on HEADERS; the PDF bytes stream after. Reading them
+    // outside this try would run with the timer already cleared — a backend
+    // that answers headers promptly and then stalls would hang forever.
+    blob = await response.blob();
+  } catch (error: unknown) {
+    if (timedOut && error instanceof Error && error.name === "AbortError") {
+      throw new ApiTimeoutError(PDF_DOWNLOAD_TIMEOUT_MS);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 
-  const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition") ?? "";
   const match = /filename="?([^"]+?)"?(?:;|$)/i.exec(disposition);
   const filename = match?.[1] ?? fallbackFilename;
