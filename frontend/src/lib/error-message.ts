@@ -59,9 +59,10 @@
  * module has nothing better. A generic "ocurrió un error" would have been less
  * useful than what the 28 sites already had.
  *
- * **It is not wired up yet.** Only `GENERIC_FAILURE` is live here, through
- * `services/api.ts`; the 28 render sites move onto `toUserMessage` in the
- * follow-up. The present tense above describes the contract offered.
+ * **It is wired up.** The follow-up landed in #153 and #155: every render
+ * site now reads an error through `toUserMessage`, and no `.tsx` reads
+ * `err.message` directly. See `error-message-usage.test.ts` for the guard
+ * that holds this state — a raw `err.message` read in a component goes red.
  */
 
 /**
@@ -266,7 +267,19 @@ export function toUserMessage(error: unknown, fallback: string): string {
 
   if (INPUT_STATUSES.includes(status)) {
     const detail = (error as Error).message.trim();
-    if (isUserFacingText(detail)) return detail;
+    // `GENERIC_FAILURE` passes `isUserFacingText` on its own merits — short,
+    // plain Spanish, no implementation vocabulary — because that gate can only
+    // read the TEXT, not where it came from. But this text was never written
+    // by the server: it is the client's own placeholder for "the response body
+    // did not match `isApiErrorBody`", set in `services/api.ts` before this
+    // module ever sees the error. Treating it as "no detail" and falling
+    // through to the caller's fallback is the honest reading — the fallback
+    // names the operation, which is strictly more than a message that names
+    // nothing. A lexical rule broad enough to catch this sentence in
+    // `isUserFacingText` would also catch real backend copy that happens to
+    // read the same way, so the check is an identity check against the one
+    // known non-server string instead.
+    if (detail !== GENERIC_FAILURE && isUserFacingText(detail)) return detail;
   }
 
   return fallback;

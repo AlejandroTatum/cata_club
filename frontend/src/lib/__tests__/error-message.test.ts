@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { STATUS_MESSAGES, isUserFacingText, toUserMessage } from "../error-message";
+import { GENERIC_FAILURE, STATUS_MESSAGES, isUserFacingText, toUserMessage } from "../error-message";
 
 /** Shapes an `ApiClientError` without importing the client into `lib/`. */
 function apiError(message: string, status: number): Error & { status: number } {
@@ -159,6 +159,39 @@ describe("toUserMessage — the vocabulary gate", () => {
 
   it("treats a blank detail as no detail", () => {
     expect(toUserMessage(apiError("   ", 400), FALLBACK)).toBe(FALLBACK);
+  });
+
+  it("does not by itself reject the client's own generic placeholder", () => {
+    // `GENERIC_FAILURE` passes THIS gate on its own merits: it is short,
+    // plain Spanish, and names no implementation. That is exactly the
+    // problem this gate cannot solve — it asks "was this written for a
+    // person", and a client-authored placeholder answers yes even though no
+    // server ever wrote it. The fix has to live in `toUserMessage`, which
+    // knows WHERE the text came from; this gate only ever sees the text.
+    expect(isUserFacingText(GENERIC_FAILURE)).toBe(true);
+  });
+});
+
+describe("toUserMessage — the client's own placeholder is not a server sentence", () => {
+  it("prefers the caller's fallback over GENERIC_FAILURE, even at an input status", () => {
+    // `GENERIC_FAILURE` is what `services/api.ts` sets as an `ApiClientError`'s
+    // message when a non-2xx response body does not match `isApiErrorBody` —
+    // it carries no information from the server, only the client's own "there
+    // was nothing to say". At 400/409/422 it used to reach both gates and win:
+    // short enough, plain Spanish, no implementation vocabulary. It beat the
+    // caller's own fallback, which at least names the operation ("No se pudo
+    // guardar el descuento."). The client's placeholder is "no detail", not
+    // "a sentence written for a person" — so it must lose to the fallback the
+    // same way a blank `detail` already does.
+    expect(toUserMessage(apiError(GENERIC_FAILURE, 409), FALLBACK)).toBe(FALLBACK);
+  });
+
+  it("still lets a real business rule through at the same status", () => {
+    // Guards the guard: the fix above is an identity check against ONE known
+    // string, not a new reason to distrust every INPUT_STATUSES detail.
+    const detail = "Ya existe una persona con la cédula 0912345678";
+
+    expect(toUserMessage(apiError(detail, 409), FALLBACK)).toBe(detail);
   });
 });
 
