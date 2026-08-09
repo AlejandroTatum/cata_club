@@ -155,13 +155,27 @@ const INPUT_STATUSES: readonly number[] = [400, 409, 422];
  * What the frontend says for a status whose meaning is complete on its own.
  * A status missing from this table falls back to the caller's sentence, which
  * names the operation and is strictly more informative than a generic line.
+ *
+ * **Every key here has to be a status some path in this stack really sends.**
+ * A canned message for a status nobody produces is not a defense: it reads as
+ * "that failure is handled" while the real failure goes on arriving with no
+ * message of its own. Three keys were exactly that and are gone:
+ *
+ *   · `408` — nothing in the stack emits it (no ingress, no reverse proxy).
+ *     What actually happens on a slow server is that THIS client gives up at
+ *     `DEFAULT_TIMEOUT_MS`, and that abort carries no status at all. It now
+ *     has its own branch in `toUserMessage`; see `TIMED_OUT`.
+ *   · `413`/`415` — an oversized or wrong-format upload is refused by
+ *     `AuthServicio.actualizar_foto_perfil` as `OperacionInvalida`, which is a
+ *     `400`. Its Spanish detail ("El archivo excede el tamaño máximo de 5MB")
+ *     passes both gates and is more specific than the canned line was.
+ *
+ * Exported so its guard test can hold that rule: a new key needs a named
+ * producer or the test goes red.
  */
-const STATUS_MESSAGES: Readonly<Record<number, string>> = {
+export const STATUS_MESSAGES: Readonly<Record<number, string>> = {
   401: "Su sesión expiró. Vuelva a iniciar sesión.",
   403: "No tiene permisos para realizar esta acción.",
-  408: "La operación tardó demasiado. Intente nuevamente.",
-  413: "El archivo es demasiado grande.",
-  415: "El formato del archivo no es válido.",
   429: "Demasiados intentos. Espere un momento e intente nuevamente.",
 };
 
@@ -173,6 +187,15 @@ const NETWORK_FAILURE = "No pudimos conectar con el servidor. Revise su conexió
 
 /** The caller aborted — a navigation, an unmount, a superseded request. */
 const CANCELLED = "La operación se canceló.";
+
+/**
+ * The client gave up waiting: `DEFAULT_TIMEOUT_MS` elapsed with no answer.
+ *
+ * It reads almost like `CANCELLED` and means the opposite. "Se canceló"
+ * describes the user's own decision and suggests nothing to do; this one says
+ * the server never answered and that trying again is worth it.
+ */
+const TIMED_OUT = "La operación tardó demasiado. Intente nuevamente.";
 
 /**
  * What an `ApiClientError` carries when the response body named no reason at
@@ -221,6 +244,11 @@ export function isNotFound(error: unknown): boolean {
  *                 call site knows what was being attempted.
  */
 export function toUserMessage(error: unknown, fallback: string): string {
+  // A timeout and a cancellation both arrive as aborts, so the name is the
+  // only thing that separates them — and `services/api.ts` is what sets it:
+  // its own deadline throws `TimeoutError`, and `AbortError` is left for the
+  // aborts a caller asked for.
+  if (error instanceof Error && error.name === "TimeoutError") return TIMED_OUT;
   if (error instanceof Error && error.name === "AbortError") return CANCELLED;
 
   const status = statusOf(error);

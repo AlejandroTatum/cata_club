@@ -45,7 +45,7 @@ import {
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
-import { GENERIC_FAILURE } from "@/lib/error-message";
+import { GENERIC_FAILURE, toUserMessage } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -306,7 +306,48 @@ describe("timeout / abort", () => {
       if (!capturedSignal) throw new Error("Expected fetch to receive an AbortSignal.");
       expect(capturedSignal.aborted).toBe(true);
 
-      await expect(promise).rejects.toThrow(/aborted/i);
+      // The message used to be `/aborted/i` — a DOM AbortError's own wording.
+      // It is now `ApiTimeoutError`'s own sentence, naming the deadline that
+      // fired; see the "reports its own timeout" test below for the seam this
+      // rename exists for.
+      await expect(promise).rejects.toThrow(/exceeded its 10000 ms timeout/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports its own timeout as a timeout, not as a cancellation", async () => {
+    // The seam this test exists for. The client aborted at 10 s and let the
+    // raw `AbortError` through; `toUserMessage` reads that name as "the caller
+    // walked away" and answered "La operación se canceló." — a false sentence,
+    // and the only one the user ever got for a server that did not answer.
+    // Both halves are asserted here because either one alone still lies: a
+    // renamed error nobody translates, or a translation nothing produces.
+    vi.useFakeTimers();
+
+    vi.mocked(global.fetch).mockImplementation((_url, opts) => {
+      const signal = opts?.signal as AbortSignal | undefined;
+      return new Promise((_resolve, reject) => {
+        if (!signal) return;
+        const onAbort = () =>
+          queueMicrotask(() => reject(new DOMException("The operation was aborted", "AbortError")));
+        if (signal.aborted) onAbort();
+        else signal.addEventListener("abort", onAbort, { once: true });
+      });
+    });
+
+    try {
+      const promise = fetchPaymentValidations();
+      const settled = promise.catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(10_001);
+
+      const error = await settled;
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).name).toBe("TimeoutError");
+      expect(toUserMessage(error, "No se pudo cargar la lista.")).toBe(
+        "La operación tardó demasiado. Intente nuevamente.",
+      );
     } finally {
       vi.useRealTimers();
     }

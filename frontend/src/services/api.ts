@@ -180,6 +180,29 @@ export class ApiClientError extends Error {
 }
 
 /**
+ * This client's own deadline elapsed before the server answered.
+ *
+ * It exists because the abort that enforces the deadline is indistinguishable
+ * from the abort a caller triggers on a navigation or an unmount: both reach
+ * the catch as an `AbortError`. `toUserMessage` reads that name as "the user
+ * walked away" and answered "La operación se canceló." — the only sentence a
+ * timed-out request ever produced, and a false one.
+ *
+ * The name is `TimeoutError` on purpose: it is what the platform itself uses
+ * for `AbortSignal.timeout()`, so a caller who ever hands us a signal built
+ * that way is already speaking the same vocabulary.
+ *
+ * It carries no `status`. Nothing in this stack sends 408 and inventing one
+ * here would put a server's word on a decision the browser made alone.
+ */
+export class ApiTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`The request exceeded its ${timeoutMs} ms timeout.`);
+    this.name = "TimeoutError";
+  }
+}
+
+/**
  * Current auth role, mirrored here from AuthContext (see `setCurrentMockRole`)
  * whenever the session changes. Replaces a prior localStorage-based read —
  * nothing has persisted a session to localStorage since auth moved to the
@@ -297,7 +320,18 @@ async function request<T>(
     signal = controller.signal;
   }
 
-  const timeoutId = controller !== undefined ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+  // Which of the two aborts fired. Without it the catch below cannot tell our
+  // own deadline from a caller's cancellation: `controller.abort()` and
+  // `signal.abort()` raise the same `AbortError`, and the translator can only
+  // read what it is given.
+  let timedOut = false;
+  const timeoutId =
+    controller !== undefined
+      ? setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs)
+      : undefined;
 
   // FormData (multipart file uploads, e.g. `subirFotoPerfil`) must NOT get a
   // manual Content-Type: the browser needs to set its own multipart boundary
@@ -359,6 +393,13 @@ async function request<T>(
     }
 
     return response.json() as Promise<T>;
+  } catch (error: unknown) {
+    // Only OUR timeout is renamed. An abort the caller asked for keeps its
+    // `AbortError`, because "se canceló" is true for that one.
+    if (timedOut && error instanceof Error && error.name === "AbortError") {
+      throw new ApiTimeoutError(timeoutMs);
+    }
+    throw error;
   } finally {
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);

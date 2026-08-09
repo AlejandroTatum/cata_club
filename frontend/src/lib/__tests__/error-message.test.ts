@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { isUserFacingText, toUserMessage } from "../error-message";
+import { STATUS_MESSAGES, isUserFacingText, toUserMessage } from "../error-message";
 
 /** Shapes an `ApiClientError` without importing the client into `lib/`. */
 function apiError(message: string, status: number): Error & { status: number } {
@@ -55,14 +55,25 @@ describe("toUserMessage — the status gate", () => {
   });
 
   it("describes an upload problem instead of echoing the MIME type", () => {
-    // The 415 body names `image/heic` and `application/pdf`; the user needs to
-    // know the file was rejected, not the wire format that rejected it.
-    expect(toUserMessage(apiError("Unsupported media type: image/heic", 415), FALLBACK)).toBe(
-      "El formato del archivo no es válido.",
-    );
-    expect(toUserMessage(apiError("Payload too large", 413), FALLBACK)).toBe(
-      "El archivo es demasiado grande.",
-    );
+    // There is no 415/413 in this stack — an oversized or wrong-format upload
+    // is refused by `AuthServicio.actualizar_foto_perfil` as `OperacionInvalida`,
+    // a 400 (see backend/app/servicios_negocio/auth_servicio.py:157-169). Its
+    // Spanish detail is hand-authored, names no implementation, and passes
+    // both gates through the INPUT_STATUSES branch — so the user reads it
+    // as-is, never a generic line.
+    expect(
+      toUserMessage(apiError("Formato de archivo no permitido. Use JPG o PNG", 400), FALLBACK),
+    ).toBe("Formato de archivo no permitido. Use JPG o PNG");
+    expect(
+      toUserMessage(apiError("El archivo excede el tamaño máximo de 5MB", 400), FALLBACK),
+    ).toBe("El archivo excede el tamaño máximo de 5MB");
+
+    // A raw MIME type would still be caught if one ever leaked into a detail:
+    // the vocabulary gate rejects it (English vocabulary too, doubly so) and
+    // the user gets the caller's fallback instead of "image/heic".
+    expect(
+      toUserMessage(apiError("Unsupported media type: image/heic", 400), FALLBACK),
+    ).toBe(FALLBACK);
   });
 
   it("hands a 404 back to the caller, which knows what was missing", () => {
@@ -167,6 +178,22 @@ describe("toUserMessage — anything that is not an API error", () => {
     expect(toUserMessage(aborted, FALLBACK)).toBe("La operación se canceló.");
   });
 
+  it("does not call a timeout a cancellation", () => {
+    // Both arrive as an abort, and until the client named them apart every
+    // slow server read as "se canceló" — a sentence that describes the USER
+    // leaving (a navigation, a closed form) and points at no useful action.
+    // The two are not interchangeable: one says try again, the other says you
+    // already decided not to.
+    const timedOut = Object.assign(new Error("The operation was aborted."), {
+      name: "TimeoutError",
+    });
+
+    expect(toUserMessage(timedOut, FALLBACK)).toBe(
+      "La operación tardó demasiado. Intente nuevamente.",
+    );
+    expect(toUserMessage(timedOut, FALLBACK)).not.toBe("La operación se canceló.");
+  });
+
   it("falls back for a bare Error, which carries a developer's sentence", () => {
     expect(toUserMessage(new Error("Cannot read properties of undefined"), FALLBACK)).toBe(FALLBACK);
   });
@@ -174,6 +201,40 @@ describe("toUserMessage — anything that is not an API error", () => {
   it("falls back for anything that was never an Error at all", () => {
     for (const thrown of [undefined, null, "boom", 42, {}, { status: 400 }]) {
       expect(toUserMessage(thrown, FALLBACK)).toBe(FALLBACK);
+    }
+  });
+});
+
+describe("STATUS_MESSAGES — the table promises nothing this stack cannot send", () => {
+  /**
+   * Every canned status, with the path that produces it. A message sitting
+   * here for a status nobody sends is not a defense: it is a promise the
+   * product cannot keep, and it hides the fact that the real failure has no
+   * message of its own. That is exactly how `408` survived — it read as "the
+   * timeout is handled" while the browser's own 10 s abort, which carries no
+   * status at all, was reaching the user as "se canceló".
+   *
+   * Adding a key without adding its producer here turns this red. If a
+   * producer ever disappears, the row goes with it.
+   */
+  const PRODUCERS: Readonly<Record<number, string>> = {
+    401: "backend/app/main.py maps CredencialesInvalidas; every BFF route forwards it",
+    403: "backend/app/main.py maps PermisosInsuficientes (e.g. EFECTIVO registered by an admin)",
+    429: "backend/app/servicios_negocio/chatbot_servicio.py:162, and the password-recovery routes",
+  };
+
+  it("carries a producer for every message it can show", () => {
+    expect(Object.keys(STATUS_MESSAGES).sort()).toEqual(Object.keys(PRODUCERS).sort());
+  });
+
+  it("leaves an unsendable status to the caller's own sentence", () => {
+    // 413 and 415 shared 408's defect. An oversized or wrong-format upload is
+    // rejected by `AuthServicio.actualizar_foto_perfil` as `OperacionInvalida`
+    // — a 400, whose Spanish detail ("El archivo excede el tamaño máximo de
+    // 5MB") already passes both gates and is more specific than the canned
+    // line ever was.
+    for (const status of [408, 413, 415]) {
+      expect(toUserMessage(apiError("", status), FALLBACK)).toBe(FALLBACK);
     }
   });
 });
