@@ -837,7 +837,12 @@ export async function downloadBlob(endpoint: string, fallbackFilename: string): 
   if (!response.ok) {
     // The HTTP code used to be printed at the user here (`(status 504)`). It
     // told them nothing they could act on and it is already on the error.
-    let message = "No se pudo generar el PDF.";
+    // Shares `GENERIC_FAILURE` with `request()` rather than its own wording:
+    // both are the client's placeholder for "the body carried nothing usable",
+    // and `error-message.ts` special-cases that exact string so it never beats
+    // a caller's own fallback (e.g. "No se pudo generar el PDF del reporte.").
+    // A second, differently-worded generic here would have re-opened that gap.
+    let message = GENERIC_FAILURE;
     try {
       const errorBody: unknown = await response.json();
       if (isApiErrorBody(errorBody)) {
