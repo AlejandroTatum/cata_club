@@ -109,8 +109,21 @@ function Carnet({
   // a price, and the `franja_horaria` column it used to be read from was a
   // hand-typed String(80) that drifted from the club's real hours — an Adultos
   // student read "20:00-21:00" here and "20:00 — 21:15" on the panel beside it.
+  //
+  // `null` from `describeAssignedWindows` means "the club assigned nothing",
+  // and the carnet is honest about that by omitting the row entirely — but
+  // that silence is only true for `status: "ready"`. A `loading` or `error`
+  // lookup is not "nothing assigned", it is "not answered yet" or "could not
+  // be answered", and printing the same omission for all three used to let a
+  // network failure read as a fact the club never asserted. The wording below
+  // matches the "Próximos entrenamientos" panel's vocabulary for the same
+  // `horariosState` (see `TrainingPanel`) so the screen speaks with one voice.
   const franja =
-    horariosState.status === "ready" ? describeAssignedWindows(horariosState.asignaciones) : null;
+    horariosState.status === "ready"
+      ? describeAssignedWindows(horariosState.asignaciones)
+      : horariosState.status === "loading"
+        ? "Consultando…"
+        : "No se pudo consultar";
   if (franja) facts.push({ label: "Franja", value: franja });
   if (profile.membership?.modalidad) {
     facts.push({

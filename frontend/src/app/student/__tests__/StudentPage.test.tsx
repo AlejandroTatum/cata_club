@@ -455,6 +455,24 @@ describe("StudentPage — the carnet's franja agrees with the assigned schedule"
     });
     expect(within(carnet).queryByText("Franja")).not.toBeInTheDocument();
   });
+
+  // The finding: a network failure and "the club assigned no schedule" both
+  // used to omit the "Franja" row, so a parent reading the printed carnet
+  // alone could not tell "reload the page" from "go ask at the front desk".
+  // The row must reappear on failure, and it must say so honestly rather
+  // than reusing the silence that means "nothing assigned".
+  it("marks the franja as unavailable on a lookup failure instead of reading like no schedule was assigned", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalForAdultos());
+    mockFetchHorariosPorAlumno.mockRejectedValue(new Error("boom"));
+
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    await waitFor(() => {
+      expect(within(carnet).getByText("Franja")).toBeInTheDocument();
+    });
+    expect(franjaValue(carnet)).toMatch(/no se pudo consultar/i);
+  });
 });
 
 /**
