@@ -379,6 +379,90 @@ describe("timeout / abort", () => {
       vi.useRealTimers();
     }
   });
+
+  it("downloadBlob aborts past its own PDF timeout and reports it as a timeout, not a cancellation", async () => {
+    // downloadBlob bypasses request() entirely (raw bytes, not JSON — see its
+    // own docstring), so it never inherited the shared 10 s default. Before
+    // this test it had no timeout at all: a hung backend left the PDF export
+    // pending forever, with no error and no way out but a reload. See
+    // PDF_DOWNLOAD_TIMEOUT_MS for why 30 s specifically — it has to clear the
+    // BFF's own internal 10 s bound (BACKEND_TIMEOUT_MS, src/lib/server/auth.ts)
+    // so a real backend answer wins over a bare client abort.
+    vi.useFakeTimers();
+
+    let capturedSignal: AbortSignal | undefined;
+    vi.mocked(global.fetch).mockImplementation((_url, opts) => {
+      capturedSignal = opts?.signal as AbortSignal | undefined;
+      return new Promise((_resolve, reject) => {
+        if (!capturedSignal) return;
+        const onAbort = () =>
+          queueMicrotask(() => reject(new DOMException("The operation was aborted", "AbortError")));
+        if (capturedSignal.aborted) onAbort();
+        else capturedSignal.addEventListener("abort", onAbort, { once: true });
+      });
+    });
+
+    try {
+      const promise = downloadBlob("/api/personas/reportes/nuevos-por-periodo/pdf", "fallback.pdf");
+      const settled = promise.catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(30_001);
+
+      expect(capturedSignal).toBeDefined();
+      if (!capturedSignal) throw new Error("Expected fetch to receive an AbortSignal.");
+      expect(capturedSignal.aborted).toBe(true);
+
+      const error = await settled;
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).name).toBe("TimeoutError");
+      expect(toUserMessage(error, "No se pudo generar el PDF del reporte.")).toBe(
+        "La operación tardó demasiado. Intente nuevamente.",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("downloadBlob still aborts when fetch resolves but the body stream stalls", async () => {
+    // The gap the test above cannot see: `fetch` settles on HEADERS, and the
+    // PDF bytes arrive after. A stall there has to hit the same deadline.
+    vi.useFakeTimers();
+    vi.mocked(global.fetch).mockImplementation((_url, opts) => {
+      const signal = opts?.signal as AbortSignal;
+      const stalled = new Promise((_resolve, reject) =>
+        signal.addEventListener("abort", () => queueMicrotask(() => reject(signal.reason))),
+      );
+      return Promise.resolve({ ok: true, blob: () => stalled } as unknown as Response);
+    });
+    try {
+      const settled = downloadBlob("/api/x/pdf", "x.pdf").catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(((await settled) as Error).name).toBe("TimeoutError");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("downloadBlob names its deadline even when the stalled body is an error body", async () => {
+    // The error branch reads the body too, and its catch exists to swallow a
+    // parse error. An abort is not one: swallowing it shipped the timeout as
+    // a server failure, the one sentence a slow PDF must not produce.
+    vi.useFakeTimers();
+    vi.mocked(global.fetch).mockImplementation((_url, opts) => {
+      const signal = opts?.signal as AbortSignal;
+      const stalled = new Promise((_resolve, reject) =>
+        signal.addEventListener("abort", () => queueMicrotask(() => reject(signal.reason))),
+      );
+      return Promise.resolve({ ok: false, status: 504, json: () => stalled } as unknown as Response);
+    });
+    try {
+      const settled = downloadBlob("/api/x/pdf", "x.pdf").catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(((await settled) as Error).name).toBe("TimeoutError");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -856,7 +940,10 @@ describe("downloadBlob / report PDF exports", () => {
 
     await downloadBlob("/api/personas/reportes/nuevos-por-periodo/pdf", "fallback.pdf");
 
-    expect(global.fetch).toHaveBeenCalledWith("/api/personas/reportes/nuevos-por-periodo/pdf");
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/personas/reportes/nuevos-por-periodo/pdf",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
     expect(createdAnchors).toHaveLength(1);
     expect(createdAnchors[0].download).toBe("reporte-periodo_2026-07-23.pdf");
@@ -897,6 +984,7 @@ describe("downloadBlob / report PDF exports", () => {
 
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/personas/reportes/nuevos-por-periodo/pdf?fecha_inicio=2026-01-01&fecha_fin=2026-12-31",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
@@ -907,6 +995,7 @@ describe("downloadBlob / report PDF exports", () => {
 
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/asistencias/reportes/pdf?fechaInicio=2026-01-01&fechaFin=2026-12-31&horarioId=3",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 });
