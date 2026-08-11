@@ -532,11 +532,13 @@ function RenewPaymentForm({
 
     let nuevoPago: PagoPersona;
     try {
+      // No fechaInicio/fechaFin (fix período de cobertura, PAG-5): el
+      // backend las calcula solo, a partir del monto y la cuota. Las
+      // variables locales siguen existiendo -- son la vista previa que ve
+      // el lector antes de confirmar -- pero ya no viajan en la petición.
       nuevoPago = await registrarPago({
         monto: amount,
         tipoPago,
-        fechaInicio,
-        fechaFin,
         personaId: Number(personaId),
         membresiaId: membership.id,
       } satisfies RegistrarPagoInput);

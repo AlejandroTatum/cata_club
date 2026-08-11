@@ -1087,12 +1087,18 @@ export async function fetchPagosDePersona(personaId: string): Promise<PagoPerson
 /** Payload for registering a new pending payment — `POST /api/membresias/pagos`.
  *  `monto` is always the BASE amount: when `descuentoIds` are attached the
  *  backend resolves each discount's current value, freezes it and computes
- *  the final amount itself (frozen-value semantics, issue #12). */
+ *  the final amount itself (frozen-value semantics, issue #12).
+ *
+ *  No `fechaInicio`/`fechaFin` (fix período de cobertura, PAG-5): the
+ *  backend derives the coverage period from `monto` and the membership's
+ *  monthly price -- the old contract let the caller hand it any range
+ *  regardless of `monto`, which is exactly the hole this fix closes (see
+ *  docs/fixes/06-periodo-de-cobertura.md). Callers can still PREVIEW the
+ *  period client-side (`wholeMonthsFor` / `addMonthsIso`) to show the
+ *  reader what they're about to pay for, but nothing here is sent. */
 export interface RegistrarPagoInput {
   monto: number;
   tipoPago: "EFECTIVO" | "TRANSFERENCIA";
-  fechaInicio: string;
-  fechaFin: string;
   personaId: number;
   membresiaId: number;
   /** Catalog discounts to apply on THIS registration (admin-only decision).
