@@ -1,5 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, Rol, usuario_rol
@@ -108,10 +108,24 @@ class PersonaRepositorio:
                 .join(Rol, Rol.id == usuario_rol.c.rol_id)
                 .where(Rol.tipo_rol == rol)
             )
-        filtro = f"%{q}%"
-        stmt = stmt.where(
-            (Persona.nombres.ilike(filtro)) | (Persona.apellidos.ilike(filtro))
-        )
+        # `q` completa contra CADA columna por separado nunca encontraba
+        # "nombre apellido" juntos: ni nombres ni apellidos, por sí solos,
+        # calzaban con la cadena entera. Partimos `q` en palabras y exigimos
+        # que CADA una matchee nombres O apellidos (AND de ORes): así da
+        # igual el orden en que se escriban ("Emilio Zambrano" o "Zambrano
+        # Emilio") y un apellido compuesto alcanza con nombrar una porción
+        # ("Ariana Chavez" encuentra a "Ariana Chavez Bravo"). Con una sola
+        # palabra el comportamiento es idéntico al de antes.
+        palabras = q.split()
+        if palabras:
+            stmt = stmt.where(
+                and_(
+                    *[
+                        or_(Persona.nombres.ilike(f"%{palabra}%"), Persona.apellidos.ilike(f"%{palabra}%"))
+                        for palabra in palabras
+                    ]
+                )
+            )
         # Baja lógica: el autocomplete es OPERATIVO -- se usa para elegir a
         # quién registrarle un pago, una asistencia o una membresía. Ofrecer a
         # un ex-miembro ahí es invitar a operar sobre alguien que ya no está.
