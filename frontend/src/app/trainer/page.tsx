@@ -33,13 +33,6 @@
  * competitive-ranking feature the old level concept belonged to was removed
  * from the MVP entirely.
  *
- * "Avisar al club" has no endpoint behind it: nothing in the API notifies the
- * club about a student. It opens the help assistant with the message already
- * written (see `openHelpChat`), which is the only real channel there is. That
- * used to be documented HERE and nowhere the trainer could see it, so the
- * button read as "the club has been told" when in fact the trainer still has to
- * send the message — hence the hint rendered next to it.
- *
  * ## "Últimas listas del club" has no author column
  *
  * `Asistencia` deliberately doesn't record who took the list
@@ -55,8 +48,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import AppShell, { openHelpChat } from "@/components/shell/AppShell";
-import { ArrowRight, CalendarCheck, ClipboardList, Megaphone } from "lucide-react";
+import AppShell from "@/components/shell/AppShell";
+import { ArrowRight, CalendarCheck, ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -68,7 +61,6 @@ import {
 } from "@/services/api";
 import {
   Badge,
-  Button,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -96,7 +88,6 @@ import type { EstadoAsistencia } from "@/types/domain";
 import { todayDiaSemana } from "@/lib/club-date";
 import { formatDate } from "@/lib/format-utils";
 import {
-  buildAbsenceNotice,
   findAbsenceAlert,
   formatAbsenceCount,
   formatEnrolledCount,
@@ -114,9 +105,6 @@ import AttendanceStatusChart from "@/app/dashboard/AttendanceStatusChart";
 
 /** The order the four states are read in — best news first, as on every other screen. */
 const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
-
-/** Ties the "Avisar al club" button to the sentence explaining what it opens. */
-const ABSENCE_NOTICE_HINT_ID = "trainer-absence-notice-hint";
 
 /** First name only — "Hola, Carlos Mendoza" is a greeting nobody says out loud. */
 function firstNameOf(fullName: string | undefined): string {
@@ -388,27 +376,13 @@ export default function TrainerPage(): React.ReactElement {
 
               <section className="card flex flex-col gap-4 p-[18px]">
                 {absenceAlert && (
-                  <div className="flex flex-col gap-2.5 border-b border-line pb-4">
-                    <p className="m-0 text-sm text-ink-2">
-                      <b className="font-semibold text-ink">{absenceAlert.estudiante}</b> suma{" "}
-                      <b className="font-semibold text-ink">
-                        {formatAbsenceCount(absenceAlert.ausencias)}
-                      </b>{" "}
-                      este mes
-                    </p>
-                    <Button
-                      variant="dark"
-                      size="sm"
-                      aria-describedby={ABSENCE_NOTICE_HINT_ID}
-                      onClick={(): void => openHelpChat(buildAbsenceNotice(absenceAlert))}
-                    >
-                      <Megaphone size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                      Avisar al club
-                    </Button>
-                    <p id={ABSENCE_NOTICE_HINT_ID} className="m-0 text-xs text-ink-3">
-                      Abre el asistente con el mensaje ya escrito. Usted lo revisa y lo envía.
-                    </p>
-                  </div>
+                  <p className="m-0 border-b border-line pb-4 text-sm text-ink-2">
+                    <b className="font-semibold text-ink">{absenceAlert.estudiante}</b> suma{" "}
+                    <b className="font-semibold text-ink">
+                      {formatAbsenceCount(absenceAlert.ausencias)}
+                    </b>{" "}
+                    este mes
+                  </p>
                 )}
 
                 <div>

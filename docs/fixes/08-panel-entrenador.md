@@ -9,6 +9,7 @@
   - `75e2ca0` — feat(bff): add GET /api/attendance/recent-sessions
   - `b32dedb` — feat(trainer): rebuild the panel around StatGrid and a used screen
   - `d9521b0` — fix(trainer): show attendance state names, not just badge color
+  - `f9d60bc` — fix(trainer): remove Avisar al club, not an MVP feature
 
 ## El problema
 
@@ -75,6 +76,23 @@ abreviados porque el texto completo visible ya resolvía el problema sin
 tocar la estructura de la tabla. `/trainer/attendance/history` tenía
 exactamente el mismo defecto (mismo patrón `Badge` + `sr-only`) y se
 corrigió igual.
+
+**Corrección post-lanzamiento 2** (pedido del dueño: «sacalo, no es una
+funcionalidad para MVP»): se sacó el botón «Avisar al club», junto al aviso
+de faltas crónicas. El propio comentario de cabecera del archivo ya lo
+documentaba: no hay endpoint que avise a nadie — el botón solo abría el
+asistente de ayuda con un mensaje pre-escrito que el entrenador todavía
+tenía que revisar y enviar él mismo. En algún momento alguien notó que el
+botón sonaba a «el club ya fue avisado» y en vez de sacarlo le agregó una
+aclaración al lado («Abre el asistente… Usted lo revisa y lo envía») — un
+botón que necesitaba una disculpa para no mentir. Se fue con él
+`buildAbsenceNotice` (quedó sin otro consumidor) y el id
+`ABSENCE_NOTICE_HINT_ID` que solo existía para conectar el botón con esa
+aclaración. `openHelpChat` se queda — lo siguen usando «Ayuda y soporte»,
+el lanzador flotante, `/unauthorized` y el resto de las entradas al
+asistente — y también quedan sus comentarios de cabecera en
+`help-chat-store.ts` y `ChatWidget.tsx`, solo que ya no citan a «Avisar al
+club» como ejemplo de un caso que dejó de existir.
 
 ## El candado
 
@@ -160,6 +178,40 @@ Test Files  8 passed (8)
 Suite completa del frontend (`vitest run`, sin filtro): `Test Files 162
 passed (162)` · `Tests 2456 passed (2456)`.
 
+**Corrección post-lanzamiento 2** —
+`frontend/src/app/trainer/__tests__/TrainerPage.test.tsx`: el test que antes
+afirmaba que el botón «Avisar al club» estaba presente (`getByRole("button",
+{ name: /Avisar al club/ })`) se dio vuelta en el mismo lugar —
+`does not render an 'Avisar al club' button — no endpoint notifies the club
+(owner: not an MVP feature)` — para que quede el candado de que no vuelve a
+aparecer. Corrido contra el código viejo (botón todavía presente), da rojo
+por la razón correcta:
+
+```
+Error: expect(element).not.toBeInTheDocument()
+
+expected document not to contain element, found <button
+  aria-describedby="trainer-absence-notice-hint"
+  ...
+>
+  Avisar al club
+</button> instead
+```
+
+Verde después del fix — suite del área (`src/app/trainer`):
+
+```
+Test Files  5 passed (5)
+     Tests  225 passed (225)
+```
+
+Y la suite completa del frontend, para confirmar que la corrección de
+etiquetas del commit anterior sigue intacta: `Test Files 162 passed (162)` ·
+`Tests 2454 passed (2454)` (2 menos que antes: el test que probaba el click
+del botón y el test de `buildAbsenceNotice` se borraron con la
+funcionalidad que probaban — no tenían una "vuelta" natural, a diferencia
+del test de presencia del botón, que sí se dio vuelta).
+
 ## La prueba
 
 ![después](img/08-panel-entrenador-despues-1440.png)
@@ -184,6 +236,13 @@ auditoría); después el contenido ocupa y termina en y≈1124 — **0% en blanc
 en el pliegue inicial, con scroll natural hacia el resto de las listas. Muy
 por debajo del 11% del panel de admin que se tomó como referencia.
 
+![después — sin el botón «Avisar al club», el aviso de faltas se queda, 1440px](img/08-panel-entrenador-avisar-club-despues-1440.png)
+![después — sin el botón «Avisar al club», el aviso de faltas se queda, 390px](img/08-panel-entrenador-avisar-club-despues-390.png)
+
+El aviso «Anahi Cedeno Loor suma 5 ausencias este mes» se sigue viendo igual
+que antes; lo que ya no está es el botón «Avisar al club» y su aclaración de
+abajo.
+
 ## Lo que NO cambió
 
 - El hero y el CTA «Pasar lista» en el header: sin cambios, ya estaban
@@ -200,3 +259,9 @@ por debajo del 11% del panel de admin que se tomó como referencia.
 - `/trainer/attendance/history`: solo se le tocó la etiqueta de texto de los
   cuatro conteos (mismo cambio que la tarjeta de arriba). Los filtros, la
   paginación y el link «Corregir» quedaron intactos.
+- El aviso de faltas crónicas en sí (nombre real del alumno, conteo de
+  ausencias): se queda. Es justo lo que este mismo fix ya arregló para dejar
+  de mostrar «Persona 15» — lo que se sacó fue solo el botón, no el dato.
+- `openHelpChat` y el asistente de ayuda: siguen disponibles desde «Ayuda y
+  soporte» en el sidebar, que es el canal real. No se reemplazó el botón por
+  nada — el dueño no pidió un sustituto.
