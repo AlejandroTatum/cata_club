@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import { WizardNavigation } from "@/components/wizard-fields";
 
 vi.mock("next/link", () => ({
@@ -100,5 +100,62 @@ describe("WizardNavigation — already-registered escape hatch", () => {
     // Only what the backend already said: the cédula the user typed. No
     // e-mail, no name, no account status.
     expect(screen.getByRole("alert").textContent ?? "").not.toMatch(/@/);
+  });
+});
+
+// --- INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): "Vincular a mi
+// cuenta" action next to the alert. Same-click as the escape hatch above —
+// no extra page, no extra step beyond the one that already reveals the
+// duplicate-identity error. ---------------------------------------------
+describe("WizardNavigation — vincular a mi cuenta (INS-2)", () => {
+  it("stays hidden when the caller does not pass onLinkExisting, even for a representative", () => {
+    renderNav({ formErrors: [DUPLICADA], duplicateIdentityAudience: "representative" });
+
+    expect(screen.queryByRole("button", { name: /vincular a mi cuenta/i })).not.toBeInTheDocument();
+  });
+
+  it("renders next to the alert when onLinkExisting is provided", () => {
+    renderNav({
+      formErrors: [DUPLICADA],
+      duplicateIdentityAudience: "representative",
+      onLinkExisting: vi.fn(),
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByRole("button", { name: /vincular a mi cuenta/i })).toBeInTheDocument();
+  });
+
+  it("calls onLinkExisting when clicked", () => {
+    const onLinkExisting = vi.fn();
+    renderNav({
+      formErrors: [DUPLICADA],
+      duplicateIdentityAudience: "representative",
+      onLinkExisting,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /vincular a mi cuenta/i }));
+    expect(onLinkExisting).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables itself and swaps its label while linkingExisting is true", () => {
+    renderNav({
+      formErrors: [DUPLICADA],
+      duplicateIdentityAudience: "representative",
+      onLinkExisting: vi.fn(),
+      linkingExisting: true,
+    });
+
+    const button = screen.getByRole("button", { name: /vinculando/i });
+    expect(button).toBeDisabled();
+  });
+
+  it("does not render for an audience that cannot link (self-service)", () => {
+    renderNav({
+      formErrors: [DUPLICADA],
+      duplicateIdentityAudience: "self-service",
+      onLinkExisting: vi.fn(),
+    });
+
+    expect(screen.queryByRole("button", { name: /vincular a mi cuenta/i })).not.toBeInTheDocument();
   });
 });

@@ -1331,6 +1331,23 @@ export async function crearRepresentado(
   });
 }
 
+/**
+ * INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): representante-only
+ * self-service, links a person ALREADY registered in the club (typically by
+ * another representante) to `personaId`'s account by cédula alone — no
+ * approval from anyone. See `POST /personas/{persona_id}/vincular-representado`.
+ *
+ * The backend answers every ineligible cédula (nonexistent, adult, already
+ * yours, your own) with the SAME generic message and the SAME 400 — that is
+ * intentional (anti-enumeration), not a bug to work around here.
+ */
+export async function vincularRepresentado(personaId: number, cedula: string): Promise<PersonaResponse> {
+  return request<PersonaResponse>(apiEndpoint(`/personas/${personaId}/vincular-representado`), {
+    method: "POST",
+    body: JSON.stringify({ cedula }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Aging Up / Independizar (Flow 4)
 // ---------------------------------------------------------------------------

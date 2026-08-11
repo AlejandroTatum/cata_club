@@ -11,8 +11,13 @@
  *  - `self-service` (public enrollment): the person is very likely enrolling
  *    a second time — send them to sign in or recover their password.
  *  - `representative` (adding a dependent): the dependent already exists,
- *    possibly under another guardian — send them to their portal and to the
- *    club, which is the only party that can reassign a person.
+ *    possibly under another guardian. INS-2
+ *    (docs/decisiones-de-negocio-2026-08-11.md §1): the representante can
+ *    link that person to their own account directly, no club approval
+ *    needed — the actual action lives next to this hint, rendered by the
+ *    wizard's `WizardNavigation` (`onLinkExisting`), because doing it here
+ *    would need the cédula the visitor already typed and this component
+ *    never receives it.
  *  - `admin` (creating an account for someone else): the person is already
  *    in the system — send the admin to the members list to find them and
  *    grant roles or credentials there.
@@ -45,7 +50,7 @@ const GUIDANCE: Record<DuplicateIdentityAudience, Guidance> = {
     ],
   },
   representative: {
-    hint: "Esa persona ya está registrada en el club. Revise sus dependientes; si no aparece ahí, el club puede vincularla a su cuenta.",
+    hint: "Esa persona ya está registrada en el club. Revise sus dependientes; si no aparece ahí, puede vincularla a su cuenta con el botón de abajo.",
     links: [{ href: "/student", label: "Ver mis dependientes" }],
   },
   admin: {
