@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from datetime import date, time, datetime
 from typing import Optional
 
-from app.dominio.enums import EstadoAsistencia, DiaSemana, Categoria
+from app.dominio.enums import EstadoAsistencia, DiaSemana
 from app.presentacion.schemas.base import ResponseBase
 
 
@@ -11,15 +11,21 @@ class HorarioCreateDTO(BaseModel):
     deriva server-side de la fila `categoria_horario` de `categoria` para
     que el contrato nunca pueda desviarse de los horarios fijos de negocio.
 
+    `categoria` es un `str` liso, no el enum `Categoria` (M1): la validación
+    real es que exista una fila `categoria_horario` con ese código --
+    `AsistenciaServicio._validar_dia_y_derivar_horas` la hace consultando la
+    tabla, así que un enum acá solo podría rechazar de más una categoría que
+    la tabla sí reconoce.
+
     Sin `entrenador_id`: el club no asigna entrenadores a horarios -- la
     clase la da el entrenador disponible (issue #13,
     docs/concepto-alcance-modelo.md §4)."""
-    categoria: Categoria
+    categoria: str
     dia_semana: DiaSemana
 
 
 class HorarioUpdateDTO(BaseModel):
-    categoria: Optional[Categoria] = None
+    categoria: Optional[str] = None
     dia_semana: Optional[DiaSemana] = None
 
 

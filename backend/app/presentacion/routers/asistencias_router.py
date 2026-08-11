@@ -4,7 +4,6 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
 from datetime import date
 
-from app.dominio.enums import Categoria
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
@@ -81,7 +80,7 @@ async def eliminar_horario(horario_id: int, db: Session = Depends(obtener_sesion
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
 def listar_horarios(
-    categoria: Optional[Categoria] = Query(default=None),
+    categoria: Optional[str] = Query(default=None),
     db: Session = Depends(obtener_sesion),
 ):
     return AsistenciaServicio(db).listar_horarios(categoria)
