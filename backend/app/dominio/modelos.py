@@ -485,10 +485,21 @@ class CategoriaHorario(Base):
     `AsistenciaServicio._validar_dia_y_derivar_horas`) -- la garantía que ya
     existía con el enum no cambia, solo cambia de dónde se lee.
 
-    Sin pantalla de alta/edición todavía (fuera de alcance de este cambio):
-    hoy las filas solo las siembra la migración que creó esta tabla.
+    ABM del admin (docs/fixes/24-abm-categorias.md): `AsistenciaServicio.
+    crear_categoria`/`actualizar_categoria`/`eliminar_categoria` son el
+    único camino de escritura -- alta atómica de la fila + sus
+    `categoria_horario_dia` + un `horario_entrenamiento` por día marcado,
+    todo en una transacción. `codigo` lo deriva el servidor del nombre
+    (ver `_generar_codigo_categoria`) y es INMUTABLE una vez creado: es la
+    FK de `horario_entrenamiento.categoria`, así que un rename solo toca
+    `label`, nunca `codigo`. `label` es único en la base (red de
+    seguridad; el servicio ya rechaza el duplicado con un mensaje legible
+    antes de llegar acá) -- ver migración `f1a2b3c4d5e6`.
     """
     __tablename__ = "categoria_horario"
+    __table_args__ = (
+        UniqueConstraint("label", name="uq_categoria_horario_label"),
+    )
     codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
     label: Mapped[str] = mapped_column(String(50))
     hora_inicio: Mapped[time] = mapped_column(Time)
