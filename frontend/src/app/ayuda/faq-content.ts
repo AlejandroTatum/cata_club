@@ -89,7 +89,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       {
         question: "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
         answer:
-          "No: la ficha médica (alergias, contacto de emergencia) la gestiona un administrador del club. Pídaselo y ellos la actualizan.",
+          "Si es representante, sí: en Mi Cuenta, bajo Ficha médica, puede ver y corregir las alergias, enfermedades, tipo de sangre y contacto de emergencia de cada hijo o dependiente a su cargo. Un administrador del club también puede hacerlo. Un estudiante que gestiona su propia cuenta, sin representante, todavía no puede corregir la suya — pídaselo a un administrador.",
       },
       {
         question: "Represento a más de un hijo. ¿Cómo cambio entre ellos?",
