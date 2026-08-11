@@ -377,6 +377,15 @@ class Pago(Base):
     # al aprobar un pago (tarea Celery). El voucher es la imagen/PDF que sube
     # el cliente como evidencia de la transferencia bancaria, mientras el pago
     # está PENDIENTE_VALIDACION. No constituye tabla nueva: son columnas en Pago.
+    #
+    # `voucher_url` NO es una URL (pese al nombre, que se conserva para no
+    # migrar el esquema): desde el fix de privacidad "voucher no enumerable"
+    # guarda el `public_id` de Cloudinary de un recurso `type="authenticated"`.
+    # La URL de entrega se firma fresca en cada lectura autorizada -- ver
+    # `PagoServicio.pago_a_response_dto` / `cloudinary_cliente.resolver_url_entrega`.
+    # Filas creadas ANTES del fix siguen con la URL pública completa de un
+    # recurso `type="upload"` (se detecta por el prefijo `http`); ver el
+    # residual documentado en docs/fixes/16-voucher-no-enumerable.md.
     voucher_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     voucher_formato: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     voucher_fecha_carga: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -446,6 +455,10 @@ class Descuento(Base):
 class ComprobantePago(Base):
     __tablename__ = "comprobante_pago"
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Mismo criterio que `Pago.voucher_url` (ver ese docstring): desde el fix
+    # de privacidad "voucher no enumerable" guarda el `public_id` de un
+    # recurso `type="authenticated"`, no una URL, pese al nombre de la
+    # columna.
     archivo_url: Mapped[str] = mapped_column(String(255))
     formato_archivo: Mapped[str] = mapped_column(String(20))
     fecha_carga: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
