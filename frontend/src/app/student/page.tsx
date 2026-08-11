@@ -307,13 +307,19 @@ function Carnet({
 
       {/* A fixed two-column grid, not `auto-fit`: the carnet used to sit in a
           340px rail, where `auto-fit` and "two columns" were the same thing.
-          It is now the wide column (see `ActivePortalView`), and `auto-fit`
-          at that width would have spread four facts across four or five
-          columns — the maquette draws exactly two. */}
+          `auto-fit` at the carnet's current width would spread four facts
+          across four or five columns — the chosen maquette (Propuesta 2)
+          draws exactly two, `.carnet .grid` at its own card's full width.
+          The grid used to carry `sm:max-w-[360px]` from when the carnet was
+          fix 12's ~1000px "wide" column — with the carnet and the rail now
+          split evenly (fix 12c, see `ActivePortalView`), that cap would leave
+          an empty strip inside the card instead of filling it, which is the
+          same "vacío que no se llena" fix 12b already closed once. Dropped,
+          so the grid fills the carnet the way the maquette's own does. */}
       {facts.length > 0 && (
         <div
           data-testid="carnet-facts"
-          className="relative z-10 mt-[18px] grid grid-cols-2 gap-x-4 gap-y-section border-t border-white/10 pt-[15px] sm:max-w-[360px]"
+          className="relative z-10 mt-[18px] grid grid-cols-2 gap-x-4 gap-y-section border-t border-white/10 pt-[15px]"
         >
           {facts.map((fact) => (
             <CarnetFact key={fact.label} label={fact.label} value={fact.value} />
@@ -373,8 +379,19 @@ function TrainingRow({ session, first }: { session: UpcomingTraining; first: boo
      * pool into one dead band between the last row and the footer. The rows
      * share it instead. `items-center` already had the content centred, so a
      * taller row just breathes more.
+     *
+     * `first && "bg-sunken"` (fix 12c): the chosen maquette (Propuesta 2,
+     * `.row.next`) marks the closest upcoming session with a distinct row
+     * background, not with a badge — the "Hoy" pill below only fires when
+     * that session happens to land on today's date, so on its own it left the
+     * nearest-of-the-week row looking like any other one.
      */
-    <li className="flex min-h-drow flex-1 flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-3 last:border-b-0">
+    <li
+      className={cn(
+        "flex min-h-drow flex-1 flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-3 last:border-b-0",
+        first && "bg-sunken",
+      )}
+    >
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2 text-base font-bold tracking-tight text-ink">
           {session.diaLabel}
@@ -753,21 +770,33 @@ function ActivePortalView({
         />
       ) : (
         // "El carnet manda" (docs/fixes/12-mi-cuenta-carnet.md, Propuesta 2):
-        // the identity card is the wide column and carries its own payment
-        // band; the rail stacks the "Cuota" detail card over "Esta semana".
-        // `PAGE_RAIL` is the product's one two-column split (see layout.ts),
-        // reused as-is (`lg:items-start`, no stretch override).
+        // the identity card carries its own payment band; the rail stacks the
+        // "Cuota" detail card over "Esta semana". `PAGE_RAIL` is the
+        // product's one two-column split (see layout.ts) — kept for its
+        // `lg:items-start` (no stretch override, see fix 12b below), but its
+        // own 340px rail is overridden here.
         //
-        // Fix 12b tried the opposite first — `lg:!items-stretch` plus
-        // `flex-1` on the carnet, so it filled the row's full height — and it
-        // traded one emptiness for another: whenever the rail (Cuota + Esta
-        // semana) was taller than the carnet's own content, the stretched
-        // carnet grew to match it and the slack landed INSIDE the card, below
-        // its fact grid — the exact "vacío que no se llena" complaint this
-        // redesign existed to close, just moved from the page into the
-        // carnet. A carnet has a carnet's proportions, not a column's, so it
-        // now sits at its natural height, top-aligned with the rail.
-        <div className={PAGE_RAIL}>
+        // Fix 12c: the chosen maquette draws this split as
+        // `grid-template-columns: 1fr 1fr` — even columns. Reusing
+        // `PAGE_RAIL`'s 340px rail unmodified left the carnet at roughly
+        // three-quarters of the row width, well past what its four-fact grid
+        // needs to fill — the actual root of the "empty carnet" defect fix 12
+        // and 12b kept re-finding downstream (inside the card, then as page
+        // canvas below it) without ever touching the ratio that caused it.
+        // `!` beats `PAGE_RAIL`'s own `lg:grid-cols-[…_340px]` regardless of
+        // class order, the same mechanism fix 12b used for `lg:!items-stretch`
+        // before finding stretching itself was the wrong fix — the technique
+        // is fine, that one application of it was not.
+        //
+        // Fix 12b tried stretching the carnet's height first —
+        // `lg:!items-stretch` plus `flex-1` on the carnet, so it filled the
+        // row's full height — and it traded one emptiness for another:
+        // whenever the rail (Cuota + Esta semana) was taller than the
+        // carnet's own content, the stretched carnet grew to match it and the
+        // slack landed INSIDE the card, below its fact grid. A carnet has a
+        // carnet's proportions, not a column's, so it still sits at its
+        // natural height, top-aligned with the rail (`lg:items-start`).
+        <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,1fr)_minmax(0,1fr)]")}>
           <div className="flex flex-col gap-5">
             <Carnet
               profile={selectedProfile}

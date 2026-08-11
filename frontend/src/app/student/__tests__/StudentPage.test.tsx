@@ -359,6 +359,18 @@ describe("StudentPage — the club membership card (carnet)", () => {
       "Valor mensual",
     ]);
   });
+
+  // Fix 12c: the 360px cap on the fact grid was sized for when the carnet was
+  // fix 12's ~1000px "wide" column. Now that the carnet and the rail split the
+  // row evenly (matching the chosen maquette), a fixed cap would leave an
+  // empty strip inside the card instead of filling it — reintroducing, inside
+  // the carnet, the exact emptiness fix 12b already closed once.
+  it("lets the facts grid fill the carnet's real width instead of capping at the old wide-column measure", async () => {
+    render(<StudentPage />);
+
+    const facts = await screen.findByTestId("carnet-facts");
+    expect(facts.className).not.toMatch(/max-w-\[360px\]/);
+  });
 });
 
 /**
@@ -629,6 +641,34 @@ describe("StudentPage — próximos entrenamientos", () => {
       expect(within(panel).getByText(/no se pudo consultar el horario/i)).toBeInTheDocument();
     });
     expect(screen.getByTestId("student-cuota-card")).toBeInTheDocument();
+  });
+
+  // Fix 12c (docs/fixes/12-mi-cuenta-carnet.md): the chosen maquette (Propuesta
+  // 2, "El carnet manda") marks the closest upcoming session with a distinct
+  // row background (`.row.next`), not with a badge that only fires when that
+  // session happens to land on today's date. Real system time on purpose,
+  // unlike the fake-timer tests above: `findNextTrainingSessions` always
+  // returns its rows soonest-first regardless of what day "today" is, so the
+  // row ordering itself is enough to prove the highlight tracks position
+  // (`first`), not a date coincidence.
+  it("highlights the nearest session's row instead of only badging it 'Hoy'", async () => {
+    mockFetchHorariosPorAlumno.mockResolvedValue([
+      asignacion("LUNES", "15:00:00", "16:00:00", 1),
+      asignacion("MARTES", "16:00:00", "17:00:00", 2),
+      asignacion("MIERCOLES", "17:00:00", "18:00:00", 3),
+    ]);
+
+    render(<StudentPage />);
+
+    const panel = await screen.findByTestId("student-situation");
+    let rows: HTMLElement[] = [];
+    await waitFor(() => {
+      rows = within(panel).getAllByRole("listitem");
+      expect(rows.length).toBeGreaterThan(1);
+    });
+
+    expect(rows[0].className).toMatch(/bg-sunken/);
+    expect(rows[1].className).not.toMatch(/bg-sunken/);
   });
 });
 
@@ -921,6 +961,30 @@ describe("StudentPage — the carnet keeps its own proportions instead of stretc
     // from the carnet itself (the carnet's own flex column, then the grid).
     const rail = carnet.parentElement?.parentElement;
     expect(rail?.className).not.toMatch(/items-stretch/);
+  });
+});
+
+/**
+ * Fix 12c (docs/fixes/12-mi-cuenta-carnet.md): the owner's own read of the
+ * screen against the maquette — "si decido eso, pues debería verse igual".
+ * The chosen maquette (Propuesta 2) draws its desktop split as
+ * `grid-template-columns: 1fr 1fr`. Reusing `PAGE_RAIL`'s own 340px rail
+ * unmodified left the carnet at roughly three-quarters of the row and the
+ * rail at one-quarter — the actual root of the "empty carnet" defect chased
+ * across fix 12 and 12b, neither of which touched the column ratio.
+ */
+describe("StudentPage — the carnet and the rail split the row evenly", () => {
+  it("matches the chosen maquette's 1fr/1fr desktop grid instead of a 340px rail", async () => {
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const rail = carnet.parentElement?.parentElement;
+    // `PAGE_RAIL`'s own `lg:grid-cols-[…_340px]` is still present in the
+    // string (`cn` concatenates, it does not deduplicate) — the `!important`
+    // override wins at the CSS layer, not by removing the losing utility from
+    // the class list. See the comment above this `<div>` in page.tsx for why
+    // that is the established mechanism, not a workaround.
+    expect(rail?.className).toMatch(/lg:!grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)\]/);
   });
 });
 
