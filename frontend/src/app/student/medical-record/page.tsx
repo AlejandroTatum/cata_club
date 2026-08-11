@@ -223,7 +223,10 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
         <RepresentanteMedicalRecordView data={state.data} accountPersonaId={personaId} />
       )}
       {state.status === "ready" && role === "estudiante" && state.data.self && (
-        <MedicalRecordEditor personaId={Number(state.data.self.personaId)} />
+        <MedicalRecordEditor
+          personaId={Number(state.data.self.personaId)}
+          studentName={firstNameOf(state.data.self.nombres)}
+        />
       )}
       {state.status === "ready" && role === "estudiante" && !state.data.self && (
         <ErrorState
