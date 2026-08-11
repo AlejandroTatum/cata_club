@@ -96,7 +96,7 @@ describe("GET /api/attendance/records", () => {
   it("resolves the real student name for a trainer session, not a 'Persona {id}' placeholder", async () => {
     const asistenciaDePersona15 = { ...asistencia, personaId: 15 };
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse([asistenciaDePersona15]))
+      .mockResolvedValueOnce(jsonResponse({ items: [asistenciaDePersona15], total: 1, skip: 0, limit: 200 }))
       .mockResolvedValueOnce(jsonResponse([horario]))
       .mockResolvedValueOnce(jsonResponse({ detail: "Permisos insuficientes" }, 403))
       .mockResolvedValueOnce(jsonResponse({ id: 15, nombres: "Emily", apellidos: "Moreira Pilay" }));
