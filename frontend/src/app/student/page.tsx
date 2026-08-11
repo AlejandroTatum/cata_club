@@ -101,13 +101,36 @@ type HorariosState =
 // it, and it is the more actionable of the two.
 // ---------------------------------------------------------------------------
 
+/**
+ * A "Franja" value with two or more windows ("15:00 — 16:00 · 20:00 —
+ * 21:15") used to be one plain string in a 172px-wide grid cell, so the
+ * browser wrapped wherever it found a space — including inside a single
+ * window, splitting "20:00 —" from "21:15" (fix 12b,
+ * docs/fixes/12-mi-cuenta-carnet.md). Each window is wrapped in its own
+ * `whitespace-nowrap` span so the ONLY point where a line can break is the
+ * " · " between them, which stays a normal (breakable) text node — never
+ * inside a window, always between two.
+ */
 function CarnetFact({ label, value }: { label: string; value: string }): React.ReactElement {
+  const windows = value.split(" · ");
   return (
     <div className="min-w-0">
       <span className="mb-[3px] block text-2xs font-semibold uppercase leading-tight text-white/60">
         {label}
       </span>
-      <b className="block text-sm font-bold leading-tight tabular-nums">{value}</b>
+      <b className="block text-sm font-bold leading-tight tabular-nums">
+        {windows.length > 1
+          ? windows.flatMap((window, index) => {
+              const nodes: React.ReactNode[] = [
+                <span key={window} className="whitespace-nowrap">
+                  {window}
+                </span>,
+              ];
+              if (index < windows.length - 1) nodes.push(" · ");
+              return nodes;
+            })
+          : value}
+      </b>
     </div>
   );
 }
@@ -733,21 +756,23 @@ function ActivePortalView({
         // the identity card is the wide column and carries its own payment
         // band; the rail stacks the "Cuota" detail card over "Esta semana".
         // `PAGE_RAIL` is the product's one two-column split (see layout.ts),
-        // reused rather than adding a second ratio — with one addition,
-        // `lg:!items-stretch` (`!` beats `PAGE_RAIL`'s own `lg:items-start`
-        // regardless of class order, since Tailwind resolves same-specificity
-        // utilities by generation order, not by where they sit in the
-        // string): the carnet is the whole reason for this screen, so it
-        // fills the row's height instead of stopping short and leaving the
-        // canvas showing beneath it — the exact "vacío que no se llena"
-        // complaint the old layout had, just moved under a different card.
-        <div className={cn(PAGE_RAIL, "lg:!items-stretch")}>
+        // reused as-is (`lg:items-start`, no stretch override).
+        //
+        // Fix 12b tried the opposite first — `lg:!items-stretch` plus
+        // `flex-1` on the carnet, so it filled the row's full height — and it
+        // traded one emptiness for another: whenever the rail (Cuota + Esta
+        // semana) was taller than the carnet's own content, the stretched
+        // carnet grew to match it and the slack landed INSIDE the card, below
+        // its fact grid — the exact "vacío que no se llena" complaint this
+        // redesign existed to close, just moved from the page into the
+        // carnet. A carnet has a carnet's proportions, not a column's, so it
+        // now sits at its natural height, top-aligned with the rail.
+        <div className={PAGE_RAIL}>
           <div className="flex flex-col gap-5">
             <Carnet
               profile={selectedProfile}
               situation={paymentSituation}
               horariosState={horariosState}
-              className="flex-1"
             />
 
             {/* Only on the minor's OWN account. Shown to a guardian looking

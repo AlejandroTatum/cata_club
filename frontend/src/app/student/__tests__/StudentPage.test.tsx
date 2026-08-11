@@ -447,6 +447,33 @@ describe("StudentPage — the carnet's franja agrees with the assigned schedule"
     expect(within(carnet).queryByText("15:00 — 21:15")).not.toBeInTheDocument();
   });
 
+  // Fix 12b (docs/fixes/12-mi-cuenta-carnet.md): the joined string used to
+  // wrap wherever the browser found a space, which could split a single
+  // window's own closing time from its dash ("20:00 —" / "21:15"). Each
+  // window must be its own unbreakable run, so the ONLY place a wrap is
+  // allowed to happen is between windows.
+  it("keeps each window as one unbreakable run so a wrap can never split a time in half", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalForAdultos());
+    mockFetchHorariosPorAlumno.mockResolvedValue([
+      asignacion("MARTES", "15:00:00", "16:00:00", 1),
+      asignacion("JUEVES", "20:00:00", "21:15:00", 2),
+    ]);
+
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    let firstWindow: HTMLElement;
+    let secondWindow: HTMLElement;
+    await waitFor(() => {
+      firstWindow = within(carnet).getByText("15:00 — 16:00");
+      secondWindow = within(carnet).getByText("20:00 — 21:15");
+    });
+    expect(firstWindow!.className).toMatch(/whitespace-nowrap/);
+    expect(secondWindow!.className).toMatch(/whitespace-nowrap/);
+    // Still the same coherent fact, read in one breath.
+    expect(franjaValue(carnet)).toBe("15:00 — 16:00 · 20:00 — 21:15");
+  });
+
   it("omits the fact entirely when the club assigned no schedule", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalForAdultos());
     mockFetchHorariosPorAlumno.mockResolvedValue([]);
@@ -871,6 +898,29 @@ describe("StudentPage — the carnet earns its space when the cuota is up to dat
     expect(within(cuota).queryByText("A pagar")).not.toBeInTheDocument();
     const link = within(cuota).getByText("Registrar un pago").closest("a");
     expect(link?.className).not.toMatch(/w-full/);
+  });
+});
+
+/**
+ * Fix 12b (docs/fixes/12-mi-cuenta-carnet.md): stretching the carnet to match
+ * the rail's height ("lg:!items-stretch" + the carnet's own `flex-1`) left the
+ * card with its OWN empty canvas underneath its fact grid whenever the rail
+ * (Cuota + Esta semana) was taller than the carnet's real content — the exact
+ * "vacío que no se llena" complaint this redesign existed to close, just
+ * moved from the page into the card. The carnet keeps its natural height and
+ * sits at the top of the row instead.
+ */
+describe("StudentPage — the carnet keeps its own proportions instead of stretching", () => {
+  it("does not force the carnet's height to match the rail's", async () => {
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    expect(carnet.className).not.toMatch(/\bflex-1\b/);
+
+    // The grid that splits the carnet column from the rail — two levels up
+    // from the carnet itself (the carnet's own flex column, then the grid).
+    const rail = carnet.parentElement?.parentElement;
+    expect(rail?.className).not.toMatch(/items-stretch/);
   });
 });
 
