@@ -661,3 +661,40 @@ class Notificacion(Base):
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     persona: Mapped["Persona"] = relationship(back_populates="notificaciones")
+
+
+# ---------------------------------------------------------------------------
+# INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): un representante puede
+# vincular a su cuenta un representado YA EXISTENTE escribiendo su cédula,
+# sin que nadie apruebe. El guardarraíl de auditoría de esa decisión ("queda
+# registrado quién vinculó a quién y cuándo") es esta tabla: una fila por
+# vinculación, nunca actualizada ni borrada -- un log de eventos, no el
+# estado actual (para eso está `Persona.representante_id`, que sí muta).
+# ---------------------------------------------------------------------------
+class VinculacionRepresentante(Base):
+    __tablename__ = "vinculacion_representante"
+    __table_args__ = (
+        Index("ix_vinculacion_representante_persona_id", "persona_id"),
+        Index("ix_vinculacion_representante_representante_anterior_id", "representante_anterior_id"),
+        Index("ix_vinculacion_representante_representante_nuevo_id", "representante_nuevo_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
+
+    # El representado que cambió de cuenta.
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    persona: Mapped["Persona"] = relationship(foreign_keys=[persona_id])
+
+    # `None` cuando el representado no tenía representante legal antes de
+    # esta vinculación (ej. se había independizado, o quedó huérfano de
+    # representante por algún otro camino).
+    representante_anterior_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    representante_anterior: Mapped[Optional["Persona"]] = relationship(
+        foreign_keys=[representante_anterior_id]
+    )
+
+    representante_nuevo_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    representante_nuevo: Mapped["Persona"] = relationship(foreign_keys=[representante_nuevo_id])

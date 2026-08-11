@@ -370,6 +370,17 @@ export function getAddDependentErrorMessage(error: unknown): string {
   return toUserMessage(error, "No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.");
 }
 
+/**
+ * Same translator, different fallback — for the "Vincular a mi cuenta"
+ * action (INS-2). The backend's real message
+ * (`MENSAJE_VINCULACION_NO_DISPONIBLE`) is user-facing text and reaches the
+ * caller as-is via `toUserMessage`; this fallback only fires for a network
+ * failure or an unexpected shape, never to replace the backend's answer.
+ */
+export function getLinkExistingErrorMessage(error: unknown): string {
+  return toUserMessage(error, "No se pudo vincular esa cédula a su cuenta. Intente nuevamente.");
+}
+
 // ---------------------------------------------------------------------------
 // Domain helpers
 // ---------------------------------------------------------------------------

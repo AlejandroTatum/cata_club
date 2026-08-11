@@ -1,10 +1,12 @@
+import time
 from datetime import date
+from typing import Callable
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades
-from app.dominio.enums import TipoRol
+from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, Notificacion, VinculacionRepresentante
+from app.dominio.enums import TipoRol, TipoNotificacion
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
-from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
+from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_VINCULACION_NO_DISPONIBLE
 from app.soporte_transversal.tiempo import hoy_club
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -12,9 +14,11 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
     UsuarioRepositorio, FichaMedicaRepositorio,
 )
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
+from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO, IndependizarDTO,
+    VincularRepresentadoDTO,
 )
 
 
@@ -39,15 +43,42 @@ def _calcular_edad(fecha_nacimiento: date, referencia: date | None = None) -> in
     return anos
 
 
+# --- INS-2: freno progresivo de intentos de vinculación ---------------------
+# Mismo patrón que `AuthServicio._INTENTOS_FALLIDOS_LOGIN` (TRA-4,
+# docs/decisiones-de-negocio-2026-08-11.md §3): un dict a nivel de módulo,
+# simplificación aceptada para el alcance del proyecto (no sobrevive un
+# reinicio del proceso ni se comparte entre réplicas). Acá la clave es el
+# `representante_id` (el actor autenticado), no un correo -- el guardarraíl
+# 4 de la sección 1 pide frenar a QUIEN prueba cédulas en serie, y esa
+# identidad ya está resuelta por el token antes de llegar al servicio.
+_INTENTOS_FALLIDOS_VINCULACION: dict[int, int] = {}
+_UMBRAL_RETRASO_VINCULACION = 3
+_TECHO_RETRASO_VINCULACION_SEGUNDOS = 30
+
+
+def _calcular_retraso_vinculacion(intentos_fallidos: int) -> int:
+    """Sin retraso antes del 3er intento fallido; 1s al 3ro, duplicando en
+    cada intento siguiente, techo de 30s. Nunca bloqueo duro -- un
+    representante real puede simplemente estar recordando mal un dígito."""
+    if intentos_fallidos < _UMBRAL_RETRASO_VINCULACION:
+        return 0
+    exponente = intentos_fallidos - _UMBRAL_RETRASO_VINCULACION
+    return min(2 ** exponente, _TECHO_RETRASO_VINCULACION_SEGUNDOS)
+
+
 class PersonaServicio:
     """Contiene las reglas de negocio de Persona. No conoce FastAPI ni HTTPException;
     comunica errores mediante excepciones de dominio."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, dormir: Callable[[float], None] = time.sleep):
         self.db = db
         self.repo = PersonaRepositorio(db)
         self.repo_usuario = UsuarioRepositorio(db)
         self.repo_rol = RolRepositorio(db)
+        # Inyectable para tests (ningún test hace un sleep real de varios
+        # segundos, mismo criterio que `AuthServicio`). Los routers de
+        # producción no pasan `dormir`, así que usan el `time.sleep` real.
+        self._dormir = dormir
 
     def registrar_persona(self, datos: PersonaCreateDTO) -> Persona:
         if self.repo.obtener_por_cedula(datos.cedula):
@@ -133,6 +164,106 @@ class PersonaServicio:
             self._asignar_rol(usuario, TipoRol.ALUMNO)
 
         return representado
+
+    # --- INS-2: vincular un representado ya existente ------------------------
+    # docs/decisiones-de-negocio-2026-08-11.md §1: "Un chico tiene un solo
+    # representante, y el representante lo vincula solo". Antes no existía
+    # ninguna vía (ni endpoint ni pantalla) para pasar una Persona ya
+    # registrada de un representante a otro, pese a que el mensaje de cédula
+    # duplicada se lo prometía al usuario (INS-2).
+    def vincular_representado(
+        self, representante_id: int, datos: VincularRepresentadoDTO
+    ) -> Persona:
+        """Vincula a `representante_id` una Persona YA EXISTENTE (típicamente
+        cargada por otro representante), identificada por cédula. Sin
+        aprobación de nadie -- decisión de negocio explícita, ver docstring
+        del módulo de tests `test_vinculacion_representado.py`. Cuatro
+        guardarraíles, ninguno agrega un clic al padre que vincula:
+
+        1. Auditoría: la vinculación exitosa deja una fila en
+           `VinculacionRepresentante` (quién, a quién, cuándo).
+        2. Si el representado ya tenía representante, se le notifica
+           DESPUÉS del hecho por el feed de notificaciones existente.
+           "Deshacerlo" es repetir esta misma llamada con la misma cédula
+           -- que el representante anterior ya conocía, porque fue quien
+           dio de alta a ese representado.
+        3. ANTI-ENUMERACIÓN: toda falla de elegibilidad -- cédula
+           inexistente, representado mayor de edad, ya vinculado a este
+           mismo representante, o la cédula del propio representante --
+           levanta el MISMO error (`MENSAJE_VINCULACION_NO_DISPONIBLE`).
+           Ni el mensaje ni el código HTTP distinguen "no existe" de "existe
+           pero no es elegible": esta llamada NUNCA revela el nombre de la
+           persona antes de vincularla.
+        4. Tope de intentos: freno progresivo por representante (mismo
+           patrón que `AuthServicio._calcular_retraso_login`, nunca bloqueo
+           duro).
+        """
+        try:
+            representado = self._resolver_representado_elegible(representante_id, datos.cedula)
+        except OperacionInvalida:
+            self._penalizar_intento_fallido_vinculacion(representante_id)
+            raise
+
+        _INTENTOS_FALLIDOS_VINCULACION.pop(representante_id, None)
+
+        representante_anterior_id = representado.representante_id
+        self.repo.actualizar(representado, {"representante_id": representante_id})
+
+        self.db.add(VinculacionRepresentante(
+            persona_id=representado.id,
+            representante_anterior_id=representante_anterior_id,
+            representante_nuevo_id=representante_id,
+        ))
+        self.db.commit()
+
+        if representante_anterior_id is not None:
+            self._notificar_representante_anterior(representado, representante_anterior_id)
+
+        return representado
+
+    def _resolver_representado_elegible(self, representante_id: int, cedula: str) -> Persona:
+        """Devuelve la Persona elegible para ser vinculada, o levanta
+        `OperacionInvalida` con el mensaje genérico -- NUNCA revela cuál de
+        los motivos de rechazo aplicó (guardarraíl 3 de arriba)."""
+        candidato = self.repo.obtener_por_cedula(cedula)
+        elegible = (
+            candidato is not None
+            and candidato.id != representante_id
+            and candidato.representante_id != representante_id
+            and _calcular_edad(candidato.fecha_nacimiento) < EDAD_MAYORIA_EDAD
+        )
+        if not elegible:
+            motivo = (
+                "cédula inexistente" if candidato is None
+                else f"persona_id={candidato.id} no elegible (self/ya vinculada/mayor de edad)"
+            )
+            raise OperacionInvalida(
+                MENSAJE_VINCULACION_NO_DISPONIBLE,
+                detalle_tecnico=(
+                    f"vinculación rechazada para representante_id={representante_id}: {motivo}"
+                ),
+            )
+        return candidato
+
+    def _penalizar_intento_fallido_vinculacion(self, representante_id: int) -> None:
+        intentos = _INTENTOS_FALLIDOS_VINCULACION.get(representante_id, 0) + 1
+        _INTENTOS_FALLIDOS_VINCULACION[representante_id] = intentos
+        retraso = _calcular_retraso_vinculacion(intentos)
+        if retraso:
+            self._dormir(retraso)
+
+    def _notificar_representante_anterior(self, representado: Persona, representante_anterior_id: int) -> None:
+        nombre = f"{representado.nombres} {representado.apellidos}"
+        NotificacionRepositorio(self.db).crear(Notificacion(
+            tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,
+            mensaje=(
+                f"{nombre} (cédula {representado.cedula}) fue vinculado a otra cuenta "
+                f"de representante. Si esto fue un error, puede recuperarlo escribiendo "
+                f"la misma cédula en \"Vincular un hijo ya registrado\"."
+            ),
+            persona_id=representante_anterior_id,
+            entidad_relacionada_id=representado.id,
+        ))
 
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
         """Asigna un rol al usuario si aún no lo tiene (idempotente)."""

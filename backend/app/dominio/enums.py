@@ -120,3 +120,7 @@ class TipoNotificacion(str, enum.Enum):
     PAGO_APROBADO = "PAGO_APROBADO"
     PAGO_RECHAZADO = "PAGO_RECHAZADO"
     NUEVA_INSCRIPCION = "NUEVA_INSCRIPCION"
+    # INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): avisa al
+    # representante ANTERIOR de un dependiente, después del hecho, cuando otro
+    # representante lo vincula a su propia cuenta escribiendo su cédula.
+    VINCULACION_REPRESENTANTE = "VINCULACION_REPRESENTANTE"

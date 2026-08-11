@@ -227,6 +227,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
+    # INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): mismo par de roles
+    # que su hermano `representados` -- un representante vincula su propio
+    # representado ya existente, un administrador puede hacerlo por cualquiera.
+    ("POST", "/personas/{persona_id}/vincular-representado"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("PUT", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
 }
 

@@ -10,7 +10,7 @@ from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaUpdateDTO,
-    PersonaBusquedaDTO, RepresentadoCreateDTO, IndependizarDTO, EstadoPersonaDTO,
+    PersonaBusquedaDTO, RepresentadoCreateDTO, VincularRepresentadoDTO, IndependizarDTO, EstadoPersonaDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
@@ -359,6 +359,38 @@ async def crear_representado(
         roles_privilegiados=SOLO_ADMINISTRADOR,
     )
     return PersonaServicio(db).crear_representado(persona_id, datos)
+
+
+# --- Vincular un representado ya existente (INS-2) --------------------------
+# docs/decisiones-de-negocio-2026-08-11.md §1: "un representante puede
+# vincular a su cuenta un chico ya registrado, escribiendo su cédula, sin que
+# nadie apruebe". Mismo patrón de ownership que `crear_representado` (línea
+# ~342): la identidad del representante sale EXCLUSIVAMENTE del token, nunca
+# del cuerpo, y se compara contra el `persona_id` de la URL.
+# Rate-limited (mismo tier de autoservicio autenticado que `crear_representado`
+# -- 10/minute): el freno REAL de intentos en serie es el retraso progresivo
+# por representante que vive en `PersonaServicio` (guardarraíl 4 de la
+# decisión), que sí se ejerce en `AMBIENTE=test`; este decorador es la capa
+# adicional que ya cubre a todo el router (D6-c/D1), consistente con el resto
+# del inventario de `test_limite_tasa_pagos.py`.
+@router.post(
+    "/{persona_id}/vincular-representado", response_model=PersonaResponseDTO,
+)
+@limiter.limit("10/minute")
+async def vincular_representado(
+    request: Request,
+    persona_id: int,
+    datos: VincularRepresentadoDTO,
+    token_payload: dict = Depends(GestorPermisos(["REPRESENTANTE", "ADMINISTRADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    PoliticaAccesoPersona(db).exigir_acceso_directo(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=SOLO_ADMINISTRADOR,
+    )
+    return PersonaServicio(db).vincular_representado(persona_id, datos)
 
 
 # --- Independizar (Flujo 4): ex-menor se independiza del representante --
