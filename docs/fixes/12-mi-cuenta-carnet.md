@@ -7,7 +7,9 @@
   no hay nada que resolver» — a resolver como parte de la implementación, no
   a ignorar
 - **Rama:** `feat/mi-cuenta-carnet`
-- **Commits:** (pendientes — rama sin commitear, ver mensaje final del agente)
+- **Commits:**
+  - `ec20622` — feat(student): make the carnet lead Mi cuenta, weighted by cuota status
+  - `a9768d9` — docs(fixes): document the Mi cuenta carnet redesign
 
 ## El problema
 
