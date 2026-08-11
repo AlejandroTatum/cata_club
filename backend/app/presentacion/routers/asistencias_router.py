@@ -11,7 +11,7 @@ from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_r
 from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaResponseDTO, CategoriaResponseDTO,
     HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
-    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO,
+    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -194,7 +194,7 @@ async def reporte_asistencia_pdf(
 # respuesta es una lista (una fila por horario) y no un único DTO.
 @router.post(
     "/asignar-alumno",
-    response_model=List[AlumnoHorarioDetalleDTO],
+    response_model=AsignacionAlumnoHorarioResponseDTO,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
 )

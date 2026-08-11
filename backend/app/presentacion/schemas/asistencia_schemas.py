@@ -83,3 +83,20 @@ class AlumnoHorarioDetalleDTO(ResponseBase, BaseModel):
     horario_hora_inicio: time
     horario_hora_fin: time
     fecha_asignacion: datetime
+
+
+class AsignacionAlumnoHorarioResponseDTO(ResponseBase, BaseModel):
+    """Respuesta de `POST /asignar-alumno`.
+
+    INS-6 (decisión de negocio #4, 2026-08-11): la cuota vencida NO bloquea
+    la asignación -- se asigna igual, y esta respuesta lleva el aviso NO
+    BLOQUEANTE que el admin ve. Deliberadamente un DTO propio y no un campo
+    agregado a `AlumnoHorarioDetalleDTO`: ese DTO también lo usan
+    `listar_alumnos_por_horario`/`listar_horarios_por_alumno` (listados de
+    roster), y sumarle ahí una consulta de membresía por fila sería un N+1
+    en endpoints que este fix no toca. El dato es plano (booleano + días) a
+    propósito: la oración en castellano ("Ariana tiene la cuota vencida
+    hace 14 días") la arma el frontend, que ya conoce el nombre del alumno."""
+    asignaciones: list[AlumnoHorarioDetalleDTO]
+    membresia_vencida: bool
+    dias_vencida: Optional[int] = None

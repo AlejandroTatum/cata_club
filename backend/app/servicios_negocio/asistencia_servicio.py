@@ -3,19 +3,21 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario
-from app.dominio.enums import Categoria
+from app.dominio.enums import Categoria, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import categoria_en_castellano, dia_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
+from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.asistencia_repositorio import (
     AsistenciaRepositorio, HorarioRepositorio, AlumnoHorarioRepositorio
 )
 from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCreateDTO, CategoriaResponseDTO, HorarioCreateDTO, HorarioUpdateDTO,
-    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO
+    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO
 )
 from app.servicios_negocio.persona_servicio import _calcular_edad
+from app.soporte_transversal.tiempo import hoy_club
 
 
 class AsistenciaServicio:
@@ -25,6 +27,7 @@ class AsistenciaServicio:
         self.repo_persona = PersonaRepositorio(db)
         self.repo_alumno_horario = AlumnoHorarioRepositorio(db)
         self.repo_categoria = CategoriaRepositorio(db)
+        self.repo_membresia = MembresiaRepositorio(db)
 
     def _validar_dia_y_derivar_horas(self, horario: HorarioEntrenamiento) -> None:
         """`hora_inicio`/`hora_fin` nunca los envía el cliente: siempre se
@@ -185,10 +188,45 @@ class AsistenciaServicio:
             fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
         )
 
+    def _info_membresia_vencida(self, persona_id: int) -> tuple[bool, Optional[int]]:
+        """INS-6 (decisión de negocio #4, 2026-08-11): la cuota vencida NO
+        bloquea la asignación -- esto solo calcula, UNA vez por llamada, el
+        aviso no bloqueante que ve el admin.
+
+        Se mira la membresía MÁS RECIENTE de la persona (por
+        `fecha_activacion`), sin filtrar por la categoria del horario: a lo
+        sumo una membresía puede estar ACTIVA por persona a la vez
+        (`uq_membresia_activa_por_persona`), así que la más reciente es la
+        vigente hoy. No existe en el modelo una relación entre
+        `TipoMembresia.categoria` (etiqueta comercial libre, ej. "Mensual
+        Infantil") y `HorarioEntrenamiento.categoria` (código técnico, ej.
+        "FORMATIVO") -- ese mapeo solo vive, ad hoc, en el seed de
+        desarrollo (`scripts/seed_dev_bulk.py`), no en el dominio.
+
+        Alcance deliberado: solo VENCIDA dispara el aviso. INACTIVA (nunca
+        pagó / aún no se le aprobó un primer pago) es un estado distinto que
+        la decisión de negocio #4 no menciona -- "cuota vencida" describe
+        una membresía que SE ACTIVÓ y luego expiró, no una que nunca
+        arrancó. No se trata como vencida acá.
+        """
+        membresias = self.repo_membresia.listar_por_persona(persona_id)
+        if not membresias:
+            return False, None
+        ultima = max(membresias, key=lambda m: m.fecha_activacion)
+        if ultima.estado != EstadoMembresia.VENCIDA:
+            return False, None
+
+        pagos_aprobados = [p for p in ultima.pagos if p.estado_pago == EstadoPago.APROBADO]
+        if not pagos_aprobados:
+            return True, None
+        ultimo_vencimiento = max(p.fecha_fin for p in pagos_aprobados)
+        dias_vencida = (hoy_club() - ultimo_vencimiento).days
+        return True, max(dias_vencida, 0)
+
     # --- Asignación directa Alumno ↔ Categoria (todos sus horarios) --------
     def asignar_alumno_a_horario(
         self, datos: AlumnoHorarioCreateDTO
-    ) -> list[AlumnoHorarioDetalleDTO]:
+    ) -> AsignacionAlumnoHorarioResponseDTO:
         """Enrolls a student into the WHOLE training categoria, not just the
         single `horario_id` in the request. The club enrolls by full month —
         never by a loose weekday — so `horario_id` only anchors which
@@ -228,7 +266,12 @@ class AsistenciaServicio:
             AlumnoHorario(persona_id=datos.persona_id, horario_id=h.id)
             for h in pendientes
         ])
-        return [self._a_detalle_dto(a) for a in nuevas]
+        membresia_vencida, dias_vencida = self._info_membresia_vencida(datos.persona_id)
+        return AsignacionAlumnoHorarioResponseDTO(
+            asignaciones=[self._a_detalle_dto(a) for a in nuevas],
+            membresia_vencida=membresia_vencida,
+            dias_vencida=dias_vencida,
+        )
 
     def desasignar_alumno_de_horario(
         self, persona_id: int, horario_id: int
