@@ -13,8 +13,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import TrainerPage from "@/app/trainer/page";
-import { OPEN_HELP_CHAT_EVENT, type OpenHelpChatDetail } from "@/components/shell/AppShell";
 import type { TrainingSchedule, AttendanceRecord } from "@/app/attendance/attendance-utils";
+import type { RecentAttendanceSession } from "@/services/api";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 
 vi.mock("@/components/ProtectedRoute", () => ({
@@ -52,11 +52,13 @@ vi.mock("next/image", () => ({
 const mockFetchTrainingSchedules = vi.fn();
 const mockFetchAttendanceRecords = vi.fn();
 const mockFetchAlumnosPorHorario = vi.fn();
+const mockFetchRecentAttendanceSessions = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchAlumnosPorHorario: (id: number) => mockFetchAlumnosPorHorario(id),
+  fetchRecentAttendanceSessions: () => mockFetchRecentAttendanceSessions(),
   fetchNotificaciones: vi.fn().mockResolvedValue([]),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
@@ -110,6 +112,23 @@ const MONTH_RECORDS: AttendanceRecord[] = [
   record("absent", "Luis Lopez", "2026-07-06"),
 ];
 
+const RECENT_CLUB_SESSIONS: RecentAttendanceSession[] = [
+  {
+    horarioId: 2,
+    fecha: "2026-07-20",
+    horario: "Lunes 16:00 — 17:00",
+    counts: { present: 6, late: 0, justified: 1, absent: 1 },
+    total: 8,
+  },
+  {
+    horarioId: 3,
+    fecha: "2026-07-19",
+    horario: "Domingo 09:00 — 10:00",
+    counts: { present: 4, late: 1, justified: 0, absent: 0 },
+    total: 5,
+  },
+];
+
 describe("TrainerPage — Mi día", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -117,6 +136,7 @@ describe("TrainerPage — Mi día", () => {
     mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
     mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
     mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(new Array(12).fill({}));
+    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_CLUB_SESSIONS);
   });
 
   afterEach(() => {
@@ -210,57 +230,50 @@ describe("TrainerPage — Mi día", () => {
   // Última lista — a result, plus something to do about it.
   // -------------------------------------------------------------------------
 
-  it("summarizes the most recent list with all four state counts", async () => {
+  // DSH-2: these four counts used to render as loose `Badge`s in a flex row
+  // ("2 presente" as one string). They are `StatCard` tiles now — label and
+  // value are separate nodes inside the same tile.
+  it("summarizes the most recent list with all four state counts in a StatGrid", async () => {
     render(<TrainerPage />);
 
     expect(await screen.findByText(/Última lista/)).toBeInTheDocument();
-    expect(screen.getByText("2 presente")).toBeInTheDocument();
-    expect(screen.getByText("1 tardanza")).toBeInTheDocument();
-    expect(screen.getByText("1 justificado")).toBeInTheDocument();
-    expect(screen.getByText("1 ausente")).toBeInTheDocument();
+    // Scoped to the "última lista" card: the donut further down the page
+    // repeats the same four state labels in its own legend.
+    const stats = within(screen.getByTestId("ultima-lista"));
+    const presente = stats.getByText("Presente").closest("div");
+    expect(presente).toHaveTextContent("Presente");
+    expect(presente).toHaveTextContent("2");
+    const tardanza = stats.getByText("Tardanza").closest("div");
+    expect(tardanza).toHaveTextContent("1");
+    const justificado = stats.getByText("Justificado").closest("div");
+    expect(justificado).toHaveTextContent("1");
+    const ausente = stats.getByText("Ausente").closest("div");
+    expect(ausente).toHaveTextContent("1");
   });
 
-  it("names the student piling up absences and offers a way to act on it", async () => {
+  it("names the student piling up absences, without a button to act on it", async () => {
     render(<TrainerPage />);
 
     await screen.findByText(/Última lista/);
     expect(screen.getByText("Luis Lopez")).toBeInTheDocument();
     expect(screen.getByText("3 ausencias")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Avisar al club/ })).toBeInTheDocument();
   });
 
-  it("opens the help assistant with the notice already written", async () => {
-    const listener = vi.fn();
-    window.addEventListener(OPEN_HELP_CHAT_EVENT, listener);
-
-    render(<TrainerPage />);
-    await screen.findByText(/Última lista/);
-    fireEvent.click(screen.getByRole("button", { name: /Avisar al club/ }));
-
-    expect(listener).toHaveBeenCalledTimes(1);
-    const detail = (listener.mock.calls[0][0] as CustomEvent<OpenHelpChatDetail>).detail;
-    expect(detail.draft).toBe("Hola, quiero avisar que Luis Lopez suma 3 ausencias este mes.");
-    window.removeEventListener(OPEN_HELP_CHAT_EVENT, listener);
-  });
-
-  it("says on screen what 'Avisar al club' actually does", async () => {
+  it("does not render an 'Avisar al club' button — no endpoint notifies the club (owner: not an MVP feature)", async () => {
     /*
-     * There is no notify-the-club endpoint; the button opens the help assistant
-     * with the message already written, and the trainer still has to send it.
-     * That was documented in a source comment only, so on screen the button
-     * promised something it does not do by itself.
+     * The button never notified anyone: there is no notify-the-club endpoint,
+     * it only opened the help assistant with a message the trainer still had
+     * to send themselves. The owner cut it outright rather than keep
+     * disclaiming what it actually did. This is the regression lock — it used
+     * to assert the button WAS there; now it asserts it stays gone.
      */
     render(<TrainerPage />);
     await screen.findByText(/Última lista/);
 
-    const button = screen.getByRole("button", { name: /Avisar al club/ });
-    const hint = screen.getByText(
-      "Abre el asistente con el mensaje ya escrito. Usted lo revisa y lo envía.",
-    );
-    expect(hint).toBeInTheDocument();
-    // The hint has to reach a screen reader from the button too, not just sit
-    // near it visually.
-    expect(button).toHaveAttribute("aria-describedby", hint.id);
+    expect(screen.queryByRole("button", { name: /Avisar al club/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Abre el asistente con el mensaje ya escrito. Usted lo revisa y lo envía."),
+    ).not.toBeInTheDocument();
   });
 
   it("stays quiet about absences when nobody has reached the threshold", async () => {
@@ -271,7 +284,7 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     await screen.findByText(/Última lista/);
-    expect(screen.queryByRole("button", { name: /Avisar al club/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/ausencias/)).not.toBeInTheDocument();
   });
 
   it("shows an actionable empty state when no list has been filed this month", async () => {
@@ -283,15 +296,86 @@ describe("TrainerPage — Mi día", () => {
     ).toBeInTheDocument();
   });
 
-  it("sends the history to its own view instead of embedding it", async () => {
+  it("sends the history to its own view instead of embedding a correction table", async () => {
     render(<TrainerPage />);
 
     const link = await screen.findByRole("link", { name: "Ver historial" });
     expect(link).toHaveAttribute("href", "/trainer/attendance/history");
-    // The table, its filter panel and its pager are gone from this screen.
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    // The filter panel, the pager and the "Corregir" action live only on the
+    // history screen — the table on THIS screen (below) is the club's recent
+    // sessions, read-only.
+    expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Filtrar por horario")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Página siguiente" })).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Últimas listas del club (Fix 8 / DSH-2).
+  // -------------------------------------------------------------------------
+
+  it("lists the club's recent sessions with their four counts, no author column", async () => {
+    render(<TrainerPage />);
+
+    expect(await screen.findByText("Últimas listas del club")).toBeInTheDocument();
+    const table = within(screen.getByTestId("recent-club-sessions"));
+    expect(table.getByText("Lunes 16:00 — 17:00")).toBeInTheDocument();
+    expect(table.getByText("Domingo 09:00 — 10:00")).toBeInTheDocument();
+    // Sin autor a propósito (§8): ninguna columna dice quién tomó la lista.
+    expect(table.queryByText(/Entrenador/)).not.toBeInTheDocument();
+    expect(table.queryByText(/Registrad[oa] por/)).not.toBeInTheDocument();
+  });
+
+  it("shows each recent session's counts with visible state names, not only color", async () => {
+    render(<TrainerPage />);
+
+    await screen.findByText("Últimas listas del club");
+    const table = within(screen.getByTestId("recent-club-sessions"));
+    const rows = await table.findAllByRole("row");
+    const resultCell = within(rows[1]).getAllByRole("cell")[1];
+
+    // The state name has to be real, visible text — not tucked into a
+    // hidden `sr-only` span that only a screen reader ever sees, which is
+    // exactly what the owner flagged: dots and numbers with no label.
+    expect(resultCell.querySelector(".sr-only")).toBeNull();
+    expect(resultCell).toHaveTextContent("6 Presente");
+    expect(resultCell).toHaveTextContent("0 Tardanza");
+    expect(resultCell).toHaveTextContent("1 Justificado");
+    expect(resultCell).toHaveTextContent("1 Ausente");
+  });
+
+  it("shows an empty state when the club has no recent sessions", async () => {
+    mockFetchRecentAttendanceSessions.mockResolvedValue([]);
+    render(<TrainerPage />);
+
+    expect(
+      await screen.findByText("Todavía no hay listas registradas"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not let a failed recent-sessions load block the rest of the panel", async () => {
+    mockFetchRecentAttendanceSessions.mockRejectedValue(new Error("boom"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(<TrainerPage />);
+
+    expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Todavía no hay listas registradas"),
+    ).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Distribución de asistencias (donut, reused from /dashboard).
+  // -------------------------------------------------------------------------
+
+  it("shows the attendance distribution chart beside the absence notice", async () => {
+    render(<TrainerPage />);
+
+    await screen.findByText(/Última lista/);
+    expect(screen.getByText("Distribución de asistencias")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /Distribución de asistencias/ }),
+    ).toBeInTheDocument();
   });
 
   it("recovers from a failed load with a retry", async () => {

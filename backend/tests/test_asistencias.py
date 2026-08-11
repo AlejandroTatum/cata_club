@@ -340,3 +340,97 @@ def test_roster_de_todos_los_horarios_excluye_a_los_dados_de_baja(client, db_ses
 def test_roster_de_todos_los_horarios_requiere_admin_o_entrenador(client_sin_permisos):
     resp = client_sin_permisos.get("/api/v1/asistencias/horarios/alumnos")
     assert resp.status_code == 403
+
+
+# --- Fix 8 / DSH-2: "últimas listas del club" -------------------------------
+# El panel del entrenador rediseñado (§8 de decisiones-de-negocio-2026-08-11.md)
+# muestra las últimas listas tomadas en el club, sin autor: no existe relación
+# entrenador-horario (issue #13) y `Asistencia` no guarda quién tomó la lista
+# (modelos.py:536, deliberado). El candado de este fix: sin el endpoint, la
+# ruta ni existe (404); con él, agrupa por (horario, fecha) y cuenta los
+# cuatro estados.
+def _crear_horario_api(client, dia="LUNES", categoria="JUVENIL"):
+    resp = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": categoria, "dia_semana": dia},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def _registrar_lista(client, persona_id, horario_id, fecha, estado):
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": persona_id, "horario_id": horario_id},
+    )
+    resp = client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": fecha, "estado": estado,
+            "persona_id": persona_id, "horario_id": horario_id,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_listar_ultimas_listas_cuenta_los_cuatro_estados(client):
+    horario = _crear_horario_api(client)
+    estudiantes = [
+        _crear_persona_api(client, f"171003500{i}", f"Alumno{i}") for i in range(4)
+    ]
+    for persona, estado in zip(estudiantes, ["PRESENTE", "ATRASADO", "JUSTIFICADO", "AUSENTE"]):
+        _registrar_lista(client, persona["id"], horario["id"], "2026-08-03", estado)
+
+    resp = client.get("/api/v1/asistencias/ultimas-listas")
+    assert resp.status_code == 200
+    listas = resp.json()
+    assert len(listas) == 1
+    lista = listas[0]
+    assert lista["horarioId"] == horario["id"]
+    assert lista["fechaEntrenamiento"] == "2026-08-03"
+    assert lista["presentes"] == 1
+    assert lista["tardanzas"] == 1
+    assert lista["justificados"] == 1
+    assert lista["ausentes"] == 1
+    assert lista["total"] == 4
+
+
+def test_listar_ultimas_listas_ordena_las_mas_recientes_primero(client):
+    horario = _crear_horario_api(client)
+    alumno = _crear_persona_api(client, "1710035010", "Ana")
+    _registrar_lista(client, alumno["id"], horario["id"], "2026-07-06", "PRESENTE")
+    _registrar_lista(client, alumno["id"], horario["id"], "2026-08-03", "PRESENTE")
+
+    resp = client.get("/api/v1/asistencias/ultimas-listas")
+    fechas = [lista["fechaEntrenamiento"] for lista in resp.json()]
+    assert fechas == ["2026-08-03", "2026-07-06"]
+
+
+def test_listar_ultimas_listas_no_expone_autor(client):
+    """Candado del recorte de alcance: la lista no dice quién la tomó."""
+    horario = _crear_horario_api(client)
+    alumno = _crear_persona_api(client, "1710035020", "Ana")
+    _registrar_lista(client, alumno["id"], horario["id"], "2026-08-03", "PRESENTE")
+
+    resp = client.get("/api/v1/asistencias/ultimas-listas")
+    lista = resp.json()[0]
+    assert "entrenadorId" not in lista
+    assert "registradoPor" not in lista
+    assert "personaId" not in lista
+
+
+def test_listar_ultimas_listas_entrenador_puede_acceder(client_entrenador, client):
+    horario = _crear_horario_api(client)
+    alumno = _crear_persona_api(client, "1710035030", "Ana")
+    _registrar_lista(client, alumno["id"], horario["id"], "2026-08-03", "PRESENTE")
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.get("/api/v1/asistencias/ultimas-listas")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+def test_listar_ultimas_listas_rechaza_rol_sin_permiso(client_sin_permisos, client):
+    _restaurar_token_alumno()
+    resp = client_sin_permisos.get("/api/v1/asistencias/ultimas-listas")
+    assert resp.status_code == 403

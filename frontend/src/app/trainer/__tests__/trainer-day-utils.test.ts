@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
 import {
   ABSENCE_ALERT_THRESHOLD,
-  buildAbsenceNotice,
   findAbsenceAlert,
   formatAbsenceCount,
   formatEnrolledCount,
@@ -293,14 +292,6 @@ describe("formatAbsenceCount", () => {
   it("pluralizes", () => {
     expect(formatAbsenceCount(1)).toBe("1 ausencia");
     expect(formatAbsenceCount(3)).toBe("3 ausencias");
-  });
-});
-
-describe("buildAbsenceNotice", () => {
-  it("names the student and the count in the message sent to the club", () => {
-    expect(buildAbsenceNotice({ estudiante: "Luis Lopez", ausencias: 3 })).toBe(
-      "Hola, quiero avisar que Luis Lopez suma 3 ausencias este mes.",
-    );
   });
 });
 

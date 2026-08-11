@@ -251,19 +251,6 @@ export function formatAbsenceCount(ausencias: number): string {
   return ausencias === 1 ? "1 ausencia" : `${ausencias} ausencias`;
 }
 
-/**
- * The message the trainer sends the club about an accumulating absence.
- *
- * There is NO backend endpoint for "notify the club" — the assistant's
- * WhatsApp hand-off is the only real channel — so the button pre-fills this
- * text rather than pretending to file a report.
- */
-export function buildAbsenceNotice(alert: AbsenceAlert): string {
-  return `Hola, quiero avisar que ${alert.estudiante} suma ${formatAbsenceCount(
-    alert.ausencias,
-  )} este mes.`;
-}
-
 // ---------------------------------------------------------------------------
 // Date ranges
 // ---------------------------------------------------------------------------

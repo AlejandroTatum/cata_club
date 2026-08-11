@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario
-from app.dominio.enums import Categoria, EstadoMembresia, EstadoPago
+from app.dominio.enums import Categoria, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import categoria_en_castellano, dia_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
@@ -14,7 +14,8 @@ from app.infraestructura.repositorios.asistencia_repositorio import (
 )
 from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCreateDTO, CategoriaResponseDTO, HorarioCreateDTO, HorarioUpdateDTO,
-    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO
+    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
+    UltimaListaDTO,
 )
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.soporte_transversal.tiempo import hoy_club
@@ -243,6 +244,33 @@ class AsistenciaServicio:
         ultimo_vencimiento = max(p.fecha_fin for p in pagos_aprobados)
         dias_vencida = (hoy_club() - ultimo_vencimiento).days
         return True, max(dias_vencida, 0)
+
+    def listar_ultimas_listas(self, limit: int = 5) -> list[UltimaListaDTO]:
+        """Las últimas `limit` listas del club (horario + fecha), más
+        recientes primero, sin autor -- ver §8 de
+        decisiones-de-negocio-2026-08-11.md. Alimenta el panel del
+        entrenador."""
+        sesiones = self.repo.listar_ultimas_sesiones(limit)
+        resultado = []
+        for s in sesiones:
+            conteos = s["conteos"]
+            presentes = conteos.get(EstadoAsistencia.PRESENTE, 0)
+            tardanzas = conteos.get(EstadoAsistencia.ATRASADO, 0)
+            justificados = conteos.get(EstadoAsistencia.JUSTIFICADO, 0)
+            ausentes = conteos.get(EstadoAsistencia.AUSENTE, 0)
+            resultado.append(UltimaListaDTO(
+                horario_id=s["horario_id"],
+                fecha_entrenamiento=s["fecha_entrenamiento"],
+                dia_semana=s["dia_semana"],
+                hora_inicio=s["hora_inicio"],
+                hora_fin=s["hora_fin"],
+                presentes=presentes,
+                tardanzas=tardanzas,
+                justificados=justificados,
+                ausentes=ausentes,
+                total=presentes + tardanzas + justificados + ausentes,
+            ))
+        return resultado
 
     # --- Asignación directa Alumno ↔ Categoria (todos sus horarios) --------
     def asignar_alumno_a_horario(

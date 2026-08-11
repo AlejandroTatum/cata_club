@@ -161,6 +161,58 @@ class AsistenciaRepositorio:
             query = query.filter(Asistencia.fecha_entrenamiento <= fecha_fin)
         return query
 
+    def listar_ultimas_sesiones(self, limit: int = 5) -> List[dict]:
+        """Las últimas `limit` sesiones (pares horario_id + fecha) que
+        tienen al menos una Asistencia, más recientes primero, con un
+        conteo por estado -- todo derivado de `Asistencia` +
+        `HorarioEntrenamiento`, sin tabla nueva (ver §8 de
+        decisiones-de-negocio-2026-08-11.md).
+
+        Dos consultas: una para encontrar los `limit` pares más recientes,
+        otra por par para sus conteos. `limit` está acotado (tope 20 en el
+        router) así que el N+1 es del mismo tamaño pequeño ya aceptado en
+        `fetchPersonaNameMap` del frontend, no una consulta por fila de
+        `Asistencia`."""
+        pares_stmt = (
+            select(
+                Asistencia.fecha_entrenamiento,
+                Asistencia.horario_id,
+                HorarioEntrenamiento.dia_semana,
+                HorarioEntrenamiento.hora_inicio,
+                HorarioEntrenamiento.hora_fin,
+            )
+            .join(HorarioEntrenamiento, HorarioEntrenamiento.id == Asistencia.horario_id)
+            .group_by(
+                Asistencia.fecha_entrenamiento, Asistencia.horario_id,
+                HorarioEntrenamiento.dia_semana, HorarioEntrenamiento.hora_inicio,
+                HorarioEntrenamiento.hora_fin,
+            )
+            .order_by(Asistencia.fecha_entrenamiento.desc(), HorarioEntrenamiento.hora_inicio.desc())
+            .limit(limit)
+        )
+        pares = self.db.execute(pares_stmt).all()
+
+        sesiones: List[dict] = []
+        for fecha, horario_id, dia_semana, hora_inicio, hora_fin in pares:
+            conteo_stmt = (
+                select(Asistencia.estado, func.count())
+                .where(
+                    Asistencia.horario_id == horario_id,
+                    Asistencia.fecha_entrenamiento == fecha,
+                )
+                .group_by(Asistencia.estado)
+            )
+            conteos = dict(self.db.execute(conteo_stmt).all())
+            sesiones.append({
+                "horario_id": horario_id,
+                "fecha_entrenamiento": fecha,
+                "dia_semana": dia_semana,
+                "hora_inicio": hora_inicio,
+                "hora_fin": hora_fin,
+                "conteos": conteos,
+            })
+        return sesiones
+
 
 class AlumnoHorarioRepositorio:
     def __init__(self, db: Session):

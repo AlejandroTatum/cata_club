@@ -85,6 +85,36 @@ describe("GET /api/attendance/records", () => {
     ]);
   });
 
+  // ASI-4 lock: for a trainer session, the bulk `/personas/?limit=200`
+  // read 403s (personas_router.py restricts it to ADMINISTRADOR — it
+  // carries real PII). The old code swallowed that 403 into an empty
+  // name map, so `estudiante` fell back to "Persona {id}" for EVERY
+  // record a trainer viewed — not a rare failure, the 100% case. This
+  // test fails red against that old behavior (it would see "Persona
+  // 15") and stays green now that the adapter falls back to the per-id
+  // `/personas/{id}` lookup ENTRENADOR is already granted.
+  it("resolves the real student name for a trainer session, not a 'Persona {id}' placeholder", async () => {
+    const asistenciaDePersona15 = { ...asistencia, personaId: 15 };
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse([asistenciaDePersona15]))
+      .mockResolvedValueOnce(jsonResponse([horario]))
+      .mockResolvedValueOnce(jsonResponse({ detail: "Permisos insuficientes" }, 403))
+      .mockResolvedValueOnce(jsonResponse({ id: 15, nombres: "Emily", apellidos: "Moreira Pilay" }));
+
+    const access = makeJwt(3600);
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body[0].estudiante).toBe("Emily Moreira Pilay");
+    expect(body[0].estudiante).not.toBe("Persona 15");
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      4,
+      "http://localhost:8000/api/v1/personas/15",
+      expect.anything(),
+    );
+  });
+
   it("forwards fechaInicio/fechaFin as fecha_inicio/fecha_fin query params, plus skip/limit for the backend page", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 }))

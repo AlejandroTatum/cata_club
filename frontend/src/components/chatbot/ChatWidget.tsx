@@ -111,8 +111,9 @@ export interface ChatWidgetProps {
    */
   role?: UserRole | null;
   /**
-   * Text to pre-fill the composer with when the panel opens. Used by the
-   * trainer's "Avisar al club", which knows exactly what needs saying.
+   * Text to pre-fill the composer with when the panel opens. No current call
+   * site sets this — every trigger opens the assistant empty — but the seam
+   * stays cheap for the next screen that knows exactly what needs saying.
    */
   initialDraft?: string;
 }

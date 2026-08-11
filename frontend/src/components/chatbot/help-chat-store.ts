@@ -12,18 +12,17 @@
  * So the panel is now mounted exactly once, by `HelpChatDock` in the root
  * layout, and every trigger in the product — the floating launcher, the
  * sidebar's "Ayuda y soporte", the landing's contact block, the auth screens'
- * small print, the enrolment wizard header, `/unauthorized`'s "Contactar al
- * club" and the trainer's "Avisar al club" — calls `openHelpChat()` and opens
- * THAT panel.
+ * small print, the enrolment wizard header and `/unauthorized`'s "Contactar
+ * al club" — calls `openHelpChat()` and opens THAT panel.
  *
  * ## Why a CustomEvent is still the ingress
  *
  * `openHelpChat` has always dispatched `cata:open-help-chat` on `window`, and
- * screens outside this module (the trainer's "Avisar al club") depend on that
- * contract. Keeping the event as the way IN means no call site had to change;
- * this store is simply the one listener that turns it into React state, plus
- * the read side (`useHelpChatState`) that lets a remote trigger report
- * `aria-expanded` truthfully.
+ * call sites outside this module depend on that contract. Keeping the event
+ * as the way IN means no call site had to change; this store is simply the
+ * one listener that turns it into React state, plus the read side
+ * (`useHelpChatState`) that lets a remote trigger report `aria-expanded`
+ * truthfully.
  */
 
 import { useSyncExternalStore } from "react";
@@ -32,11 +31,12 @@ import { useSyncExternalStore } from "react";
  * Event any screen can fire to open the help assistant, with an optional
  * `detail.draft` pre-filling the composer.
  *
- * The trainer's "Avisar al club" needs to reach the club about a specific
- * student, and there is NO backend endpoint for "notify the club" — the chat
- * is the only real channel. A custom event keeps that a one-line call from the
- * page instead of threading chat state through props or a context nobody else
- * needs.
+ * No current call site passes a draft — every trigger in the product opens
+ * the assistant empty (`openHelpChat()`). The parameter stays because the
+ * contract is cheap to keep and cheaper than re-adding it the next time a
+ * screen needs to open the assistant with something specific already typed.
+ * A custom event keeps that a one-line call from the page instead of
+ * threading chat state through props or a context nobody else needs.
  */
 export const OPEN_HELP_CHAT_EVENT = "cata:open-help-chat";
 
