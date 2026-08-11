@@ -19,28 +19,30 @@ import type {
   PagoPersona,
 } from "@/services/api";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
-import { EmptyState, ErrorState, LoadingState, PAGE_RAIL, buttonClasses } from "@/components/ui";
+import { EmptyState, ErrorState, LoadingState, PAGE_RAIL, buttonClasses, cn } from "@/components/ui";
 import AgeUpConfirmation from "@/components/AgeUpConfirmation";
 import ManagedStudentPicker, {
   useManagedProfiles,
   withSelectedStudent,
 } from "./ManagedStudentPicker";
-import PaymentBand from "./PaymentBand";
+import CuotaCard from "./CuotaCard";
 import {
+  compactPaymentLabel,
   derivePortalMode,
   isRepresentative,
   isMinor,
   buildWeeklyTrainingSchedule,
   describeAssignedWindows,
-  describeMembershipState,
   describePaymentSituation,
   findNextTrainingSessions,
   firstNameOf,
+  paymentBandTone,
   resolveCoverageEnd,
   summarizeRecentAttendance,
+  type PaymentSituation,
   type UpcomingTraining,
 } from "./student-utils";
-import { CalendarDays, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
+import { AlertTriangle, CalendarDays, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -70,6 +72,33 @@ type HorariosState =
 // and is held to that standard: every field on it is real. The prototype's
 // "Miembro nº", "Desde" and "Renueva" are NOT rendered — see the block comment
 // above `resolveCoverageEnd` in student-utils.ts for where each one dies.
+//
+// ## "El carnet manda" (docs/fixes/12-mi-cuenta-carnet.md)
+//
+// The redesign folds the payment situation into the carnet as a status band,
+// in the position the chosen maquette draws it — over the card, not beside
+// it — and trims the fact grid to the four the maquette asks for: Socio
+// desde, Plan, Franja, Valor mensual. Two facts the OLD grid carried move or
+// drop:
+//
+//   - "Cobertura hasta" moves to the "Cuota" card (`CuotaCard`) beside the
+//     carnet — it is payment information, and the band above now states the
+//     payment verdict already; repeating the date on the carnet too would be
+//     the same fact stated twice two inches apart.
+//   - "Modalidad" (Mensual/Personalizada) is dropped. Nothing in the chosen
+//     maquette draws it, and the brief is explicit that an unlisted field
+//     gets left out rather than kept "just in case" — the whole point of this
+//     pass is that the carnet stops carrying everything it can.
+//
+// The band ALSO replaces the old `describeMembershipState` badge
+// ("Membresía activa/pendiente/vencida"). That badge and the payment
+// situation used to be able to disagree — an admin-set `estado` is not
+// derived from coverage — and the maquette draws exactly one band, worded
+// for "can this family act on it", which `describePaymentSituation` already
+// is. The one case this trades away: an admin who marks a membership
+// `INACTIVA` with no payment consequence no longer gets a distinct carnet
+// reading for that — `never-paid`'s "no tiene ningún pago aprobado" covers
+// it, and it is the more actionable of the two.
 // ---------------------------------------------------------------------------
 
 function CarnetFact({ label, value }: { label: string; value: string }): React.ReactElement {
@@ -83,20 +112,98 @@ function CarnetFact({ label, value }: { label: string; value: string }): React.R
   );
 }
 
+/**
+ * The carnet's own reading of the payment situation.
+ *
+ * Two shapes, not one-per-tone: `kind === "covered"` — a family that is up to
+ * date, the majority of visits in a club where most people pay on time — is
+ * the ONLY state that renders as the small pill the membership badge this
+ * replaces already used. This is the direct answer to the maquette's own
+ * recorded cost, "pesa mucho cuando no hay nada que resolver": that sentence
+ * is about the up-to-date case specifically, not about every non-urgent one.
+ *
+ * Every other state — urgent (`bad`) or not (`awaiting-validation`,
+ * `minor-blocked`, `no-membership`) — still has something to explain (why
+ * there is nothing to act on yet, or who acts instead), so it keeps the
+ * full-weight strip with `situation.headline` stated in full. Only the color
+ * tells those two groups apart: red for urgent, the same neutral white the
+ * old badge's inactive state used otherwise.
+ *
+ * Colors are literal hex, not the `state-*` tokens `Badge` uses: those are
+ * tuned for text on the light `paper`/`canvas` surfaces, and this band sits
+ * on the carnet's own coal gradient. The pattern (a translucent `state-*`
+ * wash plus a light, hand-picked foreground) is the one the membership badge
+ * this replaces already established for `ok` (`bg-state-ok/20
+ * text-[#7BE8A4]`); `bad` follows the same recipe.
+ */
+function CarnetStatusBand({ situation }: { situation: PaymentSituation }): React.ReactElement {
+  const tone = paymentBandTone(situation);
+  const compact = situation.kind === "covered";
+
+  if (!compact) {
+    return (
+      <div
+        data-testid="carnet-status-band"
+        data-urgent={String(situation.urgent)}
+        data-tone={tone}
+        className={cn(
+          "relative z-10 mt-3 flex items-start gap-2.5 rounded-ctl px-3.5 py-2.5",
+          tone === "bad" ? "bg-state-bad/20" : "bg-white/[0.11]",
+        )}
+      >
+        {tone === "bad" && (
+          <AlertTriangle
+            size={ICON.sm}
+            strokeWidth={2}
+            className="mt-0.5 flex-none text-[#FF8A93]"
+            aria-hidden="true"
+          />
+        )}
+        <div className="min-w-0">
+          <p
+            className={cn(
+              "text-sm font-bold leading-tight",
+              tone === "bad" ? "text-[#FF8A93]" : "text-white",
+            )}
+          >
+            {situation.headline}
+          </p>
+          {situation.figure && (
+            <p className="mt-0.5 text-2xs font-semibold uppercase tracking-flat text-white/60">
+              {situation.figure.value} {situation.figure.unit}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <span
+      data-testid="carnet-status-band"
+      data-urgent="false"
+      data-tone={tone}
+      className="relative z-10 mt-3 inline-flex h-badge w-fit items-center gap-1.5 rounded-full bg-state-ok/20 px-[11px] text-2xs tracking-flat font-bold text-[#7BE8A4]"
+    >
+      <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-current" />
+      {compactPaymentLabel(situation)}
+    </span>
+  );
+}
+
 function Carnet({
   profile,
-  coverageEnd,
+  situation,
   horariosState,
+  className,
 }: {
   profile: StudentProfileSummary;
-  coverageEnd: string | null;
+  situation: PaymentSituation;
   /** The same assignments the training panel reads — see `franja` below. */
   horariosState: HorariosState;
+  className?: string;
 }): React.ReactElement {
   const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
-  // The same reading `/student/payments` shows, from the same function — the
-  // two screens used to word this differently for the same `estado`.
-  const membership = describeMembershipState(profile.membership?.estado);
   const facts: { label: string; value: string }[] = [];
   // "Socio desde" rather than the prototype's "MIEMBRO Nº · DESDE": the backend
   // has no member-number concept, and printing the surrogate persona id as one
@@ -116,8 +223,8 @@ function Carnet({
   // lookup is not "nothing assigned", it is "not answered yet" or "could not
   // be answered", and printing the same omission for all three used to let a
   // network failure read as a fact the club never asserted. The wording below
-  // matches the "Próximos entrenamientos" panel's vocabulary for the same
-  // `horariosState` (see `TrainingPanel`) so the screen speaks with one voice.
+  // matches the "Esta semana" panel's vocabulary for the same `horariosState`
+  // (see `TrainingPanel`) so the screen speaks with one voice.
   const franja =
     horariosState.status === "ready"
       ? describeAssignedWindows(horariosState.asignaciones)
@@ -125,12 +232,6 @@ function Carnet({
         ? "Consultando…"
         : "No se pudo consultar";
   if (franja) facts.push({ label: "Franja", value: franja });
-  if (profile.membership?.modalidad) {
-    facts.push({
-      label: "Modalidad",
-      value: profile.membership.modalidad === "PERSONALIZADA" ? "Personalizada" : "Mensual",
-    });
-  }
   if (profile.membership?.montoAplicado) {
     // "Valor mensual", the same label `/student/payments` puts on the same
     // field. The carnet used to call it "Monto", which reads as an amount
@@ -141,13 +242,15 @@ function Carnet({
       value: formatCurrency(Number(profile.membership.montoAplicado)),
     });
   }
-  if (coverageEnd) facts.push({ label: "Cobertura hasta", value: formatDate(coverageEnd) });
 
   return (
     <section
       data-testid="student-carnet"
       aria-label={`Carnet de socio de ${fullName}`}
-      className="relative flex flex-col overflow-hidden rounded-card bg-gradient-to-br from-coal to-[#2A2A33] px-6 py-[22px] text-white"
+      className={cn(
+        "relative flex flex-col overflow-hidden rounded-card bg-gradient-to-br from-coal to-[#2A2A33] px-6 py-[22px] text-white",
+        className,
+      )}
     >
       <span
         aria-hidden="true"
@@ -169,40 +272,25 @@ function Carnet({
         </div>
       </div>
 
-      {/* Name and badges are one group — the person and what the club grants
-          them — so they sit 10px apart, while the club header above and the
-          fact grid below are separated by 18px. The card used to space all
-          four blocks by an identical 14px, which read as four unrelated rows
-          rather than as header / identity / record. */}
+      {/* Name and status band are one group — the person and what the club
+          currently needs from them about it — so they sit close together,
+          while the header above and the fact grid below are separated by
+          18px. */}
       <p className="relative z-10 mt-[18px] text-balance text-xl font-extrabold">
         {fullName}
       </p>
 
-      <div className="relative z-10 mt-2.5 flex flex-wrap gap-2">
-        <span
-          className={
-            membership.active
-              ? "h-badge inline-flex items-center gap-1.5 rounded-full bg-state-ok/20 px-[11px] text-2xs tracking-flat font-bold text-[#7BE8A4]"
-              : "h-badge inline-flex items-center gap-1.5 rounded-full bg-white/[0.11] px-[11px] text-2xs tracking-flat font-bold text-white"
-          }
-        >
-          <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-current" />
-          {membership.label}
-        </span>
-      </div>
+      <CarnetStatusBand situation={situation} />
 
-      {/* Equal columns, not shrink-to-fit ones. As a wrapping flex row every
-          fact was as wide as its own value, so the labels landed at arbitrary
-          x positions and no two rows lined up (in the 340px rail: 1098/1198.4
-          on the first row against 1098/1203.5/1293 on the second, with 93px of
-          dead space at the end of the first). `auto-fit` tracks give one
-          rhythm at every width — two columns in the rail and on a phone, and
-          all five or six side by side when the card runs full width below
-          `lg`. */}
+      {/* A fixed two-column grid, not `auto-fit`: the carnet used to sit in a
+          340px rail, where `auto-fit` and "two columns" were the same thing.
+          It is now the wide column (see `ActivePortalView`), and `auto-fit`
+          at that width would have spread four facts across four or five
+          columns — the maquette draws exactly two. */}
       {facts.length > 0 && (
         <div
           data-testid="carnet-facts"
-          className="relative z-10 mt-[18px] grid grid-cols-[repeat(auto-fit,minmax(116px,1fr))] gap-x-4 gap-y-section border-t border-white/10 pt-[15px]"
+          className="relative z-10 mt-[18px] grid grid-cols-2 gap-x-4 gap-y-section border-t border-white/10 pt-[15px] sm:max-w-[360px]"
         >
           {facts.map((fact) => (
             <CarnetFact key={fact.label} label={fact.label} value={fact.value} />
@@ -327,11 +415,18 @@ function TrainingPanel({
   return (
     <section
       data-testid="student-situation"
-      aria-label="Próximos entrenamientos"
-      className="card flex h-full flex-col overflow-hidden"
+      aria-label="Esta semana"
+      // `flex-1 min-h-0`, not the old `h-full`: this card used to stand alone
+      // in its own grid column (its row's only occupant), where "fill the
+      // row" and "fill 100% of my parent" were the same thing. It now shares
+      // a flex column with `CuotaCard` above it — `h-full` there meant "take
+      // the WHOLE stretched column", squeezing `CuotaCard` below its own
+      // content height and letting its `overflow-hidden` silently clip the
+      // payment button. `flex-1` takes only what `CuotaCard` doesn't need.
+      className="card flex flex-1 min-h-0 flex-col overflow-hidden"
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-field px-5 pb-3.5 pt-[18px]">
-        <h2 className="text-base font-bold tracking-tight text-ink">Próximos entrenamientos</h2>
+        <h2 className="text-base font-bold tracking-tight text-ink">Esta semana</h2>
         <p className="text-xs text-ink-3-strong">
           {viewingOwnProfile
             ? "El horario semanal que el club le asignó."
@@ -581,10 +676,11 @@ function ActivePortalView({
     representative || !hasAlumnoRole || data.self?.representanteId != null;
 
   /**
-   * The one thing this screen exists to answer, resolved once and rendered in
-   * the band above everything else — see `PaymentBand`. `describePaymentSituation`
-   * owns every word of it, so the home screen and `/student/payments` can never
-   * word the same `estado` differently again.
+   * The one thing this screen exists to answer, resolved once and rendered
+   * twice — as the carnet's own status band and as the "Cuota" card's detail
+   * (see `CarnetStatusBand` and `CuotaCard`). `describePaymentSituation` owns
+   * every word of it, so the carnet, the rail card and `/student/payments`
+   * can never word the same `estado` differently again.
    */
   const paymentSituation = selectedProfile
     ? describePaymentSituation({
@@ -603,13 +699,11 @@ function ActivePortalView({
     : null;
 
   return (
-    // Full content width, like `/dashboard`, `/members` and `/payments`. The
-    // 760px cap came from the prototype's `.canvas`, and at 1440×900 it left
-    // the right HALF of the content column empty on every family screen while
-    // every admin screen filled it — the loudest remaining reason the portal
-    // did not read as the same product. What was one 760px stack is now a
-    // band across the top, the training panel in the main column and the
-    // carnet in a rail beside it.
+    // Full content width, like `/dashboard`, `/members` and `/payments` — the
+    // 760px cap the prototype started from left the right HALF of the content
+    // column empty on every family screen. "El carnet manda" (Propuesta 2)
+    // spends that width on the carnet itself: see the `PAGE_RAIL` block below
+    // for how the identity card and the two rail cards split it.
     <>
       {/* The greeting is NOT a heading here. It used to be a 26px h2 directly
           under `PageHeader`'s own 26px h1, which stacked "ÁREA DE ESTUDIANTES
@@ -635,72 +729,84 @@ function ActivePortalView({
           description="Inscríbase como jugador o agregue un hijo o dependiente para empezar."
         />
       ) : (
-        <>
-          {/* First, across the whole width: the reader came to find out whether
-              they owe the club anything and to do something about it. */}
-          <PaymentBand
-            situation={paymentSituation}
-            action={
-              paymentSituation.canRegister
-                ? // Straight into the open form. The route to paying used to be
-                  // three clicks — link, page, "Registrar un pago" — and the
-                  // last two were on a screen that never said whose payment it
-                  // was about.
-                  {
-                    href: withSelectedStudent("/student/payments?registrar=1", selectedPersonaId),
-                    label: "Registrar un pago",
-                  }
-                : {
-                    href: withSelectedStudent("/student/payments", selectedPersonaId),
-                    label: "Ver los pagos",
-                  }
-            }
-          />
+        // "El carnet manda" (docs/fixes/12-mi-cuenta-carnet.md, Propuesta 2):
+        // the identity card is the wide column and carries its own payment
+        // band; the rail stacks the "Cuota" detail card over "Esta semana".
+        // `PAGE_RAIL` is the product's one two-column split (see layout.ts),
+        // reused rather than adding a second ratio — with one addition,
+        // `lg:!items-stretch` (`!` beats `PAGE_RAIL`'s own `lg:items-start`
+        // regardless of class order, since Tailwind resolves same-specificity
+        // utilities by generation order, not by where they sit in the
+        // string): the carnet is the whole reason for this screen, so it
+        // fills the row's height instead of stopping short and leaving the
+        // canvas showing beneath it — the exact "vacío que no se llena"
+        // complaint the old layout had, just moved under a different card.
+        <div className={cn(PAGE_RAIL, "lg:!items-stretch")}>
+          <div className="flex flex-col gap-5">
+            <Carnet
+              profile={selectedProfile}
+              situation={paymentSituation}
+              horariosState={horariosState}
+              className="flex-1"
+            />
 
-          {/* The main column answers "when do I train next"; the rail carries
-              the identity the family screenshots. The carnet was NOT deleted —
-              it is the one thing on this screen a parent has reacted well to —
-              but it no longer sits between the band and the training panel at
-              full width, where it read as the screen's subject. At 340px it is
-              a card the size of a card. */}
-          <div className={PAGE_RAIL}>
+            {/* Only on the minor's OWN account. Shown to a guardian looking
+                at their dependent it read "Su representante: Laura Vera" to
+                Laura Vera — the card names the person the reader should turn
+                to, and the reader was that person. */}
+            {selectedIsMinor && viewingOwnProfile && selectedProfile.representante && (
+              <section className="card flex items-center gap-3 p-5" aria-label="Su representante">
+                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-canvas">
+                  <User size={ICON.base} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-2xs font-bold uppercase text-ink-3">
+                    Su representante
+                  </span>
+                  <span className="block text-sm font-semibold text-ink">
+                    {selectedProfile.representante.nombres}{" "}
+                    {selectedProfile.representante.apellidos}
+                  </span>
+                </span>
+              </section>
+            )}
+          </div>
+
+          {/* Below `lg` this is the SECOND stacked block (see `PAGE_RAIL`'s
+              doc comment: no explicit columns below `lg` means DOM order is
+              reading order), so a phone gets exactly the brief's order —
+              carnet, then the payment action, then "Esta semana". */}
+          <div className="flex flex-col gap-5">
+            <CuotaCard
+              situation={paymentSituation}
+              coverageEnd={coverageEnd}
+              monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
+              viewPagosHref={withSelectedStudent("/student/payments", selectedPersonaId)}
+              action={
+                paymentSituation.canRegister
+                  ? // Straight into the open form. The route to paying used to
+                    // be three clicks — link, page, "Registrar un pago" — and
+                    // the last two were on a screen that never said whose
+                    // payment it was about.
+                    {
+                      href: withSelectedStudent("/student/payments?registrar=1", selectedPersonaId),
+                      label: "Registrar un pago",
+                    }
+                  : {
+                      href: withSelectedStudent("/student/payments", selectedPersonaId),
+                      label: "Ver los pagos",
+                    }
+              }
+            />
+
             <TrainingPanel
               profile={selectedProfile}
               horariosState={horariosState}
               viewingOwnProfile={viewingOwnProfile}
               studentName={firstNameOf(selectedProfile.nombres)}
             />
-
-            <div className="flex flex-col gap-5">
-              <Carnet
-                profile={selectedProfile}
-                coverageEnd={coverageEnd}
-                horariosState={horariosState}
-              />
-
-              {/* Only on the minor's OWN account. Shown to a guardian looking
-                  at their dependent it read "Su representante: Laura Vera" to
-                  Laura Vera — the card names the person the reader should turn
-                  to, and the reader was that person. */}
-              {selectedIsMinor && viewingOwnProfile && selectedProfile.representante && (
-                <section className="card flex items-center gap-3 p-5" aria-label="Su representante">
-                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-canvas">
-                    <User size={ICON.base} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-2xs font-bold uppercase text-ink-3">
-                      Su representante
-                    </span>
-                    <span className="block text-sm font-semibold text-ink">
-                      {selectedProfile.representante.nombres}{" "}
-                      {selectedProfile.representante.apellidos}
-                    </span>
-                  </span>
-                </section>
-              )}
-            </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* A minor manages nothing on their own account: no dependents, no
@@ -713,9 +819,9 @@ function ActivePortalView({
           not use the honest route either. Offering it was worse than nothing.
 
           `hasAccountActions` exists because the row is now genuinely optional:
-          the payments CTA lives in `PaymentBand` at the top of the screen (on
-          the fact it acts on), so a self-managed adult with no dependents and
-          no representative has nothing left to put here, and an empty flex row
+          the payments CTA lives in `CuotaCard` in the rail above (on the fact
+          it acts on), so a self-managed adult with no dependents and no
+          representative has nothing left to put here, and an empty flex row
           still costs a 20px gap under the panel. */}
       {!selfIsMinor && hasAccountActions && (
         <div className="flex flex-wrap gap-3 pt-1">

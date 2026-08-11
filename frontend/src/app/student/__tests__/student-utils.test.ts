@@ -9,7 +9,9 @@ import {
   isMinor,
   describeMembershipState,
   breakdownAttendance,
+  compactPaymentLabel,
   daysUntil,
+  paymentBandTone,
   personInitials,
   summarizeRecentAttendance,
   resolveCoverageEnd,
@@ -473,6 +475,66 @@ describe("describePaymentSituation", () => {
     expect(describePaymentSituation(situation({ coverageEnd: "2026-08-02" }), TODAY).kind).toBe(
       "covered",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The carnet's status band ("El carnet manda" — docs/fixes/12-mi-cuenta-carnet.md)
+// ---------------------------------------------------------------------------
+
+describe("paymentBandTone", () => {
+  it("is 'bad' for every urgent situation, regardless of kind", () => {
+    expect(paymentBandTone(describePaymentSituation(situation({ coverageEnd: "2026-07-01" }), TODAY))).toBe(
+      "bad",
+    ); // expired
+    expect(
+      paymentBandTone(describePaymentSituation(situation({ coverageEnd: "2026-07-28" }), TODAY)),
+    ).toBe("bad"); // ending-soon
+    expect(
+      paymentBandTone(describePaymentSituation(situation({ coverageEnd: null }), TODAY)),
+    ).toBe("bad"); // never-paid
+  });
+
+  it("is 'ok' for the covered case and 'neutral' for every other non-urgent one", () => {
+    expect(
+      paymentBandTone(describePaymentSituation(situation({ coverageEnd: "2026-08-30" }), TODAY)),
+    ).toBe("ok");
+    expect(
+      paymentBandTone(describePaymentSituation(situation({ pendingCount: 1 }), TODAY)),
+    ).toBe("neutral"); // awaiting-validation
+    expect(
+      paymentBandTone(describePaymentSituation(situation({ blockedAsMinor: true }), TODAY)),
+    ).toBe("neutral"); // minor-blocked
+    expect(
+      paymentBandTone(
+        describePaymentSituation(
+          situation({ hasMembership: false, monthlyPrice: null, planName: null, coverageEnd: null }),
+          TODAY,
+        ),
+      ),
+    ).toBe("neutral"); // no-membership
+  });
+});
+
+describe("compactPaymentLabel", () => {
+  it('is the short "Al día" only for the covered case', () => {
+    const covered = describePaymentSituation(situation({ coverageEnd: "2026-08-30" }), TODAY);
+    expect(covered.kind).toBe("covered");
+    expect(compactPaymentLabel(covered)).toBe("Al día");
+  });
+
+  it("falls back to the full headline for every other kind — those still need explaining", () => {
+    const awaitingValidation = describePaymentSituation(situation({ pendingCount: 1 }), TODAY);
+    expect(compactPaymentLabel(awaitingValidation)).toBe(awaitingValidation.headline);
+
+    const expired = describePaymentSituation(situation({ coverageEnd: "2026-07-01" }), TODAY);
+    expect(compactPaymentLabel(expired)).toBe(expired.headline);
+
+    const noMembership = describePaymentSituation(
+      situation({ hasMembership: false, monthlyPrice: null, planName: null, coverageEnd: null }),
+      TODAY,
+    );
+    expect(compactPaymentLabel(noMembership)).toBe(noMembership.headline);
   });
 });
 
