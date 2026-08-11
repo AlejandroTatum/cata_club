@@ -88,6 +88,10 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // missing much of the time and, when present, would point 400px down the page
   // at the form it opened.
   "app/student/payments/page.tsx": "a disclosure bound to the membership it pays",
+  // MedicalRecordEditor (reused unchanged from /members) owns its own
+  // "Guardar cambios" button inside the card. A header slot here would
+  // duplicate the one save action the form already offers.
+  "app/student/medical-record/page.tsx": "the editor owns its own save button",
 };
 
 function read(path: string): string {
