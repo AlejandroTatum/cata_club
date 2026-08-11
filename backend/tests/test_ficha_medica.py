@@ -127,6 +127,39 @@ def test_actualizar_datos_de_emergencia_parcial(client):
     assert body["telefonoEmergencia"] == "0987654321"
 
 
+def test_vaciar_alergias_contacto_y_telefono_los_borra(client):
+    """FIC-5: el toast decía "guardado correctamente" pero el valor viejo
+    sobrevivía. Enviar `null` explícito en el PATCH (a diferencia de OMITIR
+    el campo, que `test_actualizar_datos_de_emergencia_parcial` ya cubre)
+    debe borrar el valor -- igual que ya hace `enfermedades: []`."""
+    persona = _crear_persona(client, cedula="1710034081")
+    client.post(
+        "/api/v1/fichas-medicas/",
+        json={
+            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": [],
+            "alergias": "Polen", "contacto_emergencia": "Ana Torres",
+            "telefono_emergencia": "0991112233",
+        },
+    )
+
+    resp = client.patch(
+        f"/api/v1/fichas-medicas/persona/{persona['id']}",
+        json={"alergias": None, "contacto_emergencia": None, "telefono_emergencia": None},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["alergias"] is None
+    assert body["contactoEmergencia"] is None
+    assert body["telefonoEmergencia"] is None
+
+    # Confirma que no fue solo la respuesta: releer también da vacío.
+    resp = client.get(f"/api/v1/fichas-medicas/persona/{persona['id']}")
+    body = resp.json()
+    assert body["alergias"] is None
+    assert body["contactoEmergencia"] is None
+    assert body["telefonoEmergencia"] is None
+
+
 def test_upsert_sin_tipo_sangre_es_400_y_no_nombra_el_campo_interno(client):
     """PATCH sobre una persona SIN ficha médica y sin tipo de sangre.
 
