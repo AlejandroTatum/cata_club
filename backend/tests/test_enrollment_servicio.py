@@ -235,6 +235,27 @@ def test_representante_menor_de_edad_rechazado(db_session):
         EnrollmentServicio(db_session).enroll(datos)
 
 
+def test_representante_edad_maxima_rechazada(db_session):
+    """El representante también tiene techo (EDAD_MAXIMA_ALUMNO), no solo
+    piso. Antes solo se validaba `edad_rep < EDAD_MAYORIA_EDAD`; una fecha
+    de nacimiento implausible (patrón auditado: año 1800) se aceptaba en
+    silencio del lado del cliente porque el cálculo de edad ahí devolvía
+    NaN fuera de un rango arbitrario y toda comparación con NaN es `false`.
+    Este es el mismo defecto de origen, del lado del servidor: sin este
+    techo, el 400 nunca llega y el registro se completa igual."""
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Muy Longevo", apellidos="Martinez", cedula="1712345678",
+            fecha_nacimiento=date(1800, 1, 1), telefono="0991234567",
+            correo="longevo@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(),
+    )
+    from app.dominio.excepciones import OperacionInvalida
+    with pytest.raises(OperacionInvalida, match="máximo"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
 def test_representante_correo_duplicado_rechazado(db_session):
     """Si el correo del representante ya está en uso, se rechaza."""
     persona = Persona(
