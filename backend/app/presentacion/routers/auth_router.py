@@ -53,6 +53,7 @@ async def obtener_perfil(
         "telefono": usuario.persona.telefono,
         "fecha_creacion": usuario.fecha_creacion,
         "foto_url": usuario.persona.foto_url,
+        "fecha_nacimiento": usuario.persona.fecha_nacimiento,
     }
 
 
