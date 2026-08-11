@@ -1091,8 +1091,6 @@ describe("registrarPago — descuentos", () => {
     await registrarPago({
       monto: 35,
       tipoPago: "EFECTIVO",
-      fechaInicio: "2026-08-01",
-      fechaFin: "2026-08-31",
       personaId: 9,
       membresiaId: 4,
       descuentoIds: [1, 2],
@@ -1110,8 +1108,6 @@ describe("registrarPago — descuentos", () => {
     await registrarPago({
       monto: 35,
       tipoPago: "EFECTIVO",
-      fechaInicio: "2026-08-01",
-      fechaFin: "2026-08-31",
       personaId: 9,
       membresiaId: 4,
     });

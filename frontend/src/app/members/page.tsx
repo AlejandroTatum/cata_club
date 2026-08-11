@@ -360,8 +360,10 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
         // amount itself (the preview shown in the form is display-only).
         monto: montoNum,
         tipoPago: "TRANSFERENCIA",
-        fechaInicio: paymentFechaInicio,
-        fechaFin: paymentFechaFin,
+        // No fechaInicio/fechaFin (fix período de cobertura, PAG-5): el
+        // backend las calcula del monto y la cuota. `paymentFechaInicio`/
+        // `paymentFechaFin` siguen existiendo solo para la vista previa de
+        // este formulario ("Inicio: / Fin:" más abajo).
         personaId,
         membresiaId: student.membresia.id,
         ...(selectedDescuentoId != null ? { descuentoIds: [selectedDescuentoId] } : {}),

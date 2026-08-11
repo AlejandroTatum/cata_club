@@ -89,8 +89,6 @@ describe("POST /api/membresias/pagos", () => {
         {
           monto: 50,
           tipoPago: "TRANSFERENCIA",
-          fechaInicio: "2026-08-01",
-          fechaFin: "2026-08-31",
           personaId: 9,
           membresiaId: 4,
         },
@@ -107,13 +105,43 @@ describe("POST /api/membresias/pagos", () => {
         body: JSON.stringify({
           monto: 50,
           tipo_pago: "TRANSFERENCIA",
-          fecha_inicio: "2026-08-01",
-          fecha_fin: "2026-08-31",
           persona_id: 9,
           membresia_id: 4,
         }),
       }),
     );
+  });
+
+  /**
+   * Fix período de cobertura (PAG-5): el backend calcula el período del
+   * monto y la cuota -- un cliente que TODAVÍA mande `fechaInicio`/
+   * `fechaFin` (versión vieja del bundle, o un curl como el de la
+   * reproducción del agujero) no debe lograr que esas fechas lleguen al
+   * backend. El handler ya no las lee del body.
+   */
+  it("ignores a client-sent fechaInicio/fechaFin instead of forwarding it", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ id: 44, estadoPago: "PENDIENTE_VALIDACION" }, 201),
+    );
+    const token = makeJwt(3600);
+    const response = await POST(
+      request(
+        {
+          monto: 50,
+          tipoPago: "TRANSFERENCIA",
+          fechaInicio: "2026-08-01",
+          fechaFin: "2027-08-01", // un año -- exactamente el payload de la reproducción
+          personaId: 9,
+          membresiaId: 4,
+        },
+        `${ACCESS_TOKEN_COOKIE}=${token}`,
+      ),
+    );
+
+    expect(response.status).toBe(201);
+    const forwarded = JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body));
+    expect(forwarded).not.toHaveProperty("fecha_inicio");
+    expect(forwarded).not.toHaveProperty("fecha_fin");
   });
 
   it("forwards descuentoIds as descuento_ids when provided (issue #12)", async () => {
@@ -126,8 +154,6 @@ describe("POST /api/membresias/pagos", () => {
         {
           monto: 35,
           tipoPago: "EFECTIVO",
-          fechaInicio: "2026-08-01",
-          fechaFin: "2026-08-31",
           personaId: 9,
           membresiaId: 4,
           descuentoIds: [1, 2],
@@ -148,8 +174,6 @@ describe("POST /api/membresias/pagos", () => {
         {
           monto: 35,
           tipoPago: "EFECTIVO",
-          fechaInicio: "2026-08-01",
-          fechaFin: "2026-08-31",
           personaId: 9,
           membresiaId: 4,
           descuentoIds: ["uno"],
@@ -171,8 +195,6 @@ describe("POST /api/membresias/pagos", () => {
         {
           monto: 35,
           tipoPago: "EFECTIVO",
-          fechaInicio: "2026-08-01",
-          fechaFin: "2026-08-31",
           personaId: 9,
           membresiaId: 4,
           descuentoIds: [1, 2],
@@ -194,8 +216,6 @@ describe("POST /api/membresias/pagos", () => {
         {
           monto: 50,
           tipoPago: "EFECTIVO",
-          fechaInicio: "2026-08-01",
-          fechaFin: "2026-08-31",
           personaId: 1,
           membresiaId: 4,
         },
@@ -235,8 +255,6 @@ describe("POST /api/membresias/pagos", () => {
         {
           monto: 50,
           tipoPago: "EFECTIVO",
-          fechaInicio: "2026-08-01",
-          fechaFin: "2026-08-31",
           personaId: 1,
           membresiaId: 4,
         },

@@ -9,6 +9,14 @@
  *
  * Accepts camelCase JSON from the frontend and translates to the
  * snake_case `PagoCreateDTO` the backend expects.
+ *
+ * Fix período de cobertura (PAG-5): `fechaInicio`/`fechaFin` are no longer
+ * read from the body or forwarded. The backend now derives the coverage
+ * period itself from `monto` and the membership's monthly price — the old
+ * contract let the client hand it ANY range regardless of `monto` (a
+ * one-month payment could ask for a year of coverage; reproduced live
+ * against QA, see docs/fixes/06-periodo-de-cobertura.md). Forwarding a
+ * field the backend now ignores would just be the next confusion.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
@@ -30,13 +38,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     || body === null
     || typeof (body as Record<string, unknown>).monto !== "number"
     || typeof (body as Record<string, unknown>).tipoPago !== "string"
-    || typeof (body as Record<string, unknown>).fechaInicio !== "string"
-    || typeof (body as Record<string, unknown>).fechaFin !== "string"
     || typeof (body as Record<string, unknown>).personaId !== "number"
     || typeof (body as Record<string, unknown>).membresiaId !== "number"
   ) {
     return NextResponse.json(
-      { message: "Faltan campos obligatorios (monto, tipoPago, fechaInicio, fechaFin, personaId, membresiaId)." },
+      { message: "Faltan campos obligatorios (monto, tipoPago, personaId, membresiaId)." },
       { status: 400 },
     );
   }
@@ -58,8 +64,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const payload = body as {
     monto: number;
     tipoPago: string;
-    fechaInicio: string;
-    fechaFin: string;
     personaId: number;
     membresiaId: number;
     descuentoIds?: number[];
@@ -71,8 +75,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     body: JSON.stringify({
       monto: payload.monto,
       tipo_pago: payload.tipoPago,
-      fecha_inicio: payload.fechaInicio,
-      fecha_fin: payload.fechaFin,
       persona_id: payload.personaId,
       membresia_id: payload.membresiaId,
       ...(payload.descuentoIds !== undefined ? { descuento_ids: payload.descuentoIds } : {}),

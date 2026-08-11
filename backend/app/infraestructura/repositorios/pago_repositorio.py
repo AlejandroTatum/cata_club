@@ -94,6 +94,18 @@ class PagoRepositorio:
         )
         return self.db.execute(stmt).scalar_one() > 0
 
+    def fecha_fin_maxima_aprobada(self, membresia_id: int) -> Optional[date]:
+        """`fecha_fin` más lejana entre los pagos APROBADOS de una membresía,
+        o `None` si nunca tuvo uno. Es el ancla desde donde
+        `PagoServicio.registrar_pago` extiende la cobertura de un pago
+        nuevo (fix período de cobertura, PAG-5): retoma el pago pendiente
+        de validación, así que solo cuentan los que el club ya validó."""
+        stmt = select(func.max(Pago.fecha_fin)).where(
+            Pago.membresia_id == membresia_id,
+            Pago.estado_pago == EstadoPago.APROBADO,
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
     def crear(self, pago: Pago) -> Pago:
         self.db.add(pago)
         self.db.commit()

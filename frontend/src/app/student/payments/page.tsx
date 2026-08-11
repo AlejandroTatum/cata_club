@@ -532,11 +532,13 @@ function RenewPaymentForm({
 
     let nuevoPago: PagoPersona;
     try {
+      // No fechaInicio/fechaFin (fix período de cobertura, PAG-5): el
+      // backend las calcula solo, a partir del monto y la cuota. Las
+      // variables locales siguen existiendo -- son la vista previa que ve
+      // el lector antes de confirmar -- pero ya no viajan en la petición.
       nuevoPago = await registrarPago({
         monto: amount,
         tipoPago,
-        fechaInicio,
-        fechaFin,
         personaId: Number(personaId),
         membresiaId: membership.id,
       } satisfies RegistrarPagoInput);
@@ -709,9 +711,20 @@ function RenewPaymentForm({
         </div>
       )}
 
-      {error && (
+      {/*
+       * PAG-5: `findProblem()` always had the right sentence (a monto that
+       * doesn't close, a missing voucher…) but it only ever reached the
+       * screen through `error`, which `handleRequestConfirm` only sets on a
+       * CLICK — and the button that triggers it is exactly the one this
+       * sentence explains is disabled. The reader saw a greyed-out button
+       * and nothing else. `liveProblem` is the same function, read on every
+       * render instead of waiting for a click; `error` (a submit attempt or
+       * an API failure) still wins once it exists, so nothing here changes
+       * once the reader has actually tried to submit.
+       */}
+      {(error || (monto !== "" && findProblem())) && (
         <p role="alert" className="text-sm font-semibold text-state-bad">
-          {error}
+          {error ?? findProblem()}
         </p>
       )}
 

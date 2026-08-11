@@ -342,8 +342,6 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
       registrarPago({
         monto: 35,
         tipoPago: "EFECTIVO",
-        fechaInicio: "2026-08-01",
-        fechaFin: "2026-08-31",
         personaId: 9,
         membresiaId: 4,
         descuentoIds: [1, 2],
