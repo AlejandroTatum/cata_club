@@ -685,7 +685,9 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
         </button>
       </div>
 
-      {showMedical && <MedicalRecordEditor personaId={personaId} />}
+      {showMedical && (
+        <MedicalRecordEditor personaId={personaId} studentName={`${student.nombres} ${student.apellidos}`} />
+      )}
     </li>
   );
 }

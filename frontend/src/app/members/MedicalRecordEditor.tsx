@@ -1,19 +1,28 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Save, CheckCircle2, Stethoscope, Plus } from "lucide-react";
+import { Loader2, Save, CheckCircle2, Stethoscope } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
-import { ErrorState, LoadingState } from "@/components/ui";
+import { Badge, ErrorState, LoadingState } from "@/components/ui";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
 
 interface MedicalRecordEditorProps {
   personaId: number;
+  /**
+   * The student this record belongs to. Rendered in a header band that stays
+   * pinned (`sticky top-0`) while the fields below scroll — this is medical
+   * data, and on a narrow screen the identity above this editor (owned by
+   * the caller, e.g. `StudentEditPanel`) scrolls out of view long before the
+   * form does. Optional so a caller with no name in scope still renders; the
+   * band itself just doesn't.
+   */
+  studentName?: string;
 }
 
-export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorProps): React.ReactElement {
+export default function MedicalRecordEditor({ personaId, studentName }: MedicalRecordEditorProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [state, setState] = useState<
     | { status: "loading" }
@@ -123,18 +132,29 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
   }
 
   return (
-    <div className="mt-3 rounded-2xl border border-line bg-paper p-3 sm:p-4">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
-        <Stethoscope size={ICON.sm} strokeWidth={1.5} className="text-state-bad" aria-hidden="true" />
-        Ficha médica
-        {state.isNew && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-2xs tracking-flat font-semibold text-blue-700">
-            <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Nueva
-          </span>
-        )}
-      </h3>
+    <div className="mt-3 rounded-2xl border border-line bg-paper">
+      {/* `sticky top-0`, not a plain header: on a narrow screen this card's
+          own fields can outgrow the viewport, and the student's identity —
+          shown only once, above this editor, by the caller — scrolls out of
+          view first. Pinning this band keeps whoever is editing from ever
+          losing sight of whose medical data they're touching. `bg-paper`
+          keeps it opaque so it actually covers the fields as they scroll
+          under it, and `rounded-t-2xl` matches the card's own corners since
+          the card no longer clips overflow (clipping would break the sticky
+          positioning by making this its own scroll container instead of the
+          real one further up the tree). */}
+      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-t-2xl border-b border-line bg-paper px-3 py-2.5 sm:px-4">
+        <Stethoscope size={ICON.sm} strokeWidth={1.5} className="flex-none text-state-bad" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-base font-extrabold text-ink">Ficha médica</h3>
+          {/* Not a description of the form — the name says something the
+              title alone can't once you've scrolled past it. */}
+          {studentName && <p className="truncate text-xs text-ink-3">{studentName}</p>}
+        </div>
+        {state.isNew && <Badge tone="neutral">Nueva</Badge>}
+      </header>
 
+      <div className="p-3 sm:p-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <label htmlFor={`tipo-sangre-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
@@ -232,6 +252,7 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
             Ficha médica guardada.
           </p>
         )}
+      </div>
       </div>
     </div>
   );
