@@ -575,7 +575,6 @@ const RAW_PALETTE = new RegExp(
 const RAW_PALETTE_DEBT: readonly string[] = [
   "app/attendance/attendance-utils.ts",
   "app/groups/page.tsx",
-  "app/members/MedicalRecordEditor.tsx",
   "app/student/add-dependent/page.tsx",
   "app/student/enroll/page.tsx",
   "app/student/proof-utils.ts",
