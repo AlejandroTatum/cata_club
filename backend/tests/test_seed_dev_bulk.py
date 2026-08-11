@@ -102,3 +102,36 @@ def test_main_inscribe_a_cada_alumno_en_el_horario_donde_le_registra_asistencia(
         f"{len(sin_inscripcion)} de {len(asistencias)} asistencias sin AlumnoHorario "
         f"que las respalde: {sorted(set(sin_inscripcion))[:5]}"
     )
+
+
+def test_main_no_inventa_justificativo_ni_estado_justificativo():
+    """`justificativo` / `estado_justificativo` los escribe la app, nunca el seed.
+
+    Decisión del 11 de agosto (docs/decisiones-de-negocio-2026-08-11.md,
+    sección 2): "Justificado" es una marca sin motivo -- no hay flujo que pida
+    ni muestre un motivo. Antes de este fix el seed llenaba ~82 filas con
+    "Cita médica" inventada, y eso confundió a un auditor que reportó como
+    defecto que las columnas estuvieran vacías cuando en realidad estaban
+    llenas de datos falsos del seed. Deben quedar en NULL siempre,
+    independientemente del `estado` de la asistencia.
+    """
+    modulo_base = _load_base_seed_module()
+    modulo_bulk = _load_seed_module()
+    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
+
+    modulo_base.main()
+    modulo_bulk.main()
+
+    with SessionLocal() as verificacion:
+        asistencias = list(verificacion.execute(select(Asistencia)).scalars().all())
+
+    assert asistencias, "el seed no creó asistencias: el test pasaría en vacío"
+
+    con_justificativo_inventado = [
+        a for a in asistencias
+        if a.justificativo is not None or a.estado_justificativo is not None
+    ]
+    assert not con_justificativo_inventado, (
+        f"{len(con_justificativo_inventado)} de {len(asistencias)} asistencias con "
+        "justificativo/estado_justificativo inventado por el seed"
+    )

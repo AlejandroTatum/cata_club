@@ -512,12 +512,17 @@ def main() -> None:
                         )
                         if existe:
                             continue
-                        es_justificado = estado == EstadoAsistencia.JUSTIFICADO
+                        # `justificativo` / `estado_justificativo` quedan sin
+                        # tocar a propósito: la app nunca los escribe ni los
+                        # muestra ("Justificado" es una marca sin motivo,
+                        # decisión de negocio del 11 de agosto -- ver ASI-2).
+                        # Llenarlos acá era el propio seed inventando una
+                        # "Cita médica" que ningún entrenador tipeó, y
+                        # confundió a un auditor que reportó como defecto que
+                        # estas columnas estuvieran vacías.
                         asistencia = Asistencia(
                             fecha_entrenamiento=fecha,
                             estado=estado,
-                            justificativo="Cita médica" if es_justificado else None,
-                            estado_justificativo=True if es_justificado else None,
                             persona_id=persona.id,
                             horario_id=horario.id,
                         )
