@@ -1,3 +1,4 @@
+import calendar
 import logging
 from dataclasses import dataclass
 from datetime import datetime, date, timezone
@@ -19,10 +20,26 @@ from app.infraestructura.repositorios.notificacion_repositorio import Notificaci
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.soporte_transversal.firma_archivos import es_firma_valida
+from app.soporte_transversal.tiempo import hoy_club
 from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO, ComprobantePagoCreateDTO,
     PagoListItemDTO,
 )
+
+
+def _sumar_meses(fecha: date, meses: int) -> date:
+    """Suma `meses` meses calendario a `fecha`, recortando al último día del
+    mes destino cuando el día de origen no existe ahí (31 ene + 1 mes = 28/29
+    feb, nunca 3 de marzo). Espejo en Python de `addMonthsIso`
+    (`frontend/src/app/student/payments/payments-utils.ts`): las dos deben
+    coincidir porque el frontend usa la misma cuenta para PREVISUALIZAR el
+    período antes de confirmar, aunque quien decide la fecha real, desde este
+    fix, es el backend."""
+    mes_total = fecha.month - 1 + meses
+    anio = fecha.year + mes_total // 12
+    mes = mes_total % 12 + 1
+    ultimo_dia_mes_destino = calendar.monthrange(anio, mes)[1]
+    return date(anio, mes, min(fecha.day, ultimo_dia_mes_destino))
 
 
 # --- Regla Familiar E04-RF002 -----------------------------------------------
@@ -303,13 +320,38 @@ class PagoServicio:
         if self.repo.existe_pendiente_para_membresia(datos.membresia_id):
             raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
 
-        # El monto debe ser un múltiplo exacto del precio mensual de la membresía.
+        # El monto debe ser un múltiplo exacto del precio mensual de la
+        # membresía (se queda: decisiones 2026-08-11 §6 sacó los pagos
+        # parciales de alcance). Esto es lo que garantiza que TODO pago
+        # represente meses completos, así que el período de abajo puede
+        # calcularse en línea recta -- sin saldos, sin estados intermedios.
         precio_mensual = membresia.monto_aplicado
         if precio_mensual > 0 and datos.monto % precio_mensual != 0:
             raise OperacionInvalida(
                 f"El monto (${datos.monto}) debe ser múltiplo del precio mensual "
                 f"(${precio_mensual})."
             )
+
+        # Fix período de cobertura (PAG-5): antes, `fecha_inicio`/`fecha_fin`
+        # llegaban del cliente y el servicio solo confiaba en que una fuera
+        # anterior a la otra -- un pago de UN mes podía pedir DOCE de
+        # cobertura y el 201 lo aceptaba (agujero reproducido en vivo, ver
+        # docs/fixes/06-periodo-de-cobertura.md). Ahora el backend deriva el
+        # período: arranca donde termina la del último pago APROBADO (o hoy
+        # si no hay ninguno, igual que antes leía el frontend) y avanza
+        # tantos meses completos como el monto compre.
+        #
+        # Importante (decisiones 2026-08-11 §6): "tantos meses como el monto
+        # compre" se calcula sobre `datos.monto`, el monto BASE -- ANTES de
+        # `_congelar_descuento` más abajo. La membresía anual se vende como
+        # descuento del catálogo sobre doce meses adelantados ($300 -> $270);
+        # si la cobertura se calculara sobre el monto ya descontado, el padre
+        # pagaría doce meses y recibiría once.
+        meses = int(datos.monto // precio_mensual) if precio_mensual > 0 else 1
+        ultima_fecha_fin = self.repo.fecha_fin_maxima_aprobada(datos.membresia_id)
+        hoy = hoy_club()
+        ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
+        fecha_inicio, fecha_fin = ancla, _sumar_meses(ancla, meses)
 
         # Issue #11: resolver el valor VIGENTE del catálogo, congelarlo y
         # descontar el monto base. Las columnas congeladas se asignan al MISMO
@@ -321,6 +363,8 @@ class PagoServicio:
         pago = Pago(
             **datos.model_dump(exclude={"descuento_ids"}),
             estado_pago=EstadoPago.PENDIENTE_VALIDACION,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
         )
         pago.monto = monto_final
         if descuento_congelado is not None:
