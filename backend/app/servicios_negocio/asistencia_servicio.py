@@ -286,6 +286,15 @@ class AsistenciaServicio:
         total = self.repo_alumno_horario.contar_por_horario(horario_id)
         return [self._a_detalle_dto(a) for a in asignaciones], total
 
+    def listar_roster_de_todos_los_horarios(self) -> list[AlumnoHorarioDetalleDTO]:
+        """TRA-7: roster completo (todos los horarios) en una sola consulta,
+        para el conteo "N inscriptos" de /groups. Deliberadamente SIN
+        paginar: el volumen de filas ya viajaba completo hoy, repartido en 26
+        respuestas (una por horario); esto consolida esas 26 consultas en
+        una sola sin cambiar cuántas filas cruzan la red."""
+        asignaciones = self.repo_alumno_horario.listar_activos_de_todos_los_horarios()
+        return [self._a_detalle_dto(a) for a in asignaciones]
+
     def listar_horarios_por_alumno(self, persona_id: int) -> list[AlumnoHorarioDetalleDTO]:
         """Lista todos los horarios asignados a un alumno específico."""
         if not self.repo_persona.obtener_por_id(persona_id):

@@ -1,3 +1,4 @@
+from app.dominio.modelos import Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from datetime import date
@@ -275,4 +276,67 @@ def test_listar_alumnos_por_horario_rechaza_aunque_el_propio_este_inscrito(
 
     _restaurar_token_alumno()
     resp = client_sin_permisos.get(f"/api/v1/asistencias/horarios/{horario['id']}/alumnos")
+    assert resp.status_code == 403
+
+
+# --- TRA-7: roster de todos los horarios en una sola consulta ---------------
+def test_roster_de_todos_los_horarios_junta_varios_horarios_en_una_consulta(client):
+    """Un solo GET trae el roster de TODOS los horarios, agrupable por
+    `horarioId` en el cliente -- reemplaza las 26 llamadas (una por horario)
+    que /groups hacía antes para el conteo "N inscriptos"."""
+    alumno_a = _crear_persona_api(client, "1710034080", "Ana")
+    alumno_b = _crear_persona_api(client, "1710034081", "Beto")
+
+    horario_a = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
+    ).json()
+    horario_b = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": "MARTES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno_a["id"], "horario_id": horario_a["id"]},
+    )
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno_b["id"], "horario_id": horario_b["id"]},
+    )
+
+    resp = client.get("/api/v1/asistencias/horarios/alumnos")
+
+    assert resp.status_code == 200
+    por_horario: dict[int, list[int]] = {}
+    for fila in resp.json():
+        por_horario.setdefault(fila["horarioId"], []).append(fila["personaId"])
+    assert por_horario[horario_a["id"]] == [alumno_a["id"]]
+    assert por_horario[horario_b["id"]] == [alumno_b["id"]]
+
+
+def test_roster_de_todos_los_horarios_excluye_a_los_dados_de_baja(client, db_session):
+    """Mismo filtro de baja lógica que `listar_por_horario`: alguien que ya
+    no está en el club no puede figurar en ningún roster."""
+    alumno = _crear_persona_api(client, "1710034082", "Cami")
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    persona = db_session.get(Persona, alumno["id"])
+    persona.activo = False
+    db_session.commit()
+
+    resp = client.get("/api/v1/asistencias/horarios/alumnos")
+
+    assert resp.status_code == 200
+    assert alumno["id"] not in [fila["personaId"] for fila in resp.json()]
+
+
+def test_roster_de_todos_los_horarios_requiere_admin_o_entrenador(client_sin_permisos):
+    resp = client_sin_permisos.get("/api/v1/asistencias/horarios/alumnos")
     assert resp.status_code == 403

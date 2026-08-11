@@ -228,6 +228,21 @@ class AlumnoHorarioRepositorio:
             stmt = stmt.limit(limit)
         return list(self.db.execute(stmt).scalars().unique().all())
 
+    def listar_activos_de_todos_los_horarios(self) -> List[AlumnoHorario]:
+        """Roster completo de TODOS los horarios en UNA consulta (TRA-7):
+        reemplaza las 26 llamadas de `listar_por_horario` (una por horario,
+        fijas -- no crecen con el padrón) que alimentaban el conteo "N
+        inscriptos" de /groups. Mismo filtro de baja lógica que su hermano;
+        `.horario` va eager-loaded para que `_a_detalle_dto` no dispare una
+        consulta lazy por cada uno de los ~26 horarios distintos."""
+        stmt = (
+            select(AlumnoHorario)
+            .options(joinedload(AlumnoHorario.persona), joinedload(AlumnoHorario.horario))
+            .join(Persona, Persona.id == AlumnoHorario.persona_id)
+            .where(Persona.activo.is_(True))
+        )
+        return list(self.db.execute(stmt).scalars().unique().all())
+
     def contar_por_horario(self, horario_id: int) -> int:
         """Total de alumnos ACTIVOS del horario: el mismo filtro que
         `listar_por_horario`, para que el `total` del envelope paginado

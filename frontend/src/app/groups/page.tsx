@@ -88,6 +88,7 @@ import {
   eliminarHorario,
   fetchMembers,
   fetchAlumnosPorHorario,
+  fetchRosterDeTodosLosHorarios,
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
 } from "@/services/api";
@@ -331,13 +332,14 @@ export default function GroupsPage(): React.ReactElement {
    * would report 220 students for the 44 who actually train. The union needs
    * the identities.
    *
-   * BACKEND GAP: `GET /groups/horarios` returns no enrollment count, and there
-   * is no bulk roster endpoint — the only way to know who a session has is one
-   * `GET /groups/horarios/{id}/alumnos` per row. So the rosters are fetched in
-   * parallel AFTER the schedules render, and a categoría with any unanswered
-   * row simply has no count line. Rendering an undercount for a request that
-   * never answered would be a lie, and this figure is the one the club plans
-   * around.
+   * `GET /groups/horarios` itself returns no enrollment count, but
+   * `GET /groups/horarios/alumnos` (TRA-7) answers the roster of EVERY
+   * schedule in one call — replacing the 26-call fan-out (one
+   * `GET /groups/horarios/{id}/alumnos` per row) this used to need. The
+   * roster is fetched AFTER the schedules render so a slow/failed request
+   * never delays or blanks the grid itself; on failure no card gets a count
+   * line at all — an undercount would be a lie, and this figure is the one
+   * the club plans around.
    */
   const [personasPorHorario, setPersonasPorHorario] = useState<PersonasPorHorario>({});
 
@@ -458,30 +460,30 @@ export default function GroupsPage(): React.ReactElement {
 
   /**
    * Fill in the per-session rosters once the schedules are known. Kept out of
-   * `loadData`'s `Promise.all` deliberately: this is N extra requests for a
-   * secondary line of text, and it must never delay or fail the grid itself.
+   * `loadData`'s `Promise.all` deliberately: this is a secondary line of
+   * text, and it must never delay or fail the grid itself.
    */
   useEffect(() => {
     if (horarios.length === 0) return;
     let cancelled = false;
 
-    void Promise.all(
-      horarios.map(async (horario) => {
-        try {
-          const alumnos = await fetchAlumnosPorHorario(horario.id);
-          return [horario.id, alumnos.map((alumno) => alumno.personaId)] as const;
-        } catch {
-          return null;
+    void fetchRosterDeTodosLosHorarios()
+      .then((roster) => {
+        if (cancelled) return;
+        // Every known horario gets an entry (possibly empty) so a genuinely
+        // empty class still counts as "0 inscriptos", not "unanswered" —
+        // see PersonasPorHorario's own doc comment.
+        const rosters: Record<number, number[]> = {};
+        for (const horario of horarios) rosters[horario.id] = [];
+        for (const alumno of roster) {
+          (rosters[alumno.horarioId] ??= []).push(alumno.personaId);
         }
-      }),
-    ).then((results) => {
-      if (cancelled) return;
-      const rosters: Record<number, number[]> = {};
-      for (const result of results) {
-        if (result) rosters[result[0]] = [...result[1]];
-      }
-      setPersonasPorHorario(rosters);
-    });
+        setPersonasPorHorario(rosters);
+      })
+      .catch(() => {
+        // Leave personasPorHorario untouched: every row stays absent, so
+        // every card omits its count rather than risking a false number.
+      });
 
     return () => {
       cancelled = true;

@@ -178,6 +178,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # LÓGICA (`PATCH /personas/{persona_id}/estado`, más abajo), porque el
     # borrado duro destruía asistencias, pagos y ficha médica del ex-miembro.
     ("DELETE", "/personas/{persona_id}/roles/{tipo_rol}"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/asistencias/horarios/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes/pdf"): frozenset({"ADMINISTRADOR"}),

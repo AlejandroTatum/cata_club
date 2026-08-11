@@ -259,6 +259,22 @@ async def listar_alumnos_por_horario(
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
+# TRA-7: roster de TODOS los horarios en una sola consulta -- reemplaza las
+# 26 llamadas (una por horario, vía el endpoint de arriba) que /groups hacía
+# para armar el conteo "N inscriptos" de cada categoría. Los horarios son un
+# catálogo fijo (26 hoy, no crece con el padrón): esto consolida las
+# consultas, no cambia cuántas filas viajan. Mismo gate que su hermano
+# per-horario. Deliberadamente SIN paginar: el volumen agregado ya viajaba
+# completo hoy, solo que repartido en 26 respuestas.
+@router.get(
+    "/horarios/alumnos",
+    response_model=List[AlumnoHorarioDetalleDTO],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+)
+async def listar_roster_de_todos_los_horarios(db: Session = Depends(obtener_sesion)):
+    return AsistenciaServicio(db).listar_roster_de_todos_los_horarios()
+
+
 # Los horarios asignados a un alumno dicen dónde está y a qué hora. El portal
 # del alumno/representante lo consume con el `persona_id` seleccionado (ver
 # `frontend/src/app/student/page.tsx`), que siempre es el propio o el de un
