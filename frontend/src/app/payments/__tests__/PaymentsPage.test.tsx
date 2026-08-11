@@ -1088,6 +1088,28 @@ describe("PaymentsPage — a decision stays reversible for a few seconds", () =>
       screen.getByText("Juan Pérez volvió a la cola de pendientes."),
     ).toBeInTheDocument();
   });
+
+  it("shows the backend's real reason instead of the generic toast, when it has one", async () => {
+    // PAG-2: reproduced with a real rejection, where the backend refused a
+    // 422 because the admin's own note passed 255 characters. `decide()`'s
+    // `onError` used to hardcode `confirmation.failure` and throw the real
+    // `err` away — the admin always saw "No se pudo aprobar/rechazar el
+    // pago." and never learned what to fix. `err` has to go through
+    // `toUserMessage()`, same as every other error site in the app.
+    mockUpdatePaymentValidation.mockRejectedValue(
+      Object.assign(new Error("La nota no puede superar los 255 caracteres."), { status: 422 }),
+    );
+    await approveJuan();
+
+    await act(async () => {
+      vi.advanceTimersByTime(UNDO_WINDOW_MS);
+    });
+
+    expect(
+      await screen.findByText("La nota no puede superar los 255 caracteres."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No se pudo aprobar el pago.")).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
