@@ -86,6 +86,7 @@ import {
   formatPagoMonto,
   getEmptyStateMessage,
   describePagoEstado,
+  pagoFaltaComprobante,
   countPagosByStatus,
   wholeMonthsFor,
   addMonthsIso,
@@ -425,7 +426,7 @@ function RenewPaymentForm({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const submitButtonRef = useRef<HTMLButtonElement>(null);
-  const { showSuccess } = useToast();
+  const { showSuccess, showWarning } = useToast();
 
   const monthlyPrice = Number(membership.montoAplicado ?? "") || 0;
   const amount = Number(monto) || 0;
@@ -528,8 +529,10 @@ function RenewPaymentForm({
 
     setLoading(true);
     setError(null);
+
+    let nuevoPago: PagoPersona;
     try {
-      const nuevoPago = await registrarPago({
+      nuevoPago = await registrarPago({
         monto: amount,
         tipoPago,
         fechaInicio,
@@ -537,31 +540,57 @@ function RenewPaymentForm({
         personaId: Number(personaId),
         membresiaId: membership.id,
       } satisfies RegistrarPagoInput);
-
-      if (voucherFile && nuevoPago?.id) {
-        await subirVoucherPago(nuevoPago.id, voucherFile);
-      }
-
-      setShowForm(false);
-      setConfirming(false);
-      setVoucherFile(null);
-      // What happened, and what to do if it was wrong. There is no "Deshacer"
-      // to offer (see the block comment above this component), so the toast
-      // says plainly where the recovery actually lives.
-      showSuccess(
-        studentName
-          ? `Pago de ${studentName} registrado y en revisión`
-          : "Pago registrado y en revisión",
-        {
-          description: `${formatCurrency(amount)} por el período ${formatDateRange(fechaInicio, fechaFin)}. El club lo valida; si algo está mal lo rechaza indicando el motivo y usted registra el pago correcto.`,
-        },
-      );
-      onRegistered();
     } catch (err) {
       setError(toUserMessage(err, "No se pudo registrar el pago."));
-    } finally {
       setLoading(false);
+      return;
     }
+
+    // The payment exists in the database from this point on, and it is not
+    // reverted if the voucher fails to attach (decisiones-de-negocio
+    // §7 — the owner's call, not this screen's). Reoffering "Confirmar y
+    // registrar" here used to call registrarPago() again and collide with
+    // the payment it had just created ("ya tiene un pago pendiente") — the
+    // ghost-payment bug this closes (PAG-1). Instead the form gets out of
+    // the way and the payment survives in the history, marked as missing
+    // its voucher, with its own upload control (PagoRow).
+    if (voucherFile && nuevoPago?.id) {
+      try {
+        await subirVoucherPago(nuevoPago.id, voucherFile);
+      } catch (err) {
+        setShowForm(false);
+        setConfirming(false);
+        setVoucherFile(null);
+        setLoading(false);
+        showWarning(
+          studentName
+            ? `El pago de ${studentName} se registró, pero no pudimos subir el comprobante`
+            : "Su pago se registró, pero no pudimos subir el comprobante",
+          {
+            description: `${toUserMessage(err, "No pudimos subir el comprobante.")} Súbalo desde el historial para que el club pueda validarlo.`,
+          },
+        );
+        onRegistered();
+        return;
+      }
+    }
+
+    setShowForm(false);
+    setConfirming(false);
+    setVoucherFile(null);
+    // What happened, and what to do if it was wrong. There is no "Deshacer"
+    // to offer (see the block comment above this component), so the toast
+    // says plainly where the recovery actually lives.
+    showSuccess(
+      studentName
+        ? `Pago de ${studentName} registrado y en revisión`
+        : "Pago registrado y en revisión",
+      {
+        description: `${formatCurrency(amount)} por el período ${formatDateRange(fechaInicio, fechaFin)}. El club lo valida; si algo está mal lo rechaza indicando el motivo y usted registra el pago correcto.`,
+      },
+    );
+    onRegistered();
+    setLoading(false);
   }
 
   if (hasPendingPago) {
@@ -766,6 +795,7 @@ function PagoRow({
 }): React.ReactElement {
   const estado = describePagoEstado(pago.estadoPago);
   const canUpload = !pago.voucherUrl && pago.estadoPago !== "APROBADO";
+  const faltaComprobante = pagoFaltaComprobante(pago);
 
   return (
     <li className="flex min-h-drow flex-wrap items-start gap-x-4 gap-y-field border-b border-line px-5 py-3.5 last:border-b-0">
@@ -775,6 +805,10 @@ function PagoRow({
             {formatPagoMonto(pago.monto)}
           </span>
           <Badge tone={estado.tone}>{estado.label}</Badge>
+          {/* Distinct from an ordinary "awaiting validation" row: this is the
+              payment a failed voucher upload left behind. The owner's call
+              (decisiones §7) keeps it, marked, instead of reverting it. */}
+          {faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
         </div>
         <p className="mt-1 text-xs text-ink-3-strong">
           {TIPO_PAGO_LABEL[pago.tipoPago]} · Registrado el{" "}

@@ -72,6 +72,25 @@ export function describePagoEstado(
   return { label: "Pendiente de validación", tone: "warn" };
 }
 
+/**
+ * A transfer payment still awaiting validation with no voucher attached —
+ * the state a failed `subirVoucherPago()` leaves behind after `registrarPago()`
+ * already succeeded (PAG-1). The owner's decision is that this payment is
+ * NOT reverted: it survives in the history marked this way, with its own way
+ * to attach the voucher (`decisiones-de-negocio-2026-08-11.md` §7).
+ *
+ * Scoped narrowly: EFECTIVO never needs a voucher, and APROBADO/RECHAZADO
+ * already carry their own resolution — only a payment genuinely stuck
+ * without one, mid-validation, gets the mark.
+ */
+export function pagoFaltaComprobante(pago: PagoPersona): boolean {
+  return (
+    pago.tipoPago === "TRANSFERENCIA" &&
+    pago.estadoPago === "PENDIENTE_VALIDACION" &&
+    !pago.voucherUrl
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Coverage period
 // ---------------------------------------------------------------------------
