@@ -1,12 +1,13 @@
-# Fix 11 · Tres cabos sueltos
+# Fix 11 · Cuatro cabos sueltos
 
-- **Cierra:** ASI-2 (cabo suelto del seed), INS-8, INS-1
+- **Cierra:** ASI-2 (cabo suelto del seed), INS-8, INS-1, y un candado preventivo pedido por el coordinador (sin ficha de auditoría propia — el mecanismo que previene está documentado en `docs/auditoria-qa/README.md` y en el `pendientes.md` viejo, que lo sugería y nunca se escribió).
 - **Decisión que lo gobierna:** `docs/decisiones-de-negocio-2026-08-11.md`, sección 2 — «Justificado» es una marca sin motivo; el cabo suelto que sí se ata es que el seed escribe justificativos que la app nunca escribe ni muestra.
 - **Rama:** `fix/cabos-sueltos`
 - **Commits:**
   - `fe66d83` — fix(seed): stop inventing asistencia justificativo data
   - `023cfb7` — fix(student): reject an impossible birth date on step one
   - `6c95e77` — docs(qa): warn that qa-up cannot exercise the email path
+  - `97caa7d` — test(migrations): lock alembic to a single head
 
 ---
 
@@ -109,6 +110,26 @@ esta razón exacta antes de que se corrigiera. Se escribió un cálculo de edad
 local, sin esa cota artificial, porque el caso auditado depende de que el año
 imposible siga produciendo un número real (226) y no un `NaN` silencioso.
 
+**Observación (no se corrige acá):** ese `NaN` silencioso es un defecto
+latente, no una decisión — verificado a mano: `calculateAge("1800-01-01")`
+devuelve `NaN`, y `NaN < 18` y `NaN >= 18` son ambas `false`, así que
+cualquier comparación numérica directa contra el resultado (`calculateAge(x)
+< 18`, `>= 5`) deja pasar un año fuera de 1900–2200 en vez de rechazarlo —
+es exactamente lo que le pasó a mi primer intento de este fix, reusando este
+mismo helper para el chequeo de 5–74 años (ver el candado más arriba: falló
+en rojo por esta razón exacta antes de que lo cambiara por un cálculo local).
+Hoy, en `enroll-utils.ts`, las dos validaciones que comparan edad
+(`d.enrollmentType === SELF && calculateAge(...) < 18`,
+`calculateAge(fechaNacimientoRepresentante) >= 18`) no lo sufren, pero por
+accidente: ambas viven detrás de `isDate(valor)` en la misma regla o en el
+`&&` de la propia condición, y `isDate` está definida como
+`!isNaN(calculateAge(valor))` — así que un año como 1800 sí queda rechazado,
+solo que con el mensaje equivocado («La fecha de nacimiento ingresada no es
+válida.» / «El representante debe ser mayor de edad»), no con uno que hable
+de un año fuera de rango. La próxima comparación que se agregue sin pasar
+primero por `isDate()` no va a tener esa protección accidental. Queda para
+quien toque ese archivo después.
+
 ### El candado
 
 Dos tests en
@@ -210,3 +231,99 @@ es la prueba.
 - `qa-reset` no reimprime este aviso porque no reimprime el bloque de salida
   de `qa-up` — solo resiembra. Si hace falta el aviso también ahí, es una
   decisión aparte.
+
+---
+
+## d · Candado preventivo — Alembic con más de una cabeza
+
+*Pedido por el coordinador mientras se trabajaba este fix; no tiene ficha
+propia en `docs/auditoria-qa/README.md` — el mecanismo que previene sí está
+documentado ahí y en el `pendientes.md` viejo, que sugería este candado y
+nunca se escribió.*
+
+### El problema
+
+Dos ramas de esta misma tanda de fixes pueden agregar cada una una migración
+colgando del mismo `down_revision` (el caso real: `fix/reglas-horario-y-cuota`
+y `fix/vinculacion-representante`, las dos con `down_revision: c6b3e8f2a5d9`).
+Cada cadena, vista sola en su rama, es lineal — cada agente verificó la suya y
+tenía razón. El choque solo existe al mergear ambas: Alembic queda con dos
+cabezas, y hasta ahora nada lo detectaba antes de que alguien corriera
+`alembic upgrade head` contra una base real y reventara. Este repo ya
+acumuló tres migraciones de fusión y 31 revisiones por este patrón exacto.
+
+### Qué se hizo
+
+Un test, `tests/test_alembic_cabeza_unica.py`, que arma el grafo de
+revisiones con `ScriptDirectory.from_config(...).get_heads()` y afirma que
+hay exactamente una cabeza.
+
+Vive en el `tests/` de la raíz del repo, no en `backend/tests/`, a propósito:
+`backend/tests/conftest.py` tiene un fixture `esquema_migrado`
+(`scope="session", autouse=True`) que corre `alembic upgrade head` contra
+Postgres real para TODA la sesión, sin importar qué necesite cada test
+individual. Puesto ahí, este test heredaría esa dependencia aunque nunca la
+use, y un candado que exige base de datos es un candado que alguien termina
+marcando `skip` en CI. `tests/` (raíz) es exactamente el mismo lugar donde
+ya vive `test_docker_compose_config.py` por la misma razón (ver su propio
+docstring y el comentario de `test-compose` en el `Makefile`); confirmado
+que corre sin ninguna base y sin `TEST_DATABASE_URL` definido en absoluto.
+
+El mensaje de fallo nombra las cabezas encontradas y dice explícitamente qué
+hacer — y qué NO hacer: re-apuntar el `down_revision` de la revisión que se
+mergeó después para que cuelgue de la que ya estaba en `origin/main`, nunca
+crear una migración de fusión (la reacción instintiva, y la que produjo las
+tres fusiones que ya tiene este repo).
+
+**No se enganchó a `make test`, `make test-compose` ni a `.github/workflows/ci.yml`.**
+El pedido fue el test; enganchar el gate a CI es una decisión aparte (qué
+target, si sumarlo al step de "Compose config tests" o crear uno propio) que
+se dejó fuera a propósito para no tocar nada más de lo pedido. Hoy corre con
+`cd backend && uv run pytest ../tests/test_alembic_cabeza_unica.py -v`, igual
+que `test_docker_compose_config.py`.
+
+### El candado
+
+`tests/test_alembic_cabeza_unica.py::test_alembic_tiene_una_sola_cabeza`.
+
+**Verde, hoy** (una sola cabeza en esta rama, sin `TEST_DATABASE_URL` definido
+en absoluto — cero Postgres):
+
+```
+$ cd backend && env -u TEST_DATABASE_URL uv run pytest ../tests/test_alembic_cabeza_unica.py -v
+../tests/test_alembic_cabeza_unica.py::test_alembic_tiene_una_sola_cabeza PASSED [100%]
+============================== 1 passed in 0.19s ===============================
+```
+
+**Rojo, verificado a mano** creando una revisión huérfana temporal
+(`alembic/versions/zzz_temp_cabeza_huerfana.py`, `down_revision =
+a4e7c2f9b1d8` — el mismo padre que la cabeza real, reproduciendo el choque
+del ejemplo del coordinador) y borrándola después de confirmar el fallo:
+
+```
+$ cd backend && env -u TEST_DATABASE_URL uv run pytest ../tests/test_alembic_cabeza_unica.py -v
+../tests/test_alembic_cabeza_unica.py::test_alembic_tiene_una_sola_cabeza FAILED [100%]
+
+E       AssertionError: Alembic tiene 2 cabezas, no 1: ['c6b3e8f2a5d9', 'zzztemp0001']. Esto pasa
+        cuando dos migraciones de ramas distintas quedan apuntando al mismo down_revision --
+        cada rama, sola, es lineal; el choque solo aparece al mergear. NO crear una migración
+        de fusión (merge revision): es la reacción instintiva y es exactamente lo que produjo
+        las tres fusiones que ya tiene este repo. En cambio, re-apuntar el `down_revision` de
+        la revisión que se mergeó DESPUÉS para que cuelgue de la que se mergeó primero (la que
+        ya estaba en `origin/main`), dejando una sola cadena lineal, y correr este test de
+        nuevo hasta que quede una sola cabeza.
+```
+
+### La prueba
+
+No hay captura — es salida de terminal, no una pantalla. Las dos salidas de
+arriba (rojo con la cabeza huérfana presente, verde sin ella) son la prueba.
+
+### Lo que NO cambió
+
+- No se resolvió ningún conflicto de cabezas real: en esta rama, sola, ya
+  había una sola cabeza (`c6b3e8f2a5d9`) antes de este cabo. El candado es
+  preventivo, para la próxima vez que dos ramas se mergeen — no la
+  reparación de un estado roto que hoy no existe.
+- No se tocó ninguna migración existente en `alembic/versions/`.
+- No se enganchó a CI ni a ningún target de `Makefile` (ver arriba).
