@@ -196,6 +196,33 @@ describe("getNavLinksForRole", () => {
     expect(links.some((link) => link.href === "/student/medical-record")).toBe(false);
   });
 
+  // A minor with their own "estudiante" account still gets no Ficha médica
+  // entry: incluir_titular on GET/PATCH /fichas-medicas/persona/{id} is
+  // age-gated backend-side (ficha_medica_router.py::_es_titular_mayor_de_edad).
+  // Offering the destination anyway would only hand a minor a 403.
+  it("does not add a Ficha médica link for a minor estudiante", () => {
+    const links = getNavLinksForRole("estudiante", false);
+    expect(links).toHaveLength(4);
+    expect(links.some((link) => link.href === "/student/medical-record")).toBe(false);
+  });
+
+  it("adds a Ficha médica link for an adult estudiante", () => {
+    const links = getNavLinksForRole("estudiante", true);
+    expect(links).toHaveLength(5);
+    expect(links[4]).toEqual({ href: "/student/medical-record", label: "Ficha médica" });
+  });
+
+  // The age flag is scoped to "estudiante" only. "representante" already
+  // gets the Ficha médica link unconditionally (that access — a guardian
+  // managing a DEPENDENT's record — is a separate, unrelated grant), so
+  // toggling `studentIsAdult` must not change its result either way.
+  it("ignores the adult flag for representante", () => {
+    const withFlag = getNavLinksForRole("representante", true);
+    const withoutFlag = getNavLinksForRole("representante", false);
+    expect(withFlag).toEqual(withoutFlag);
+    expect(withFlag.some((link) => link.href === "/student/medical-record")).toBe(true);
+  });
+
   it("every recognized role gets Inicio as first link and at least one role-specific link", () => {
     const rolesWithNav = ALL_ROLES.filter((role) => role !== "unsupported");
     for (const role of rolesWithNav) {

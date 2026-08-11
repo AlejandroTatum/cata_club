@@ -45,6 +45,7 @@ import {
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNavLinksForRole, getRoleLabel, getUserInitials, type NavLinkDef } from "@/lib/auth-utils";
+import { isMinor } from "@/app/student/student-utils";
 import { normalizeText } from "@/app/members/members-utils";
 import { useNotificaciones } from "@/lib/useNotificaciones";
 import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
@@ -350,9 +351,13 @@ export default function AppShell({
   const chatOpen = useHelpChatOpen();
 
   const role = session?.user.role ?? null;
+  // See the equivalent comment in Header.tsx's `useNavLinks` — only an
+  // "estudiante" session carries `fechaNacimiento`.
+  const studentIsAdult =
+    session?.user.role === "estudiante" ? !isMinor(session.user.fechaNacimiento) : false;
   const navLinks = useMemo<NavLinkDef[]>(
-    () => getNavLinksForRole(role).filter((link) => link.href !== "/"),
-    [role],
+    () => getNavLinksForRole(role, studentIsAdult).filter((link) => link.href !== "/"),
+    [role, studentIsAdult],
   );
   const activeHref = useMemo(
     (): string | null => resolveActiveHref(navLinks, pathname),

@@ -6,7 +6,7 @@ Patrón de nomenclatura consistente con el resto de schemas del proyecto:
   - Sufijo `ResponseDTO` para respuestas, con `model_config = ConfigDict(from_attributes=True)`
     cuando la respuesta se mapea directamente desde un modelo ORM.
 """
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 
@@ -44,6 +44,13 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     telefono: str
     fecha_creacion: datetime
     foto_url: Optional[str] = None
+    # El propio cumpleaños, no un dato ajeno: expone la fecha de nacimiento
+    # de la persona AUTENTICADA. Se agrega para que el frontend pueda decidir
+    # si un "estudiante" es mayor de edad (nav de Ficha médica,
+    # getNavLinksForRole) sin una llamada aparte -- ver
+    # ficha_medica_router.py::_es_titular_mayor_de_edad para la mitad
+    # backend de la misma decisión.
+    fecha_nacimiento: date
 
 
 class LogoutResponseDTO(ResponseBase, BaseModel):

@@ -430,6 +430,23 @@ describe("buildSession", () => {
     expect(session.user).toMatchObject({ role: "estudiante", activo: true });
   });
 
+  // getNavLinksForRole (src/lib/auth-utils.ts) needs the estudiante's own
+  // birth date to decide whether the Ficha médica nav entry belongs — this
+  // is the field that carries it from /auth/me's `fechaNacimiento` through
+  // to the client session.
+  it("carries fechaNacimiento through for an estudiante session", () => {
+    const session = buildSession({
+      correo: "alumno2@cataclub.com",
+      personaId: "8",
+      nombres: "Marta",
+      apellidos: "Ruiz",
+      roles: ["ALUMNO"],
+      fechaNacimiento: "1990-05-20",
+    });
+
+    expect(session.user).toMatchObject({ role: "estudiante", fechaNacimiento: "1990-05-20" });
+  });
+
   it("builds a representante session", () => {
     const session = buildSession({
       correo: "representante@cataclub.com",

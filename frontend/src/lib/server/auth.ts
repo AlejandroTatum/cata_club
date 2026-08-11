@@ -182,6 +182,13 @@ export interface BackendMeResponse {
   nombres: string;
   apellidos: string;
   roles: string[];
+  // Not validated in `isBackendMeResponse` below, same as `telefono` /
+  // `fechaCreacion` / `fotoUrl` — this interface only names the subset of
+  // `/auth/me`'s real response the client actually reads. `buildSession`
+  // uses this to populate `UsuarioEstudiante.fechaNacimiento` (see
+  // src/types/domain.ts), which `getNavLinksForRole` needs to decide whether
+  // a self-managed student is an adult.
+  fechaNacimiento?: string;
 }
 
 export interface BackendRefreshResponse {
@@ -491,7 +498,7 @@ export function buildSession(me: BackendMeResponse): ServerSession {
 
   const user: Usuario =
     role === "estudiante"
-      ? { ...base, role: "estudiante", activo: true }
+      ? { ...base, role: "estudiante", activo: true, fechaNacimiento: me.fechaNacimiento }
       : { ...base, role };
 
   return {

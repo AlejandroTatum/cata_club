@@ -7,12 +7,13 @@
  * under `app/student/**` mounted `MedicalRecordEditor`, so a family had no way
  * to use the access the API already granted them.
  *
- * This screen is representante-ONLY (`allowedRoles={["representante"]}`), not
- * `["representante", "estudiante", "unsupported"]` like `/student/payments`
- * and `/student/attendance`: the backend still excludes the titular's own
- * record (`incluir_titular=False`, `ficha_medica_router.py`), so a
- * self-managed "estudiante" account has nothing to look at here and must
- * never be routed to a screen that would only 403 it.
+ * As of the merge with `feat/ficha-medica-propia`, this route also carries an
+ * adult `estudiante`'s access to their OWN record — a separate, unrelated
+ * grant (see `StudentOwnMedicalRecordPage.test.tsx`). So
+ * `allowedRoles={["representante", "estudiante"]}` at the `ProtectedRoute`
+ * boundary, but THIS suite only ever renders it with a representante
+ * session — the picker-over-representados behavior below is unaffected by
+ * the estudiante branch living in the same component.
  *
  * Mocking follows StudentAttendancePage.test.tsx (ProtectedRoute, next/navigation,
  * next/link, next/image, AuthContext stubbed; @/services/api mocked).
@@ -160,7 +161,7 @@ describe("StudentMedicalRecordPage — who can reach it", () => {
     // `MedicalRecordEditor`'s own "Ficha médica" `<h3>`, which also renders
     // once the picker resolves a default profile.
     await screen.findByRole("heading", { level: 1, name: "Ficha médica" });
-    expect(mockProtectedRoute).toHaveBeenCalledWith(["representante"]);
+    expect(mockProtectedRoute).toHaveBeenCalledWith(["representante", "estudiante"]);
   });
 });
 

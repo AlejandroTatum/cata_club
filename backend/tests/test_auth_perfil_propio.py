@@ -114,6 +114,23 @@ def test_auth_me_incluye_fecha_creacion(client, db_session):
     assert resp.json()["fechaCreacion"] == _fecha_creacion_iso_esperada(usuario)
 
 
+# --- GET /auth/me incluye fechaNacimiento ------------------------------------
+# El frontend necesita esto para decidir, sin una llamada aparte, si un
+# alumno autogestionado ("estudiante") es mayor de edad -- el nav
+# (getNavLinksForRole) solo puede ofrecer el link a "Ficha médica" cuando lo
+# es (ver ficha_medica_router.py::_es_titular_mayor_de_edad, la mitad
+# backend de la misma decisión).
+def test_auth_me_incluye_fecha_nacimiento(client, db_session):
+    persona = _crear_persona(db_session, cedula="1710034301", nombres="Iván", telefono="0991234567")
+    rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")
+    _crear_usuario_para_persona(db_session, persona, correo="ivan@cataclub.com", roles=[rol_admin])
+    _restaurar_override_token(correo="ivan@cataclub.com", persona_id=persona.id, roles=["ADMINISTRADOR"])
+
+    resp = client.get("/api/v1/auth/me")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["fechaNacimiento"] == persona.fecha_nacimiento.isoformat()
+
+
 # --- PATCH /auth/me -----------------------------------------------------------
 def test_patch_perfil_actualiza_telefono_sin_reemitir_tokens(client, db_session):
     persona = _crear_persona(db_session, cedula="1710034226", nombres="Sofía", telefono="0991111111")

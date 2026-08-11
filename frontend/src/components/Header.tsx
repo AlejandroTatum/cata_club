@@ -36,6 +36,7 @@ import {
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNavLinksForRole, type NavLinkDef } from "@/lib/auth-utils";
+import { isMinor } from "@/app/student/student-utils";
 import { hidesTopHeader } from "@/lib/shell-routes";
 import { useDismissablePopup } from "@/lib/useDismissablePopup";
 import { useNotificaciones } from "@/lib/useNotificaciones";
@@ -91,7 +92,13 @@ function useNavLinks(): NavLink[] {
 
   return useMemo<NavLink[]>((): NavLink[] => {
     const role = isAuthenticated && session ? session.user.role : null;
-    const defs: NavLinkDef[] = getNavLinksForRole(role);
+    // Only an "estudiante" session carries `fechaNacimiento` (see
+    // UsuarioEstudiante in src/types/domain.ts) — `getNavLinksForRole` itself
+    // ignores this flag for every other role, so computing it unconditionally
+    // here is safe.
+    const studentIsAdult =
+      session?.user.role === "estudiante" ? !isMinor(session.user.fechaNacimiento) : false;
+    const defs: NavLinkDef[] = getNavLinksForRole(role, studentIsAdult);
     return defs.map((def): NavLink => ({
       href: def.href,
       label: def.label,

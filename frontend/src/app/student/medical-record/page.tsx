@@ -1,64 +1,63 @@
 /**
- * /student/medical-record — the representante's access to a representado's
- * medical record.
+ * /student/medical-record — a family portal screen with TWO grants that
+ * share one route, branching on `session.user.role`:
  *
- * ## The finding this closes (FIC-4 in the QA audit)
+ * - `representante`: the representante's access to a REPRESENTADO's medical
+ *   record (FIC-4 in the QA audit) — a picker over `data.representados`,
+ *   reusing `MedicalRecordEditor` per selected child.
+ * - `estudiante`, ADULT only: the titular's own access to their OWN record
+ *   (half of FIC-3 — the owner's ruling was partial: an adult titular gets
+ *   in, a minor with their own account does not). No picker: there is
+ *   exactly one persona this branch can ever show.
  *
- * The backend already authorized this: `PoliticaAccesoPersona.exigir_acceso`
- * on `GET`/`PATCH /fichas-medicas/persona/{id}` accepts the ADMINISTRADOR or
- * the representative of that exact persona (`ficha_medica_router.py`). What
- * was missing was a screen — `MedicalRecordEditor` lived only under
- * `app/members/`, admin territory, and no route under `app/student/**`
- * imported it. A family had no way to correct a child's medical record; the
- * `/ayuda` FAQ said so outright ("no: la ficha médica la gestiona un
- * administrador"), and that sentence is now the thing this screen makes
- * false — see `app/ayuda/faq-content.ts`.
+ * ## Why one file, not two routes
  *
- * ## Why this reuses `MedicalRecordEditor` unchanged
+ * `feat/ficha-medica-representante` and `feat/ficha-medica-propia` each
+ * mounted their own screen at this exact path, on independent branches. The
+ * two access grants are unrelated in the backend — a guardian's link to a
+ * REPRESENTADO (`representante_id`) has nothing to do with a titular's own
+ * age (`ficha_medica_router.py::_es_titular_mayor_de_edad`) — so merging
+ * them is purely a routing concern: one path, one component, branching on
+ * role. See `docs/fixes/15-ficha-medica-propia.md`'s "Conflicto con
+ * feat/ficha-medica-representante" section for the resolution this file
+ * carries out.
+ *
+ * ## Why both branches reuse `MedicalRecordEditor` unchanged
  *
  * The editor takes a bare `personaId` and calls the same
- * `fetchFichaMedica`/`actualizarFichaMedica` client functions the admin
- * screen calls. Nothing in it assumes an admin caller — the ROLE distinction
- * lives entirely in the backend's `PoliticaAccesoPersona` check, which this
- * screen leans on rather than re-implements. A second editor here would be a
- * second place for the five fields (`enfermedades`, `alergias`,
- * `contactoEmergencia`, `telefonoEmergencia`, `tipoSangre`) to drift out of
- * sync with what the API actually saves — see the bug this product already
- * had once, where three of five silently never left the client.
+ * `fetchFichaMedica`/`actualizarFichaMedica` client functions regardless of
+ * caller role — nothing in it assumes an admin, a representante or a
+ * titular. A second implementation per branch would be a second place for
+ * the five fields (`enfermedades`, `alergias`, `contactoEmergencia`,
+ * `telefonoEmergencia`, `tipoSangre`) to drift out of sync with what the API
+ * actually saves.
  *
- * ## Why this is `allowedRoles={["representante"]}`, unlike its siblings
+ * ## Defense in depth against a minor `estudiante` typing the URL directly
  *
- * `/student/payments` and `/student/attendance` allow
- * `["representante", "estudiante", "unsupported"]`, because a self-managed
- * student has payments and attendance of their own to look at. A self-managed
- * student has no medical record to look at HERE: the backend's
- * `incluir_titular=False` (`ficha_medica_router.py`) still excludes the
- * titular's own record from this endpoint — enabling that is a separate,
- * not-yet-made product decision (see `test_el_titular_no_lee_su_propia_ficha_medica`
- * in `backend/tests/test_ficha_medica_representante.py`). Routing an
- * "estudiante" account here would only hand it a 403 with nothing to explain
- * it — the honest thing is to not offer the destination at all, in the nav
- * (`getNavLinksForRole`) AND at the route.
+ * The nav entry (`getNavLinksForRole` in `src/lib/auth-utils.ts`) already
+ * hides this destination from a minor `estudiante` session. A minor who
+ * reaches the URL anyway is redirected to `/student` the moment the portal
+ * fetch resolves — the backend would 403 the ficha médica call regardless
+ * (`test_el_titular_menor_de_edad_no_lee_su_propia_ficha_medica`), so this
+ * just avoids surfacing that 403 raw. A `representante` session has no such
+ * gate: that grant was never age-conditioned.
  *
- * ## The family-isolation guarantee
+ * ## The family-isolation guarantee (representante branch)
  *
  * This screen never decides who may see whose record — it always asks the
  * backend, by calling the exact same authorized endpoints the admin screen
- * calls, for whichever `personaId` `ManagedStudentPicker` resolves. It cannot
- * select a `personaId` outside `data.representados`, because the picker's
- * options ARE that list; and even a hand-edited `?alumno=` in the address bar
- * changes only which of the caller's OWN representados is selected — see
- * `useManagedProfiles`, which ignores a param that does not name one of the
- * account's own profiles. A stranger's `personaId` typed into the URL is not
- * a shortcut around that: it never reaches `ManagedStudentPicker`'s selection
- * at all, and even if it somehow reached `MedicalRecordEditor` directly, the
- * backend would still 403 it — the same guarantee `/members` relies on for
- * the admin screen.
+ * calls, for whichever `personaId` `ManagedStudentPicker` resolves. It
+ * cannot select a `personaId` outside `data.representados`, because the
+ * picker's options ARE that list; and even a hand-edited `?alumno=` in the
+ * address bar changes only which of the caller's OWN representados is
+ * selected — see `useManagedProfiles`, which ignores a param that does not
+ * name one of the account's own profiles.
  */
 
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -68,7 +67,7 @@ import type { StudentPortalSummary } from "@/services/api";
 import { EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import MedicalRecordEditor from "@/app/members/MedicalRecordEditor";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
-import { firstNameOf } from "../student-utils";
+import { firstNameOf, isMinor } from "../student-utils";
 import { Stethoscope } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
@@ -83,10 +82,10 @@ type LoadState =
   | { status: "ready"; data: StudentPortalSummary };
 
 // ---------------------------------------------------------------------------
-// Content — the picker, then the reused editor
+// Representante branch — the picker, then the reused editor
 // ---------------------------------------------------------------------------
 
-function MedicalRecordView({
+function RepresentanteMedicalRecordView({
   data,
   accountPersonaId,
 }: {
@@ -96,11 +95,11 @@ function MedicalRecordView({
 }): React.ReactElement {
   // `hasAlumnoRole` is hard-coded `false`, not read from the session: a
   // representante account that ALSO holds ALUMNO (a parent who trains
-  // themselves) still has no medical record of their OWN reachable here — the
-  // backend's `incluir_titular=False` applies to every titular, representante
-  // or not. Passing `false` keeps `data.self` out of `managedProfiles`
-  // unconditionally, so this screen can never offer a destination the
-  // backend would 403.
+  // themselves) still has no medical record of their OWN reachable here —
+  // that grant belongs to the `estudiante` branch below, and it is age-gated
+  // in a way this picker does not express. Passing `false` keeps `data.self`
+  // out of `managedProfiles` unconditionally, so this branch can never offer
+  // a destination the backend would 403.
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
     false,
@@ -159,8 +158,10 @@ function MedicalRecordView({
 // Page
 // ---------------------------------------------------------------------------
 
-function StudentMedicalRecordContent(): React.ReactElement {
+function StudentMedicalRecordContent(): React.ReactElement | null {
   const { session } = useAuth();
+  const router = useRouter();
+  const role = session?.user.role;
   const personaId = session?.user.id ?? "";
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -186,11 +187,26 @@ function StudentMedicalRecordContent(): React.ReactElement {
     };
   }, [personaId, reloadToken]);
 
+  // See the file header's "Defense in depth" note — the nav already hides
+  // this destination from a minor estudiante, this is the route-level
+  // backstop. A representante session is never minor-gated: that check is
+  // meaningless for a guardian's own access grant.
+  const selfIsMinor =
+    role === "estudiante" && state.status === "ready" && isMinor(state.data.self?.fechaNacimiento);
+
+  useEffect(() => {
+    if (selfIsMinor) router.replace("/student");
+  }, [selfIsMinor, router]);
+
+  if (selfIsMinor) return null;
+
+  const subtitle =
+    role === "representante"
+      ? "Consulte y corrija los datos de salud de cada hijo o dependiente a su cargo."
+      : "Consulte y corrija sus propios datos de salud.";
+
   return (
-    <AppShell
-      title="Ficha médica"
-      subtitle="Consulte y corrija los datos de salud de cada hijo o dependiente a su cargo."
-    >
+    <AppShell title="Ficha médica" subtitle={subtitle}>
       {state.status === "loading" && (
         <div className="card">
           <LoadingState label="Cargando su cuenta…" />
@@ -199,8 +215,17 @@ function StudentMedicalRecordContent(): React.ReactElement {
       {state.status === "error" && (
         <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
-      {state.status === "ready" && (
-        <MedicalRecordView data={state.data} accountPersonaId={personaId} />
+      {state.status === "ready" && role === "representante" && (
+        <RepresentanteMedicalRecordView data={state.data} accountPersonaId={personaId} />
+      )}
+      {state.status === "ready" && role === "estudiante" && state.data.self && (
+        <MedicalRecordEditor personaId={Number(state.data.self.personaId)} />
+      )}
+      {state.status === "ready" && role === "estudiante" && !state.data.self && (
+        <ErrorState
+          message="No se pudo cargar su perfil. Intente de nuevo en unos minutos."
+          onRetry={() => setReloadToken((n) => n + 1)}
+        />
       )}
     </AppShell>
   );
@@ -208,9 +233,11 @@ function StudentMedicalRecordContent(): React.ReactElement {
 
 export default function StudentMedicalRecordPage(): React.ReactElement {
   return (
-    // Representante-only — see the file header for why this list is shorter
-    // than `/student/payments` and `/student/attendance`'s.
-    <ProtectedRoute allowedRoles={["representante"]}>
+    // Both grants share this route — see the file header for why a
+    // representante's access to a REPRESENTADO and an adult estudiante's
+    // access to their OWN record are independent and unrelated to each
+    // other's condition (a role vs. an age check).
+    <ProtectedRoute allowedRoles={["representante", "estudiante"]}>
       {/* `useManagedProfiles` reads `?alumno=` through `useSearchParams` —
           the same boundary `/student`, `/student/payments` and
           `/student/attendance` use for the same reason. */}
