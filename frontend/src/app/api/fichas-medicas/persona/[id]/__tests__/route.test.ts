@@ -154,4 +154,34 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
 
     expect(response.status).toBe(403);
   });
+
+  it("forwards an explicit null for alergias/contactoEmergencia/telefonoEmergencia instead of dropping the key (FIC-5)", async () => {
+    // Clearing a field must reach the backend as `null`, not be silently
+    // omitted from the body — omitting it means "leave unchanged" server-side,
+    // which is exactly the bug: the toast says success but nothing is cleared.
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(fichaMedica));
+
+    const access = makeJwt(3600);
+    await PATCH(
+      patchRequest(
+        "5",
+        { alergias: null, contactoEmergencia: null, telefonoEmergencia: null },
+        `${ACCESS_TOKEN_COOKIE}=${access}`,
+      ),
+      { params: { id: "5" } },
+    );
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8000/api/v1/fichas-medicas/persona/5",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          alergias: null,
+          contacto_emergencia: null,
+          telefono_emergencia: null,
+        }),
+      }),
+    );
+  });
 });
