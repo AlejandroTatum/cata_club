@@ -7,6 +7,7 @@
   - `2a0cb21` — fix(members): resolve memberships with one bulk call, not N
   - `87d00db` — fix(asistencias): paginate reportes and per-persona history
   - `dfb2687` — fix(groups): fetch every schedule's roster in one call
+  - `0b47cc9` — fix(members): page through every membership, not just the first 200
 
 ## El problema
 
@@ -15,6 +16,8 @@ Tres pantallas del panel de administración piden más datos de los que necesita
 ## Qué se hizo
 
 **TRA-8 — `/members` de ~120 llamadas a 4.** El código pedía la membresía de cada socio una por una porque `GET /membresias/` devolvía error 500 hace un tiempo. Ese bug ya está reparado (y de hecho otra pantalla del mismo panel, `/payments`, ya lo usaba sin rodeos). Se sacó el rodeo entero — la resolución individual por persona y por membresía — y se lo reemplazó por una sola llamada a `GET /membresias/?limit=200`, agrupando el resultado en memoria. El comentario que explicaba el bug ya reparado se borró con el código que describía.
+
+**Corrección posterior — la llamada única truncaba en silencio.** Un segundo par de ojos encontró que la llamada única a `GET /membresias/` tiene el mismo tope de 200 filas que `GET /personas/`, pero las membresías crecen más rápido que las personas: cada socio acumula varias a lo largo del tiempo (vencida, inactiva, la activa), así que 150 socios pueden producir 300 filas de membresía sin esfuerzo. `personasCapped` seguía en `false` (150 < 200) mientras el mapa de membresías ya había perdido un tercio de las filas — el mismo defecto que este fix vino a eliminar, cambiado de forma: de "lento pero completo" a "rápido y silenciosamente incompleto". Se evaluaron las dos opciones: agregar una señal `membresiasCapped` (mínimo aceptable) o paginar internamente hasta agotar el listado (solución de fondo, mismo patrón ya escrito en `/api/attendance/records` para TRA-6). Se eligió la segunda: `/api/members` ahora recorre `GET /membresias/?skip=N&limit=200` hasta que una página devuelve menos filas que el límite, así que no hay techo que señalizar — nunca se pierde una fila, sea cual sea el tamaño del club. `personasCapped` se dejó como está: a diferencia del caso de membresías, ya avisa visiblemente en pantalla ("La fuente devuelve hasta 200 registros; este listado puede estar incompleto") en vez de fallar en silencio, así que no es el mismo defecto y paginarlo también queda fuera de este alcance.
 
 **TRA-6 — paginar `asistencias/reportes` y `asistencias/persona/{id}`.** Ambos endpoints devolvían TODAS las filas sin paginar (500 asistencias hoy). Se les agregó el mismo contrato `skip`/`limit` (tope 200) que ya usan `GET /personas/` y `GET /membresias/pagos`, devolviendo el mismo envelope `{items, total, skip, limit}`. Antes de tocar nada se revisaron los dos consumidores del reporte JSON: la pantalla `/reports` arma su CSV y su conteo de vista previa a partir del array completo (documentado explícitamente en `reports-utils.ts`), así que paginar el endpoint sin más rompía esa garantía. En vez de forzar una repaginación de la pantalla (fuera de alcance de este fix), el intermediario (`/api/attendance/records`) ahora recorre las páginas del backend internamente y arma el mismo array completo de siempre — el backend nunca vuelve a aceptar una consulta sin límite, pero ninguna pantalla (`/reports`, `/attendance`, `/dashboard`, `/trainer*`) tuvo que cambiar. El export a PDF de asistencia sigue llamando al mismo servicio sin límite, a propósito: es un documento que se descarga una vez, no un listado que alguien recorra en pantalla.
 
@@ -40,6 +43,25 @@ Después del fix:
 
  Test Files  1 passed (1)
       Tests  9 passed (9)
+```
+
+**Corrección posterior (truncado silencioso de membresías)** — `frontend/src/app/api/members/__tests__/route.test.ts`, test `"loops every backend page so a membership past the 200-row cap is never dropped"` (201 membresías repartidas en 2 páginas; la de la página 2 pertenece a una persona sin pago):
+
+```
+× GET /api/members > loops every backend page so a membership past the 200-row cap is never dropped 5ms
+  → expected [ …(4) ] to include 'http://localhost:8000/api/v1/membresi…'
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+```
+
+Después del fix:
+
+```
+ ✓ src/app/api/members/__tests__/route.test.ts (10 tests) 23ms
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
 ```
 
 **TRA-6** — `backend/tests/test_paginacion_asistencias.py` (8 tests nuevos, uno de ellos, `test_reporte_asistencia_rechaza_limit_por_encima_del_tope`):
@@ -133,3 +155,4 @@ rows: 932
 - `GET /asistencias/reportes/pdf` sigue sin paginar, a propósito: descarga un documento completo de una vez, no alimenta un listado en pantalla.
 - Las pantallas `/reports`, `/attendance`, `/dashboard` y las del entrenador siguen recibiendo el conjunto completo de asistencias del rango filtrado — no se les agregó paginación de interfaz; ese sería un cambio de UX más grande, fuera de alcance de este fix.
 - `GET /membresias/{id}` y `GET /membresias/persona/{id}` (los endpoints individuales que `/members` dejó de usar) siguen existiendo — los usa el resto del sistema (portal del alumno, validación de pagos) sin cambios.
+- `personasCapped` (el aviso visible cuando `/personas/` toca su propio tope de 200) no se tocó: ya avisa en pantalla en vez de fallar en silencio, así que no es el mismo defecto que se corrigió en membresías. Paginar también el listado de personas queda fuera de este alcance.
