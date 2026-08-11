@@ -111,6 +111,12 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
         "listar_instituciones": "60/minute",
         "crear_cuenta_admin": "20/minute",
         "crear_representado": "10/minute",
+        # INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): mismo tier de
+        # autoservicio autenticado que `crear_representado` -- vincula (no
+        # crea) una identidad ya existente a la cuenta del representante. El
+        # freno real de intentos en serie vive en `PersonaServicio` (retraso
+        # progresivo por representante), no en este decorador.
+        "vincular_representado": "10/minute",
         "listar_personas": "30/minute",
         "listar_representados": "30/minute",
         "buscar_personas": "30/minute",
