@@ -260,6 +260,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                     totalItems={sessions.length}
                     pageSize={PAGE_SIZE}
                     itemNoun="sesión"
+                    itemNounPlural="sesiones"
                   />
                 )}
               </>
