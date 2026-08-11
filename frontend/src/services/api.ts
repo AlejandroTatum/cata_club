@@ -1561,14 +1561,32 @@ export interface AsignarAlumnoHorarioDTO {
 }
 
 /**
+ * `AsignacionAlumnoHorarioResponseDTO` on the backend
+ * (`backend/app/presentacion/schemas/asistencia_schemas.py`) -- INS-6, decisión
+ * de negocio #4 (2026-08-11): assigning a student with an overdue (VENCIDA)
+ * membership stays allowed, so this rides alongside `asignaciones` as a
+ * non-blocking warning instead of an error. `diasVencida` is `null` when the
+ * membership isn't vencida, or when it is but no approved payment exists to
+ * derive "since when" from.
+ */
+export interface AsignacionAlumnoHorarioResponse {
+  asignaciones: AlumnoHorario[];
+  membresiaVencida: boolean;
+  diasVencida: number | null;
+}
+
+/**
  * Assign a student to the WHOLE training categoria `horario_id` belongs to.
  * The club enrolls by full month, never by a loose weekday, so the backend
  * enrolls the student into every horario row of that categoria in one
- * atomic transaction and returns one `AlumnoHorario` per row created.
+ * atomic transaction and returns one `AlumnoHorario` per row created, plus
+ * the overdue-membership warning (see `AsignacionAlumnoHorarioResponse`).
  */
-export async function asignarAlumnoAHorario(data: AsignarAlumnoHorarioDTO): Promise<AlumnoHorario[]> {
+export async function asignarAlumnoAHorario(
+  data: AsignarAlumnoHorarioDTO,
+): Promise<AsignacionAlumnoHorarioResponse> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
-  return request<AlumnoHorario[]>(apiEndpoint("/groups/asignar-alumno"), {
+  return request<AsignacionAlumnoHorarioResponse>(apiEndpoint("/groups/asignar-alumno"), {
     method: "POST",
     body: JSON.stringify(data),
     headers: mockHeaders,

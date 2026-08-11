@@ -161,6 +161,31 @@ function joinWithY(parts: string[]): string {
   return `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`;
 }
 
+// ---------------------------------------------------------------------------
+// INS-6 — non-blocking "cuota vencida" warning on assignment
+// ---------------------------------------------------------------------------
+
+/**
+ * Compose the Spanish sentence for the non-blocking overdue-membership
+ * warning (decisión de negocio #4, 2026-08-11: assignment stays allowed,
+ * the admin just gets told). The backend hands back plain data
+ * (`membresiaVencida` + `diasVencida`) on purpose — it doesn't know the
+ * student's display name, which the caller already has client-side.
+ */
+export function formatMembresiaVencidaWarning(
+  nombreCompleto: string,
+  diasVencida: number | null,
+): string {
+  if (diasVencida === null) {
+    return `${nombreCompleto} tiene la cuota vencida.`;
+  }
+  if (diasVencida <= 0) {
+    return `${nombreCompleto} tiene la cuota vencida desde hoy.`;
+  }
+  const unidad = diasVencida === 1 ? "día" : "días";
+  return `${nombreCompleto} tiene la cuota vencida hace ${diasVencida} ${unidad}.`;
+}
+
 /**
  * The weekday track a categoría is read against, in week order.
  *

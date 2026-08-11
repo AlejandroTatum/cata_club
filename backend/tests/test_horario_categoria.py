@@ -102,3 +102,43 @@ def test_get_horarios_filtra_por_query_param_categoria(client):
 # `entrenador_id` (issue #13): categoria y dia_semana son hoy los únicos campos
 # actualizables y ambos re-derivan las horas, así que ya no existe una
 # actualización que no las recalcule.
+
+
+# --- INS-3: una sola fila por (categoria, dia_semana) -----------------------
+# Decisión de negocio #5 (2026-08-11): es invariante, con candado en la base.
+# Las horas se derivan de la categoria, así que dos filas Formativo-Lunes
+# serían idénticas -- no existe el caso legítimo de "dos grupos el mismo día".
+def test_crear_horario_rechaza_dia_ya_existente_en_la_categoria(db_session):
+    """Sin este chequeo, la segunda llamada crearía una fila duplicada en
+    silencio: mismo categoria+día, mismas horas derivadas, y cualquier
+    alumno asignado después queda enrolado en AMBAS (rompe la inscripción
+    atómica del issue #181)."""
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_horario(HorarioCreateDTO(
+        categoria=Categoria.FORMATIVO, dia_semana=DiaSemana.LUNES,
+    ))
+
+    with pytest.raises(OperacionInvalida) as exc_info:
+        servicio.crear_horario(HorarioCreateDTO(
+            categoria=Categoria.FORMATIVO, dia_semana=DiaSemana.LUNES,
+        ))
+
+    # Mensaje legible, no un IntegrityError crudo de Postgres.
+    assert "Formativo" in str(exc_info.value)
+    assert "lunes" in str(exc_info.value)
+    assert len(servicio.listar_horarios(Categoria.FORMATIVO)) == 1
+
+
+def test_crear_horario_permite_mismo_dia_en_otra_categoria(db_session):
+    """Triangulación: el candado es por PAR (categoria, día), no por día
+    suelto -- dos categorías distintas sí pueden compartir el Lunes."""
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_horario(HorarioCreateDTO(
+        categoria=Categoria.FORMATIVO, dia_semana=DiaSemana.LUNES,
+    ))
+
+    otra = servicio.crear_horario(HorarioCreateDTO(
+        categoria=Categoria.JUVENIL, dia_semana=DiaSemana.LUNES,
+    ))
+
+    assert otra.dia_semana == DiaSemana.LUNES

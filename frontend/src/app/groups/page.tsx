@@ -107,6 +107,7 @@ import {
   formatDiaSet,
   countInscriptos,
   buildDiaTrack,
+  formatMembresiaVencidaWarning,
   DIA_LABELS,
   type CategoriaCard,
   type PersonasPorHorario,
@@ -272,7 +273,7 @@ export default function GroupsPage(): React.ReactElement {
   // all degrade for instead of throwing.
   const [categorias, setCategorias] = useState<Partial<Record<Categoria, CategoriaInfo>>>({});
   const [loading, setLoading] = useState(true);
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showWarning } = useToast();
 
   /** The categoría's label, falling back to its raw value for an unknown one
    *  (or while the catalog is still loading). */
@@ -381,10 +382,18 @@ export default function GroupsPage(): React.ReactElement {
     if (!alumnoSeleccionado || rows.length === 0) return;
     setAsignandoAlumno(true);
     try {
-      await asignarAlumnoAHorario({ persona_id: alumnoSeleccionado, horario_id: rows[0].id });
+      const respuesta = await asignarAlumnoAHorario({ persona_id: alumnoSeleccionado, horario_id: rows[0].id });
       const message = "Alumno asignado correctamente al horario.";
       showNotification("success", message);
       showSuccess(message);
+      // INS-6 (decisión de negocio #4): la cuota vencida NO bloquea la
+      // asignación -- ya se hizo, arriba. Esto es solo el aviso no
+      // bloqueante, aparte del toast de éxito.
+      if (respuesta.membresiaVencida) {
+        const alumno = allStudents.find((s) => Number(s.id) === alumnoSeleccionado);
+        const nombreCompleto = alumno ? `${alumno.nombres} ${alumno.apellidos}` : "El alumno";
+        showWarning(formatMembresiaVencidaWarning(nombreCompleto, respuesta.diasVencida));
+      }
       setAlumnoSeleccionado(null);
     } catch (err) {
       const message = extractErrorMessage(err, "Error al asignar el alumno al horario.");
@@ -397,7 +406,7 @@ export default function GroupsPage(): React.ReactElement {
     // reflecting the last KNOWN-good state.
     await cargarAlumnosDelGrupo(rows);
     setAsignandoAlumno(false);
-  }, [alumnoSeleccionado, cargarAlumnosDelGrupo, showNotification, showSuccess, showError]);
+  }, [alumnoSeleccionado, allStudents, cargarAlumnosDelGrupo, showNotification, showSuccess, showError, showWarning]);
 
   /** Mirror of `handleAsignarAlumno`: the backend unassigns the student from
    * every horario row of the categoría in one atomic transaction, so one
