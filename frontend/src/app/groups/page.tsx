@@ -100,7 +100,7 @@ import {
   type HorarioGroup,
   type HorarioGroupRow,
 } from "@/lib/groups-utils";
-import { cargarCategorias, CATEGORIA_OPTIONS, diasPermitidos, horarioDe, type Categoria, type CategoriaInfo } from "@/services/categorias";
+import { cargarCategorias, diasPermitidos, horarioDe, type Categoria, type CategoriaInfo } from "@/services/categorias";
 import {
   countUniqueAlumnos,
   buildCategoriaCards,
@@ -257,10 +257,10 @@ const NEW_GROUP_KEY = "__new__";
  */
 const ALUMNOS_PAGE_SIZE = 10;
 
-const DEFAULT_CATEGORIA: Categoria = CATEGORIA_OPTIONS[0];
-
+/** Sensible fallback before the categoria catalog has loaded (or if it comes
+ *  back empty) — never a hardcoded categoría, since the set is now open (M1). */
 const EMPTY_FORM: HorarioFormData = {
-  categoria: DEFAULT_CATEGORIA,
+  categoria: "",
 };
 
 export default function GroupsPage(): React.ReactElement {
@@ -511,7 +511,10 @@ export default function GroupsPage(): React.ReactElement {
 
   function openCreateForm(): void {
     setEditingGroup(null);
-    setFormData(EMPTY_FORM);
+    // Default to the first loaded categoria (stable catalog order) rather
+    // than a hardcoded one — the set is open now (M1), so there is no fixed
+    // "first" categoría to fall back to at module scope.
+    setFormData({ categoria: Object.keys(categorias)[0] ?? "" });
     setSelectedDias(new Set());
     setFormError(null);
     setExpandedGroup({ key: NEW_GROUP_KEY, tab: "editar" });
@@ -528,7 +531,7 @@ export default function GroupsPage(): React.ReactElement {
       return;
     }
     setFormData({
-      categoria: (group.categoria as Categoria) ?? DEFAULT_CATEGORIA,
+      categoria: group.categoria ?? "",
     });
     setSelectedDias(new Set(group.rows.map((row) => row.diaSemana)));
   }
@@ -753,7 +756,7 @@ export default function GroupsPage(): React.ReactElement {
               }}
               required
             >
-              {CATEGORIA_OPTIONS.map((cat) => (
+              {Object.keys(categorias).map((cat) => (
                 <option key={cat} value={cat}>{categorias[cat]?.label ?? cat}</option>
               ))}
             </select>

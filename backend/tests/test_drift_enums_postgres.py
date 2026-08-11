@@ -62,9 +62,11 @@ _LABELS_HUERFANOS_CONOCIDOS: dict[str, set[str]] = {
 # `Categoria` dejó de respaldar una columna Postgres enum (M1): `categoria_horario`
 # -- una tabla real, no un tipo enum -- es ahora la fuente de verdad de
 # hora_inicio/hora_fin/días permitidos, y `HorarioEntrenamiento.categoria` es un
-# `String` con FK a esa tabla. `Categoria` sigue existiendo solo para gatear qué
-# códigos acepta hoy la API (alta/edición de categorías queda fuera de este
-# cambio), así que ya no hay ningún tipo Postgres que auditar acá.
+# `String` con FK a esa tabla. `Categoria` sigue existiendo como constante con
+# nombre para las 5 categorías originales (conveniencia tipada en tests/scripts),
+# pero ya NO gatea qué códigos acepta la API -- esa validación es
+# `AsistenciaServicio._validar_dia_y_derivar_horas` contra la tabla, no este
+# enum -- así que ya no hay ningún tipo Postgres que auditar acá.
 _ENUMS_SIN_COLUMNA_POSTGRES: set[str] = {"Categoria"}
 
 

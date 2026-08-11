@@ -47,10 +47,13 @@ class DiaSemana(str, enum.Enum):
 
 class Categoria(str, enum.Enum):
     """
-    Códigos de categoría de horario aceptados por la API hoy (edad/audiencia,
-    franja horaria y días permitidos); no editables por el administrador
-    todavía -- ver la tabla `categoria_horario`, la fuente real de
-    `hora_inicio`/`hora_fin`/días permitidos (`app.dominio.modelos.CategoriaHorario`).
+    Constantes con nombre para las 5 categorías originales del club -- una
+    conveniencia tipada para el código Python (tests, scripts de seed), NO
+    la fuente de verdad ni un gate de validación (M1). Esa fuente es la
+    tabla `categoria_horario` (`app.dominio.modelos.CategoriaHorario`), que
+    ya admite códigos que no están acá: la API valida y deriva
+    `hora_inicio`/`hora_fin`/días permitidos consultando esa tabla, nunca
+    comparando contra este enum.
     """
     FORMATIVO = "FORMATIVO"
     INFANTIL = "INFANTIL"
