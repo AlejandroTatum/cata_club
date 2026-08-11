@@ -526,8 +526,21 @@ class HorarioEntrenamiento(Base):
     asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="horario")
     alumno_horarios: Mapped[List["AlumnoHorario"]] = relationship(back_populates="horario")
 
+    # Invariante de negocio EN LA BASE (INS-3, decisión de negocio #5,
+    # 2026-08-11): una sola fila por (categoria, dia_semana). Las horas de
+    # un horario se derivan de la categoria (ver `AsistenciaServicio.
+    # _validar_dia_y_derivar_horas`), así que dos filas Formativo-Lunes
+    # serían idénticas -- no existe el caso legítimo de "dos grupos el mismo
+    # día". El chequeo de `AsistenciaServicio.crear_horario` sigue siendo el
+    # camino primario de error (mensaje legible); este UNIQUE es la red de
+    # seguridad ante escrituras concurrentes que lo burlen -- mismo patrón
+    # que `uq_alumno_horario` arriba. A diferencia de esa, ESTA sí necesitó
+    # migración (`b7e4a9f2c6d1`), que además colapsa los duplicados
+    # preexistentes -- ver el comentario de esa migración para la regla de
+    # limpieza.
     __table_args__ = (
         Index("ix_horario_entrenamiento_categoria", "categoria"),
+        UniqueConstraint("categoria", "dia_semana", name="uq_horario_categoria_dia"),
     )
 
 

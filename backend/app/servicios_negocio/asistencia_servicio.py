@@ -58,6 +58,23 @@ class AsistenciaServicio:
         horario = HorarioEntrenamiento(**datos.model_dump())
         horario.categoria = self._codigo_de(horario.categoria)
         self._validar_dia_y_derivar_horas(horario)
+        # INS-3 (decisión de negocio #5, 2026-08-11): una sola fila por
+        # (categoria, dia_semana) -- es invariante, no advertencia. Las horas
+        # se derivan de la categoria (arriba), así que dos filas Formativo-
+        # Lunes serían idénticas, y un alumno asignado después quedaría
+        # enrolado en AMBAS (rompe la inscripción atómica del issue #181).
+        # Este chequeo va ANTES del `UniqueConstraint` de la base
+        # (`uq_horario_categoria_dia`) para devolver un mensaje legible en
+        # vez de un `IntegrityError` crudo.
+        if self.repo_horario.existe_categoria_dia(horario.categoria, horario.dia_semana):
+            raise OperacionInvalida(
+                f"La categoría {categoria_en_castellano(horario.categoria)} ya "
+                f"tiene un horario el día {dia_en_castellano(horario.dia_semana)}.",
+                detalle_tecnico=(
+                    f"uq_horario_categoria_dia: categoria={horario.categoria} "
+                    f"dia_semana={horario.dia_semana.value}"
+                ),
+            )
         return self.repo_horario.crear(horario)
 
     def listar_horarios(self, categoria: Optional[Categoria] = None) -> list[HorarioEntrenamiento]:

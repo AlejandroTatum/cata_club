@@ -20,6 +20,17 @@ class HorarioRepositorio:
             stmt = stmt.where(HorarioEntrenamiento.categoria == categoria)
         return list(self.db.execute(stmt).scalars().unique().all())
 
+    def existe_categoria_dia(self, categoria: str, dia_semana) -> bool:
+        """INS-3: ¿ya hay una fila para este (categoria, dia_semana)? Usado
+        por `AsistenciaServicio.crear_horario` para rechazar el duplicado
+        con un mensaje legible ANTES de que lo haga el UNIQUE de la base
+        (`uq_horario_categoria_dia`, migración `b7e4a9f2c6d1`)."""
+        stmt = select(HorarioEntrenamiento.id).where(
+            HorarioEntrenamiento.categoria == categoria,
+            HorarioEntrenamiento.dia_semana == dia_semana,
+        )
+        return self.db.execute(stmt).first() is not None
+
     def crear(self, horario: HorarioEntrenamiento) -> HorarioEntrenamiento:
         self.db.add(horario)
         self.db.commit()
