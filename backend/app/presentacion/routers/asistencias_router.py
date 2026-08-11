@@ -11,7 +11,7 @@ from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_r
 from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaResponseDTO, CategoriaResponseDTO,
     HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
-    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO,
+    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, UltimaListaDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -185,6 +185,25 @@ async def reporte_asistencia_pdf(
     # no puede llamarse con la fecha del martes.
     fecha_iso = hoy_club().isoformat()
     return construir_respuesta_pdf(pdf_bytes, f"reporte-asistencia_{fecha_iso}.pdf")
+
+
+# --- Panel del entrenador: "últimas listas del club" (Fix 8, DSH-2) --------
+# Sin autor a propósito: `Asistencia` no guarda quién tomó la lista
+# (modelos.py:536, deliberado) -- §8 de decisiones-de-negocio-2026-08-11.md.
+# Cero migración: se computa de Asistencia + HorarioEntrenamiento, lo mismo
+# que ya existía. Mismo tier de permiso que `/reportes` (ADMINISTRADOR y
+# ENTRENADOR): ninguno de los dos roles necesita el nombre de un alumno para
+# esta tarjeta, solo el horario, la fecha y los cuatro conteos.
+@router.get(
+    "/ultimas-listas",
+    response_model=List[UltimaListaDTO],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+)
+async def listar_ultimas_listas(
+    limit: int = Query(default=5, ge=1, le=20),
+    db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).listar_ultimas_listas(limit)
 
 
 # --- Asignación directa Alumno ↔ Categoria (todos sus horarios) ------------

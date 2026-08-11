@@ -181,6 +181,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes/pdf"): frozenset({"ADMINISTRADOR"}),
+    # Fix 8 / DSH-2: "últimas listas del club" en el panel del entrenador.
+    # Mismo tier que su hermano `/reportes`: ninguno de los dos roles
+    # necesita el nombre de un alumno para esta tarjeta.
+    ("GET", "/asistencias/ultimas-listas"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/dashboard/stats"): frozenset({"ADMINISTRADOR"}),
     # Resumen de circuit breakers (P2, feat/diagnostico-circuitos-http): le
     # dice a quien la lea QUÉ dependencia externa está caída y CUÁNDO

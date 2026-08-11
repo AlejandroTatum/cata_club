@@ -72,6 +72,24 @@ class AlumnoHorarioResponseDTO(ResponseBase, BaseModel):
     fecha_asignacion: datetime
 
 
+class UltimaListaDTO(ResponseBase, BaseModel):
+    """Una sesión (horario + fecha) con al menos una Asistencia registrada,
+    con sus cuatro conteos. Sin autor a propósito: `Asistencia` no guarda
+    quién tomó la lista (modelos.py:536, deliberado) -- ver
+    decisiones-de-negocio-2026-08-11.md §8. Usada por el panel del
+    entrenador para "las últimas listas del club"."""
+    horario_id: int
+    fecha_entrenamiento: date
+    dia_semana: DiaSemana
+    hora_inicio: time
+    hora_fin: time
+    presentes: int
+    tardanzas: int
+    justificados: int
+    ausentes: int
+    total: int
+
+
 class AlumnoHorarioDetalleDTO(ResponseBase, BaseModel):
     """DTO con información de persona y horario para listados."""
     id: int
