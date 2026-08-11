@@ -5,6 +5,7 @@ import {
   formatPagoMonto,
   getEmptyStateMessage,
   describePagoEstado,
+  pagoFaltaComprobante,
   countPagosByStatus,
   wholeMonthsFor,
   addMonthsIso,
@@ -135,6 +136,35 @@ describe("describePagoEstado", () => {
       tone: "warn",
     });
   });
+});
+
+describe("pagoFaltaComprobante", () => {
+  it("marks a pending transfer with no voucher — the payment a failed upload leaves behind (PAG-1)", () => {
+    const pago = makePago({ tipoPago: "TRANSFERENCIA", estadoPago: "PENDIENTE_VALIDACION", voucherUrl: null });
+    expect(pagoFaltaComprobante(pago)).toBe(true);
+  });
+
+  it("does not mark a pending transfer that already has its voucher", () => {
+    const pago = makePago({
+      tipoPago: "TRANSFERENCIA",
+      estadoPago: "PENDIENTE_VALIDACION",
+      voucherUrl: "https://cataclub.example/vouchers/1",
+    });
+    expect(pagoFaltaComprobante(pago)).toBe(false);
+  });
+
+  it("does not mark a cash payment — EFECTIVO never needs a voucher", () => {
+    const pago = makePago({ tipoPago: "EFECTIVO", estadoPago: "PENDIENTE_VALIDACION", voucherUrl: null });
+    expect(pagoFaltaComprobante(pago)).toBe(false);
+  });
+
+  it.each(["APROBADO", "RECHAZADO"] as const)(
+    "does not mark a %s transfer — it already carries its own resolution",
+    (estadoPago) => {
+      const pago = makePago({ tipoPago: "TRANSFERENCIA", estadoPago, voucherUrl: null });
+      expect(pagoFaltaComprobante(pago)).toBe(false);
+    },
+  );
 });
 
 describe("wholeMonthsFor", () => {

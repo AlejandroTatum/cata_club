@@ -36,6 +36,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const mockShowSuccess = vi.fn();
+const mockShowWarning = vi.fn();
 vi.mock("@/contexts/ToastContext", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useToast: () => ({
@@ -43,7 +44,7 @@ vi.mock("@/contexts/ToastContext", () => ({
     showError: vi.fn(),
     showSuccess: mockShowSuccess,
     showInfo: vi.fn(),
-    showWarning: vi.fn(),
+    showWarning: mockShowWarning,
   }),
 }));
 
@@ -393,6 +394,61 @@ describe("StudentPaymentsPage — the history", () => {
     expect(await screen.findByText("No hay pagos rechazados.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ver todos los pagos" })).toBeInTheDocument();
   });
+
+  /**
+   * A pending transfer with no voucher is exactly what a failed upload after
+   * `registrarPago()` succeeded leaves behind (PAG-1) — the ghost payment the
+   * owner decided must survive, marked, rather than be reverted (decisiones
+   * §7). This is the mark: distinct from a normal "awaiting validation" row,
+   * with its own way out.
+   */
+  it("marks a transfer payment that is missing its voucher, with a button to upload it right there", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText("Falta el comprobante")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^subir comprobante$/i })).toBeInTheDocument();
+  });
+
+  it("does not mark an approved or a cash payment as missing its voucher", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 1, estadoPago: "APROBADO", voucherUrl: null, monto: "25.00" }),
+      makePago({
+        id: 2,
+        estadoPago: "PENDIENTE_VALIDACION",
+        tipoPago: "EFECTIVO",
+        voucherUrl: null,
+        monto: "40.00",
+      }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByText("$40,00");
+    expect(screen.queryByText("Falta el comprobante")).not.toBeInTheDocument();
+  });
+
+  it("uploads the missing voucher from that same row and refreshes the history", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /^subir comprobante$/i }));
+
+    const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mockSubirVoucherPago).toHaveBeenCalledWith(77, file);
+    });
+    await waitFor(() => {
+      expect(mockFetchPagosDePersona).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 
 describe("StudentPaymentsPage — registering a payment", () => {
@@ -579,6 +635,84 @@ describe("StudentPaymentsPage — the checkpoint before the money moves", () => 
     expect(message).toMatch(/en revisión/i);
     expect(detail.description).toMatch(/lo rechaza indicando el motivo/i);
     expect(document.body.textContent).not.toMatch(/deshacer/i);
+  });
+});
+
+/**
+ * PAG-1, the auditoría's only blocking finding: `registrarPago()` succeeds,
+ * `subirVoucherPago()` fails (a file over 5 MB, a bad extension, Cloudinary
+ * down), and the old form stayed open re-offering "Confirmar y registrar" —
+ * which called `registrarPago()` again and collided with the payment it had
+ * just created ("ya tiene un pago pendiente"). The owner's decision
+ * (decisiones §7) is that the payment is NOT reverted: it survives, marked
+ * as missing its voucher (covered above), and the form must get out of the
+ * reader's way instead of dead-ending them.
+ */
+describe("StudentPaymentsPage — a voucher failure after the payment is already registered", () => {
+  const voucherFile = new File(["contenido"], "comprobante.pdf", { type: "application/pdf" });
+
+  async function openFormWithVoucher(): Promise<void> {
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    const fileInput = await screen.findByTestId("renew-voucher-input");
+    fireEvent.change(fileInput, { target: { files: [voucherFile] } });
+  }
+
+  it("closes the form, states the payment survived, and refreshes the history instead of reoffering the same button", async () => {
+    mockRegistrarPago.mockResolvedValueOnce({ id: 77 });
+    mockSubirVoucherPago.mockRejectedValueOnce(
+      Object.assign(new Error("El archivo supera el límite de 5 MB (6.0 MB)."), { status: 400 }),
+    );
+
+    render(<StudentPaymentsPage />);
+    await openFormWithVoucher();
+    fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
+    await screen.findByTestId("renew-confirm");
+
+    fireEvent.click(screen.getByRole("button", { name: /confirmar y registrar/i }));
+
+    await waitFor(() => {
+      expect(mockSubirVoucherPago).toHaveBeenCalledWith(77, voucherFile);
+    });
+
+    // Gone, not reoffered: a second click here used to call registrarPago()
+    // again and create the ghost-payment collision.
+    await waitFor(() => {
+      expect(screen.queryByTestId("renew-confirm")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /confirmar y registrar/i })).not.toBeInTheDocument();
+    });
+
+    expect(mockShowWarning).toHaveBeenCalledTimes(1);
+    const [message, detail] = mockShowWarning.mock.calls[0];
+    expect(message).toMatch(/se registró/i);
+    expect(message).toMatch(/no pudimos subir el comprobante/i);
+    expect(detail.description).toMatch(/límite de 5 MB/i);
+    expect(detail.description).toMatch(/historial/i);
+
+    // The reader must not have to reload by hand to see the row it can now
+    // finish from.
+    expect(mockFetchPagosDePersona).toHaveBeenCalledTimes(2);
+
+    // No success toast for a payment that is still missing its voucher.
+    expect(mockShowSuccess).not.toHaveBeenCalled();
+  });
+
+  it("still shows the inline error and keeps the form open when registrarPago itself fails", async () => {
+    mockRegistrarPago.mockRejectedValueOnce(
+      Object.assign(new Error("El monto no coincide con la membresía activa."), { status: 400 }),
+    );
+
+    render(<StudentPaymentsPage />);
+    await openFormWithVoucher();
+    fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
+    await screen.findByTestId("renew-confirm");
+
+    fireEvent.click(screen.getByRole("button", { name: /confirmar y registrar/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/el monto no coincide/i);
+    // The checkpoint is still here: nothing was created, so retrying from it
+    // is safe and is exactly what should happen.
+    expect(screen.getByTestId("renew-confirm")).toBeInTheDocument();
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
   });
 });
 
