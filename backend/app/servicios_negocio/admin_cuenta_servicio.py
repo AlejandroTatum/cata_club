@@ -77,11 +77,17 @@ class AdminCuentaServicio:
         edad = _calcular_edad(datos.fecha_nacimiento)
 
         if datos.tipo_cuenta in TIPOS_CUENTA_ADULTA:
-            if edad < EDAD_MAYORIA_EDAD:
+            # Auditoría 2026-08-10: esta rama solo validaba el piso, así que
+            # una fecha de nacimiento de 1700 (326 años) pasaba sin aviso. No
+            # hay una cota de "adulto" propia -- se reutiliza
+            # `EDAD_MAXIMA_ALUMNO` (74), el único techo que el sistema define,
+            # y JUGADOR/REPRESENTANTE ya reciben el rol ALUMNO
+            # (`ROLES_POR_TIPO_CUENTA`) así que no es una cota prestada.
+            if edad < EDAD_MAYORIA_EDAD or edad > EDAD_MAXIMA_ALUMNO:
                 raise OperacionInvalida(
                     f"Los {TIPOS_CUENTA_ADULTA[datos.tipo_cuenta]} deben ser "
-                    f"mayores de edad ({EDAD_MAYORIA_EDAD} años o más); la "
-                    f"edad calculada es {edad} años."
+                    f"mayores de edad, entre {EDAD_MAYORIA_EDAD} y "
+                    f"{EDAD_MAXIMA_ALUMNO} años (calculado: {edad})."
                 )
 
         if datos.tipo_cuenta == "MENOR":

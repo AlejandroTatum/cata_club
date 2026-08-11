@@ -132,15 +132,21 @@ function validatePersonal(data: CrearCuentaFormData): string[] {
   if (!data.telefono.trim()) errors.push("El teléfono es obligatorio.");
   else if (!/^\d{7,10}$/.test(data.telefono.trim())) errors.push("El teléfono debe tener entre 7 y 10 dígitos.");
 
-  // Age validation based on account type
+  // Age validation based on account type. Uses `edadDesdeFecha`, not
+  // `calculateAge` — the latter returns NaN outside 1900-2200 and every
+  // comparison below would silently pass (audited case: 1700, 326 years).
   if (data.accountType && data.fechaNacimiento && isValidDate(data.fechaNacimiento)) {
-    const age = calculateAge(data.fechaNacimiento);
+    const age = edadDesdeFecha(data.fechaNacimiento);
     if (ADULT_ACCOUNT_TYPES.includes(data.accountType)) {
-      if (age < 18) errors.push("Los jugadores, representantes y entrenadores deben ser mayores de edad (18+).");
+      if (age < EDAD_MAYORIA_EDAD || age > EDAD_MAXIMA_ALUMNO) {
+        errors.push(
+          `Los jugadores, representantes y entrenadores deben ser mayores de edad, entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${age}).`,
+        );
+      }
     }
     if (data.accountType === "MENOR") {
-      if (age >= 18) errors.push("La persona es mayor de edad. Use tipo Jugador o Representante.");
-      if (age < 5) errors.push("La edad mínima es 5 años.");
+      if (age >= EDAD_MAYORIA_EDAD) errors.push("La persona es mayor de edad. Use tipo Jugador o Representante.");
+      else if (age < EDAD_MINIMA_ALUMNO) errors.push(`La edad mínima es ${EDAD_MINIMA_ALUMNO} años.`);
     }
   }
 
@@ -190,6 +196,40 @@ function isValidDate(value: string): boolean {
     parsed.getMonth() === month - 1 &&
     parsed.getDate() === day
   );
+}
+
+/**
+ * Real domain limits (`EDAD_MINIMA_ALUMNO` / `EDAD_MAXIMA_ALUMNO` /
+ * `EDAD_MAYORIA_EDAD` in `backend/app/servicios_negocio/persona_servicio.py`).
+ * No new ceiling for JUGADOR/REPRESENTANTE/ENTRENADOR: they reuse
+ * `EDAD_MAXIMA_ALUMNO` — JUGADOR and REPRESENTANTE already carry the ALUMNO
+ * role (`ROLES_POR_TIPO_CUENTA` on the backend), and it's the only ceiling
+ * this system defines.
+ */
+const EDAD_MINIMA_ALUMNO = 5;
+const EDAD_MAXIMA_ALUMNO = 74;
+const EDAD_MAYORIA_EDAD = 18;
+
+/**
+ * Age in whole years from an already-validated "YYYY-MM-DD" string.
+ *
+ * Deliberately does NOT bound the input year the way `calculateAge` does (it
+ * caps at 1900-2200 and returns `NaN` outside that range): an implausibly old
+ * year like 1700 is exactly the audited case this rule exists to catch
+ * (326 years, accepted with no warning), so it must still produce a real
+ * (large) number instead of silently opting out of both age checks below —
+ * `NaN < 18` and `NaN > 74` are both `false`, which is how it slipped through
+ * (mirrors `add-dependent-utils.ts::edadDesdeFecha`, added for the same bug
+ * on MENOR).
+ */
+function edadDesdeFecha(value: string): number {
+  const [year, month, day] = value.split("-").map(Number);
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - year;
+  const antesDelCumple =
+    hoy.getMonth() + 1 < month || (hoy.getMonth() + 1 === month && hoy.getDate() < day);
+  if (antesDelCumple) edad -= 1;
+  return edad;
 }
 
 function isFutureDate(value: string): boolean {

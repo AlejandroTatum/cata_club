@@ -21,6 +21,7 @@ const TIPO_LABELS: Record<TipoNotificacion, string> = {
   PAGO_APROBADO: "Pago aprobado",
   PAGO_RECHAZADO: "Pago rechazado",
   NUEVA_INSCRIPCION: "Nueva inscripción",
+  VINCULACION_REPRESENTANTE: "Vinculación de representante",
 };
 
 export interface NotificationBellProps {

@@ -53,6 +53,33 @@ describe("NotificationBell", () => {
     expect(screen.getByText("Membresía próxima a vencer")).toBeInTheDocument();
   });
 
+  // INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): the guardian's
+  // linking notice is about a minor's custody — it must read at least as
+  // clearly as a payment notice, not fall back to a blank title because the
+  // frontend's type map never learned about it.
+  it("shows a real title for VINCULACION_REPRESENTANTE, not a blank one", () => {
+    render(
+      <NotificationBell
+        notificaciones={[
+          makeNotificacion({
+            tipo: "VINCULACION_REPRESENTANTE",
+            mensaje: "Lucas Vega (cédula 1712345678) fue vinculado a otra cuenta de representante.",
+          }),
+        ]}
+        loadError={false}
+        onMarkRead={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /notificaciones/i }));
+
+    expect(screen.getByText("Lucas Vega (cédula 1712345678) fue vinculado a otra cuenta de representante.")).toBeInTheDocument();
+    // The blank title this bug produces is `undefined` rendered as text —
+    // asserting the real label directly rules that out.
+    expect(screen.queryByText("undefined")).not.toBeInTheDocument();
+    expect(screen.getByText(/vinculaci[oó]n/i)).toBeInTheDocument();
+  });
+
   it("calls onMarkRead when an unread notification is clicked", () => {
     const onMarkRead = vi.fn();
     render(
