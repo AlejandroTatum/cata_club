@@ -31,6 +31,7 @@ import {
   Users,
   Calendar,
   FileText,
+  Stethoscope,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
@@ -79,6 +80,7 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   "/reports": FileText,
   "/student": User,
   "/student/payments": CreditCard,
+  "/student/medical-record": Stethoscope,
 };
 
 /**

@@ -77,8 +77,10 @@ Representante/Estudiante (sección "Mi Cuenta"):
 - Puede ver el estado de sus pagos y de su membresía desde "Mi Cuenta".
 - Puede consultar su propio historial de asistencia desde "Mi Cuenta"; cada registro muestra el día y
   horario de esa clase, así que ahí también se ve el horario de sus entrenamientos.
-- La ficha médica (alergias, contacto de emergencia) la gestiona el ADMINISTRADOR, no el propio
-  estudiante/representante directamente — si necesita actualizarla, debe pedírselo a un administrador.
+- La ficha médica (alergias, enfermedades, tipo de sangre, contacto de emergencia) de un hijo o
+  dependiente la puede ver y corregir su REPRESENTANTE desde "Mi Cuenta", además del
+  ADMINISTRADOR. Un estudiante que gestiona su propia cuenta, sin representante, todavía no puede
+  ver ni corregir la suya propia — debe pedírselo a un administrador.
 
 Entrenador:
 - Toma la asistencia de cualquier grupo desde la sección "Asistencia".

@@ -1457,14 +1457,20 @@ export async function crearCuentaAdmin(data: AdminCrearCuentaPayload): Promise<{
   });
 }
 
-/** Admin-only: fetch a person's medical record. */
+/**
+ * Fetch a person's medical record. Authorized for an ADMINISTRADOR or the
+ * representative of that exact persona — the backend's
+ * `PoliticaAccesoPersona.exigir_acceso` decides, this client just calls the
+ * endpoint. Used by both `app/members/MedicalRecordEditor.tsx` (admin) and
+ * `app/student/medical-record/page.tsx` (representante).
+ */
 export async function fetchFichaMedica(personaId: number): Promise<FichaMedicaEditable> {
   return request<FichaMedicaEditable>(apiEndpoint(`/fichas-medicas/persona/${personaId}`));
 }
 
 /**
- * Admin-only: update a person's medical record. `enfermedades` replaces the
- * full list.
+ * Update a person's medical record — same ADMINISTRADOR-or-representative
+ * authorization as `fetchFichaMedica`. `enfermedades` replaces the full list.
  *
  * Sends `data` as-is (camelCase) — the BFF route is the single place that
  * converts to the backend's snake_case. Converting here too used to rename
