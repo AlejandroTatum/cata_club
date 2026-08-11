@@ -178,6 +178,13 @@ def test_vincular_representado_notifica_al_representante_anterior(db_session):
     # que repetirla no es información nueva para él.
     assert "Lucas Vega" in notif.mensaje
     assert menor.cedula in notif.mensaje
+    # Auditoría 2026-08-10: el mensaje mandaba a "Vincular un hijo ya
+    # registrado", una pantalla que no existe. El camino real es completar
+    # "Agregar dependiente" con la misma cédula hasta que salte el error de
+    # cédula duplicada, y desde ahí usar "Vincular a mi cuenta"
+    # (WizardNavigation, `add-dependent-utils.ts::getLinkExistingErrorMessage`).
+    assert "Agregar dependiente" in notif.mensaje
+    assert "Vincular un hijo ya registrado" not in notif.mensaje
 
 
 # ---------------------------------------------------------------------------

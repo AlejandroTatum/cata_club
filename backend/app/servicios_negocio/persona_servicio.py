@@ -258,8 +258,8 @@ class PersonaServicio:
             tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,
             mensaje=(
                 f"{nombre} (cédula {representado.cedula}) fue vinculado a otra cuenta "
-                f"de representante. Si esto fue un error, puede recuperarlo escribiendo "
-                f"la misma cédula en \"Vincular un hijo ya registrado\"."
+                f"de representante. Si fue un error, complete \"Agregar dependiente\" "
+                f"con la misma cédula para deshacerlo."
             ),
             persona_id=representante_anterior_id,
             entidad_relacionada_id=representado.id,
