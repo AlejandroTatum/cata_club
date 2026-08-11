@@ -13,6 +13,7 @@ import {
   countInscriptos,
   buildDiaTrack,
   DIA_ORDER,
+  formatMembresiaVencidaWarning,
 } from "../groups-page-utils";
 import type { AlumnoHorario } from "@/services/api";
 import type { HorarioGroup } from "@/lib/groups-utils";
@@ -240,5 +241,35 @@ describe("DIA_ORDER", () => {
       "SABADO",
       "DOMINGO",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatMembresiaVencidaWarning — INS-6 non-blocking warning
+// ---------------------------------------------------------------------------
+
+describe("formatMembresiaVencidaWarning", () => {
+  it("names the student and the number of overdue days", () => {
+    expect(formatMembresiaVencidaWarning("Ariana Ruiz", 14)).toBe(
+      "Ariana Ruiz tiene la cuota vencida hace 14 días.",
+    );
+  });
+
+  it("uses the singular día for exactly one overdue day", () => {
+    expect(formatMembresiaVencidaWarning("Ariana Ruiz", 1)).toBe(
+      "Ariana Ruiz tiene la cuota vencida hace 1 día.",
+    );
+  });
+
+  it("says 'desde hoy' when the membership expired today (0 días)", () => {
+    expect(formatMembresiaVencidaWarning("Ariana Ruiz", 0)).toBe(
+      "Ariana Ruiz tiene la cuota vencida desde hoy.",
+    );
+  });
+
+  it("falls back to a dateless sentence when diasVencida is unknown", () => {
+    expect(formatMembresiaVencidaWarning("Ariana Ruiz", null)).toBe(
+      "Ariana Ruiz tiene la cuota vencida.",
+    );
   });
 });

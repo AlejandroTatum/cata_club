@@ -971,6 +971,39 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(await screen.findByText(/asignado correctamente/i)).toBeInTheDocument();
   });
 
+  it("shows a non-blocking overdue-membership warning without failing the assignment (INS-6)", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
+    mockAsignarAlumnoAHorario.mockResolvedValue({
+      asignaciones: [],
+      membresiaVencida: true,
+      diasVencida: 14,
+    });
+    render(
+      <ToastProvider>
+        <GroupsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await waitForHorarios();
+
+    const [multiDiaCard] = cards();
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
+
+    fireEvent.change(screen.getByLabelText("Seleccionar alumno"), { target: { value: "70" } });
+    fireEvent.click(screen.getByRole("button", { name: /^asignar$/i }));
+
+    // The assignment itself still succeeds -- the warning rides alongside
+    // the success toast, it never replaces it. Two success surfaces now
+    // render the same text (the page's own banner AND the toast), so this
+    // asserts presence rather than a single unique match.
+    expect((await screen.findAllByText(/asignado correctamente/i)).length).toBeGreaterThan(0);
+    expect(
+      await screen.findByText("Diego Vega tiene la cuota vencida hace 14 días."),
+    ).toBeInTheDocument();
+  });
+
   it("shows a real error when the assign call fails (e.g. already enrolled in the whole categoria)", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
     mockAsignarAlumnoAHorario.mockRejectedValue(new ApiClientError("Diego Vega ya figura en esa categoría.", 400));
