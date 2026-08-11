@@ -149,7 +149,11 @@ function RepresentanteMedicalRecordView({
           second implementation. `key` forces a fresh mount per persona, so
           its internal state (the blood-type default, the form fields) never
           carries over from the previous child when the picker switches. */}
-      <MedicalRecordEditor key={selectedProfile.personaId} personaId={Number(selectedProfile.personaId)} />
+      <MedicalRecordEditor
+        key={selectedProfile.personaId}
+        personaId={Number(selectedProfile.personaId)}
+        studentName={studentName}
+      />
     </>
   );
 }
