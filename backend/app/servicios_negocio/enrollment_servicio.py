@@ -74,13 +74,26 @@ class EnrollmentServicio:
             if self.repo_usuario.obtener_por_correo(datos.representante.correo):
                 raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 
-            # Validar que el representante sea mayor de edad
+            # Validar que el representante sea mayor de edad. El piso
+            # (EDAD_MAYORIA_EDAD) ya se validaba; el techo no -- una fecha de
+            # nacimiento implausible (patrón auditado: año 1800) pasaba en
+            # silencio porque el cálculo de edad del lado del cliente
+            # devolvía NaN fuera de un rango arbitrario y `NaN < 18` es
+            # `false`. La edad del alumno, arriba, ya valida ambas cotas
+            # (EDAD_MINIMA_ALUMNO/EDAD_MAXIMA_ALUMNO); esta usa el mismo
+            # patrón, reusando EDAD_MAXIMA_ALUMNO como el único techo que
+            # define el sistema.
             edad_rep = _calcular_edad(datos.representante.fecha_nacimiento)
             if edad_rep < EDAD_MAYORIA_EDAD:
                 raise OperacionInvalida(
                     f"El representante legal debe ser mayor de edad "
                     f"({EDAD_MAYORIA_EDAD} años o más); la edad calculada "
                     f"es {edad_rep} años."
+                )
+            if edad_rep > EDAD_MAXIMA_ALUMNO:
+                raise OperacionInvalida(
+                    f"El representante legal debe tener como máximo "
+                    f"{EDAD_MAXIMA_ALUMNO} años (calculado: {edad_rep})."
                 )
 
             # Crear Persona del representante

@@ -1,4 +1,5 @@
 import { toUserMessage } from "@/lib/error-message";
+import { calculateAge } from "@/app/student/enroll/enroll-utils";
 
 /**
  * Pure utility functions for the Admin "Create Account" wizard.
@@ -132,21 +133,25 @@ function validatePersonal(data: CrearCuentaFormData): string[] {
   if (!data.telefono.trim()) errors.push("El teléfono es obligatorio.");
   else if (!/^\d{7,10}$/.test(data.telefono.trim())) errors.push("El teléfono debe tener entre 7 y 10 dígitos.");
 
-  // Age validation based on account type. Uses `edadDesdeFecha`, not
-  // `calculateAge` — the latter returns NaN outside 1900-2200 and every
-  // comparison below would silently pass (audited case: 1700, 326 years).
+  // Age validation based on account type. `calculateAge` no longer caps its
+  // input year (see its docstring in enroll-utils.ts) — an implausibly old
+  // year like 1700 used to return NaN there, and `NaN < 18` / `NaN > 74` are
+  // both `false`, so it passed every check below in silence (this file used
+  // to carry its own capped copy of `calculateAge` with the identical bug —
+  // now it imports the fixed shared helper instead).
   if (data.accountType && data.fechaNacimiento && isValidDate(data.fechaNacimiento)) {
-    const age = edadDesdeFecha(data.fechaNacimiento);
+    const age = calculateAge(data.fechaNacimiento);
     if (ADULT_ACCOUNT_TYPES.includes(data.accountType)) {
       if (age < EDAD_MAYORIA_EDAD || age > EDAD_MAXIMA_ALUMNO) {
         errors.push(
-          `Los jugadores, representantes y entrenadores deben ser mayores de edad, entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${age}).`,
+          `Los jugadores, representantes y entrenadores deben tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${age}).`,
         );
       }
     }
     if (data.accountType === "MENOR") {
       if (age >= EDAD_MAYORIA_EDAD) errors.push("La persona es mayor de edad. Use tipo Jugador o Representante.");
       else if (age < EDAD_MINIMA_ALUMNO) errors.push(`La edad mínima es ${EDAD_MINIMA_ALUMNO} años.`);
+      else if (age > EDAD_MAXIMA_ALUMNO) errors.push(`La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${age}).`);
     }
   }
 
@@ -198,40 +203,6 @@ function isValidDate(value: string): boolean {
   );
 }
 
-/**
- * Real domain limits (`EDAD_MINIMA_ALUMNO` / `EDAD_MAXIMA_ALUMNO` /
- * `EDAD_MAYORIA_EDAD` in `backend/app/servicios_negocio/persona_servicio.py`).
- * No new ceiling for JUGADOR/REPRESENTANTE/ENTRENADOR: they reuse
- * `EDAD_MAXIMA_ALUMNO` — JUGADOR and REPRESENTANTE already carry the ALUMNO
- * role (`ROLES_POR_TIPO_CUENTA` on the backend), and it's the only ceiling
- * this system defines.
- */
-const EDAD_MINIMA_ALUMNO = 5;
-const EDAD_MAXIMA_ALUMNO = 74;
-const EDAD_MAYORIA_EDAD = 18;
-
-/**
- * Age in whole years from an already-validated "YYYY-MM-DD" string.
- *
- * Deliberately does NOT bound the input year the way `calculateAge` does (it
- * caps at 1900-2200 and returns `NaN` outside that range): an implausibly old
- * year like 1700 is exactly the audited case this rule exists to catch
- * (326 years, accepted with no warning), so it must still produce a real
- * (large) number instead of silently opting out of both age checks below —
- * `NaN < 18` and `NaN > 74` are both `false`, which is how it slipped through
- * (mirrors `add-dependent-utils.ts::edadDesdeFecha`, added for the same bug
- * on MENOR).
- */
-function edadDesdeFecha(value: string): number {
-  const [year, month, day] = value.split("-").map(Number);
-  const hoy = new Date();
-  let edad = hoy.getFullYear() - year;
-  const antesDelCumple =
-    hoy.getMonth() + 1 < month || (hoy.getMonth() + 1 === month && hoy.getDate() < day);
-  if (antesDelCumple) edad -= 1;
-  return edad;
-}
-
 function isFutureDate(value: string): boolean {
   const [year, month, day] = value.split("-").map(Number);
   const parsed = new Date(year, month - 1, day);
@@ -244,42 +215,16 @@ function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-export function calculateAge(
-  birthDate: string,
-  today: Date = new Date(),
-): number {
-  if (!birthDate) return NaN;
-  const parts = birthDate.split("-");
-  if (parts.length !== 3) return NaN;
-  const [birthYear, birthMonth, birthDay] = parts.map(Number);
-  if (
-    !Number.isInteger(birthYear) ||
-    !Number.isInteger(birthMonth) ||
-    !Number.isInteger(birthDay) ||
-    birthYear < 1900 ||
-    birthYear > 2200 ||
-    birthMonth < 1 ||
-    birthMonth > 12 ||
-    birthDay < 1 ||
-    birthDay > 31
-  ) {
-    return NaN;
-  }
-  const parsed = new Date(birthYear, birthMonth - 1, birthDay);
-  if (
-    parsed.getFullYear() !== birthYear ||
-    parsed.getMonth() !== birthMonth - 1 ||
-    parsed.getDate() !== birthDay
-  ) {
-    return NaN;
-  }
-  let age = today.getFullYear() - birthYear;
-  const monthDiff = today.getMonth() - (birthMonth - 1);
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDay)) {
-    age--;
-  }
-  return age;
-}
+/**
+ * Real domain limits (`EDAD_MINIMA_ALUMNO` / `EDAD_MAXIMA_ALUMNO` /
+ * `EDAD_MAYORIA_EDAD` in `backend/app/servicios_negocio/persona_servicio.py`).
+ * `calculateAge` itself is imported from `enroll-utils.ts` — this file used
+ * to carry its own copy that capped the birth year to 1900-2200 and returned
+ * `NaN` outside it, the same defect audited and fixed there.
+ */
+const EDAD_MINIMA_ALUMNO = 5;
+const EDAD_MAXIMA_ALUMNO = 74;
+const EDAD_MAYORIA_EDAD = 18;
 
 /**
  * One of three hand-rolled versions of the same idea that used to live in this

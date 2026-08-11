@@ -12,6 +12,7 @@
 import type { RepresentadoCreatePayload } from "@/services/api";
 import type { TipoSangre } from "@/types/domain";
 import { toUserMessage } from "@/lib/error-message";
+import { calculateAge } from "@/app/student/enroll/enroll-utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -161,25 +162,6 @@ function nameRule(value: string, subject: string): string | null {
 const EDAD_MINIMA_ALUMNO = 5;
 const EDAD_MAXIMA_ALUMNO = 74;
 
-/**
- * Age in whole years from an already-validated "YYYY-MM-DD" string.
- *
- * Deliberately does NOT bound the input year the way `enroll-utils.ts`'s
- * `calculateAge` does (it caps at 1900 and returns `NaN` outside that range):
- * an implausibly old year like 1800 is exactly the audited case this rule
- * exists to catch, so it must still produce a real (large) number instead of
- * silently opting out of the check.
- */
-function edadDesdeFecha(value: string): number {
-  const [year, month, day] = value.split("-").map(Number);
-  const hoy = new Date();
-  let edad = hoy.getFullYear() - year;
-  const antesDelCumple =
-    hoy.getMonth() + 1 < month || (hoy.getMonth() + 1 === month && hoy.getDate() < day);
-  if (antesDelCumple) edad -= 1;
-  return edad;
-}
-
 /** Ecuadorian numbers run 7 (landline) to 10 (mobile) digits. */
 function phoneRule(value: string, subject: string): string | null {
   if (!value.trim()) return `${subject} es obligatorio.`;
@@ -196,7 +178,10 @@ const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) =
     if (!d.fechaNacimiento) return "La fecha de nacimiento es obligatoria.";
     if (!isValidDate(d.fechaNacimiento)) return "La fecha de nacimiento ingresada no es válida.";
     if (isFutureDate(d.fechaNacimiento)) return "La fecha de nacimiento no puede ser en el futuro.";
-    const edad = edadDesdeFecha(d.fechaNacimiento);
+    // `calculateAge` no longer caps its input year (see its docstring in
+    // enroll-utils.ts) — an implausibly old year like 1800 now produces a
+    // real (large) number instead of NaN, so this check catches it by name.
+    const edad = calculateAge(d.fechaNacimiento);
     if (edad < EDAD_MINIMA_ALUMNO || edad > EDAD_MAXIMA_ALUMNO) {
       return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${edad}).`;
     }

@@ -36,7 +36,21 @@ describe("validateCrearCuentaForm — ENTRENADOR", () => {
 
   it("rejects a trainer who is under age", () => {
     const errors = validateCrearCuentaForm(form({ fechaNacimiento: "2020-01-01" }));
-    expect(errors.join(" ")).toMatch(/mayores de edad/i);
+    expect(errors.join(" ")).toMatch(/entre 18 y 74/i);
+  });
+
+  /**
+   * Root-cause candado: this file used to carry its own copy of
+   * `calculateAge` that capped the birth year to 1900-2200 and returned
+   * `NaN` outside it — so `age < 18` was always `false` for a wildly old
+   * date (the audited pattern: year 1700) and this exact case slipped
+   * through in silence. Now it imports the fixed shared helper, which never
+   * returns NaN for a syntactically valid date, so this age is caught by
+   * name instead.
+   */
+  it("rejects an implausibly old trainer birth date instead of letting it through", () => {
+    const errors = validateCrearCuentaForm(form({ fechaNacimiento: "1700-01-01" }));
+    expect(errors.join(" ")).toMatch(/entre 18 y 74 años \(calculado: \d+\)/i);
   });
 
   it("does not demand a legal guardian from a trainer", () => {
