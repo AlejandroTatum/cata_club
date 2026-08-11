@@ -34,7 +34,18 @@ export default function PageHeader({
   className,
 }: PageHeaderProps): ReactElement {
   return (
-    <header className={cn("flex flex-wrap items-center gap-3", className)}>
+    <header
+      className={cn(
+        // Stacked by default: at narrow widths, actions competing for space
+        // shrank the title's box toward zero (`min-w-0` below) while its
+        // text kept painting at full width past that box — the header's own
+        // `flex-wrap` never fired because the shrunken boxes still fit on
+        // one line. Matches `Pagination`'s `flex-col ... sm:flex-row`: share
+        // a row only once a breakpoint gives both parts real room.
+        "flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center",
+        className,
+      )}
+    >
       <div className="min-w-0 flex-1">
         <h1 className="text-xl font-extrabold text-ink">{title}</h1>
         {/* `ink-3-strong`, not `ink-3`: 13px/400 `ink-3` on the `canvas` grey

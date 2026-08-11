@@ -76,4 +76,27 @@ describe("PageHeader — structure", () => {
     const block = screen.getByRole("heading", { level: 1 }).parentElement;
     expect(block).toHaveClass("flex-1", "min-w-0");
   });
+
+  /**
+   * ASI-8: at 390px, `Generar PDF` painted over "Reportes" — the title read
+   * "Repo" with the rest hidden under the button. `min-w-0` on the title
+   * block let its layout BOX shrink toward zero once the actions competed
+   * for space, but the `<h1>` text itself (`overflow: visible`, one
+   * unbreakable word) kept painting at its real width past that shrunken
+   * box — so the header's own `flex-wrap` never saw a reason to wrap, since
+   * the (collapsed) boxes still fit on one line.
+   *
+   * The fix stacks title above actions by default, matching the
+   * `flex-col ... sm:flex-row` convention `Pagination` already uses for the
+   * same "narrow screen: never share a row" problem — actions only sit
+   * beside the title once a `sm:` breakpoint gives them room.
+   */
+  it("stacks the title above actions by default, sharing a row only from sm: up (ASI-8)", () => {
+    const { container } = render(
+      <PageHeader title="Reportes" actions={<Button variant="primary">Generar PDF</Button>} />,
+    );
+    const header = container.firstElementChild as HTMLElement;
+    expect(header).toHaveClass("flex-col");
+    expect(header.className).toMatch(/\bsm:flex-row\b/);
+  });
 });

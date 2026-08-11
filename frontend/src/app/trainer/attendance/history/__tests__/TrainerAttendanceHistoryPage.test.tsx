@@ -127,6 +127,21 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.queryByText("Sofia Vera")).not.toBeInTheDocument();
   });
 
+  it("pluralises 'sesión' as 'sesiones', not 'sesións' (ASI-6)", async () => {
+    // 11 distinct sessions (one record each, all different dates) force a
+    // second page at PAGE_SIZE=10, which is what renders the range readout.
+    const manySessions: AttendanceRecord[] = Array.from({ length: 11 }, (_, i) =>
+      record("present", `Alumno ${i}`, `2026-07-${String(i + 1).padStart(2, "0")}`),
+    );
+    mockFetchAttendanceRecords.mockResolvedValue(manySessions);
+
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    expect(screen.getByText(/11 sesiones/)).toBeInTheDocument();
+    expect(screen.queryByText(/sesións/)).not.toBeInTheDocument();
+  });
+
   it("does not show who filed each list — attendance no longer records it (issue #13)", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
