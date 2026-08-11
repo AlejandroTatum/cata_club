@@ -278,7 +278,7 @@ def test_historial_sobrevive_a_la_desactivacion(client, db_session):
 
     asistencias = client.get(f"/api/v1/asistencias/persona/{persona.id}")
     assert asistencias.status_code == 200
-    assert len(asistencias.json()) == 1
+    assert len(asistencias.json()["items"]) == 1
 
     pagos = client.get(f"/api/v1/membresias/pagos/persona/{persona.id}")
     assert pagos.status_code == 200

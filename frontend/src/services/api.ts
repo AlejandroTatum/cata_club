@@ -1599,6 +1599,18 @@ export async function fetchAlumnosPorHorario(horarioId: number): Promise<AlumnoH
   return items;
 }
 
+/**
+ * Roster of EVERY training schedule, in ONE call (TRA-7). Replaces the old
+ * `/groups` pattern of one `fetchAlumnosPorHorario` per horario (26 calls,
+ * fixed — grows only with category count, never with the padrón) used to
+ * build the "N inscriptos" card counts. Deliberately unpaginated, matching
+ * the backend route.
+ */
+export async function fetchRosterDeTodosLosHorarios(): Promise<AlumnoHorario[]> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<AlumnoHorario[]>(apiEndpoint("/groups/horarios/alumnos"), { headers: mockHeaders });
+}
+
 /** List all schedules assigned to a specific student. */
 export async function fetchHorariosPorAlumno(personaId: number): Promise<AlumnoHorario[]> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};

@@ -152,18 +152,39 @@ class AsistenciaServicio:
 
         return self.repo.crear(Asistencia(**datos.model_dump()))
 
-    def historial_por_persona(self, persona_id: int) -> list[Asistencia]:
+    def historial_por_persona(
+        self, persona_id: int, skip: int = 0, limit: Optional[int] = None
+    ) -> tuple[list[Asistencia], int]:
+        """Historial paginado de una persona, más el total de su historial
+        completo (paginado, issue #7 / TRA-6)."""
         if not self.repo_persona.obtener_por_id(persona_id):
             raise EntidadNoEncontrada(f"Persona con id {persona_id} no encontrada")
-        return self.repo.listar_por_persona(persona_id)
+        items = self.repo.listar_por_persona(persona_id, skip=skip, limit=limit)
+        total = self.repo.contar_por_persona(persona_id)
+        return items, total
 
     def generar_reporte(
-        self, horario_id=None, persona_id=None, fecha_inicio=None, fecha_fin=None
+        self, horario_id=None, persona_id=None, fecha_inicio=None, fecha_fin=None,
+        skip: int = 0, limit: Optional[int] = None,
     ) -> list[Asistencia]:
         """E02-RF005: reporte de asistencia por horario, periodo o alumno.
-        No existía ningún endpoint de reporte -- solo el historial fijo por
-        persona de arriba. Los tres filtros son opcionales y combinables."""
+        Los tres filtros son opcionales y combinables. `skip`/`limit` quedan
+        opcionales a propósito: el export a PDF (`reporte_asistencia_pdf`)
+        llama a este mismo método SIN ellos -- un único documento descargado
+        de una vez, no un listado que se recorra en pantalla (issue #7 /
+        TRA-6) -- mientras que el endpoint JSON del reporte sí los pasa."""
         return self.repo.listar_reporte(
+            horario_id=horario_id, persona_id=persona_id,
+            fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+            skip=skip, limit=limit,
+        )
+
+    def contar_reporte(
+        self, horario_id=None, persona_id=None, fecha_inicio=None, fecha_fin=None
+    ) -> int:
+        """Total del reporte FILTRADO -- para el `total` del envelope
+        paginado del endpoint JSON."""
+        return self.repo.contar_reporte(
             horario_id=horario_id, persona_id=persona_id,
             fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
         )
@@ -264,6 +285,15 @@ class AsistenciaServicio:
         )
         total = self.repo_alumno_horario.contar_por_horario(horario_id)
         return [self._a_detalle_dto(a) for a in asignaciones], total
+
+    def listar_roster_de_todos_los_horarios(self) -> list[AlumnoHorarioDetalleDTO]:
+        """TRA-7: roster completo (todos los horarios) en una sola consulta,
+        para el conteo "N inscriptos" de /groups. Deliberadamente SIN
+        paginar: el volumen de filas ya viajaba completo hoy, repartido en 26
+        respuestas (una por horario); esto consolida esas 26 consultas en
+        una sola sin cambiar cuántas filas cruzan la red."""
+        asignaciones = self.repo_alumno_horario.listar_activos_de_todos_los_horarios()
+        return [self._a_detalle_dto(a) for a in asignaciones]
 
     def listar_horarios_por_alumno(self, persona_id: int) -> list[AlumnoHorarioDetalleDTO]:
         """Lista todos los horarios asignados a un alumno específico."""

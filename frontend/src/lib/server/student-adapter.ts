@@ -130,13 +130,14 @@ export interface StudentPortalView {
 /**
  * Raised from 5 once /student/attendance existed to show a real history.
  *
- * This is a pure frontend slice, not a backend constraint: GET
- * /asistencias/persona/{id} returns the full unpaginated history
- * (AsistenciaRepositorio.listar_por_persona takes no limit/offset). At 5 the
- * portal was hiding records students already had — several have 13. The cap
- * stays because the payload is unbounded and this feeds a portal, not a report;
- * `PORTAL_SESSION_WINDOW` in the attendance screen must match it, since the
- * screen states the window in its footnote.
+ * This is a frontend slice, not (only) a backend one: `GET
+ * /asistencias/persona/{id}` is paginated (TRA-6) and the BFF route
+ * (`src/app/api/student/route.ts`) already requests a generous page (200 —
+ * `HISTORIAL_PAGE_LIMIT`), well above this window, so page 1 always contains
+ * the most recent 30. At 5 the portal was hiding records students already
+ * had — several have 13. The cap stays because this feeds a portal, not a
+ * report; `PORTAL_SESSION_WINDOW` in the attendance screen must match it,
+ * since the screen states the window in its footnote.
  */
 const RECENT_SESSIONS_LIMIT = 30;
 

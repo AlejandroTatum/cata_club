@@ -78,7 +78,7 @@ describe("GET /api/student", () => {
       .mockResolvedValueOnce(jsonResponse([])) // /asistencias/horarios
       .mockResolvedValueOnce(jsonResponse([{ id: 1, categoria: "Mensual", precio: "85.00", modalidad: "MENSUAL" }])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse(self)) // /personas/5
-      .mockResolvedValueOnce(jsonResponse([])) // /asistencias/persona/5
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })) // /asistencias/persona/5
       .mockResolvedValueOnce(jsonResponse([{ id: 4, estado: "ACTIVA", personaId: 5, montoAplicado: "85.00", tipoMembresiaId: 1 }])); // /membresias/mias?persona_id=5
 
     const access = makeJwt(3600);
@@ -101,10 +101,10 @@ describe("GET /api/student", () => {
       .mockResolvedValueOnce(jsonResponse([])) // /asistencias/horarios
       .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse(self)) // /personas/5
-      .mockResolvedValueOnce(jsonResponse([])) // /asistencias/persona/5
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })) // /asistencias/persona/5
       .mockResolvedValueOnce(jsonResponse([{ id: 4, estado: "ACTIVA", personaId: 5, montoAplicado: "40.00", tipoMembresiaId: 1 }])) // /membresias/mias?persona_id=5
       .mockResolvedValueOnce(jsonResponse(child)) // /personas/6
-      .mockResolvedValueOnce(jsonResponse([])) // /asistencias/persona/6
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })) // /asistencias/persona/6
       .mockResolvedValueOnce(jsonResponse([{ id: 7, estado: "ACTIVA", personaId: 6, montoAplicado: "25.00", tipoMembresiaId: 1 }])); // /membresias/mias?persona_id=6
 
     const access = makeJwt(3600);
@@ -131,13 +131,50 @@ describe("GET /api/student", () => {
     expect(body.message).toBe("No autorizado");
   });
 
+  it("reads the attendance history from the paginated envelope's items, requesting enough rows to cover the portal's window", async () => {
+    // GET /asistencias/persona/{id} now answers {items, total, skip, limit}
+    // instead of a raw array (TRA-6). The portal's own "most recent 30"
+    // window (RECENT_SESSIONS_LIMIT in student-adapter.ts) needs page 1 to
+    // actually contain the most recent sessions, so the request must ask for
+    // a limit comfortably above that, not rely on the backend's default.
+    const asistencia = {
+      id: 1,
+      fechaEntrenamiento: "2026-07-01",
+      estado: "PRESENTE",
+      justificativo: null,
+      estadoJustificativo: null,
+      personaId: 5,
+      horarioId: 1,
+    };
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse([])) // /personas/5/representados
+      .mockResolvedValueOnce(jsonResponse([])) // /asistencias/horarios
+      .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse(self)) // /personas/5
+      .mockResolvedValueOnce(jsonResponse({ items: [asistencia], total: 1, skip: 0, limit: 200 })) // /asistencias/persona/5
+      .mockResolvedValueOnce(jsonResponse([])); // /membresias/mias?persona_id=5
+
+    const access = makeJwt(3600);
+    const response = await GET(getRequest("http://localhost/api/student?personaId=5", `${ACCESS_TOKEN_COOKIE}=${access}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.self.recentSessions).toHaveLength(1);
+    expect(body.self.recentSessions[0]).toMatchObject({ fecha: "2026-07-01" });
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    const historialUrl = urls.find((url) => url.includes("/asistencias/persona/5"));
+    expect(historialUrl).toMatch(/limit=(\d+)/);
+    const limit = Number(historialUrl!.match(/limit=(\d+)/)![1]);
+    expect(limit).toBeGreaterThanOrEqual(30); // RECENT_SESSIONS_LIMIT
+  });
+
   it("returns self: null when the self persona lookup itself fails", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse([])) // /personas/5/representados
       .mockResolvedValueOnce(jsonResponse([])) // /asistencias/horarios
       .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ detail: "No encontrado" }, 404)) // /personas/5
-      .mockResolvedValueOnce(jsonResponse([])) // /asistencias/persona/5
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })) // /asistencias/persona/5
       .mockResolvedValueOnce(jsonResponse([])); // /membresias/mias?persona_id=5 (called but persona fetch failed first)
 
     const access = makeJwt(3600);

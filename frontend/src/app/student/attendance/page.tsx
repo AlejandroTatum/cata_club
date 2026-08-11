@@ -30,12 +30,12 @@
  * ## The window, and why it is stated on screen
  *
  * `buildRecentSessions` (src/lib/server/student-adapter.ts) slices the backend
- * history to its five most recent records before it reaches this client. The
- * backend itself does NOT impose that limit — `GET /asistencias/persona/{id}`
- * returns the full, unpaginated history to any authenticated caller (see
- * `AsistenciaRepositorio.listar_por_persona`) — so the cap is a frontend
- * decision, and several real students already have 13 records the portal never
- * shows. Raising `RECENT_SESSIONS_LIMIT` is all this screen needs to grow.
+ * history to its five most recent records before it reaches this client.
+ * `GET /asistencias/persona/{id}` is itself paginated now (TRA-6), but the
+ * BFF route already requests a page well above this window, so the cap
+ * remains a frontend decision — and several real students already have 13
+ * records the portal never shows. Raising `RECENT_SESSIONS_LIMIT` is all this
+ * screen needs to grow.
  *
  * Until it is raised, the page states its own scope in the footnote rather
  * than presenting five rows as if they were the whole record.

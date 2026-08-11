@@ -100,11 +100,13 @@ async def registrar_asistencia(datos: AsistenciaCreateDTO, db: Session = Depends
 # necesita para tomar asistencia).
 @router.get(
     "/persona/{persona_id}",
-    response_model=List[AsistenciaResponseDTO],
+    response_model=PaginatedResponse[AsistenciaResponseDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
 async def historial_asistencia_persona(
     persona_id: int,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
     db: Session = Depends(obtener_sesion),
 ):
@@ -115,13 +117,17 @@ async def historial_asistencia_persona(
         roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
         mensaje="No puede consultar el historial de asistencia de otra persona",
     )
-    return AsistenciaServicio(db).historial_por_persona(persona_id)
+    items, total = AsistenciaServicio(db).historial_por_persona(persona_id, skip=skip, limit=limit)
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 # --- E02-RF005: reporte de asistencia por horario, periodo o alumno --------
+# Paginado (issue #7 / TRA-6): mismo contrato skip/limit (tope 200) que
+# GET /personas/ y GET /membresias/pagos. El export a PDF de abajo llama al
+# mismo servicio SIN paginar -- ver su propio comentario.
 @router.get(
     "/reportes",
-    response_model=List[AsistenciaResponseDTO],
+    response_model=PaginatedResponse[AsistenciaResponseDTO],
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
 )
 async def reporte_asistencia(
@@ -129,13 +135,22 @@ async def reporte_asistencia(
     persona_id: Optional[int] = Query(default=None),
     fecha_inicio: Optional[date] = Query(default=None),
     fecha_fin: Optional[date] = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(obtener_sesion),
 ):
     _validar_rango_de_fechas(fecha_inicio, fecha_fin)
-    return AsistenciaServicio(db).generar_reporte(
+    servicio = AsistenciaServicio(db)
+    items = servicio.generar_reporte(
+        horario_id=horario_id, persona_id=persona_id,
+        fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+        skip=skip, limit=limit,
+    )
+    total = servicio.contar_reporte(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
     )
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 # --- Exportación a PDF del reporte de asistencia ----------------------------
@@ -242,6 +257,22 @@ async def listar_alumnos_por_horario(
         horario_id, skip=skip, limit=limit
     )
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
+
+
+# TRA-7: roster de TODOS los horarios en una sola consulta -- reemplaza las
+# 26 llamadas (una por horario, vía el endpoint de arriba) que /groups hacía
+# para armar el conteo "N inscriptos" de cada categoría. Los horarios son un
+# catálogo fijo (26 hoy, no crece con el padrón): esto consolida las
+# consultas, no cambia cuántas filas viajan. Mismo gate que su hermano
+# per-horario. Deliberadamente SIN paginar: el volumen agregado ya viajaba
+# completo hoy, solo que repartido en 26 respuestas.
+@router.get(
+    "/horarios/alumnos",
+    response_model=List[AlumnoHorarioDetalleDTO],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+)
+async def listar_roster_de_todos_los_horarios(db: Session = Depends(obtener_sesion)):
+    return AsistenciaServicio(db).listar_roster_de_todos_los_horarios()
 
 
 # Los horarios asignados a un alumno dicen dónde está y a qué hora. El portal

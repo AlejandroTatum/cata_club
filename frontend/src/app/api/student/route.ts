@@ -6,6 +6,18 @@ import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import type { BackendPersonaFull } from "@/lib/server/members-adapter";
 import type { BackendAsistencia, BackendHorario } from "@/lib/server/attendance-adapter";
+
+/**
+ * `GET /asistencias/persona/{id}` is now paginated (TRA-6). `RECENT_SESSIONS_LIMIT`
+ * (student-adapter.ts) slices to the 30 most recent sessions after a
+ * client-side sort, so page 1 must actually contain those 30 — this stays
+ * comfortably above that, same margin as `PERSONAS_PAGE_LIMIT` elsewhere.
+ */
+const HISTORIAL_PAGE_LIMIT = 200;
+
+interface PaginatedAsistencias {
+  items: BackendAsistencia[];
+}
 import {
   buildMembershipPlans,
   buildMembershipView,
@@ -35,7 +47,7 @@ async function fetchProfile(
 ): Promise<StudentProfileView | null> {
   const [personaResult, historialResult, memberships] = await Promise.all([
     backendFetchAuthed(request, `/personas/${personaId}`),
-    backendFetchAuthed(request, `/asistencias/persona/${personaId}`),
+    backendFetchAuthed(request, `/asistencias/persona/${personaId}?limit=${HISTORIAL_PAGE_LIMIT}`),
     fetchMemberships(request, personaId),
   ]);
 
@@ -52,7 +64,9 @@ async function fetchProfile(
   }
 
   const historial: BackendAsistencia[] =
-    historialResult.ok && historialResult.response.ok ? await historialResult.response.json() : [];
+    historialResult.ok && historialResult.response.ok
+      ? ((await historialResult.response.json()) as PaginatedAsistencias).items
+      : [];
   const recentSessions = buildRecentSessions(historial, horariosById);
 
   const activeMembership = memberships.find((m) => m.estado === "ACTIVA" || m.estado === "VENCIDA") ?? memberships[0] ?? null;

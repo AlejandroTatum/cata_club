@@ -71,6 +71,7 @@ const mockCrearHorario = vi.fn();
 const mockActualizarHorario = vi.fn();
 const mockEliminarHorario = vi.fn();
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
+const mockFetchRosterDeTodosLosHorarios = vi.fn().mockResolvedValue([]);
 const mockAsignarAlumnoAHorario = vi.fn();
 const mockDesasignarAlumnoDeHorario = vi.fn();
 
@@ -108,6 +109,7 @@ vi.mock("@/services/api", () => {
     actualizarHorario: (id: number, dto: unknown) => mockActualizarHorario(id, dto),
     eliminarHorario: (id: number) => mockEliminarHorario(id),
     fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
+    fetchRosterDeTodosLosHorarios: () => mockFetchRosterDeTodosLosHorarios(),
     asignarAlumnoAHorario: (dto: unknown) => mockAsignarAlumnoAHorario(dto),
     desasignarAlumnoDeHorario: (personaId: number, horarioId: number) => mockDesasignarAlumnoDeHorario(personaId, horarioId),
     fetchCategoriasCatalogo: () => mockFetchCategoriasCatalogo(),
@@ -215,8 +217,10 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
     mockFetchAlumnosPorHorario.mockReset();
+    mockFetchRosterDeTodosLosHorarios.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue([]);
   });
 
   it("renders ONE card for a categoria, not one per weekday row", async () => {
@@ -385,9 +389,10 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
   it("counts each student once across the categoria's weekdays, not once per weekday", async () => {
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
     // The same two students train Monday, Wednesday and Friday. Summing the
-    // rows would report six; the group has two.
-    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
-      Promise.resolve([alumno(10, horarioId), alumno(11, horarioId)]),
+    // rows would report six; the group has two. TRA-7: one bulk roster call
+    // (fetchRosterDeTodosLosHorarios), not one per horario.
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue(
+      RECURRING_ROWS.flatMap((row) => [alumno(10, row.id), alumno(11, row.id)]),
     );
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
@@ -404,13 +409,11 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     // guards that it stays gone even if stale/inconsistent rosters ever
     // reach the client.
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
-    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
-      Promise.resolve(
-        horarioId === 101
-          ? [alumno(10, horarioId), alumno(11, horarioId)]
-          : [alumno(10, horarioId)],
-      ),
-    );
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue([
+      alumno(10, 101), alumno(11, 101),
+      alumno(10, 102),
+      alumno(10, 103),
+    ]);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
@@ -419,19 +422,38 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     expect(screen.queryByText(/no está inscript[oa]/i)).not.toBeInTheDocument();
   });
 
-  it("omits the headcount rather than undercounting when a roster request fails", async () => {
+  it("omits the headcount rather than undercounting when the roster request fails", async () => {
+    // TRA-7 collapsed the 26 per-horario requests into one bulk call: a
+    // failure is now all-or-nothing (no card gets a count), coarser-grained
+    // than the old per-horario partial failure but the same principle —
+    // never render a false number.
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
-    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
-      horarioId === 103
-        ? Promise.reject(new Error("network"))
-        : Promise.resolve([alumno(10, horarioId)]),
+    mockFetchRosterDeTodosLosHorarios.mockRejectedValue(new Error("network"));
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    await waitFor(() => expect(mockFetchRosterDeTodosLosHorarios).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/inscripto/i)).not.toBeInTheDocument();
+  });
+
+  it("fetches the roster in one call regardless of how many schedules there are (TRA-7)", async () => {
+    // The regression this closes: card counts used to cost one request per
+    // horario (26 in production). FULL_WEEK_ROWS stands in for "many
+    // schedules" here; the fix means the count stays flat at one call.
+    mockFetchHorarios.mockResolvedValue(FULL_WEEK_ROWS);
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue(
+      FULL_WEEK_ROWS.map((row) => alumno(10, row.id)),
     );
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(3));
-    expect(screen.queryByText(/inscripto/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("1 inscripto")).toBeInTheDocument());
+    expect(mockFetchRosterDeTodosLosHorarios).toHaveBeenCalledTimes(1);
+    // The per-horario endpoint is only for the "Ver alumnos" panel of a
+    // SINGLE opened group, never for the grid's count line.
+    expect(mockFetchAlumnosPorHorario).not.toHaveBeenCalled();
   });
 
   it("has no weekday filter left — five cards do not need filtering", async () => {
