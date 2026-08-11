@@ -13,7 +13,6 @@
 
 "use client";
 
-import Link from "next/link";
 import { HelpCircle } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
@@ -122,9 +121,6 @@ export default function AyudaPage(): React.ReactElement {
             <Button variant="primary" onClick={() => openHelpChat()}>
               Preguntar al asistente
             </Button>
-            <Link href="/" className="focus-ring rounded-ctl px-4 py-2 text-sm font-semibold text-ink underline underline-offset-2">
-              Volver al inicio
-            </Link>
           </div>
         </section>
       </div>
