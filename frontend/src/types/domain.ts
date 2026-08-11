@@ -374,7 +374,14 @@ export interface PersonaBusqueda {
 // ---------------------------------------------------------------------------
 
 /** Notification type — mirrors backend's `TipoNotificacion` enum. */
-export type TipoNotificacion = "MIEMBRESIA_VENCIMIENTO_PROXIMO" | "PAGO_APROBADO" | "PAGO_RECHAZADO" | "NUEVA_INSCRIPCION";
+export type TipoNotificacion =
+  | "MIEMBRESIA_VENCIMIENTO_PROXIMO"
+  | "PAGO_APROBADO"
+  | "PAGO_RECHAZADO"
+  | "NUEVA_INSCRIPCION"
+  // INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): notice to the
+  // PREVIOUS guardian when a dependent gets linked to another account.
+  | "VINCULACION_REPRESENTANTE";
 
 /**
  * An in-app notification (`GET /ranking/notificaciones/mias`) —
