@@ -36,6 +36,7 @@ import {
   createUnauthenticatedAuth,
   createAuthenticatedAuth,
   createLoadingAuth,
+  createHydrationOutageAuth,
 } from "./test-utils";
 
 const mockUseAuth = vi.mocked(useAuth);
@@ -66,6 +67,42 @@ describe("ProtectedRoute", () => {
     expect(screen.getByText("Cargando sesión…")).toBeInTheDocument();
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  // --- Hydration outage (DSH-6) ---
+
+  it("does NOT redirect to /login when the initial session check hits an outage", () => {
+    mockUseAuth.mockReturnValue(createHydrationOutageAuth());
+
+    render(
+      <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
+    );
+
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
+
+  it("shows a retry prompt instead of silently doing nothing on outage", () => {
+    mockUseAuth.mockReturnValue(createHydrationOutageAuth());
+
+    render(
+      <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
+    );
+
+    expect(screen.getByText("No se pudo verificar tu sesión")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+  });
+
+  it("retrying calls retryHydration", () => {
+    const retryHydration = vi.fn();
+    mockUseAuth.mockReturnValue({ ...createHydrationOutageAuth(), retryHydration });
+
+    render(
+      <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
+    );
+
+    screen.getByRole("button", { name: "Reintentar" }).click();
+    expect(retryHydration).toHaveBeenCalledTimes(1);
   });
 
   // --- Unauthenticated ---
