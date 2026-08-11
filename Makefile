@@ -161,6 +161,7 @@ qa-up: ## Levantar el entorno de QA desde cero: build + base sembrada + frontend
 	@echo "  Admin:     admin@cataclub.com / admin12345"
 	@echo "  Entrenador: entrenador@cataclub.com / trainer12345"
 	@echo "  Alumnos del dataset grande: contrasenia alumno123"
+	@echo "  AVISO:     los correos no se envian en este entorno (falta el worker de Celery, QA_SERVICIOS los deja afuera a proposito para ahorrar memoria)."
 	@echo "  Destruir:  make qa-down"
 
 qa-down: ## Destruir por completo el entorno de QA (contenedores, red y datos)
