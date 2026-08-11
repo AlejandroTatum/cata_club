@@ -23,7 +23,7 @@ from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
 from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO, ComprobantePagoCreateDTO,
-    PagoListItemDTO,
+    PagoListItemDTO, PagoResponseDTO,
 )
 
 
@@ -481,6 +481,36 @@ class PagoServicio:
         )
         return pago
 
+    def _url_entrega_voucher(self, pago: Pago) -> str | None:
+        """Traduce `pago.voucher_url` (persistido) a una URL de entrega
+        vigente. Se llama SOLO desde los puntos que efectivamente responden
+        al cliente HTTP (nunca desde `obtener_pago`, reusado internamente
+        por `validar_pago`/`adjuntar_comprobante`/`adjuntar_voucher` sin
+        pasar por este chequeo), para que la firma se genere después de que
+        la autorización ya pasó, no antes."""
+        from app.infraestructura.cloudinary_cliente import resolver_url_entrega
+
+        if not pago.voucher_url:
+            return None
+        es_pdf = pago.voucher_formato == "application/pdf"
+        return resolver_url_entrega(
+            pago.voucher_url,
+            resource_type="raw" if es_pdf else "image",
+            formato="pdf" if es_pdf else None,
+        )
+
+    def pago_a_response_dto(self, pago: Pago) -> PagoResponseDTO:
+        """Punto único donde un `Pago` ORM se convierte en la respuesta HTTP:
+        reemplaza el `voucher_url` persistido (un `public_id`, o una URL
+        pública heredada de antes del fix) por una URL de entrega firmada
+        fresca. Los routers de lectura (`GET /pagos/{id}`, `GET
+        /pagos/persona/{id}`, `PATCH /pagos/{id}/validar`, `POST
+        /pagos/{id}/voucher`) deben pasar por acá en vez de devolver el
+        `Pago` directo -- devolverlo directo filtraría el `public_id` o la
+        URL heredada tal cual, sin firmar."""
+        dto = PagoResponseDTO.model_validate(pago)
+        return dto.model_copy(update={"voucher_url": self._url_entrega_voucher(pago)})
+
     def listar_pagos_de_persona(
         self,
         persona_id_objetivo: int,
@@ -547,7 +577,7 @@ class PagoServicio:
                 persona_id=p.persona_id,
                 persona_nombre_completo=f"{p.persona.nombres} {p.persona.apellidos}",
                 membresia_id=p.membresia_id,
-                voucher_url=p.voucher_url,
+                voucher_url=self._url_entrega_voucher(p),
                 voucher_formato=p.voucher_formato,
             )
             for p in pagos
@@ -794,16 +824,24 @@ class PagoServicio:
         from app.infraestructura.cloudinary_cliente import subir_voucher_pago
 
         public_id = f"voucher-pago-{pago_id:08d}"
-        url = subir_voucher_pago(
+        subir_voucher_pago(
             contenido=contenido,
             nombre_publico=public_id,
             content_type=content_type,
             pago_id=pago_id,
         )
 
+        # Se persiste el public_id, NO una URL: el voucher se sube como
+        # `type="authenticated"` (hallazgo de privacidad "voucher no
+        # enumerable"), así que la URL que devuelve el SDK no sirve para
+        # nada sin firmar. La URL de entrega se genera fresca en cada
+        # lectura autorizada -- ver `_url_entrega_voucher` /
+        # `cloudinary_cliente.resolver_url_entrega` -- para que nunca quede
+        # una firma vieja atascada en la fila.
         # voucher_formato: guardamos el content_type exacto para distinguir
-        # jpg/png/pdf en el frontend al renderizar el voucher.
-        pago.voucher_url = url
+        # jpg/png/pdf al derivar el `resource_type` de la firma y al
+        # renderizar el voucher en el frontend.
+        pago.voucher_url = public_id
         pago.voucher_formato = content_type
         pago.voucher_fecha_carga = datetime.now(timezone.utc)
 

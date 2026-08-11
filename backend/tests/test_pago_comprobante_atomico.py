@@ -441,13 +441,21 @@ def test_genera_comprobante_sin_carrera_ni_comprobante_previo(db_session, monkey
 
     resultado = ct.generar_comprobante_pdf_tarea(pago.id)
 
-    assert resultado["comprobante_url"] == url_nueva
+    # Candado del hallazgo de privacidad "voucher no enumerable": se persiste
+    # el `public_id` determinístico, NUNCA la `secure_url` pública que
+    # devuelve (acá, simula) el SDK -- ese valor solo sirve como identificador
+    # para volver a firmar la URL de entrega en cada lectura autorizada (ver
+    # `cloudinary_cliente.resolver_url_entrega`), nunca se guarda tal cual.
+    esperado = f"comprobante-{pago.id:08d}"
+    assert resultado["comprobante_url"] == esperado
+    assert resultado["comprobante_url"] != url_nueva
     comprobante = (
         db_session.query(ComprobantePago)
         .filter(ComprobantePago.pago_id == pago.id)
         .one()
     )
-    assert comprobante.archivo_url == url_nueva
+    assert comprobante.archivo_url == esperado
+    assert comprobante.archivo_url != url_nueva
 
 
 # --- 5. Carrera de inserción de comprobante (bug 3) -------------------------

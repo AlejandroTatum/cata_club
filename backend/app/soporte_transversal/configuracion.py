@@ -196,6 +196,14 @@ _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
     ),
     "cloudinary_carpeta_vouchers": "idem carpeta de comprobantes: nombre de carpeta, no un secreto",
     "cloudinary_carpeta_fotos_perfil": "idem carpeta de comprobantes: nombre de carpeta, no un secreto",
+    "cloudinary_auth_token_key": (
+        "opcional: habilita vencimiento real en las URLs firmadas de "
+        "comprobantes/vouchers (token-based authentication de Cloudinary), "
+        "pero sin ella el código ya degrada con seguridad a una URL firmada "
+        "sin vencimiento (ver cloudinary_cliente.generar_url_firmada); "
+        "exigirla en producción bloquearía despliegues que todavía no "
+        "habilitaron esa función opcional en la cuenta de Cloudinary"
+    ),
     "smtp_port": "int con default 587; el compose lo fija por despliegue y no puede quedar vacío",
     "smtp_user": _RAZON_SMTP_SIN_AUTENTICACION,
     "smtp_password": _RAZON_SMTP_SIN_AUTENTICACION,
@@ -426,6 +434,12 @@ class Settings(BaseSettings):
     cloudinary_carpeta_vouchers: str = "cataclub/vouchers"
     # carpeta separada para las fotos de perfil self-service de cada Persona
     cloudinary_carpeta_fotos_perfil: str = "cataclub/fotos_perfil"
+    # Clave de "token-based authentication" (Cloudinary Console > Settings >
+    # Security), DISTINTA de cloudinary_api_secret. Habilita el vencimiento
+    # real de las URLs firmadas de comprobantes/vouchers (ver
+    # `cloudinary_cliente.generar_url_firmada`); sin ella, la URL queda
+    # firmada pero sin vencimiento -- ver docs/fixes/16-voucher-no-enumerable.md.
+    cloudinary_auth_token_key: str = ""
 
     # --- Correo / SMTP (envío transaccional) ---
     smtp_host: str = ""                       # ej. smtp.gmail.com, smtp.sendgrid.net o mailpit

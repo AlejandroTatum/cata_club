@@ -288,18 +288,22 @@ async def registrar_pago(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    return PagoServicio(db).registrar_pago(
+    servicio = PagoServicio(db)
+    pago = servicio.registrar_pago(
         datos,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
     )
+    return servicio.pago_a_response_dto(pago)
 
 
 @router.patch("/pagos/{pago_id}/validar", response_model=PagoResponseDTO,
               dependencies=[Depends(GestorPermisos(ROL_ADMIN))])
 @limiter.limit("20/minute")
 async def validar_pago(request: Request, pago_id: int, datos: PagoValidarDTO, db: Session = Depends(obtener_sesion)):
-    return PagoServicio(db).validar_pago(pago_id, datos)
+    servicio = PagoServicio(db)
+    pago = servicio.validar_pago(pago_id, datos)
+    return servicio.pago_a_response_dto(pago)
 
 
 @router.get(
@@ -312,11 +316,13 @@ async def obtener_pago(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    return PagoServicio(db).obtener_pago(
+    servicio = PagoServicio(db)
+    pago = servicio.obtener_pago(
         pago_id,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
     )
+    return servicio.pago_a_response_dto(pago)
 
 
 # Historial de pagos de una persona (cualquier estado). Autenticado, NO
@@ -335,11 +341,13 @@ async def listar_pagos_de_persona(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    return PagoServicio(db).listar_pagos_de_persona(
+    servicio = PagoServicio(db)
+    pagos = servicio.listar_pagos_de_persona(
         persona_id_objetivo=persona_id,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
     )
+    return [servicio.pago_a_response_dto(p) for p in pagos]
 
 
 # --- ComprobantePago (PDF oficial generado por Celery al aprobar) ---
@@ -371,7 +379,8 @@ async def subir_voucher(
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
     contenido = await leer_con_limite(archivo, TAMANO_MAXIMO_VOUCHER_BYTES)
-    return PagoServicio(db).adjuntar_voucher(
+    servicio = PagoServicio(db)
+    pago = servicio.adjuntar_voucher(
         pago_id=pago_id,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
@@ -379,3 +388,4 @@ async def subir_voucher(
         content_type=archivo.content_type,
         nombre_archivo=archivo.filename,
     )
+    return servicio.pago_a_response_dto(pago)

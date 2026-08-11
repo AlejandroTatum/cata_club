@@ -76,7 +76,7 @@ _FAKE_URL_PDF = "https://res.cloudinary.com/test/raw/upload/voucher-fake.pdf"
     "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
     return_value=_FAKE_URL_JPG,
 )
-def test_subir_voucher_jpg_a_pago_pendiente_devuelve_201(_mock_cloudinary, client):
+def test_subir_voucher_jpg_a_pago_pendiente_devuelve_201(_mock_cloudinary, client, db_session):
     persona = _crear_persona(client)
     tipo = _crear_tipo_membresia(client)
     membresia = _crear_membresia(client, persona["id"], tipo["id"])
@@ -92,9 +92,24 @@ def test_subir_voucher_jpg_a_pago_pendiente_devuelve_201(_mock_cloudinary, clien
 
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["voucherUrl"] == _FAKE_URL_JPG
+    # Candado del hallazgo de privacidad "voucher no enumerable": la URL que
+    # ve el cliente NO es la `secure_url` que devolvió el SDK al subir (esa
+    # URL corresponde a un recurso `type="authenticated"`, no sirve sin
+    # firmar) -- es una URL de entrega firmada, generada recién al responder.
+    assert body["voucherUrl"] != _FAKE_URL_JPG
+    assert "/authenticated/" in body["voucherUrl"]
+    assert "voucher-pago-" in body["voucherUrl"]
     assert body["voucherFormato"] == "image/jpeg"
     assert body["voucherFechaCarga"] is not None
+
+    # Verificación directa en Postgres (no solo la respuesta HTTP): la
+    # columna `voucher_url` guarda el `public_id`, NUNCA la `secure_url`
+    # pública que devolvió (acá, simuló) el SDK.
+    from app.dominio.modelos import Pago
+    fila = db_session.get(Pago, pago["id"])
+    assert fila.voucher_url == f"voucher-pago-{pago['id']:08d}"
+    assert fila.voucher_url != _FAKE_URL_JPG
+    assert not fila.voucher_url.startswith("http")
 
 
 @patch(
@@ -116,7 +131,52 @@ def test_subir_voucher_pdf_a_pago_pendiente_devuelve_201(_mock_cloudinary, clien
     )
 
     assert resp.status_code == 201, resp.text
-    assert resp.json()["voucherFormato"] == "application/pdf"
+    body = resp.json()
+    assert body["voucherFormato"] == "application/pdf"
+    assert body["voucherUrl"] != _FAKE_URL_PDF
+    assert "/authenticated/" in body["voucherUrl"]
+    assert body["voucherUrl"].endswith(".pdf")
+
+
+def test_subir_voucher_tras_fallo_de_cloudinary_permite_reintentar(client, db_session):
+    """El flujo que el fix no puede romper: si la subida a Cloudinary falla
+    (503), el pago queda SIN voucher (la fila nunca llega a `pago.voucher_url
+    = ...`) para que la fila de pagos del alumno lo muestre marcado, con
+    botón para volver a intentar. Un segundo intento, ya sin el fallo, debe
+    poder completarse con éxito."""
+    from app.dominio.excepciones import ServicioNoDisponible
+    from app.dominio.modelos import Pago
+
+    persona = _crear_persona(client, cedula="1710034131")
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+    _autenticar_como_duenio(client, persona["id"])
+    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+
+    with patch(
+        "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
+        side_effect=ServicioNoDisponible("Cloudinary caído"),
+    ):
+        resp_fallo = client.post(
+            f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+            files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
+        )
+    assert resp_fallo.status_code == 503
+
+    fila = db_session.get(Pago, pago["id"])
+    assert fila.voucher_url is None
+
+    with patch(
+        "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
+        return_value=_FAKE_URL_JPG,
+    ):
+        resp_reintento = client.post(
+            f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+            files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
+        )
+    assert resp_reintento.status_code == 201, resp_reintento.text
+    assert resp_reintento.json()["voucherUrl"] is not None
 
 
 def test_subir_voucher_a_pago_no_pendiente_da_400(client):

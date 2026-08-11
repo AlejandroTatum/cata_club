@@ -121,6 +121,26 @@ def _mock_disparo_celery_comprobante(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _cloudinary_credenciales_de_prueba(monkeypatch):
+    """Fija credenciales Cloudinary FALSAS pero no vacías para toda la
+    suite. Nunca tocan la red -- `cloudinary.uploader.upload`/`.destroy` ya
+    se mockean en cada test que sube algo -- pero SÍ hacen falta para que
+    `cloudinary.utils.cloudinary_url(..., sign_url=True)` pueda firmar
+    localmente (hallazgo de privacidad "voucher no enumerable": la URL de
+    entrega de un voucher/comprobante se firma en cada lectura autorizada,
+    ver `PagoServicio.pago_a_response_dto` / `cloudinary_cliente.
+    generar_url_firmada`). Sin esto, cualquier test que lea un pago con
+    voucher explota con `ValueError: Must supply api_secret` -- el mismo
+    error que tendría producción sin configurar, que
+    `_CAMPOS_PRODUCCION_CRITICOS` ya exige (así que esto solo iguala a la
+    suite con esa garantía de producción, no la relaja)."""
+    import app.soporte_transversal.configuracion as configuracion_mod
+    monkeypatch.setattr(configuracion_mod.settings, "cloudinary_cloud_name", "test-cloud")
+    monkeypatch.setattr(configuracion_mod.settings, "cloudinary_api_key", "123456789012345")
+    monkeypatch.setattr(configuracion_mod.settings, "cloudinary_api_secret", "clave-de-prueba-no-real")
+
+
+@pytest.fixture(autouse=True)
 def _reiniciar_circuitos_breaker():
     """Resetea el estado de los circuit breakers en memoria entre tests
     (degradacion-controlada, slices 2 y 3): el estado vive en una única
