@@ -62,6 +62,16 @@ export interface BackendPagoCore {
   membresiaId: number;
   voucherUrl?: string | null;
   voucherFormato?: string | null;
+  /**
+   * Only present on `PagoResponseDTO` (the PATCH .../validar response), not
+   * on `PagoListItemDTO` (the queue list). `true` means the approve/reject
+   * itself succeeded — `estadoPago` above is final — but the in-app
+   * notification to the student/guardian could not be created. Surfaced so
+   * the admin sees the truth instead of a plain 200 (hallazgo en vivo,
+   * 2026-08-11: before this, a failed notification meant an uncaught 500
+   * with the decision already committed).
+   */
+  avisoNoEnviado?: boolean;
 }
 
 /** `PagoListItemDTO` — the queue list adds the student's name (denormalized server-side; not present on `PagoResponseDTO`). */
@@ -158,6 +168,12 @@ export function buildPaymentValidationRequest(
     validatedAt: pago.fechaValidacion ?? undefined,
     startDate: pago.fechaInicio,
     endDate: pago.fechaFin,
+    // Omitted (not `false`) in the ordinary case on purpose: this field is
+    // only meaningful right after a PUT /api/payments/[id], and adding a
+    // `false` to every row of the queue list (GET /api/payments, which
+    // reuses this same builder) would change that endpoint's shape for
+    // every consumer for no reason.
+    ...(pago.avisoNoEnviado ? { notificationDeliveryFailed: true as const } : {}),
   };
 }
 

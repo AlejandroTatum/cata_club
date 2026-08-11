@@ -11,6 +11,7 @@ Correcciones aplicadas respecto al diagrama original:
 - FichaMedica <-> Enfermedades: 0..*         (antes 1..* obligaba mínimo una enfermedad registrada)
 - Se agrega FK directa Pago -> Persona (estaba en el código base pero faltaba en el diagrama)
 """
+import logging
 from datetime import datetime, date, time, timezone
 from decimal import Decimal
 from typing import List, Optional
@@ -20,7 +21,9 @@ from sqlalchemy import (
     CheckConstraint, Index, UniqueConstraint, text,
     Enum as SAEnum,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
+
+_log = logging.getLogger("cataclub.dominio.modelos")
 
 from app.dominio.enums import (
     TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
@@ -662,9 +665,20 @@ class Notificacion(Base):
         Index("ix_notificacion_persona_id", "persona_id"),
     )
 
+    # Ancho real, no un número elegido al azar. El peor caso conocido con los
+    # anchos actuales de columna es un rechazo de pago: hasta 255 caracteres
+    # de motivo (tope de `PagoValidarDTO.motivo_rechazo`) reenviados al
+    # representante con el nombre completo del alumno por delante (hasta 100
+    # + 100 de `Persona.nombres`/`apellidos`) -- unos 488 caracteres. 500 deja
+    # margen sin convertir la columna en un campo sin límite real (hallazgo en
+    # vivo, 2026-08-11: con el VARCHAR(255) anterior, un rechazo con nota de
+    # ~230+ caracteres hacía que el INSERT de esta fila tirara un `DataError`
+    # DESPUÉS de que el rechazo del pago ya estaba commiteado en Postgres).
+    MENSAJE_MAX = 500
+
     id: Mapped[int] = mapped_column(primary_key=True)
     tipo: Mapped[TipoNotificacion] = mapped_column(SAEnum(TipoNotificacion))
-    mensaje: Mapped[str] = mapped_column(String(255))
+    mensaje: Mapped[str] = mapped_column(String(MENSAJE_MAX))
     leida: Mapped[bool] = mapped_column(Boolean, default=False)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
     # Id de la entidad relacionada (ej. la Membresia o el Pago que originó
@@ -674,6 +688,26 @@ class Notificacion(Base):
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     persona: Mapped["Persona"] = relationship(back_populates="notificaciones")
+
+    @validates("mensaje")
+    def _recortar_mensaje(self, key: str, value: str) -> str:
+        """Último resorte, no la estrategia: cada sitio que arma un mensaje ya
+        acorta lo que le agrega (nombres de persona, ver
+        `notificacion_servicio.acortar_nombre_para_notificacion`) para que la
+        columna nunca tenga que enterarse. Esto atrapa lo que ese cuidado no
+        previó -- de cualquier escritor presente o futuro, incluidos los que
+        no pasan por `NotificacionRepositorio` (ej. `alertas_tareas.py`, que
+        hace `db.add_all(...)` directo) -- así un mensaje inesperadamente
+        largo se recorta con un aviso en el log en vez de tirar el
+        `DataError` post-commit que motivó este candado."""
+        if value is not None and len(value) > self.MENSAJE_MAX:
+            _log.warning(
+                "Notificacion.mensaje recortado de %d a %d caracteres (tipo=%s, persona_id=%s)",
+                len(value), self.MENSAJE_MAX,
+                getattr(self, "tipo", None), getattr(self, "persona_id", None),
+            )
+            return value[: self.MENSAJE_MAX - 1].rstrip() + "…"
+        return value
 
 
 # ---------------------------------------------------------------------------

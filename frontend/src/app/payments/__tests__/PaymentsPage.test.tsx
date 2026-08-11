@@ -653,6 +653,29 @@ describe("PaymentsPage — rejection", () => {
       screen.getByText(/María Pérez va a recibir este motivo tal cual/),
     ).toBeInTheDocument();
   });
+
+  // Hallazgo en vivo, 2026-08-11: this field had no client-side limit, so a
+  // long note only ever discovered the backend's cap by crashing a request
+  // that had already committed the rejection. The field now caps input and
+  // shows the count live instead of letting the admin find the wall by
+  // hitting it.
+  it("caps the rejection note and shows a live character count", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    fireEvent.click(await screen.findByRole("button", { name: /rechazar pago/i }));
+
+    const nota = screen.getByLabelText(/nota para el responsable/i) as HTMLTextAreaElement;
+    expect(nota).toHaveAttribute("maxLength", "200");
+    expect(screen.getByText("0/200")).toBeInTheDocument();
+
+    fireEvent.change(nota, { target: { value: "x".repeat(250) } });
+
+    // The DOM's own `maxLength` clamps a direct `.value` assignment too, so
+    // this also guards against a future change that types the counter off
+    // the constant instead of reading it.
+    expect(nota.value).toHaveLength(200);
+    expect(screen.getByText("200/200")).toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
