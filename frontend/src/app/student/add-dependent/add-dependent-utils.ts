@@ -150,6 +150,36 @@ function nameRule(value: string, subject: string): string | null {
   return NAME_PATTERN.test(trimmed) ? null : `${subject} solo pueden contener letras y espacios.`;
 }
 
+/**
+ * Real domain limits (`EDAD_MINIMA_ALUMNO` / `EDAD_MAXIMA_ALUMNO` in
+ * `backend/app/servicios_negocio/persona_servicio.py`), not the category
+ * age-range copy — that one is orientation only, not a rule (INS-6b). This
+ * mirrors the backend check on the client so an impossible birth date (the
+ * audited case: 226 years) is caught on step 1, where it's typed, instead of
+ * at final submit after three more steps of data entry.
+ */
+const EDAD_MINIMA_ALUMNO = 5;
+const EDAD_MAXIMA_ALUMNO = 74;
+
+/**
+ * Age in whole years from an already-validated "YYYY-MM-DD" string.
+ *
+ * Deliberately does NOT bound the input year the way `enroll-utils.ts`'s
+ * `calculateAge` does (it caps at 1900 and returns `NaN` outside that range):
+ * an implausibly old year like 1800 is exactly the audited case this rule
+ * exists to catch, so it must still produce a real (large) number instead of
+ * silently opting out of the check.
+ */
+function edadDesdeFecha(value: string): number {
+  const [year, month, day] = value.split("-").map(Number);
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - year;
+  const antesDelCumple =
+    hoy.getMonth() + 1 < month || (hoy.getMonth() + 1 === month && hoy.getDate() < day);
+  if (antesDelCumple) edad -= 1;
+  return edad;
+}
+
 /** Ecuadorian numbers run 7 (landline) to 10 (mobile) digits. */
 function phoneRule(value: string, subject: string): string | null {
   if (!value.trim()) return `${subject} es obligatorio.`;
@@ -166,6 +196,10 @@ const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) =
     if (!d.fechaNacimiento) return "La fecha de nacimiento es obligatoria.";
     if (!isValidDate(d.fechaNacimiento)) return "La fecha de nacimiento ingresada no es válida.";
     if (isFutureDate(d.fechaNacimiento)) return "La fecha de nacimiento no puede ser en el futuro.";
+    const edad = edadDesdeFecha(d.fechaNacimiento);
+    if (edad < EDAD_MINIMA_ALUMNO || edad > EDAD_MAXIMA_ALUMNO) {
+      return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${edad}).`;
+    }
     return null;
   },
   cedula: (d) => {
