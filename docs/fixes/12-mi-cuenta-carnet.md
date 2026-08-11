@@ -13,6 +13,9 @@
   - `6391768` — fix(student): stop the carnet from stretching and the franja splitting
     (corrección 12b, ver más abajo — dos defectos visuales encontrados revisando
     la implementación contra capturas reales)
+  - `17d143b` — fix(student): match the carnet screen to the chosen maquette's layout
+    (corrección 12c, ver más abajo — la maqueta es la especificación, no una
+    referencia a interpretar)
 
 ## El problema
 
@@ -110,6 +113,70 @@ vez), así que había que resolverlo. Cada horario ahora vive en su propio
 `<span className="whitespace-nowrap">`; el único punto donde el navegador
 puede cortar la línea es el " · " entre dos horarios, nunca adentro de uno.
 
+## Corrección 12c — la maqueta es la especificación, no una referencia
+
+Después de 12b, el dueño la miró contra el prototipo y dijo lo que las dos
+pasadas anteriores no habían hecho: *«pero fijate en el prototipo, si decido
+eso, pues debería verse igual»*. Tenía razón — las dos correcciones previas
+habían arreglado síntomas (el estirado, el wrap de la franja) sin volver a
+mirar la maqueta que se había elegido, y el hueco que perseguían era, en el
+fondo, un problema de proporción que ninguna de las dos tocó.
+
+Comparando el HTML/CSS real de la maqueta (Propuesta 2) contra la
+implementación, elemento por elemento:
+
+1. **Las columnas.** La maqueta dibuja el split de escritorio como
+   `grid-template-columns: 1fr 1fr` — parejas. La implementación reusaba el
+   riel de 340px de `PAGE_RAIL` sin modificar, dejando el carnet en unos tres
+   cuartos del ancho de la fila y el riel en un cuarto. Esta es la causa real
+   del hueco perseguido en fix 12 y 12b: con el carnet tres veces más ancho
+   que lo que su grilla de cuatro datos necesita, cualquier ajuste de altura
+   solo movía el vacío de lugar (adentro del carnet en 12, debajo en la
+   versión sin estirar). **Corregido**: un override local sobre `PAGE_RAIL`
+   (`lg:!grid-cols-[minmax(0,1fr)_minmax(0,1fr)]`, el mismo mecanismo de
+   `!important` que 12b ya usó y luego retiró para el estirado — la técnica
+   estaba bien, esa aplicación no).
+2. **La fila del próximo entrenamiento.** La maqueta la resalta con un fondo
+   distinto (`.row.next`). La implementación solo la distinguía con la
+   insignia «Hoy», que no es lo mismo: solo aparece cuando esa sesión cae en
+   el día de hoy, no cuando es simplemente la más próxima de la semana.
+   **Corregido**: la primera fila (la más próxima, sea o no «hoy») ahora
+   lleva `bg-sunken`. La insignia «Hoy» se mantiene además — es un dato real
+   que la maqueta no contradice, solo no alcanza a distinguir la fila por sí
+   sola.
+3. **La grilla de datos del carnet.** La maqueta la dibuja al ancho completo
+   de la tarjeta. La implementación la limitaba a `sm:max-w-[360px]`, una
+   medida heredada de cuando el carnet era la columna "ancha" de ~1000px de
+   fix 12. Con las columnas ya parejas (~660px cada una), ese límite dejaba
+   una franja vacía a la derecha **adentro** del propio carnet — el mismo
+   defecto que 12b ya había cerrado una vez (el vacío interno), mudado de
+   lugar otra vez. **Corregido**: se quitó el límite.
+
+### Diferencias evaluadas y mantenidas a propósito
+
+- **La banda de estado que cambia de peso** (franja completa con ícono para
+  urgente/neutral, píldora chica solo para «al día») en vez de la píldora
+  `.chip` fija que la maqueta usa para todos los casos: no es un olvido, es
+  la decisión ya documentada arriba en "El problema anotado en la maqueta" —
+  resuelve el propio costo que la maqueta anota («pesa mucho cuando no hay
+  nada que resolver»), aprobada como parte de la implementación original.
+- **El espaciado entre bloques** (`gap-page`, 20px) en vez de los 12px del
+  boceto: son los tokens de espaciado del sistema de diseño del proyecto
+  (documentados en `layout.ts`), no un pixel suelto de la maqueta — cae bajo
+  la misma excepción que ya cubre colores y tipografía.
+- **La frase de resumen de asistencia** al pie de «Esta semana» («asistió a
+  X de N sesiones» + el enlace «Ver mis asistencias»): la maqueta de
+  Propuesta 2 no la dibuja (solo pone un enlace «Asistencias» en el título de
+  la tarjeta), pero es un dato real que la pantalla ya mostraba antes de esta
+  corrección, y la maqueta no lo prohíbe — no es el defecto que se está
+  corrigiendo acá, así que se dejó como estaba.
+
+*(Un encargo intermedio de esta misma corrección había pedido agregar una
+tarjeta de asistencia con una barra debajo del carnet, para llenar el hueco.
+Se retiró antes de implementarla al identificar que el hueco era la
+proporción de columnas, no la falta de contenido — la maqueta elegida no
+dibuja esa tarjeta, así que no se agregó.)*
+
 ## El candado
 
 `StudentPage — the carnet earns its space when the cuota is up to date` en
@@ -148,6 +215,30 @@ ambos estados, el test se pone rojo.
       Tests  39 passed (39)
 ```
 
+**Candados de la corrección 12c**, mismo archivo:
+
+- `StudentPage — the carnet and the rail split the row evenly > matches the
+  chosen maquette's 1fr/1fr desktop grid instead of a 340px rail` — la fila
+  que contiene el carnet lleva el override `lg:!grid-cols-[minmax(0,1fr)_minmax(0,1fr)]`.
+  Si alguien lo retira y vuelve al riel de 340px, el test se pone rojo.
+- `StudentPage — próximos entrenamientos > highlights the nearest session's
+  row instead of only badging it 'Hoy'` — la primera fila de "Esta semana"
+  (la más próxima) lleva `bg-sunken`; las siguientes no. Corre con la hora
+  real del sistema, sin `Date` simulado, para probar que el resaltado sigue
+  la posición y no una coincidencia de fecha.
+- `StudentPage — the club membership card (carnet) > lets the facts grid
+  fill the carnet's real width instead of capping at the old wide-column
+  measure` — la grilla de datos ya no lleva `sm:max-w-[360px]`.
+
+```
+✓ StudentPage — the club membership card (carnet) > lets the facts grid fill the carnet's real width instead of capping at the old wide-column measure
+✓ StudentPage — próximos entrenamientos > highlights the nearest session's row instead of only badging it 'Hoy'
+✓ StudentPage — the carnet and the rail split the row evenly > matches the chosen maquette's 1fr/1fr desktop grid instead of a 340px rail
+
+ Test Files  1 passed (1)
+      Tests  42 passed (42)
+```
+
 ## La prueba
 
 ![después — cuota vencida](img/12-mi-cuenta-despues-vencida-1440x900.png)
@@ -155,17 +246,31 @@ ambos estados, el test se pone rojo.
 ![después — cuota vencida, teléfono](img/12-mi-cuenta-despues-vencida-390x844.png)
 ![después — al día, teléfono](img/12-mi-cuenta-despues-al-dia-390x844.png)
 
-Las cuatro capturas son de la corrección 12b, sacadas contra un backend
+Las cuatro capturas son de la corrección 12c, sacadas contra un backend
 propio levantado desde este worktree apuntando a la base de QA compartida
-(ver la nota al final). Reemplazan a las de la pasada anterior, que mostraban
-el defecto que esta corrección cierra.
+(ver la nota al final). Reemplazan a las de 12b, que mostraban el carnet a
+tres cuartos del ancho de la fila.
 
-Lo que se ve ahora: el carnet termina justo debajo de su grid de datos —
-altura natural, sin canvas vacío adentro — y en «cuota vencida» la «Franja»
-con dos horarios (15:00 — 16:00 y 20:00 — 21:15) envuelve entre un horario y
-el otro, nunca partiendo un horario por la mitad. La banda sigue cambiando de
-peso según haya algo que resolver, y en «al día» la tarjeta Cuota se
-mantiene comprimida a una línea.
+Lo que se ve ahora, comparado contra la maqueta: el carnet y la columna
+derecha (Cuota + Esta semana) miden prácticamente lo mismo de ancho — en
+1440px, ambos rondan los 565px, dejando un margen de menos de 10px entre sí
+y el mismo margen respecto de los bordes del área de contenido. La grilla de
+cuatro datos del carnet («Socio desde / Plan / Franja / Valor mensual») ya no
+deja una franja vacía a la derecha: llena el ancho de la tarjeta en dos
+columnas parejas, igual que `.carnet .grid` en la maqueta. En «cuota
+vencida», la fila «Martes · Hoy · 15:00 — 16:00» (la más próxima) tiene un
+fondo gris claro que la distingue de las dos filas siguientes — el mismo
+resalte que `.row.next` usa en la maqueta. La «Franja» con dos horarios
+(15:00 — 16:00 y 20:00 — 21:15) sigue envolviendo entre un horario y el
+otro, nunca partiendo uno por la mitad (candado de 12b, intacto). La banda
+sigue cambiando de peso según haya algo que resolver, y en «al día» la
+tarjeta Cuota se mantiene comprimida a una línea.
+
+Debajo del carnet queda un margen de página normal cuando la columna derecha
+es más alta (el caso «al día», donde el carnet es más corto sin la banda
+completa) — canvas de página, sin borde propio, del mismo tipo que cualquier
+columna corta deja (ver `PAGE_RAIL`, `layout.ts`), no el hueco con borde que
+esta corrección existe para cerrar.
 
 *(Las capturas "representante con 4 hijos" y "alumna autogestionada" de la
 pasada anterior no se regeneraron — no estaban en el alcance de esta
@@ -230,3 +335,8 @@ en `route.ts`), y lo revertí antes de terminar — `git diff` contra
 `origin/main` en ese archivo da vacío. No lo dejé en la rama porque es
 exactamente el archivo que `fix/rendimiento` está tocando; avisé en vez de
 resolverlo.
+
+La corrección 12c repitió el mismo parche local, sin commitear, para sacar
+sus propias cuatro capturas contra el mismo backend de QA — el bug sigue sin
+tocar la rama que lo va a resolver, y `git diff` contra `origin/main` en
+`route.ts` vuelve a dar vacío al terminar.
