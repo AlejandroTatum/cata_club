@@ -17,9 +17,10 @@ import {
   cargarCategorias,
   diasPermitidos,
   horarioDe,
-  CATEGORIA_OPTIONS,
   type Categoria,
 } from "@/services/categorias";
+
+const CATEGORIAS_FIJAS = ["FORMATIVO", "INFANTIL", "JUVENIL", "COMPETITIVO", "ADULTOS"];
 
 function okResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -56,10 +57,6 @@ describe("cargarCategorias", () => {
     expect(global.fetch).toHaveBeenCalledWith("/api/attendance/categories", expect.anything());
   });
 
-  it("defines exactly the 5 fixed categories", () => {
-    expect(CATEGORIA_OPTIONS).toEqual(["FORMATIVO", "INFANTIL", "JUVENIL", "COMPETITIVO", "ADULTOS"]);
-  });
-
   it("gives FORMATIVO the confirmed time range and Lun-Vie days", async () => {
     const categorias = await cargarCategorias();
     expect(categorias.FORMATIVO).toEqual({
@@ -90,12 +87,13 @@ describe("cargarCategorias", () => {
     });
   });
 
-  it("ignores a catalog entry whose código isn't one of the 5 known categorías", async () => {
+  it("keeps a catalog entry whose código isn't one of the 5 original categorías (M1: the set is open)", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
-      okResponse([...CATALOGO, { codigo: "DESCONOCIDA", label: "?", horaInicio: "00:00", horaFin: "01:00", dias: [] }]),
+      okResponse([...CATALOGO, { codigo: "BEGINNERS", label: "Principiantes", horaInicio: "00:00", horaFin: "01:00", dias: [] }]),
     );
     const categorias = await cargarCategorias();
-    expect(Object.keys(categorias).sort()).toEqual(CATEGORIA_OPTIONS.slice().sort());
+    expect(Object.keys(categorias).sort()).toEqual([...CATEGORIAS_FIJAS, "BEGINNERS"].sort());
+    expect(categorias.BEGINNERS).toEqual({ label: "Principiantes", horaInicio: "00:00", horaFin: "01:00", dias: [] });
   });
 });
 
