@@ -52,6 +52,29 @@ describe("validateCrearCuentaForm — ENTRENADOR", () => {
   });
 });
 
+// Auditoría 2026-08-10: 1700-01-01 (326 años) se aceptaba sin aviso para
+// JUGADOR/REPRESENTANTE/ENTRENADOR. La causa era que `calculateAge` (la
+// misma que usa `/student/enroll`) devuelve NaN fuera de 1900-2200 -- y
+// `NaN < 18` es `false`, así que la comprobación de "menor de edad" nunca
+// disparaba. El candado usa una edad real (no capada), como ya hace
+// `add-dependent-utils.ts::edadDesdeFecha` para el mismo bug en MENOR.
+describe("validateCrearCuentaForm — edad imposible (326 años)", () => {
+  it.each<AccountType>(["JUGADOR", "REPRESENTANTE", "ENTRENADOR"])(
+    "rejects %s born in 1700",
+    (accountType) => {
+      const errors = validateCrearCuentaForm(form({ accountType, fechaNacimiento: "1700-01-01" }));
+      expect(errors.join(" ")).toMatch(/74/);
+    },
+  );
+
+  it("rejects a MENOR born in 1700 too, not just adults", () => {
+    const errors = validateCrearCuentaForm(
+      form({ accountType: "MENOR", fechaNacimiento: "1700-01-01", representanteId: 1 }),
+    );
+    expect(errors).not.toEqual([]);
+  });
+});
+
 describe("AccountType", () => {
   it("covers the four account types the backend accepts", () => {
     const todos: AccountType[] = ["JUGADOR", "REPRESENTANTE", "MENOR", "ENTRENADOR"];
