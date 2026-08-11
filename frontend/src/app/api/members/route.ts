@@ -32,6 +32,35 @@ interface PaginatedPagos {
 
 interface PaginatedMembresias {
   items: BackendMembresia[];
+  total: number;
+}
+
+type MembresiasFetchResult =
+  | { ok: true; items: BackendMembresia[] }
+  | { ok: false };
+
+/**
+ * `GET /membresias/` is paginated at the backend (tope 200) — a single call
+ * silently truncates once the club has more than 200 membership rows, which
+ * happens well before it has 200 PERSONAS: a membership accumulates per
+ * persona over time (vencida, inactiva, la activa), so the membership table
+ * outgrows the persona table. `personasCapped` (below) would stay false
+ * while a real chunk of the membership map was already gone — a swallowed
+ * truncation must never render as a confident membership-less student, same
+ * principle as `membresiasDegraded`. This loops every page instead.
+ */
+async function fetchAllMembresias(request: NextRequest): Promise<MembresiasFetchResult> {
+  const items: BackendMembresia[] = [];
+  let skip = 0;
+  while (true) {
+    const result = await backendFetchAuthed(request, `/membresias/?skip=${skip}&limit=${MEMBRESIAS_PAGE_LIMIT}`);
+    if (!result.ok || !result.response.ok) return { ok: false };
+    const page = (await result.response.json()) as PaginatedMembresias;
+    items.push(...page.items);
+    if (page.items.length < MEMBRESIAS_PAGE_LIMIT || items.length >= page.total) break;
+    skip += MEMBRESIAS_PAGE_LIMIT;
+  }
+  return { ok: true, items };
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -44,10 +73,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   const personasBody = (await personasResult.response.json()) as PaginatedPersonas;
 
-  const [pagosResult, tiposResult, membresiasResult] = await Promise.all([
+  const [pagosResult, tiposResult, membresiasFetch] = await Promise.all([
     backendFetchAuthed(request, "/membresias/pagos?limit=200"),
     backendFetchAuthed(request, "/membresias/tipos"),
-    backendFetchAuthed(request, `/membresias/?limit=${MEMBRESIAS_PAGE_LIMIT}`),
+    fetchAllMembresias(request),
   ]);
 
   const pagos: BackendPagoListItem[] =
@@ -64,19 +93,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   /*
-   * Memberships are resolved with a single `GET /membresias/` call — same
-   * pattern `enrichBackendPagos` already uses for `/payments` (see
-   * payments-adapter.ts). The N individual `/membresias/{id}` /
+   * Memberships are resolved from `GET /membresias/`, paged in full (see
+   * `fetchAllMembresias`) — same looping pattern `/api/attendance/records`
+   * uses for TRA-6. The N individual `/membresias/{id}` /
    * `/membresias/persona/{id}` lookups this route used to make (one batch of
    * requests per unique membership, another per persona without a payment —
    * ~120 calls for 59 students) existed to work around `GET /membresias/`
    * answering 500. That bug is fixed; the bulk list now carries `personaId`
-   * on every row, so both maps below come from the one response.
+   * on every row, so both maps below come from the same paged fetch.
    */
-  const membresiasDegraded = !(membresiasResult.ok && membresiasResult.response.ok);
-  const membresias: BackendMembresia[] = membresiasDegraded
-    ? []
-    : ((await membresiasResult.response.json()) as PaginatedMembresias).items;
+  const membresiasDegraded = !membresiasFetch.ok;
+  const membresias: BackendMembresia[] = membresiasFetch.ok ? membresiasFetch.items : [];
 
   const membresiaById = new Map<number, BackendMembresia>();
   const membresiasByPersona = new Map<number, BackendMembresia[]>();

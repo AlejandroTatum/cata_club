@@ -136,7 +136,7 @@ describe("GET /api/members", () => {
     expect(response.status).toBe(200);
     // No per-id or per-persona membresía lookups — the bulk list already has everything.
     const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
-    expect(urls).toContain("http://localhost:8000/api/v1/membresias/?limit=200");
+    expect(urls).toContain("http://localhost:8000/api/v1/membresias/?skip=0&limit=200");
     expect(urls.some((url) => /\/membresias\/77$/.test(url))).toBe(false);
     expect(urls.some((url) => /\/membresias\/persona\//.test(url))).toBe(false);
     expect(body.accounts[0].estudiantes[0].membresia).toMatchObject({ estado: "activa" });
@@ -202,6 +202,41 @@ describe("GET /api/members", () => {
     expect(response.status).toBe(200);
     // Exactly 4 calls total: personas, pagos, tipos, membresias — never one per student.
     expect(global.fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("loops every backend page so a membership past the 200-row cap is never dropped", async () => {
+    // Memberships accumulate per persona over time (vencida, inactiva, la
+    // activa), so the membership table outgrows the persona table — 150
+    // socios can easily produce 300+ membresía rows. A single
+    // `GET /membresias/?limit=200` call would silently drop everything past
+    // row 200: `personasCapped` stays false (150 < 200) while a third of the
+    // membership map is already gone, and a real socio renders with no
+    // membership and no warning. This asserts the fix: the route must keep
+    // paging until it has every row, not just the first 200.
+    const personaTardia = { ...persona, id: 999, nombres: "Zoe", apellidos: "Tardia" };
+    const page1 = Array.from({ length: 200 }, (_, i) => ({
+      id: i + 1, estado: "VENCIDA", tipoMembresiaId: 1, personaId: i + 1,
+    }));
+    const page2 = [{ id: 201, estado: "ACTIVA", tipoMembresiaId: 1, personaId: 999 }];
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ items: [persona, personaTardia], total: 2, skip: 0, limit: 200 })) // /personas/
+      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: page1, total: 201, skip: 0, limit: 200 })) // /membresias/ page 1
+      .mockResolvedValueOnce(jsonResponse({ items: page2, total: 201, skip: 200, limit: 200 })); // /membresias/ page 2
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls).toContain("http://localhost:8000/api/v1/membresias/?skip=0&limit=200");
+    expect(urls).toContain("http://localhost:8000/api/v1/membresias/?skip=200&limit=200");
+
+    const cuentaTardia = body.accounts.find((account: { id: string }) => account.id === "999");
+    expect(cuentaTardia.estudiantes[0].membresia).toMatchObject({ id: 201, estado: "activa" });
+    expect(body.membresiasDegraded).toBe(false);
   });
 
   it("degrades gracefully (empty pagos/tipos) when those calls fail", async () => {
