@@ -102,6 +102,13 @@ class PagoResponseDTO(ResponseBase, BaseModel):
     descuento_valor_aplicado: Optional[Decimal] = None
     descuento_porcentaje_aplicado: Optional[Decimal] = None
     descuento_autorizado_por_persona_id: Optional[int] = None
+    # `PagoServicio.validar_pago` lo setea como atributo transitorio (no es
+    # columna de `Pago`) cuando aprobar/rechazar el pago sale bien pero el
+    # aviso in-app al alumno/representante falla. El pago YA quedó en el
+    # estado que dice `estado_pago` -- este campo es lo que le dice al
+    # administrador que el aviso no salió, en vez de dejarlo bajo un 200
+    # mudo (hallazgo en vivo, 2026-08-11).
+    aviso_no_enviado: bool = False
 
 
 # --- Listado / cola de validación (GET /membresias/pagos) -------------------

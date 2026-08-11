@@ -17,6 +17,7 @@ from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepo
 from app.infraestructura.repositorios.pago_repositorio import PagoRepositorio, ComprobantePagoRepositorio
 from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
+from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.soporte_transversal.firma_archivos import es_firma_valida
@@ -632,7 +633,7 @@ class PagoServicio:
                 if "uq_membresia_activa_por_persona" in str(error.orig):
                     raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
                 raise
-            self._crear_notificacion_pago(
+            aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_APROBADO,
                 mensaje=f"Tu pago de ${pago.monto} fue aprobado. Tu membresía está activa.",
@@ -645,11 +646,17 @@ class PagoServicio:
             # queda registrado únicamente en Pago.estado_pago y Pago.motivo_rechazo.
             self.repo.guardar_cambios(pago)
             motivo = f": {pago.motivo_rechazo}" if pago.motivo_rechazo else ""
-            self._crear_notificacion_pago(
+            aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_RECHAZADO,
                 mensaje=f"Tu pago fue rechazado{motivo}.",
             )
+        # Atributo transitorio, no una columna de `Pago`: `PagoResponseDTO`
+        # (from_attributes=True) lo lee por `getattr` para que el 200 que
+        # vuelve diga la verdad completa cuando el aviso in-app falló
+        # (hallazgo en vivo, 2026-08-11 -- ver docstring de
+        # `_crear_notificacion_pago`).
+        pago.aviso_no_enviado = not aviso_ok
         return pago
 
     # --- E04-RF002: gratuidad del 4to miembro -------------------------------
@@ -680,25 +687,64 @@ class PagoServicio:
             membresia.es_gratuidad_familiar = True
         return None
 
-    def _crear_notificacion_pago(self, pago: Pago, tipo: TipoNotificacion, mensaje: str) -> None:
+    def _crear_notificacion_pago(self, pago: Pago, tipo: TipoNotificacion, mensaje: str) -> bool:
+        """Crea el aviso in-app para el alumno y, si tiene, para su
+        representante. Devuelve `False` (y NUNCA levanta) si no se pudo
+        crear alguno de los dos -- NUNCA `True`/`False` a medias silenciado.
+
+        Por qué no relanza: cuando esto corre, `pago` YA está commiteado con
+        su estado final (`guardar_cambios` corre antes, en las dos ramas de
+        `validar_pago`). Levantar acá convertiría un aviso fallido en un 5xx
+        para toda la petición -- y por diseño del frontend
+        (`error-message.ts`: un `detail` 5xx nunca llega al usuario, porque
+        describe una falla del SERVIDOR, no algo que el usuario deba leer) el
+        admin vería el cartel genérico "El servidor no pudo completar la
+        operación" sobre un pago que en realidad SÍ se procesó. `validar_pago`
+        lee este `bool` y lo expone en `PagoResponseDTO.aviso_no_enviado`,
+        así el 200 que ya vuelve lleva la verdad completa en vez de tener que
+        elegir entre mentir con un 200 mudo o mentir con un 500 falso
+        (hallazgo en vivo, 2026-08-11: antes de este fix era ni siquiera
+        esto -- un `DataError` sin capturar por VARCHAR(255) en
+        `notificacion.mensaje`, con el rechazo ya commiteado)."""
         persona = self.repo_persona.obtener_por_id(pago.persona_id)
         if not persona:
-            return
-        notif = Notificacion(
-            tipo=tipo,
-            mensaje=mensaje,
-            persona_id=persona.id,
-            entidad_relacionada_id=pago.id,
-        )
-        self.repo_notificacion.crear(notif)
-        if persona.representante_id:
-            notif_rep = Notificacion(
+            return True  # nada que notificar no es un fallo
+        try:
+            notif = Notificacion(
                 tipo=tipo,
-                mensaje=f"Para {persona.nombres} {persona.apellidos}: {mensaje}",
-                persona_id=persona.representante_id,
+                mensaje=mensaje,
+                persona_id=persona.id,
                 entidad_relacionada_id=pago.id,
             )
-            self.repo_notificacion.crear(notif_rep)
+            self.repo_notificacion.crear(notif)
+            if persona.representante_id:
+                # El nombre se acorta ACÁ, nunca `mensaje`: el motivo de un
+                # rechazo es lo que el representante necesita leer entero.
+                nombre_alumno = acortar_nombre_para_notificacion(
+                    f"{persona.nombres} {persona.apellidos}"
+                )
+                notif_rep = Notificacion(
+                    tipo=tipo,
+                    mensaje=f"Para {nombre_alumno}: {mensaje}",
+                    persona_id=persona.representante_id,
+                    entidad_relacionada_id=pago.id,
+                )
+                self.repo_notificacion.crear(notif_rep)
+            return True
+        except Exception:
+            # `rollback()` deshace SOLO la transacción de esta notificación
+            # (nunca llegó a `commit`): lo que `guardar_cambios` ya
+            # commiteó antes sigue intacto. Necesario para que la sesión
+            # quede usable después de un `DataError` -- sin esto, cualquier
+            # lectura posterior (ej. serializar la respuesta) tira
+            # `PendingRollbackError` encima del problema original.
+            self.db.rollback()
+            logger.exception(
+                "No se pudo crear la notificación del pago %s (estado=%s, "
+                "persona_id=%s). El pago YA está commiteado con ese estado.",
+                pago.id, pago.estado_pago.value, pago.persona_id,
+            )
+            return False
 
     def adjuntar_comprobante(self, pago_id: int, datos: ComprobantePagoCreateDTO) -> ComprobantePago:
         pago = self.obtener_pago(pago_id)
