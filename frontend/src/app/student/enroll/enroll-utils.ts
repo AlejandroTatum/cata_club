@@ -278,6 +278,21 @@ function nameRule(value: string, subject: string, article: string): string | nul
   return NAME_PATTERN.test(trimmed) ? null : `${subject} solo pueden contener letras y espacios.`;
 }
 
+/**
+ * Same domain limits the backend enforces for a legal representative
+ * (`enrollment_servicio.py`'s `edad_rep` check): a floor of 18 (a minor
+ * cannot be a legal guardian) and a ceiling reusing `EDAD_MAXIMA_ALUMNO`
+ * (74) — the only ceiling this system defines. Before this fix, the
+ * representative's field rule below checked only the floor; an implausible
+ * birth year (the audited pattern: 1700-1800) used to slip past silently
+ * because `calculateAge` capped its own output to `NaN` outside 1900-2200,
+ * and `NaN >= 18` is `false` either way. Now that `calculateAge` returns a
+ * real number for any syntactically valid date, the missing ceiling is a
+ * plain, visible gap — closed here.
+ */
+const EDAD_MAYORIA_EDAD = 18;
+const EDAD_MAXIMA_REPRESENTANTE = 74;
+
 /** Ecuadorian numbers run 7 (landline) to 10 (mobile) digits. */
 function phoneRule(value: string, subject: string, article: string): string | null {
   if (!value.trim()) return `${subject} ${article} obligatorio.`;
@@ -293,7 +308,7 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   fechaNacimiento: (d) => {
     if (!d.fechaNacimiento) return "La fecha de nacimiento es obligatoria.";
     if (!isDate(d.fechaNacimiento)) return "La fecha de nacimiento ingresada no es válida.";
-    if (d.enrollmentType === ENROLLMENT_TYPES.SELF && calculateAge(d.fechaNacimiento) < 18) {
+    if (d.enrollmentType === ENROLLMENT_TYPES.SELF && calculateAge(d.fechaNacimiento) < EDAD_MAYORIA_EDAD) {
       return "Los menores de edad no pueden autoinscribirse. Seleccione 'Inscribo a un hijo / dependiente' o un representante debe completar la inscripción.";
     }
     return null;
@@ -313,10 +328,15 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     /^\d{10}$/.test(d.cedulaRepresentante.trim())
       ? null
       : "La cédula del representante debe tener 10 dígitos.",
-  fechaNacimientoRepresentante: (d) =>
-    isDate(d.fechaNacimientoRepresentante) && calculateAge(d.fechaNacimientoRepresentante) >= 18
+  fechaNacimientoRepresentante: (d) => {
+    if (!isDate(d.fechaNacimientoRepresentante)) {
+      return "El representante debe ser mayor de edad (18+).";
+    }
+    const edad = calculateAge(d.fechaNacimientoRepresentante);
+    return edad >= EDAD_MAYORIA_EDAD && edad <= EDAD_MAXIMA_REPRESENTANTE
       ? null
-      : "El representante debe ser mayor de edad (18+).",
+      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_REPRESENTANTE} años (calculado: ${edad}).`;
+  },
   telefonoRepresentante: (d) =>
     phoneRule(d.telefonoRepresentante, "El teléfono del representante", "es"),
   correoRepresentante: (d) =>
@@ -491,9 +511,37 @@ function isBloodType(value: string): value is BloodType {
  * Accepts an optional `today` parameter (defaults to `new Date()`) so that
  * tests can pass a fixed reference date for deterministic results.
  *
+ * NO year-plausibility cap. An earlier version capped `birthYear` to
+ * 1900-2200 and returned `NaN` outside that range — meant as a guard, it
+ * became the bug: `NaN < 18`, `NaN > 74` and every other comparison against
+ * `NaN` evaluate to `false`, so a wildly implausible birth date (the audited
+ * case: year 1800, a 226-year-old) silently PASSED every age check built on
+ * top of this helper instead of failing one. That defect shipped three
+ * times in three different forms because each rediscovery treated it as a
+ * local problem and wrote its own uncapped calculation instead of fixing
+ * the shared one (see `add-dependent-utils.ts` and `crear-cuenta-utils.ts`
+ * git history).
+ *
+ * The fix: `NaN` is now reserved for input that is not a valid calendar
+ * date at all (wrong format, non-integer components, a month/day outside
+ * 1-12/1-31, or a day that doesn't exist in that month, e.g. Feb 31). Any
+ * string that IS a real calendar date — no matter how implausible the year
+ * — produces a real, comparable integer, so a caller's `< EDAD_MINIMA` /
+ * `> EDAD_MAXIMA` check catches it by name instead of being silently
+ * skipped. Plausibility (is this a believable human birth date) is a
+ * DOMAIN rule, not a parsing concern — it belongs to `EDAD_MINIMA_ALUMNO`/
+ * `EDAD_MAXIMA_ALUMNO` at the call site, not to this helper.
+ *
+ * Extreme-but-nonsensical years (older than JS `Date` can represent, e.g.
+ * 999999) still resolve to `NaN`, not silently: `new Date(y, ...)` produces
+ * an Invalid Date whose `getFullYear()` is `NaN`, and NaN`!==` the input
+ * year, so the round-trip check below rejects it the same way it rejects
+ * Feb 31 — a genuine "this isn't a date" case, not a plausibility judgment.
+ *
  * @param birthDate — ISO date string "YYYY-MM-DD".
  * @param today — Reference date (default `new Date()`).
- * @returns Age in whole years, or `NaN` for invalid/empty/unparseable input.
+ * @returns Age in whole years, or `NaN` for input that isn't a valid
+ *   calendar date at all.
  */
 export function calculateAge(
   birthDate: string,
@@ -510,8 +558,6 @@ export function calculateAge(
     !Number.isInteger(birthYear) ||
     !Number.isInteger(birthMonth) ||
     !Number.isInteger(birthDay) ||
-    birthYear < 1900 ||
-    birthYear > 2200 ||
     birthMonth < 1 ||
     birthMonth > 12 ||
     birthDay < 1 ||
@@ -521,7 +567,9 @@ export function calculateAge(
   }
 
   // Calendar validation: reject dates like Feb 31 or Apr 31 that JS
-  // silently "overflows" into the next valid calendar date.
+  // silently "overflows" into the next valid calendar date, and reject
+  // years so extreme that `Date` itself can't represent them (Invalid
+  // Date's getFullYear() is NaN, which never equals birthYear).
   const parsed = new Date(birthYear, birthMonth - 1, birthDay);
   if (
     parsed.getFullYear() !== birthYear ||

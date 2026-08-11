@@ -125,6 +125,32 @@ describe("validateEnrollFields", () => {
     expect(errors.correoRepresentante).toBe("El correo del representante no es válido.");
   });
 
+  it("rejects an underage representante's birth date", () => {
+    const errors = validateEnrollFields(
+      "representative",
+      validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "2015-01-15" }),
+    );
+    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 74/);
+  });
+
+  /**
+   * The fourth hole the root-cause fix closes: the representante's floor
+   * (>= 18) was already checked, but never the ceiling. An implausible
+   * birth year (the audited pattern: 1800) used to pass here in total
+   * silence — `calculateAge` returned NaN for it, and `NaN >= 18` is
+   * `false`, so the OLD code read that as "not a valid adult" only by
+   * accident of the floor check failing too. Once `calculateAge` stopped
+   * capping its own output (see its docstring), the missing ceiling became
+   * a plain, visible gap instead of hiding behind a coincidence.
+   */
+  it("rejects an implausibly old representante birth date instead of letting it through", () => {
+    const errors = validateEnrollFields(
+      "representative",
+      validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "1800-01-15" }),
+    );
+    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 74 años \(calculado: \d+\)/);
+  });
+
   it("validates the health step's blood type and emergency contact", () => {
     const errors = validateEnrollFields(
       "health",

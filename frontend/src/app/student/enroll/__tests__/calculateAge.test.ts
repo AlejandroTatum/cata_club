@@ -91,10 +91,6 @@ describe("calculateAge", () => {
     expect(calculateAge("2026-00-15", TODAY)).toBeNaN();
   });
 
-  it("returns NaN for year before 1900", () => {
-    expect(calculateAge("1899-06-15", TODAY)).toBeNaN();
-  });
-
   it("returns NaN for whitespace-only string", () => {
     expect(calculateAge("   ", TODAY)).toBeNaN();
   });
@@ -133,5 +129,39 @@ describe("calculateAge", () => {
 
   it("returns NaN for Feb 29 of a non-leap year", () => {
     expect(calculateAge("2025-02-29", TODAY)).toBeNaN();
+  });
+
+  // -----------------------------------------------------------------------
+  // Root-cause candado: an implausible-but-real year must compute a real
+  // age, never NaN. `NaN < 18`, `NaN > 74` and every other comparison
+  // against NaN are `false`, so an old artificial year cap here let this
+  // exact defect reach production three times through three separately
+  // hand-rolled "uncapped" copies of this same function. This is the test
+  // that goes red without the fix: before it, "1800-06-15" returned NaN,
+  // and `calculateAge(...) < 18` silently reported a 226-year-old as valid.
+  // -----------------------------------------------------------------------
+
+  it("computes a real (large) age for a year before 1900, instead of NaN", () => {
+    expect(calculateAge("1800-06-15", TODAY)).toBe(226);
+  });
+
+  it("computes a real age for a year the old cap rejected just past 1900", () => {
+    expect(calculateAge("1899-06-15", TODAY)).toBe(127);
+  });
+
+  it("computes a real age for a year the old cap rejected past 2200", () => {
+    // A birth date this far in the future is nonsensical for a real person,
+    // but it's still a syntactically valid calendar date — plausibility is
+    // the caller's domain rule (EDAD_MINIMA_ALUMNO/EDAD_MAXIMA_ALUMNO), not
+    // this parser's. Comparisons against a real (negative) number still
+    // behave correctly: -174 < 18 is true, so an age gate still catches it.
+    expect(calculateAge("2300-06-15", TODAY)).toBe(-274);
+  });
+
+  it("still returns NaN for a year Date itself cannot represent", () => {
+    // Genuinely unparseable — not a plausibility judgment. `new Date` cannot
+    // represent this year at all, so its round trip fails the same way
+    // Feb 31 does.
+    expect(calculateAge("999999-06-15", TODAY)).toBeNaN();
   });
 });
