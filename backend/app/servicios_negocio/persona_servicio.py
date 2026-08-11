@@ -1,3 +1,4 @@
+import logging
 import time
 from datetime import date
 from typing import Callable
@@ -16,6 +17,9 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
+from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
+
+logger = logging.getLogger("cataclub.servicios.personas")
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO, IndependizarDTO,
     VincularRepresentadoDTO,
@@ -253,17 +257,36 @@ class PersonaServicio:
             self._dormir(retraso)
 
     def _notificar_representante_anterior(self, representado: Persona, representante_anterior_id: int) -> None:
-        nombre = f"{representado.nombres} {representado.apellidos}"
-        NotificacionRepositorio(self.db).crear(Notificacion(
-            tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,
-            mensaje=(
-                f"{nombre} (cédula {representado.cedula}) fue vinculado a otra cuenta "
-                f"de representante. Si esto fue un error, puede recuperarlo escribiendo "
-                f"la misma cédula en \"Vincular un hijo ya registrado\"."
-            ),
-            persona_id=representante_anterior_id,
-            entidad_relacionada_id=representado.id,
-        ))
+        """Avisa al representante anterior (guardarraíl 2 de la decisión).
+
+        No relanza si el aviso falla: la vinculación en sí YA está
+        commiteada (`self.db.commit()` corre antes, en `vincular_representado`),
+        así que un fallo acá no puede tirar la petición entera -- se loguea
+        con traceback completo (nunca en silencio) y la vinculación sigue
+        siendo válida. Mismo patrón que
+        `PagoServicio._disparar_generacion_comprobante_pdf`: un efecto
+        posterior al hecho principal no debe deshacer ni ocultar que el hecho
+        principal ya ocurrió (hallazgo en vivo, 2026-08-11: antes de este fix
+        un nombre real largo hacía `DataError` acá por VARCHAR(255))."""
+        nombre = acortar_nombre_para_notificacion(f"{representado.nombres} {representado.apellidos}")
+        try:
+            NotificacionRepositorio(self.db).crear(Notificacion(
+                tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,
+                mensaje=(
+                    f"{nombre} (cédula {representado.cedula}) fue vinculado a otra cuenta "
+                    f"de representante. Si esto fue un error, puede recuperarlo escribiendo "
+                    f"la misma cédula en \"Vincular un hijo ya registrado\"."
+                ),
+                persona_id=representante_anterior_id,
+                entidad_relacionada_id=representado.id,
+            ))
+        except Exception:
+            self.db.rollback()
+            logger.exception(
+                "No se pudo avisar al representante anterior (persona_id=%s) de la "
+                "vinculación de persona_id=%s. La vinculación YA está commiteada.",
+                representante_anterior_id, representado.id,
+            )
 
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
         """Asigna un rol al usuario si aún no lo tiene (idempotente)."""

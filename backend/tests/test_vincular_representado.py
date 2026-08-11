@@ -180,6 +180,49 @@ def test_vincular_representado_notifica_al_representante_anterior(db_session):
     assert menor.cedula in notif.mensaje
 
 
+def test_vincular_representado_con_nombres_largos_no_revienta(db_session):
+    """Hallazgo en vivo, 2026-08-11: un nombre y apellido reales (no
+    inventados para el test) empujaron este aviso a 372 caracteres -- un
+    nombre no tiene tope real (apellidos compuestos, partículas), y amenaza
+    directamente el guardarraíl 2 de la decisión de negocio: "al anterior le
+    llega el aviso, con forma de deshacerlo". 100+100 son los anchos reales
+    de `Persona.nombres`/`apellidos`, el peor caso posible hoy."""
+    representante_anterior = _guardado(db_session, _adulto("1710034065", nombres="Pedro", apellidos="Ruiz"))
+    representante_nuevo = _adulto("1710034073", nombres="Marcela")
+    nombre_largo = "Maria Fernanda Concepcion Esperanza Guadalupe Del Carmen A" * 2
+    apellido_largo = "Rodriguez Gonzalez Martinez Fernandez Sanchez De La Torre B" * 2
+    nombre_largo, apellido_largo = nombre_largo[:100], apellido_largo[:100]
+    menor = _menor(
+        "1723456789", representante_id=representante_anterior.id,
+        nombres=nombre_largo, apellidos=apellido_largo,
+    )
+    db_session.add_all([representante_nuevo, menor])
+    db_session.commit()
+
+    servicio = PersonaServicio(db_session, dormir=_SleeperEspia())
+    # No debe tirar ninguna excepción -- antes de este fix, esto era un
+    # DataError sin capturar (VARCHAR(255) de Notificacion.mensaje) con la
+    # vinculación YA commiteada.
+    servicio.vincular_representado(
+        representante_nuevo.id, VincularRepresentadoDTO(cedula=menor.cedula)
+    )
+
+    notificaciones = db_session.query(Notificacion).filter(
+        Notificacion.persona_id == representante_anterior.id
+    ).all()
+    assert len(notificaciones) == 1
+    notif = notificaciones[0]
+    assert notif.tipo == TipoNotificacion.VINCULACION_REPRESENTANTE
+    # El nombre completo (201 caracteres) se acorta -- lo que no se pierde es
+    # la cédula, con la que el representante anterior identifica al chico
+    # igual que lo identificaba antes de este aviso.
+    assert menor.cedula in notif.mensaje
+    assert "fue vinculado a otra cuenta" in notif.mensaje
+    nombre_completo = f"{nombre_largo} {apellido_largo}"
+    assert nombre_completo not in notif.mensaje, "el nombre completo (201 caracteres) debe acortarse"
+    assert len(notif.mensaje) <= Notificacion.MENSAJE_MAX
+
+
 # ---------------------------------------------------------------------------
 # Guardarraíl 3 (el más importante): anti-enumeración
 # ---------------------------------------------------------------------------
