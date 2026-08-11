@@ -15,6 +15,31 @@ from app.dominio.excepciones import EntidadNoEncontrada, PermisosInsuficientes
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 
 
+# Ancho del fragmento decorativo -- un nombre de persona -- que otros
+# servicios anteponen a un mensaje de notificación (ej. "Para <nombre>:
+# <mensaje>", "Nuevo alumno inscrito: <nombre> ..."). Un nombre no tiene tope
+# real: apellidos compuestos, partículas ("de la", "van der"), varios nombres
+# de pila pueden superar largamente lo que hace falta para identificar a
+# alguien en un aviso (hallazgo en vivo, 2026-08-11: un nombre + apellido
+# real empujó un aviso de vinculación a 372 caracteres). Acortarlo ACÁ, en la
+# parte que solo identifica, es lo que le deja lugar de sobra al contenido
+# que sí importa -- el motivo de un rechazo, el detalle de una alerta -- sin
+# depender de que la columna de la base crezca al ritmo de cualquier nombre
+# real. Ver `Notificacion.MENSAJE_MAX` (modelos.py) para el último resorte
+# que cubre lo que esto no previno.
+LIMITE_NOMBRE_EN_NOTIFICACION = 60
+
+
+def acortar_nombre_para_notificacion(
+    nombre: str, limite: int = LIMITE_NOMBRE_EN_NOTIFICACION
+) -> str:
+    """Acorta un nombre de persona antes de insertarlo en el texto de una
+    notificación, preservando el resto del mensaje intacto."""
+    if len(nombre) <= limite:
+        return nombre
+    return nombre[: limite - 1].rstrip() + "…"
+
+
 class NotificacionServicio:
     def __init__(self, db: Session):
         self.db = db
