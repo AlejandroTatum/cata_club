@@ -80,6 +80,8 @@ export interface BackendMembresia {
    * the admin actually validated.
    */
   montoAplicado?: string | null;
+  /** Owner of the membership. Only present on `GET /membresias/` list items — used to group the bulk list by persona in `/api/members`. */
+  personaId?: number;
 }
 
 export interface BackendTipoMembresia {
