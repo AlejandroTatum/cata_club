@@ -86,9 +86,14 @@ export default function MedicalRecordEditor({ personaId }: MedicalRecordEditorPr
       await actualizarFichaMedica(personaId, {
         tipoSangre,
         enfermedades,
-        alergias: alergias.trim() || undefined,
-        contactoEmergencia: contactoEmergencia.trim() || undefined,
-        telefonoEmergencia: telefonoEmergencia.trim() || undefined,
+        // FIC-5: `|| undefined` used to mean "field omitted", which the
+        // backend's partial PATCH reads as "leave the stored value alone" —
+        // so clearing the field and saving reported success but never erased
+        // it. `null` is the explicit "erase this" signal (see
+        // FichaMedicaUpdatePayload's doc comment).
+        alergias: alergias.trim() || null,
+        contactoEmergencia: contactoEmergencia.trim() || null,
+        telefonoEmergencia: telefonoEmergencia.trim() || null,
       });
       setSaveSuccess(true);
       setReloadToken((n) => n + 1);

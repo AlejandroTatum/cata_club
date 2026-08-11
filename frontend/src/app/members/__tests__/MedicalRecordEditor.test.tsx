@@ -97,3 +97,53 @@ describe("MedicalRecordEditor blood type", () => {
     });
   });
 });
+
+describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockActualizarFichaMedica.mockResolvedValue({});
+  });
+
+  /**
+   * FIC-5: clearing "Alergias" and saving showed a green success toast, but
+   * the old value survived in the database. Root cause was
+   * `alergias.trim() || undefined` — an emptied field became `undefined`,
+   * the BFF route omits `undefined` keys, and the backend's partial-update
+   * PATCH treats an omitted key as "leave unchanged". Sending `null`
+   * explicitly is what actually clears it (see the backend's
+   * `test_vaciar_alergias_contacto_y_telefono_los_borra`).
+   */
+  it("sends null, not undefined, for alergias/contactoEmergencia/telefonoEmergencia once emptied", async () => {
+    mockFetchFichaMedica.mockResolvedValue({
+      tipoSangre: "O_POSITIVO",
+      enfermedades: [],
+      alergias: "Polen",
+      contactoEmergencia: "Ana Torres",
+      telefonoEmergencia: "0991112233",
+    });
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    const alergias = await screen.findByLabelText<HTMLInputElement>("Alergias");
+    await waitFor(() => expect(alergias.value).toBe("Polen"));
+    const contacto = screen.getByLabelText<HTMLInputElement>("Contacto de emergencia");
+    const telefono = screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia");
+
+    fireEvent.change(alergias, { target: { value: "" } });
+    fireEvent.change(contacto, { target: { value: "" } });
+    fireEvent.change(telefono, { target: { value: "" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Guardar ficha médica/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          alergias: null,
+          contactoEmergencia: null,
+          telefonoEmergencia: null,
+        }),
+      );
+    });
+  });
+});
