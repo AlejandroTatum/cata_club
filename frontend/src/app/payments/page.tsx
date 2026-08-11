@@ -1060,7 +1060,6 @@ export default function PaymentsPage(): React.ReactElement {
                     <TableHeaderCell type="text">Período</TableHeaderCell>
                     <TableHeaderCell type="number">Monto</TableHeaderCell>
                     <TableHeaderCell type="text">Método</TableHeaderCell>
-                    <TableHeaderCell type="text">Estado</TableHeaderCell>
                     <TableHeaderCell type="action">
                       <span className="sr-only">Acción</span>
                     </TableHeaderCell>
@@ -1079,31 +1078,30 @@ export default function PaymentsPage(): React.ReactElement {
                       <TableCell type="text">{humanizePaymentPeriod(req.membershipPeriod)}</TableCell>
                       <TableCell type="number">{formatCurrency(req.expectedAmount)}</TableCell>
                       <TableCell type="text">{req.paymentMethod}</TableCell>
-                      <TableCell type="badge">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {/* The active tab already filters to one status, so
-                              repeating it per row would only echo the tab —
-                              see the "Todos" case below, where it is the one
-                              thing on the row that says what state a payment
-                              is in. */}
+                      <TableCell type="action">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          {/* No "Estado" column: the active tab already filters
+                              to one status, so repeating it per row would only
+                              echo the tab. What is left is context for the
+                              action button, not a column of its own — see the
+                              "Todas" case below, where it is the one thing on
+                              the row that says what state a payment is in. */}
                           {activeFilter === "all" && (
                             <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
                               {VALIDATION_STATUS_LABELS[req.validationStatus]}
                             </Badge>
                           )}
                           {reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
+                          <Button
+                            size="sm"
+                            variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
+                            aria-label={actionLabel(req)}
+                            data-payment-action={req.id}
+                            onClick={() => setSelectedId(req.id)}
+                          >
+                            {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
+                          </Button>
                         </div>
-                      </TableCell>
-                      <TableCell type="action">
-                        <Button
-                          size="sm"
-                          variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
-                          aria-label={actionLabel(req)}
-                          data-payment-action={req.id}
-                          onClick={() => setSelectedId(req.id)}
-                        >
-                          {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
-                        </Button>
                       </TableCell>
                     </TableRow>
                     );
@@ -1118,25 +1116,13 @@ export default function PaymentsPage(): React.ReactElement {
                 const mobileNameId = `payment-name-mobile-${req.id}`;
                 return (
                 <li key={req.id} className="flex flex-col gap-3 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
-                      {renderBatchCheckbox(req, mobileNameId)}
-                      <div className="min-w-0">
-                        <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
-                          {req.studentName}
-                        </p>
-                        <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      {/* Same rule as the desktop table: the active tab
-                          already fixes the status for every visible row. */}
-                      {activeFilter === "all" && (
-                        <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
-                          {VALIDATION_STATUS_LABELS[req.validationStatus]}
-                        </Badge>
-                      )}
-                      {reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
+                  <div className="flex min-w-0 items-start gap-3">
+                    {renderBatchCheckbox(req, mobileNameId)}
+                    <div className="min-w-0">
+                      <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
+                        {req.studentName}
+                      </p>
+                      <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
                     </div>
                   </div>
                   <p className="text-xs text-ink-2">
@@ -1144,15 +1130,27 @@ export default function PaymentsPage(): React.ReactElement {
                   </p>
                   <div className="flex items-center justify-between gap-3">
                     <DataBox variant="numeric">{formatCurrency(req.expectedAmount)}</DataBox>
-                    <Button
-                      size="sm"
-                      variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
-                      aria-label={actionLabel(req)}
-                      data-payment-action={req.id}
-                      onClick={() => setSelectedId(req.id)}
-                    >
-                      {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      {/* Same rule as the desktop table: the active tab
+                          already fixes the status for every visible row, and
+                          what is left is context for the action button, not a
+                          column of its own. */}
+                      {activeFilter === "all" && (
+                        <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
+                          {VALIDATION_STATUS_LABELS[req.validationStatus]}
+                        </Badge>
+                      )}
+                      {reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
+                      <Button
+                        size="sm"
+                        variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
+                        aria-label={actionLabel(req)}
+                        data-payment-action={req.id}
+                        onClick={() => setSelectedId(req.id)}
+                      >
+                        {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
+                      </Button>
+                    </div>
                   </div>
                 </li>
                 );

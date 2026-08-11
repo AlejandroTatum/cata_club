@@ -127,6 +127,14 @@ const RESOLVED_REQUEST: PaymentValidationRequest = {
   validatedBy: "Admin Dev",
 };
 
+const REJECTED_REQUEST: PaymentValidationRequest = {
+  ...PENDING_REQUEST,
+  id: "req-4",
+  studentName: "Ana Torres",
+  validationStatus: "rechazado",
+  rejectionReason: "El monto no coincide",
+};
+
 function renderPage(): void {
   render(<ToastProvider><PaymentsPage /></ToastProvider>);
 }
@@ -295,6 +303,63 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     const cards = screen.getByTestId("payments-cards");
     expect(within(cards).getByText("Pendiente")).toBeInTheDocument();
     expect(within(cards).getByText("Validado")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1c. Every visible header names a column that actually has content
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — every visible column header has matching content", () => {
+  /**
+   * General regression guard, not a one-off: a header whose text is announced
+   * to a sighted admin (i.e. not an `sr-only`-only label, like the batch
+   * checkbox or action columns) must correspond to a column that renders
+   * *something* in at least one visible row. This is exactly the shape of the
+   * "Estado" defect — the header stayed after every row's cell in that column
+   * went empty for three of the four filter tabs — and it holds for whichever
+   * column trips it next, not just that one.
+   */
+  it("never leaves a header's column empty across every row, on any filter tab", async () => {
+    // One request per status, so every tab — including "Rechazados" — has at
+    // least one row and renders the table instead of the empty state.
+    mockFetchPaymentValidations.mockResolvedValue([
+      PENDING_REQUEST,
+      SECOND_PENDING,
+      RESOLVED_REQUEST,
+      REJECTED_REQUEST,
+    ]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    for (const tabName of ["Pendientes", "Validados", "Rechazados", "Todas"]) {
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${tabName}`, "i") }));
+      const table = await screen.findByTestId("payments-table");
+      await waitFor(() => {
+        expect(table.querySelectorAll("tbody tr").length).toBeGreaterThan(0);
+      });
+
+      const headerCells = Array.from(table.querySelectorAll("thead th"));
+      const rows = Array.from(table.querySelectorAll("tbody tr"));
+
+      headerCells.forEach((th, colIndex) => {
+        // `sr-only` labels (the batch-selection and action columns) are real
+        // accessible names but never *visible* headers, so they carry no
+        // promise that the column reads as non-empty on screen.
+        const isVisibleHeader = !th.querySelector(".sr-only");
+        const headerText = th.textContent?.trim() ?? "";
+        if (!isVisibleHeader || !headerText) return;
+
+        const columnHasContent = rows.some((row) => {
+          const cell = row.querySelectorAll("td")[colIndex];
+          return Boolean(cell?.textContent?.trim());
+        });
+        expect(
+          columnHasContent,
+          `header "${headerText}" on tab "${tabName}" has no content in any row`,
+        ).toBe(true);
+      });
+    }
   });
 });
 
