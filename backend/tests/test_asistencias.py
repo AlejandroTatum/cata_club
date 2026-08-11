@@ -90,7 +90,7 @@ def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client):
 
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
     registros = [
-        r for r in historial.json()
+        r for r in historial.json()["items"]
         if r["horarioId"] == horario["id"] and r["fechaEntrenamiento"] == str(date(2026, 7, 20))
     ]
     assert len(registros) == 1
@@ -210,7 +210,7 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_insercion(client):
     assert "Ana Torres" in resp.json()["detail"]
 
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
-    assert historial.json() == []
+    assert historial.json()["items"] == []
 
 
 def test_registrar_asistencia_rechaza_sin_alumno_horario_actualizacion(client):
@@ -248,7 +248,7 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_actualizacion(client):
     assert "Ana Torres" in segunda.json()["detail"]
 
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
-    registros = [r for r in historial.json() if r["horarioId"] == horario["id"]]
+    registros = [r for r in historial.json()["items"] if r["horarioId"] == horario["id"]]
     assert len(registros) == 1
     assert registros[0]["estado"] == "PRESENTE"  # sin cambios
 

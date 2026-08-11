@@ -71,7 +71,7 @@ describe("GET /api/attendance/records", () => {
 
   it("translates backend Asistencias into AttendanceRecord[]", async () => {
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse([asistencia]))
+      .mockResolvedValueOnce(jsonResponse({ items: [asistencia], total: 1, skip: 0, limit: 200 }))
       .mockResolvedValueOnce(jsonResponse([horario]))
       .mockResolvedValueOnce(jsonResponse(personas));
 
@@ -85,9 +85,9 @@ describe("GET /api/attendance/records", () => {
     ]);
   });
 
-  it("forwards fechaInicio/fechaFin as fecha_inicio/fecha_fin query params", async () => {
+  it("forwards fechaInicio/fechaFin as fecha_inicio/fecha_fin query params, plus skip/limit for the backend page", async () => {
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 }))
       .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse({ items: [] }));
 
@@ -99,7 +99,41 @@ describe("GET /api/attendance/records", () => {
 
     expect(global.fetch).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8000/api/v1/asistencias/reportes?fecha_inicio=2026-07-18&fecha_fin=2026-07-18",
+      "http://localhost:8000/api/v1/asistencias/reportes?fecha_inicio=2026-07-18&fecha_fin=2026-07-18&skip=0&limit=200",
+      expect.anything(),
+    );
+  });
+
+  it("loops through backend pages to assemble the full, unpaginated result the rest of the app expects", async () => {
+    // The regression this fix closes: GET /asistencias/reportes is now
+    // paginated server-side (TRA-6), but every consumer of THIS BFF route
+    // (/reports CSV+PDF-count parity, /attendance, /dashboard, /trainer*) is
+    // written against "one full array for the filtered range" — see
+    // reports-utils.ts's doc comment on why that parity matters. So the BFF
+    // loops pages internally: the backend query stays bounded, this route's
+    // own response does not.
+    const page1 = Array.from({ length: 200 }, (_, i) => ({ ...asistencia, id: i + 1 }));
+    const page2 = [{ ...asistencia, id: 201 }, { ...asistencia, id: 202 }];
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ items: page1, total: 202, skip: 0, limit: 200 }))
+      .mockResolvedValueOnce(jsonResponse({ items: page2, total: 202, skip: 200, limit: 200 }))
+      .mockResolvedValueOnce(jsonResponse([horario]))
+      .mockResolvedValueOnce(jsonResponse(personas));
+
+    const access = makeJwt(3600);
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toHaveLength(202);
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8000/api/v1/asistencias/reportes?skip=0&limit=200",
+      expect.anything(),
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8000/api/v1/asistencias/reportes?skip=200&limit=200",
       expect.anything(),
     );
   });

@@ -94,7 +94,7 @@ def test_reporte_asistencia_filtra_por_horario_y_periodo(client):
         params={"horario_id": horario["id"], "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31"},
     )
     assert resp.status_code == 200
-    body = resp.json()
+    body = resp.json()["items"]
     assert len(body) == 1
     assert body[0]["estado"] == "PRESENTE"
 
@@ -132,7 +132,7 @@ def test_reporte_asistencia_expone_horario_id_y_persona_id(client):
         params={"horario_id": horario["id"]},
     )
     assert resp.status_code == 200
-    fila = resp.json()[0]
+    fila = resp.json()["items"][0]
     assert fila["horarioId"] == horario["id"]
     assert fila["personaId"] == alumno["id"]
     assert fila["fechaEntrenamiento"] == "2026-07-07"
