@@ -211,8 +211,53 @@ def test_refresh_con_access_token_en_vez_de_refresh_da_401(client, db_session):
 
 
 # --- /auth/logout -----------------------------------------------------------
-def test_logout_devuelve_mensaje(client):
-    _restaurar_override_token(correo="x@cataclub.com", persona_id=1, roles=["ALUMNO"])
+# TRA-10: /auth/logout no invalidaba nada del lado del servidor -- el
+# access_token seguía sirviendo hasta su expiración natural, y el
+# refresh_token hasta 7 días. Estas pruebas fijan el contrato: logout debe
+# bombear version_sesion (mismo mecanismo que /auth/sesiones/invalidar,
+# ver GestorAutenticacion.epoch_valido), pero SIN reemitir un par nuevo --
+# a diferencia de "cerrar mis otras sesiones", acá el caller también debe
+# quedar deslogueado.
+
+def test_logout_devuelve_mensaje(client, db_session):
+    persona = _crear_persona(db_session, cedula="1710034199", nombres="Uriel")
+    _crear_usuario_para_persona(db_session, persona, correo="uriel@cataclub.com")
+    _restaurar_override_token(correo="uriel@cataclub.com", persona_id=persona.id, roles=["ALUMNO"])
     resp = client.post("/api/v1/auth/logout")
     assert resp.status_code == 200
     assert "finalizada" in resp.json()["mensaje"].lower()
+
+
+def test_logout_invalida_access_token_y_refresh_token(client_sin_token, db_session):
+    persona = _crear_persona(db_session, cedula="1710034205", nombres="Sofia")
+    _crear_usuario_para_persona(db_session, persona, correo="sofia@cataclub.com")
+
+    login_resp = client_sin_token.post(
+        "/api/v1/auth/login",
+        data={"username": "sofia@cataclub.com", "password": "clave12345"},
+    )
+    assert login_resp.status_code == 200, login_resp.text
+    access = login_resp.json()["access_token"]
+    refresh = login_resp.json()["refresh_token"]
+
+    logout_resp = client_sin_token.post(
+        "/api/v1/auth/logout", headers={"Authorization": f"Bearer {access}"}
+    )
+    assert logout_resp.status_code == 200, logout_resp.text
+
+    me_resp = client_sin_token.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {access}"}
+    )
+    assert me_resp.status_code == 401
+
+    refresh_resp = client_sin_token.post(
+        "/api/v1/auth/refresh", json={"refresh_token": refresh}
+    )
+    assert refresh_resp.status_code == 401
+
+
+def test_logout_sin_token_devuelve_401(client_sin_token):
+    """Ahora que logout bombea el epoch, necesita saber DE QUIÉN -- no puede
+    quedar público como antes."""
+    resp = client_sin_token.post("/api/v1/auth/logout")
+    assert resp.status_code == 401

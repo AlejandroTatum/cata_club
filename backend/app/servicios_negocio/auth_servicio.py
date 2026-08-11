@@ -252,24 +252,47 @@ class AuthServicio:
         )
         return {"access_token": access_token, "token_type": "bearer"}
 
-    # --- E01: invalidación de sesión (POST /auth/sesiones/invalidar) --------
-    def invalidar_otras_sesiones(self, correo: str) -> dict:
+    # --- E01: invalidación de sesión (primitiva compartida) -----------------
+    def _bombear_epoch_sesion(self, correo: str) -> Usuario:
         """Bombea `version_sesion` del usuario autenticado (resuelto vía el
-        `sub` del JWT, igual que el resto de operaciones self-service de esta
-        clase) y le reemite un par de tokens nuevo EN LA MISMA respuesta.
+        `sub` del JWT) y persiste el cambio. NO reemite tokens -- eso queda a
+        criterio de cada caller, ver `invalidar_otras_sesiones` (sí reemite)
+        vs. `cerrar_sesion` (no reemite).
 
         El bump del epoch invalida de inmediato TODO token previo -- access y
         refresh, ver `GestorAutenticacion.epoch_valido` -- incluido el que se
-        usó para autenticar esta misma llamada. El re-issue es lo que
-        convierte esto en "cerrar mis OTRAS sesiones" en vez de "cerrar
-        también la mía": el caller sigue autenticado con el par nuevo, que ya
-        lleva el `sver` vigente.
+        usó para autenticar esta misma llamada.
         """
         usuario = self.obtener_usuario_actual(correo)
         usuario.revocar_sesiones()
         self.db.commit()
         self.db.refresh(usuario)
+        return usuario
+
+    def invalidar_otras_sesiones(self, correo: str) -> dict:
+        """POST /auth/sesiones/invalidar: bombea el epoch y le reemite un par
+        de tokens nuevo EN LA MISMA respuesta. El re-issue es lo que
+        convierte esto en "cerrar mis OTRAS sesiones" en vez de "cerrar
+        también la mía": el caller sigue autenticado con el par nuevo, que ya
+        lleva el `sver` vigente.
+        """
+        usuario = self._bombear_epoch_sesion(correo)
         return self._emitir_par_tokens(usuario)
+
+    # --- TRA-10: POST /auth/logout -------------------------------------------
+    def cerrar_sesion(self, correo: str) -> dict:
+        """Bombea el epoch de sesión del caller y NO reemite tokens -- a
+        diferencia de `invalidar_otras_sesiones`, acá el caller debe quedar
+        deslogueado también. Reutiliza `_bombear_epoch_sesion` en vez de
+        reusar `invalidar_otras_sesiones` completo: llamar a ese método acá
+        generaría un par de tokens nuevo que este endpoint nunca devuelve
+        (`LogoutResponseDTO` solo expone `mensaje`) -- trabajo de firma JWT
+        desperdiciado, y semánticamente confuso (el docstring de ese método
+        promete dejar al caller autenticado, justo lo contrario de un
+        logout).
+        """
+        self._bombear_epoch_sesion(correo)
+        return {"mensaje": "Sesión finalizada"}
 
     # --- Privado: emisión del par access + refresh -------------------------
     def _emitir_par_tokens(self, usuario: Usuario) -> dict:

@@ -114,7 +114,6 @@ RUTAS_PUBLICAS = {
                                # dependencia.
     ("GET", "/personas/instituciones"),
     ("POST", "/auth/login"),
-    ("POST", "/auth/logout"),
     ("POST", "/auth/recuperar-contrasenia"),
     ("POST", "/auth/refresh"),
     ("POST", "/auth/restablecer-contrasenia"),
@@ -137,6 +136,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/asistencias/horarios"),                           # (a)
     ("GET", "/asistencias/persona/{persona_id}"),                # (b)
     ("GET", "/auth/me"),                                         # (b) - propio via `sub`
+    ("POST", "/auth/logout"),                                    # (b) - propio via `sub`, TRA-10
     ("GET", "/fichas-medicas/persona/{persona_id}"),             # (b) - admin o representante, SIN el titular
     ("GET", "/geografia/cantones"),                              # (a)
     ("GET", "/geografia/cantones/{canton_id}"),                  # (a)
