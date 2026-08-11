@@ -97,3 +97,51 @@ describe("MedicalRecordEditor blood type", () => {
     });
   });
 });
+
+/**
+ * The owner's own walkthrough (Aug 7): the "Ficha médica" title read at the
+ * same weight as a field label like "Tipo de sangre", so it didn't register
+ * as a heading at all; and on a narrow screen the student's identity — shown
+ * only above this editor, never inside it — scrolled out of view while the
+ * fields were still being edited. That's a real risk on medical data: editing
+ * the wrong student's record because you lost sight of whose it was.
+ *
+ * jsdom does not lay out or scroll, so "stays on screen while scrolling"
+ * itself is checked by screenshot (see docs/fixes/14-header-ficha-medica.md),
+ * not here. What IS locked here: the title carries weight a field label
+ * doesn't, the student's name is rendered at all when the caller supplies
+ * it, and the element meant to persist is wired with `sticky` positioning —
+ * the actual mechanism a real browser needs to keep it on screen.
+ */
+describe("MedicalRecordEditor header hierarchy", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+  });
+
+  it("gives the section title more visual weight than a field label", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    const title = await screen.findByRole("heading", { name: "Ficha médica" });
+    const fieldLabel = screen.getByText("Tipo de sangre");
+
+    // The field label's own weight is `font-semibold`; the title must read
+    // heavier than that, not merely differently-colored.
+    expect(fieldLabel.className).toMatch(/font-semibold/);
+    expect(title.className).toMatch(/font-extrabold/);
+    expect(title.className).not.toMatch(/text-xs/);
+  });
+
+  it("shows the student's name so identity survives once the fields scroll out of view", async () => {
+    render(<MedicalRecordEditor personaId={7} studentName="Jefferson Delgado Rivadeneira" />);
+
+    await screen.findByRole("heading", { name: "Ficha médica" });
+
+    const identity = screen.getByText("Jefferson Delgado Rivadeneira");
+    // The mechanism a real browser needs to keep it visible while the fields
+    // below scroll: `position: sticky` pinned to the top of the nearest
+    // scrolling ancestor (the member-edit dialog's scrollable body, or the
+    // family portal's page).
+    expect(identity.closest("[class*='sticky']")).not.toBeNull();
+  });
+});
