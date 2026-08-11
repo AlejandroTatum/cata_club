@@ -47,6 +47,17 @@ CIRCUITO_CLOUDINARY_UMBRAL_FALLOS = 3
 # persona espera como máximo 30s a que el sistema vuelva a probar.
 CIRCUITO_CLOUDINARY_COOLDOWN_SEGUNDOS = 30.0
 
+# --- URL firmada de entrega (comprobantes/vouchers, hallazgo de privacidad
+# "voucher no enumerable") ---------------------------------------------------
+# Vigencia de la URL firmada que `cloudinary_cliente.generar_url_firmada`
+# entrega SOLO cuando la cuenta tiene token-based authentication habilitada
+# (`settings.cloudinary_auth_token_key`); sin esa clave, Cloudinary firma
+# pero no vence (ver docstring de esa función). 15 minutos: alcanza para que
+# un admin revise una fila de la cola de validación o para que una familia
+# abra el link desde una notificación, sin dejar una URL utilizable por
+# tiempo indefinido si se filtra.
+CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS = 900
+
 # --- SMTP --------------------------------------------------------------------
 # Valor histórico de `notificaciones_servicio.py`, sin cambios, ahora
 # nombrado. `smtplib` lo aplica POR operación de socket (connect/starttls/

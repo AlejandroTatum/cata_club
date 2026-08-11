@@ -17,6 +17,7 @@ from typing import Optional
 
 import cloudinary
 import cloudinary.uploader
+import cloudinary.utils
 from urllib3.util import Timeout
 
 from app.dominio.excepciones import ServicioNoDisponible
@@ -25,6 +26,7 @@ from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.resiliencia import (
     CIRCUITO_CLOUDINARY_COOLDOWN_SEGUNDOS,
     CIRCUITO_CLOUDINARY_UMBRAL_FALLOS,
+    CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS,
     TIMEOUT_CLOUDINARY_CONEXION_SEGUNDOS,
     TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
     UMBRAL_SUBIDA_LENTA_SEGUNDOS,
@@ -120,8 +122,9 @@ def subir_pdf_membresia(
     sobreescribir: bool = False,
 ) -> str:
     """
-    Sube un PDF (en bytes, en memoria) a Cloudinary como recurso `raw` y
-    devuelve la URL pública segura (https).
+    Sube un PDF (en bytes, en memoria) a Cloudinary como recurso `raw`,
+    `type="authenticated"`, y devuelve la URL que retorna el SDK -- NO
+    utilizable para servir el archivo (ver nota de seguridad abajo).
 
     Args:
         contenido_pdf: bytes en memoria del PDF (NO toca el disco del server).
@@ -129,8 +132,15 @@ def subir_pdf_membresia(
         sobreescribir: si True, permite pisar un public_id ya existente.
 
     Returns:
-        URL pública HTTPS del recurso subido (ej.
-        https://res.cloudinary.com/<cloud>/raw/upload/<id>.pdf).
+        URL que devuelve el SDK al subir (ej.
+        https://res.cloudinary.com/<cloud>/raw/authenticated/<id>.pdf).
+        NO es una URL de entrega válida: con `type="authenticated"`,
+        Cloudinary la sirve solo si viene firmada (401 si no). El caller NO
+        debe persistir este valor como "la URL del archivo" -- debe guardar
+        `nombre_publico` y generar la URL de entrega en cada lectura
+        autorizada con `generar_url_firmada` (hallazgo de privacidad
+        "voucher no enumerable": un `public_id` secuencial bajo `type=upload`
+        era una URL pública, enumerable sin autenticación).
     """
     _configurar_cliente()
 
@@ -139,6 +149,7 @@ def subir_pdf_membresia(
 
     upload_kwargs = {
         "resource_type": "raw",
+        "type": "authenticated",
         "public_id": nombre_publico,
         "folder": settings.cloudinary_carpeta_comprobantes,
         "overwrite": sobreescribir,
@@ -173,8 +184,16 @@ def subir_voucher_pago(
     `overwrite=True` + `invalidate=True` permiten al cliente corregir un
     voucher subido erróneamente mientras el pago siga PENDIENTE_VALIDACION.
 
+    `type="authenticated"`: el comprobante bancario que sube la familia es
+    dato sensible. Sin esto, cualquiera que conociera (o adivinara, ver
+    `nombre_publico`) el `public_id` podía descargarlo sin pasar por ningún
+    chequeo del backend (hallazgo de privacidad "voucher no enumerable").
+
     Returns:
-        URL pública HTTPS del recurso subido.
+        URL que devuelve el SDK al subir. NO es una URL de entrega válida
+        (ver el docstring de `subir_pdf_membresia`, mismo criterio): el
+        caller debe persistir `nombre_publico` y pedir la URL de entrega a
+        `generar_url_firmada` en cada lectura autorizada.
     """
     _configurar_cliente()
 
@@ -184,6 +203,7 @@ def subir_voucher_pago(
     if content_type == "application/pdf":
         upload_kwargs = {
             "resource_type": "raw",
+            "type": "authenticated",
             "public_id": nombre_publico,
             "folder": settings.cloudinary_carpeta_vouchers,
             "overwrite": True,
@@ -196,6 +216,7 @@ def subir_voucher_pago(
         # formato original (jpg/png) que trae el archivo del cliente.
         upload_kwargs = {
             "resource_type": "image",
+            "type": "authenticated",
             "public_id": nombre_publico,
             "folder": settings.cloudinary_carpeta_vouchers,
             "overwrite": True,
@@ -253,3 +274,80 @@ def subir_foto_perfil(
         contenido, upload_kwargs,
         f"foto de perfil (persona_id={persona_id}, public_id={nombre_publico})",
     )
+
+
+# --- URL de entrega firmada (hallazgo de privacidad "voucher no enumerable") -
+def generar_url_firmada(
+    public_id: str,
+    resource_type: str,
+    formato: Optional[str] = None,
+) -> str:
+    """
+    Genera una URL de entrega para un recurso `type="authenticated"`
+    (comprobante/voucher subido por `subir_voucher_pago`/`subir_pdf_membresia`
+    desde este fix en adelante).
+
+    NO hace red: `cloudinary.utils.cloudinary_url` firma localmente con las
+    credenciales ya cargadas por `_configurar_cliente()`, así que esto corre
+    incluso si Cloudinary está caído o el circuito está abierto -- generar el
+    link no es "subir", no hay nada que proteger acá.
+
+    Se llama en cada lectura autorizada, nunca al momento de subir ni de
+    persistir: si se guardara la URL firmada en la fila del pago, quedaría
+    vencida (o eternamente vigente, ver abajo) esperando en la BD en vez de
+    reflejar el momento real en que alguien autorizado la pidió.
+
+    Vencimiento real (`duration`, vía `auth_token`) SOLO si
+    `settings.cloudinary_auth_token_key` está configurada -- token-based
+    authentication es una función que hay que habilitar en la cuenta de
+    Cloudinary (Console > Settings > Security), no algo que este código
+    pueda activar por su cuenta. Sin esa clave, la URL queda igual firmada
+    con `sign_url=True` (nadie sin el `api_secret` puede construir un link
+    que Cloudinary acepte) pero sin vencer -- cierra la enumeración pública,
+    no la reutilización indefinida de un link ya firmado que se filtre.
+    Ver docs/fixes/16-voucher-no-enumerable.md para el residual documentado.
+    """
+    _configurar_cliente()
+
+    opciones: dict = {
+        "type": "authenticated",
+        "resource_type": resource_type,
+        "sign_url": True,
+        "secure": True,
+    }
+    if formato:
+        opciones["format"] = formato
+    if settings.cloudinary_auth_token_key:
+        opciones["auth_token"] = {
+            "key": settings.cloudinary_auth_token_key,
+            "duration": CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS,
+        }
+
+    url, _opciones_restantes = cloudinary.utils.cloudinary_url(public_id, **opciones)
+    return url
+
+
+def resolver_url_entrega(
+    valor_almacenado: Optional[str],
+    resource_type: str,
+    formato: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Traduce lo persistido en `Pago.voucher_url` / `ComprobantePago.archivo_url`
+    a una URL de entrega. Desde este fix se persiste el `public_id` (no la
+    URL), así que el caso normal es firmar fresco con `generar_url_firmada`.
+
+    Filas anteriores al fix guardaron el `secure_url` completo de un recurso
+    `type="upload"` (público, enumerable -- exactamente el hallazgo que este
+    módulo corrige). No hay forma de repararlas sin volver a subir el
+    archivo bajo `type="authenticated"` con las credenciales reales de
+    Cloudinary (ausentes en este entorno); se detectan por el prefijo
+    `http` y se devuelven sin cambios en vez de romperlas en silencio --
+    siguen siendo públicas, riesgo residual documentado en
+    docs/fixes/16-voucher-no-enumerable.md junto con la migración pendiente.
+    """
+    if not valor_almacenado:
+        return None
+    if valor_almacenado.startswith("http://") or valor_almacenado.startswith("https://"):
+        return valor_almacenado
+    return generar_url_firmada(valor_almacenado, resource_type=resource_type, formato=formato)
