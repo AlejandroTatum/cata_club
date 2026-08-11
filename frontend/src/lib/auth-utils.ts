@@ -64,13 +64,24 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
       );
       break;
     case "representante":
-    case "estudiante":
       links.push(
         { href: "/student", label: "Mi cuenta" },
         { href: "/student/payments", label: "Pagos" },
         // The two things a student actually opens the portal to do. Without
         // this entry /student/attendance is reachable only from a panel on the
         // home screen.
+        { href: "/student/attendance", label: "Asistencias" },
+        // Only a representante manages a representado's medical record — the
+        // backend's `incluir_titular=False` on `/fichas-medicas/*` still
+        // excludes the titular's own, so "estudiante" (below) never gets this
+        // entry: it would point a self-managed student at a screen that 403s.
+        { href: "/student/medical-record", label: "Ficha médica" },
+      );
+      break;
+    case "estudiante":
+      links.push(
+        { href: "/student", label: "Mi cuenta" },
+        { href: "/student/payments", label: "Pagos" },
         { href: "/student/attendance", label: "Asistencias" },
       );
       break;

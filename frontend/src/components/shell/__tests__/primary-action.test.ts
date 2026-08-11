@@ -88,6 +88,11 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // missing much of the time and, when present, would point 400px down the page
   // at the form it opened.
   "app/student/payments/page.tsx": "a disclosure bound to the membership it pays",
+  // The save action ("Guardar ficha médica") lives inside the reused
+  // `MedicalRecordEditor` card itself — the same admin-owned component
+  // `/members` embeds inline, with the same button in the same place. A
+  // header action here would duplicate a button the editor already draws.
+  "app/student/medical-record/page.tsx": "the save action lives inside the reused MedicalRecordEditor card",
 };
 
 function read(path: string): string {
