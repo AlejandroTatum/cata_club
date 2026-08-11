@@ -110,16 +110,47 @@ export function horarioLabel(horario: Pick<BackendHorario, "diaSemana" | "horaIn
 }
 
 /**
- * Fetch every Persona once and index by id, instead of one lookup per
- * record — same small-scale N+1 tradeoff documented in payments-adapter.ts.
- * Returns an empty map (never throws) if the lookup fails; callers fall
- * back to a "Persona {id}" placeholder via `personaFullName`.
+ * Fetch every Persona referenced by `personaIds` and index by id.
+ *
+ * Tries the bulk roster first (`GET /personas/?limit=200`, one call) — works
+ * for ADMINISTRADOR, who is the only role that endpoint is granted to:
+ * `PersonaResponseDTO` carries real PII (cédula, teléfono, fecha de
+ * nacimiento), so `personas_router.py` deliberately keeps the full-roster
+ * read off-limits to ENTRENADOR (see the router's own comment at that
+ * route). For a trainer session the bulk call 403s every time — the old
+ * code swallowed that into an empty map, which made every attendance record
+ * a trainer viewed fall back to the generic "Persona {id}" placeholder:
+ * not a rare degradation but the 100% case for that role (ASI-4).
+ *
+ * ENTRENADOR already has a real, narrower grant: `GET /personas/{id}`
+ * privileges ADMINISTRADOR_O_ENTRENADOR (personas_router.py, `obtener_persona`)
+ * — the same per-id access the "pasar lista" roster already relies on. So on
+ * a 403 this falls back to resolving each distinct id individually instead
+ * of degrading in silence. `personaIds` is the distinct set already present
+ * in the records being enriched (one page of attendance history), never the
+ * whole club roster, so the fallback stays small.
  */
-export async function fetchPersonaNameMap(request: NextRequest): Promise<Map<number, BackendPersonaName>> {
-  const result = await backendFetchAuthed(request, "/personas/?limit=200");
-  if (!result.ok || !result.response.ok) return new Map();
-  const body = (await result.response.json()) as { items: BackendPersonaName[] };
-  return new Map(body.items.map((p) => [p.id, p]));
+export async function fetchPersonaNameMap(
+  request: NextRequest,
+  personaIds: Iterable<number>,
+): Promise<Map<number, BackendPersonaName>> {
+  const bulkResult = await backendFetchAuthed(request, "/personas/?limit=200");
+  if (bulkResult.ok && bulkResult.response.ok) {
+    const body = (await bulkResult.response.json()) as { items: BackendPersonaName[] };
+    return new Map(body.items.map((p) => [p.id, p]));
+  }
+
+  const ids = [...new Set(personaIds)];
+  const lookups = await Promise.all(
+    ids.map(async (id): Promise<BackendPersonaName | null> => {
+      const result = await backendFetchAuthed(request, `/personas/${id}`);
+      if (!result.ok || !result.response.ok) return null;
+      return (await result.response.json()) as BackendPersonaName;
+    }),
+  );
+  return new Map(
+    lookups.filter((p): p is BackendPersonaName => p !== null).map((p) => [p.id, p]),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -151,5 +182,54 @@ export function buildAttendanceRecord(
     personaId: asistencia.personaId,
     estudiante: personaFullName(personas.get(asistencia.personaId), `Persona ${asistencia.personaId}`),
     estado: ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND[asistencia.estado],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// "Últimas listas del club" (Fix 8 / DSH-2)
+// ---------------------------------------------------------------------------
+
+/** `GET /asistencias/ultimas-listas` DTO — a session (horario + fecha) with
+ *  at least one Asistencia, and its four counts. No author: `Asistencia`
+ *  deliberately doesn't record who took the list (modelos.py:536) — see
+ *  decisiones-de-negocio-2026-08-11.md §8. */
+export interface BackendUltimaLista {
+  horarioId: number;
+  fechaEntrenamiento: string;
+  diaSemana: BackendDiaSemana;
+  horaInicio: string;
+  horaFin: string;
+  presentes: number;
+  tardanzas: number;
+  justificados: number;
+  ausentes: number;
+  total: number;
+}
+
+export interface RecentSession {
+  horarioId: number;
+  fecha: string;
+  /** "Lunes 15:00 — 16:30" — same label grammar as `AttendanceRecord.horario`. */
+  horario: string;
+  counts: Record<EstadoAsistencia, number>;
+  total: number;
+}
+
+export function buildRecentSession(lista: BackendUltimaLista): RecentSession {
+  return {
+    horarioId: lista.horarioId,
+    fecha: lista.fechaEntrenamiento,
+    horario: horarioLabel({
+      diaSemana: lista.diaSemana,
+      horaInicio: lista.horaInicio,
+      horaFin: lista.horaFin,
+    }),
+    counts: {
+      present: lista.presentes,
+      late: lista.tardanzas,
+      justified: lista.justificados,
+      absent: lista.ausentes,
+    },
+    total: lista.total,
   };
 }

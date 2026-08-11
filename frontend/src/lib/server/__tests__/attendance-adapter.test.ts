@@ -14,9 +14,11 @@ import {
   horarioLabel,
   buildTrainingSchedule,
   buildAttendanceRecord,
+  buildRecentSession,
   type BackendHorario,
   type BackendAsistencia,
   type BackendPersonaName,
+  type BackendUltimaLista,
 } from "../attendance-adapter";
 
 describe("DIA_SEMANA maps", () => {
@@ -122,5 +124,36 @@ describe("buildAttendanceRecord", () => {
   it("falls back to a placeholder name when the persona is missing from the map", () => {
     const built = buildAttendanceRecord(asistencia, horario, new Map());
     expect(built.estudiante).toBe("Persona 3");
+  });
+});
+
+describe("buildRecentSession", () => {
+  const lista: BackendUltimaLista = {
+    horarioId: 1,
+    fechaEntrenamiento: "2026-08-03",
+    diaSemana: "LUNES",
+    horaInicio: "15:00:00",
+    horaFin: "16:30:00",
+    presentes: 5,
+    tardanzas: 1,
+    justificados: 1,
+    ausentes: 1,
+    total: 8,
+  };
+
+  it("builds a RecentSession with the four counts keyed by frontend estado", () => {
+    expect(buildRecentSession(lista)).toEqual({
+      horarioId: 1,
+      fecha: "2026-08-03",
+      horario: "Lunes 15:00 — 16:30",
+      counts: { present: 5, late: 1, justified: 1, absent: 1 },
+      total: 8,
+    });
+  });
+
+  it("carries no author field — the club's list, not any one trainer's", () => {
+    const built = buildRecentSession(lista);
+    expect(built).not.toHaveProperty("entrenadorId");
+    expect(built).not.toHaveProperty("registradoPor");
   });
 });

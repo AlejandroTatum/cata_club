@@ -7,10 +7,11 @@
  * read and write) is the backend's job via `GestorPermisos` — these handlers
  * just proxy whatever status FastAPI returns. GET enriches each Asistencia
  * with the student's name and a "Día HH:mm — HH:mm" schedule label
- * (resolved via a single `/asistencias/horarios` + `/personas` lookup, see
- * src/lib/server/attendance-adapter.ts) since the DTO only carries bare ids.
- * Consumed by the admin `/attendance` overview and the trainer dashboard's
- * "today" stats.
+ * (resolved via `/asistencias/horarios` + `fetchPersonaNameMap`, see
+ * src/lib/server/attendance-adapter.ts — that helper falls back to per-id
+ * `/personas/{id}` lookups when the bulk roster read 403s, which is every
+ * ENTRENADOR call, ASI-4) since the DTO only carries bare ids. Consumed by
+ * the admin `/attendance` overview and the trainer panel's "última lista".
  *
  * POST replaces the old frontend-only prototype in `/trainer/attendance`
  * (previously "no data is persisted") — it issues one real
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const [horariosResult, personas] = await Promise.all([
     backendFetchAuthed(request, "/asistencias/horarios"),
-    fetchPersonaNameMap(request),
+    fetchPersonaNameMap(request, asistencias.map((a) => a.personaId)),
   ]);
   const horarios: BackendHorario[] =
     horariosResult.ok && horariosResult.response.ok ? await horariosResult.response.json() : [];
