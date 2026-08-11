@@ -20,6 +20,17 @@ class HorarioRepositorio:
             stmt = stmt.where(HorarioEntrenamiento.categoria == categoria)
         return list(self.db.execute(stmt).scalars().unique().all())
 
+    def tiene_asistencias(self, horario_id: int) -> bool:
+        """¿Tiene este horario algún registro de `Asistencia`? Usado por
+        `AsistenciaServicio.actualizar_categoria`/`eliminar_categoria` para
+        bloquear -- ANTES de tocar nada -- quitar un día o borrar una
+        categoria entera cuando hay historial: "no se borra historial" es
+        la decisión (docs/fixes/24-abm-categorias.md), y chequear antes
+        evita depender de parsear un `IntegrityError` de un DELETE en lote
+        para saber CUÁL día bloqueó."""
+        stmt = select(Asistencia.id).where(Asistencia.horario_id == horario_id)
+        return self.db.execute(stmt).first() is not None
+
     def existe_categoria_dia(self, categoria: str, dia_semana) -> bool:
         """INS-3: ¿ya hay una fila para este (categoria, dia_semana)? Usado
         por `AsistenciaServicio.crear_horario` para rechazar el duplicado
@@ -259,6 +270,33 @@ class AlumnoHorarioRepositorio:
         for fila in filas:
             self.db.delete(fila)
         self.db.commit()
+
+    def listar_por_horario_sin_filtro(self, horario_id: int) -> List[AlumnoHorario]:
+        """Todas las filas de un horario, sin filtrar por alumno activo ni
+        paginar -- el mismo conjunto que recorre `eliminar_por_horario`,
+        pero SIN comprometer la transacción acá: usado por
+        `AsistenciaServicio.actualizar_categoria`/`eliminar_categoria`,
+        que arma un lote de deletes y los aplica en un único `commit()`
+        vía `CategoriaRepositorio` (edición/baja atómica de la
+        categoria)."""
+        stmt = select(AlumnoHorario).where(AlumnoHorario.horario_id == horario_id)
+        return list(self.db.execute(stmt).scalars().all())
+
+    def listar_personas_de_horarios(self, horario_ids: List[int]) -> set[int]:
+        """`persona_id` únicos inscriptos en cualquiera de estos horarios --
+        el roster actual de una categoria (por la inscripción atómica, todo
+        alumno de la categoria está en TODOS sus horarios vigentes, así que
+        cualquiera de ellos alcanza para reconstruirlo). Usado para
+        backfillear el `alumno_horario` de un día recién agregado a una
+        categoria con alumnos ya inscriptos."""
+        if not horario_ids:
+            return set()
+        stmt = (
+            select(AlumnoHorario.persona_id)
+            .where(AlumnoHorario.horario_id.in_(horario_ids))
+            .distinct()
+        )
+        return set(self.db.execute(stmt).scalars().all())
 
     def obtener_por_persona_y_horario(
         self, persona_id: int, horario_id: int

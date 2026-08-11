@@ -8,8 +8,8 @@ from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.asistencia_schemas import (
-    AsistenciaCreateDTO, AsistenciaResponseDTO, CategoriaResponseDTO,
-    HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
+    AsistenciaCreateDTO, AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
+    CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
     UltimaListaDTO,
 )
@@ -45,7 +45,7 @@ def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[d
 
 # Catálogo de categorías (M1): el frontend lo consulta acá en vez de
 # espejarlo a mano (ver `frontend/src/services/categorias.ts`). Lectura para
-# cualquier autenticado, igual que `/horarios` -- no hay alta/edición todavía.
+# cualquier autenticado, igual que `/horarios`.
 @router.get(
     "/categorias",
     response_model=List[CategoriaResponseDTO],
@@ -53,6 +53,37 @@ def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[d
 )
 def listar_categorias(db: Session = Depends(obtener_sesion)):
     return AsistenciaServicio(db).listar_categorias()
+
+
+# ABM de categorías (docs/fixes/24-abm-categorias.md): alta/edición/baja
+# atómica de la categoria + sus días + sus horarios, en una sola operación
+# (pedido del dueño). ADMIN-only, como el resto de la escritura sobre
+# `/horarios` que muta el catálogo (PUT/DELETE), no el tier más permisivo
+# de POST /horarios (que además admite ENTRENADOR).
+@router.post(
+    "/categorias", response_model=CategoriaResponseDTO, status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def crear_categoria(datos: CategoriaCreateDTO, db: Session = Depends(obtener_sesion)):
+    return AsistenciaServicio(db).crear_categoria(datos)
+
+
+@router.put(
+    "/categorias/{codigo}", response_model=CategoriaResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def actualizar_categoria(
+    codigo: str, datos: CategoriaUpdateDTO, db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).actualizar_categoria(codigo, datos)
+
+
+@router.delete(
+    "/categorias/{codigo}", status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def eliminar_categoria(codigo: str, db: Session = Depends(obtener_sesion)):
+    AsistenciaServicio(db).eliminar_categoria(codigo)
 
 
 @router.post("/horarios", response_model=HorarioResponseDTO, status_code=status.HTTP_201_CREATED,
