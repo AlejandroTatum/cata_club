@@ -360,16 +360,13 @@ export default function TrainerPage(): React.ReactElement {
                             <TableNameCell name={formatDate(s.fecha)} sub={s.horario} />
                             <TableCell>
                               <div className="flex flex-wrap gap-[5px]">
+                                {/* The state name rides along as real,
+                                    visible text — a bare "9" next to a
+                                    colored dot forced every reader to
+                                    memorize what each color meant. */}
                                 {STATE_ORDER.map((estado) => (
                                   <Badge key={estado} tone={getAttendanceBadgeTone(estado)}>
-                                    {s.counts[estado]}
-                                    {/* A bare "9" tells a screen reader
-                                        nothing; the state name rides along
-                                        without changing the pill's width. */}
-                                    <span className="sr-only">
-                                      {" "}
-                                      {getAttendanceLabel(estado).toLowerCase()}
-                                    </span>
+                                    {s.counts[estado]} {getAttendanceLabel(estado)}
                                   </Badge>
                                 ))}
                               </div>

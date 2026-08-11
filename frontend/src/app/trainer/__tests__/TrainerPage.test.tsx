@@ -344,6 +344,24 @@ describe("TrainerPage — Mi día", () => {
     expect(table.queryByText(/Registrad[oa] por/)).not.toBeInTheDocument();
   });
 
+  it("shows each recent session's counts with visible state names, not only color", async () => {
+    render(<TrainerPage />);
+
+    await screen.findByText("Últimas listas del club");
+    const table = within(screen.getByTestId("recent-club-sessions"));
+    const rows = await table.findAllByRole("row");
+    const resultCell = within(rows[1]).getAllByRole("cell")[1];
+
+    // The state name has to be real, visible text — not tucked into a
+    // hidden `sr-only` span that only a screen reader ever sees, which is
+    // exactly what the owner flagged: dots and numbers with no label.
+    expect(resultCell.querySelector(".sr-only")).toBeNull();
+    expect(resultCell).toHaveTextContent("6 Presente");
+    expect(resultCell).toHaveTextContent("0 Tardanza");
+    expect(resultCell).toHaveTextContent("1 Justificado");
+    expect(resultCell).toHaveTextContent("1 Ausente");
+  });
+
   it("shows an empty state when the club has no recent sessions", async () => {
     mockFetchRecentAttendanceSessions.mockResolvedValue([]);
     render(<TrainerPage />);

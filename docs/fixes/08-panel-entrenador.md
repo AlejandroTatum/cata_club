@@ -8,6 +8,7 @@
   - `309bb6e` — fix(attendance): stop degrading a trainer's roster to "Persona {id}"
   - `75e2ca0` — feat(bff): add GET /api/attendance/recent-sessions
   - `b32dedb` — feat(trainer): rebuild the panel around StatGrid and a used screen
+  - `d9521b0` — fix(trainer): show attendance state names, not just badge color
 
 ## El problema
 
@@ -58,6 +59,23 @@ del club» (`registrado_por` en `Asistencia` queda como mejora posterior al
 lanzamiento — la decisión distingue *quién dictó la clase* de *quién tipeó la
 lista*, y ninguna de las dos se guarda hoy).
 
+**Corrección post-lanzamiento** (pedido del dueño): en «Últimas listas del
+club» los cuatro conteos por sesión se leían solo por el color del `Badge` —
+un punto verde/naranja/gris/rojo y un número, sin ninguna palabra al lado. El
+nombre del estado ya existía (`getAttendanceLabel`, la misma nomenclatura que
+usa el `StatGrid` de arriba y la pantalla de pasar lista: Presente, Tardanza,
+Justificado, Ausente), pero vivía en un `<span className="sr-only">` —
+invisible para cualquiera que no usara un lector de pantalla. Pasó a ser
+texto visible dentro del propio badge (`12 Presente`, no solo `12`). Se
+probó a 390px de ancho antes de descartar una abreviatura: las cuatro
+palabras completas por fila caben envolviendo a dos badges por línea (el
+`flex-wrap` del contenedor ya existía para esto), sin quedar ilegibles — se
+descartó dividir la columna «Resultado» en cuatro columnas con encabezados
+abreviados porque el texto completo visible ya resolvía el problema sin
+tocar la estructura de la tabla. `/trainer/attendance/history` tenía
+exactamente el mismo defecto (mismo patrón `Badge` + `sr-only`) y se
+corrigió igual.
+
 ## El candado
 
 **DSH-2** — `backend/tests/test_asistencias.py`:
@@ -102,6 +120,46 @@ Test Files  4 passed (4)
      Tests  50 passed (50)
 ```
 
+**Corrección post-lanzamiento** — `frontend/src/app/trainer/__tests__/TrainerPage.test.tsx`:
+`shows each recent session's counts with visible state names, not only
+color`, y `frontend/src/app/trainer/attendance/history/__tests__/TrainerAttendanceHistoryPage.test.tsx`:
+`carries the four state counts in the row itself, with a visible state
+name`. Sin el fix, dan rojo porque el nombre del estado solo existe dentro
+de un `.sr-only`:
+
+```
+AssertionError: expected <span class="sr-only"></span> to be null
+
+- Expected:
+null
+
++ Received:
+<span
+  class="sr-only"
+>
+
+  presente
+</span>
+```
+
+Verde después del fix (área completa, no solo los dos tests nuevos):
+
+```
+✓ src/app/trainer/attendance/__tests__/TrainerAttendancePage.test.tsx (82 tests)
+✓ src/app/trainer/attendance/__tests__/attendance-utils.test.ts (74 tests)
+✓ src/app/trainer/__tests__/TrainerPage.test.tsx (21 tests)
+✓ src/app/attendance/__tests__/attendance-utils.test.ts (40 tests)
+✓ src/app/trainer/attendance/history/__tests__/TrainerAttendanceHistoryPage.test.tsx (13 tests)
+✓ src/app/trainer/__tests__/trainer-day-utils.test.ts (37 tests)
+✓ src/app/attendance/__tests__/AttendancePage.test.tsx (11 tests)
+✓ src/components/ui/__tests__/Badge.test.tsx (6 tests)
+Test Files  8 passed (8)
+     Tests  284 passed (284)
+```
+
+Suite completa del frontend (`vitest run`, sin filtro): `Test Files 162
+passed (162)` · `Tests 2456 passed (2456)`.
+
 ## La prueba
 
 ![después](img/08-panel-entrenador-despues-1440.png)
@@ -110,6 +168,14 @@ Test Files  4 passed (4)
 Ahora se ve el `StatGrid` con los cuatro conteos, la tarjeta «Últimas listas
 del club» con cinco sesiones reales del club, el nombre real de la alumna
 («Anahi Cedeno Loor», no «Persona 15») y el gráfico de torta junto al aviso.
+
+![después — etiquetas de texto en «Últimas listas del club», 390px](img/08-panel-entrenador-labels-despues-390.png)
+![después — etiquetas de texto en «Últimas listas del club», 1440px](img/08-panel-entrenador-labels-despues-1440.png)
+
+Cada conteo de «Últimas listas del club» ahora dice su estado (`12
+Presente`, no solo un punto de color y un `12`) — a 390px de ancho las
+cuatro etiquetas completas envuelven en dos badges por línea, sin quedar
+ilegibles.
 
 **Medido a 1440×900**, contra el botón «pasar lista» que abre el contenido
 (no una captura estática): el contenido terminaba en y≈370 antes (**59% de
@@ -131,3 +197,6 @@ por debajo del 11% del panel de admin que se tomó como referencia.
   no se resuelve acá.
 - La agenda completa de la semana: fuera de alcance a propósito, decisión
   explícita del dueño.
+- `/trainer/attendance/history`: solo se le tocó la etiqueta de texto de los
+  cuatro conteos (mismo cambio que la tarjeta de arriba). Los filtros, la
+  paginación y el link «Corregir» quedaron intactos.
