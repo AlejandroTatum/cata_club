@@ -513,6 +513,25 @@ export async function fetchAttendanceRecords(params?: {
   return request<AttendanceRecord[]>(apiEndpoint(`/attendance/records${query ? `?${query}` : ""}`));
 }
 
+/**
+ * A club session (horario + fecha) with at least one Asistencia, and its
+ * four counts. No author, no per-student name — see
+ * `/api/attendance/recent-sessions`'s own doc comment (Fix 8 / DSH-2,
+ * decisiones-de-negocio-2026-08-11.md §8).
+ */
+export interface RecentAttendanceSession {
+  horarioId: number;
+  fecha: string;
+  horario: string;
+  counts: Record<EstadoAsistencia, number>;
+  total: number;
+}
+
+/** The club's most recent attendance sessions, most recent first. Powers the trainer panel's "Últimas listas del club". */
+export async function fetchRecentAttendanceSessions(limit = 5): Promise<RecentAttendanceSession[]> {
+  return request<RecentAttendanceSession[]>(apiEndpoint(`/attendance/recent-sessions?limit=${limit}`));
+}
+
 /** Persist attendance for a session (one real `POST /asistencias` per student, partial-failure-tolerant). */
 export async function registerAttendance(data: RegisterAttendanceRequest): Promise<RegisterAttendanceResult> {
   return request<RegisterAttendanceResult>(apiEndpoint("/attendance/records"), {
