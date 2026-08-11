@@ -20,6 +20,8 @@ import {
   describeBatchApproval,
   getNextUnreviewedId,
   composeRejectionReason,
+  REJECTION_REASONS,
+  REJECTION_NOTE_MAX_LENGTH,
 } from "../payments-utils";
 
 function buildRequests(count: number): PaymentValidationRequest[] {
@@ -316,5 +318,23 @@ describe("composeRejectionReason", () => {
   it("returns an empty string when no reason is selected, so the caller can block", () => {
     expect(composeRejectionReason("", "una nota")).toBe("");
     expect(composeRejectionReason("no-existe", "")).toBe("");
+  });
+
+  // Hallazgo en vivo, 2026-08-11: with no client-side cap, a long enough
+  // note produced a `motivo_rechazo` the backend accepted (its own limit is
+  // 255) but that, wrapped into a notification message downstream, blew
+  // past a DIFFERENT, unrelated 255-character column and crashed the
+  // request AFTER the rejection was already committed. This guard holds the
+  // other half of that fix: `REJECTION_NOTE_MAX_LENGTH` must leave enough
+  // room, under EVERY typified label (not just the shortest), for the
+  // composed string to stay under the backend's real limit on
+  // `motivo_rechazo` itself.
+  it("REJECTION_NOTE_MAX_LENGTH leaves every label under the backend's 255-character limit", () => {
+    const MOTIVO_RECHAZO_BACKEND_LIMIT = 255;
+    const noteAtLimit = "x".repeat(REJECTION_NOTE_MAX_LENGTH);
+    for (const reason of REJECTION_REASONS) {
+      const composed = composeRejectionReason(reason.key, noteAtLimit);
+      expect(composed.length).toBeLessThanOrEqual(MOTIVO_RECHAZO_BACKEND_LIMIT);
+    }
   });
 });

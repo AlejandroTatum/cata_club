@@ -91,6 +91,11 @@ export interface PaymentValidationRequest {
   validatedBy?: string;
   startDate: string;
   endDate: string;
+  /** `true` when the approve/reject itself succeeded but the in-app
+   *  notification to the student/guardian could not be sent — the decision
+   *  above (`validationStatus`, `rejectionReason`) is still final and real.
+   *  Only ever set by `PUT /api/payments/[id]`; absent elsewhere. */
+  notificationDeliveryFailed?: boolean;
 }
 
 /** DTO for approving a payment validation request. */

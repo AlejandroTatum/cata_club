@@ -95,6 +95,7 @@ import {
   describeBatchApproval,
   composeRejectionReason,
   REJECTION_REASONS,
+  REJECTION_NOTE_MAX_LENGTH,
   type BatchApprovalOutcome,
 } from "@/app/payments/payments-utils";
 import {
@@ -328,7 +329,7 @@ function focusQueueAction(requestId: string | null): boolean {
 // ---------------------------------------------------------------------------
 
 export default function PaymentsPage(): React.ReactElement {
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showWarning } = useToast();
   const [requests, setRequests] = useState<PaymentValidationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -689,6 +690,17 @@ export default function PaymentsPage(): React.ReactElement {
         // The server owns the canonical row — dates it normalised, the
         // validation timestamp, the validator's name.
         setRequests((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+        // The decision itself (`saved.validationStatus`) is final and real
+        // even when this is true — only the in-app notification failed. The
+        // optimistic success toast above already fired and is gone by the
+        // time this resolves, so this is a SEPARATE, honest follow-up: the
+        // admin needs to know the notice didn't reach the student/guardian,
+        // not just see a silent success (hallazgo en vivo, 2026-08-11).
+        if (saved.notificationDeliveryFailed) {
+          showWarning(`${confirmation.label}: la decisión se guardó, pero el aviso no llegó.`, {
+            description: `${request.studentName} no recibió la notificación in-app. Si hace falta, avísele directamente.`,
+          });
+        }
       },
       onUndo: putItBack,
       onError: (err: unknown) => {
@@ -1476,13 +1488,21 @@ export default function PaymentsPage(): React.ReactElement {
                     </fieldset>
 
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-2xs font-bold uppercase text-ink-3">
-                        Nota para el responsable (opcional)
+                      <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3">
+                        <span>Nota para el responsable (opcional)</span>
+                        <span
+                          className={`font-normal normal-case tabular-nums ${
+                            rejectionNote.length >= REJECTION_NOTE_MAX_LENGTH ? "text-state-bad" : ""
+                          }`}
+                        >
+                          {rejectionNote.length}/{REJECTION_NOTE_MAX_LENGTH}
+                        </span>
                       </span>
                       <textarea
                         rows={3}
                         value={rejectionNote}
-                        onChange={(e) => setRejectionNote(e.target.value)}
+                        onChange={(e) => setRejectionNote(e.target.value.slice(0, REJECTION_NOTE_MAX_LENGTH))}
+                        maxLength={REJECTION_NOTE_MAX_LENGTH}
                         placeholder="Ej.: El comprobante dice $20,00 y la mensualidad es de $25,00."
                         className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
                         disabled={actionLoading !== null}
