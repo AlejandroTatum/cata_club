@@ -66,6 +66,7 @@ import {
 import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
+import StudentSearch from "@/components/StudentSearch";
 import {
   fetchNuevosPorPeriodo,
   fetchAttendanceRecords,
@@ -119,7 +120,7 @@ import {
   VALIDATION_STATUS_LABELS,
   VALIDATION_STATUS_TONES,
 } from "@/lib/status-badges";
-import type { PersonaReporte } from "@/types/domain";
+import type { PersonaBusqueda, PersonaReporte } from "@/types/domain";
 import { toUserMessage } from "@/lib/error-message";
 
 type ReportPreset = "periodo" | "asistencia" | "pagos";
@@ -186,6 +187,18 @@ function ReportsContent(): React.ReactElement {
   const [horarioId, setHorarioId] = useState("");
   const [pagosEstado, setPagosEstado] = useState("");
 
+  /**
+   * The asistencia preset's alumno filter — the same `StudentSearch` used on
+   * `/trainer/attendance/history`, not a second lookup built for this screen.
+   * Backend already accepts `persona_id`; this was the only piece missing.
+   */
+  const [student, setStudent] = useState<PersonaBusqueda | null>(null);
+  const [studentResetSignal, setStudentResetSignal] = useState(0);
+  const clearStudent = useCallback((): void => {
+    setStudent(null);
+    setStudentResetSignal((n) => n + 1);
+  }, []);
+
   const [personaResults, setPersonaResults] = useState<PersonaReporte[]>([]);
   const [attendanceResults, setAttendanceResults] = useState<AttendanceRecord[]>([]);
   const [pagosResults, setPagosResults] = useState<PaymentValidationRequest[]>([]);
@@ -219,10 +232,11 @@ function ReportsContent(): React.ReactElement {
       if (preset === "periodo") {
         setPersonaResults(await fetchNuevosPorPeriodo(fechaInicio, fechaFin));
       } else if (preset === "asistencia") {
-        const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number } = {};
+        const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number; personaId?: number } = {};
         if (fechaInicio) params.fechaInicio = fechaInicio;
         if (fechaFin) params.fechaFin = fechaFin;
         if (horarioId) params.horarioId = Number(horarioId);
+        if (student) params.personaId = student.id;
         setAttendanceResults(await fetchAttendanceRecords(params));
       } else {
         const params: { fechaInicio?: string; fechaFin?: string; estadoPago?: string } = {};
@@ -240,7 +254,7 @@ function ReportsContent(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [preset, fechaInicio, fechaFin, horarioId, pagosEstado]);
+  }, [preset, fechaInicio, fechaFin, horarioId, pagosEstado, student]);
 
   /**
    * The preview generates itself from the current selection. That is the whole
@@ -292,10 +306,11 @@ function ReportsContent(): React.ReactElement {
       if (preset === "periodo") {
         await exportNuevosPorPeriodoPdf(fechaInicio, fechaFin);
       } else if (preset === "asistencia") {
-        const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number } = {};
+        const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number; personaId?: number } = {};
         if (fechaInicio) params.fechaInicio = fechaInicio;
         if (fechaFin) params.fechaFin = fechaFin;
         if (horarioId) params.horarioId = Number(horarioId);
+        if (student) params.personaId = student.id;
         await exportAsistenciaReportePdf(params);
       } else {
         const params: { fechaInicio?: string; fechaFin?: string; estadoPago?: string } = {};
@@ -486,24 +501,41 @@ function ReportsContent(): React.ReactElement {
             </div>
 
             {preset === "asistencia" && (
-              <div className="flex min-w-[150px] flex-col gap-1.5">
-                <label htmlFor="horarioId" className="text-2xs font-bold uppercase text-ink-3">
-                  Horario
-                </label>
-                <select
-                  id="horarioId"
-                  value={horarioId}
-                  onChange={(e) => setHorarioId(e.target.value)}
-                  className="input-field h-ctl"
-                >
-                  <option value="">Todos</option>
-                  {horarios.map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {formatDay(h.diaSemana)} {h.horaInicio}–{h.horaFin}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <>
+                <div className="flex min-w-[150px] flex-col gap-1.5">
+                  <label htmlFor="horarioId" className="text-2xs font-bold uppercase text-ink-3">
+                    Horario
+                  </label>
+                  <select
+                    id="horarioId"
+                    value={horarioId}
+                    onChange={(e) => setHorarioId(e.target.value)}
+                    className="input-field h-ctl"
+                  >
+                    <option value="">Todos</option>
+                    {horarios.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {formatDay(h.diaSemana)} {h.horaInicio}–{h.horaFin}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex min-w-[220px] flex-col gap-1.5">
+                  <span className="text-2xs font-bold uppercase text-ink-3">Alumno</span>
+                  <StudentSearch
+                    onSelect={setStudent}
+                    placeholder="Buscar alumno…"
+                    resetSignal={studentResetSignal}
+                  />
+                </div>
+
+                {student && (
+                  <Button size="sm" variant="ghost" onClick={clearStudent}>
+                    Limpiar selección
+                  </Button>
+                )}
+              </>
             )}
 
             {preset === "pagos" && (
