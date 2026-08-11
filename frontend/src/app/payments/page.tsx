@@ -76,6 +76,7 @@ import type {
   ValidationStatus,
 } from "@/services/api";
 import { fetchPaymentValidations, updatePaymentValidation } from "@/services/api";
+import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import { usePersistentPreference } from "@/lib/persistent-preference";
 import { useToast } from "@/contexts/ToastContext";
@@ -694,8 +695,13 @@ export default function PaymentsPage(): React.ReactElement {
         console.error("[payments] decision failed", err);
         putItBack();
         // The window is gone and the admin has moved on, so there is no
-        // control left to attach this to: it has to travel to them.
-        showError(confirmation.failure, {
+        // control left to attach this to: it has to travel to them. It used
+        // to always be `confirmation.failure` — a generic "no se pudo" even
+        // when the backend named the real reason (e.g. a rejection note over
+        // 255 characters) — so `err` never reached the admin. `toUserMessage`
+        // is the one place that decides whether `err` is safe to show; when
+        // it is not, it already falls back to `confirmation.failure`.
+        showError(toUserMessage(err, confirmation.failure), {
           description: `${request.studentName} volvió a la cola de pendientes.`,
         });
       },

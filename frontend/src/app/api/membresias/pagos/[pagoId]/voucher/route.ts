@@ -36,8 +36,17 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   }
 
   if (!ALLOWED_TYPES.includes(file.type)) {
+    // PAG-3: this used to echo the rejected file's raw MIME type
+    // (`file.type`, e.g. `text/plain`) into the sentence. That is exactly
+    // the shape `isUserFacingText`'s vocabulary gate exists to catch — a raw
+    // MIME type is implementation detail, not something a padre typed — so
+    // the client's own error translator (`toUserMessage`, see
+    // `lib/error-message.ts`) discarded this message and showed a generic
+    // "No se pudo subir el comprobante." instead. The fix is to never put the
+    // MIME type in the sentence: plain Spanish naming what IS accepted is
+    // both what a non-technical user needs and what passes the gate.
     return NextResponse.json(
-      { message: `Tipo de archivo no permitido: ${file.type}. Use JPG, PNG o PDF.` },
+      { message: "Ese tipo de archivo no se puede subir. Adjunte una foto (JPG o PNG) o un PDF." },
       { status: 400 },
     );
   }
