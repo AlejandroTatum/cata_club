@@ -250,7 +250,7 @@ export type AuthResult<T> = { ok: true; data: T } | { ok: false; error: AuthErro
  * login, /auth/me, refresh: the backend either answers in well under a second
  * or something is wrong, so waiting longer only makes the failure slower.
  */
-const BACKEND_TIMEOUT_MS = 10_000;
+export const BACKEND_TIMEOUT_MS = 10_000;
 
 /**
  * Abort deadline for backend PDF report generation, and ONLY for that.
@@ -396,16 +396,23 @@ export async function backendMe(accessToken: string): Promise<AuthResult<Backend
   return { ok: true, data: json };
 }
 
-export async function backendRefresh(refreshToken: string): Promise<AuthResult<BackendRefreshResponse>> {
+export async function backendRefresh(
+  refreshToken: string,
+  options: BackendFetchOptions = {},
+): Promise<AuthResult<BackendRefreshResponse>> {
   // The refresh token goes in the JSON body, not an Authorization header —
   // confirmed against the real backend: a refresh token is intentionally
   // not a general-purpose bearer credential (see auth_router.py's /refresh
   // docstring). Sending it as Bearer instead gets a 422 (missing body).
-  const result = await backendFetch("/auth/refresh", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
+  const result = await backendFetch(
+    "/auth/refresh",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    },
+    options,
+  );
   if (!result.ok) return result;
 
   const response = result.data;
