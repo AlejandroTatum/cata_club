@@ -11,6 +11,7 @@ import { NextRequest } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { GET } from "../route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
+import { MAX_PAGES_PER_SOURCE } from "@/lib/server/paged-fetch";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -305,6 +306,44 @@ describe("GET /api/members", () => {
     expect(body.accounts[0].estudiantes[0].ultimoPago).toBeNull();
   });
 
+  it("gives up instead of looping forever when a page never reports a usable total", async () => {
+    // The loop's normal exits are a short page and `items.length >= total`.
+    // A backend that answers full pages while omitting `total` satisfies
+    // neither — `n >= undefined` is false — so a bug that made `skip` a no-op
+    // would spin the Route Handler until its deadline with the browser's
+    // request open. The bound turns that into the same honest degradation a
+    // failed page already produces: no payments, rather than a partial list
+    // or a hang.
+    const fullPage = Array.from({ length: 200 }, (_, i) => ({
+      ...pago, id: i + 1, personaId: i + 1, membresiaId: undefined,
+    }));
+
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/personas/")) {
+        return Promise.resolve(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 }));
+      }
+      if (url.includes("/membresias/tipos")) return Promise.resolve(jsonResponse([tipo]));
+      if (url.includes("/membresias/pagos")) {
+        // Full page, every time, and no `total` — the pathological shape.
+        return Promise.resolve(jsonResponse({ items: fullPage }));
+      }
+      return Promise.resolve(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 }));
+    });
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.accounts[0].estudiantes[0].ultimoPago).toBeNull();
+
+    const pagosCalls = vi
+      .mocked(global.fetch)
+      .mock.calls.map((call) => String(call[0]))
+      .filter((url) => url.includes("/membresias/pagos"));
+    expect(pagosCalls.length).toBeLessThanOrEqual(MAX_PAGES_PER_SOURCE);
+  });
+
   it("fires every independent backend call at once instead of waiting for /personas/", async () => {
     // Nothing in the pagos/tipos/membresías batch reads the personas response,
     // so awaiting personas first only serialises four independent round trips
@@ -327,6 +366,18 @@ describe("GET /api/members", () => {
     // Can only pass if the other three were dispatched without waiting on
     // personas — while it stays unresolved, a sequential route makes 1 call.
     await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(4));
+
+    // Pin WHICH call got the deferred promise. Without this the test only
+    // says "four calls fired while one was pending", which a reordering of
+    // the Promise.all array would keep satisfying while quietly restoring a
+    // serial personas fetch under some other name.
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls[0]).toContain("/personas/");
+    expect(urls.slice(1)).toEqual([
+      expect.stringContaining("/membresias/pagos"),
+      expect.stringContaining("/membresias/tipos"),
+      expect.stringContaining("/membresias/?"),
+    ]);
 
     releasePersonas(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 }));
     const response = await pending;

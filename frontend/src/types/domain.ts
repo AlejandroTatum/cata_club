@@ -314,21 +314,6 @@ export interface Asistencia {
   createdAt: string;
 }
 
-// ---------------------------------------------------------------------------
-// Domain Helpers
-// ---------------------------------------------------------------------------
-
-/** Students managed by the given account (via `representanteId`). */
-export function getManagedAccounts(
-  usuarioId: string,
-  allUsuarios: Usuario[],
-): UsuarioEstudiante[] {
-  return allUsuarios.filter(
-    (u): u is UsuarioEstudiante =>
-      u.role === "estudiante" && u.representanteId === usuarioId,
-  );
-}
-
 /**
  * Persona report entry — mirrors the camelCase output of PersonaResponseDTO
  * from the backend reportes endpoints (etiquetas & nuevos-por-periodo).

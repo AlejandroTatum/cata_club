@@ -16,56 +16,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { buildMemberAccounts, type BackendPersonaFull } from "@/lib/server/members-adapter";
+import { fetchAllPages, type PaginatedPage } from "@/lib/server/paged-fetch";
 import type { BackendMembresia, BackendPagoListItem, BackendTipoMembresia } from "@/lib/server/payments-adapter";
 
 const PERSONAS_PAGE_LIMIT = 200;
 const MEMBRESIAS_PAGE_LIMIT = 200;
 const PAGOS_PAGE_LIMIT = 200;
 
-/** The envelope every paginated FastAPI list endpoint answers with. */
-interface PaginatedPage<T> {
-  items: T[];
-  total: number;
-}
-
 type PaginatedPersonas = PaginatedPage<BackendPersonaFull>;
-
-type PagedFetchResult<T> = { ok: true; items: T[] } | { ok: false };
-
-/**
- * Both `GET /membresias/` and `GET /membresias/pagos` are paginated at the
- * backend (tope 200) — a single call silently truncates once the club has
- * more than 200 rows in either table, which happens well before it has 200
- * PERSONAS: memberships accumulate per persona over time (vencida, inactiva,
- * la activa) and payments accumulate one row per renewal, so both tables
- * outgrow the persona table. `personasCapped` (below) would stay false while
- * a real chunk of either map was already gone — a swallowed truncation must
- * never render as a confident membership-less or payment-less student, same
- * principle as `membresiasDegraded`. This loops every page instead.
- *
- * A page that fails mid-loop fails the WHOLE source rather than returning
- * what arrived so far: a partial list is the same lie as a truncated one,
- * because the personas on the missing page render as an absence with the
- * same confidence as the ones who genuinely have no row.
- */
-async function fetchAllPages<T>(
-  request: NextRequest,
-  path: string,
-  limit: number,
-): Promise<PagedFetchResult<T>> {
-  const separator = path.includes("?") ? "&" : "?";
-  const items: T[] = [];
-  let skip = 0;
-  while (true) {
-    const result = await backendFetchAuthed(request, `${path}${separator}skip=${skip}&limit=${limit}`);
-    if (!result.ok || !result.response.ok) return { ok: false };
-    const page = (await result.response.json()) as PaginatedPage<T>;
-    items.push(...page.items);
-    if (page.items.length < limit || items.length >= page.total) break;
-    skip += limit;
-  }
-  return { ok: true, items };
-}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   /*
@@ -76,6 +34,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * was real latency on the heaviest admin screen. The array order is also
    * the dispatch order, which is what the positional fetch mocks in
    * `__tests__/route.test.ts` assert against.
+   *
+   * The two `fetchAllPages` calls are drained page by page because both those
+   * tables outgrow the persona table — memberships accumulate per persona
+   * over time (vencida, inactiva, la activa) and payments accumulate one row
+   * per renewal — so `personasCapped` further down would stay false while a
+   * real chunk of either map was already gone. See `lib/server/paged-fetch.ts`
+   * for why truncation, not failure, is the hazard those loops exist to
+   * prevent, and for what happens when a source outgrows the loop's bound.
    */
   const [personasResult, pagosFetch, tiposResult, membresiasFetch] = await Promise.all([
     backendFetchAuthed(request, `/personas/?limit=${PERSONAS_PAGE_LIMIT}`),
