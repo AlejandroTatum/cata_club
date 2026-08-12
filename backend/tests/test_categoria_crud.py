@@ -1,0 +1,335 @@
+"""ABM de categorías (docs/fixes/24-abm-categorias.md): el dueño pidió que
+crear una categoría cree, en la MISMA operación, la fila de
+`categoria_horario` y un `horario_entrenamiento` por cada día marcado --
+"quisiera que se cree directo el horario y categoría, no diferentes". Este
+archivo cubre las cuatro decisiones documentadas en el fix:
+
+1. `codigo` se deriva de `nombre` y es estable (no cambia en un rename).
+2. Quitar un día con asistencias registradas bloquea la edición ENTERA.
+3. Cambiar la franja re-deriva las horas de los horarios que quedan.
+4. Agregar un día a una categoría con alumnos backfillea su inscripción.
+"""
+from datetime import time
+
+import pytest
+
+from app.dominio.enums import DiaSemana, EstadoAsistencia
+from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
+from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia
+from app.presentacion.schemas.asistencia_schemas import (
+    AlumnoHorarioCreateDTO, CategoriaCreateDTO, CategoriaUpdateDTO,
+)
+from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
+
+
+def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
+    return client.post(
+        "/api/v1/personas/",
+        json={
+            "nombres": nombres, "apellidos": "Torres", "cedula": cedula,
+            "fecha_nacimiento": "2010-05-14", "telefono": "0991234567",
+        },
+    ).json()
+
+
+# --- Alta atómica ------------------------------------------------------
+def test_crear_categoria_crea_categoria_dias_y_horarios_atomicamente(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES, DiaSemana.MIERCOLES],
+    ))
+
+    assert categoria.codigo == "PREINFANTIL"
+    assert set(categoria.dias) == {DiaSemana.LUNES, DiaSemana.MIERCOLES}
+
+    fila = db_session.get(CategoriaHorario, "PREINFANTIL")
+    assert fila is not None
+    assert {d.dia_semana for d in fila.dias_permitidos} == {DiaSemana.LUNES, DiaSemana.MIERCOLES}
+
+    horarios = servicio.listar_horarios("PREINFANTIL")
+    assert len(horarios) == 2
+    assert {h.dia_semana for h in horarios} == {DiaSemana.LUNES, DiaSemana.MIERCOLES}
+    assert all(h.hora_inicio == time(15, 0) and h.hora_fin == time(16, 0) for h in horarios)
+
+
+def test_crear_categoria_deriva_codigo_del_nombre_sin_espacios_ni_acentos(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Súper Chiquitos", hora_inicio=time(9, 0), hora_fin=time(10, 0),
+        dias=[DiaSemana.VIERNES],
+    ))
+
+    assert categoria.codigo == "SUPER_CHIQUITOS"
+
+
+def test_crear_categoria_resuelve_colision_de_codigo_con_sufijo(db_session):
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Beta", hora_inicio=time(9, 0), hora_fin=time(10, 0), dias=[DiaSemana.LUNES],
+    ))
+
+    otra = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Beta!!", hora_inicio=time(10, 0), hora_fin=time(11, 0), dias=[DiaSemana.MARTES],
+    ))
+
+    assert otra.codigo == "BETA_2"
+
+
+def test_crear_categoria_rechaza_nombre_duplicado(db_session):
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(9, 0), hora_fin=time(10, 0), dias=[DiaSemana.LUNES],
+    ))
+
+    with pytest.raises(OperacionInvalida) as exc_info:
+        servicio.crear_categoria(CategoriaCreateDTO(
+            nombre="Preinfantil", hora_inicio=time(11, 0), hora_fin=time(12, 0),
+            dias=[DiaSemana.MARTES],
+        ))
+    assert "Preinfantil" in str(exc_info.value)
+    # Nada se creó a medias: el segundo intento no dejó una categoria nueva.
+    codigos = {c.codigo for c in servicio.listar_categorias()}
+    assert "PREINFANTIL_2" not in codigos
+    assert len([c for c in codigos if c.startswith("PREINFANTIL")]) == 1
+
+
+def test_crear_categoria_rechaza_franja_invertida(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    with pytest.raises(OperacionInvalida):
+        servicio.crear_categoria(CategoriaCreateDTO(
+            nombre="Preinfantil", hora_inicio=time(16, 0), hora_fin=time(15, 0),
+            dias=[DiaSemana.LUNES],
+        ))
+
+
+def test_crear_categoria_dia_repetido_en_el_payload_no_duplica_el_horario(db_session):
+    """El candado de una sola fila por (categoria, día) sigue valiendo: un
+    llamado directo a la API (no la casilla del formulario, que es un Set)
+    que repite el mismo día no debe reventar ni crear dos filas."""
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(9, 0), hora_fin=time(10, 0),
+        dias=[DiaSemana.LUNES, DiaSemana.LUNES],
+    ))
+
+    assert len(servicio.listar_horarios(categoria.codigo)) == 1
+
+
+# --- Edición: franja se re-deriva ---------------------------------------
+def test_actualizar_categoria_cambia_franja_re_deriva_horas_de_horarios_existentes(db_session):
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES, DiaSemana.MIERCOLES],
+    ))
+
+    servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(
+        hora_inicio=time(17, 0), hora_fin=time(18, 0),
+    ))
+
+    horarios = servicio.listar_horarios(categoria.codigo)
+    assert len(horarios) == 2
+    assert all(h.hora_inicio == time(17, 0) and h.hora_fin == time(18, 0) for h in horarios)
+
+
+def test_actualizar_categoria_renombra_sin_tocar_el_codigo(db_session):
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES],
+    ))
+
+    actualizada = servicio.actualizar_categoria(
+        categoria.codigo, CategoriaUpdateDTO(nombre="Preinfantil A"),
+    )
+
+    assert actualizada.codigo == categoria.codigo
+    assert actualizada.label == "Preinfantil A"
+
+
+def test_actualizar_categoria_rechaza_nombre_duplicado_de_otra_categoria(db_session):
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(9, 0), hora_fin=time(10, 0), dias=[DiaSemana.LUNES],
+    ))
+    otra = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Infantil B", hora_inicio=time(11, 0), hora_fin=time(12, 0), dias=[DiaSemana.MARTES],
+    ))
+
+    with pytest.raises(OperacionInvalida):
+        servicio.actualizar_categoria(otra.codigo, CategoriaUpdateDTO(nombre="Preinfantil"))
+
+
+# --- Edición: agregar día backfillea alumnos inscriptos ------------------
+def test_actualizar_categoria_agregar_dia_backfillea_alumnos_inscriptos(db_session, client):
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES],
+    ))
+    alumno = _crear_persona_api(client)
+    horario_lunes = servicio.listar_horarios(categoria.codigo)[0]
+    servicio.asignar_alumno_a_horario(
+        AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario_lunes.id)
+    )
+
+    servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(
+        dias=[DiaSemana.LUNES, DiaSemana.MIERCOLES],
+    ))
+
+    horarios = {h.dia_semana: h for h in servicio.listar_horarios(categoria.codigo)}
+    horario_miercoles = horarios[DiaSemana.MIERCOLES]
+    asignaciones = servicio.listar_horarios_por_alumno(alumno["id"])
+    assert {a.horario_id for a in asignaciones} == {horario_lunes.id, horario_miercoles.id}
+
+
+def test_actualizar_categoria_quitar_dia_sin_historial_lo_borra(db_session):
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES, DiaSemana.MIERCOLES],
+    ))
+
+    actualizada = servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(
+        dias=[DiaSemana.LUNES],
+    ))
+
+    assert actualizada.dias == [DiaSemana.LUNES]
+    assert len(servicio.listar_horarios(categoria.codigo)) == 1
+    assert db_session.get(CategoriaHorarioDia, ("PREINFANTIL", DiaSemana.MIERCOLES)) is None
+
+
+# --- Edición: quitar día con historial bloquea TODO -----------------------
+def test_actualizar_categoria_quitar_dia_con_asistencias_bloquea_la_edicion_entera(db_session, client):
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES, DiaSemana.MIERCOLES],
+    ))
+    alumno = _crear_persona_api(client)
+    horario_lunes = next(h for h in servicio.listar_horarios(categoria.codigo) if h.dia_semana == DiaSemana.LUNES)
+    servicio.asignar_alumno_a_horario(
+        AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario_lunes.id)
+    )
+    from app.presentacion.schemas.asistencia_schemas import AsistenciaCreateDTO
+    servicio.registrar_asistencia(AsistenciaCreateDTO(
+        fecha_entrenamiento="2026-08-10", estado=EstadoAsistencia.PRESENTE,
+        persona_id=alumno["id"], horario_id=horario_lunes.id,
+    ))
+
+    with pytest.raises(OperacionInvalida) as exc_info:
+        servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(
+            nombre="Otro nombre", dias=[DiaSemana.MIERCOLES],
+        ))
+    assert "lunes" in str(exc_info.value)
+
+    # Nada se tocó: ni el nombre, ni los días, ni las horas.
+    fila = db_session.get(CategoriaHorario, categoria.codigo)
+    assert fila.label == "Preinfantil"
+    assert len(servicio.listar_horarios(categoria.codigo)) == 2
+
+
+# --- Baja de la categoría entera ------------------------------------------
+def test_eliminar_categoria_sin_historial_borra_categoria_dias_y_horarios(db_session):
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES, DiaSemana.MIERCOLES],
+    ))
+
+    servicio.eliminar_categoria(categoria.codigo)
+
+    assert db_session.get(CategoriaHorario, categoria.codigo) is None
+    assert servicio.listar_horarios(categoria.codigo) == []
+    assert db_session.get(CategoriaHorarioDia, (categoria.codigo, DiaSemana.LUNES)) is None
+
+
+def test_eliminar_categoria_con_asistencias_bloquea_y_no_borra_nada(db_session, client):
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES],
+    ))
+    alumno = _crear_persona_api(client)
+    horario = servicio.listar_horarios(categoria.codigo)[0]
+    servicio.asignar_alumno_a_horario(
+        AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario.id)
+    )
+    from app.presentacion.schemas.asistencia_schemas import AsistenciaCreateDTO
+    servicio.registrar_asistencia(AsistenciaCreateDTO(
+        fecha_entrenamiento="2026-08-10", estado=EstadoAsistencia.PRESENTE,
+        persona_id=alumno["id"], horario_id=horario.id,
+    ))
+
+    with pytest.raises(OperacionInvalida):
+        servicio.eliminar_categoria(categoria.codigo)
+
+    assert db_session.get(CategoriaHorario, categoria.codigo) is not None
+    assert len(servicio.listar_horarios(categoria.codigo)) == 1
+
+
+def test_actualizar_categoria_codigo_inexistente(db_session):
+    servicio = AsistenciaServicio(db_session)
+    with pytest.raises(EntidadNoEncontrada):
+        servicio.actualizar_categoria("NOEXISTE", CategoriaUpdateDTO(nombre="X"))
+
+
+def test_eliminar_categoria_codigo_inexistente(db_session):
+    servicio = AsistenciaServicio(db_session)
+    with pytest.raises(EntidadNoEncontrada):
+        servicio.eliminar_categoria("NOEXISTE")
+
+
+# --- Endpoints HTTP: alta/edición/baja, ADMIN-only ------------------------
+def test_post_categorias_crea_y_devuelve_201(client):
+    resp = client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00:00", "hora_fin": "16:00:00",
+        "dias": ["LUNES", "MIERCOLES"],
+    })
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["codigo"] == "PREINFANTIL"
+    assert set(body["dias"]) == {"LUNES", "MIERCOLES"}
+
+
+def test_post_categorias_sin_admin_devuelve_403(client_sin_permisos):
+    resp = client_sin_permisos.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00:00", "hora_fin": "16:00:00",
+        "dias": ["LUNES"],
+    })
+
+    assert resp.status_code == 403
+
+
+def test_put_categorias_actualiza(client):
+    creada = client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00:00", "hora_fin": "16:00:00",
+        "dias": ["LUNES"],
+    }).json()
+
+    resp = client.put(f"/api/v1/asistencias/categorias/{creada['codigo']}", json={
+        "nombre": "Preinfantil A",
+    })
+
+    assert resp.status_code == 200
+    assert resp.json()["label"] == "Preinfantil A"
+
+
+def test_delete_categorias_borra(client):
+    creada = client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00:00", "hora_fin": "16:00:00",
+        "dias": ["LUNES"],
+    }).json()
+
+    resp = client.delete(f"/api/v1/asistencias/categorias/{creada['codigo']}")
+
+    assert resp.status_code == 204
+    assert client.get("/api/v1/asistencias/categorias").json()
+    codigos = {c["codigo"] for c in client.get("/api/v1/asistencias/categorias").json()}
+    assert creada["codigo"] not in codigos

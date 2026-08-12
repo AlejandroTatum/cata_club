@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import date, time, datetime
 from typing import Optional
 
@@ -43,6 +43,36 @@ class CategoriaResponseDTO(ResponseBase, BaseModel):
     hora_inicio: time
     hora_fin: time
     dias: list[DiaSemana]
+
+
+class CategoriaCreateDTO(BaseModel):
+    """Alta atómica (docs/fixes/24-abm-categorias.md, pedido del dueño:
+    "quisiera que se cree directo el horario y categoría, no diferentes"):
+    una sola operación crea la fila `categoria_horario`, sus
+    `categoria_horario_dia` y un `horario_entrenamiento` por cada día
+    marcado.
+
+    Sin `codigo`: lo deriva el servidor de `nombre`
+    (`AsistenciaServicio._generar_codigo`) para que el admin nunca tipee un
+    código con espacios/acentos -- es la FK de
+    `horario_entrenamiento.categoria`, así que tiene que ser estable y
+    válido como identificador."""
+    nombre: str = Field(min_length=1, max_length=50)
+    hora_inicio: time
+    hora_fin: time
+    dias: list[DiaSemana] = Field(min_length=1)
+
+
+class CategoriaUpdateDTO(BaseModel):
+    """Edición atómica de nombre/franja/días. `dias`, si viene, REEMPLAZA
+    el conjunto completo de días permitidos (no es un delta) --
+    `AsistenciaServicio.actualizar_categoria` calcula qué día agregar y
+    cuál quitar comparando contra los días actuales, y aplica ambos + el
+    re-derive de horas en una sola transacción."""
+    nombre: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    hora_inicio: Optional[time] = None
+    hora_fin: Optional[time] = None
+    dias: Optional[list[DiaSemana]] = Field(default=None, min_length=1)
 
 
 class AsistenciaCreateDTO(BaseModel):

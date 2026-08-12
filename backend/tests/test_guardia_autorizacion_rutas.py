@@ -173,6 +173,14 @@ RUTAS_SOLO_AUTENTICADAS = {
 # visible en el diff.
 RUTAS_ROLES_REQUERIDOS = {
     ("DELETE", "/asistencias/desasignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    # ABM de categorías (docs/fixes/24-abm-categorias.md): alta/edición/baja
+    # atómica de la categoria + sus días + sus horarios. Mismo tier que
+    # PUT/DELETE de `/horarios` (ADMIN-only), no el más permisivo POST
+    # /horarios (que además admite ENTRENADOR) -- crear una categoria
+    # entera es una decisión de catálogo, no operar la clase del día.
+    ("POST", "/asistencias/categorias"): frozenset({"ADMINISTRADOR"}),
+    ("PUT", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
+    ("DELETE", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
     # `DELETE /personas/{persona_id}` ya no existe: la baja de una persona es
     # LÓGICA (`PATCH /personas/{persona_id}/estado`, más abajo), porque el

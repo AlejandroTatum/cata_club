@@ -67,9 +67,9 @@ const mockFetchMembers = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 const mockFetchHorarios = vi.fn().mockResolvedValue([]);
-const mockCrearHorario = vi.fn();
-const mockActualizarHorario = vi.fn();
-const mockEliminarHorario = vi.fn();
+const mockCrearCategoria = vi.fn();
+const mockActualizarCategoria = vi.fn();
+const mockEliminarCategoria = vi.fn();
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchRosterDeTodosLosHorarios = vi.fn().mockResolvedValue([]);
 const mockAsignarAlumnoAHorario = vi.fn();
@@ -105,9 +105,9 @@ vi.mock("@/services/api", () => {
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     fetchHorarios: () => mockFetchHorarios(),
-    crearHorario: (dto: unknown) => mockCrearHorario(dto),
-    actualizarHorario: (id: number, dto: unknown) => mockActualizarHorario(id, dto),
-    eliminarHorario: (id: number) => mockEliminarHorario(id),
+    crearCategoria: (dto: unknown) => mockCrearCategoria(dto),
+    actualizarCategoria: (codigo: string, dto: unknown) => mockActualizarCategoria(codigo, dto),
+    eliminarCategoria: (codigo: string) => mockEliminarCategoria(codigo),
     fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
     fetchRosterDeTodosLosHorarios: () => mockFetchRosterDeTodosLosHorarios(),
     asignarAlumnoAHorario: (dto: unknown) => mockAsignarAlumnoAHorario(dto),
@@ -132,7 +132,7 @@ async function waitForHorarios(): Promise<void> {
   });
 }
 
-describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () => {
+describe("GroupsPage — categoría form is typed input, not a locked catalog select (v6, docs/fixes/24-abm-categorias.md)", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
@@ -149,35 +149,25 @@ describe("GroupsPage — categoria-driven locked schedule form (v2 design)", () 
     expect(heading).not.toHaveClass("sr-only");
   });
 
-  it("locks the displayed time range to COMPETITIVO's 18:00–20:00 and offers Sábado as a día checkbox", async () => {
+  it("the create form has a free-text nombre input and editable hora_inicio/hora_fin — no categoría <select> left", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
-    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "COMPETITIVO" } });
-
-    expect(screen.getByText("18:00 – 20:00")).toBeInTheDocument();
-    expect(screen.getByLabelText("Sábado")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hora de inicio")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hora de fin")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
-  it("locks the displayed time range to FORMATIVO's 15:00–16:00 and excludes Sábado from día checkboxes", async () => {
+  it("offers all seven días as checkboxes — not restricted to a fixed allowed set", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
-    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "FORMATIVO" } });
-
-    expect(screen.getByText("15:00 – 16:00")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Sábado")).not.toBeInTheDocument();
-  });
-
-  it("has no editable hora_inicio/hora_fin time inputs left in the form (locked, not freeform)", async () => {
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await waitForHorarios();
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
-
-    expect(screen.queryByLabelText(/hora inicio/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/hora fin/i)).not.toBeInTheDocument();
+    for (const dia of ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]) {
+      expect(screen.getByLabelText(dia)).toBeInTheDocument();
+    }
   });
 });
 
@@ -491,10 +481,10 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
 
     fireEvent.click(screen.getByRole("button", { name: /^editar formativo/i }));
     await screen.findByRole("heading", { name: "Editar Formativo" });
-    expect(screen.queryByRole("heading", { name: "Editar Horario" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Editar categoría" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /editar los días martes/i }));
-    await screen.findByRole("heading", { name: "Editar Horario" });
+    await screen.findByRole("heading", { name: "Editar categoría" });
   });
 
   it("collapses the club's twenty-six rows into its five training groups", async () => {
@@ -584,7 +574,7 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
   });
 });
 
-describe("GroupsPage — day-diffing unified save (PR2b)", () => {
+describe("GroupsPage — atomic categoría save (v6, docs/fixes/24-abm-categorias.md)", () => {
   const GROUP_ROWS = [
     { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
     { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
@@ -593,16 +583,16 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockCrearHorario.mockReset();
-    mockActualizarHorario.mockReset();
-    mockEliminarHorario.mockReset();
+    mockCrearCategoria.mockReset();
+    mockActualizarCategoria.mockReset();
+    mockEliminarCategoria.mockReset();
     mockFetchAlumnosPorHorario.mockReset();
     mockDesasignarAlumnoDeHorario.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
-    mockCrearHorario.mockResolvedValue({});
-    mockActualizarHorario.mockResolvedValue({});
-    mockEliminarHorario.mockResolvedValue(undefined);
+    mockCrearCategoria.mockResolvedValue({});
+    mockActualizarCategoria.mockResolvedValue({});
+    mockEliminarCategoria.mockResolvedValue(undefined);
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
     mockDesasignarAlumnoDeHorario.mockResolvedValue(undefined);
   });
@@ -611,27 +601,25 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
     fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
-    await screen.findByRole("heading", { name: "Editar Horario" });
+    await screen.findByRole("heading", { name: "Editar categoría" });
   }
 
-  it("ticking a new día creates a row and updates the kept días' shared fields on submit", async () => {
+  it("ticking a new día saves the categoría with the whole new day-set in ONE actualizarCategoria call", async () => {
     await openEditAndSubmit();
 
     fireEvent.click(screen.getByLabelText("Viernes"));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     await waitFor(() => {
-      expect(mockCrearHorario).toHaveBeenCalledWith(
-        expect.objectContaining({ dia_semana: "VIERNES", categoria: "COMPETITIVO" }),
+      expect(mockActualizarCategoria).toHaveBeenCalledWith(
+        "COMPETITIVO",
+        expect.objectContaining({ dias: expect.arrayContaining(["LUNES", "MIERCOLES", "VIERNES"]) }),
       );
     });
-    expect(mockActualizarHorario).toHaveBeenCalledWith(301, expect.objectContaining({ categoria: "COMPETITIVO" }));
-    expect(mockActualizarHorario).toHaveBeenCalledWith(303, expect.objectContaining({ categoria: "COMPETITIVO" }));
-    // Sin relación entrenador–horario (issue #13): ningún DTO lleva entrenador_id.
-    expect(mockCrearHorario).not.toHaveBeenCalledWith(expect.objectContaining({ entrenador_id: expect.anything() }));
+    expect(mockActualizarCategoria).toHaveBeenCalledTimes(1);
   });
 
-  it("unticking a día with zero enrolled students deletes it silently, without a confirmation dialog", async () => {
+  it("unticking a día with zero enrolled students saves atomically, without a confirmation dialog", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
     await openEditAndSubmit();
 
@@ -639,12 +627,15 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     await waitFor(() => {
-      expect(mockEliminarHorario).toHaveBeenCalledWith(303);
+      expect(mockActualizarCategoria).toHaveBeenCalledWith(
+        "COMPETITIVO",
+        expect.objectContaining({ dias: ["LUNES"] }),
+      );
     });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("unticking a día with enrolled students shows a confirmation naming the count and día before deleting", async () => {
+  it("unticking a día with enrolled students shows a confirmation naming the count and día BEFORE saving", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([
       { id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", horarioId: 303, horarioDia: "MIERCOLES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
       { id: 2, personaId: 11, personaNombreCompleto: "Bruno Díaz", horarioId: 303, horarioDia: "MIERCOLES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
@@ -657,15 +648,15 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/2/)).toBeInTheDocument();
     expect(within(dialog).getByText(/mié/i)).toBeInTheDocument();
-    expect(mockEliminarHorario).not.toHaveBeenCalled();
+    expect(mockActualizarCategoria).not.toHaveBeenCalled();
 
     fireEvent.click(within(dialog).getByRole("button", { name: /cancelar/i }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(mockEliminarHorario).not.toHaveBeenCalled();
+    expect(mockActualizarCategoria).not.toHaveBeenCalled();
     expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
   });
 
-  it("confirming the pending deletion calls eliminarHorario, which unassigns that ONE row's students server-side (not desasignarAlumnoDeHorario, which would unenroll them from the whole categoria)", async () => {
+  it("confirming the pending removal saves atomically via actualizarCategoria (not desasignarAlumnoDeHorario, which would unenroll Ana from every OTHER día of the categoría too)", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([
       { id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", horarioId: 303, horarioDia: "MIERCOLES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
     ]);
@@ -678,12 +669,23 @@ describe("GroupsPage — day-diffing unified save (PR2b)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /confirmar/i }));
 
     await waitFor(() => {
-      expect(mockEliminarHorario).toHaveBeenCalledWith(303);
+      expect(mockActualizarCategoria).toHaveBeenCalledWith(
+        "COMPETITIVO",
+        expect.objectContaining({ dias: ["LUNES"] }),
+      );
     });
-    // NOT desasignarAlumnoDeHorario: since it now fans out to the whole
-    // categoria server-side, calling it here would wrongly unenroll Ana from
-    // every OTHER día of the group too, just because Miércoles is dropped.
     expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
+  });
+
+  it("stays open and shows the server's message instead of closing/resyncing when the save fails (fully atomic: nothing was written)", async () => {
+    mockActualizarCategoria.mockRejectedValue(new ApiClientError("La categoría ya tiene ese nombre.", 400));
+    await openEditAndSubmit();
+
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    expect(await screen.findByText("La categoría ya tiene ese nombre.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Editar categoría" })).toBeInTheDocument();
+    expect(mockFetchHorarios).toHaveBeenCalledTimes(1); // only the initial load — no resync on failure.
   });
 });
 
@@ -705,7 +707,7 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
   });
 
   function cards(): HTMLElement[] {
-    // Scoped to the horarios list container — excludes the "Nuevo Horario"
+    // Scoped to the horarios list container — excludes the "Nueva categoría"
     // create-form wrapper, which reuses the same "card p-5" classes but is a
     // sibling before the list, not a group card.
     return screen.getAllByTestId("horario-card");
@@ -718,7 +720,7 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
     const [cardA] = cards();
     fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
 
-    const heading = await screen.findByRole("heading", { name: "Editar Horario" });
+    const heading = await screen.findByRole("heading", { name: "Editar categoría" });
     expect(cardA.contains(heading)).toBe(true);
   });
 
@@ -728,15 +730,15 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
 
     const [cardA, cardB] = cards();
     fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
-    await screen.findByRole("heading", { name: "Editar Horario" });
-    expect(within(cardA).getByRole("heading", { name: "Editar Horario" })).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Editar categoría" });
+    expect(within(cardA).getByRole("heading", { name: "Editar categoría" })).toBeInTheDocument();
 
     fireEvent.click(within(cardB).getByRole("button", { name: /^editar /i }));
     await waitFor(() => {
-      expect(within(cardB).getByRole("heading", { name: "Editar Horario" })).toBeInTheDocument();
+      expect(within(cardB).getByRole("heading", { name: "Editar categoría" })).toBeInTheDocument();
     });
-    expect(within(cardA).queryByRole("heading", { name: "Editar Horario" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { name: "Editar Horario" })).toHaveLength(1);
+    expect(within(cardA).queryByRole("heading", { name: "Editar categoría" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Editar categoría" })).toHaveLength(1);
   });
 
   it("opening the alumnos panel on group B closes group A's edit form (single accordion across tabs)", async () => {
@@ -745,12 +747,12 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
 
     const [cardA, cardB] = cards();
     fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
-    await screen.findByRole("heading", { name: "Editar Horario" });
+    await screen.findByRole("heading", { name: "Editar categoría" });
 
     fireEvent.click(within(cardB).getByRole("button", { name: /ver alumnos/i }));
     await screen.findByRole("heading", { name: "Alumnos de Competitivo" });
 
-    expect(screen.queryByRole("heading", { name: "Editar Horario" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Editar categoría" })).not.toBeInTheDocument();
   });
 
   it("switching tabs on the same group replaces the editar panel with the alumnos panel inline", async () => {
@@ -759,20 +761,20 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
 
     const [cardA] = cards();
     fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
-    await screen.findByRole("heading", { name: "Editar Horario" });
+    await screen.findByRole("heading", { name: "Editar categoría" });
 
     fireEvent.click(within(cardA).getByRole("button", { name: /ver alumnos/i }));
     const alumnosHeading = await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     expect(cardA.contains(alumnosHeading)).toBe(true);
-    expect(screen.queryByRole("heading", { name: "Editar Horario" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Editar categoría" })).not.toBeInTheDocument();
   });
 
-  it("the 'Nuevo Horario' create form is not nested inside any existing group card", async () => {
+  it("the 'Nueva categoría' create form is not nested inside any existing group card", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
-    const heading = await screen.findByRole("heading", { name: "Nuevo Horario" });
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+    const heading = await screen.findByRole("heading", { name: "Nueva categoría" });
 
     for (const card of cards()) {
       expect(card.contains(heading)).toBe(false);
@@ -1122,12 +1124,12 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   });
 });
 
-describe("GroupsPage — deleting removes the whole group, not just the first día (bugfix)", () => {
+describe("GroupsPage — deleting removes the categoría entera atomically (docs/fixes/24-abm-categorias.md)", () => {
   /** The delete action lives inside the edit panel (`15-horario-editar.html`),
-   *  not on the card, because it removes every weekday of the group. */
+   *  not on the card, because it removes every weekday of the categoría. */
   async function openDeleteFromEditPanel(): Promise<void> {
     fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
-    await screen.findByRole("heading", { name: "Editar Horario" });
+    await screen.findByRole("heading", { name: "Editar categoría" });
     fireEvent.click(screen.getByRole("button", { name: /^eliminar/i }));
   }
 
@@ -1140,12 +1142,12 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockEliminarHorario.mockReset();
+    mockEliminarCategoria.mockReset();
     mockFetchAlumnosPorHorario.mockReset();
     mockDesasignarAlumnoDeHorario.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
-    mockEliminarHorario.mockResolvedValue(undefined);
+    mockEliminarCategoria.mockResolvedValue(undefined);
     mockDesasignarAlumnoDeHorario.mockResolvedValue(undefined);
   });
 
@@ -1181,10 +1183,10 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
     expect(within(dialog).getByText(/lun/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/mié/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/vie/i)).toBeInTheDocument();
-    expect(mockEliminarHorario).not.toHaveBeenCalled();
+    expect(mockEliminarCategoria).not.toHaveBeenCalled();
   });
 
-  it("confirming deletes EVERY día row of the whole group via eliminarHorario alone (each row's own students are unassigned server-side, not via desasignarAlumnoDeHorario)", async () => {
+  it("confirming deletes the categoría with ONE eliminarCategoria call (not desasignarAlumnoDeHorario)", async () => {
     mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) => {
       if (horarioId === 701) {
         return Promise.resolve([
@@ -1202,10 +1204,9 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
     fireEvent.click(within(dialog).getByRole("button", { name: /confirmar/i }));
 
     await waitFor(() => {
-      expect(mockEliminarHorario).toHaveBeenCalledWith(701);
-      expect(mockEliminarHorario).toHaveBeenCalledWith(702);
-      expect(mockEliminarHorario).toHaveBeenCalledWith(703);
+      expect(mockEliminarCategoria).toHaveBeenCalledWith("COMPETITIVO");
     });
+    expect(mockEliminarCategoria).toHaveBeenCalledTimes(1);
     expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
   });
 
@@ -1220,71 +1221,38 @@ describe("GroupsPage — deleting removes the whole group, not just the first d�
     fireEvent.click(within(dialog).getByRole("button", { name: /cancelar/i }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(mockEliminarHorario).not.toHaveBeenCalled();
+    expect(mockEliminarCategoria).not.toHaveBeenCalled();
     expect(mockFetchHorarios).not.toHaveBeenCalled();
   });
-});
 
-describe("GroupsPage — save resyncs local state after a mid-sequence failure (bugfix)", () => {
-  const GROUP_ROWS = [
-    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
-    { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
-  ];
-  // Simulates the backend state AFTER the partial failure: día VIERNES (705)
-  // was already created successfully before actualizarHorario(303) rejected.
-  const RESYNCED_ROWS = [
-    ...GROUP_ROWS,
-    { id: 705, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
-  ];
-
-  beforeEach(() => {
-    mockFetchMembers.mockReset();
-    mockFetchHorarios.mockReset();
-    mockCrearHorario.mockReset();
-    mockActualizarHorario.mockReset();
-    mockEliminarHorario.mockReset();
-    mockFetchAlumnosPorHorario.mockReset();
-    mockDesasignarAlumnoDeHorario.mockReset();
-    mockFetchMembers.mockResolvedValue({ accounts: [] });
-    mockFetchHorarios.mockResolvedValueOnce(GROUP_ROWS).mockResolvedValue(RESYNCED_ROWS);
+  it("shows the server's message and does not remove the card when eliminarCategoria is blocked (real Asistencia history)", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
-  });
-
-  it("resyncs via loadData() and closes the form after a mid-sequence save failure, so a retry does not re-diff against stale rows", async () => {
-    mockCrearHorario.mockResolvedValue({}); // crearHorario(VIERNES) succeeds
-    // actualizarHorario(301) succeeds, actualizarHorario(303) fails — the
-    // real bug: a 2nd/3rd call in the sequence rejecting after earlier calls
-    // already succeeded.
-    mockActualizarHorario.mockImplementation((id: number) =>
-      id === 301 ? Promise.resolve({}) : Promise.reject(new Error("boom")),
+    mockEliminarCategoria.mockRejectedValue(
+      new ApiClientError(
+        'No se puede eliminar la categoría "Competitivo": el día lunes tiene asistencias registradas. El historial no se borra.',
+        400,
+      ),
     );
-
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
-    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
-    await screen.findByRole("heading", { name: "Editar Horario" });
 
-    fireEvent.click(screen.getByLabelText("Viernes"));
-    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+    await openDeleteFromEditPanel();
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar/i }));
 
-    await waitFor(() => expect(mockActualizarHorario).toHaveBeenCalledWith(303, expect.anything()));
-
-    // loadData()/fetchHorarios is called again to resync with what actually
-    // persisted (initial load + post-failure resync).
-    await waitFor(() => expect(mockFetchHorarios).toHaveBeenCalledTimes(2));
-    // The form closes instead of continuing to edit against the stale
-    // pre-failure `editingGroup` snapshot.
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Editar Horario" })).not.toBeInTheDocument());
-    await screen.findByText(/error al guardar el horario/i);
-
-    // Reopening the form must reflect the RESYNCED backend state (día
-    // VIERNES already exists, id 705) — not the stale 2-día snapshot from
-    // before the failed save, which would cause a retry to re-create it.
-    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
-    await screen.findByRole("heading", { name: "Editar Horario" });
-    expect(screen.getByLabelText("Viernes")).toBeChecked();
+    expect(
+      await screen.findByText(/el historial no se borra/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(1);
   });
 });
+
+// "save resyncs local state after a mid-sequence failure" died with the
+// per-día diff loop it guarded: `submitCategoria` is now ONE atomic backend
+// call, so there is no mid-sequence to fail partway through — see "stays
+// open and shows the server's message instead of closing/resyncing when the
+// save fails" in the "atomic categoría save" describe block above, which
+// replaces this guard for the new (impossible-to-partially-fail) shape.
 
 describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
   const GROUP_ROWS = [
@@ -1294,41 +1262,45 @@ describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
-    mockCrearHorario.mockReset();
+    mockCrearCategoria.mockReset();
     mockFetchMembers.mockResolvedValue({ accounts: [] });
     mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
-    mockCrearHorario.mockResolvedValue({});
+    mockCrearCategoria.mockResolvedValue({});
   });
 
   it("the create form has no Entrenador field — the relation is gone", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
-    await screen.findByRole("heading", { name: "Nuevo Horario" });
+    await screen.findByRole("heading", { name: "Nueva categoría" });
     expect(screen.queryByLabelText("Entrenador")).not.toBeInTheDocument();
   });
 
-  it("creating a new horario submits only categoria and dia_semana", async () => {
+  it("creating a new categoría submits nombre, franja and días — no entrenador, no categoria code typed by hand", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
-    fireEvent.click(screen.getByRole("button", { name: /nuevo horario/i }));
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
+    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Preinfantil" } });
+    fireEvent.change(screen.getByLabelText("Hora de inicio"), { target: { value: "15:00" } });
+    fireEvent.change(screen.getByLabelText("Hora de fin"), { target: { value: "16:00" } });
     fireEvent.click(screen.getByLabelText("Lunes"));
-    fireEvent.click(screen.getByRole("button", { name: /crear horario/i }));
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await waitFor(() => {
-      // FORMATIVO es la categoría por defecto del formulario "Nuevo Horario".
-      expect(mockCrearHorario).toHaveBeenCalledWith({ dia_semana: "LUNES", categoria: "FORMATIVO" });
+      expect(mockCrearCategoria).toHaveBeenCalledWith({
+        nombre: "Preinfantil", hora_inicio: "15:00", hora_fin: "16:00", dias: ["LUNES"],
+      });
     });
   });
 
-  it("editing an existing horario opens the form without any trainer field", async () => {
+  it("editing an existing categoría opens the form without any trainer field", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
     fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
 
-    await screen.findByRole("heading", { name: "Editar Horario" });
+    await screen.findByRole("heading", { name: "Editar categoría" });
     expect(screen.queryByLabelText("Entrenador")).not.toBeInTheDocument();
   });
 });

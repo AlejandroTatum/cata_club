@@ -620,6 +620,82 @@ export async function eliminarHorario(id: number): Promise<void> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Categorías (docs/fixes/24-abm-categorias.md) — atomic ABM
+// ---------------------------------------------------------------------------
+
+/**
+ * A `categoria_horario` row as this endpoint family returns it — same
+ * untranslated backend day-code space (`"LUNES"`..`"DOMINGO"`) as `Horario`
+ * above, NOT the frontend `DiaSemana` codes `@/services/categorias`
+ * translates for other pages (see that module's own doc comment on why the
+ * two coexist).
+ */
+export interface CategoriaGrupo {
+  codigo: string;
+  label: string;
+  horaInicio: string;
+  horaFin: string;
+  dias: string[];
+}
+
+/**
+ * `codigo` is intentionally absent: the server derives it from `nombre`
+ * (`AsistenciaServicio._generar_codigo`) and it never changes afterwards —
+ * see that method's doc comment for why (it is the FK
+ * `horario_entrenamiento.categoria` relies on).
+ */
+export interface CrearCategoriaDTO {
+  nombre: string;
+  hora_inicio: string;
+  hora_fin: string;
+  dias: string[];
+}
+
+/** `dias`, if present, REPLACES the categoria's whole day-set (not a delta)
+ *  — see `AsistenciaServicio.actualizar_categoria`. */
+export interface ActualizarCategoriaDTO {
+  nombre?: string;
+  hora_inicio?: string;
+  hora_fin?: string;
+  dias?: string[];
+}
+
+/** Create a categoria AND a horario per día marked, in one atomic operation
+ *  (the owner's own words: "quisiera que se cree directo el horario y
+ *  categoría, no diferentes"). */
+export async function crearCategoria(data: CrearCategoriaDTO): Promise<CategoriaGrupo> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<CategoriaGrupo>(apiEndpoint("/groups/categorias"), {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: mockHeaders,
+  });
+}
+
+/** Edit a categoria's nombre/franja/días atomically — re-derives hours on
+ *  the horarios that remain and backfills `alumno_horario` for any newly
+ *  added día (see the backend service method's own doc comment). */
+export async function actualizarCategoria(codigo: string, data: ActualizarCategoriaDTO): Promise<CategoriaGrupo> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<CategoriaGrupo>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}`), {
+    method: "PUT",
+    body: JSON.stringify(data),
+    headers: mockHeaders,
+  });
+}
+
+/** Delete a categoria and every one of its horarios. Blocked server-side
+ *  (400) when any of them already has `Asistencia` history — history is
+ *  never deleted. */
+export async function eliminarCategoria(codigo: string): Promise<void> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  await request<unknown>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}`), {
+    method: "DELETE",
+    headers: mockHeaders,
+  });
+}
+
 // `Entrenador`/`fetchEntrenadores` (the trainer dropdown for the horario
 // form) were removed with the trainer–schedule relation (issue #13): the
 // backend endpoint `GET /personas/entrenadores` no longer exists.
