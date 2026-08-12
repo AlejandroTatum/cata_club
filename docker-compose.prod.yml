@@ -8,17 +8,34 @@
 # base ya no tiene `build:` ni puertos publicados, así que este overlay no
 # necesita QUITAR nada -- esa es la propiedad estructural que buscaba la
 # decisión de diseño 4.1 (los overlays de Compose se fusionan, nunca pueden
-# remover una clave). Caddy (TLS + reverse proxy), límites de memoria por
-# servicio, y logging rotado quedan para la continuación de esta PR (ver
-# decisiones de diseño 4.5/4.6/4.7): no forman parte de la propiedad de
-# seguridad medida (build en el droplet OOM-ea un 2GB) que esta PR entrega.
+# remover una clave). Caddy (TLS + reverse proxy) y logging rotado quedan
+# para la continuación de esta PR (ver decisiones de diseño 4.5/4.7): no
+# forman parte de la propiedad de seguridad medida (build en el droplet
+# OOM-ea un 2GB) que esta PR entrega. Los límites de memoria por servicio
+# (decisión de diseño 4.6) YA están resueltos acá, con `mem_limit`: es lo
+# que `docker compose up` honra fuera de Swarm, a diferencia de
+# `deploy.resources.limits`, que Compose solo aplica en modo Swarm y por eso
+# no tiene ningún efecto en este despliegue.
 # `SMTP_STARTTLS` se repite en los tres servicios porque cada uno resuelve
 # `environment: *backend_env` a su propia copia del mapa base ANTES de que
 # este overlay se fusione: un override puesto solo en `backend:` acá no
 # alcanza a `celery-worker`/`celery-beat`, aunque los tres compartan el mismo
 # alias YAML en `docker-compose.yml`.
 services:
+  # Valores de arranque del presupuesto de memoria (decisión de diseño 4.6):
+  # db 320m | redis 64m | backend 320m | celery-worker 320m | celery-beat
+  # 160m | frontend 256m. Suman 1440m sobre los 2048m del droplet, dejando
+  # margen para el sistema operativo y los picos. `mem_limit` (no
+  # `deploy.resources.limits`, ver arriba) es lo único que `docker compose
+  # up` honra fuera de Swarm.
+  db:
+    mem_limit: 320m
+
+  redis:
+    mem_limit: 64m
+
   backend:
+    mem_limit: 320m
     environment:
       # Hardcodeado, no `${AMBIENTE:-production}`: este overlay debe forzar
       # producción sin depender de que nadie exporte la variable.
@@ -38,13 +55,18 @@ services:
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
 
   celery-worker:
+    mem_limit: 320m
     environment:
       AMBIENTE: production
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
 
   celery-beat:
+    mem_limit: 160m
     environment:
       AMBIENTE: production
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+
+  frontend:
+    mem_limit: 256m

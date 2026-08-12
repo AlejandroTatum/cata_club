@@ -43,11 +43,21 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
 
-  # mailpit es una herramienta de DESARROLLO y su UI web no pide
-  # credenciales: publicar 8025 (y 1025 SMTP) solo puede pasar acá. En la
-  # base, el render de producción los exponía en 0.0.0.0 y ningún overlay
-  # podía quitarlos (los overlays de Compose solo fusionan).
+  # Cazamoscas de correo para DESARROLLO. El servicio ENTERO vive acá, no
+  # solo sus puertos: la UI web no tiene autenticación de ningún tipo, y
+  # con él en la base el render de producción lo incluía igual -- los
+  # overlays de Compose solo fusionan, jamás pueden remover una clave, así
+  # que `docker-compose.prod.yml` no tenía forma de quitarlo (mismo
+  # razonamiento que `build:` y los puertos publicados, arriba). Como
+  # `SMTP_HOST: ${SMTP_HOST:-mailpit}`, un operador que no sobrescriba el
+  # SMTP en producción manda el correo transaccional real (incluidos los
+  # enlaces de recuperación de contraseña) a un buzón abierto a internet --
+  # sacar el servicio de la base es lo único que lo garantiza.
   mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: 500
     ports:
       - "127.0.0.1:1025:1025"  # SMTP
       - "127.0.0.1:8025:8025"  # UI web para ver correos capturados
