@@ -28,11 +28,29 @@ services:
   # droplet, dejando margen para el sistema operativo y los picos. `mem_limit`
   # (no `deploy.resources.limits`, ver arriba) es lo único que `docker compose
   # up` honra fuera de Swarm.
+  #
+  # Presupuesto de rotación de logs, común a los siete servicios de abajo:
+  # `max-size: "10m"` x `max-file: "3"` = 30MB tope por servicio x 7 =
+  # 210MB máximo total, muy por debajo de los 50GB del disco del droplet
+  # (51200MB) -- deja margen de sobra incluso si varios servicios rotan a la
+  # vez. Sin esto, `json-file` (el driver por defecto de Docker) escribe sin
+  # límite y el disco se llena en silencio: Postgres es el primer servicio en
+  # morir sin espacio (no puede escribir WAL).
   db:
     mem_limit: 320m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     mem_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     mem_limit: 320m
@@ -53,6 +71,11 @@ services:
       # proveedor SMTP real. El operador puede seguir desactivándolo
       # explícitamente si su proveedor no lo soporta.
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   celery-worker:
     mem_limit: 320m
@@ -60,6 +83,11 @@ services:
       AMBIENTE: production
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   celery-beat:
     mem_limit: 160m
@@ -67,9 +95,19 @@ services:
       AMBIENTE: production
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Ingress único del stack de producción. Imagen oficial con tag fijo (nunca
   # `latest`: un `docker compose pull` sin aviso no debe poder cambiar de
@@ -120,6 +158,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   caddy_data:
