@@ -96,6 +96,7 @@ import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { Button, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
+import { useGroupRoster } from "./useGroupRoster";
 import {
   fetchHorarios,
   crearCategoria,
@@ -104,8 +105,6 @@ import {
   fetchMembers,
   fetchAlumnosPorHorario,
   fetchRosterDeTodosLosHorarios,
-  asignarAlumnoAHorario,
-  desasignarAlumnoDeHorario,
 } from "@/services/api";
 import type { Horario, AlumnoHorario } from "@/services/api";
 import {
@@ -121,7 +120,6 @@ import {
   formatDiaSet,
   countInscriptos,
   buildDiaTrack,
-  formatMembresiaVencidaWarning,
   DIA_ORDER,
   DIA_LABELS,
   type CategoriaCard,
@@ -334,14 +332,9 @@ export default function GroupsPage(): React.ReactElement {
   // rendered inline via `expandedGroup.tab === "alumnos"`. Assignment is at
   // GRUPO level (every underlying `horario_id` día row), not per-día: a
   // student enrolled in a día-group belongs to ALL its días, never just one.
-  // `alumnosPorHorario` holds the deduplicated (by `personaId`) union of the
+  // `roster.alumnos` holds the deduplicated (by `personaId`) union of the
   // roster across every row of the currently open group.
-  const [alumnosPorHorario, setAlumnosPorHorario] = useState<AlumnoHorario[]>([]);
-  const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
-  const [asignandoAlumno, setAsignandoAlumno] = useState(false);
-  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<number | null>(null);
   /** 1-indexed page of the "Ver alumnos" roster. Reset whenever a panel opens. */
-  const [alumnosPage, setAlumnosPage] = useState(1);
 
   /**
    * Enrolled person-ids per `Horario.id`, for the card's "N inscriptos" line.
@@ -367,81 +360,7 @@ export default function GroupsPage(): React.ReactElement {
     setTimeout(() => setNotification(null), 4000);
   }, []);
 
-  /** Loads the roster for a whole categoría: fetches every underlying row's
-   * assignees and deduplicates by `personaId` (a student assigned — even
-   * inconsistently, to only some días — must appear exactly once). */
-  const cargarAlumnosDelGrupo = useCallback(async (rows: readonly HorarioGroupRow[]): Promise<void> => {
-    setCargandoAlumnos(true);
-    try {
-      const listasPorDia = await Promise.all(rows.map((row) => fetchAlumnosPorHorario(row.id)));
-      const porPersona = new Map<number, AlumnoHorario>();
-      for (const lista of listasPorDia) {
-        for (const alumno of lista) {
-          if (!porPersona.has(alumno.personaId)) porPersona.set(alumno.personaId, alumno);
-        }
-      }
-      setAlumnosPorHorario(Array.from(porPersona.values()));
-    } catch {
-      showNotification("error", "Error al cargar los alumnos del horario.");
-    } finally {
-      setCargandoAlumnos(false);
-    }
-  }, [showNotification]);
-
-  /**
-   * Assigns the selected student to the categoría the card represents. The
-   * backend now enrolls the student into EVERY horario row of that categoría
-   * in one atomic transaction — the club enrolls by full month, never by a
-   * loose weekday — so this only needs to anchor the request on any one row
-   * of the group (`rows[0]`); there is no longer a per-row loop to run or a
-   * benign-per-row-failure case to tolerate on this side.
-   */
-  const handleAsignarAlumno = useCallback(async (rows: readonly HorarioGroupRow[]): Promise<void> => {
-    if (!alumnoSeleccionado || rows.length === 0) return;
-    setAsignandoAlumno(true);
-    try {
-      const respuesta = await asignarAlumnoAHorario({ persona_id: alumnoSeleccionado, horario_id: rows[0].id });
-      const message = "Alumno asignado correctamente al horario.";
-      showNotification("success", message);
-      showSuccess(message);
-      // INS-6 (decisión de negocio #4): la cuota vencida NO bloquea la
-      // asignación -- ya se hizo, arriba. Esto es solo el aviso no
-      // bloqueante, aparte del toast de éxito.
-      if (respuesta.membresiaVencida) {
-        const alumno = allStudents.find((s) => Number(s.id) === alumnoSeleccionado);
-        const nombreCompleto = alumno ? `${alumno.nombres} ${alumno.apellidos}` : "El alumno";
-        showWarning(formatMembresiaVencidaWarning(nombreCompleto, respuesta.diasVencida));
-      }
-      setAlumnoSeleccionado(null);
-    } catch (err) {
-      const message = extractErrorMessage(err, "Error al asignar el alumno al horario.");
-      showNotification("error", message);
-      showError(message);
-    }
-    // Refreshed on both paths, mirroring handleDesasignarAlumno: an assign
-    // call can fail on the client side (network) after already landing on
-    // the server, so the roster must resync either way instead of only
-    // reflecting the last KNOWN-good state.
-    await cargarAlumnosDelGrupo(rows);
-    setAsignandoAlumno(false);
-  }, [alumnoSeleccionado, allStudents, cargarAlumnosDelGrupo, showNotification, showSuccess, showError, showWarning]);
-
-  /** Mirror of `handleAsignarAlumno`: the backend unassigns the student from
-   * every horario row of the categoría in one atomic transaction, so one
-   * call anchored on any row of the group is enough. */
-  const handleDesasignarAlumno = useCallback(async (rows: readonly HorarioGroupRow[], personaId: number): Promise<void> => {
-    if (rows.length === 0) return;
-    try {
-      await desasignarAlumnoDeHorario(personaId, rows[0].id);
-      showNotification("success", "Alumno desasignado del horario.");
-      showSuccess("Alumno desasignado del horario.");
-    } catch (err) {
-      const message = extractErrorMessage(err, "Error al desasignar el alumno del horario.");
-      showNotification("error", message);
-      showError(message);
-    }
-    await cargarAlumnosDelGrupo(rows);
-  }, [cargarAlumnosDelGrupo, showNotification, showSuccess, showError]);
+  const roster = useGroupRoster({ allStudents, showNotification });
 
   const loadData = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -571,8 +490,8 @@ export default function GroupsPage(): React.ReactElement {
    * recurring grupo, not one día). */
   function openAlumnosTab(card: CategoriaCard): void {
     setExpandedGroup({ key: card.categoria, tab: "alumnos" });
-    setAlumnosPage(1);
-    void cargarAlumnosDelGrupo(card.rows);
+    roster.setPage(1);
+    void roster.load(card.rows);
   }
 
   /** Collapses whichever accordion panel (editar or alumnos) is open. */
@@ -582,9 +501,7 @@ export default function GroupsPage(): React.ReactElement {
     setFormData(EMPTY_FORM);
     setSelectedDias(new Set());
     setFormError(null);
-    setAlumnosPorHorario([]);
-    setAlumnoSeleccionado(null);
-    setAlumnosPage(1);
+    roster.reset();
   }
 
   function toggleDia(dia: string): void {
@@ -942,12 +859,12 @@ export default function GroupsPage(): React.ReactElement {
    */
   function renderAlumnosPanel(card: CategoriaCard): React.ReactElement {
     const rows = card.rows;
-    const totalPages = getTotalPages(alumnosPorHorario.length, ALUMNOS_PAGE_SIZE);
+    const totalPages = getTotalPages(roster.alumnos.length, ALUMNOS_PAGE_SIZE);
     // Clamped rather than trusted: desasignar can shorten the roster past the
     // page being read, and a page beyond the end would render an empty list
     // with no way back to the rows that are still there.
-    const currentPage = Math.min(alumnosPage, totalPages);
-    const alumnosVisibles = paginateRecords(alumnosPorHorario, currentPage, ALUMNOS_PAGE_SIZE);
+    const currentPage = Math.min(roster.page, totalPages);
+    const alumnosVisibles = paginateRecords(roster.alumnos, currentPage, ALUMNOS_PAGE_SIZE);
 
     return (
       <>
@@ -972,12 +889,12 @@ export default function GroupsPage(): React.ReactElement {
             <select
               id="alumno-select"
               className="input-field w-full"
-              value={alumnoSeleccionado ?? ""}
-              onChange={(e) => setAlumnoSeleccionado(e.target.value ? Number(e.target.value) : null)}
+              value={roster.selectedId ?? ""}
+              onChange={(e) => roster.setSelectedId(e.target.value ? Number(e.target.value) : null)}
             >
               <option value="">Seleccionar alumno…</option>
               {allStudents
-                .filter((s) => s.activo && !alumnosPorHorario.some((a) => a.personaId === Number(s.id)))
+                .filter((s) => s.activo && !roster.alumnos.some((a) => a.personaId === Number(s.id)))
                 .map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.nombres} {s.apellidos}
@@ -987,11 +904,11 @@ export default function GroupsPage(): React.ReactElement {
           </div>
           <button
             type="button"
-            onClick={() => void handleAsignarAlumno(rows)}
-            disabled={!alumnoSeleccionado || asignandoAlumno}
+            onClick={() => void roster.assign(rows)}
+            disabled={!roster.selectedId || roster.assigning}
             className="btn-primary inline-flex items-center gap-1.5 text-xs"
           >
-            {asignandoAlumno ? (
+            {roster.assigning ? (
               <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
             ) : (
               <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
@@ -1000,13 +917,13 @@ export default function GroupsPage(): React.ReactElement {
           </button>
         </div>
 
-        {cargandoAlumnos ? (
+        {roster.loading ? (
           <LoadingState label="Cargando alumnos…" />
         ) : (
-          alumnosPorHorario.length > 0 && (
+          roster.alumnos.length > 0 && (
             <div className="border-t border-line pt-4">
               <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-ink-3-strong">
-                Alumnos asignados ({alumnosPorHorario.length})
+                Alumnos asignados ({roster.alumnos.length})
               </p>
               <DataRowList>
                 {alumnosVisibles.map((a) => (
@@ -1017,7 +934,7 @@ export default function GroupsPage(): React.ReactElement {
                     actions={
                       <button
                         type="button"
-                        onClick={() => void handleDesasignarAlumno(rows, a.personaId)}
+                        onClick={() => void roster.unassign(rows, a.personaId)}
                         className="rounded-lg border border-line-2 p-1 text-ink-3 transition-colors hover:bg-red-50 hover:text-state-bad"
                         title="Desasignar alumno"
                       >
@@ -1027,12 +944,12 @@ export default function GroupsPage(): React.ReactElement {
                   />
                 ))}
               </DataRowList>
-              {alumnosPorHorario.length > ALUMNOS_PAGE_SIZE && (
+              {roster.alumnos.length > ALUMNOS_PAGE_SIZE && (
                 <Pagination
                   page={currentPage}
                   totalPages={totalPages}
-                  onPageChange={setAlumnosPage}
-                  totalItems={alumnosPorHorario.length}
+                  onPageChange={roster.setPage}
+                  totalItems={roster.alumnos.length}
                   pageSize={ALUMNOS_PAGE_SIZE}
                   itemNoun="alumno"
                   variant="footer"
