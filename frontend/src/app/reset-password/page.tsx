@@ -32,7 +32,7 @@ import { ICON } from "@/lib/icon-size";
 import { restablecerContrasenia } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
-import { Button } from "@/components/ui";
+import { BackLink, Button } from "@/components/ui";
 import { buildPasswordRules } from "./reset-password-utils";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -252,13 +252,7 @@ function ResetPasswordContent(): React.ReactElement {
 
       {/* `.fcard .aux` — 12.5px line with the action in red/600. */}
       <p className="text-center text-xs text-ink-3">
-        <Link
-          href="/login"
-          className="inline-flex items-center gap-1.5 font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
-        >
-          <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          Volver a Iniciar Sesión
-        </Link>
+        <BackLink href="/login" label="Volver a Iniciar Sesión" />
       </p>
     </AuthShell>
   );

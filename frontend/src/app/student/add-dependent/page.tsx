@@ -23,13 +23,12 @@ import { useRouter } from "next/navigation";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import BackLink from "@/components/BackLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal, crearRepresentado, vincularRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
 import { calculateAge } from "@/app/student/enroll/enroll-utils";
 import { WizardTextarea, WizardInput, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
-import { Stepper, buttonClasses } from "@/components/ui";
+import { BackLink, Stepper, buttonClasses } from "@/components/ui";
 import { BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
 import {
@@ -569,7 +568,7 @@ function AddDependentContent(): React.ReactElement {
       subtitle="Complete los pasos para agregar un nuevo dependiente a su cuenta de representante."
     >
       <div className="flex w-full max-w-[760px] flex-col gap-page">
-      <BackLink href="/student" label="Volver" />
+      <BackLink href="/student" label="Volver a Mi Cuenta" />
 
       {/* Named stepper — the same contract as the public wizard. */}
       <div>

@@ -68,7 +68,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -128,9 +127,8 @@ import {
   paginateRecords,
   getTotalPages,
 } from "@/app/attendance/attendance-utils";
-import BackLink from "@/components/BackLink";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Badge, Button, EmptyState, ErrorState, LoadingState, Pagination, Stepper, buttonClasses } from "@/components/ui";
+import { Badge, BackLink, Button, EmptyState, ErrorState, LoadingState, Pagination, Stepper } from "@/components/ui";
 import { getUserInitials } from "@/lib/auth-utils";
 import { clubIsoDate, todayDiaSemana } from "@/lib/club-date";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
@@ -1408,6 +1406,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
           // Walking out of a started roll call is the one navigation on this
           // screen that costs something, so it is the one that asks.
           onClick={handleLeaveWizard}
+          className="mb-6"
         />
       )}
       <ConfirmDialog
@@ -1489,9 +1488,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
               <Button type="button" variant="primary" onClick={handleReset}>
                 Registrar Otra Asistencia
               </Button>
-              <Link href={backHref} className={buttonClasses("secondary")}>
-                Volver al Panel
-              </Link>
+              <BackLink href={backHref} label="Volver al Panel" />
             </div>
           </div>
         </div>

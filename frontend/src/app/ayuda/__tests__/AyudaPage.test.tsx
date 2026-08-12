@@ -34,4 +34,12 @@ describe("AyudaPage", () => {
 
     expect(screen.getAllByText("Volver al inicio")).toHaveLength(1);
   });
+
+  it("points that one link at the site root with the canonical back skin", () => {
+    render(<AyudaPage />);
+
+    const link = screen.getByRole("link", { name: /volver al inicio/i });
+    expect(link).toHaveAttribute("href", "/");
+    expect(link).toHaveClass("border-cata-red", "bg-transparent", "text-cata-red-dark");
+  });
 });

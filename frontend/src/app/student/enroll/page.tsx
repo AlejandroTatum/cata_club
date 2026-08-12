@@ -23,10 +23,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
-import BackLink from "@/components/BackLink";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { WizardInput, WizardTextarea, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
-import { Stepper, buttonClasses } from "@/components/ui";
+import { BackLink, Stepper, buttonClasses } from "@/components/ui";
 import { BLOOD_TYPES } from "@/types/enrollment";
 import {
   UserPlus,
@@ -860,17 +859,19 @@ function EnrollWizard(): React.ReactElement {
               reaches for when a five-step form stops making sense. The
               assistant is public (`POST /chatbot` needs no session), which is
               the point: most people filling this in have no account yet. */}
-          {/* `items-baseline`, not `items-center`: `BackLink` carries its own
-              `mb-6`, so centring the two margin boxes dropped the help link
-              half a line below the back link it sits beside. */}
+          {/* `items-baseline`, not `items-center`: the back link carries its
+              own `mb-6` (via `className`), so centring the two margin boxes
+              dropped the help link half a line below the back link it sits
+              beside. */}
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <BackLink
               href={isAuthenticated ? "/student" : "/"}
               label={isAuthenticated ? "Volver a Mi Cuenta" : "Volver al inicio"}
+              className="mb-6"
             />
-            {/* Carries `BackLink`'s own `mb-6` so that when the row wraps on a
-                phone the help link keeps its distance from the step eyebrow
-                below, instead of sitting on top of it. */}
+            {/* Carries `mb-6` so that when the row wraps on a phone the help
+                link keeps its distance from the step eyebrow below, instead
+                of sitting on top of it. */}
             <HelpChatLauncher
               variant="quiet"
               label="¿Tiene dudas? Pregunte al asistente"

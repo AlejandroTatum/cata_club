@@ -47,7 +47,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import BackLink from "@/components/BackLink";
 import { ArrowRight, ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
@@ -65,6 +64,7 @@ import {
   TableHeaderCell,
   TableNameCell,
   TableRow,
+  BackLink,
   buttonClasses,
 } from "@/components/ui";
 import {
@@ -173,7 +173,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
           </Link>
         }
       >
-        <BackLink href="/trainer" label="Volver a Mi día" />
+        <BackLink href="/trainer" label="Volver a Mi día" className="mb-6" />
 
         <AttendanceFilters filters={filters} schedules={schedules} />
 
