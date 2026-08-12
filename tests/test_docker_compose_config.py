@@ -302,14 +302,34 @@ def test_todos_los_servicios_de_larga_duracion_declaran_healthcheck():
     Compose los daba por buenos con el proceso arrancado aunque el servidor
     de Next no escuchara, el worker no conectara al broker o beat dejara de
     disparar el schedule. Sin healthcheck, `restart: unless-stopped` solo
-    cubre la muerte del proceso, no el cuelgue."""
-    config = _config_produccion()
-    for nombre in ("frontend", "celery-worker", "celery-beat"):
-        healthcheck = config["services"][nombre].get("healthcheck") or {}
-        prueba = healthcheck.get("test") or []
-        assert prueba, (
-            f"'{nombre}' no declara un `healthcheck.test` no vacío en el "
-            f"render de producción: {healthcheck}"
+    cubre la muerte del proceso, no el cuelgue.
+
+    Recorre TODOS los servicios del render en vez de la terna fija que
+    comprobaba la versión anterior. Esa lista dejaba fuera justo a los dos
+    servicios cuyo healthcheck se rompió después: `caddy` -- el único borde
+    público -- y `backend`. Con la lista fija, borrar cualquiera de esos dos
+    healthchecks dejaba la suite entera en verde, y
+    `test_ningun_healthcheck_de_produccion_sondea_localhost` tampoco lo
+    veía: ese candado exige que ninguna sonda diga `localhost`, y un
+    servicio sin sonda cumple esa condición sin problema. Uno canda el
+    negativo y este el positivo; hacen falta los dos.
+
+    Se comprueban ambos renders, con y sin perfiles, igual que los demás
+    candados que recorren servicios en este archivo: los servicios detrás
+    de `profiles:` tampoco tienen excusa para no reportar salud."""
+    for con_perfiles in (False, True):
+        config = _config_produccion(con_perfiles=con_perfiles)
+        sin_salud = {
+            nombre: (datos.get("healthcheck") or {})
+            for nombre, datos in config["services"].items()
+            if not (datos.get("healthcheck") or {}).get("test")
+        }
+        assert sin_salud == {}, (
+            f"Estos servicios no declaran un `healthcheck.test` no vacío en "
+            f"el render de producción (perfiles activos={con_perfiles}): "
+            f"{sin_salud}. Sin healthcheck, Compose da el servicio por bueno "
+            f"con el proceso arrancado aunque esté colgado, y "
+            f"`restart: unless-stopped` no lo levanta."
         )
 
 
