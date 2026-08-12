@@ -70,13 +70,40 @@ const HAND_WRITTEN_RAIL = /grid-cols-\[minmax\(0,\s*1fr\)_/;
 
 const USES_CONSTANT = /\bPAGE_RAIL\b/;
 
+/**
+ * Overriding one track of `PAGE_RAIL` is not writing a rail by hand. The two
+ * look alike to the regex above and mean opposite things: one takes the shared
+ * shape and adjusts a measure on the same element, the other rebuilds the shape
+ * from scratch and drifts away from every other screen.
+ *
+ * `/student` takes the first road — the chosen mockup splits that row evenly
+ * instead of main-plus-rail, and it says so where it does it. So the rule is
+ * about the ELEMENT, not the file: a line may spell the grid out only while it
+ * is decorating `PAGE_RAIL` right there. Drop the constant and the guard bites
+ * again.
+ */
+const isOverridingTheConstant = (line: string): boolean => USES_CONSTANT.test(line);
+
+const linesWritingARailFromScratch = (code: string): string[] =>
+  code
+    .split("\n")
+    .filter((line) => HAND_WRITTEN_RAIL.test(line) && !isOverridingTheConstant(line));
+
 describe("a page splits into a main column and a rail one way", () => {
   it("is never written by hand", () => {
-    const handWritten = FILES.filter(({ code }) => HAND_WRITTEN_RAIL.test(code)).map(
+    const handWritten = FILES.filter(({ code }) => linesWritingARailFromScratch(code).length > 0).map(
       ({ path }) => path,
     );
 
     expect(handWritten).toEqual([]);
+  });
+
+  it("still bites when the constant is dropped", () => {
+    // Without this, loosening the rule above would quietly retire it: a file
+    // that spells the grid out and never mentions PAGE_RAIL has to keep failing.
+    const fromScratch = 'className="grid grid-cols-[minmax(0,1fr)_340px] gap-5"';
+
+    expect(linesWritingARailFromScratch(fromScratch)).toEqual([fromScratch]);
   });
 
   it("watches more than one screen", () => {

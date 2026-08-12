@@ -495,7 +495,10 @@ class TestLasEtiquetasSonElUnicoPuenteYNoFiltran:
         (enums.DiaSemana, etiquetas.dia_en_castellano),
         (enums.TipoRol, etiquetas.rol_en_castellano),
         (enums.EstadoPago, etiquetas.estado_de_pago_en_castellano),
-        (enums.Categoria, etiquetas.categoria_en_castellano),
+        # `enums.Categoria` quedó afuera (M1): ya no tiene traductor en
+        # `etiquetas.py` -- su label sale de `CategoriaHorario.label`
+        # (tabla), no de un diccionario cerrado que un enum nuevo pudiera
+        # dejar sin cubrir.
     ])
     def test_cada_miembro_tiene_etiqueta_y_esta_escrita_para_una_persona(
         self, enumeracion, traductor

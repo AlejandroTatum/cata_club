@@ -36,7 +36,21 @@ describe("validateCrearCuentaForm — ENTRENADOR", () => {
 
   it("rejects a trainer who is under age", () => {
     const errors = validateCrearCuentaForm(form({ fechaNacimiento: "2020-01-01" }));
-    expect(errors.join(" ")).toMatch(/mayores de edad/i);
+    expect(errors.join(" ")).toMatch(/entre 18 y 74/i);
+  });
+
+  /**
+   * Root-cause candado: this file used to carry its own copy of
+   * `calculateAge` that capped the birth year to 1900-2200 and returned
+   * `NaN` outside it — so `age < 18` was always `false` for a wildly old
+   * date (the audited pattern: year 1700) and this exact case slipped
+   * through in silence. Now it imports the fixed shared helper, which never
+   * returns NaN for a syntactically valid date, so this age is caught by
+   * name instead.
+   */
+  it("rejects an implausibly old trainer birth date instead of letting it through", () => {
+    const errors = validateCrearCuentaForm(form({ fechaNacimiento: "1700-01-01" }));
+    expect(errors.join(" ")).toMatch(/entre 18 y 74 años \(calculado: \d+\)/i);
   });
 
   it("does not demand a legal guardian from a trainer", () => {
@@ -49,6 +63,29 @@ describe("validateCrearCuentaForm — ENTRENADOR", () => {
       form({ accountType: "MENOR", fechaNacimiento: "2015-01-01", representanteId: "" }),
     );
     expect(errors.join(" ")).toMatch(/representante/i);
+  });
+});
+
+// Auditoría 2026-08-10: 1700-01-01 (326 años) se aceptaba sin aviso para
+// JUGADOR/REPRESENTANTE/ENTRENADOR. La causa era que `calculateAge` (la
+// misma que usa `/student/enroll`) devuelve NaN fuera de 1900-2200 -- y
+// `NaN < 18` es `false`, así que la comprobación de "menor de edad" nunca
+// disparaba. El candado usa una edad real (no capada), como ya hace
+// `add-dependent-utils.ts::edadDesdeFecha` para el mismo bug en MENOR.
+describe("validateCrearCuentaForm — edad imposible (326 años)", () => {
+  it.each<AccountType>(["JUGADOR", "REPRESENTANTE", "ENTRENADOR"])(
+    "rejects %s born in 1700",
+    (accountType) => {
+      const errors = validateCrearCuentaForm(form({ accountType, fechaNacimiento: "1700-01-01" }));
+      expect(errors.join(" ")).toMatch(/74/);
+    },
+  );
+
+  it("rejects a MENOR born in 1700 too, not just adults", () => {
+    const errors = validateCrearCuentaForm(
+      form({ accountType: "MENOR", fechaNacimiento: "1700-01-01", representanteId: 1 }),
+    );
+    expect(errors).not.toEqual([]);
   });
 });
 

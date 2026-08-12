@@ -91,6 +91,21 @@ describe("validateAddDependentStep — child step", () => {
       .not.toContain("La fecha de nacimiento no puede ser en el futuro.");
   });
 
+  it("rejects an impossible age on step 1 instead of letting the wizard reach the backend (INS-8)", () => {
+    // The audited case: a typo'd year (1800) computes a 226-year-old and
+    // used to sail through all four steps before the backend's 400 threw it
+    // out, losing everything the person had already typed.
+    const errors = validateAddDependentStep("child", validForm({ fechaNacimiento: "1800-01-01" }));
+    expect(errors.some((message) => message.includes("La edad del alumno debe estar entre 5 y 74 años"))).toBe(true);
+  });
+
+  it("rejects a fechaNacimiento below the minimum domain age (EDAD_MINIMA_ALUMNO = 5)", () => {
+    const today = new Date();
+    const twoYearsAgo = `${today.getFullYear() - 2}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const errors = validateAddDependentStep("child", validForm({ fechaNacimiento: twoYearsAgo }));
+    expect(errors.some((message) => message.includes("La edad del alumno debe estar entre 5 y 74 años"))).toBe(true);
+  });
+
   it("requires cedula", () => {
     expect(validateAddDependentStep("child", validForm({ cedula: "" })))
       .toContain("La cédula de identidad es obligatoria.");

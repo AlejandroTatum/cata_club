@@ -171,6 +171,66 @@ describe("POST /api/personas/[id]/representados", () => {
     expect(response.status).toBe(422);
   });
 
+  it("forwards correo, contrasenia and institucionId to the backend (FIC-2)", async () => {
+    // FIC-2: the wizard's credentials step builds these into
+    // RepresentadoCreatePayload, the backend's RepresentadoCreateDTO accepts
+    // them, and the API says 201 — but this route used to drop all three
+    // before forwarding, so the minor's Usuario row was never created.
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(personaResponse, 201));
+    const payloadWithCredentials = {
+      ...validPayload,
+      correo: "hijo@cataclub.com",
+      contrasenia: "alumno1234",
+      institucionId: 3,
+    };
+
+    const access = makeJwt(3600);
+    await POST(
+      postRequest("5", payloadWithCredentials, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      { params: { id: "5" } },
+    );
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8000/api/v1/personas/5/representados",
+      expect.objectContaining({
+        body: JSON.stringify({
+          nombres: "Juan",
+          apellidos: "Pérez",
+          cedula: "1712345678",
+          fecha_nacimiento: "2015-06-15",
+          telefono: "0991234567",
+          ficha_medica: {
+            tipo_sangre: "O_POSITIVO",
+            enfermedades: ["Asma"],
+            alergias: "Ninguna",
+            contacto_emergencia: "María Pérez",
+            telefono_emergencia: "0997654321",
+          },
+          correo: "hijo@cataclub.com",
+          contrasenia: "alumno1234",
+          institucion_id: 3,
+        }),
+      }),
+    );
+  });
+
+  it("omits correo/contrasenia/institucionId from the backend body when not provided", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(personaResponse, 201));
+
+    const access = makeJwt(3600);
+    await POST(
+      postRequest("5", validPayload, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      { params: { id: "5" } },
+    );
+
+    const [, options] = vi.mocked(global.fetch).mock.calls[0];
+    const sentBody = JSON.parse((options as RequestInit).body as string) as Record<string, unknown>;
+    expect(sentBody).not.toHaveProperty("correo");
+    expect(sentBody).not.toHaveProperty("contrasenia");
+    expect(sentBody).not.toHaveProperty("institucion_id");
+  });
+
   it("returns 400 when the request body is not valid JSON", async () => {
     const access = makeJwt(3600);
     const request = new NextRequest("http://localhost/api/personas/5/representados", {

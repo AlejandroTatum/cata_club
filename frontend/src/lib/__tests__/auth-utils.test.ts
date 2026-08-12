@@ -166,16 +166,22 @@ describe("getNavLinksForRole", () => {
     expect(links).toEqual([{ href: "/", label: "Inicio" }]);
   });
 
-  it("returns representante links to Mi cuenta, Pagos and Asistencias", () => {
+  it("returns representante links to Mi cuenta, Pagos, Asistencias and Ficha médica", () => {
     const links = getNavLinksForRole("representante");
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(5);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
     expect(links[1]).toEqual({ href: "/student", label: "Mi cuenta" });
     expect(links[2]).toEqual({ href: "/student/payments", label: "Pagos" });
     expect(links[3]).toEqual({ href: "/student/attendance", label: "Asistencias" });
+    // Only a representante has a representado whose medical record they can
+    // manage — see `PoliticaAccesoPersona`'s `incluir_titular=False` on
+    // `/fichas-medicas/*`, which still excludes a self-managed titular. An
+    // "estudiante" nav (below) never gets this entry, so it never points a
+    // self-managed student at a screen the backend will 403 them out of.
+    expect(links[4]).toEqual({ href: "/student/medical-record", label: "Ficha médica" });
   });
 
-  it("returns estudiante links to Mi cuenta, Pagos and Asistencias", () => {
+  it("returns estudiante links to Mi cuenta, Pagos and Asistencias — no Ficha médica", () => {
     const links = getNavLinksForRole("estudiante");
     expect(links).toHaveLength(4);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
@@ -184,6 +190,37 @@ describe("getNavLinksForRole", () => {
     // Paying and checking attendance are the two things a student opens the
     // portal to do, so both are reachable from the nav, not only from a panel.
     expect(links[3]).toEqual({ href: "/student/attendance", label: "Asistencias" });
+    // A self-managed alumno has no representado and the backend still
+    // excludes the titular from their own medical record (out of scope of
+    // this change) — the nav must not offer a destination that 403s.
+    expect(links.some((link) => link.href === "/student/medical-record")).toBe(false);
+  });
+
+  // A minor with their own "estudiante" account still gets no Ficha médica
+  // entry: incluir_titular on GET/PATCH /fichas-medicas/persona/{id} is
+  // age-gated backend-side (ficha_medica_router.py::_es_titular_mayor_de_edad).
+  // Offering the destination anyway would only hand a minor a 403.
+  it("does not add a Ficha médica link for a minor estudiante", () => {
+    const links = getNavLinksForRole("estudiante", false);
+    expect(links).toHaveLength(4);
+    expect(links.some((link) => link.href === "/student/medical-record")).toBe(false);
+  });
+
+  it("adds a Ficha médica link for an adult estudiante", () => {
+    const links = getNavLinksForRole("estudiante", true);
+    expect(links).toHaveLength(5);
+    expect(links[4]).toEqual({ href: "/student/medical-record", label: "Ficha médica" });
+  });
+
+  // The age flag is scoped to "estudiante" only. "representante" already
+  // gets the Ficha médica link unconditionally (that access — a guardian
+  // managing a DEPENDENT's record — is a separate, unrelated grant), so
+  // toggling `studentIsAdult` must not change its result either way.
+  it("ignores the adult flag for representante", () => {
+    const withFlag = getNavLinksForRole("representante", true);
+    const withoutFlag = getNavLinksForRole("representante", false);
+    expect(withFlag).toEqual(withoutFlag);
+    expect(withFlag.some((link) => link.href === "/student/medical-record")).toBe(true);
   });
 
   it("every recognized role gets Inicio as first link and at least one role-specific link", () => {

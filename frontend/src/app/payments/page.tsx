@@ -76,6 +76,7 @@ import type {
   ValidationStatus,
 } from "@/services/api";
 import { fetchPaymentValidations, updatePaymentValidation } from "@/services/api";
+import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import { usePersistentPreference } from "@/lib/persistent-preference";
 import { useToast } from "@/contexts/ToastContext";
@@ -94,6 +95,7 @@ import {
   describeBatchApproval,
   composeRejectionReason,
   REJECTION_REASONS,
+  REJECTION_NOTE_MAX_LENGTH,
   type BatchApprovalOutcome,
 } from "@/app/payments/payments-utils";
 import {
@@ -327,7 +329,7 @@ function focusQueueAction(requestId: string | null): boolean {
 // ---------------------------------------------------------------------------
 
 export default function PaymentsPage(): React.ReactElement {
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showWarning } = useToast();
   const [requests, setRequests] = useState<PaymentValidationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -688,14 +690,34 @@ export default function PaymentsPage(): React.ReactElement {
         // The server owns the canonical row — dates it normalised, the
         // validation timestamp, the validator's name.
         setRequests((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+        // The decision itself (`saved.validationStatus`) is final and real
+        // even when this is true — only the in-app notification failed. The
+        // optimistic success toast above already fired and is gone by the
+        // time this resolves, so this is a SEPARATE, honest follow-up: the
+        // admin needs to know the notice didn't reach the student/guardian,
+        // not just see a silent success (hallazgo en vivo, 2026-08-11).
+        if (saved.notificationDeliveryFailed) {
+          showWarning(`${confirmation.label}: la decisión se guardó, pero el aviso no llegó.`, {
+            description: `${request.studentName} no recibió la notificación in-app. Si hace falta, avísele directamente.`,
+          });
+        }
       },
       onUndo: putItBack,
       onError: (err: unknown) => {
         console.error("[payments] decision failed", err);
         putItBack();
         // The window is gone and the admin has moved on, so there is no
-        // control left to attach this to: it has to travel to them.
-        showError(confirmation.failure, {
+        // control left to attach this to: it has to travel to them. It used
+        // to always be `confirmation.failure` — a generic "no se pudo" even
+        // when the backend named the real reason (e.g. a rejection note over
+        // 255 characters) — so `err` never reached the admin. `toUserMessage`
+        // is the one place that decides whether `err` is safe to show.
+        // For 400/409/422 it may surface the backend's own detail, falling
+        // back to `confirmation.failure` only when that detail isn't safe to
+        // show. For any 5xx it always returns the generic server-failure
+        // message before `fallback` is even looked at, so `confirmation.failure`
+        // is never used in that case (see `error-message.ts`).
+        showError(toUserMessage(err, confirmation.failure), {
           description: `${request.studentName} volvió a la cola de pendientes.`,
         });
       },
@@ -1042,7 +1064,6 @@ export default function PaymentsPage(): React.ReactElement {
                     <TableHeaderCell type="text">Período</TableHeaderCell>
                     <TableHeaderCell type="number">Monto</TableHeaderCell>
                     <TableHeaderCell type="text">Método</TableHeaderCell>
-                    <TableHeaderCell type="text">Estado</TableHeaderCell>
                     <TableHeaderCell type="action">
                       <span className="sr-only">Acción</span>
                     </TableHeaderCell>
@@ -1061,31 +1082,30 @@ export default function PaymentsPage(): React.ReactElement {
                       <TableCell type="text">{humanizePaymentPeriod(req.membershipPeriod)}</TableCell>
                       <TableCell type="number">{formatCurrency(req.expectedAmount)}</TableCell>
                       <TableCell type="text">{req.paymentMethod}</TableCell>
-                      <TableCell type="badge">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {/* The active tab already filters to one status, so
-                              repeating it per row would only echo the tab —
-                              see the "Todos" case below, where it is the one
-                              thing on the row that says what state a payment
-                              is in. */}
+                      <TableCell type="action">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          {/* No "Estado" column: the active tab already filters
+                              to one status, so repeating it per row would only
+                              echo the tab. What is left is context for the
+                              action button, not a column of its own — see the
+                              "Todas" case below, where it is the one thing on
+                              the row that says what state a payment is in. */}
                           {activeFilter === "all" && (
                             <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
                               {VALIDATION_STATUS_LABELS[req.validationStatus]}
                             </Badge>
                           )}
                           {reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
+                          <Button
+                            size="sm"
+                            variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
+                            aria-label={actionLabel(req)}
+                            data-payment-action={req.id}
+                            onClick={() => setSelectedId(req.id)}
+                          >
+                            {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
+                          </Button>
                         </div>
-                      </TableCell>
-                      <TableCell type="action">
-                        <Button
-                          size="sm"
-                          variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
-                          aria-label={actionLabel(req)}
-                          data-payment-action={req.id}
-                          onClick={() => setSelectedId(req.id)}
-                        >
-                          {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
-                        </Button>
                       </TableCell>
                     </TableRow>
                     );
@@ -1100,25 +1120,13 @@ export default function PaymentsPage(): React.ReactElement {
                 const mobileNameId = `payment-name-mobile-${req.id}`;
                 return (
                 <li key={req.id} className="flex flex-col gap-3 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
-                      {renderBatchCheckbox(req, mobileNameId)}
-                      <div className="min-w-0">
-                        <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
-                          {req.studentName}
-                        </p>
-                        <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      {/* Same rule as the desktop table: the active tab
-                          already fixes the status for every visible row. */}
-                      {activeFilter === "all" && (
-                        <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
-                          {VALIDATION_STATUS_LABELS[req.validationStatus]}
-                        </Badge>
-                      )}
-                      {reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
+                  <div className="flex min-w-0 items-start gap-3">
+                    {renderBatchCheckbox(req, mobileNameId)}
+                    <div className="min-w-0">
+                      <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
+                        {req.studentName}
+                      </p>
+                      <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
                     </div>
                   </div>
                   <p className="text-xs text-ink-2">
@@ -1126,15 +1134,27 @@ export default function PaymentsPage(): React.ReactElement {
                   </p>
                   <div className="flex items-center justify-between gap-3">
                     <DataBox variant="numeric">{formatCurrency(req.expectedAmount)}</DataBox>
-                    <Button
-                      size="sm"
-                      variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
-                      aria-label={actionLabel(req)}
-                      data-payment-action={req.id}
-                      onClick={() => setSelectedId(req.id)}
-                    >
-                      {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      {/* Same rule as the desktop table: the active tab
+                          already fixes the status for every visible row, and
+                          what is left is context for the action button, not a
+                          column of its own. */}
+                      {activeFilter === "all" && (
+                        <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
+                          {VALIDATION_STATUS_LABELS[req.validationStatus]}
+                        </Badge>
+                      )}
+                      {reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
+                      <Button
+                        size="sm"
+                        variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
+                        aria-label={actionLabel(req)}
+                        data-payment-action={req.id}
+                        onClick={() => setSelectedId(req.id)}
+                      >
+                        {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
+                      </Button>
+                    </div>
                   </div>
                 </li>
                 );
@@ -1470,13 +1490,21 @@ export default function PaymentsPage(): React.ReactElement {
                     </fieldset>
 
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-2xs font-bold uppercase text-ink-3">
-                        Nota para el responsable (opcional)
+                      <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3">
+                        <span>Nota para el responsable (opcional)</span>
+                        <span
+                          className={`font-normal normal-case tabular-nums ${
+                            rejectionNote.length >= REJECTION_NOTE_MAX_LENGTH ? "text-state-bad" : ""
+                          }`}
+                        >
+                          {rejectionNote.length}/{REJECTION_NOTE_MAX_LENGTH}
+                        </span>
                       </span>
                       <textarea
                         rows={3}
                         value={rejectionNote}
-                        onChange={(e) => setRejectionNote(e.target.value)}
+                        onChange={(e) => setRejectionNote(e.target.value.slice(0, REJECTION_NOTE_MAX_LENGTH))}
+                        maxLength={REJECTION_NOTE_MAX_LENGTH}
                         placeholder="Ej.: El comprobante dice $20,00 y la mensualidad es de $25,00."
                         className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
                         disabled={actionLoading !== null}

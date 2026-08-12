@@ -71,6 +71,8 @@ export function createUnauthenticatedAuth(
     login: vi.fn(),
     logout: vi.fn(),
     refreshSession: vi.fn(),
+    hydrationOutage: false,
+    retryHydration: vi.fn(),
   };
 }
 
@@ -93,6 +95,8 @@ export function createAuthenticatedAuth(
     login: vi.fn(),
     logout: vi.fn(),
     refreshSession: vi.fn(),
+    hydrationOutage: false,
+    retryHydration: vi.fn(),
     ...overrides,
   };
 }
@@ -108,5 +112,25 @@ export function createLoadingAuth(): AuthContextValue {
     login: vi.fn(),
     logout: vi.fn(),
     refreshSession: vi.fn(),
+    hydrationOutage: false,
+    retryHydration: vi.fn(),
+  };
+}
+
+/**
+ * Build an AuthContextValue for the DSH-6 hydration-outage state: the
+ * initial session check failed with a network/5xx outage, so there is no
+ * verdict on whether the user is authenticated yet.
+ */
+export function createHydrationOutageAuth(): AuthContextValue {
+  return {
+    session: null,
+    isAuthenticated: false,
+    isLoading: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshSession: vi.fn(),
+    hydrationOutage: true,
+    retryHydration: vi.fn(),
   };
 }

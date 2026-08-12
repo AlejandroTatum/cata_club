@@ -127,6 +127,14 @@ const RESOLVED_REQUEST: PaymentValidationRequest = {
   validatedBy: "Admin Dev",
 };
 
+const REJECTED_REQUEST: PaymentValidationRequest = {
+  ...PENDING_REQUEST,
+  id: "req-4",
+  studentName: "Ana Torres",
+  validationStatus: "rechazado",
+  rejectionReason: "El monto no coincide",
+};
+
 function renderPage(): void {
   render(<ToastProvider><PaymentsPage /></ToastProvider>);
 }
@@ -295,6 +303,63 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     const cards = screen.getByTestId("payments-cards");
     expect(within(cards).getByText("Pendiente")).toBeInTheDocument();
     expect(within(cards).getByText("Validado")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1c. Every visible header names a column that actually has content
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — every visible column header has matching content", () => {
+  /**
+   * General regression guard, not a one-off: a header whose text is announced
+   * to a sighted admin (i.e. not an `sr-only`-only label, like the batch
+   * checkbox or action columns) must correspond to a column that renders
+   * *something* in at least one visible row. This is exactly the shape of the
+   * "Estado" defect — the header stayed after every row's cell in that column
+   * went empty for three of the four filter tabs — and it holds for whichever
+   * column trips it next, not just that one.
+   */
+  it("never leaves a header's column empty across every row, on any filter tab", async () => {
+    // One request per status, so every tab — including "Rechazados" — has at
+    // least one row and renders the table instead of the empty state.
+    mockFetchPaymentValidations.mockResolvedValue([
+      PENDING_REQUEST,
+      SECOND_PENDING,
+      RESOLVED_REQUEST,
+      REJECTED_REQUEST,
+    ]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    for (const tabName of ["Pendientes", "Validados", "Rechazados", "Todas"]) {
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${tabName}`, "i") }));
+      const table = await screen.findByTestId("payments-table");
+      await waitFor(() => {
+        expect(table.querySelectorAll("tbody tr").length).toBeGreaterThan(0);
+      });
+
+      const headerCells = Array.from(table.querySelectorAll("thead th"));
+      const rows = Array.from(table.querySelectorAll("tbody tr"));
+
+      headerCells.forEach((th, colIndex) => {
+        // `sr-only` labels (the batch-selection and action columns) are real
+        // accessible names but never *visible* headers, so they carry no
+        // promise that the column reads as non-empty on screen.
+        const isVisibleHeader = !th.querySelector(".sr-only");
+        const headerText = th.textContent?.trim() ?? "";
+        if (!isVisibleHeader || !headerText) return;
+
+        const columnHasContent = rows.some((row) => {
+          const cell = row.querySelectorAll("td")[colIndex];
+          return Boolean(cell?.textContent?.trim());
+        });
+        expect(
+          columnHasContent,
+          `header "${headerText}" on tab "${tabName}" has no content in any row`,
+        ).toBe(true);
+      });
+    }
   });
 });
 
@@ -652,6 +717,29 @@ describe("PaymentsPage — rejection", () => {
     expect(
       screen.getByText(/María Pérez va a recibir este motivo tal cual/),
     ).toBeInTheDocument();
+  });
+
+  // Hallazgo en vivo, 2026-08-11: this field had no client-side limit, so a
+  // long note only ever discovered the backend's cap by crashing a request
+  // that had already committed the rejection. The field now caps input and
+  // shows the count live instead of letting the admin find the wall by
+  // hitting it.
+  it("caps the rejection note and shows a live character count", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    fireEvent.click(await screen.findByRole("button", { name: /rechazar pago/i }));
+
+    const nota = screen.getByLabelText(/nota para el responsable/i) as HTMLTextAreaElement;
+    expect(nota).toHaveAttribute("maxLength", "200");
+    expect(screen.getByText("0/200")).toBeInTheDocument();
+
+    fireEvent.change(nota, { target: { value: "x".repeat(250) } });
+
+    // The DOM's own `maxLength` clamps a direct `.value` assignment too, so
+    // this also guards against a future change that types the counter off
+    // the constant instead of reading it.
+    expect(nota.value).toHaveLength(200);
+    expect(screen.getByText("200/200")).toBeInTheDocument();
   });
 });
 
@@ -1087,6 +1175,28 @@ describe("PaymentsPage — a decision stays reversible for a few seconds", () =>
     expect(
       screen.getByText("Juan Pérez volvió a la cola de pendientes."),
     ).toBeInTheDocument();
+  });
+
+  it("shows the backend's real reason instead of the generic toast, when it has one", async () => {
+    // PAG-2: reproduced with a real rejection, where the backend refused a
+    // 422 because the admin's own note passed 255 characters. `decide()`'s
+    // `onError` used to hardcode `confirmation.failure` and throw the real
+    // `err` away — the admin always saw "No se pudo aprobar/rechazar el
+    // pago." and never learned what to fix. `err` has to go through
+    // `toUserMessage()`, same as every other error site in the app.
+    mockUpdatePaymentValidation.mockRejectedValue(
+      Object.assign(new Error("La nota no puede superar los 255 caracteres."), { status: 422 }),
+    );
+    await approveJuan();
+
+    await act(async () => {
+      vi.advanceTimersByTime(UNDO_WINDOW_MS);
+    });
+
+    expect(
+      await screen.findByText("La nota no puede superar los 255 caracteres."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No se pudo aprobar el pago.")).not.toBeInTheDocument();
   });
 });
 

@@ -127,6 +127,21 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.queryByText("Sofia Vera")).not.toBeInTheDocument();
   });
 
+  it("pluralises 'sesión' as 'sesiones', not 'sesións' (ASI-6)", async () => {
+    // 11 distinct sessions (one record each, all different dates) force a
+    // second page at PAGE_SIZE=10, which is what renders the range readout.
+    const manySessions: AttendanceRecord[] = Array.from({ length: 11 }, (_, i) =>
+      record("present", `Alumno ${i}`, `2026-07-${String(i + 1).padStart(2, "0")}`),
+    );
+    mockFetchAttendanceRecords.mockResolvedValue(manySessions);
+
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    expect(screen.getByText(/11 sesiones/)).toBeInTheDocument();
+    expect(screen.queryByText(/sesións/)).not.toBeInTheDocument();
+  });
+
   it("does not show who filed each list — attendance no longer records it (issue #13)", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
@@ -136,17 +151,18 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(within(rows[0]).getAllByRole("columnheader")).toHaveLength(3);
   });
 
-  it("carries the four state counts in the row itself, named for a screen reader", async () => {
+  it("carries the four state counts in the row itself, with a visible state name", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
-    // The pill shows only the count; the state name rides along in an
-    // `sr-only` span, so the accessible text is "2 presente" while the 26px
-    // badge still reads "2".
-    expect(rows[1]).toHaveTextContent("2 presente");
-    expect(rows[1]).toHaveTextContent("1 tardanza");
-    expect(rows[1]).toHaveTextContent("0 justificado");
-    expect(rows[1]).toHaveTextContent("1 ausente");
+    const resultCell = within(rows[1]).getAllByRole("cell")[1];
+    // The state name has to be real, visible text — not tucked into a
+    // hidden `sr-only` span that only a screen reader ever sees.
+    expect(resultCell.querySelector(".sr-only")).toBeNull();
+    expect(resultCell).toHaveTextContent("2 Presente");
+    expect(resultCell).toHaveTextContent("1 Tardanza");
+    expect(resultCell).toHaveTextContent("0 Justificado");
+    expect(resultCell).toHaveTextContent("1 Ausente");
   });
 
   it("offers a Corregir action per session", async () => {

@@ -4,8 +4,10 @@ Tarea Celery: Generación + subida del comprobante PDF de un Pago aprobado.
 Flujo:
     1. Lee el Pago + Persona + Membresia + TipoMembresia desde la BD.
     2. Genera el PDF en memoria (ReportLab) -> bytes.
-    3. Sube los bytes a Cloudinary (raw, .pdf) -> secure_url.
-    4. Persiste un `ComprobantePago` con la URL en la BD (pago_id unique).
+    3. Sube los bytes a Cloudinary (raw, .pdf, `type="authenticated"`).
+    4. Persiste un `ComprobantePago` con el `public_id` en la BD (pago_id
+       unique) -- NO la URL: la URL de entrega se firma fresca en cada
+       lectura autorizada (ver `cloudinary_cliente.resolver_url_entrega`).
 
 El servicio `PagoServicio.validar_pago` dispara `.delay(pago_id)` apenas se
 commitea la aprobación del pago, así el endpoint responde rápido y la latencia
@@ -96,11 +98,16 @@ def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
         )
 
         public_id = f"comprobante-{pago.id:08d}"
-        url = subir_pdf_membresia(pdf_bytes, public_id)
+        subir_pdf_membresia(pdf_bytes, public_id)
 
+        # Se persiste el public_id, NO la URL que devuelve el SDK: el PDF se
+        # sube como `type="authenticated"` (hallazgo de privacidad "voucher
+        # no enumerable", mismo criterio que el voucher de transferencia en
+        # `PagoServicio.adjuntar_voucher`) -- la URL de entrega se firma
+        # fresca en cada lectura autorizada, nunca se persiste firmada.
         comprobante = ComprobantePago(
             pago_id=pago.id,
-            archivo_url=url,
+            archivo_url=public_id,
             formato_archivo="pdf",
         )
         db.add(comprobante)
@@ -124,8 +131,8 @@ def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
             return {"pago_id": pago_id, "comprobante_url": ganador.archivo_url}
 
         db.refresh(comprobante)
-        logger.info("Comprobante creado para pago %s -> %s", pago_id, url)
-    return {"pago_id": pago_id, "comprobante_url": url}
+        logger.info("Comprobante creado para pago %s -> %s", pago_id, public_id)
+    return {"pago_id": pago_id, "comprobante_url": public_id}
 
 
 @celery_app.task(

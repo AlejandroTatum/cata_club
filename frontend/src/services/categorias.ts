@@ -22,11 +22,14 @@ import { fetchCategoriasCatalogo } from "@/services/api";
 import type { DiaSemana } from "@/types/domain";
 
 /**
- * The set of accepted codes is still gated by the backend's `Categoria`
- * Python enum — out of scope for this change. Only hours/label/días became
- * dynamic.
+ * M1: the backend's `Categoria` Python enum no longer gates which codes the
+ * API accepts — `categoria_horario` (a real table) is the source of truth,
+ * and an admin can add a row there without a code deploy. This type stays a
+ * plain `string` alias (not a closed union) so a catalog entry the backend
+ * returns is never silently dropped here the way `isCategoria` used to drop
+ * it (see git history on this file for that filter).
  */
-export type Categoria = "FORMATIVO" | "INFANTIL" | "JUVENIL" | "COMPETITIVO" | "ADULTOS";
+export type Categoria = string;
 
 export interface CategoriaInfo {
   label: string;
@@ -46,10 +49,6 @@ export interface CategoriaInfo {
   dias: string[];
 }
 
-/** Stable iteration order for the categoría `<select>` — same order the
- *  backend enum declares them in. */
-export const CATEGORIA_OPTIONS: Categoria[] = ["FORMATIVO", "INFANTIL", "JUVENIL", "COMPETITIVO", "ADULTOS"];
-
 /**
  * Reverse of `DIA_SEMANA_BACKEND_TO_FRONTEND`
  * (`@/lib/server/attendance-adapter`), duplicated rather than imported: that
@@ -67,25 +66,20 @@ const DIA_FRONTEND_TO_BACKEND: Record<DiaSemana, string> = {
   dom: "DOMINGO",
 };
 
-function isCategoria(codigo: string): codigo is Categoria {
-  return (CATEGORIA_OPTIONS as string[]).includes(codigo);
-}
-
 /**
  * Fetch the live categoria catalog and shape it into a lookup by código.
  * Callers load it once (typically alongside their other fetched lists) and
  * pass the result into `diasPermitidos`/`horarioDe` explicitly — no fetch
  * hides behind either of those, so both stay easily testable pure lookups.
  *
- * Partial, not a full `Record`: a categoría the backend catalog omits (or an
- * unrecognized código, filtered out below) has no entry, and callers must
- * handle that rather than trust every `Categoria` is always present.
+ * Partial, not a full `Record`: a categoría the backend catalog omits has no
+ * entry, and callers must handle that rather than trust every código is
+ * always present (e.g. while the catalog is still loading).
  */
 export async function cargarCategorias(): Promise<Partial<Record<Categoria, CategoriaInfo>>> {
   const entradas = await fetchCategoriasCatalogo();
   const categorias: Partial<Record<Categoria, CategoriaInfo>> = {};
   for (const entrada of entradas) {
-    if (!isCategoria(entrada.codigo)) continue;
     categorias[entrada.codigo] = {
       label: entrada.label,
       horaInicio: entrada.horaInicio,

@@ -26,3 +26,22 @@ implementación de un servicio en particular.
 # actualizar ese archivo rompe esa salida, y por eso hay un test que lo fija
 # (`tests/test_mensajes_identidad_duplicada.py`).
 MENSAJE_IDENTIDAD_DUPLICADA = "Ya existe una cuenta registrada con los datos ingresados."
+
+# INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1, guardarraíl 3): respuesta
+# única para "esta cédula no se puede vincular a su cuenta", sin importar el
+# motivo real -- que no exista ninguna Persona con esa cédula, que exista pero
+# sea mayor de edad, que ya esté vinculada a este mismo representante, o que
+# sea la cédula del propio representante. Los cuatro casos devuelven el MISMO
+# texto y el MISMO código HTTP.
+#
+# Es el mismo razonamiento que ya rige `MENSAJE_IDENTIDAD_DUPLICADA` arriba,
+# aplicado al sentido inverso: ahí el riesgo era confirmar que una cédula
+# NUEVA ya pertenece a alguien; acá es confirmar que una cédula EXISTENTE
+# pertenece (o no) a un menor concreto, o revelar por qué el club no la deja
+# vincular. Sin un único texto, el formulario de vinculación sería un
+# buscador de cédulas de menores -- justo el guardarraíl que la decisión de
+# negocio exige.
+MENSAJE_VINCULACION_NO_DISPONIBLE = (
+    "No fue posible vincular esa cédula a su cuenta. Verifique el número e "
+    "intente nuevamente."
+)

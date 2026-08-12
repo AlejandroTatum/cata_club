@@ -59,6 +59,21 @@
  * categoría's horarios atomically on the backend — every row or none — so a
  * student can no longer be enrolled in only SOME of a categoría's días, and
  * the footnote that used to flag that state is gone with the state itself.
+ *
+ * v6 (ABM de categorías, docs/fixes/24-abm-categorias.md): the owner's
+ * request, verbatim — "quisiera que se cree directo el horario y categoría,
+ * no diferentes". "Nuevo Horario" is gone as a loose concept: it could not
+ * create anything (the five categorías already had every día) and only ever
+ * produced the lock error. The create/edit form now owns the categoría
+ * itself — nombre, franja, días — and one submit creates or edits the
+ * `categoria_horario` row AND a `horario_entrenamiento` per día in a SINGLE
+ * backend transaction (`AsistenciaServicio.crear_categoria`/
+ * `actualizar_categoria`), replacing the old per-día `crearHorario`/
+ * `actualizarHorario`/`eliminarHorario` diff loop that could partially fail
+ * mid-sequence. `categoria`/`horaInicio`/`horaFin` are no longer locked to a
+ * fixed catalog entry chosen from a `<select>` — the admin types them, and
+ * the categoria catalog (`cargarCategorias`) now exists only to LABEL
+ * existing cards (`categoriaLabel`), not to gate what a form can submit.
  */
 
 "use client";
@@ -83,29 +98,31 @@ import { Button, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingS
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import {
   fetchHorarios,
-  crearHorario,
-  actualizarHorario,
-  eliminarHorario,
+  crearCategoria,
+  actualizarCategoria,
+  eliminarCategoria,
   fetchMembers,
   fetchAlumnosPorHorario,
+  fetchRosterDeTodosLosHorarios,
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
 } from "@/services/api";
-import type { Horario, CrearHorarioDTO, ActualizarHorarioDTO, AlumnoHorario } from "@/services/api";
+import type { Horario, AlumnoHorario } from "@/services/api";
 import {
   groupHorarios,
-  diffGroupSave,
   type StudentRef,
   type HorarioGroup,
   type HorarioGroupRow,
 } from "@/lib/groups-utils";
-import { cargarCategorias, CATEGORIA_OPTIONS, diasPermitidos, horarioDe, type Categoria, type CategoriaInfo } from "@/services/categorias";
+import { cargarCategorias, type Categoria, type CategoriaInfo } from "@/services/categorias";
 import {
   countUniqueAlumnos,
   buildCategoriaCards,
   formatDiaSet,
   countInscriptos,
   buildDiaTrack,
+  formatMembresiaVencidaWarning,
+  DIA_ORDER,
   DIA_LABELS,
   type CategoriaCard,
   type PersonasPorHorario,
@@ -211,15 +228,14 @@ function DiaTrack({ track, dias }: { track: string[]; dias: string[] }): React.R
   );
 }
 
-/** Shared (non-día) fields edited across the whole day-group at once — PR2b.
- *
- * A horario has no nivel de ranking: the column was dropped by migration
- * `c4d5e6f7a8b9` and `HorarioCreateDTO` never accepted one, so the form used
- * to collect a value the BFF silently discarded. It has no entrenador either:
- * the trainer–schedule relation was removed (issue #13, migration
- * `e7c3a1b9d5f2`). */
+/** The categoría's own editable fields (v6, docs/fixes/24-abm-categorias.md)
+ *  — `nombre`/`horaInicio`/`horaFin` are typed input now, not a `<select>`
+ *  locked to an existing catalog entry. `dias` lives separately in
+ *  `selectedDias` (a `Set`, shared with the checkbox toggling logic). */
 interface HorarioFormData {
-  categoria: Categoria;
+  nombre: string;
+  horaInicio: string;
+  horaFin: string;
 }
 
 /** One día-group row pending deletion after student-safety check, awaiting user confirmation. */
@@ -255,10 +271,10 @@ const NEW_GROUP_KEY = "__new__";
  */
 const ALUMNOS_PAGE_SIZE = 10;
 
-const DEFAULT_CATEGORIA: Categoria = CATEGORIA_OPTIONS[0];
-
 const EMPTY_FORM: HorarioFormData = {
-  categoria: DEFAULT_CATEGORIA,
+  nombre: "",
+  horaInicio: "",
+  horaFin: "",
 };
 
 export default function GroupsPage(): React.ReactElement {
@@ -271,7 +287,7 @@ export default function GroupsPage(): React.ReactElement {
   // all degrade for instead of throwing.
   const [categorias, setCategorias] = useState<Partial<Record<Categoria, CategoriaInfo>>>({});
   const [loading, setLoading] = useState(true);
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showWarning } = useToast();
 
   /** The categoría's label, falling back to its raw value for an unknown one
    *  (or while the catalog is still loading). */
@@ -304,6 +320,10 @@ export default function GroupsPage(): React.ReactElement {
   const [pendingDeletionScope, setPendingDeletionScope] = useState<"days" | "group">("days");
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  /** `codigo` of the categoría a pending "group"-scope deletion targets —
+   *  `pendingDeletions` itself only holds día rows, not the categoría
+   *  identity `eliminarCategoria` needs (see `requestDeleteCategoria`). */
+  const [deletingCategoriaCodigo, setDeletingCategoriaCodigo] = useState<string | null>(null);
 
   const [notification, setNotification] = useState<{
     type: "success" | "error";
@@ -331,13 +351,14 @@ export default function GroupsPage(): React.ReactElement {
    * would report 220 students for the 44 who actually train. The union needs
    * the identities.
    *
-   * BACKEND GAP: `GET /groups/horarios` returns no enrollment count, and there
-   * is no bulk roster endpoint — the only way to know who a session has is one
-   * `GET /groups/horarios/{id}/alumnos` per row. So the rosters are fetched in
-   * parallel AFTER the schedules render, and a categoría with any unanswered
-   * row simply has no count line. Rendering an undercount for a request that
-   * never answered would be a lie, and this figure is the one the club plans
-   * around.
+   * `GET /groups/horarios` itself returns no enrollment count, but
+   * `GET /groups/horarios/alumnos` (TRA-7) answers the roster of EVERY
+   * schedule in one call — replacing the 26-call fan-out (one
+   * `GET /groups/horarios/{id}/alumnos` per row) this used to need. The
+   * roster is fetched AFTER the schedules render so a slow/failed request
+   * never delays or blanks the grid itself; on failure no card gets a count
+   * line at all — an undercount would be a lie, and this figure is the one
+   * the club plans around.
    */
   const [personasPorHorario, setPersonasPorHorario] = useState<PersonasPorHorario>({});
 
@@ -379,10 +400,18 @@ export default function GroupsPage(): React.ReactElement {
     if (!alumnoSeleccionado || rows.length === 0) return;
     setAsignandoAlumno(true);
     try {
-      await asignarAlumnoAHorario({ persona_id: alumnoSeleccionado, horario_id: rows[0].id });
+      const respuesta = await asignarAlumnoAHorario({ persona_id: alumnoSeleccionado, horario_id: rows[0].id });
       const message = "Alumno asignado correctamente al horario.";
       showNotification("success", message);
       showSuccess(message);
+      // INS-6 (decisión de negocio #4): la cuota vencida NO bloquea la
+      // asignación -- ya se hizo, arriba. Esto es solo el aviso no
+      // bloqueante, aparte del toast de éxito.
+      if (respuesta.membresiaVencida) {
+        const alumno = allStudents.find((s) => Number(s.id) === alumnoSeleccionado);
+        const nombreCompleto = alumno ? `${alumno.nombres} ${alumno.apellidos}` : "El alumno";
+        showWarning(formatMembresiaVencidaWarning(nombreCompleto, respuesta.diasVencida));
+      }
       setAlumnoSeleccionado(null);
     } catch (err) {
       const message = extractErrorMessage(err, "Error al asignar el alumno al horario.");
@@ -395,7 +424,7 @@ export default function GroupsPage(): React.ReactElement {
     // reflecting the last KNOWN-good state.
     await cargarAlumnosDelGrupo(rows);
     setAsignandoAlumno(false);
-  }, [alumnoSeleccionado, cargarAlumnosDelGrupo, showNotification, showSuccess, showError]);
+  }, [alumnoSeleccionado, allStudents, cargarAlumnosDelGrupo, showNotification, showSuccess, showError, showWarning]);
 
   /** Mirror of `handleAsignarAlumno`: the backend unassigns the student from
    * every horario row of the categoría in one atomic transaction, so one
@@ -458,30 +487,30 @@ export default function GroupsPage(): React.ReactElement {
 
   /**
    * Fill in the per-session rosters once the schedules are known. Kept out of
-   * `loadData`'s `Promise.all` deliberately: this is N extra requests for a
-   * secondary line of text, and it must never delay or fail the grid itself.
+   * `loadData`'s `Promise.all` deliberately: this is a secondary line of
+   * text, and it must never delay or fail the grid itself.
    */
   useEffect(() => {
     if (horarios.length === 0) return;
     let cancelled = false;
 
-    void Promise.all(
-      horarios.map(async (horario) => {
-        try {
-          const alumnos = await fetchAlumnosPorHorario(horario.id);
-          return [horario.id, alumnos.map((alumno) => alumno.personaId)] as const;
-        } catch {
-          return null;
+    void fetchRosterDeTodosLosHorarios()
+      .then((roster) => {
+        if (cancelled) return;
+        // Every known horario gets an entry (possibly empty) so a genuinely
+        // empty class still counts as "0 inscriptos", not "unanswered" —
+        // see PersonasPorHorario's own doc comment.
+        const rosters: Record<number, number[]> = {};
+        for (const horario of horarios) rosters[horario.id] = [];
+        for (const alumno of roster) {
+          (rosters[alumno.horarioId] ??= []).push(alumno.personaId);
         }
-      }),
-    ).then((results) => {
-      if (cancelled) return;
-      const rosters: Record<number, number[]> = {};
-      for (const result of results) {
-        if (result) rosters[result[0]] = [...result[1]];
-      }
-      setPersonasPorHorario(rosters);
-    });
+        setPersonasPorHorario(rosters);
+      })
+      .catch(() => {
+        // Leave personasPorHorario untouched: every row stays absent, so
+        // every card omits its count rather than risking a false number.
+      });
 
     return () => {
       cancelled = true;
@@ -517,7 +546,9 @@ export default function GroupsPage(): React.ReactElement {
       return;
     }
     setFormData({
-      categoria: (group.categoria as Categoria) ?? DEFAULT_CATEGORIA,
+      nombre: categoriaLabel(group.categoria),
+      horaInicio: group.horaInicio,
+      horaFin: group.horaFin,
     });
     setSelectedDias(new Set(group.rows.map((row) => row.diaSemana)));
   }
@@ -566,204 +597,224 @@ export default function GroupsPage(): React.ReactElement {
   }
 
   /**
-   * Apply a `diffGroupSave` diff: create/update rows immediately, delete rows
-   * with zero enrolled students immediately, and collect rows with enrolled
-   * students into `pendingDeletions` (awaiting explicit user confirmation
-   * instead of deleting silently and orphaning `AlumnoHorario` rows).
+   * Persist the categoría: one atomic backend call, create or edit
+   * (`AsistenciaServicio.crear_categoria`/`actualizar_categoria`) that
+   * writes `categoria_horario` + `categoria_horario_dia` + a
+   * `horario_entrenamiento` per día in a SINGLE transaction. Unlike the old
+   * per-día diff loop this replaces, a rejected request leaves NOTHING
+   * written — so on failure the form stays open with the server's message
+   * instead of closing and resyncing against a partially-applied save.
    */
-  async function handleSubmit(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
-    if (selectedDias.size === 0) {
-      setFormError("Seleccione al menos un día.");
-      return;
-    }
+  async function submitCategoria(): Promise<void> {
     setFormSubmitting(true);
     setFormError(null);
-    const shared = {
-      categoria: formData.categoria,
-    };
+    const nombre = formData.nombre.trim();
+    const dias = Array.from(selectedDias);
     try {
-      const group: HorarioGroup = editingGroup ?? {
-        key: "",
-        categoria: shared.categoria,
-        horaInicio: horarioDe(categorias, shared.categoria).horaInicio,
-        horaFin: horarioDe(categorias, shared.categoria).horaFin,
-        rows: [],
-      };
-      const diff = diffGroupSave(group, selectedDias);
-
-      for (const dia of diff.toCreate) {
-        const dto: CrearHorarioDTO = { dia_semana: dia, ...shared };
-        await crearHorario(dto);
+      if (editingGroup) {
+        await actualizarCategoria(editingGroup.categoria, {
+          nombre, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
+        });
+      } else {
+        await crearCategoria({
+          nombre, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
+        });
       }
-      for (const id of diff.toUpdateIds) {
-        const dto: ActualizarHorarioDTO = { ...shared };
-        await actualizarHorario(id, dto);
-      }
-
-      const nextPending: PendingDayDeletion[] = [];
-      for (const id of diff.toDeleteIds) {
-        const alumnos = await fetchAlumnosPorHorario(id);
-        if (alumnos.length > 0) {
-          const row = group.rows.find((r) => r.id === id);
-          nextPending.push({ id, diaSemana: row?.diaSemana ?? "", alumnos });
-        } else {
-          await eliminarHorario(id);
-        }
-      }
-
-      if (nextPending.length > 0) {
-        setPendingDeletions(nextPending);
-        return;
-      }
-
-      const message = editingGroup ? "Horario actualizado correctamente." : "Horario creado correctamente.";
+      const message = editingGroup ? "Categoría actualizada correctamente." : "Categoría creada correctamente.";
       showNotification("success", message);
       showSuccess(message);
       closeExpanded();
       await loadData();
     } catch (err) {
-      // A partial failure mid-sequence (e.g. the 2nd of 3 crearHorario calls
-      // rejects) leaves the backend ahead of local state: some rows were
-      // already created/updated/deleted before the failing call. Closing the
-      // form drops the now-stale `editingGroup`/`selectedDias` snapshot
-      // instead of leaving them around to silently re-diff against pre-save
-      // data on a retry (which would re-create the row that already
-      // succeeded). `loadData()` resyncs `horarios` with what's actually
-      // persisted so any retry starts from a reopened, accurate group.
-      const message = extractErrorMessage(err, "Error al guardar el horario.");
-      showNotification("error", message);
+      const message = extractErrorMessage(err, "Error al guardar la categoría.");
+      setFormError(message);
       showError(message);
-      closeExpanded();
-      await loadData();
     } finally {
       setFormSubmitting(false);
     }
   }
 
   /**
-   * User confirmed: delete each pending row. `eliminarHorario` now unassigns
-   * that row's own students server-side before removing it (scoped to that
-   * ONE horario_id) — deliberately NOT the categoría-wide
-   * `desasignarAlumnoDeHorario`, which would incorrectly unenroll these
-   * students from every OTHER día of the categoría too. Dropping Miércoles
-   * from a 5-día group must leave enrolled students on the remaining 4, not
-   * unenroll them entirely.
+   * Validates the form, then — only when editing AND at least one ticked-off
+   * día currently has enrolled students — asks for explicit confirmation
+   * before writing anything: `actualizar_categoria` unenrolls those students
+   * from the removed día(s) as part of the same atomic transaction, so this
+   * is the one place that has to warn about it up front. A día with real
+   * `Asistencia` history is a different, harder case: the backend refuses
+   * the whole edit for that (no history is ever deleted, see
+   * docs/fixes/24-abm-categorias.md), surfaced as `formError` like any other
+   * validation failure.
    */
-  async function handleConfirmPendingDeletions(): Promise<void> {
-    if (!pendingDeletions) return;
-    try {
-      for (const pending of pendingDeletions) {
-        await eliminarHorario(pending.id);
-      }
-      const message =
-        pendingDeletionScope === "group" ? "Horario eliminado correctamente." : "Horario actualizado correctamente.";
-      showNotification("success", message);
-      showSuccess(message);
-    } catch (err) {
-      const message = extractErrorMessage(err, "Error al eliminar el horario.");
-      showNotification("error", message);
-      showError(message);
-    } finally {
-      setPendingDeletions(null);
-      setPendingDeletionScope("days");
-      closeExpanded();
-      await loadData();
+  async function handleSubmit(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    if (!formData.nombre.trim()) {
+      setFormError("Ingrese un nombre para la categoría.");
+      return;
     }
-  }
+    if (!formData.horaInicio || !formData.horaFin) {
+      setFormError("Ingrese la hora de inicio y de fin.");
+      return;
+    }
+    if (selectedDias.size === 0) {
+      setFormError("Seleccione al menos un día.");
+      return;
+    }
+    setFormError(null);
 
-  function handleCancelPendingDeletions(): void {
-    // Only the "days" flow (mid-edit unticking) has already written other
-    // rows via handleSubmit before this dialog appears, so only it needs to
-    // close the form and resync on cancel. The "group" flow (trash icon)
-    // hasn't mutated anything yet — canceling is a pure no-op.
-    if (pendingDeletionScope === "days") {
-      closeExpanded();
-      void loadData();
+    if (editingGroup) {
+      const diasAQuitar = editingGroup.rows.filter((row) => !selectedDias.has(row.diaSemana));
+      if (diasAQuitar.length > 0) {
+        try {
+          const listas = await Promise.all(diasAQuitar.map((row) => fetchAlumnosPorHorario(row.id)));
+          if (listas.some((alumnos) => alumnos.length > 0)) {
+            setPendingDeletionScope("days");
+            setPendingDeletions(
+              diasAQuitar.map((row, i) => ({ id: row.id, diaSemana: row.diaSemana, alumnos: listas[i] })),
+            );
+            return; // handleConfirmPendingDeletions calls submitCategoria() on confirm.
+          }
+        } catch {
+          // A roster-check failure must not block saving — the backend still
+          // validates (blocks on real Asistencia history) before writing
+          // anything either way.
+        }
+      }
     }
-    setPendingDeletions(null);
-    setPendingDeletionScope("days");
+
+    await submitCategoria();
   }
 
   /**
-   * Trash-icon entry point: deletes the ENTIRE group (every día row), not
-   * just `group.rows[0]` — reuses the same student-safety pending-deletion
-   * flow as unticking días mid-edit (`fetchAlumnosPorHorario` per row,
-   * `pendingDeletions` + confirmation dialog, `handleConfirmPendingDeletions`
-   * calling `eliminarHorario` per row) instead of duplicating that logic.
+   * User confirmed. "days" (mid-edit unticking already warned about enrolled
+   * students) proceeds to the one atomic save; "group" (trash icon) deletes
+   * the categoría entirely. Neither path has written anything yet — this
+   * dialog runs BEFORE the single backend call in both flows now, unlike the
+   * old per-día loop it replaces.
    */
-  async function requestDeleteGroup(group: HorarioGroup): Promise<void> {
-    setDeletingId(group.rows[0].id);
-    try {
-      const nextPending: PendingDayDeletion[] = [];
-      for (const row of group.rows) {
-        const alumnos = await fetchAlumnosPorHorario(row.id);
-        nextPending.push({ id: row.id, diaSemana: row.diaSemana, alumnos });
+  async function handleConfirmPendingDeletions(): Promise<void> {
+    if (!pendingDeletions) return;
+    if (pendingDeletionScope === "group") {
+      const codigo = deletingCategoriaCodigo;
+      setPendingDeletions(null);
+      setPendingDeletionScope("days");
+      if (!codigo) return;
+      try {
+        await eliminarCategoria(codigo);
+        const message = "Categoría eliminada correctamente.";
+        showNotification("success", message);
+        showSuccess(message);
+        closeExpanded();
+        await loadData();
+      } catch (err) {
+        const message = extractErrorMessage(err, "Error al eliminar la categoría.");
+        showNotification("error", message);
+        showError(message);
+      } finally {
+        setDeletingCategoriaCodigo(null);
       }
+      return;
+    }
+    setPendingDeletions(null);
+    await submitCategoria();
+  }
+
+  function handleCancelPendingDeletions(): void {
+    setPendingDeletions(null);
+    setPendingDeletionScope("days");
+    setDeletingCategoriaCodigo(null);
+  }
+
+  /**
+   * Trash-icon entry point: deletes the categoría entirely (every día row),
+   * gated behind the same student-safety confirmation as unticking días
+   * mid-edit (`fetchAlumnosPorHorario` per row, `pendingDeletions` +
+   * `ConfirmDialog`) — but the actual delete is now ONE atomic backend call
+   * (`eliminarCategoria`) in `handleConfirmPendingDeletions`, not a loop.
+   */
+  async function requestDeleteCategoria(codigo: string, rows: readonly HorarioGroupRow[]): Promise<void> {
+    setDeletingId(rows[0]?.id ?? null);
+    setDeletingCategoriaCodigo(codigo);
+    try {
+      const listas = await Promise.all(rows.map((row) => fetchAlumnosPorHorario(row.id)));
       setPendingDeletionScope("group");
-      setPendingDeletions(nextPending);
+      setPendingDeletions(rows.map((row, i) => ({ id: row.id, diaSemana: row.diaSemana, alumnos: listas[i] })));
     } catch (err) {
-      const message = extractErrorMessage(err, "Error al eliminar el horario.");
+      const message = extractErrorMessage(err, "Error al eliminar la categoría.");
       showNotification("error", message);
       showError(message);
+      setDeletingCategoriaCodigo(null);
     } finally {
       setDeletingId(null);
     }
   }
 
-  /** Shared/día-checklist edit form — rendered inline (PR3a), either under the
-   * group card being edited or, for "Nuevo Horario", in its own top-of-list
-   * card (no existing group card to nest a brand-new one under). */
+  /**
+   * Categoría form — rendered inline (PR3a), either under the card being
+   * edited or, for "Nueva categoría", in its own top-of-list card (no
+   * existing card to nest a brand-new one under).
+   *
+   * v6 (docs/fixes/24-abm-categorias.md): nombre/franja/días are typed
+   * input now, not a `<select>` locked to an existing catalog entry — this
+   * form is what CREATES the categoría, so there is no catalog entry to pick
+   * from yet on that path. `código` is never asked for: the server derives
+   * it from `nombre` and it does not change on a rename.
+   */
   function renderHorarioForm(): React.ReactElement {
     return (
       <>
         <h3 className="mb-4 text-sm font-bold text-ink">
-          {editingGroup !== null ? "Editar Horario" : "Nuevo Horario"}
+          {editingGroup !== null ? "Editar categoría" : "Nueva categoría"}
         </h3>
         {formError && (
           <div className="alert-error mb-4" role="alert">{formError}</div>
         )}
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label htmlFor="horario-categoria" className="mb-1 block text-xs font-semibold text-ink-2">
-              Categoría
+          <div className="sm:col-span-2">
+            <label htmlFor="categoria-nombre" className="mb-1 block text-xs font-semibold text-ink-2">
+              Nombre
             </label>
-            <select
-              id="horario-categoria"
+            <input
+              id="categoria-nombre"
+              type="text"
               className="input-field w-full"
-              value={formData.categoria}
-              onChange={(e) => {
-                const categoria = e.target.value as Categoria;
-                setFormData((prev) => ({ ...prev, categoria }));
-                setSelectedDias((prev) => {
-                  const permitidos = new Set(diasPermitidos(categorias, categoria));
-                  return new Set([...prev].filter((dia) => permitidos.has(dia)));
-                });
-              }}
+              value={formData.nombre}
+              onChange={(e) => setFormData((prev) => ({ ...prev, nombre: e.target.value }))}
+              placeholder="Ej: Preinfantil"
               required
-            >
-              {CATEGORIA_OPTIONS.map((cat) => (
-                <option key={cat} value={cat}>{categorias[cat]?.label ?? cat}</option>
-              ))}
-            </select>
+            />
           </div>
           <div>
-            <span className="mb-1 block text-xs font-semibold text-ink-2">
-              Horario (fijo según categoría)
-            </span>
-            <p
-              className="input-field flex w-full items-center text-ink-2"
-              aria-readonly="true"
-            >
-              {horarioDe(categorias, formData.categoria).horaInicio} – {horarioDe(categorias, formData.categoria).horaFin}
-            </p>
+            <label htmlFor="categoria-hora-inicio" className="mb-1 block text-xs font-semibold text-ink-2">
+              Hora de inicio
+            </label>
+            <input
+              id="categoria-hora-inicio"
+              type="time"
+              className="input-field w-full"
+              value={formData.horaInicio}
+              onChange={(e) => setFormData((prev) => ({ ...prev, horaInicio: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="categoria-hora-fin" className="mb-1 block text-xs font-semibold text-ink-2">
+              Hora de fin
+            </label>
+            <input
+              id="categoria-hora-fin"
+              type="time"
+              className="input-field w-full"
+              value={formData.horaFin}
+              onChange={(e) => setFormData((prev) => ({ ...prev, horaFin: e.target.value }))}
+              required
+            />
           </div>
           <div className="sm:col-span-2 lg:col-span-4">
             <span className="mb-1 block text-xs font-semibold text-ink-2">
               Días de la semana
             </span>
             <div className="flex flex-wrap gap-3">
-              {diasPermitidos(categorias, formData.categoria).map((dia) => (
+              {DIA_ORDER.map((dia) => (
                 <label key={dia} className="inline-flex items-center gap-1.5 text-xs text-ink">
                   <input
                     type="checkbox"
@@ -778,7 +829,7 @@ export default function GroupsPage(): React.ReactElement {
           <div className="sm:col-span-2 lg:col-span-4 flex gap-2">
             <Button type="submit" variant="primary" size="sm" disabled={formSubmitting}>
               {formSubmitting && <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />}
-              {editingGroup !== null ? "Guardar cambios" : "Crear horario"}
+              {editingGroup !== null ? "Guardar cambios" : "Crear categoría"}
             </Button>
             <Button size="sm" onClick={closeExpanded}>
               Cancelar
@@ -787,20 +838,22 @@ export default function GroupsPage(): React.ReactElement {
         </form>
 
         {/* Danger zone, exactly where `15-horario-editar.html` puts it: inside
-            the edit form, not on the card. Deleting removes the whole
-            recurring schedule — every weekday of the group — so it must not
-            hang off a card that names one single day. */}
+            the edit form, not on the card. Deleting removes the categoría
+            entera — every día row — so it must not hang off a card that
+            names one single day. Blocked server-side (400) when any día has
+            real Asistencia history; see docs/fixes/24-abm-categorias.md. */}
         {editingGroup !== null && (
           <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
             <div className="min-w-[220px] flex-1">
-              <p className="text-sm font-semibold text-state-bad">Eliminar este horario</p>
+              <p className="text-sm font-semibold text-state-bad">Eliminar esta categoría</p>
               <p className="text-xs text-ink-3">
-                Se eliminan todos sus días y los alumnos quedan sin horario asignado.
+                Se eliminan todos sus días y los alumnos quedan sin horario asignado. No se puede
+                si alguno de sus días tiene asistencias registradas.
               </p>
             </div>
             <Button
               size="sm"
-              onClick={() => void requestDeleteGroup(editingGroup)}
+              onClick={() => void requestDeleteCategoria(editingGroup.categoria, editingGroup.rows)}
               disabled={deletingId !== null}
             >
               {deletingId !== null ? (
@@ -1014,7 +1067,7 @@ export default function GroupsPage(): React.ReactElement {
           // of the screen does.
           <Button variant="dark" onClick={openCreateForm} disabled={loading}>
             <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Nuevo horario
+            Nueva categoría
           </Button>
         }
       >
@@ -1194,12 +1247,12 @@ export default function GroupsPage(): React.ReactElement {
         {!loading && horarios.length === 0 && (
           <EmptyState
             icon={<Calendar size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-            title="No hay horarios configurados"
-            description="Cree un horario de entrenamiento para empezar a asignarle alumnos."
+            title="No hay categorías configuradas"
+            description="Cree una categoría con sus días de entrenamiento para empezar a asignarle alumnos."
             action={
               <Button variant="primary" onClick={openCreateForm}>
                 <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                Crear primer horario
+                Crear primera categoría
               </Button>
             }
           />
@@ -1208,16 +1261,16 @@ export default function GroupsPage(): React.ReactElement {
         <ConfirmDialog
           open={pendingDeletions !== null && pendingDeletions.length > 0}
           variant="danger"
-          title={pendingDeletionScope === "group" ? "Eliminar horario completo" : "Desasignar alumnos y eliminar días"}
+          title={pendingDeletionScope === "group" ? "Eliminar categoría completa" : "Desasignar alumnos y quitar días"}
           message={
             pendingDeletions
               ? pendingDeletionScope === "group"
-                ? `Se eliminará el horario completo (todos sus días: ${pendingDeletions
+                ? `Se eliminará la categoría completa (todos sus días: ${pendingDeletions
                     .map((p) => shortDiaLabel(p.diaSemana))
                     .join(", ")}) y ${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados. Esta acción no se puede deshacer.`
                 : `${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados de: ${pendingDeletions
                     .map((p) => shortDiaLabel(p.diaSemana))
-                    .join(", ")}. ¿Confirma la eliminación de esos días?`
+                    .join(", ")}. ¿Confirma guardar la categoría con esos días quitados?`
               : ""
           }
           onConfirm={() => void handleConfirmPendingDeletions()}

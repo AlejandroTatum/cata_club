@@ -28,8 +28,16 @@ export interface NavLinkDef {
  * that should be visible for a given role (or unauthenticated state).
  *
  * @param role — The current user's role, or null if unauthenticated.
+ * @param studentIsAdult — Only meaningful for `"estudiante"`: true when that
+ * self-managed student is 18+. Ignored for every other role — in particular
+ * a `"representante"` account gets no Ficha médica entry from this flag,
+ * because that access (a guardian correcting a DEPENDENT's record) is a
+ * separate, role-only grant unrelated to the caller's own age.
  */
-export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
+export function getNavLinksForRole(
+  role: UserRole | null,
+  studentIsAdult = false,
+): NavLinkDef[] {
   if (!role) {
     return [
       { href: "/", label: "Inicio" },
@@ -64,7 +72,6 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
       );
       break;
     case "representante":
-    case "estudiante":
       links.push(
         { href: "/student", label: "Mi cuenta" },
         { href: "/student/payments", label: "Pagos" },
@@ -72,7 +79,34 @@ export function getNavLinksForRole(role: UserRole | null): NavLinkDef[] {
         // this entry /student/attendance is reachable only from a panel on the
         // home screen.
         { href: "/student/attendance", label: "Asistencias" },
+        // Only a representante manages a representado's medical record — the
+        // backend's `incluir_titular=False` on `/fichas-medicas/*` still
+        // excludes the titular's own, so "estudiante" (below) never gets this
+        // entry: it would point a self-managed student at a screen that 403s.
+        { href: "/student/medical-record", label: "Ficha médica" },
       );
+      break;
+    case "estudiante":
+      links.push(
+        { href: "/student", label: "Mi cuenta" },
+        { href: "/student/payments", label: "Pagos" },
+        { href: "/student/attendance", label: "Asistencias" },
+      );
+      // Ficha médica, ESTUDIANTE-only and age-gated: the backend's
+      // `incluir_titular` on GET/PATCH /fichas-medicas/persona/{id} only
+      // admits the titular when they're 18+
+      // (ficha_medica_router.py::_es_titular_mayor_de_edad) — a minor with
+      // their own account still gets no nav entry, or it would point them at
+      // a screen that 403s.
+      //
+      // `representante` gets no entry here at all — a guardian's access to a
+      // REPRESENTADO's record is a separate, role-only grant with its own
+      // route (see feat/ficha-medica-representante, not yet merged as of this
+      // branch). Once merged, this `case` needs both entries pushed under
+      // their own conditions instead of one shared block.
+      if (role === "estudiante" && studentIsAdult) {
+        links.push({ href: "/student/medical-record", label: "Ficha médica" });
+      }
       break;
     case "unsupported":
       // No role-specific links — this account has no recognized backend

@@ -80,6 +80,19 @@ describe("FAQ_SECTIONS", () => {
     }
   });
 
+  it("no longer tells a representante they cannot correct the medical record themselves", () => {
+    // FIC-4: the backend already authorized a representante to read/correct a
+    // representado's ficha médica, and `/student/medical-record` now mounts
+    // the screen — this entry used to flatly say "No", which became a lie the
+    // moment the screen shipped. See `docs/fixes/13-ficha-medica-representante.md`.
+    const entry = FAQ_SECTIONS.flatMap((s) => s.entries).find(
+      (e) => e.question === "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
+    );
+    expect(entry).toBeDefined();
+    expect(entry!.answer).toMatch(/representante.*(s[ií]|puede)/i);
+    expect(entry!.answer.toLowerCase().trim().startsWith("no:")).toBe(false);
+  });
+
   it("names sections the way the menu does, never by route", () => {
     // The assistant is under explicit instruction never to mention a path;
     // a help page that does would contradict it in the same breath.

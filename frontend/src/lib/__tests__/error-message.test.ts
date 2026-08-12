@@ -314,4 +314,27 @@ describe("isUserFacingText — the gate on its own", () => {
 
     for (const text of mime) expect(`${text} → ${isUserFacingText(text)}`).toBe(`${text} → false`);
   });
+
+  it("passes the voucher upload's rejected-file-type message (PAG-3), and nothing else moved", () => {
+    // The fix for PAG-3 lives in the route that authors this sentence
+    // (`app/api/membresias/pagos/[pagoId]/voucher/route.ts`), not here: it
+    // stopped echoing the raw MIME type of the rejected file. This test pins
+    // the gate's side of the contract — the reworded sentence has to pass —
+    // and, just as importantly, that every other real product message this
+    // gate was already letting through still does. Six real sentences went
+    // into the verification that found PAG-3; five already passed, and this
+    // is the sixth, now fixed rather than the gate loosened.
+    const realProductMessages = [
+      "Ese tipo de archivo no se puede subir. Adjunte una foto (JPG o PNG) o un PDF.", // PAG-3, fixed
+      "Ya existe una persona con la cédula 0912345678",
+      "El alumno ya está inscrito en este horario.",
+      "No hay cupos disponibles en el nivel seleccionado.",
+      "La contraseña actual no es correcta.",
+      "El horario lunes/miércoles no tiene cupos.",
+    ];
+
+    for (const text of realProductMessages) {
+      expect(`${text} → ${isUserFacingText(text)}`).toBe(`${text} → true`);
+    }
+  });
 });

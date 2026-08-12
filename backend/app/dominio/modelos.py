@@ -11,6 +11,7 @@ Correcciones aplicadas respecto al diagrama original:
 - FichaMedica <-> Enfermedades: 0..*         (antes 1..* obligaba mínimo una enfermedad registrada)
 - Se agrega FK directa Pago -> Persona (estaba en el código base pero faltaba en el diagrama)
 """
+import logging
 from datetime import datetime, date, time, timezone
 from decimal import Decimal
 from typing import List, Optional
@@ -20,7 +21,7 @@ from sqlalchemy import (
     CheckConstraint, Index, UniqueConstraint, text,
     Enum as SAEnum,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.dominio.enums import (
     TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
@@ -28,6 +29,8 @@ from app.dominio.enums import (
     TipoNotificacion,
     TipoManoDominante,
 )
+
+_log = logging.getLogger("cataclub.dominio.modelos")
 
 
 def _ahora_utc() -> datetime:
@@ -377,6 +380,15 @@ class Pago(Base):
     # al aprobar un pago (tarea Celery). El voucher es la imagen/PDF que sube
     # el cliente como evidencia de la transferencia bancaria, mientras el pago
     # está PENDIENTE_VALIDACION. No constituye tabla nueva: son columnas en Pago.
+    #
+    # `voucher_url` NO es una URL (pese al nombre, que se conserva para no
+    # migrar el esquema): desde el fix de privacidad "voucher no enumerable"
+    # guarda el `public_id` de Cloudinary de un recurso `type="authenticated"`.
+    # La URL de entrega se firma fresca en cada lectura autorizada -- ver
+    # `PagoServicio.pago_a_response_dto` / `cloudinary_cliente.resolver_url_entrega`.
+    # Filas creadas ANTES del fix siguen con la URL pública completa de un
+    # recurso `type="upload"` (se detecta por el prefijo `http`); ver el
+    # residual documentado en docs/fixes/16-voucher-no-enumerable.md.
     voucher_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     voucher_formato: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     voucher_fecha_carga: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -446,6 +458,10 @@ class Descuento(Base):
 class ComprobantePago(Base):
     __tablename__ = "comprobante_pago"
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Mismo criterio que `Pago.voucher_url` (ver ese docstring): desde el fix
+    # de privacidad "voucher no enumerable" guarda el `public_id` de un
+    # recurso `type="authenticated"`, no una URL, pese al nombre de la
+    # columna.
     archivo_url: Mapped[str] = mapped_column(String(255))
     formato_archivo: Mapped[str] = mapped_column(String(20))
     fecha_carga: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
@@ -469,10 +485,21 @@ class CategoriaHorario(Base):
     `AsistenciaServicio._validar_dia_y_derivar_horas`) -- la garantía que ya
     existía con el enum no cambia, solo cambia de dónde se lee.
 
-    Sin pantalla de alta/edición todavía (fuera de alcance de este cambio):
-    hoy las filas solo las siembra la migración que creó esta tabla.
+    ABM del admin (docs/fixes/24-abm-categorias.md): `AsistenciaServicio.
+    crear_categoria`/`actualizar_categoria`/`eliminar_categoria` son el
+    único camino de escritura -- alta atómica de la fila + sus
+    `categoria_horario_dia` + un `horario_entrenamiento` por día marcado,
+    todo en una transacción. `codigo` lo deriva el servidor del nombre
+    (ver `_generar_codigo_categoria`) y es INMUTABLE una vez creado: es la
+    FK de `horario_entrenamiento.categoria`, así que un rename solo toca
+    `label`, nunca `codigo`. `label` es único en la base (red de
+    seguridad; el servicio ya rechaza el duplicado con un mensaje legible
+    antes de llegar acá) -- ver migración `f1a2b3c4d5e6`.
     """
     __tablename__ = "categoria_horario"
+    __table_args__ = (
+        UniqueConstraint("label", name="uq_categoria_horario_label"),
+    )
     codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
     label: Mapped[str] = mapped_column(String(50))
     hora_inicio: Mapped[time] = mapped_column(Time)
@@ -526,8 +553,21 @@ class HorarioEntrenamiento(Base):
     asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="horario")
     alumno_horarios: Mapped[List["AlumnoHorario"]] = relationship(back_populates="horario")
 
+    # Invariante de negocio EN LA BASE (INS-3, decisión de negocio #5,
+    # 2026-08-11): una sola fila por (categoria, dia_semana). Las horas de
+    # un horario se derivan de la categoria (ver `AsistenciaServicio.
+    # _validar_dia_y_derivar_horas`), así que dos filas Formativo-Lunes
+    # serían idénticas -- no existe el caso legítimo de "dos grupos el mismo
+    # día". El chequeo de `AsistenciaServicio.crear_horario` sigue siendo el
+    # camino primario de error (mensaje legible); este UNIQUE es la red de
+    # seguridad ante escrituras concurrentes que lo burlen -- mismo patrón
+    # que `uq_alumno_horario` arriba. A diferencia de esa, ESTA sí necesitó
+    # migración (`b7e4a9f2c6d1`), que además colapsa los duplicados
+    # preexistentes -- ver el comentario de esa migración para la regla de
+    # limpieza.
     __table_args__ = (
         Index("ix_horario_entrenamiento_categoria", "categoria"),
+        UniqueConstraint("categoria", "dia_semana", name="uq_horario_categoria_dia"),
     )
 
 
@@ -636,9 +676,20 @@ class Notificacion(Base):
         Index("ix_notificacion_persona_id", "persona_id"),
     )
 
+    # Ancho real, no un número elegido al azar. El peor caso conocido con los
+    # anchos actuales de columna es un rechazo de pago: hasta 255 caracteres
+    # de motivo (tope de `PagoValidarDTO.motivo_rechazo`) reenviados al
+    # representante con el nombre completo del alumno por delante (hasta 100
+    # + 100 de `Persona.nombres`/`apellidos`) -- unos 488 caracteres. 500 deja
+    # margen sin convertir la columna en un campo sin límite real (hallazgo en
+    # vivo, 2026-08-11: con el VARCHAR(255) anterior, un rechazo con nota de
+    # ~230+ caracteres hacía que el INSERT de esta fila tirara un `DataError`
+    # DESPUÉS de que el rechazo del pago ya estaba commiteado en Postgres).
+    MENSAJE_MAX = 500
+
     id: Mapped[int] = mapped_column(primary_key=True)
     tipo: Mapped[TipoNotificacion] = mapped_column(SAEnum(TipoNotificacion))
-    mensaje: Mapped[str] = mapped_column(String(255))
+    mensaje: Mapped[str] = mapped_column(String(MENSAJE_MAX))
     leida: Mapped[bool] = mapped_column(Boolean, default=False)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
     # Id de la entidad relacionada (ej. la Membresia o el Pago que originó
@@ -648,3 +699,60 @@ class Notificacion(Base):
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     persona: Mapped["Persona"] = relationship(back_populates="notificaciones")
+
+    @validates("mensaje")
+    def _recortar_mensaje(self, key: str, value: str) -> str:
+        """Último resorte, no la estrategia: cada sitio que arma un mensaje ya
+        acorta lo que le agrega (nombres de persona, ver
+        `notificacion_servicio.acortar_nombre_para_notificacion`) para que la
+        columna nunca tenga que enterarse. Esto atrapa lo que ese cuidado no
+        previó -- de cualquier escritor presente o futuro, incluidos los que
+        no pasan por `NotificacionRepositorio` (ej. `alertas_tareas.py`, que
+        hace `db.add_all(...)` directo) -- así un mensaje inesperadamente
+        largo se recorta con un aviso en el log en vez de tirar el
+        `DataError` post-commit que motivó este candado."""
+        if value is not None and len(value) > self.MENSAJE_MAX:
+            _log.warning(
+                "Notificacion.mensaje recortado de %d a %d caracteres (tipo=%s, persona_id=%s)",
+                len(value), self.MENSAJE_MAX,
+                getattr(self, "tipo", None), getattr(self, "persona_id", None),
+            )
+            return value[: self.MENSAJE_MAX - 1].rstrip() + "…"
+        return value
+
+
+# ---------------------------------------------------------------------------
+# INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): un representante puede
+# vincular a su cuenta un representado YA EXISTENTE escribiendo su cédula,
+# sin que nadie apruebe. El guardarraíl de auditoría de esa decisión ("queda
+# registrado quién vinculó a quién y cuándo") es esta tabla: una fila por
+# vinculación, nunca actualizada ni borrada -- un log de eventos, no el
+# estado actual (para eso está `Persona.representante_id`, que sí muta).
+# ---------------------------------------------------------------------------
+class VinculacionRepresentante(Base):
+    __tablename__ = "vinculacion_representante"
+    __table_args__ = (
+        Index("ix_vinculacion_representante_persona_id", "persona_id"),
+        Index("ix_vinculacion_representante_representante_anterior_id", "representante_anterior_id"),
+        Index("ix_vinculacion_representante_representante_nuevo_id", "representante_nuevo_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
+
+    # El representado que cambió de cuenta.
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    persona: Mapped["Persona"] = relationship(foreign_keys=[persona_id])
+
+    # `None` cuando el representado no tenía representante legal antes de
+    # esta vinculación (ej. se había independizado, o quedó huérfano de
+    # representante por algún otro camino).
+    representante_anterior_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    representante_anterior: Mapped[Optional["Persona"]] = relationship(
+        foreign_keys=[representante_anterior_id]
+    )
+
+    representante_nuevo_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    representante_nuevo: Mapped["Persona"] = relationship(foreign_keys=[representante_nuevo_id])

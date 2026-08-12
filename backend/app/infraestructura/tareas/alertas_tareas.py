@@ -27,6 +27,7 @@ from app.infraestructura.tareas.celery_app import celery_app
 from app.dominio.excepciones import ServicioNoDisponible
 from app.dominio.modelos import Pago, Membresia, Persona, Notificacion
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion
+from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.soporte_transversal.resiliencia import CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
 from app.soporte_transversal.tiempo import hoy_club
 
@@ -202,10 +203,11 @@ def _disparar_notificacion_vencimiento(
             )
 
     if representante_pendiente:
+        nombre_alumno = acortar_nombre_para_notificacion(f"{persona.nombres} {persona.apellidos}")
         filas_pendientes.append(Notificacion(
             tipo=TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO,
             mensaje=(
-                f"La membresía de {persona.nombres} {persona.apellidos} "
+                f"La membresía de {nombre_alumno} "
                 f"vence el {vence.strftime('%d/%m/%Y')}."
             ),
             persona_id=persona.representante_id,

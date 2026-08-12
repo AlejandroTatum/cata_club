@@ -382,14 +382,22 @@ def main() -> None:
             )
 
         # Sin relación entrenador–horario (issue #13): la asistencia se
-        # siembra sobre los primeros horarios del club, sin titular.
-        horarios_asistencia: list[HorarioEntrenamiento] = (
-            db.query(HorarioEntrenamiento)
-            .order_by(HorarioEntrenamiento.id)
-            .limit(3)
-            .all()
-        )
-        if not horarios_asistencia:
+        # siembra sobre los horarios del club, sin titular.
+        #
+        # Agrupados POR CATEGORÍA y no `.limit(3)` por id: la inscripción es
+        # atómica por categoría desde el issue #181 -- un alumno está en TODOS
+        # los días de su categoría o en ninguno. Tomar los tres primeros
+        # horarios sembraba justo el estado que esa regla prohíbe (Formativo
+        # con lunes/martes/miércoles y sin jueves/viernes), y la API ya no
+        # puede producirlo, así que el entorno de QA mostraba un caso
+        # imposible en producción.
+        horarios_por_categoria: dict[str, list[HorarioEntrenamiento]] = {}
+        for horario in db.query(HorarioEntrenamiento).order_by(HorarioEntrenamiento.id).all():
+            horarios_por_categoria.setdefault(horario.categoria, []).append(horario)
+
+        # Orden estable: el seed debe producir la misma base en cada corrida.
+        categorias_con_horario = sorted(horarios_por_categoria)
+        if not categorias_con_horario:
             print(
                 "[seed] AVISO: no se encontraron horarios "
                 "(corra primero seed_dev_base.py). La asistencia se omitirá."
@@ -442,18 +450,31 @@ def main() -> None:
         db.flush()
 
         # ------------------------------------------------------------------
-        # 3. Asistencia histórica (últimas 4 sesiones de los primeros 3
-        #    horarios del club), para un subconjunto de alumnos.
+        # 3. Inscripción por categoría + asistencia histórica.
+        #
+        #    Cada alumno entra a UNA categoría y queda inscrito en TODOS sus
+        #    días (regla atómica del issue #181). Las categorías se reparten
+        #    round-robin para que ninguna quede sin roster: Competitivo
+        #    quedaba vacío con el reparto anterior, y el panel del entrenador
+        #    anunciaba "0 estudiantes inscritos" sobre su sesión en curso.
         # ------------------------------------------------------------------
         asistencias_creadas = 0
-        if horarios_asistencia:
-            estudiantes_con_asistencia = [p for p, _ in estudiantes[:24]]
+        inscripciones_creadas = 0
+        if categorias_con_horario:
             estados_ciclo = [
                 EstadoAsistencia.PRESENTE, EstadoAsistencia.PRESENTE,
                 EstadoAsistencia.AUSENTE, EstadoAsistencia.ATRASADO,
                 EstadoAsistencia.PRESENTE, EstadoAsistencia.JUSTIFICADO,
             ]
-            for horario in horarios_asistencia:
+            # La asistencia histórica cubre a los primeros 24, como antes: el
+            # resto queda inscrito y sin historial, que es el caso real de un
+            # alumno recién matriculado.
+            con_historial = {p.id for p, _ in estudiantes[:24]}
+
+            for e_idx, (persona, _) in enumerate(estudiantes):
+                categoria = categorias_con_horario[e_idx % len(categorias_con_horario)]
+                horarios_del_alumno = horarios_por_categoria[categoria]
+
                 # Inscribir ANTES de registrar asistencia. Sin esto el seed
                 # producía un estado que la propia API no puede generar: la
                 # única vía real de alta es `asignar_alumno_a_horario`, y
@@ -462,19 +483,24 @@ def main() -> None:
                 # salía vacío de los mismos alumnos que `GET
                 # /asistencias/reportes` sí listaba, y las dos pantallas se
                 # contradecían.
-                for persona in estudiantes_con_asistencia:
-                    _obtener_o_crear(
+                for horario in horarios_del_alumno:
+                    _, es_nueva = _obtener_o_crear(
                         db,
                         AlumnoHorario,
                         (AlumnoHorario.persona_id == persona.id)
                         & (AlumnoHorario.horario_id == horario.id),
                         {"persona_id": persona.id, "horario_id": horario.id},
                     )
+                    if es_nueva:
+                        inscripciones_creadas += 1
 
-                fechas = _fechas_recientes(horario.dia_semana, 4)
-                for f_idx, fecha in enumerate(fechas):
-                    for p_idx, persona in enumerate(estudiantes_con_asistencia):
-                        estado = estados_ciclo[(p_idx + f_idx) % len(estados_ciclo)]
+                if persona.id not in con_historial:
+                    continue
+
+                for horario in horarios_del_alumno:
+                    fechas = _fechas_recientes(horario.dia_semana, 4)
+                    for f_idx, fecha in enumerate(fechas):
+                        estado = estados_ciclo[(e_idx + f_idx) % len(estados_ciclo)]
                         existe = (
                             db.query(Asistencia)
                             .filter(
@@ -486,12 +512,17 @@ def main() -> None:
                         )
                         if existe:
                             continue
-                        es_justificado = estado == EstadoAsistencia.JUSTIFICADO
+                        # `justificativo` / `estado_justificativo` quedan sin
+                        # tocar a propósito: la app nunca los escribe ni los
+                        # muestra ("Justificado" es una marca sin motivo,
+                        # decisión de negocio del 11 de agosto -- ver ASI-2).
+                        # Llenarlos acá era el propio seed inventando una
+                        # "Cita médica" que ningún entrenador tipeó, y
+                        # confundió a un auditor que reportó como defecto que
+                        # estas columnas estuvieran vacías.
                         asistencia = Asistencia(
                             fecha_entrenamiento=fecha,
                             estado=estado,
-                            justificativo="Cita médica" if es_justificado else None,
-                            estado_justificativo=True if es_justificado else None,
                             persona_id=persona.id,
                             horario_id=horario.id,
                         )
@@ -517,6 +548,7 @@ def main() -> None:
         print(f"[seed] Hijos gestionados creados en esta corrida: {hijos_creados}")
         print(f"[seed] Alumnos auto-gestionados creados en esta corrida: {autogestionados_creados}")
         print(f"[seed] Total de estudiantes conocidos (nuevos + ya existentes): {total_estudiantes}")
+        print(f"[seed] Inscripciones a horarios creadas: {inscripciones_creadas}")
         print(f"[seed] Registros de asistencia creados: {asistencias_creadas}")
         print(f"[seed] Contraseña compartida para TODAS las cuentas de este seed: {CONTRASENIA_COMPARTIDA}")
         if muestras_correo:

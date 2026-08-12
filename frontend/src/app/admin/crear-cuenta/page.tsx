@@ -42,6 +42,7 @@ import {
   Dumbbell,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { calculateAge } from "@/app/student/enroll/enroll-utils";
 import {
   CREAR_CUENTA_STEP_ORDER,
   CREAR_CUENTA_STEP_LABELS,
@@ -49,7 +50,6 @@ import {
   initialCrearCuentaFormData,
   validateCrearCuentaStep,
   validateCrearCuentaForm,
-  calculateAge,
   getCrearCuentaErrorMessage,
   type CrearCuentaFormData,
   type CrearCuentaStep,

@@ -44,9 +44,9 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
 interface PatchBody {
   tipoSangre?: TipoSangre;
   enfermedades?: string[];
-  alergias?: string;
-  contactoEmergencia?: string;
-  telefonoEmergencia?: string;
+  alergias?: string | null;
+  contactoEmergencia?: string | null;
+  telefonoEmergencia?: string | null;
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext): Promise<NextResponse> {

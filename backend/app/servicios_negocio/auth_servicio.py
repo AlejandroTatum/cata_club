@@ -1,4 +1,6 @@
 import logging
+import time
+from typing import Callable
 
 import jwt
 from sqlalchemy.orm import Session
@@ -18,19 +20,68 @@ from app.soporte_transversal.firma_archivos import es_firma_valida
 
 _log = logging.getLogger(__name__)
 
+# --- TRA-4 (issue #111): freno progresivo de login por cuenta --------------
+# Contador de intentos fallidos CONSECUTIVOS por correo (normalizado, ver
+# `login`). Vive en un dict a nivel de módulo -- simplificación aceptada para
+# el alcance de este proyecto, mismo criterio que la ausencia de blacklist
+# Redis ya documentada en `refrescar_sesion`: no sobrevive un reinicio del
+# proceso ni se comparte entre réplicas. En producción multi-instancia se
+# movería a Redis con TTL (el TTL además limpiaría solo los intentos de
+# cuentas inexistentes, que acá quedan en memoria indefinidamente).
+_INTENTOS_FALLIDOS_LOGIN: dict[str, int] = {}
+_UMBRAL_RETRASO_INTENTOS = 3
+_TECHO_RETRASO_SEGUNDOS = 60
+
+
+def _calcular_retraso_login(intentos_fallidos: int) -> int:
+    """Decisión de negocio (docs/decisiones-de-negocio-2026-08-11.md, sección
+    3): sin retraso antes del 3er intento fallido; 1s al 3ro, duplicando en
+    cada intento siguiente, con techo de 60s. Nunca bloqueo duro -- eso
+    regala un ataque nuevo (dejar a un socio afuera sin saber ninguna
+    contraseña)."""
+    if intentos_fallidos < _UMBRAL_RETRASO_INTENTOS:
+        return 0
+    exponente = intentos_fallidos - _UMBRAL_RETRASO_INTENTOS
+    return min(2 ** exponente, _TECHO_RETRASO_SEGUNDOS)
+
 
 class AuthServicio:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, dormir: Callable[[float], None] = time.sleep):
         self.db = db
         self.repo = UsuarioRepositorio(db)
         self.repo_persona = PersonaRepositorio(db)
+        # Inyectable para tests (BRIEF.md: ningún test hace un sleep real de
+        # varios segundos). El router de producción no pasa `dormir`, así que
+        # usa el `time.sleep` real.
+        self._dormir = dormir
 
     # --- Login ---------------------------------------------------------------
     def login(self, correo: str, contrasenia: str) -> dict:
         """
         Devuelve el shape estandarizado `{access_token, refresh_token, token_type}`
         para el auto-login tras autenticarse (y para reutilizarlo tras registro).
+
+        TRA-4: aplica el freno progresivo de `_INTENTOS_FALLIDOS_LOGIN` sobre
+        el correo NORMALIZADO (trim + minúsculas), contra el string tal cual
+        llega -- ANTES y con total independencia de si existe un Usuario con
+        ese correo. Es lo que hace indistinguible por timing una cuenta real
+        con contraseña incorrecta de una cuenta inexistente (ver
+        `test_auth_freno_login.py::test_cuenta_inexistente_sigue_la_misma_
+        curva_de_retraso_que_una_real`): ambas incrementan el MISMO tipo de
+        contador y sufren el MISMO retraso, sin importar qué rama de
+        `_verificar_credenciales` fue la que falló.
         """
+        clave = correo.strip().lower()
+        try:
+            usuario = self._verificar_credenciales(correo, contrasenia)
+        except CredencialesInvalidas:
+            self._penalizar_intento_fallido(clave)
+            raise
+
+        _INTENTOS_FALLIDOS_LOGIN.pop(clave, None)
+        return self._emitir_par_tokens(usuario)
+
+    def _verificar_credenciales(self, correo: str, contrasenia: str) -> Usuario:
         usuario = self.repo.obtener_por_correo(correo)
         if not usuario or not GestorAutenticacion.verificar_contrasenia(contrasenia, usuario.contrasenia):
             raise CredencialesInvalidas("Correo o contraseña incorrectos")
@@ -49,8 +100,14 @@ class AuthServicio:
         # línea, ese camino le devolvería el acceso a un ex-miembro.
         if not usuario.persona.activo:
             raise CredencialesInvalidas("Correo o contraseña incorrectos")
+        return usuario
 
-        return self._emitir_par_tokens(usuario)
+    def _penalizar_intento_fallido(self, clave: str) -> None:
+        intentos = _INTENTOS_FALLIDOS_LOGIN.get(clave, 0) + 1
+        _INTENTOS_FALLIDOS_LOGIN[clave] = intentos
+        retraso = _calcular_retraso_login(intentos)
+        if retraso:
+            self._dormir(retraso)
 
     # --- Registro de usuario para una Persona ya existente -------------------
     def registrar_usuario(self, datos: RegistroUsuarioDTO) -> dict:
@@ -252,24 +309,47 @@ class AuthServicio:
         )
         return {"access_token": access_token, "token_type": "bearer"}
 
-    # --- E01: invalidación de sesión (POST /auth/sesiones/invalidar) --------
-    def invalidar_otras_sesiones(self, correo: str) -> dict:
+    # --- E01: invalidación de sesión (primitiva compartida) -----------------
+    def _bombear_epoch_sesion(self, correo: str) -> Usuario:
         """Bombea `version_sesion` del usuario autenticado (resuelto vía el
-        `sub` del JWT, igual que el resto de operaciones self-service de esta
-        clase) y le reemite un par de tokens nuevo EN LA MISMA respuesta.
+        `sub` del JWT) y persiste el cambio. NO reemite tokens -- eso queda a
+        criterio de cada caller, ver `invalidar_otras_sesiones` (sí reemite)
+        vs. `cerrar_sesion` (no reemite).
 
         El bump del epoch invalida de inmediato TODO token previo -- access y
         refresh, ver `GestorAutenticacion.epoch_valido` -- incluido el que se
-        usó para autenticar esta misma llamada. El re-issue es lo que
-        convierte esto en "cerrar mis OTRAS sesiones" en vez de "cerrar
-        también la mía": el caller sigue autenticado con el par nuevo, que ya
-        lleva el `sver` vigente.
+        usó para autenticar esta misma llamada.
         """
         usuario = self.obtener_usuario_actual(correo)
         usuario.revocar_sesiones()
         self.db.commit()
         self.db.refresh(usuario)
+        return usuario
+
+    def invalidar_otras_sesiones(self, correo: str) -> dict:
+        """POST /auth/sesiones/invalidar: bombea el epoch y le reemite un par
+        de tokens nuevo EN LA MISMA respuesta. El re-issue es lo que
+        convierte esto en "cerrar mis OTRAS sesiones" en vez de "cerrar
+        también la mía": el caller sigue autenticado con el par nuevo, que ya
+        lleva el `sver` vigente.
+        """
+        usuario = self._bombear_epoch_sesion(correo)
         return self._emitir_par_tokens(usuario)
+
+    # --- TRA-10: POST /auth/logout -------------------------------------------
+    def cerrar_sesion(self, correo: str) -> dict:
+        """Bombea el epoch de sesión del caller y NO reemite tokens -- a
+        diferencia de `invalidar_otras_sesiones`, acá el caller debe quedar
+        deslogueado también. Reutiliza `_bombear_epoch_sesion` en vez de
+        reusar `invalidar_otras_sesiones` completo: llamar a ese método acá
+        generaría un par de tokens nuevo que este endpoint nunca devuelve
+        (`LogoutResponseDTO` solo expone `mensaje`) -- trabajo de firma JWT
+        desperdiciado, y semánticamente confuso (el docstring de ese método
+        promete dejar al caller autenticado, justo lo contrario de un
+        logout).
+        """
+        self._bombear_epoch_sesion(correo)
+        return {"mensaje": "Sesión finalizada"}
 
     # --- Privado: emisión del par access + refresh -------------------------
     def _emitir_par_tokens(self, usuario: Usuario) -> dict:

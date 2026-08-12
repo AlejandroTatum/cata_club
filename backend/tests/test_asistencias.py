@@ -1,3 +1,4 @@
+from app.dominio.modelos import Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from datetime import date
@@ -90,7 +91,7 @@ def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client):
 
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
     registros = [
-        r for r in historial.json()
+        r for r in historial.json()["items"]
         if r["horarioId"] == horario["id"] and r["fechaEntrenamiento"] == str(date(2026, 7, 20))
     ]
     assert len(registros) == 1
@@ -210,7 +211,7 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_insercion(client):
     assert "Ana Torres" in resp.json()["detail"]
 
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
-    assert historial.json() == []
+    assert historial.json()["items"] == []
 
 
 def test_registrar_asistencia_rechaza_sin_alumno_horario_actualizacion(client):
@@ -248,7 +249,7 @@ def test_registrar_asistencia_rechaza_sin_alumno_horario_actualizacion(client):
     assert "Ana Torres" in segunda.json()["detail"]
 
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
-    registros = [r for r in historial.json() if r["horarioId"] == horario["id"]]
+    registros = [r for r in historial.json()["items"] if r["horarioId"] == horario["id"]]
     assert len(registros) == 1
     assert registros[0]["estado"] == "PRESENTE"  # sin cambios
 
@@ -275,4 +276,161 @@ def test_listar_alumnos_por_horario_rechaza_aunque_el_propio_este_inscrito(
 
     _restaurar_token_alumno()
     resp = client_sin_permisos.get(f"/api/v1/asistencias/horarios/{horario['id']}/alumnos")
+    assert resp.status_code == 403
+
+
+# --- TRA-7: roster de todos los horarios en una sola consulta ---------------
+def test_roster_de_todos_los_horarios_junta_varios_horarios_en_una_consulta(client):
+    """Un solo GET trae el roster de TODOS los horarios, agrupable por
+    `horarioId` en el cliente -- reemplaza las 26 llamadas (una por horario)
+    que /groups hacía antes para el conteo "N inscriptos"."""
+    alumno_a = _crear_persona_api(client, "1710034080", "Ana")
+    alumno_b = _crear_persona_api(client, "1710034081", "Beto")
+
+    horario_a = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
+    ).json()
+    horario_b = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": "MARTES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno_a["id"], "horario_id": horario_a["id"]},
+    )
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno_b["id"], "horario_id": horario_b["id"]},
+    )
+
+    resp = client.get("/api/v1/asistencias/horarios/alumnos")
+
+    assert resp.status_code == 200
+    por_horario: dict[int, list[int]] = {}
+    for fila in resp.json():
+        por_horario.setdefault(fila["horarioId"], []).append(fila["personaId"])
+    assert por_horario[horario_a["id"]] == [alumno_a["id"]]
+    assert por_horario[horario_b["id"]] == [alumno_b["id"]]
+
+
+def test_roster_de_todos_los_horarios_excluye_a_los_dados_de_baja(client, db_session):
+    """Mismo filtro de baja lógica que `listar_por_horario`: alguien que ya
+    no está en el club no puede figurar en ningún roster."""
+    alumno = _crear_persona_api(client, "1710034082", "Cami")
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    persona = db_session.get(Persona, alumno["id"])
+    persona.activo = False
+    db_session.commit()
+
+    resp = client.get("/api/v1/asistencias/horarios/alumnos")
+
+    assert resp.status_code == 200
+    assert alumno["id"] not in [fila["personaId"] for fila in resp.json()]
+
+
+def test_roster_de_todos_los_horarios_requiere_admin_o_entrenador(client_sin_permisos):
+    resp = client_sin_permisos.get("/api/v1/asistencias/horarios/alumnos")
+    assert resp.status_code == 403
+
+
+# --- Fix 8 / DSH-2: "últimas listas del club" -------------------------------
+# El panel del entrenador rediseñado (§8 de decisiones-de-negocio-2026-08-11.md)
+# muestra las últimas listas tomadas en el club, sin autor: no existe relación
+# entrenador-horario (issue #13) y `Asistencia` no guarda quién tomó la lista
+# (modelos.py:536, deliberado). El candado de este fix: sin el endpoint, la
+# ruta ni existe (404); con él, agrupa por (horario, fecha) y cuenta los
+# cuatro estados.
+def _crear_horario_api(client, dia="LUNES", categoria="JUVENIL"):
+    resp = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": categoria, "dia_semana": dia},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def _registrar_lista(client, persona_id, horario_id, fecha, estado):
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": persona_id, "horario_id": horario_id},
+    )
+    resp = client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": fecha, "estado": estado,
+            "persona_id": persona_id, "horario_id": horario_id,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_listar_ultimas_listas_cuenta_los_cuatro_estados(client):
+    horario = _crear_horario_api(client)
+    estudiantes = [
+        _crear_persona_api(client, f"171003500{i}", f"Alumno{i}") for i in range(4)
+    ]
+    for persona, estado in zip(estudiantes, ["PRESENTE", "ATRASADO", "JUSTIFICADO", "AUSENTE"]):
+        _registrar_lista(client, persona["id"], horario["id"], "2026-08-03", estado)
+
+    resp = client.get("/api/v1/asistencias/ultimas-listas")
+    assert resp.status_code == 200
+    listas = resp.json()
+    assert len(listas) == 1
+    lista = listas[0]
+    assert lista["horarioId"] == horario["id"]
+    assert lista["fechaEntrenamiento"] == "2026-08-03"
+    assert lista["presentes"] == 1
+    assert lista["tardanzas"] == 1
+    assert lista["justificados"] == 1
+    assert lista["ausentes"] == 1
+    assert lista["total"] == 4
+
+
+def test_listar_ultimas_listas_ordena_las_mas_recientes_primero(client):
+    horario = _crear_horario_api(client)
+    alumno = _crear_persona_api(client, "1710035010", "Ana")
+    _registrar_lista(client, alumno["id"], horario["id"], "2026-07-06", "PRESENTE")
+    _registrar_lista(client, alumno["id"], horario["id"], "2026-08-03", "PRESENTE")
+
+    resp = client.get("/api/v1/asistencias/ultimas-listas")
+    fechas = [lista["fechaEntrenamiento"] for lista in resp.json()]
+    assert fechas == ["2026-08-03", "2026-07-06"]
+
+
+def test_listar_ultimas_listas_no_expone_autor(client):
+    """Candado del recorte de alcance: la lista no dice quién la tomó."""
+    horario = _crear_horario_api(client)
+    alumno = _crear_persona_api(client, "1710035020", "Ana")
+    _registrar_lista(client, alumno["id"], horario["id"], "2026-08-03", "PRESENTE")
+
+    resp = client.get("/api/v1/asistencias/ultimas-listas")
+    lista = resp.json()[0]
+    assert "entrenadorId" not in lista
+    assert "registradoPor" not in lista
+    assert "personaId" not in lista
+
+
+def test_listar_ultimas_listas_entrenador_puede_acceder(client_entrenador, client):
+    horario = _crear_horario_api(client)
+    alumno = _crear_persona_api(client, "1710035030", "Ana")
+    _registrar_lista(client, alumno["id"], horario["id"], "2026-08-03", "PRESENTE")
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.get("/api/v1/asistencias/ultimas-listas")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+def test_listar_ultimas_listas_rechaza_rol_sin_permiso(client_sin_permisos, client):
+    _restaurar_token_alumno()
+    resp = client_sin_permisos.get("/api/v1/asistencias/ultimas-listas")
     assert resp.status_code == 403

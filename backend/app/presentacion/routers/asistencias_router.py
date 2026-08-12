@@ -4,14 +4,14 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
 from datetime import date
 
-from app.dominio.enums import Categoria
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.asistencia_schemas import (
-    AsistenciaCreateDTO, AsistenciaResponseDTO, CategoriaResponseDTO,
-    HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
-    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO,
+    AsistenciaCreateDTO, AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
+    CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
+    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
+    UltimaListaDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -45,7 +45,7 @@ def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[d
 
 # Catálogo de categorías (M1): el frontend lo consulta acá en vez de
 # espejarlo a mano (ver `frontend/src/services/categorias.ts`). Lectura para
-# cualquier autenticado, igual que `/horarios` -- no hay alta/edición todavía.
+# cualquier autenticado, igual que `/horarios`.
 @router.get(
     "/categorias",
     response_model=List[CategoriaResponseDTO],
@@ -53,6 +53,37 @@ def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[d
 )
 def listar_categorias(db: Session = Depends(obtener_sesion)):
     return AsistenciaServicio(db).listar_categorias()
+
+
+# ABM de categorías (docs/fixes/24-abm-categorias.md): alta/edición/baja
+# atómica de la categoria + sus días + sus horarios, en una sola operación
+# (pedido del dueño). ADMIN-only, como el resto de la escritura sobre
+# `/horarios` que muta el catálogo (PUT/DELETE), no el tier más permisivo
+# de POST /horarios (que además admite ENTRENADOR).
+@router.post(
+    "/categorias", response_model=CategoriaResponseDTO, status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def crear_categoria(datos: CategoriaCreateDTO, db: Session = Depends(obtener_sesion)):
+    return AsistenciaServicio(db).crear_categoria(datos)
+
+
+@router.put(
+    "/categorias/{codigo}", response_model=CategoriaResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def actualizar_categoria(
+    codigo: str, datos: CategoriaUpdateDTO, db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).actualizar_categoria(codigo, datos)
+
+
+@router.delete(
+    "/categorias/{codigo}", status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def eliminar_categoria(codigo: str, db: Session = Depends(obtener_sesion)):
+    AsistenciaServicio(db).eliminar_categoria(codigo)
 
 
 @router.post("/horarios", response_model=HorarioResponseDTO, status_code=status.HTTP_201_CREATED,
@@ -80,7 +111,7 @@ async def eliminar_horario(horario_id: int, db: Session = Depends(obtener_sesion
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
 def listar_horarios(
-    categoria: Optional[Categoria] = Query(default=None),
+    categoria: Optional[str] = Query(default=None),
     db: Session = Depends(obtener_sesion),
 ):
     return AsistenciaServicio(db).listar_horarios(categoria)
@@ -100,11 +131,13 @@ async def registrar_asistencia(datos: AsistenciaCreateDTO, db: Session = Depends
 # necesita para tomar asistencia).
 @router.get(
     "/persona/{persona_id}",
-    response_model=List[AsistenciaResponseDTO],
+    response_model=PaginatedResponse[AsistenciaResponseDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
 async def historial_asistencia_persona(
     persona_id: int,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
     db: Session = Depends(obtener_sesion),
 ):
@@ -115,13 +148,17 @@ async def historial_asistencia_persona(
         roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
         mensaje="No puede consultar el historial de asistencia de otra persona",
     )
-    return AsistenciaServicio(db).historial_por_persona(persona_id)
+    items, total = AsistenciaServicio(db).historial_por_persona(persona_id, skip=skip, limit=limit)
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 # --- E02-RF005: reporte de asistencia por horario, periodo o alumno --------
+# Paginado (issue #7 / TRA-6): mismo contrato skip/limit (tope 200) que
+# GET /personas/ y GET /membresias/pagos. El export a PDF de abajo llama al
+# mismo servicio SIN paginar -- ver su propio comentario.
 @router.get(
     "/reportes",
-    response_model=List[AsistenciaResponseDTO],
+    response_model=PaginatedResponse[AsistenciaResponseDTO],
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
 )
 async def reporte_asistencia(
@@ -129,13 +166,22 @@ async def reporte_asistencia(
     persona_id: Optional[int] = Query(default=None),
     fecha_inicio: Optional[date] = Query(default=None),
     fecha_fin: Optional[date] = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(obtener_sesion),
 ):
     _validar_rango_de_fechas(fecha_inicio, fecha_fin)
-    return AsistenciaServicio(db).generar_reporte(
+    servicio = AsistenciaServicio(db)
+    items = servicio.generar_reporte(
+        horario_id=horario_id, persona_id=persona_id,
+        fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+        skip=skip, limit=limit,
+    )
+    total = servicio.contar_reporte(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
     )
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 # --- Exportación a PDF del reporte de asistencia ----------------------------
@@ -187,6 +233,25 @@ async def reporte_asistencia_pdf(
     return construir_respuesta_pdf(pdf_bytes, f"reporte-asistencia_{fecha_iso}.pdf")
 
 
+# --- Panel del entrenador: "últimas listas del club" (Fix 8, DSH-2) --------
+# Sin autor a propósito: `Asistencia` no guarda quién tomó la lista
+# (modelos.py:536, deliberado) -- §8 de decisiones-de-negocio-2026-08-11.md.
+# Cero migración: se computa de Asistencia + HorarioEntrenamiento, lo mismo
+# que ya existía. Mismo tier de permiso que `/reportes` (ADMINISTRADOR y
+# ENTRENADOR): ninguno de los dos roles necesita el nombre de un alumno para
+# esta tarjeta, solo el horario, la fecha y los cuatro conteos.
+@router.get(
+    "/ultimas-listas",
+    response_model=List[UltimaListaDTO],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+)
+async def listar_ultimas_listas(
+    limit: int = Query(default=5, ge=1, le=20),
+    db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).listar_ultimas_listas(limit)
+
+
 # --- Asignación directa Alumno ↔ Categoria (todos sus horarios) ------------
 # El club inscribe por mes completo, nunca por día suelto: `horario_id` en el
 # body solo ancla la categoria, y el servicio inscribe al alumno en TODOS los
@@ -194,7 +259,7 @@ async def reporte_asistencia_pdf(
 # respuesta es una lista (una fila por horario) y no un único DTO.
 @router.post(
     "/asignar-alumno",
-    response_model=List[AlumnoHorarioDetalleDTO],
+    response_model=AsignacionAlumnoHorarioResponseDTO,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
 )
@@ -242,6 +307,22 @@ async def listar_alumnos_por_horario(
         horario_id, skip=skip, limit=limit
     )
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
+
+
+# TRA-7: roster de TODOS los horarios en una sola consulta -- reemplaza las
+# 26 llamadas (una por horario, vía el endpoint de arriba) que /groups hacía
+# para armar el conteo "N inscriptos" de cada categoría. Los horarios son un
+# catálogo fijo (26 hoy, no crece con el padrón): esto consolida las
+# consultas, no cambia cuántas filas viajan. Mismo gate que su hermano
+# per-horario. Deliberadamente SIN paginar: el volumen agregado ya viajaba
+# completo hoy, solo que repartido en 26 respuestas.
+@router.get(
+    "/horarios/alumnos",
+    response_model=List[AlumnoHorarioDetalleDTO],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+)
+async def listar_roster_de_todos_los_horarios(db: Session = Depends(obtener_sesion)):
+    return AsistenciaServicio(db).listar_roster_de_todos_los_horarios()
 
 
 # Los horarios asignados a un alumno dicen dónde está y a qué hora. El portal

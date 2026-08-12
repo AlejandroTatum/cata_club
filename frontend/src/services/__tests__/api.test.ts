@@ -814,9 +814,11 @@ describe("fetchAlumnosPorHorario", () => {
 describe("asignarAlumnoAHorario", () => {
   it("POSTs /api/groups/asignar-alumno and returns one row per horario the categoria enrolled", async () => {
     // The backend enrolls the whole categoria atomically (full-month
-    // enrollment, never a loose weekday) and returns one row per horario.
+    // enrollment, never a loose weekday) and returns one row per horario,
+    // alongside the INS-6 non-blocking overdue-membership warning.
     const created = [makeAlumnoHorario({ horarioId: 1 }), makeAlumnoHorario({ id: 2, horarioId: 2 })];
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(created, { status: 201 }));
+    const envelope = { asignaciones: created, membresiaVencida: false, diasVencida: null };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(envelope, { status: 201 }));
 
     const dto = { persona_id: 3, horario_id: 1 };
     const result = await asignarAlumnoAHorario(dto);
@@ -825,7 +827,21 @@ describe("asignarAlumnoAHorario", () => {
       "/api/groups/asignar-alumno",
       expect.objectContaining({ method: "POST", body: JSON.stringify(dto) }),
     );
-    expect(result).toEqual(created);
+    expect(result).toEqual(envelope);
+  });
+
+  it("surfaces the overdue-membership warning when the backend reports one", async () => {
+    const envelope = {
+      asignaciones: [makeAlumnoHorario({ horarioId: 1 })],
+      membresiaVencida: true,
+      diasVencida: 14,
+    };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(envelope, { status: 201 }));
+
+    const result = await asignarAlumnoAHorario({ persona_id: 3, horario_id: 1 });
+
+    expect(result.membresiaVencida).toBe(true);
+    expect(result.diasVencida).toBe(14);
   });
 });
 
@@ -1091,8 +1107,6 @@ describe("registrarPago — descuentos", () => {
     await registrarPago({
       monto: 35,
       tipoPago: "EFECTIVO",
-      fechaInicio: "2026-08-01",
-      fechaFin: "2026-08-31",
       personaId: 9,
       membresiaId: 4,
       descuentoIds: [1, 2],
@@ -1110,8 +1124,6 @@ describe("registrarPago — descuentos", () => {
     await registrarPago({
       monto: 35,
       tipoPago: "EFECTIVO",
-      fechaInicio: "2026-08-01",
-      fechaFin: "2026-08-31",
       personaId: 9,
       membresiaId: 4,
     });

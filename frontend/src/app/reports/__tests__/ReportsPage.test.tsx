@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ReportsPage from "@/app/reports/page";
-import type { PersonaReporte } from "@/types/domain";
+import type { PersonaBusqueda, PersonaReporte } from "@/types/domain";
 import type { PaymentValidationRequest } from "@/services/api";
 
 vi.mock("@/components/ProtectedRoute", () => ({
@@ -66,6 +66,7 @@ const mockFetchPagosReporte = vi.fn();
 const mockExportNuevosPorPeriodoPdf = vi.fn();
 const mockExportAsistenciaReportePdf = vi.fn();
 const mockExportPagosReportePdf = vi.fn();
+const mockSearchStudents = vi.fn();
 
 /**
  * The exact shape a failing call reaches a screen as. Every failure route in
@@ -89,6 +90,7 @@ vi.mock("@/services/api", () => ({
   exportNuevosPorPeriodoPdf: (...args: unknown[]) => mockExportNuevosPorPeriodoPdf(...args),
   exportAsistenciaReportePdf: (...args: unknown[]) => mockExportAsistenciaReportePdf(...args),
   exportPagosReportePdf: (...args: unknown[]) => mockExportPagosReportePdf(...args),
+  searchStudents: (...args: unknown[]) => mockSearchStudents(...args),
 }));
 
 const PERSONA: PersonaReporte = {
@@ -117,6 +119,12 @@ const PAGO: PaymentValidationRequest = {
   endDate: "2026-07-31",
 };
 
+const ALUMNO: PersonaBusqueda = {
+  id: 35,
+  nombres: "Ana",
+  apellidos: "García",
+};
+
 const ATTENDANCE_RECORD = {
   id: "a1",
   fecha: "2026-07-01",
@@ -140,6 +148,13 @@ function setRange(desde: string, hasta: string): void {
   fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: hasta } });
 }
 
+/** Types into the alumno search and picks the first suggestion offered. */
+async function pickStudent(): Promise<void> {
+  mockSearchStudents.mockResolvedValue([ALUMNO]);
+  fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana" } });
+  fireEvent.click(await screen.findByRole("option", { name: /Ana García/i }));
+}
+
 describe("ReportsPage — preset cards (18-reportes.html)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -147,6 +162,7 @@ describe("ReportsPage — preset cards (18-reportes.html)", () => {
     mockFetchAttendanceRecords.mockResolvedValue([]);
     mockFetchPagosReporte.mockResolvedValue([]);
     mockFetchNuevosPorPeriodo.mockResolvedValue([]);
+    mockSearchStudents.mockResolvedValue([]);
   });
 
   it("offers exactly the three reports the backend can actually produce", async () => {
@@ -208,6 +224,7 @@ describe("ReportsPage — preview area", () => {
     mockFetchAttendanceRecords.mockResolvedValue([]);
     mockFetchPagosReporte.mockResolvedValue([]);
     mockFetchNuevosPorPeriodo.mockResolvedValue([]);
+    mockSearchStudents.mockResolvedValue([]);
   });
 
   it("tells the user what the empty canvas is waiting for, instead of sitting blank", async () => {
@@ -261,6 +278,24 @@ describe("ReportsPage — preview area", () => {
     expect(await screen.findByText("Ana Pérez")).toBeInTheDocument();
   });
 
+  it("narrows the asistencia preview to one alumno through the shared student search (ASI-7)", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/asistencia/i);
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({}));
+    mockFetchAttendanceRecords.mockClear();
+
+    await pickStudent();
+
+    await waitFor(() => {
+      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith(
+        expect.objectContaining({ personaId: 35 }),
+      );
+    });
+  });
+
   it("previews pagos with the estado filter applied", async () => {
     mockFetchPagosReporte.mockResolvedValue([PAGO]);
     render(<ReportsPage />);
@@ -301,6 +336,7 @@ describe("ReportsPage — date-range validation", () => {
     mockFetchAttendanceRecords.mockResolvedValue([]);
     mockFetchPagosReporte.mockResolvedValue([]);
     mockFetchNuevosPorPeriodo.mockResolvedValue([]);
+    mockSearchStudents.mockResolvedValue([]);
   });
 
   it("período: never queries with an end date equal to the start date", async () => {
@@ -349,6 +385,7 @@ describe("ReportsPage — Generar PDF", () => {
     mockFetchAttendanceRecords.mockResolvedValue([]);
     mockFetchPagosReporte.mockResolvedValue([]);
     mockFetchNuevosPorPeriodo.mockResolvedValue([]);
+    mockSearchStudents.mockResolvedValue([]);
   });
 
   it("stays disabled until the preview actually has rows to export", async () => {
@@ -389,6 +426,26 @@ describe("ReportsPage — Generar PDF", () => {
     fireEvent.click(generateButton());
 
     await waitFor(() => expect(mockExportAsistenciaReportePdf).toHaveBeenCalledWith({}));
+  });
+
+  it("exports the asistencia PDF scoped to the selected alumno (ASI-7)", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
+    mockExportAsistenciaReportePdf.mockResolvedValue(undefined);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/asistencia/i);
+    await waitFor(() => expect(generateButton()).toBeEnabled());
+    await pickStudent();
+
+    await waitFor(() => expect(generateButton()).toBeEnabled());
+    fireEvent.click(generateButton());
+
+    await waitFor(() => {
+      expect(mockExportAsistenciaReportePdf).toHaveBeenCalledWith(
+        expect.objectContaining({ personaId: 35 }),
+      );
+    });
   });
 
   it("exports the pagos report", async () => {
@@ -473,6 +530,7 @@ describe("ReportsPage — Descargar CSV", () => {
     mockFetchAttendanceRecords.mockResolvedValue([]);
     mockFetchPagosReporte.mockResolvedValue([]);
     mockFetchNuevosPorPeriodo.mockResolvedValue([]);
+    mockSearchStudents.mockResolvedValue([]);
 
     capturedBlob = null;
     capturedFilename = "";

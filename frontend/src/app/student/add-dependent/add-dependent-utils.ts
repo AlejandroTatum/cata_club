@@ -12,6 +12,7 @@
 import type { RepresentadoCreatePayload } from "@/services/api";
 import type { TipoSangre } from "@/types/domain";
 import { toUserMessage } from "@/lib/error-message";
+import { calculateAge } from "@/app/student/enroll/enroll-utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -150,6 +151,17 @@ function nameRule(value: string, subject: string): string | null {
   return NAME_PATTERN.test(trimmed) ? null : `${subject} solo pueden contener letras y espacios.`;
 }
 
+/**
+ * Real domain limits (`EDAD_MINIMA_ALUMNO` / `EDAD_MAXIMA_ALUMNO` in
+ * `backend/app/servicios_negocio/persona_servicio.py`), not the category
+ * age-range copy — that one is orientation only, not a rule (INS-6b). This
+ * mirrors the backend check on the client so an impossible birth date (the
+ * audited case: 226 years) is caught on step 1, where it's typed, instead of
+ * at final submit after three more steps of data entry.
+ */
+const EDAD_MINIMA_ALUMNO = 5;
+const EDAD_MAXIMA_ALUMNO = 74;
+
 /** Ecuadorian numbers run 7 (landline) to 10 (mobile) digits. */
 function phoneRule(value: string, subject: string): string | null {
   if (!value.trim()) return `${subject} es obligatorio.`;
@@ -166,6 +178,13 @@ const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) =
     if (!d.fechaNacimiento) return "La fecha de nacimiento es obligatoria.";
     if (!isValidDate(d.fechaNacimiento)) return "La fecha de nacimiento ingresada no es válida.";
     if (isFutureDate(d.fechaNacimiento)) return "La fecha de nacimiento no puede ser en el futuro.";
+    // `calculateAge` no longer caps its input year (see its docstring in
+    // enroll-utils.ts) — an implausibly old year like 1800 now produces a
+    // real (large) number instead of NaN, so this check catches it by name.
+    const edad = calculateAge(d.fechaNacimiento);
+    if (edad < EDAD_MINIMA_ALUMNO || edad > EDAD_MAXIMA_ALUMNO) {
+      return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${edad}).`;
+    }
     return null;
   },
   cedula: (d) => {
@@ -334,6 +353,17 @@ function isFutureDate(value: string): boolean {
  */
 export function getAddDependentErrorMessage(error: unknown): string {
   return toUserMessage(error, "No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.");
+}
+
+/**
+ * Same translator, different fallback — for the "Vincular a mi cuenta"
+ * action (INS-2). The backend's real message
+ * (`MENSAJE_VINCULACION_NO_DISPONIBLE`) is user-facing text and reaches the
+ * caller as-is via `toUserMessage`; this fallback only fires for a network
+ * failure or an unexpected shape, never to replace the backend's answer.
+ */
+export function getLinkExistingErrorMessage(error: unknown): string {
+  return toUserMessage(error, "No se pudo vincular esa cédula a su cuenta. Intente nuevamente.");
 }
 
 // ---------------------------------------------------------------------------

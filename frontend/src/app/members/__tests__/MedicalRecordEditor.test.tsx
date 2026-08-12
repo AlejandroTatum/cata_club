@@ -97,3 +97,101 @@ describe("MedicalRecordEditor blood type", () => {
     });
   });
 });
+
+describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockActualizarFichaMedica.mockResolvedValue({});
+  });
+
+  /**
+   * FIC-5: clearing "Alergias" and saving showed a green success toast, but
+   * the old value survived in the database. Root cause was
+   * `alergias.trim() || undefined` — an emptied field became `undefined`,
+   * the BFF route omits `undefined` keys, and the backend's partial-update
+   * PATCH treats an omitted key as "leave unchanged". Sending `null`
+   * explicitly is what actually clears it (see the backend's
+   * `test_vaciar_alergias_contacto_y_telefono_los_borra`).
+   */
+  it("sends null, not undefined, for alergias/contactoEmergencia/telefonoEmergencia once emptied", async () => {
+    mockFetchFichaMedica.mockResolvedValue({
+      tipoSangre: "O_POSITIVO",
+      enfermedades: [],
+      alergias: "Polen",
+      contactoEmergencia: "Ana Torres",
+      telefonoEmergencia: "0991112233",
+    });
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    const alergias = await screen.findByLabelText<HTMLInputElement>("Alergias");
+    await waitFor(() => expect(alergias.value).toBe("Polen"));
+    const contacto = screen.getByLabelText<HTMLInputElement>("Contacto de emergencia");
+    const telefono = screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia");
+
+    fireEvent.change(alergias, { target: { value: "" } });
+    fireEvent.change(contacto, { target: { value: "" } });
+    fireEvent.change(telefono, { target: { value: "" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Guardar ficha médica/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          alergias: null,
+          contactoEmergencia: null,
+          telefonoEmergencia: null,
+        }),
+      );
+    });
+  });
+});
+
+/**
+ * The owner's own walkthrough (Aug 7): the "Ficha médica" title read at the
+ * same weight as a field label like "Tipo de sangre", so it didn't register
+ * as a heading at all; and on a narrow screen the student's identity — shown
+ * only above this editor, never inside it — scrolled out of view while the
+ * fields were still being edited. That's a real risk on medical data: editing
+ * the wrong student's record because you lost sight of whose it was.
+ *
+ * jsdom does not lay out or scroll, so "stays on screen while scrolling"
+ * itself is checked by screenshot (see docs/fixes/14-header-ficha-medica.md),
+ * not here. What IS locked here: the title carries weight a field label
+ * doesn't, the student's name is rendered at all when the caller supplies
+ * it, and the element meant to persist is wired with `sticky` positioning —
+ * the actual mechanism a real browser needs to keep it on screen.
+ */
+describe("MedicalRecordEditor header hierarchy", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+  });
+
+  it("gives the section title more visual weight than a field label", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    const title = await screen.findByRole("heading", { name: "Ficha médica" });
+    const fieldLabel = screen.getByText("Tipo de sangre");
+
+    // The field label's own weight is `font-semibold`; the title must read
+    // heavier than that, not merely differently-colored.
+    expect(fieldLabel.className).toMatch(/font-semibold/);
+    expect(title.className).toMatch(/font-extrabold/);
+    expect(title.className).not.toMatch(/text-xs/);
+  });
+
+  it("shows the student's name so identity survives once the fields scroll out of view", async () => {
+    render(<MedicalRecordEditor personaId={7} studentName="Jefferson Delgado Rivadeneira" />);
+
+    await screen.findByRole("heading", { name: "Ficha médica" });
+
+    const identity = screen.getByText("Jefferson Delgado Rivadeneira");
+    // The mechanism a real browser needs to keep it visible while the fields
+    // below scroll: `position: sticky` pinned to the top of the nearest
+    // scrolling ancestor (the member-edit dialog's scrollable body, or the
+    // family portal's page).
+    expect(identity.closest("[class*='sticky']")).not.toBeNull();
+  });
+});

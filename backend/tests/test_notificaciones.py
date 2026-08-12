@@ -221,6 +221,50 @@ class TestRecuperacionTarea:
 
 
 # ---------------------------------------------------------------------------
+# Candado sistémico: `Notificacion.mensaje` nunca revienta un INSERT
+# (hallazgo en vivo, 2026-08-11). Estos dos son unitarios y no tocan la BD:
+# `@validates` corre al ASIGNAR el atributo, no al hacer flush/commit.
+# ---------------------------------------------------------------------------
+def test_notificacion_mensaje_recorta_lo_que_supera_el_maximo():
+    from app.dominio.modelos import Notificacion
+    from app.dominio.enums import TipoNotificacion
+
+    demasiado_largo = "x" * (Notificacion.MENSAJE_MAX + 50)
+    notif = Notificacion(
+        tipo=TipoNotificacion.PAGO_RECHAZADO,
+        mensaje=demasiado_largo,
+        persona_id=1,
+    )
+    assert len(notif.mensaje) == Notificacion.MENSAJE_MAX
+    assert notif.mensaje.endswith("…")
+
+
+def test_notificacion_mensaje_corto_no_se_toca():
+    from app.dominio.modelos import Notificacion
+    from app.dominio.enums import TipoNotificacion
+
+    notif = Notificacion(
+        tipo=TipoNotificacion.PAGO_APROBADO, mensaje="Tu pago fue aprobado.", persona_id=1,
+    )
+    assert notif.mensaje == "Tu pago fue aprobado."
+
+
+def test_acortar_nombre_para_notificacion_recorta_pero_conserva_los_cortos():
+    from app.servicios_negocio.notificacion_servicio import (
+        LIMITE_NOMBRE_EN_NOTIFICACION,
+        acortar_nombre_para_notificacion,
+    )
+
+    corto = "Ana Torres"
+    assert acortar_nombre_para_notificacion(corto) == corto
+
+    nombre_muy_largo = "Maria Fernanda Concepcion " * 5  # > 60 caracteres
+    resultado = acortar_nombre_para_notificacion(nombre_muy_largo)
+    assert len(resultado) == LIMITE_NOMBRE_EN_NOTIFICACION
+    assert resultado.endswith("…")
+
+
+# ---------------------------------------------------------------------------
 # Tests de notificaciones in-app para pagos aprobados/rechazados
 # ---------------------------------------------------------------------------
 def _crear_persona(client, cedula="1710034065"):
@@ -356,6 +400,121 @@ class TestNotificacionPago:
         ).scalars().all()
         assert len(notifs_representante) == 1
         assert "Hijo Representado" in notifs_representante[0].mensaje
+
+    def test_pago_rechazado_con_nota_larga_no_revienta_y_preserva_el_motivo(self, client, db_session):
+        """Hallazgo en vivo, 2026-08-11: un motivo de rechazo de 250
+        caracteres (bajo el tope de 255 de `PagoValidarDTO.motivo_rechazo`)
+        cabe sin problema en `Pago.motivo_rechazo`, pero el mensaje derivado
+        ("Tu pago fue rechazado: " + motivo + ".", y peor todavía envuelto
+        con el nombre del alumno para el representante) superaba el
+        VARCHAR(255) que tenía `Notificacion.mensaje` -- un `DataError` sin
+        capturar al insertar, con el rechazo del pago YA commiteado en
+        Postgres. Reproducido en vivo contra el backend real antes de este
+        fix: PATCH /validar con una nota de 253 caracteres devolvía 500, el
+        pago quedaba RECHAZADO en la base, y no se creaba ninguna fila en
+        `notificacion` para ese pago."""
+        from app.dominio.modelos import Notificacion
+
+        representante = _crear_persona(client, cedula="1733344455")
+        alumno = client.post(
+            "/api/v1/personas/",
+            json={
+                "nombres": "Hijo", "apellidos": "Representado", "cedula": "1744455566",
+                "fecha_nacimiento": "2015-05-14", "telefono": "0991234567",
+                "representante_id": representante["id"],
+            },
+        ).json()
+        tipo = _crear_tipo_membresia(client)
+        membresia = client.post(
+            "/api/v1/membresias/",
+            json={
+                "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+                "persona_id": alumno["id"], "tipo_membresia_id": tipo["id"],
+            },
+        ).json()
+        pago = _crear_pago_pendiente(client, alumno["id"], membresia["id"])
+
+        motivo_largo = (
+            "Comprobante de transferencia ilegible: el monto y la fecha no "
+            "coinciden con lo que dice el voucher que subio. "
+        ) * 4
+        motivo_largo = motivo_largo[:250].rstrip()
+        assert len(motivo_largo) <= 255
+
+        resp = client.patch(
+            f"/api/v1/membresias/pagos/{pago['id']}/validar",
+            json={"estado_pago": "RECHAZADO", "motivo_rechazo": motivo_largo},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["estadoPago"] == "RECHAZADO"
+        assert body["motivoRechazo"] == motivo_largo
+        assert body.get("avisoNoEnviado") is False
+
+        notif_alumno = db_session.execute(
+            select(Notificacion).where(
+                Notificacion.persona_id == alumno["id"],
+                Notificacion.tipo == "PAGO_RECHAZADO",
+            )
+        ).scalar_one_or_none()
+        assert notif_alumno is not None
+        assert motivo_largo in notif_alumno.mensaje
+
+        notif_rep = db_session.execute(
+            select(Notificacion).where(
+                Notificacion.persona_id == representante["id"],
+                Notificacion.tipo == "PAGO_RECHAZADO",
+            )
+        ).scalar_one_or_none()
+        assert notif_rep is not None
+        assert motivo_largo in notif_rep.mensaje, (
+            "el motivo de rechazo es lo que el representante necesita leer -- "
+            "lo que se acorta es el nombre decorativo, nunca esto"
+        )
+
+    def test_pago_rechazado_si_notificacion_falla_avisa_sin_ocultar_el_rechazo(
+        self, client, db_session, monkeypatch
+    ):
+        """Si crear la notificación falla por cualquier motivo (uno que este
+        fix no previno), el pago YA está commiteado como RECHAZADO -- el
+        `guardar_cambios` corre antes en las dos ramas de `validar_pago`. El
+        200 que vuelve tiene que decir la verdad completa (`avisoNoEnviado`)
+        en vez de que main.py devuelva un 500 que, por diseño del frontend
+        (`error-message.ts`: un detalle 5xx nunca llega al usuario), el admin
+        vería como "no se pudo rechazar el pago" sobre un pago que sí se
+        rechazó."""
+        from app.dominio.modelos import Pago
+        from app.infraestructura.repositorios.notificacion_repositorio import (
+            NotificacionRepositorio,
+        )
+
+        persona = _crear_persona(client)
+        tipo = _crear_tipo_membresia(client)
+        membresia = client.post(
+            "/api/v1/membresias/",
+            json={
+                "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+                "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+            },
+        ).json()
+        pago = _crear_pago_pendiente(client, persona["id"], membresia["id"])
+
+        def _falla(self, notificacion):
+            raise RuntimeError("fallo simulado de infraestructura")
+
+        monkeypatch.setattr(NotificacionRepositorio, "crear", _falla)
+
+        resp = client.patch(
+            f"/api/v1/membresias/pagos/{pago['id']}/validar",
+            json={"estado_pago": "RECHAZADO", "motivo_rechazo": "Comprobante ilegible"},
+        )
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["avisoNoEnviado"] is True
+
+        pago_db = db_session.get(Pago, pago["id"])
+        db_session.refresh(pago_db)
+        assert pago_db.estado_pago.value == "RECHAZADO"
 
 
 def test_marcar_notificacion_ajena_como_leida_falla(client, db_session):

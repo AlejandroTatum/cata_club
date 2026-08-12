@@ -590,7 +590,7 @@ function EnrollWizard(): React.ReactElement {
             Representante mayor de edad
           </p>
           <p className="mt-1">
-            El representante debe ser mayor de edad (18+). Al inscribir a un
+            El representante debe tener entre 18 y 74 años. Al inscribir a un
             dependiente, usted confirma que es legalmente responsable del menor.
           </p>
         </div>

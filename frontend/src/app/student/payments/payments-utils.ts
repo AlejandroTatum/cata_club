@@ -72,9 +72,41 @@ export function describePagoEstado(
   return { label: "Pendiente de validación", tone: "warn" };
 }
 
+/**
+ * A transfer payment still awaiting validation with no voucher attached —
+ * the state a failed `subirVoucherPago()` leaves behind after `registrarPago()`
+ * already succeeded (PAG-1). The owner's decision is that this payment is
+ * NOT reverted: it survives in the history marked this way, with its own way
+ * to attach the voucher (`decisiones-de-negocio-2026-08-11.md` §7).
+ *
+ * Scoped narrowly: EFECTIVO never needs a voucher, and APROBADO/RECHAZADO
+ * already carry their own resolution — only a payment genuinely stuck
+ * without one, mid-validation, gets the mark.
+ */
+export function pagoFaltaComprobante(pago: PagoPersona): boolean {
+  return (
+    pago.tipoPago === "TRANSFERENCIA" &&
+    pago.estadoPago === "PENDIENTE_VALIDACION" &&
+    !pago.voucherUrl
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Coverage period
 // ---------------------------------------------------------------------------
+
+/**
+ * Cents in a currency amount, rounded to the nearest integer.
+ *
+ * `40.8 * 100` is `4079.999999999999` in binary floating point — a plain
+ * `amount * 100` would floor away from the true value. Rounding to the
+ * nearest cent removes that noise while still catching a genuinely
+ * non-multiple amount, because real payment amounts never carry a fraction
+ * of a cent.
+ */
+function toCents(amount: number): number {
+  return Math.round(amount * 100);
+}
 
 /**
  * How many whole months an amount buys at a plan's monthly price, or `null`
@@ -85,17 +117,39 @@ export function describePagoEstado(
  * $25 plan drew "1 mes de vigencia" on screen while the amount being submitted
  * said something else entirely.
  *
- * The rounding tolerance is not decoration: `40.8 / 13.6` is
- * 2.9999999999999996 in binary floating point, and a strict `% !== 0` check
- * rejects a payment of exactly three months.
+ * This used to round the *quotient* with a 0.001 tolerance to survive binary
+ * floating point (`40.8 / 13.6` is `2.9999999999999996`). That tolerance was
+ * too wide: $49,99 against a $25 quota is 1.9996 months, inside the 0.001
+ * band of 2 — the preview promised "2 meses" and the confirmation checkpoint,
+ * but the backend's exact `Decimal` modulo
+ * (`membresia_pago_servicio.py:308`, "la regla del múltiplo exacto SE QUEDA")
+ * then rejected it. The two sides have to agree on the same rule, not two
+ * different ones that happen to overlap most of the time.
+ *
+ * The fix compares in integer cents instead of dividing floats: the backend
+ * is exact because `Decimal` has no binary-fraction error, and comparing
+ * whole cents (`amountCents % priceCents === 0`) gets the client the same
+ * exactness without adopting `Decimal` client-side. `40.8 / 13.6` still
+ * resolves to 3 months this way, because `4080 % 1360 === 0` — the floating
+ * point noise from `* 100` is well under the 0.5-cent rounding margin, while
+ * $49,99 (`4999 % 2500 = 499`) is correctly rejected.
  */
 export function wholeMonthsFor(amount: number, monthlyPrice: number): number | null {
   if (!Number.isFinite(amount) || !Number.isFinite(monthlyPrice)) return null;
   if (monthlyPrice <= 0 || amount <= 0) return null;
-  const months = amount / monthlyPrice;
-  const rounded = Math.round(months);
-  if (rounded < 1 || Math.abs(months - rounded) > 0.001) return null;
-  return rounded;
+
+  const amountCents = toCents(amount);
+  const priceCents = toCents(monthlyPrice);
+  if (priceCents <= 0) return null;
+
+  // Beyond safe-integer cents, `%` on the rounded values can no longer be
+  // trusted to reflect the real amount — reject rather than risk a false
+  // "yes" the backend would then contradict.
+  if (!Number.isSafeInteger(amountCents) || !Number.isSafeInteger(priceCents)) return null;
+
+  if (amountCents % priceCents !== 0) return null;
+  const months = amountCents / priceCents;
+  return months >= 1 ? months : null;
 }
 
 /**

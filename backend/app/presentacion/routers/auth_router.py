@@ -53,6 +53,7 @@ async def obtener_perfil(
         "telefono": usuario.persona.telefono,
         "fecha_creacion": usuario.fecha_creacion,
         "foto_url": usuario.persona.foto_url,
+        "fecha_nacimiento": usuario.persona.fecha_nacimiento,
     }
 
 
@@ -128,20 +129,21 @@ async def invalidar_sesiones(
 
 
 @router.post("/logout", response_model=LogoutResponseDTO)
-async def logout():
+async def logout(
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
     """
-    Dado que los JWT son stateless, este endpoint NO invalida nada en el
-    servidor (no hay blacklist de tokens revocados en este alcance). El
-    cierre de sesión real ocurre en el frontend (Next.js), al borrar las
-    cookies httpOnly que almacenan access_token y refresh_token. Este
-    endpoint existe solo para mantener un surface consistente y dar una
-    respuesta HTTP predecible, NO para revocar tokens de forma real.
-
-    Limitación documentada (extensión futura): para invalidar tokens antes
-    de su expiración natural se necesitaría una blacklist en Redis + rotación
-    de refresh tokens (ver `AuthServicio.refrescar_sesion`).
+    TRA-10: bombea `version_sesion` del usuario autenticado (mismo mecanismo
+    que `/auth/sesiones/invalidar`, ver `AuthServicio.cerrar_sesion`), así
+    que el access_token y el refresh_token usados para llamar a este
+    endpoint dejan de servir de inmediato -- antes, un token robado seguía
+    autenticando hasta su expiración natural (hasta 7 días en el caso del
+    refresh) aunque el dueño legítimo hubiera "cerrado sesión". El cierre en
+    el frontend (borrar las cookies httpOnly) sigue ocurriendo igual, esto
+    cierra además el lado servidor.
     """
-    return {"mensaje": "Sesión finalizada"}
+    return AuthServicio(db).cerrar_sesion(token_payload["sub"])
 
 
 # --- E01-RF003: recuperación de contraseña -----------------------------------

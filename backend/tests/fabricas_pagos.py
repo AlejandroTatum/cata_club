@@ -143,10 +143,13 @@ def registrar_pago_api(
 ):
     """POST /membresias/pagos devolviendo la Response CRUDA (no .json()):
     las pruebas de descuentos (issue #11) necesitan asertar también los
-    códigos de error (400/403/404), no solo el cuerpo del caso feliz."""
+    códigos de error (400/403/404), no solo el cuerpo del caso feliz.
+
+    Sin `fecha_inicio`/`fecha_fin` en el payload (fix período de cobertura,
+    PAG-5): el backend las calcula y ya no las acepta del cliente -- ver
+    `PagoServicio.registrar_pago` y docs/fixes/06-periodo-de-cobertura.md."""
     payload = {
         "monto": monto, "tipo_pago": tipo_pago,
-        "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
         "persona_id": persona_id, "membresia_id": membresia_id,
     }
     if descuento_ids is not None:

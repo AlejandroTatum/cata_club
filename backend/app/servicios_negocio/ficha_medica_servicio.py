@@ -68,14 +68,21 @@ class FichaMedicaServicio:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=n))
             return self.repo.crear(ficha)
 
-        if datos.tipo_sangre is not None:
-            ficha.tipo_sangre = datos.tipo_sangre
-        if datos.enfermedades is not None:
-            ficha.enfermedades = [Enfermedades(nombre_enfermedad=n) for n in datos.enfermedades]
-        if datos.alergias is not None:
-            ficha.alergias = datos.alergias
-        if datos.contacto_emergencia is not None:
-            ficha.contacto_emergencia = datos.contacto_emergencia
-        if datos.telefono_emergencia is not None:
-            ficha.telefono_emergencia = datos.telefono_emergencia
+        # FIC-5: `is not None` no distinguía "el campo no vino en el PATCH"
+        # de "vino explícitamente en null" -- ambos se leían igual y borrar
+        # alergias/contacto/teléfono quedaba sin efecto (mismo bug que
+        # `exclude_unset=True` ya resuelve en descuento_servicio.py y
+        # auth_servicio.py). `enfermedades` no lo sufría porque el frontend
+        # siempre manda una lista, nunca None.
+        campos = datos.model_dump(exclude_unset=True)
+        if "tipo_sangre" in campos:
+            ficha.tipo_sangre = campos["tipo_sangre"]
+        if "enfermedades" in campos:
+            ficha.enfermedades = [Enfermedades(nombre_enfermedad=n) for n in campos["enfermedades"]]
+        if "alergias" in campos:
+            ficha.alergias = campos["alergias"]
+        if "contacto_emergencia" in campos:
+            ficha.contacto_emergencia = campos["contacto_emergencia"]
+        if "telefono_emergencia" in campos:
+            ficha.telefono_emergencia = campos["telefono_emergencia"]
         return self.repo.guardar_cambios(ficha)

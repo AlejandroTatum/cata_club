@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccess, getDefaultRoute } from "@/lib/auth-utils";
 import type { UserRole } from "@/types/domain";
+import ErrorState from "@/components/ui/ErrorState";
 
 interface ProtectedRouteProps {
   /** Content to render when authorized. */
@@ -34,11 +35,17 @@ export default function ProtectedRoute({
   allowedRoles,
   redirectTo = "/login",
 }: ProtectedRouteProps) {
-  const { isAuthenticated, session, isLoading } = useAuth();
+  const { isAuthenticated, session, isLoading, hydrationOutage, retryHydration } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (isLoading) return;
+    // DSH-6: an outage on the initial session check is not a verdict on
+    // whether the user is logged in -- redirecting here is exactly the bug
+    // (a network blip reads as "not authenticated" and silently bounces the
+    // admin to /login). Stay put and let the render below show the retry
+    // prompt instead.
+    if (hydrationOutage) return;
 
     if (!isAuthenticated) {
       router.replace(redirectTo);
@@ -48,13 +55,26 @@ export default function ProtectedRoute({
     if (session && !canAccess(session.user.role, allowedRoles)) {
       router.replace(getDefaultRoute(session.user.role));
     }
-  }, [isLoading, isAuthenticated, session, allowedRoles, redirectTo, router]);
+  }, [isLoading, hydrationOutage, isAuthenticated, session, allowedRoles, redirectTo, router]);
 
   // --- Loading state ---
   if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <p className="text-sm text-white/65">Cargando sesión…</p>
+      </div>
+    );
+  }
+
+  // --- Hydration outage: say so, offer a retry, do NOT redirect ---
+  if (hydrationOutage) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center px-4">
+        <ErrorState
+          title="No se pudo verificar tu sesión"
+          message="Hubo un problema de conexión. Probá de nuevo."
+          onRetry={retryHydration}
+        />
       </div>
     );
   }

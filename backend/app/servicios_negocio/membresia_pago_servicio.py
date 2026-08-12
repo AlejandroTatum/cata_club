@@ -1,3 +1,4 @@
+import calendar
 import logging
 from dataclasses import dataclass
 from datetime import datetime, date, timezone
@@ -16,13 +17,30 @@ from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepo
 from app.infraestructura.repositorios.pago_repositorio import PagoRepositorio, ComprobantePagoRepositorio
 from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
+from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.soporte_transversal.firma_archivos import es_firma_valida
+from app.soporte_transversal.tiempo import hoy_club
 from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO, ComprobantePagoCreateDTO,
-    PagoListItemDTO,
+    PagoListItemDTO, PagoResponseDTO,
 )
+
+
+def _sumar_meses(fecha: date, meses: int) -> date:
+    """Suma `meses` meses calendario a `fecha`, recortando al último día del
+    mes destino cuando el día de origen no existe ahí (31 ene + 1 mes = 28/29
+    feb, nunca 3 de marzo). Espejo en Python de `addMonthsIso`
+    (`frontend/src/app/student/payments/payments-utils.ts`): las dos deben
+    coincidir porque el frontend usa la misma cuenta para PREVISUALIZAR el
+    período antes de confirmar, aunque quien decide la fecha real, desde este
+    fix, es el backend."""
+    mes_total = fecha.month - 1 + meses
+    anio = fecha.year + mes_total // 12
+    mes = mes_total % 12 + 1
+    ultimo_dia_mes_destino = calendar.monthrange(anio, mes)[1]
+    return date(anio, mes, min(fecha.day, ultimo_dia_mes_destino))
 
 
 # --- Regla Familiar E04-RF002 -----------------------------------------------
@@ -303,13 +321,38 @@ class PagoServicio:
         if self.repo.existe_pendiente_para_membresia(datos.membresia_id):
             raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
 
-        # El monto debe ser un múltiplo exacto del precio mensual de la membresía.
+        # El monto debe ser un múltiplo exacto del precio mensual de la
+        # membresía (se queda: decisiones 2026-08-11 §6 sacó los pagos
+        # parciales de alcance). Esto es lo que garantiza que TODO pago
+        # represente meses completos, así que el período de abajo puede
+        # calcularse en línea recta -- sin saldos, sin estados intermedios.
         precio_mensual = membresia.monto_aplicado
         if precio_mensual > 0 and datos.monto % precio_mensual != 0:
             raise OperacionInvalida(
                 f"El monto (${datos.monto}) debe ser múltiplo del precio mensual "
                 f"(${precio_mensual})."
             )
+
+        # Fix período de cobertura (PAG-5): antes, `fecha_inicio`/`fecha_fin`
+        # llegaban del cliente y el servicio solo confiaba en que una fuera
+        # anterior a la otra -- un pago de UN mes podía pedir DOCE de
+        # cobertura y el 201 lo aceptaba (agujero reproducido en vivo, ver
+        # docs/fixes/06-periodo-de-cobertura.md). Ahora el backend deriva el
+        # período: arranca donde termina la del último pago APROBADO (o hoy
+        # si no hay ninguno, igual que antes leía el frontend) y avanza
+        # tantos meses completos como el monto compre.
+        #
+        # Importante (decisiones 2026-08-11 §6): "tantos meses como el monto
+        # compre" se calcula sobre `datos.monto`, el monto BASE -- ANTES de
+        # `_congelar_descuento` más abajo. La membresía anual se vende como
+        # descuento del catálogo sobre doce meses adelantados ($300 -> $270);
+        # si la cobertura se calculara sobre el monto ya descontado, el padre
+        # pagaría doce meses y recibiría once.
+        meses = int(datos.monto // precio_mensual) if precio_mensual > 0 else 1
+        ultima_fecha_fin = self.repo.fecha_fin_maxima_aprobada(datos.membresia_id)
+        hoy = hoy_club()
+        ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
+        fecha_inicio, fecha_fin = ancla, _sumar_meses(ancla, meses)
 
         # Issue #11: resolver el valor VIGENTE del catálogo, congelarlo y
         # descontar el monto base. Las columnas congeladas se asignan al MISMO
@@ -321,6 +364,8 @@ class PagoServicio:
         pago = Pago(
             **datos.model_dump(exclude={"descuento_ids"}),
             estado_pago=EstadoPago.PENDIENTE_VALIDACION,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
         )
         pago.monto = monto_final
         if descuento_congelado is not None:
@@ -437,6 +482,36 @@ class PagoServicio:
         )
         return pago
 
+    def _url_entrega_voucher(self, pago: Pago) -> str | None:
+        """Traduce `pago.voucher_url` (persistido) a una URL de entrega
+        vigente. Se llama SOLO desde los puntos que efectivamente responden
+        al cliente HTTP (nunca desde `obtener_pago`, reusado internamente
+        por `validar_pago`/`adjuntar_comprobante`/`adjuntar_voucher` sin
+        pasar por este chequeo), para que la firma se genere después de que
+        la autorización ya pasó, no antes."""
+        from app.infraestructura.cloudinary_cliente import resolver_url_entrega
+
+        if not pago.voucher_url:
+            return None
+        es_pdf = pago.voucher_formato == "application/pdf"
+        return resolver_url_entrega(
+            pago.voucher_url,
+            resource_type="raw" if es_pdf else "image",
+            formato="pdf" if es_pdf else None,
+        )
+
+    def pago_a_response_dto(self, pago: Pago) -> PagoResponseDTO:
+        """Punto único donde un `Pago` ORM se convierte en la respuesta HTTP:
+        reemplaza el `voucher_url` persistido (un `public_id`, o una URL
+        pública heredada de antes del fix) por una URL de entrega firmada
+        fresca. Los routers de lectura (`GET /pagos/{id}`, `GET
+        /pagos/persona/{id}`, `PATCH /pagos/{id}/validar`, `POST
+        /pagos/{id}/voucher`) deben pasar por acá en vez de devolver el
+        `Pago` directo -- devolverlo directo filtraría el `public_id` o la
+        URL heredada tal cual, sin firmar."""
+        dto = PagoResponseDTO.model_validate(pago)
+        return dto.model_copy(update={"voucher_url": self._url_entrega_voucher(pago)})
+
     def listar_pagos_de_persona(
         self,
         persona_id_objetivo: int,
@@ -503,7 +578,7 @@ class PagoServicio:
                 persona_id=p.persona_id,
                 persona_nombre_completo=f"{p.persona.nombres} {p.persona.apellidos}",
                 membresia_id=p.membresia_id,
-                voucher_url=p.voucher_url,
+                voucher_url=self._url_entrega_voucher(p),
                 voucher_formato=p.voucher_formato,
             )
             for p in pagos
@@ -588,7 +663,7 @@ class PagoServicio:
                 if "uq_membresia_activa_por_persona" in str(error.orig):
                     raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
                 raise
-            self._crear_notificacion_pago(
+            aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_APROBADO,
                 mensaje=f"Tu pago de ${pago.monto} fue aprobado. Tu membresía está activa.",
@@ -601,11 +676,17 @@ class PagoServicio:
             # queda registrado únicamente en Pago.estado_pago y Pago.motivo_rechazo.
             self.repo.guardar_cambios(pago)
             motivo = f": {pago.motivo_rechazo}" if pago.motivo_rechazo else ""
-            self._crear_notificacion_pago(
+            aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_RECHAZADO,
                 mensaje=f"Tu pago fue rechazado{motivo}.",
             )
+        # Atributo transitorio, no una columna de `Pago`: `PagoResponseDTO`
+        # (from_attributes=True) lo lee por `getattr` para que el 200 que
+        # vuelve diga la verdad completa cuando el aviso in-app falló
+        # (hallazgo en vivo, 2026-08-11 -- ver docstring de
+        # `_crear_notificacion_pago`).
+        pago.aviso_no_enviado = not aviso_ok
         return pago
 
     # --- E04-RF002: gratuidad del 4to miembro -------------------------------
@@ -636,25 +717,64 @@ class PagoServicio:
             membresia.es_gratuidad_familiar = True
         return None
 
-    def _crear_notificacion_pago(self, pago: Pago, tipo: TipoNotificacion, mensaje: str) -> None:
+    def _crear_notificacion_pago(self, pago: Pago, tipo: TipoNotificacion, mensaje: str) -> bool:
+        """Crea el aviso in-app para el alumno y, si tiene, para su
+        representante. Devuelve `False` (y NUNCA levanta) si no se pudo
+        crear alguno de los dos -- NUNCA `True`/`False` a medias silenciado.
+
+        Por qué no relanza: cuando esto corre, `pago` YA está commiteado con
+        su estado final (`guardar_cambios` corre antes, en las dos ramas de
+        `validar_pago`). Levantar acá convertiría un aviso fallido en un 5xx
+        para toda la petición -- y por diseño del frontend
+        (`error-message.ts`: un `detail` 5xx nunca llega al usuario, porque
+        describe una falla del SERVIDOR, no algo que el usuario deba leer) el
+        admin vería el cartel genérico "El servidor no pudo completar la
+        operación" sobre un pago que en realidad SÍ se procesó. `validar_pago`
+        lee este `bool` y lo expone en `PagoResponseDTO.aviso_no_enviado`,
+        así el 200 que ya vuelve lleva la verdad completa en vez de tener que
+        elegir entre mentir con un 200 mudo o mentir con un 500 falso
+        (hallazgo en vivo, 2026-08-11: antes de este fix era ni siquiera
+        esto -- un `DataError` sin capturar por VARCHAR(255) en
+        `notificacion.mensaje`, con el rechazo ya commiteado)."""
         persona = self.repo_persona.obtener_por_id(pago.persona_id)
         if not persona:
-            return
-        notif = Notificacion(
-            tipo=tipo,
-            mensaje=mensaje,
-            persona_id=persona.id,
-            entidad_relacionada_id=pago.id,
-        )
-        self.repo_notificacion.crear(notif)
-        if persona.representante_id:
-            notif_rep = Notificacion(
+            return True  # nada que notificar no es un fallo
+        try:
+            notif = Notificacion(
                 tipo=tipo,
-                mensaje=f"Para {persona.nombres} {persona.apellidos}: {mensaje}",
-                persona_id=persona.representante_id,
+                mensaje=mensaje,
+                persona_id=persona.id,
                 entidad_relacionada_id=pago.id,
             )
-            self.repo_notificacion.crear(notif_rep)
+            self.repo_notificacion.crear(notif)
+            if persona.representante_id:
+                # El nombre se acorta ACÁ, nunca `mensaje`: el motivo de un
+                # rechazo es lo que el representante necesita leer entero.
+                nombre_alumno = acortar_nombre_para_notificacion(
+                    f"{persona.nombres} {persona.apellidos}"
+                )
+                notif_rep = Notificacion(
+                    tipo=tipo,
+                    mensaje=f"Para {nombre_alumno}: {mensaje}",
+                    persona_id=persona.representante_id,
+                    entidad_relacionada_id=pago.id,
+                )
+                self.repo_notificacion.crear(notif_rep)
+            return True
+        except Exception:
+            # `rollback()` deshace SOLO la transacción de esta notificación
+            # (nunca llegó a `commit`): lo que `guardar_cambios` ya
+            # commiteó antes sigue intacto. Necesario para que la sesión
+            # quede usable después de un `DataError` -- sin esto, cualquier
+            # lectura posterior (ej. serializar la respuesta) tira
+            # `PendingRollbackError` encima del problema original.
+            self.db.rollback()
+            logger.exception(
+                "No se pudo crear la notificación del pago %s (estado=%s, "
+                "persona_id=%s). El pago YA está commiteado con ese estado.",
+                pago.id, pago.estado_pago.value, pago.persona_id,
+            )
+            return False
 
     def adjuntar_comprobante(self, pago_id: int, datos: ComprobantePagoCreateDTO) -> ComprobantePago:
         pago = self.obtener_pago(pago_id)
@@ -750,16 +870,24 @@ class PagoServicio:
         from app.infraestructura.cloudinary_cliente import subir_voucher_pago
 
         public_id = f"voucher-pago-{pago_id:08d}"
-        url = subir_voucher_pago(
+        subir_voucher_pago(
             contenido=contenido,
             nombre_publico=public_id,
             content_type=content_type,
             pago_id=pago_id,
         )
 
+        # Se persiste el public_id, NO una URL: el voucher se sube como
+        # `type="authenticated"` (hallazgo de privacidad "voucher no
+        # enumerable"), así que la URL que devuelve el SDK no sirve para
+        # nada sin firmar. La URL de entrega se genera fresca en cada
+        # lectura autorizada -- ver `_url_entrega_voucher` /
+        # `cloudinary_cliente.resolver_url_entrega` -- para que nunca quede
+        # una firma vieja atascada en la fila.
         # voucher_formato: guardamos el content_type exacto para distinguir
-        # jpg/png/pdf en el frontend al renderizar el voucher.
-        pago.voucher_url = url
+        # jpg/png/pdf al derivar el `resource_type` de la firma y al
+        # renderizar el voucher en el frontend.
+        pago.voucher_url = public_id
         pago.voucher_formato = content_type
         pago.voucher_fecha_carga = datetime.now(timezone.utc)
 

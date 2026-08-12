@@ -114,7 +114,6 @@ RUTAS_PUBLICAS = {
                                # dependencia.
     ("GET", "/personas/instituciones"),
     ("POST", "/auth/login"),
-    ("POST", "/auth/logout"),
     ("POST", "/auth/recuperar-contrasenia"),
     ("POST", "/auth/refresh"),
     ("POST", "/auth/restablecer-contrasenia"),
@@ -137,6 +136,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/asistencias/horarios"),                           # (a)
     ("GET", "/asistencias/persona/{persona_id}"),                # (b)
     ("GET", "/auth/me"),                                         # (b) - propio via `sub`
+    ("POST", "/auth/logout"),                                    # (b) - propio via `sub`, TRA-10
     ("GET", "/fichas-medicas/persona/{persona_id}"),             # (b) - admin o representante, SIN el titular
     ("GET", "/geografia/cantones"),                              # (a)
     ("GET", "/geografia/cantones/{canton_id}"),                  # (a)
@@ -173,14 +173,27 @@ RUTAS_SOLO_AUTENTICADAS = {
 # visible en el diff.
 RUTAS_ROLES_REQUERIDOS = {
     ("DELETE", "/asistencias/desasignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    # ABM de categorías (docs/fixes/24-abm-categorias.md): alta/edición/baja
+    # atómica de la categoria + sus días + sus horarios. Mismo tier que
+    # PUT/DELETE de `/horarios` (ADMIN-only), no el más permisivo POST
+    # /horarios (que además admite ENTRENADOR) -- crear una categoria
+    # entera es una decisión de catálogo, no operar la clase del día.
+    ("POST", "/asistencias/categorias"): frozenset({"ADMINISTRADOR"}),
+    ("PUT", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
+    ("DELETE", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
     # `DELETE /personas/{persona_id}` ya no existe: la baja de una persona es
     # LÓGICA (`PATCH /personas/{persona_id}/estado`, más abajo), porque el
     # borrado duro destruía asistencias, pagos y ficha médica del ex-miembro.
     ("DELETE", "/personas/{persona_id}/roles/{tipo_rol}"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/asistencias/horarios/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes/pdf"): frozenset({"ADMINISTRADOR"}),
+    # Fix 8 / DSH-2: "últimas listas del club" en el panel del entrenador.
+    # Mismo tier que su hermano `/reportes`: ninguno de los dos roles
+    # necesita el nombre de un alumno para esta tarjeta.
+    ("GET", "/asistencias/ultimas-listas"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/dashboard/stats"): frozenset({"ADMINISTRADOR"}),
     # Resumen de circuit breakers (P2, feat/diagnostico-circuitos-http): le
     # dice a quien la lea QUÉ dependencia externa está caída y CUÁNDO
@@ -226,6 +239,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
+    # INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): mismo par de roles
+    # que su hermano `representados` -- un representante vincula su propio
+    # representado ya existente, un administrador puede hacerlo por cualquiera.
+    ("POST", "/personas/{persona_id}/vincular-representado"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("PUT", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
 }
 

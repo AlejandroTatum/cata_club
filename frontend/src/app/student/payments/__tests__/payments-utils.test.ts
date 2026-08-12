@@ -5,6 +5,7 @@ import {
   formatPagoMonto,
   getEmptyStateMessage,
   describePagoEstado,
+  pagoFaltaComprobante,
   countPagosByStatus,
   wholeMonthsFor,
   addMonthsIso,
@@ -137,6 +138,35 @@ describe("describePagoEstado", () => {
   });
 });
 
+describe("pagoFaltaComprobante", () => {
+  it("marks a pending transfer with no voucher — the payment a failed upload leaves behind (PAG-1)", () => {
+    const pago = makePago({ tipoPago: "TRANSFERENCIA", estadoPago: "PENDIENTE_VALIDACION", voucherUrl: null });
+    expect(pagoFaltaComprobante(pago)).toBe(true);
+  });
+
+  it("does not mark a pending transfer that already has its voucher", () => {
+    const pago = makePago({
+      tipoPago: "TRANSFERENCIA",
+      estadoPago: "PENDIENTE_VALIDACION",
+      voucherUrl: "https://cataclub.example/vouchers/1",
+    });
+    expect(pagoFaltaComprobante(pago)).toBe(false);
+  });
+
+  it("does not mark a cash payment — EFECTIVO never needs a voucher", () => {
+    const pago = makePago({ tipoPago: "EFECTIVO", estadoPago: "PENDIENTE_VALIDACION", voucherUrl: null });
+    expect(pagoFaltaComprobante(pago)).toBe(false);
+  });
+
+  it.each(["APROBADO", "RECHAZADO"] as const)(
+    "does not mark a %s transfer — it already carries its own resolution",
+    (estadoPago) => {
+      const pago = makePago({ tipoPago: "TRANSFERENCIA", estadoPago, voucherUrl: null });
+      expect(pagoFaltaComprobante(pago)).toBe(false);
+    },
+  );
+});
+
 describe("wholeMonthsFor", () => {
   it("resolves an exact multiple of the monthly price", () => {
     expect(wholeMonthsFor(75, 25)).toBe(3);
@@ -153,10 +183,43 @@ describe("wholeMonthsFor", () => {
     expect(wholeMonthsFor(40.8, 13.6)).toBe(3);
   });
 
+  it("rejects an amount the old 0.001 tolerance let through as a false 2 months", () => {
+    // $49,99 against a $25 quota: 49.99 / 25 = 1.9996, within the old 0.001
+    // band of 2 — the preview said "2 meses" and the backend's exact
+    // `Decimal` modulo (membresia_pago_servicio.py:308) then rejected it.
+    expect(wholeMonthsFor(49.99, 25)).toBeNull();
+  });
+
+  it("rejects amounts just below and just above an exact multiple", () => {
+    expect(wholeMonthsFor(24.99, 25)).toBeNull();
+    expect(wholeMonthsFor(25.01, 25)).toBeNull();
+  });
+
+  it("resolves an amount with legitimate cents that lands exactly on a multiple", () => {
+    expect(wholeMonthsFor(13.75, 13.75)).toBe(1);
+    expect(wholeMonthsFor(27.5, 13.75)).toBe(2);
+  });
+
   it("returns null for a zero or unknown monthly price rather than dividing by it", () => {
     expect(wholeMonthsFor(50, 0)).toBeNull();
     expect(wholeMonthsFor(0, 25)).toBeNull();
     expect(wholeMonthsFor(Number.NaN, 25)).toBeNull();
+  });
+
+  it("returns null for a negative amount", () => {
+    expect(wholeMonthsFor(-25, 25)).toBeNull();
+  });
+
+  it("does not falsely accept an enormous amount past safe-integer precision", () => {
+    // Beyond Number.MAX_SAFE_INTEGER cents, integer arithmetic on the
+    // amount's cent value can no longer be trusted — reject instead of
+    // guessing, the same way the client should never promise a period the
+    // backend cannot verify.
+    expect(wholeMonthsFor(Number.MAX_SAFE_INTEGER, 25)).toBeNull();
+  });
+
+  it("still resolves a large but safely representable multiple", () => {
+    expect(wholeMonthsFor(2_500_000, 25)).toBe(100_000);
   });
 });
 

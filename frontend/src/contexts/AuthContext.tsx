@@ -59,6 +59,17 @@ export interface AuthContextValue {
    * stale (null) session state across client-side navigation.
    */
   refreshSession: () => Promise<void>;
+  /**
+   * True when the INITIAL session check (mount hydration) hit an outage
+   * (network failure or 5xx) instead of getting a real answer — see
+   * `SessionOutcome`. Distinct from "unauthenticated": a consumer (e.g.
+   * `ProtectedRoute`) must show a retry prompt here instead of redirecting
+   * to /login, because an outage says nothing about whether the user is
+   * actually logged in (DSH-6).
+   */
+  hydrationOutage: boolean;
+  /** Retry the initial session check after a hydration outage. */
+  retryHydration: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // DSH-6: set only when the INITIAL hydration check hits an outage. Never
+  // touched by the periodic revalidate (that one already no-ops on outage
+  // without needing to say anything — a session is already on screen).
+  const [hydrationOutage, setHydrationOutage] = useState(false);
   const sessionRef = useRef<AuthSession | null>(null);
   sessionRef.current = session;
   // Set synchronously at the start of logout() so any revalidation already
@@ -101,11 +116,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(outcome.kind === "authenticated" ? outcome.session : null);
   }, []);
 
-  // Hydrate session from the BFF on mount
+  // Hydrate session from the BFF on mount. DSH-6: an "outage" is NOT the
+  // same as "unauthenticated" -- a network blip on the very first load must
+  // not read as "not logged in" (which ProtectedRoute would send straight
+  // to /login, silently, exactly the finding's repro). Mirrors how
+  // `revalidate` already treats outage below, just for the mount case,
+  // which additionally has no prior session to fall back on and so needs
+  // its own error surface (`hydrationOutage`) instead of merely no-op'ing.
   useEffect(() => {
     let cancelled = false;
     authService.getSession().then((outcome) => {
       if (cancelled) return;
+      if (outcome.kind === "outage") {
+        setHydrationOutage(true);
+        setIsLoading(false);
+        return;
+      }
+      setHydrationOutage(false);
       const saved = outcome.kind === "authenticated" ? outcome.session : null;
       const { session: hydratedSession, isLoading: done } = hydrateState(saved);
       setSession(hydratedSession);
@@ -114,6 +141,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  const retryHydration = useCallback(() => {
+    setIsLoading(true);
+    authService.getSession().then((outcome) => {
+      if (outcome.kind === "outage") {
+        setHydrationOutage(true);
+        setIsLoading(false);
+        return;
+      }
+      setHydrationOutage(false);
+      const saved = outcome.kind === "authenticated" ? outcome.session : null;
+      const { session: hydratedSession, isLoading: done } = hydrateState(saved);
+      setSession(hydratedSession);
+      setIsLoading(done);
+    });
   }, []);
 
   // Proactive refresh trigger: periodic + tab-visibility revalidation while
@@ -198,6 +241,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     refreshSession: revalidate,
+    hydrationOutage,
+    retryHydration,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

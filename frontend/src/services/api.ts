@@ -91,6 +91,11 @@ export interface PaymentValidationRequest {
   validatedBy?: string;
   startDate: string;
   endDate: string;
+  /** `true` when the approve/reject itself succeeded but the in-app
+   *  notification to the student/guardian could not be sent — the decision
+   *  above (`validationStatus`, `rejectionReason`) is still final and real.
+   *  Only ever set by `PUT /api/payments/[id]`; absent elsewhere. */
+  notificationDeliveryFailed?: boolean;
 }
 
 /** DTO for approving a payment validation request. */
@@ -513,6 +518,25 @@ export async function fetchAttendanceRecords(params?: {
   return request<AttendanceRecord[]>(apiEndpoint(`/attendance/records${query ? `?${query}` : ""}`));
 }
 
+/**
+ * A club session (horario + fecha) with at least one Asistencia, and its
+ * four counts. No author, no per-student name — see
+ * `/api/attendance/recent-sessions`'s own doc comment (Fix 8 / DSH-2,
+ * decisiones-de-negocio-2026-08-11.md §8).
+ */
+export interface RecentAttendanceSession {
+  horarioId: number;
+  fecha: string;
+  horario: string;
+  counts: Record<EstadoAsistencia, number>;
+  total: number;
+}
+
+/** The club's most recent attendance sessions, most recent first. Powers the trainer panel's "Últimas listas del club". */
+export async function fetchRecentAttendanceSessions(limit = 5): Promise<RecentAttendanceSession[]> {
+  return request<RecentAttendanceSession[]>(apiEndpoint(`/attendance/recent-sessions?limit=${limit}`));
+}
+
 /** Persist attendance for a session (one real `POST /asistencias` per student, partial-failure-tolerant). */
 export async function registerAttendance(data: RegisterAttendanceRequest): Promise<RegisterAttendanceResult> {
   return request<RegisterAttendanceResult>(apiEndpoint("/attendance/records"), {
@@ -591,6 +615,82 @@ export async function actualizarHorario(id: number, data: ActualizarHorarioDTO):
 export async function eliminarHorario(id: number): Promise<void> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   await request<unknown>(apiEndpoint(`/groups/horarios/${id}`), {
+    method: "DELETE",
+    headers: mockHeaders,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Categorías (docs/fixes/24-abm-categorias.md) — atomic ABM
+// ---------------------------------------------------------------------------
+
+/**
+ * A `categoria_horario` row as this endpoint family returns it — same
+ * untranslated backend day-code space (`"LUNES"`..`"DOMINGO"`) as `Horario`
+ * above, NOT the frontend `DiaSemana` codes `@/services/categorias`
+ * translates for other pages (see that module's own doc comment on why the
+ * two coexist).
+ */
+export interface CategoriaGrupo {
+  codigo: string;
+  label: string;
+  horaInicio: string;
+  horaFin: string;
+  dias: string[];
+}
+
+/**
+ * `codigo` is intentionally absent: the server derives it from `nombre`
+ * (`AsistenciaServicio._generar_codigo`) and it never changes afterwards —
+ * see that method's doc comment for why (it is the FK
+ * `horario_entrenamiento.categoria` relies on).
+ */
+export interface CrearCategoriaDTO {
+  nombre: string;
+  hora_inicio: string;
+  hora_fin: string;
+  dias: string[];
+}
+
+/** `dias`, if present, REPLACES the categoria's whole day-set (not a delta)
+ *  — see `AsistenciaServicio.actualizar_categoria`. */
+export interface ActualizarCategoriaDTO {
+  nombre?: string;
+  hora_inicio?: string;
+  hora_fin?: string;
+  dias?: string[];
+}
+
+/** Create a categoria AND a horario per día marked, in one atomic operation
+ *  (the owner's own words: "quisiera que se cree directo el horario y
+ *  categoría, no diferentes"). */
+export async function crearCategoria(data: CrearCategoriaDTO): Promise<CategoriaGrupo> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<CategoriaGrupo>(apiEndpoint("/groups/categorias"), {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: mockHeaders,
+  });
+}
+
+/** Edit a categoria's nombre/franja/días atomically — re-derives hours on
+ *  the horarios that remain and backfills `alumno_horario` for any newly
+ *  added día (see the backend service method's own doc comment). */
+export async function actualizarCategoria(codigo: string, data: ActualizarCategoriaDTO): Promise<CategoriaGrupo> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<CategoriaGrupo>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}`), {
+    method: "PUT",
+    body: JSON.stringify(data),
+    headers: mockHeaders,
+  });
+}
+
+/** Delete a categoria and every one of its horarios. Blocked server-side
+ *  (400) when any of them already has `Asistencia` history — history is
+ *  never deleted. */
+export async function eliminarCategoria(codigo: string): Promise<void> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  await request<unknown>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}`), {
     method: "DELETE",
     headers: mockHeaders,
   });
@@ -1087,12 +1187,18 @@ export async function fetchPagosDePersona(personaId: string): Promise<PagoPerson
 /** Payload for registering a new pending payment — `POST /api/membresias/pagos`.
  *  `monto` is always the BASE amount: when `descuentoIds` are attached the
  *  backend resolves each discount's current value, freezes it and computes
- *  the final amount itself (frozen-value semantics, issue #12). */
+ *  the final amount itself (frozen-value semantics, issue #12).
+ *
+ *  No `fechaInicio`/`fechaFin` (fix período de cobertura, PAG-5): the
+ *  backend derives the coverage period from `monto` and the membership's
+ *  monthly price -- the old contract let the caller hand it any range
+ *  regardless of `monto`, which is exactly the hole this fix closes (see
+ *  docs/fixes/06-periodo-de-cobertura.md). Callers can still PREVIEW the
+ *  period client-side (`wholeMonthsFor` / `addMonthsIso`) to show the
+ *  reader what they're about to pay for, but nothing here is sent. */
 export interface RegistrarPagoInput {
   monto: number;
   tipoPago: "EFECTIVO" | "TRANSFERENCIA";
-  fechaInicio: string;
-  fechaFin: string;
   personaId: number;
   membresiaId: number;
   /** Catalog discounts to apply on THIS registration (admin-only decision).
@@ -1331,6 +1437,23 @@ export async function crearRepresentado(
   });
 }
 
+/**
+ * INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): representante-only
+ * self-service, links a person ALREADY registered in the club (typically by
+ * another representante) to `personaId`'s account by cédula alone — no
+ * approval from anyone. See `POST /personas/{persona_id}/vincular-representado`.
+ *
+ * The backend answers every ineligible cédula (nonexistent, adult, already
+ * yours, your own) with the SAME generic message and the SAME 400 — that is
+ * intentional (anti-enumeration), not a bug to work around here.
+ */
+export async function vincularRepresentado(personaId: number, cedula: string): Promise<PersonaResponse> {
+  return request<PersonaResponse>(apiEndpoint(`/personas/${personaId}/vincular-representado`), {
+    method: "POST",
+    body: JSON.stringify({ cedula }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Aging Up / Independizar (Flow 4)
 // ---------------------------------------------------------------------------
@@ -1415,14 +1538,20 @@ export async function crearCuentaAdmin(data: AdminCrearCuentaPayload): Promise<{
   });
 }
 
-/** Admin-only: fetch a person's medical record. */
+/**
+ * Fetch a person's medical record. Authorized for an ADMINISTRADOR or the
+ * representative of that exact persona — the backend's
+ * `PoliticaAccesoPersona.exigir_acceso` decides, this client just calls the
+ * endpoint. Used by both `app/members/MedicalRecordEditor.tsx` (admin) and
+ * `app/student/medical-record/page.tsx` (representante).
+ */
 export async function fetchFichaMedica(personaId: number): Promise<FichaMedicaEditable> {
   return request<FichaMedicaEditable>(apiEndpoint(`/fichas-medicas/persona/${personaId}`));
 }
 
 /**
- * Admin-only: update a person's medical record. `enfermedades` replaces the
- * full list.
+ * Update a person's medical record — same ADMINISTRADOR-or-representative
+ * authorization as `fetchFichaMedica`. `enfermedades` replaces the full list.
  *
  * Sends `data` as-is (camelCase) — the BFF route is the single place that
  * converts to the backend's snake_case. Converting here too used to rename
@@ -1555,14 +1684,32 @@ export interface AsignarAlumnoHorarioDTO {
 }
 
 /**
+ * `AsignacionAlumnoHorarioResponseDTO` on the backend
+ * (`backend/app/presentacion/schemas/asistencia_schemas.py`) -- INS-6, decisión
+ * de negocio #4 (2026-08-11): assigning a student with an overdue (VENCIDA)
+ * membership stays allowed, so this rides alongside `asignaciones` as a
+ * non-blocking warning instead of an error. `diasVencida` is `null` when the
+ * membership isn't vencida, or when it is but no approved payment exists to
+ * derive "since when" from.
+ */
+export interface AsignacionAlumnoHorarioResponse {
+  asignaciones: AlumnoHorario[];
+  membresiaVencida: boolean;
+  diasVencida: number | null;
+}
+
+/**
  * Assign a student to the WHOLE training categoria `horario_id` belongs to.
  * The club enrolls by full month, never by a loose weekday, so the backend
  * enrolls the student into every horario row of that categoria in one
- * atomic transaction and returns one `AlumnoHorario` per row created.
+ * atomic transaction and returns one `AlumnoHorario` per row created, plus
+ * the overdue-membership warning (see `AsignacionAlumnoHorarioResponse`).
  */
-export async function asignarAlumnoAHorario(data: AsignarAlumnoHorarioDTO): Promise<AlumnoHorario[]> {
+export async function asignarAlumnoAHorario(
+  data: AsignarAlumnoHorarioDTO,
+): Promise<AsignacionAlumnoHorarioResponse> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
-  return request<AlumnoHorario[]>(apiEndpoint("/groups/asignar-alumno"), {
+  return request<AsignacionAlumnoHorarioResponse>(apiEndpoint("/groups/asignar-alumno"), {
     method: "POST",
     body: JSON.stringify(data),
     headers: mockHeaders,
@@ -1591,6 +1738,18 @@ export async function fetchAlumnosPorHorario(horarioId: number): Promise<AlumnoH
     { headers: mockHeaders },
   );
   return items;
+}
+
+/**
+ * Roster of EVERY training schedule, in ONE call (TRA-7). Replaces the old
+ * `/groups` pattern of one `fetchAlumnosPorHorario` per horario (26 calls,
+ * fixed — grows only with category count, never with the padrón) used to
+ * build the "N inscriptos" card counts. Deliberately unpaginated, matching
+ * the backend route.
+ */
+export async function fetchRosterDeTodosLosHorarios(): Promise<AlumnoHorario[]> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<AlumnoHorario[]>(apiEndpoint("/groups/horarios/alumnos"), { headers: mockHeaders });
 }
 
 /** List all schedules assigned to a specific student. */

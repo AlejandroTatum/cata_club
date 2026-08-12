@@ -53,7 +53,7 @@ const pago = {
   membresiaId: 77,
 };
 
-const membresia = { id: 77, estado: "ACTIVA", tipoMembresiaId: 1 };
+const membresia = { id: 77, estado: "ACTIVA", tipoMembresiaId: 1, personaId: 3 };
 
 const tipo = { id: 1, categoria: "MENSUAL" };
 
@@ -123,31 +123,32 @@ describe("GET /api/members", () => {
     expect(body.message).toBe("No autorizado");
   });
 
-  it("resolves each membership by id, because GET /membresias/ answers 500", async () => {
+  it("resolves memberships from the single bulk GET /membresias/ call, not per-id lookups", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/
       .mockResolvedValueOnce(jsonResponse({ items: [pago] })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
-      .mockResolvedValueOnce(jsonResponse(membresia)); // /membresias/77
+      .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })); // /membresias/ (bulk)
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    // The list endpoint is never called — it is the one that 500s.
+    // No per-id or per-persona membresía lookups — the bulk list already has everything.
     const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
-    expect(urls.some((url) => /\/membresias\/\?/.test(url))).toBe(false);
-    expect(urls).toContain("http://localhost:8000/api/v1/membresias/77");
+    expect(urls).toContain("http://localhost:8000/api/v1/membresias/?skip=0&limit=200");
+    expect(urls.some((url) => /\/membresias\/77$/.test(url))).toBe(false);
+    expect(urls.some((url) => /\/membresias\/persona\//.test(url))).toBe(false);
     expect(body.accounts[0].estudiantes[0].membresia).toMatchObject({ estado: "activa" });
     expect(body.membresiasDegraded).toBe(false);
   });
 
-  it("flags the response instead of reporting a membership-less student when the lookup fails", async () => {
+  it("flags the response instead of reporting a membership-less student when the bulk lookup fails", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/
       .mockResolvedValueOnce(jsonResponse({ items: [pago] })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
-      .mockResolvedValueOnce(jsonResponse({ detail: "boom" }, 500)); // /membresias/77
+      .mockResolvedValueOnce(jsonResponse({ detail: "boom" }, 500)); // /membresias/ (bulk)
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
@@ -159,7 +160,7 @@ describe("GET /api/members", () => {
     expect(body.membresiasDegraded).toBe(true);
   });
 
-  it("finds a membership for a persona who has never paid", async () => {
+  it("finds a membership for a persona who has never paid, from the same bulk call", async () => {
     // Ana García's case: an ACTIVA membresía with zero Pago rows. Resolving
     // membership only through the payment chain reported her as having none,
     // while her own student portal said "Membresía activa".
@@ -167,17 +168,74 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos — none at all
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
-      .mockResolvedValueOnce(jsonResponse([membresia])); // /membresias/persona/3
+      .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })); // /membresias/ (bulk)
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
 
     const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
-    expect(urls).toContain("http://localhost:8000/api/v1/membresias/persona/3");
+    expect(urls.some((url) => /\/membresias\/persona\//.test(url))).toBe(false);
     expect(body.accounts[0].estudiantes[0].membresia).toMatchObject({ id: 77, estado: "activa" });
     // No payment, so no invented period and no fabricated payment row.
     expect(body.accounts[0].estudiantes[0].membresia.fechaInicio).toBe("");
     expect(body.accounts[0].estudiantes[0].ultimoPago).toBeNull();
+    expect(body.membresiasDegraded).toBe(false);
+  });
+
+  it("fetches memberships in one backend call regardless of how many students there are", async () => {
+    // The regression this fix closes: resolving membership used to cost one
+    // extra request per student (batched, but still N). Five students with no
+    // pago at all used to mean five extra `/membresias/persona/{id}` calls.
+    const personas = Array.from({ length: 5 }, (_, index) => ({
+      ...persona,
+      id: index + 10,
+      representanteId: null,
+    }));
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ items: personas, total: 5, skip: 0, limit: 200 })) // /personas/
+      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos — nobody has paid
+      .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })); // /membresias/ (bulk)
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+
+    expect(response.status).toBe(200);
+    // Exactly 4 calls total: personas, pagos, tipos, membresias — never one per student.
+    expect(global.fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("loops every backend page so a membership past the 200-row cap is never dropped", async () => {
+    // Memberships accumulate per persona over time (vencida, inactiva, la
+    // activa), so the membership table outgrows the persona table — 150
+    // socios can easily produce 300+ membresía rows. A single
+    // `GET /membresias/?limit=200` call would silently drop everything past
+    // row 200: `personasCapped` stays false (150 < 200) while a third of the
+    // membership map is already gone, and a real socio renders with no
+    // membership and no warning. This asserts the fix: the route must keep
+    // paging until it has every row, not just the first 200.
+    const personaTardia = { ...persona, id: 999, nombres: "Zoe", apellidos: "Tardia" };
+    const page1 = Array.from({ length: 200 }, (_, i) => ({
+      id: i + 1, estado: "VENCIDA", tipoMembresiaId: 1, personaId: i + 1,
+    }));
+    const page2 = [{ id: 201, estado: "ACTIVA", tipoMembresiaId: 1, personaId: 999 }];
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ items: [persona, personaTardia], total: 2, skip: 0, limit: 200 })) // /personas/
+      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: page1, total: 201, skip: 0, limit: 200 })) // /membresias/ page 1
+      .mockResolvedValueOnce(jsonResponse({ items: page2, total: 201, skip: 200, limit: 200 })); // /membresias/ page 2
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls).toContain("http://localhost:8000/api/v1/membresias/?skip=0&limit=200");
+    expect(urls).toContain("http://localhost:8000/api/v1/membresias/?skip=200&limit=200");
+
+    const cuentaTardia = body.accounts.find((account: { id: string }) => account.id === "999");
+    expect(cuentaTardia.estudiantes[0].membresia).toMatchObject({ id: 201, estado: "activa" });
     expect(body.membresiasDegraded).toBe(false);
   });
 

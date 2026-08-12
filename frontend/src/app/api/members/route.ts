@@ -19,9 +19,7 @@ import { buildMemberAccounts, type BackendPersonaFull } from "@/lib/server/membe
 import type { BackendMembresia, BackendPagoListItem, BackendTipoMembresia } from "@/lib/server/payments-adapter";
 
 const PERSONAS_PAGE_LIMIT = 200;
-
-/** How many `GET /membresias/{id}` calls may be in flight at once. */
-const MEMBRESIA_FETCH_CONCURRENCY = 8;
+const MEMBRESIAS_PAGE_LIMIT = 200;
 
 interface PaginatedPersonas {
   items: BackendPersonaFull[];
@@ -30,6 +28,39 @@ interface PaginatedPersonas {
 
 interface PaginatedPagos {
   items: BackendPagoListItem[];
+}
+
+interface PaginatedMembresias {
+  items: BackendMembresia[];
+  total: number;
+}
+
+type MembresiasFetchResult =
+  | { ok: true; items: BackendMembresia[] }
+  | { ok: false };
+
+/**
+ * `GET /membresias/` is paginated at the backend (tope 200) — a single call
+ * silently truncates once the club has more than 200 membership rows, which
+ * happens well before it has 200 PERSONAS: a membership accumulates per
+ * persona over time (vencida, inactiva, la activa), so the membership table
+ * outgrows the persona table. `personasCapped` (below) would stay false
+ * while a real chunk of the membership map was already gone — a swallowed
+ * truncation must never render as a confident membership-less student, same
+ * principle as `membresiasDegraded`. This loops every page instead.
+ */
+async function fetchAllMembresias(request: NextRequest): Promise<MembresiasFetchResult> {
+  const items: BackendMembresia[] = [];
+  let skip = 0;
+  while (true) {
+    const result = await backendFetchAuthed(request, `/membresias/?skip=${skip}&limit=${MEMBRESIAS_PAGE_LIMIT}`);
+    if (!result.ok || !result.response.ok) return { ok: false };
+    const page = (await result.response.json()) as PaginatedMembresias;
+    items.push(...page.items);
+    if (page.items.length < MEMBRESIAS_PAGE_LIMIT || items.length >= page.total) break;
+    skip += MEMBRESIAS_PAGE_LIMIT;
+  }
+  return { ok: true, items };
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -42,9 +73,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   const personasBody = (await personasResult.response.json()) as PaginatedPersonas;
 
-  const [pagosResult, tiposResult] = await Promise.all([
+  const [pagosResult, tiposResult, membresiasFetch] = await Promise.all([
     backendFetchAuthed(request, "/membresias/pagos?limit=200"),
     backendFetchAuthed(request, "/membresias/tipos"),
+    fetchAllMembresias(request),
   ]);
 
   const pagos: BackendPagoListItem[] =
@@ -61,75 +93,39 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   /*
-   * Memberships are resolved ONE BY ONE, not through `GET /membresias/`.
-   *
-   * The list endpoint answers 500 — `MembresiaServicio.listar_membresias`
-   * calls `MembresiaRepositorio.listar()`, which that repository does not
-   * define (backend/app/infraestructura/repositorios/membresia_repositorio.py).
-   * This route used to turn that 500 into `[]` with an `ok &&` guard, so every
-   * student came back with `membresia: null` and `/members` rendered a
-   * confident "Membresías activas · 0" next to a dashboard reading 22 — plus
-   * an empty membership column in the whole table. A swallowed upstream error
-   * must never render as a real zero.
-   *
-   * `GET /membresias/{id}` works, and the ids needed are only those on the
-   * latest payment per persona (~60), not the whole table. They go out in
-   * bounded batches rather than one `Promise.all` over all of them: the
-   * dashboard route's own history (see its header) is that an unbounded fan-out
-   * exhausted the backend connection pool.
+   * Memberships are resolved from `GET /membresias/`, paged in full (see
+   * `fetchAllMembresias`) — same looping pattern `/api/attendance/records`
+   * uses for TRA-6. The N individual `/membresias/{id}` /
+   * `/membresias/persona/{id}` lookups this route used to make (one batch of
+   * requests per unique membership, another per persona without a payment —
+   * ~120 calls for 59 students) existed to work around `GET /membresias/`
+   * answering 500. That bug is fixed; the bulk list now carries `personaId`
+   * on every row, so both maps below come from the same paged fetch.
    */
-  const uniqueMembresiaIds = [...new Set([...latestPagoByPersona.values()].map((pago) => pago.membresiaId))];
-  const membresiaById = new Map<number, BackendMembresia>();
-  let membresiasDegraded = false;
+  const membresiasDegraded = !membresiasFetch.ok;
+  const membresias: BackendMembresia[] = membresiasFetch.ok ? membresiasFetch.items : [];
 
-  for (let i = 0; i < uniqueMembresiaIds.length; i += MEMBRESIA_FETCH_CONCURRENCY) {
-    const batch = uniqueMembresiaIds.slice(i, i + MEMBRESIA_FETCH_CONCURRENCY);
-    const settled = await Promise.all(
-      batch.map(async (id) => {
-        const result = await backendFetchAuthed(request, `/membresias/${id}`);
-        if (!result.ok || !result.response.ok) return null;
-        return (await result.response.json()) as BackendMembresia;
-      }),
-    );
-    for (const membresia of settled) {
-      if (membresia === null) membresiasDegraded = true;
-      else membresiaById.set(membresia.id, membresia);
-    }
+  const membresiaById = new Map<number, BackendMembresia>();
+  const membresiasByPersona = new Map<number, BackendMembresia[]>();
+  for (const membresia of membresias) {
+    membresiaById.set(membresia.id, membresia);
+    if (membresia.personaId === undefined) continue;
+    const list = membresiasByPersona.get(membresia.personaId) ?? [];
+    list.push(membresia);
+    membresiasByPersona.set(membresia.personaId, list);
   }
 
   /*
    * A membership can exist with no payment behind it — three personas in the
    * current data hold an ACTIVA membresía and zero Pago rows, so the payment
-   * chain above cannot see them at all and this screen showed them as
-   * membership-less while their own student portal said otherwise. Only the
-   * personas the chain missed are looked up, so this costs nothing for anyone
-   * who has ever paid.
+   * chain above cannot see them at all. This is the fallback
+   * `buildMemberStudentSummary` reaches for in that case.
    */
-  const personasSinPago = personasBody.items
-    .map((persona) => persona.id)
-    .filter((id) => !latestPagoByPersona.has(id));
   const membresiaByPersona = new Map<number, BackendMembresia>();
-
-  for (let i = 0; i < personasSinPago.length; i += MEMBRESIA_FETCH_CONCURRENCY) {
-    const batch = personasSinPago.slice(i, i + MEMBRESIA_FETCH_CONCURRENCY);
-    const settled = await Promise.all(
-      batch.map(async (personaId) => {
-        const result = await backendFetchAuthed(request, `/membresias/persona/${personaId}`);
-        if (!result.ok || !result.response.ok) return null;
-        const body: unknown = await result.response.json();
-        // A body that is not a list is a broken contract, not "no membership":
-        // treat it as degraded so the page shows "—" rather than a false zero.
-        if (!Array.isArray(body)) return null;
-        const items = body as BackendMembresia[];
-        // An ACTIVA membership is the one worth showing; otherwise the first
-        // row, so a VENCIDA still reads as a lapsed member rather than as none.
-        return { personaId, membresia: items.find((m) => m.estado === "ACTIVA") ?? items[0] ?? null };
-      }),
-    );
-    for (const entry of settled) {
-      if (entry === null) membresiasDegraded = true;
-      else if (entry.membresia) membresiaByPersona.set(entry.personaId, entry.membresia);
-    }
+  for (const [personaId, items] of membresiasByPersona) {
+    // An ACTIVA membership is the one worth showing; otherwise the first
+    // row, so a VENCIDA still reads as a lapsed member rather than as none.
+    membresiaByPersona.set(personaId, items.find((m) => m.estado === "ACTIVA") ?? items[0]);
   }
 
   const tipoById = new Map(tipos.map((tipo) => [tipo.id, tipo]));

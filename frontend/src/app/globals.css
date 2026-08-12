@@ -303,3 +303,36 @@
   outline-offset: 2px;
   box-shadow: 0 0 0 2px #FFD600;
 }
+
+/* ---------------------------------------------------------------------------
+ * DSH-5 — a keyboard-focused control could land behind the fixed mobile tab
+ * bar, fully hidden by an opaque layer (WCAG 2.4.11).
+ *
+ * `AppShell`'s admin bottom nav (`nav[aria-label="Navegación principal
+ * (móvil)"]`) is `fixed`, 62px tall, and only rendered under `lg:hidden`. It
+ * sits OUTSIDE normal document flow, so the browser's native "scroll this
+ * newly-focused element into view" has no idea it exists — it scrolls the
+ * element flush to the viewport edge, which can be behind the bar.
+ *
+ * `scroll-margin-bottom` on the focused element itself is read by that same
+ * native scroll-into-view calculation, so reusing the ring's own selector
+ * fixes every screen the bar can cover, not just `/dashboard` — the bug is a
+ * property of the bar, not of any one page. 78px clears the bar (62px) with
+ * room to spare, and only applies under the bar's own `lg` breakpoint, so
+ * desktop scrolling is untouched.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 1023.98px) {
+  :is(
+      a[href],
+      area[href],
+      button,
+      input:not([type="hidden"]),
+      select,
+      textarea,
+      summary,
+      [contenteditable="true"],
+      [tabindex]:not([tabindex="-1"])
+    ):not([class*="focus-visible:shadow-"], .landing-page *):focus-visible {
+    scroll-margin-bottom: 78px;
+  }
+}

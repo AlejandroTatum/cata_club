@@ -1,14 +1,29 @@
 /**
  * Trainer — "Mi día" (`docs/ux/prototipos/19-entrenador.html`).
  *
- * The screen has ONE decision on it: pass the list for the next session. The
- * audit found the previous version fusing two quick-action cards, three stat
- * cards, a four-control filter panel and a paginated history table into one
- * scroll — five competing focal points for a person holding a phone at
- * courtside. The history moved out to its own view
- * (`/trainer/attendance/history`, prototype `21-entrenador-historial.html`)
- * and the stat cards went with it; what is left is the hero, what comes after
- * it, and the last list.
+ * Redesigned for Fix 8 / DSH-2 (decisiones-de-negocio-2026-08-11.md §8): the
+ * audit measured ~43-47% of a 1440×900 viewport left blank below a "última
+ * lista" card that showed its four counts as loose `Badge`s in a flex row —
+ * the same shape the audit already flagged and fixed on `/dashboard`. The
+ * approved pattern is that admin panel: a hero, a `StatGrid` pulse, then two
+ * content cards sharing one row. This screen now follows it:
+ *
+ *   1. The hero — one decision, unchanged from the original redesign below.
+ *   2. The last session's four counts in `StatGrid` tiles, replacing the
+ *      `Badge` row DSH-2 named directly.
+ *   3. "Últimas listas del club" — the club's own recent sessions, not the
+ *      trainer's: there is no entrenador–horario relation to filter by
+ *      (issue #13, `modelos.py:506-507`), so the closest honest content is
+ *      what's actually recorded, whoever took it. Fed by the new
+ *      `GET /asistencias/ultimas-listas` (no migration — computed from
+ *      `Asistencia` + `HorarioEntrenamiento`, both already there).
+ *   4. The 4-state donut — `/dashboard`'s own `AttendanceStatusChart`,
+ *      reused rather than rebuilt — sharing a card with the chronic-absence
+ *      notice that already lived here.
+ *
+ * Deliberately absent: the full week's agenda. The club's horarios are fixed
+ * and a trainer has them memorized; a schedule grid would spend half the
+ * screen restating something nobody needed restated.
  *
  * ## Only what the backend can sustain
  *
@@ -18,12 +33,14 @@
  * competitive-ranking feature the old level concept belonged to was removed
  * from the MVP entirely.
  *
- * "Avisar al club" has no endpoint behind it: nothing in the API notifies the
- * club about a student. It opens the help assistant with the message already
- * written (see `openHelpChat`), which is the only real channel there is. That
- * used to be documented HERE and nowhere the trainer could see it, so the
- * button read as "the club has been told" when in fact the trainer still has to
- * send the message — hence the hint rendered next to it.
+ * ## "Últimas listas del club" has no author column
+ *
+ * `Asistencia` deliberately doesn't record who took the list
+ * (`modelos.py:536`) — the trainers are paid a flat monthly rate and the club
+ * never asked "who marked this kid absent". Adding it is a real, separate
+ * idea (`registrado_por`, for audit trail) parked for after launch — see
+ * decisiones-de-negocio-2026-08-11.md §8's own closing note. This table does
+ * not grow a column to fill that gap.
  */
 
 "use client";
@@ -31,17 +48,36 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import AppShell, { openHelpChat } from "@/components/shell/AppShell";
-import { ArrowRight, CalendarCheck, ClipboardList, Megaphone } from "lucide-react";
+import AppShell from "@/components/shell/AppShell";
+import { ArrowRight, CalendarCheck, ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchTrainingSchedules,
   fetchAttendanceRecords,
   fetchAlumnosPorHorario,
+  fetchRecentAttendanceSessions,
+  type RecentAttendanceSession,
 } from "@/services/api";
-import { Badge, Button, EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import {
+  Badge,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PAGE_RAIL,
+  STAT_GRID,
+  StatCard,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableNameCell,
+  TableRow,
+  buttonClasses,
+} from "@/components/ui";
+import {
+  buildAttendanceStats,
   formatDay,
   getAttendanceBadgeTone,
   getAttendanceLabel,
@@ -52,7 +88,6 @@ import type { EstadoAsistencia } from "@/types/domain";
 import { todayDiaSemana } from "@/lib/club-date";
 import { formatDate } from "@/lib/format-utils";
 import {
-  buildAbsenceNotice,
   findAbsenceAlert,
   formatAbsenceCount,
   formatEnrolledCount,
@@ -62,12 +97,14 @@ import {
   selectTodaySessions,
   summarizeLastSession,
 } from "./trainer-day-utils";
+// Reused, not rebuilt (decisión §8: "el gráfico de torta ya existe ahí;
+// reusalo, no construyas uno nuevo"). It's a plain presentational component
+// (props: AttendanceDayStats) with no route of its own, so importing it from
+// another screen's folder costs nothing beyond the import line itself.
+import AttendanceStatusChart from "@/app/dashboard/AttendanceStatusChart";
 
 /** The order the four states are read in — best news first, as on every other screen. */
 const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
-
-/** Ties the "Avisar al club" button to the sentence explaining what it opens. */
-const ABSENCE_NOTICE_HINT_ID = "trainer-absence-notice-hint";
 
 /** First name only — "Hola, Carlos Mendoza" is a greeting nobody says out loud. */
 function firstNameOf(fullName: string | undefined): string {
@@ -80,6 +117,7 @@ export default function TrainerPage(): React.ReactElement {
   const [schedules, setSchedules] = useState<TrainingSchedule[]>([]);
   const [monthRecords, setMonthRecords] = useState<AttendanceRecord[]>([]);
   const [enrolledCount, setEnrolledCount] = useState<number | null>(null);
+  const [recentSessions, setRecentSessions] = useState<RecentAttendanceSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,9 +139,26 @@ export default function TrainerPage(): React.ReactElement {
     }
   }, []);
 
+  /**
+   * "Últimas listas del club", loaded separately and best-effort: it is
+   * companion content, not the one decision this screen exists for, so a
+   * failure here empties the card instead of blocking the hero and the
+   * "última lista" stats — same treatment `/dashboard` gives its own
+   * secondary cards (`loadDetail`, `Promise.allSettled`).
+   */
+  const loadRecentSessions = useCallback(async (): Promise<void> => {
+    try {
+      setRecentSessions(await fetchRecentAttendanceSessions());
+    } catch (err) {
+      console.error("[trainer] fetchRecentAttendanceSessions failed", err);
+      setRecentSessions([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    loadRecentSessions();
+  }, [loadData, loadRecentSessions]);
 
   const todaySchedules = useMemo(() => {
     const today = todayDiaSemana();
@@ -113,6 +168,7 @@ export default function TrainerPage(): React.ReactElement {
   const { next, later } = useMemo(() => selectTodaySessions(todaySchedules), [todaySchedules]);
   const lastSession = useMemo(() => summarizeLastSession(monthRecords), [monthRecords]);
   const absenceAlert = useMemo(() => findAbsenceAlert(monthRecords), [monthRecords]);
+  const attendanceStats = useMemo(() => buildAttendanceStats(monthRecords), [monthRecords]);
 
   /**
    * The roster count for the hero. Loaded separately because it needs the
@@ -225,9 +281,11 @@ export default function TrainerPage(): React.ReactElement {
               </p>
             )}
 
-            {/* --- Última lista: a result, and something to do about it. --- */}
+            {/* --- Última lista: its four counts, as StatGrid tiles (DSH-2:
+                these used to be loose Badges in a flex row). --- */}
             <section
               aria-labelledby="ultima-lista-title"
+              data-testid="ultima-lista"
               className="card overflow-hidden"
             >
               <div className="flex items-center gap-3 border-b border-line px-5 py-4">
@@ -245,56 +303,103 @@ export default function TrainerPage(): React.ReactElement {
               </div>
 
               {lastSession ? (
-                <div className="flex flex-col gap-3.5 px-5 py-4">
-                  <div className="flex flex-wrap gap-2">
-                    {STATE_ORDER.map((estado) => (
-                      <Badge key={estado} tone={getAttendanceBadgeTone(estado)}>
-                        {lastSession.counts[estado]} {getAttendanceLabel(estado).toLowerCase()}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  {absenceAlert && (
-                    <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3.5">
-                      <p className="m-0 min-w-[230px] flex-1 text-sm text-ink-2">
-                        <b className="font-semibold text-ink">{absenceAlert.estudiante}</b> suma{" "}
-                        <b className="font-semibold text-ink">
-                          {formatAbsenceCount(absenceAlert.ausencias)}
-                        </b>{" "}
-                        este mes
-                      </p>
-                      <Button
-                        variant="dark"
-                        size="sm"
-                        aria-describedby={ABSENCE_NOTICE_HINT_ID}
-                        onClick={(): void => openHelpChat(buildAbsenceNotice(absenceAlert))}
-                      >
-                        <Megaphone size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                        Avisar al club
-                      </Button>
-                      {/*
-                        Full width under the row, so the button keeps its place
-                        beside the count and the explanation never squeezes it.
-                        `aria-describedby` above carries the same sentence to a
-                        screen reader, which cannot infer it from proximity.
-                      */}
-                      <p
-                        id={ABSENCE_NOTICE_HINT_ID}
-                        className="m-0 w-full text-xs text-ink-3"
-                      >
-                        Abre el asistente con el mensaje ya escrito. Usted lo revisa y lo envía.
-                      </p>
-                    </div>
-                  )}
+                <div className={`p-5 ${STAT_GRID}`}>
+                  {STATE_ORDER.map((estado) => (
+                    <StatCard
+                      key={estado}
+                      label={getAttendanceLabel(estado)}
+                      value={lastSession.counts[estado]}
+                    />
+                  ))}
                 </div>
               ) : (
-                <EmptyState surface="inset"
+                <EmptyState
+                  surface="inset"
                   icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                   title="Todavía no registraste ninguna lista este mes"
                   description="En cuanto pases lista, el resumen de la sesión aparece aquí."
                 />
               )}
             </section>
+
+            {/*
+              Two cards sharing one row, same grammar as /dashboard's own
+              "Actividad reciente" + donut row: a flexible column and a fixed
+              narrower one, both always rendered so an empty state reads as
+              "nothing here yet", never as a layout that broke.
+            */}
+            <div className={PAGE_RAIL}>
+              <section data-testid="recent-club-sessions" className="card overflow-hidden">
+                <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+                  <h2 className="flex-1 text-sm font-bold text-ink">Últimas listas del club</h2>
+                </div>
+                {recentSessions.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHead>
+                        <tr>
+                          <TableHeaderCell>Sesión</TableHeaderCell>
+                          <TableHeaderCell>Resultado</TableHeaderCell>
+                        </tr>
+                      </TableHead>
+                      <TableBody>
+                        {recentSessions.map((s) => (
+                          <TableRow key={`${s.horarioId}|${s.fecha}`}>
+                            <TableNameCell name={formatDate(s.fecha)} sub={s.horario} />
+                            <TableCell>
+                              <div className="flex flex-wrap gap-[5px]">
+                                {/* The state name rides along as real,
+                                    visible text — a bare "9" next to a
+                                    colored dot forced every reader to
+                                    memorize what each color meant. */}
+                                {STATE_ORDER.map((estado) => (
+                                  <Badge key={estado} tone={getAttendanceBadgeTone(estado)}>
+                                    {s.counts[estado]} {getAttendanceLabel(estado)}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <EmptyState
+                    surface="inset"
+                    icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                    title="Todavía no hay listas registradas"
+                    description="En cuanto alguien pase lista en el club, aparece aquí."
+                  />
+                )}
+              </section>
+
+              <section className="card flex flex-col gap-4 p-[18px]">
+                {absenceAlert && (
+                  <p className="m-0 border-b border-line pb-4 text-sm text-ink-2">
+                    <b className="font-semibold text-ink">{absenceAlert.estudiante}</b> suma{" "}
+                    <b className="font-semibold text-ink">
+                      {formatAbsenceCount(absenceAlert.ausencias)}
+                    </b>{" "}
+                    este mes
+                  </p>
+                )}
+
+                <div>
+                  <h2 className="mb-4 text-base font-bold text-ink">Distribución de asistencias</h2>
+                  {attendanceStats.totalStudents > 0 ? (
+                    <AttendanceStatusChart stats={attendanceStats} />
+                  ) : (
+                    <EmptyState
+                      surface="inset"
+                      icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                      title="Sin asistencias registradas"
+                      description="El gráfico se dibuja con la primera lista del período."
+                    />
+                  )}
+                </div>
+              </section>
+            </div>
           </>
         )}
       </AppShell>

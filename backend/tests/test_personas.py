@@ -389,6 +389,90 @@ def test_buscar_personas_respeta_el_skip(client):
     assert {p["id"] for p in primera_pagina}.isdisjoint({p["id"] for p in segunda_pagina})
 
 
+# --- Búsqueda: nombre completo (auditoría 2026-08-10) ------------------------
+# `Persona.nombres.ilike(q) | Persona.apellidos.ilike(q)` comparaba la `q`
+# COMPLETA contra cada columna por separado, nunca contra la concatenación:
+# "Emilio Zambrano" no matcheaba ni nombres="Emilio" ni apellidos="Zambrano"
+# enteros. Fallaba en silencio -- sin error, con el desplegable vacío -- y lo
+# comparte StudentSearch (`/reports` y `/trainer/attendance/history`).
+def _crear_persona_buscable(client, nombres: str, apellidos: str, cedula: str) -> None:
+    client.post(
+        "/api/v1/personas/",
+        json={
+            "nombres": nombres, "apellidos": apellidos, "cedula": cedula,
+            "fecha_nacimiento": "2010-05-14", "telefono": "0991234567",
+        },
+    )
+
+
+def test_buscar_nombre_completo_encuentra_a_la_persona(client):
+    """El caso real que reportó la auditoría: cero resultados con nombre y
+    apellido juntos, aunque cada uno por separado sí encontraba."""
+    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034810")
+
+    resp = client.get("/api/v1/personas/buscar", params={"q": "Emilio Zambrano"})
+
+    assert resp.status_code == 200
+    assert any(p["apellidos"] == "Zambrano" for p in resp.json())
+
+
+def test_buscar_nombre_completo_en_orden_invertido_encuentra(client):
+    """Mucha gente tipea apellido primero."""
+    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034811")
+
+    resp = client.get("/api/v1/personas/buscar", params={"q": "Zambrano Emilio"})
+
+    assert resp.status_code == 200
+    assert any(p["apellidos"] == "Zambrano" for p in resp.json())
+
+
+def test_buscar_con_apellido_compuesto_parcial_encuentra(client):
+    """"Ariana Chavez" tiene que encontrar a "Ariana Chavez Bravo": el
+    apellido compuesto no se busca completo, alcanza con una porción."""
+    _crear_persona_buscable(client, "Ariana", "Chavez Bravo", "1710034812")
+
+    resp = client.get("/api/v1/personas/buscar", params={"q": "Ariana Chavez"})
+
+    assert resp.status_code == 200
+    assert any(p["apellidos"] == "Chavez Bravo" for p in resp.json())
+
+
+def test_buscar_con_espacios_de_mas_encuentra(client):
+    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034813")
+
+    resp = client.get("/api/v1/personas/buscar", params={"q": "Emilio   Zambrano"})
+
+    assert resp.status_code == 200
+    assert any(p["apellidos"] == "Zambrano" for p in resp.json())
+
+
+def test_buscar_solo_nombre_sigue_funcionando(client):
+    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034814")
+
+    resp = client.get("/api/v1/personas/buscar", params={"q": "Emilio"})
+
+    assert resp.status_code == 200
+    assert any(p["apellidos"] == "Zambrano" for p in resp.json())
+
+
+def test_buscar_solo_apellido_sigue_funcionando(client):
+    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034815")
+
+    resp = client.get("/api/v1/personas/buscar", params={"q": "Zambrano"})
+
+    assert resp.status_code == 200
+    assert any(p["apellidos"] == "Zambrano" for p in resp.json())
+
+
+def test_buscar_sin_resultados_devuelve_lista_vacia_sin_romperse(client):
+    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034816")
+
+    resp = client.get("/api/v1/personas/buscar", params={"q": "Nadie Inexistente"})
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 # --- `GET /personas/`: paginación acotada -----------------------------------
 # Era el único de los cuatro endpoints paginados declarado con defaults planos
 # de Python (`skip: int = 0, limit: int = 50`), sin `Query(...)`: aceptaba

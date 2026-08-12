@@ -42,8 +42,6 @@ class MembresiaEstadisticasResponseDTO(ResponseBase, BaseModel):
 class PagoCreateDTO(BaseModel):
     monto: Decimal = Field(..., gt=0)
     tipo_pago: TipoPago
-    fecha_inicio: date
-    fecha_fin: date
     persona_id: int
     membresia_id: int
     # Issue #11: descuento del catálogo a aplicar en ESTE registro (solo un
@@ -54,11 +52,13 @@ class PagoCreateDTO(BaseModel):
     # pero el servicio rechaza con 400 cualquier envío de más de un id.
     descuento_ids: list[int] = Field(default_factory=list)
 
-    @model_validator(mode="after")
-    def _orden_fechas(self) -> "PagoCreateDTO":
-        if self.fecha_inicio >= self.fecha_fin:
-            raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
-        return self
+    # `fecha_inicio`/`fecha_fin` NO se aceptan del cliente (fix período de
+    # cobertura, PAG-5): el endpoint permitía mandar CUALQUIER rango -- un
+    # pago de un mes con un año de cobertura, reproducido en vivo contra QA
+    # (ver docs/fixes/06-periodo-de-cobertura.md). El período ahora lo
+    # deriva `PagoServicio.registrar_pago` del monto base y la cuota; un
+    # campo que el cliente mande y el backend descarte en silencio es la
+    # próxima confusión, así que se quita del contrato en vez de ignorarse.
 
 
 class PagoValidarDTO(BaseModel):
@@ -102,6 +102,13 @@ class PagoResponseDTO(ResponseBase, BaseModel):
     descuento_valor_aplicado: Optional[Decimal] = None
     descuento_porcentaje_aplicado: Optional[Decimal] = None
     descuento_autorizado_por_persona_id: Optional[int] = None
+    # `PagoServicio.validar_pago` lo setea como atributo transitorio (no es
+    # columna de `Pago`) cuando aprobar/rechazar el pago sale bien pero el
+    # aviso in-app al alumno/representante falla. El pago YA quedó en el
+    # estado que dice `estado_pago` -- este campo es lo que le dice al
+    # administrador que el aviso no salió, en vez de dejarlo bajo un 200
+    # mudo (hallazgo en vivo, 2026-08-11).
+    aviso_no_enviado: bool = False
 
 
 # --- Listado / cola de validación (GET /membresias/pagos) -------------------

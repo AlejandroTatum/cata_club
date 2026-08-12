@@ -1,5 +1,8 @@
 /**
- * GET /api/attendance/records — proxies FastAPI's `/asistencias/reportes`.
+ * GET /api/attendance/records — proxies FastAPI's `/asistencias/reportes`,
+ *   looping backend pages internally (`fetchAllReportes`, TRA-6) since that
+ *   endpoint is now paginated but this route's own contract — one full array
+ *   for the filtered range — is not (see `fetchAllReportes`'s doc comment).
  * POST /api/attendance/records — registers real attendance (CU / E02),
  *   proxying `POST /asistencias/` once per student in the roster.
  *
@@ -7,10 +10,12 @@
  * read and write) is the backend's job via `GestorPermisos` — these handlers
  * just proxy whatever status FastAPI returns. GET enriches each Asistencia
  * with the student's name and a "Día HH:mm — HH:mm" schedule label
- * (resolved via a single `/asistencias/horarios` + `/personas` lookup, see
- * src/lib/server/attendance-adapter.ts) since the DTO only carries bare ids.
- * Consumed by the admin `/attendance` overview and the trainer dashboard's
- * "today" stats.
+ * (resolved via `/asistencias/horarios` + `fetchPersonaNameMap`, see
+ * src/lib/server/attendance-adapter.ts — that helper falls back to per-id
+ * `/personas/{id}` lookups when the bulk roster read 403s, which is every
+ * ENTRENADOR call, ASI-4) since the DTO only carries bare ids. Consumed by
+ * the admin `/attendance` overview, `/reports`, `/dashboard`, the trainer
+ * dashboard/history pages, and the trainer panel's "última lista".
  *
  * POST replaces the old frontend-only prototype in `/trainer/attendance`
  * (previously "no data is persisted") — it issues one real
@@ -34,6 +39,48 @@ import { clubIsoDate } from "@/lib/club-date";
 
 const VALID_ESTADOS = new Set<string>(Object.keys(ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND));
 
+/**
+ * `GET /asistencias/reportes` is now paginated server-side (TRA-6, capped at
+ * `REPORTES_PAGE_LIMIT`) so a single request can never force one unbounded
+ * query — but every consumer of THIS route (`/reports`'s CSV/PDF-count
+ * parity, `/attendance`, `/dashboard`, `/trainer*`) is written against "one
+ * full array for the filtered range" (see reports-utils.ts's doc comment on
+ * why that parity matters). `fetchAllReportes` loops backend pages so that
+ * contract holds unchanged: the backend query is bounded, this route's own
+ * response is not.
+ */
+const REPORTES_PAGE_LIMIT = 200;
+
+interface PaginatedAsistencias {
+  items: BackendAsistencia[];
+  total: number;
+}
+
+type ReportesResult =
+  | { ok: true; items: BackendAsistencia[]; refreshedAccessToken?: string }
+  | { ok: false; status: number; response?: Response };
+
+async function fetchAllReportes(request: NextRequest, baseQuery: URLSearchParams): Promise<ReportesResult> {
+  const items: BackendAsistencia[] = [];
+  let refreshedAccessToken: string | undefined;
+  let skip = 0;
+  while (true) {
+    const pageQs = new URLSearchParams(baseQuery);
+    pageQs.set("skip", String(skip));
+    pageQs.set("limit", String(REPORTES_PAGE_LIMIT));
+    const result = await backendFetchAuthed(request, `/asistencias/reportes?${pageQs.toString()}`);
+    if (!result.ok) return { ok: false, status: result.status };
+    if (!result.response.ok) return { ok: false, status: result.response.status, response: result.response };
+    refreshedAccessToken = result.refreshedAccessToken ?? refreshedAccessToken;
+
+    const page = (await result.response.json()) as PaginatedAsistencias;
+    items.push(...page.items);
+    if (page.items.length < REPORTES_PAGE_LIMIT || items.length >= page.total) break;
+    skip += REPORTES_PAGE_LIMIT;
+  }
+  return { ok: true, items, refreshedAccessToken };
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const qs = new URLSearchParams();
@@ -45,21 +92,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (fechaFin) qs.set("fecha_fin", fechaFin);
   if (horarioId) qs.set("horario_id", horarioId);
   if (personaId) qs.set("persona_id", personaId);
-  const query = qs.toString();
 
-  const reportesResult = await backendFetchAuthed(request, `/asistencias/reportes${query ? `?${query}` : ""}`);
+  const reportesResult = await fetchAllReportes(request, qs);
   if (!reportesResult.ok) {
+    if (reportesResult.response) {
+      return passthroughBackendError(reportesResult.response, "No se pudieron cargar los registros de asistencia.");
+    }
     return NextResponse.json({ message: "No se pudieron cargar los registros de asistencia." }, { status: reportesResult.status });
   }
-  if (!reportesResult.response.ok) {
-    return passthroughBackendError(reportesResult.response, "No se pudieron cargar los registros de asistencia.");
-  }
 
-  const asistencias = (await reportesResult.response.json()) as BackendAsistencia[];
+  const asistencias = reportesResult.items;
 
   const [horariosResult, personas] = await Promise.all([
     backendFetchAuthed(request, "/asistencias/horarios"),
-    fetchPersonaNameMap(request),
+    fetchPersonaNameMap(request, asistencias.map((a) => a.personaId)),
   ]);
   const horarios: BackendHorario[] =
     horariosResult.ok && horariosResult.response.ok ? await horariosResult.response.json() : [];

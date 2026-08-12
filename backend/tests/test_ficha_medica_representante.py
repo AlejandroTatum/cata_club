@@ -11,10 +11,12 @@ Estos tests fijan la regla nueva sobre GET y PATCH:
 
     ADMINISTRADOR, o el representante legal de ESA persona. Nadie más.
 
-Deliberadamente NO se habilita al propio titular sobre su ficha (a diferencia
-de `GET /ranking/{persona_id}/perfil`, que sí lo permite): es una decisión de
-producto aparte y todavía no tomada. Ver `incluir_titular` en
-`PoliticaAccesoPersona`.
+El titular también entra sobre su PROPIA ficha, pero solo si es MAYOR DE EDAD
+(decisión de producto separada, tomada después de la anterior): la ficha
+tiene un campo de enfermedades que la familia puede no haber hablado todavía
+con un hijo menor, así que abrirla parejo filtraría eso. Un menor con cuenta
+propia sigue en 403 sobre su propia ficha -- la gestiona su representante.
+Ver `_es_titular_mayor_de_edad` en `ficha_medica_router.py`.
 
 El caso IDOR -- un representante real pidiendo el menor de OTRA familia -- es
 el test central del archivo: son ids enteros consecutivos y enumerables.
@@ -64,6 +66,30 @@ def familia(db_session):
 def otra_familia(db_session):
     """Segunda familia sin ningún vínculo con la primera: el objetivo IDOR."""
     return _crear_familia(db_session, "90")
+
+
+def _crear_alumno_adulto(db_session, sufijo: str):
+    """Alumno MAYOR de edad, autogestionado -- sin representante -- con su
+    propia ficha médica ya cargada. A diferencia de `_crear_familia`, nace en
+    1990: no necesita representante_id (regla de `PersonaServicio`: solo
+    obligatorio entre 5 y 17 años)."""
+    adulto = Persona(
+        nombres="Alumno", apellidos=f"Adulto{sufijo}", cedula=f"17100350{sufijo}",
+        fecha_nacimiento=date(1990, 1, 1), telefono="0991110002",
+    )
+    db_session.add(adulto)
+    db_session.flush()
+    db_session.add(FichaMedica(
+        tipo_sangre=TipoSangre.A_POSITIVO, persona_id=adulto.id, alergias="Ninguna",
+    ))
+    db_session.commit()
+    db_session.refresh(adulto)
+    return adulto
+
+
+@pytest.fixture()
+def alumno_adulto(db_session):
+    return _crear_alumno_adulto(db_session, "70")
 
 
 def _client_como(db_session, persona_id, roles):
@@ -195,16 +221,41 @@ def test_un_alumno_no_lee_la_ficha_medica_de_otra_persona(db_session, familia):
     assert respuesta.status_code == 403
 
 
-def test_el_titular_no_lee_su_propia_ficha_medica(db_session, familia):
-    """Límite de alcance explícito: este cambio NO abre la ficha propia,
-    aunque `PoliticaAccesoPersona` lo permita por defecto en otras rutas.
-    Es una decisión de producto aparte; el `incluir_titular=False` del router
-    la mantiene apagada y este test lo fija."""
+def test_el_titular_menor_de_edad_no_lee_su_propia_ficha_medica(db_session, familia):
+    """El candado de la decisión de edad: un menor con cuenta propia sigue
+    SIN poder ver su propia ficha, aunque la decisión de negocio ahora abra
+    el acceso al titular mayor de edad (ver los dos tests de
+    `alumno_adulto` más abajo). La gestiona su representante -- ese es el
+    caso que ya cubre `test_el_representante_si_lee_la_ficha_medica_de_su_representado`.
+    Si mañana alguien borra el chequeo de edad en
+    `_es_titular_mayor_de_edad`, este test es el que se pone rojo."""
     _, hijo = familia
     with _client_como(db_session, hijo.id, ["ALUMNO"]) as c:
         respuesta = c.get(f"/api/v1/fichas-medicas/persona/{hijo.id}")
     app.dependency_overrides.clear()
     assert respuesta.status_code == 403
+
+
+# --- El titular MAYOR de edad: sí entra sobre la suya --------------------
+def test_el_titular_mayor_de_edad_si_lee_su_propia_ficha_medica(db_session, alumno_adulto):
+    """El otro lado del mismo candado: un alumno mayor de edad, autogestionado,
+    SÍ lee su propia ficha médica."""
+    with _client_como(db_session, alumno_adulto.id, ["ALUMNO"]) as c:
+        respuesta = c.get(f"/api/v1/fichas-medicas/persona/{alumno_adulto.id}")
+    app.dependency_overrides.clear()
+    assert respuesta.status_code == 200
+    assert respuesta.json()["personaId"] == alumno_adulto.id
+
+
+def test_el_titular_mayor_de_edad_si_actualiza_su_propia_ficha_medica(db_session, alumno_adulto):
+    with _client_como(db_session, alumno_adulto.id, ["ALUMNO"]) as c:
+        respuesta = c.patch(
+            f"/api/v1/fichas-medicas/persona/{alumno_adulto.id}",
+            json={"alergias": "Polen"},
+        )
+    app.dependency_overrides.clear()
+    assert respuesta.status_code == 200
+    assert respuesta.json()["alergias"] == "Polen"
 
 
 def test_un_token_sin_persona_id_es_denegado(db_session, familia):

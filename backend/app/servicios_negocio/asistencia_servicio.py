@@ -1,21 +1,45 @@
+import re
+import unicodedata
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario
-from app.dominio.enums import Categoria
-from app.dominio.etiquetas import categoria_en_castellano, dia_en_castellano
+from app.dominio.modelos import (
+    Asistencia, HorarioEntrenamiento, AlumnoHorario, CategoriaHorario, CategoriaHorarioDia,
+)
+from app.dominio.enums import EstadoAsistencia, EstadoMembresia, EstadoPago
+from app.dominio.etiquetas import dia_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
+from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.asistencia_repositorio import (
     AsistenciaRepositorio, HorarioRepositorio, AlumnoHorarioRepositorio
 )
 from app.presentacion.schemas.asistencia_schemas import (
-    AsistenciaCreateDTO, CategoriaResponseDTO, HorarioCreateDTO, HorarioUpdateDTO,
-    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO
+    AsistenciaCreateDTO, CategoriaCreateDTO, CategoriaResponseDTO, CategoriaUpdateDTO,
+    HorarioCreateDTO, HorarioUpdateDTO,
+    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
+    UltimaListaDTO,
 )
 from app.servicios_negocio.persona_servicio import _calcular_edad
+from app.soporte_transversal.tiempo import hoy_club
+
+_CODIGO_MAX_LEN = 20
+
+
+def _sluggificar_nombre(nombre: str) -> str:
+    """`"Preinfantil A"` -> `"PREINFANTIL_A"`. Sin acentos/ñ (normaliza NFKD
+    y descarta los diacríticos), sin espacios ni símbolos (cualquier corrida
+    de caracteres no alfanuméricos se colapsa a un solo `_`). Deriva el
+    código de categoria del nombre para que el admin nunca tipee un código
+    con espacios que rompería la FK de `horario_entrenamiento.categoria`
+    (ver `AsistenciaServicio._generar_codigo`)."""
+    sin_acentos = "".join(
+        c for c in unicodedata.normalize("NFKD", nombre) if not unicodedata.combining(c)
+    )
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", sin_acentos.strip()).strip("_").upper()
+    return slug[:_CODIGO_MAX_LEN] or "CATEGORIA"
 
 
 class AsistenciaServicio:
@@ -25,12 +49,18 @@ class AsistenciaServicio:
         self.repo_persona = PersonaRepositorio(db)
         self.repo_alumno_horario = AlumnoHorarioRepositorio(db)
         self.repo_categoria = CategoriaRepositorio(db)
+        self.repo_membresia = MembresiaRepositorio(db)
 
-    def _validar_dia_y_derivar_horas(self, horario: HorarioEntrenamiento) -> None:
+    def _validar_dia_y_derivar_horas(self, horario: HorarioEntrenamiento) -> CategoriaHorario:
         """`hora_inicio`/`hora_fin` nunca los envía el cliente: siempre se
         derivan de la fila `categoria_horario` de `horario.categoria`.
         `dia_semana` debe estar en el conjunto de días permitido por esa
-        categoría (ej. Competitivo admite Sábado, las otras 4 solo Lun-Vie)."""
+        categoría (ej. Competitivo admite Sábado, las otras 4 solo Lun-Vie).
+
+        Devuelve la fila `CategoriaHorario` ya resuelta -- `crear_horario` la
+        reusa para su propio mensaje de error (`categoria.label`) en vez de
+        volver a consultarla (M1: ya no existe un traductor de enum a label,
+        la tabla es la única fuente)."""
         categoria = self.repo_categoria.obtener_por_codigo(horario.categoria)
         if categoria is None:
             raise EntidadNoEncontrada(f"Categoria {horario.categoria} no encontrada")
@@ -38,7 +68,7 @@ class AsistenciaServicio:
         if horario.dia_semana not in dias_permitidos:
             raise OperacionInvalida(
                 f"El día {dia_en_castellano(horario.dia_semana)} no está permitido "
-                f"para la categoría {categoria_en_castellano(horario.categoria)}.",
+                f"para la categoría {categoria.label}.",
                 detalle_tecnico=(
                     f"dia_semana={horario.dia_semana.value} "
                     f"fuera de los días de categoria={horario.categoria}"
@@ -46,32 +76,236 @@ class AsistenciaServicio:
             )
         horario.hora_inicio = categoria.hora_inicio
         horario.hora_fin = categoria.hora_fin
-
-    @staticmethod
-    def _codigo_de(categoria: Categoria | str) -> str:
-        """Normaliza `Categoria.ALGO` (o el string que ya sea) al `str` liso
-        que espera la columna FK -- ver el comentario en
-        `HorarioEntrenamiento.categoria` sobre por qué ya no es un enum."""
-        return Categoria(categoria).value
+        return categoria
 
     def crear_horario(self, datos: HorarioCreateDTO) -> HorarioEntrenamiento:
         horario = HorarioEntrenamiento(**datos.model_dump())
-        horario.categoria = self._codigo_de(horario.categoria)
-        self._validar_dia_y_derivar_horas(horario)
+        categoria = self._validar_dia_y_derivar_horas(horario)
+        # INS-3 (decisión de negocio #5, 2026-08-11): una sola fila por
+        # (categoria, dia_semana) -- es invariante, no advertencia. Las horas
+        # se derivan de la categoria (arriba), así que dos filas Formativo-
+        # Lunes serían idénticas, y un alumno asignado después quedaría
+        # enrolado en AMBAS (rompe la inscripción atómica del issue #181).
+        # Este chequeo va ANTES del `UniqueConstraint` de la base
+        # (`uq_horario_categoria_dia`) para devolver un mensaje legible en
+        # vez de un `IntegrityError` crudo.
+        if self.repo_horario.existe_categoria_dia(horario.categoria, horario.dia_semana):
+            raise OperacionInvalida(
+                f"La categoría {categoria.label} ya "
+                f"tiene un horario el día {dia_en_castellano(horario.dia_semana)}.",
+                detalle_tecnico=(
+                    f"uq_horario_categoria_dia: categoria={horario.categoria} "
+                    f"dia_semana={horario.dia_semana.value}"
+                ),
+            )
         return self.repo_horario.crear(horario)
 
-    def listar_horarios(self, categoria: Optional[Categoria] = None) -> list[HorarioEntrenamiento]:
-        return self.repo_horario.listar(self._codigo_de(categoria) if categoria else None)
+    def listar_horarios(self, categoria: Optional[str] = None) -> list[HorarioEntrenamiento]:
+        return self.repo_horario.listar(categoria)
 
     def listar_categorias(self) -> list[CategoriaResponseDTO]:
-        return [
-            CategoriaResponseDTO(
-                codigo=c.codigo, label=c.label,
-                hora_inicio=c.hora_inicio, hora_fin=c.hora_fin,
-                dias=[d.dia_semana for d in c.dias_permitidos],
+        return [self._a_categoria_dto(c) for c in self.repo_categoria.listar()]
+
+    @staticmethod
+    def _a_categoria_dto(c: CategoriaHorario) -> CategoriaResponseDTO:
+        return CategoriaResponseDTO(
+            codigo=c.codigo, label=c.label,
+            hora_inicio=c.hora_inicio, hora_fin=c.hora_fin,
+            dias=[d.dia_semana for d in c.dias_permitidos],
+        )
+
+    def _generar_codigo(self, nombre: str) -> str:
+        """Deriva un `codigo` único a partir de `nombre`. Estable: se llama
+        UNA vez, al crear -- nunca al renombrar (`codigo` es la FK de
+        `horario_entrenamiento.categoria`, así que cambiarlo en un rename
+        rompería todos sus horarios). Colisión de slug (dos nombres
+        distintos que normalizan igual, ej. "Preinfantil" y "PREINFANTIL!")
+        se resuelve con un sufijo numérico -- el propio `label`, ya único
+        en la base, es la garantía real de que dos categorías no se
+        confunden; el código solo necesita ser un identificador válido."""
+        base = _sluggificar_nombre(nombre)
+        codigo = base
+        sufijo = 2
+        while self.repo_categoria.existe_codigo(codigo):
+            marca = f"_{sufijo}"
+            codigo = base[: _CODIGO_MAX_LEN - len(marca)] + marca
+            sufijo += 1
+        return codigo
+
+    def crear_categoria(self, datos: CategoriaCreateDTO) -> CategoriaResponseDTO:
+        """Alta atómica (docs/fixes/24-abm-categorias.md, pedido del dueño):
+        una sola operación crea la categoria, sus días permitidos y un
+        `horario_entrenamiento` por cada día marcado."""
+        nombre = datos.nombre.strip()
+        if not nombre:
+            raise OperacionInvalida("El nombre de la categoría no puede estar vacío.")
+        if self.repo_categoria.existe_label(nombre):
+            raise OperacionInvalida(f'Ya existe una categoría llamada "{nombre}".')
+        if datos.hora_inicio >= datos.hora_fin:
+            raise OperacionInvalida("La hora de inicio debe ser anterior a la hora de fin.")
+
+        # Dedupe si el mismo día viene repetido en el payload -- no debería
+        # pasar desde el formulario (casillas = un Set), pero un llamado
+        # directo a la API sí podría mandarlo dos veces.
+        dias = list(dict.fromkeys(datos.dias))
+
+        codigo = self._generar_codigo(nombre)
+        categoria = CategoriaHorario(
+            codigo=codigo, label=nombre,
+            hora_inicio=datos.hora_inicio, hora_fin=datos.hora_fin,
+        )
+        categoria.dias_permitidos = [CategoriaHorarioDia(dia_semana=d) for d in dias]
+        horarios = [
+            HorarioEntrenamiento(
+                categoria=codigo, dia_semana=d,
+                hora_inicio=datos.hora_inicio, hora_fin=datos.hora_fin,
             )
-            for c in self.repo_categoria.listar()
+            for d in dias
         ]
+        categoria = self.repo_categoria.crear_con_horarios(categoria, horarios)
+        return self._a_categoria_dto(categoria)
+
+    def actualizar_categoria(self, codigo: str, datos: CategoriaUpdateDTO) -> CategoriaResponseDTO:
+        """Edición atómica de nombre/franja/días -- ver
+        docs/fixes/24-abm-categorias.md para las cuatro decisiones que
+        gobiernan este método:
+
+        1. Cambiar la franja RE-DERIVA las horas de los horarios que
+           quedan (nunca quedan desincronizados de la categoria).
+        2. Quitar un día con asistencias registradas está PROHIBIDO: se
+           aborta la edición ENTERA (ningún día se toca) antes de escribir
+           nada -- no se borra historial.
+        3. Agregar un día a una categoria con alumnos ya inscriptos los
+           backfillea automáticamente en el día nuevo -- la inscripción
+           sigue siendo atómica por categoria (un alumno en todos los días
+           o en ninguno).
+        4. `codigo` nunca cambia acá (ver `_generar_codigo`)."""
+        categoria = self.repo_categoria.obtener_por_codigo(codigo)
+        if categoria is None:
+            raise EntidadNoEncontrada(f"Categoria {codigo} no encontrada")
+
+        update_data = datos.model_dump(exclude_unset=True)
+        if not update_data:
+            raise OperacionInvalida("No se proporcionaron campos para actualizar")
+
+        nueva_hora_inicio = datos.hora_inicio if datos.hora_inicio is not None else categoria.hora_inicio
+        nueva_hora_fin = datos.hora_fin if datos.hora_fin is not None else categoria.hora_fin
+        if nueva_hora_inicio >= nueva_hora_fin:
+            raise OperacionInvalida("La hora de inicio debe ser anterior a la hora de fin.")
+
+        if datos.nombre is not None:
+            nombre = datos.nombre.strip()
+            if not nombre:
+                raise OperacionInvalida("El nombre de la categoría no puede estar vacío.")
+            if nombre != categoria.label and self.repo_categoria.existe_label(nombre, excluir_codigo=codigo):
+                raise OperacionInvalida(f'Ya existe una categoría llamada "{nombre}".')
+        else:
+            nombre = categoria.label
+
+        dias_actuales = {d.dia_semana for d in categoria.dias_permitidos}
+        dias_nuevos = set(datos.dias) if datos.dias is not None else dias_actuales
+        if not dias_nuevos:
+            raise OperacionInvalida("Una categoría necesita al menos un día.")
+
+        dias_a_agregar = dias_nuevos - dias_actuales
+        dias_a_quitar = dias_actuales - dias_nuevos
+
+        horarios_actuales = self.repo_horario.listar(codigo)
+
+        # No se borra historial (decisión #2 de arriba): si CUALQUIER día a
+        # quitar ya tiene asistencias, se aborta TODA la edición antes de
+        # escribir nada -- ni el nombre, ni la franja, ni los otros días.
+        horarios_a_borrar = [h for h in horarios_actuales if h.dia_semana in dias_a_quitar]
+        bloqueados = [h for h in horarios_a_borrar if self.repo_horario.tiene_asistencias(h.id)]
+        if bloqueados:
+            dias_bloqueados = ", ".join(
+                dia_en_castellano(h.dia_semana) for h in bloqueados
+            )
+            raise OperacionInvalida(
+                f"No se puede quitar el día {dias_bloqueados} de {categoria.label}: "
+                "ya tiene asistencias registradas. El historial no se borra.",
+                detalle_tecnico=(
+                    f"categoria={codigo} horario_ids_bloqueados="
+                    f"{[h.id for h in bloqueados]}"
+                ),
+            )
+
+        # Decisión #3: backfillear a los alumnos ya inscriptos en la
+        # categoria dentro de cada día nuevo -- se calcula ANTES de crear
+        # los horarios nuevos (para no incluirse a sí mismos).
+        personas_inscriptas = self.repo_alumno_horario.listar_personas_de_horarios(
+            [h.id for h in horarios_actuales]
+        )
+        horarios_nuevos = [
+            HorarioEntrenamiento(
+                categoria=codigo, dia_semana=d,
+                hora_inicio=nueva_hora_inicio, hora_fin=nueva_hora_fin,
+            )
+            for d in dias_a_agregar
+        ]
+        alumno_horario_nuevos = [
+            AlumnoHorario(persona_id=persona_id, horario=h)
+            for h in horarios_nuevos
+            for persona_id in personas_inscriptas
+        ]
+
+        # Decisión #1: los horarios que QUEDAN también re-derivan su hora
+        # de la categoria -- nunca quedan con una franja vieja.
+        horarios_restantes = [h for h in horarios_actuales if h.dia_semana not in dias_a_quitar]
+        for h in horarios_restantes:
+            h.hora_inicio = nueva_hora_inicio
+            h.hora_fin = nueva_hora_fin
+
+        alumno_horario_a_borrar = [
+            a
+            for h in horarios_a_borrar
+            for a in self.repo_alumno_horario.listar_por_horario_sin_filtro(h.id)
+        ]
+
+        categoria.label = nombre
+        categoria.hora_inicio = nueva_hora_inicio
+        categoria.hora_fin = nueva_hora_fin
+        categoria.dias_permitidos = [
+            d for d in categoria.dias_permitidos if d.dia_semana not in dias_a_quitar
+        ] + [CategoriaHorarioDia(dia_semana=d) for d in dias_a_agregar]
+
+        categoria = self.repo_categoria.guardar_edicion(
+            categoria=categoria,
+            horarios_nuevos=horarios_nuevos,
+            alumno_horario_nuevos=alumno_horario_nuevos,
+            horarios_a_borrar=horarios_a_borrar,
+            alumno_horario_a_borrar=alumno_horario_a_borrar,
+        )
+        return self._a_categoria_dto(categoria)
+
+    def eliminar_categoria(self, codigo: str) -> None:
+        """Baja de la categoria entera -- solo si NINGUNO de sus horarios
+        tiene asistencias registradas (mismo criterio que quitar un día
+        individual, decisión #2 de `actualizar_categoria`: no se borra
+        historial). Todo o nada: si un día bloquea, ninguno se toca."""
+        categoria = self.repo_categoria.obtener_por_codigo(codigo)
+        if categoria is None:
+            raise EntidadNoEncontrada(f"Categoria {codigo} no encontrada")
+
+        horarios = self.repo_horario.listar(codigo)
+        bloqueados = [h for h in horarios if self.repo_horario.tiene_asistencias(h.id)]
+        if bloqueados:
+            dias_bloqueados = ", ".join(dia_en_castellano(h.dia_semana) for h in bloqueados)
+            raise OperacionInvalida(
+                f'No se puede eliminar la categoría "{categoria.label}": el día '
+                f"{dias_bloqueados} tiene asistencias registradas. El historial no se borra.",
+                detalle_tecnico=(
+                    f"categoria={codigo} horario_ids_bloqueados="
+                    f"{[h.id for h in bloqueados]}"
+                ),
+            )
+
+        alumno_horario_a_borrar = [
+            a
+            for h in horarios
+            for a in self.repo_alumno_horario.listar_por_horario_sin_filtro(h.id)
+        ]
+        self.repo_categoria.eliminar_con_horarios(categoria, horarios, alumno_horario_a_borrar)
 
     def actualizar_horario(self, horario_id: int, datos: HorarioUpdateDTO) -> HorarioEntrenamiento:
         horario = self.repo_horario.obtener_por_id(horario_id)
@@ -81,8 +315,6 @@ class AsistenciaServicio:
         if not update_data:
             raise OperacionInvalida("No se proporcionaron campos para actualizar")
         for key, value in update_data.items():
-            if key == "categoria":
-                value = self._codigo_de(value)
             setattr(horario, key, value)
         # Sin `entrenador_id` (issue #13), categoria y dia_semana son los
         # únicos campos actualizables y ambos re-derivan las horas: se
@@ -152,26 +384,109 @@ class AsistenciaServicio:
 
         return self.repo.crear(Asistencia(**datos.model_dump()))
 
-    def historial_por_persona(self, persona_id: int) -> list[Asistencia]:
+    def historial_por_persona(
+        self, persona_id: int, skip: int = 0, limit: Optional[int] = None
+    ) -> tuple[list[Asistencia], int]:
+        """Historial paginado de una persona, más el total de su historial
+        completo (paginado, issue #7 / TRA-6)."""
         if not self.repo_persona.obtener_por_id(persona_id):
             raise EntidadNoEncontrada(f"Persona con id {persona_id} no encontrada")
-        return self.repo.listar_por_persona(persona_id)
+        items = self.repo.listar_por_persona(persona_id, skip=skip, limit=limit)
+        total = self.repo.contar_por_persona(persona_id)
+        return items, total
 
     def generar_reporte(
-        self, horario_id=None, persona_id=None, fecha_inicio=None, fecha_fin=None
+        self, horario_id=None, persona_id=None, fecha_inicio=None, fecha_fin=None,
+        skip: int = 0, limit: Optional[int] = None,
     ) -> list[Asistencia]:
         """E02-RF005: reporte de asistencia por horario, periodo o alumno.
-        No existía ningún endpoint de reporte -- solo el historial fijo por
-        persona de arriba. Los tres filtros son opcionales y combinables."""
+        Los tres filtros son opcionales y combinables. `skip`/`limit` quedan
+        opcionales a propósito: el export a PDF (`reporte_asistencia_pdf`)
+        llama a este mismo método SIN ellos -- un único documento descargado
+        de una vez, no un listado que se recorra en pantalla (issue #7 /
+        TRA-6) -- mientras que el endpoint JSON del reporte sí los pasa."""
         return self.repo.listar_reporte(
+            horario_id=horario_id, persona_id=persona_id,
+            fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+            skip=skip, limit=limit,
+        )
+
+    def contar_reporte(
+        self, horario_id=None, persona_id=None, fecha_inicio=None, fecha_fin=None
+    ) -> int:
+        """Total del reporte FILTRADO -- para el `total` del envelope
+        paginado del endpoint JSON."""
+        return self.repo.contar_reporte(
             horario_id=horario_id, persona_id=persona_id,
             fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
         )
 
+    def _info_membresia_vencida(self, persona_id: int) -> tuple[bool, Optional[int]]:
+        """INS-6 (decisión de negocio #4, 2026-08-11): la cuota vencida NO
+        bloquea la asignación -- esto solo calcula, UNA vez por llamada, el
+        aviso no bloqueante que ve el admin.
+
+        Se mira la membresía MÁS RECIENTE de la persona (por
+        `fecha_activacion`), sin filtrar por la categoria del horario: a lo
+        sumo una membresía puede estar ACTIVA por persona a la vez
+        (`uq_membresia_activa_por_persona`), así que la más reciente es la
+        vigente hoy. No existe en el modelo una relación entre
+        `TipoMembresia.categoria` (etiqueta comercial libre, ej. "Mensual
+        Infantil") y `HorarioEntrenamiento.categoria` (código técnico, ej.
+        "FORMATIVO") -- ese mapeo solo vive, ad hoc, en el seed de
+        desarrollo (`scripts/seed_dev_bulk.py`), no en el dominio.
+
+        Alcance deliberado: solo VENCIDA dispara el aviso. INACTIVA (nunca
+        pagó / aún no se le aprobó un primer pago) es un estado distinto que
+        la decisión de negocio #4 no menciona -- "cuota vencida" describe
+        una membresía que SE ACTIVÓ y luego expiró, no una que nunca
+        arrancó. No se trata como vencida acá.
+        """
+        membresias = self.repo_membresia.listar_por_persona(persona_id)
+        if not membresias:
+            return False, None
+        ultima = max(membresias, key=lambda m: m.fecha_activacion)
+        if ultima.estado != EstadoMembresia.VENCIDA:
+            return False, None
+
+        pagos_aprobados = [p for p in ultima.pagos if p.estado_pago == EstadoPago.APROBADO]
+        if not pagos_aprobados:
+            return True, None
+        ultimo_vencimiento = max(p.fecha_fin for p in pagos_aprobados)
+        dias_vencida = (hoy_club() - ultimo_vencimiento).days
+        return True, max(dias_vencida, 0)
+
+    def listar_ultimas_listas(self, limit: int = 5) -> list[UltimaListaDTO]:
+        """Las últimas `limit` listas del club (horario + fecha), más
+        recientes primero, sin autor -- ver §8 de
+        decisiones-de-negocio-2026-08-11.md. Alimenta el panel del
+        entrenador."""
+        sesiones = self.repo.listar_ultimas_sesiones(limit)
+        resultado = []
+        for s in sesiones:
+            conteos = s["conteos"]
+            presentes = conteos.get(EstadoAsistencia.PRESENTE, 0)
+            tardanzas = conteos.get(EstadoAsistencia.ATRASADO, 0)
+            justificados = conteos.get(EstadoAsistencia.JUSTIFICADO, 0)
+            ausentes = conteos.get(EstadoAsistencia.AUSENTE, 0)
+            resultado.append(UltimaListaDTO(
+                horario_id=s["horario_id"],
+                fecha_entrenamiento=s["fecha_entrenamiento"],
+                dia_semana=s["dia_semana"],
+                hora_inicio=s["hora_inicio"],
+                hora_fin=s["hora_fin"],
+                presentes=presentes,
+                tardanzas=tardanzas,
+                justificados=justificados,
+                ausentes=ausentes,
+                total=presentes + tardanzas + justificados + ausentes,
+            ))
+        return resultado
+
     # --- Asignación directa Alumno ↔ Categoria (todos sus horarios) --------
     def asignar_alumno_a_horario(
         self, datos: AlumnoHorarioCreateDTO
-    ) -> list[AlumnoHorarioDetalleDTO]:
+    ) -> AsignacionAlumnoHorarioResponseDTO:
         """Enrolls a student into the WHOLE training categoria, not just the
         single `horario_id` in the request. The club enrolls by full month —
         never by a loose weekday — so `horario_id` only anchors which
@@ -211,7 +526,12 @@ class AsistenciaServicio:
             AlumnoHorario(persona_id=datos.persona_id, horario_id=h.id)
             for h in pendientes
         ])
-        return [self._a_detalle_dto(a) for a in nuevas]
+        membresia_vencida, dias_vencida = self._info_membresia_vencida(datos.persona_id)
+        return AsignacionAlumnoHorarioResponseDTO(
+            asignaciones=[self._a_detalle_dto(a) for a in nuevas],
+            membresia_vencida=membresia_vencida,
+            dias_vencida=dias_vencida,
+        )
 
     def desasignar_alumno_de_horario(
         self, persona_id: int, horario_id: int
@@ -264,6 +584,15 @@ class AsistenciaServicio:
         )
         total = self.repo_alumno_horario.contar_por_horario(horario_id)
         return [self._a_detalle_dto(a) for a in asignaciones], total
+
+    def listar_roster_de_todos_los_horarios(self) -> list[AlumnoHorarioDetalleDTO]:
+        """TRA-7: roster completo (todos los horarios) en una sola consulta,
+        para el conteo "N inscriptos" de /groups. Deliberadamente SIN
+        paginar: el volumen de filas ya viajaba completo hoy, repartido en 26
+        respuestas (una por horario); esto consolida esas 26 consultas en
+        una sola sin cambiar cuántas filas cruzan la red."""
+        asignaciones = self.repo_alumno_horario.listar_activos_de_todos_los_horarios()
+        return [self._a_detalle_dto(a) for a in asignaciones]
 
     def listar_horarios_por_alumno(self, persona_id: int) -> list[AlumnoHorarioDetalleDTO]:
         """Lista todos los horarios asignados a un alumno específico."""

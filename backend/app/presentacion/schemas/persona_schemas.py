@@ -51,6 +51,17 @@ class RepresentadoCreateDTO(BaseModel):
     institucion_id: Optional[int] = None
 
 
+# --- Vinculación de representado ya existente (INS-2) -----------------------
+class VincularRepresentadoDTO(BaseModel):
+    """Payload de `POST /personas/{representante_id}/vincular-representado`
+    (INS-2, docs/decisiones-de-negocio-2026-08-11.md §1): vincula una Persona
+    YA EXISTENTE en el club a la cuenta del representante que hace la
+    solicitud, identificándola únicamente por cédula. A diferencia de
+    `RepresentadoCreateDTO`, no crea nada -- solo reasigna
+    `Persona.representante_id` de una fila que ya existe."""
+    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+
+
 class PersonaUpdateDTO(BaseModel):
     nombres: Optional[str] = Field(default=None, min_length=1, max_length=100)
     apellidos: Optional[str] = Field(default=None, min_length=1, max_length=100)

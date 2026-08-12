@@ -371,6 +371,28 @@ export const REJECTION_REASONS: RejectionReasonOption[] = [
 ];
 
 /**
+ * How long the free-text note can be before `composeRejectionReason` below
+ * would build a `rejectionReason` the backend refuses.
+ *
+ * The backend's real limit is `motivo_rechazo`'s `max_length=255`
+ * (`PagoValidarDTO`, `backend/app/presentacion/schemas/membresia_pago_
+ * schemas.py`) — but that limit applies to the COMPOSED string
+ * (`"<label> — <note>"`), not to the note alone. 200 leaves room for the
+ * longest label ("El comprobante ya fue usado en otro pago", 41 chars) plus
+ * the " — " separator with margin to spare, so the field's own maxLength
+ * can never itself be the reason a submit gets refused.
+ *
+ * Enforced here, client-side, so the admin sees the cap while typing instead
+ * of discovering it from a server error (hallazgo en vivo, 2026-08-11: with
+ * no cap on the client, a long enough note used to make the *notification*
+ * derived from it overflow ITS OWN column downstream — see
+ * `Notificacion.MENSAJE_MAX`, backend/app/dominio/modelos.py). This cap is
+ * unrelated to that fix: it exists so the field never even approaches
+ * `motivo_rechazo`'s own limit, which is still enforced server-side.
+ */
+export const REJECTION_NOTE_MAX_LENGTH = 200;
+
+/**
  * Build the `rejectionReason` string the backend stores and the payer reads.
  *
  * Returns "" for an unselected or unknown reason so the caller can keep the

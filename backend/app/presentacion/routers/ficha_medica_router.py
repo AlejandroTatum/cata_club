@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
+from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.presentacion.schemas.persona_schemas import (
     FichaMedicaCreateDTO, FichaMedicaResponseDTO, FichaMedicaUpdateDTO,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.ficha_medica_servicio import FichaMedicaServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.servicios_negocio.persona_servicio import _calcular_edad, EDAD_MAYORIA_EDAD
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 
 router = APIRouter(prefix="/fichas-medicas", tags=["Ficha Médica"])
@@ -24,14 +26,41 @@ router = APIRouter(prefix="/fichas-medicas", tags=["Ficha Médica"])
 # no dice DE QUIÉN.
 ROL_ADMIN = ["ADMINISTRADOR"]
 
-# `incluir_titular=False`: a diferencia del resto de los call sites, el propio
-# interesado NO entra. Abrir la ficha de salud al titular es una decisión de
-# producto aparte y todavía no tomada; encenderla luego es borrar este
-# argumento. `roles_privilegiados` queda en el default (SOLO_ADMINISTRADOR):
-# el ENTRENADOR no tiene por qué leer datos de salud.
+# El titular también entra sobre su PROPIA ficha, pero solo si es MAYOR DE
+# EDAD: la ficha tiene un campo de enfermedades, y ahí puede haber algo que la
+# familia todavía no habló con un hijo menor -- abrirla parejo se lo filtraría
+# por la app. Un menor con cuenta propia sigue afuera; la gestiona su
+# representante (el caso que ya cubre `PoliticaAccesoPersona` por el vínculo
+# `representante_id`, sin este chequeo de edad).
+#
+# `PoliticaAccesoPersona.incluir_titular` es una regla COMPARTIDA con
+# personas/asistencias/pagos y su default (True, sin condición de edad) no se
+# toca acá -- cambiarle la semántica le cambiaría la regla a media
+# aplicación. Este router resuelve la edad ACÁ, con el mismo dato
+# (`EDAD_MAYORIA_EDAD`, `_calcular_edad`) que ya usa `PersonaServicio` y que
+# reusan `asistencia_servicio.py`/`membresia_pago_servicio.py` para el mismo
+# tipo de corte -- y sigue pasando `incluir_titular=False` a la política
+# cuando no aplica. `incluir_titular=True` calculado acá reproduce
+# exactamente lo que la política ya hacía por defecto para "es el dueño";
+# el único caso nuevo es dueño + mayor de edad.
+def _es_titular_mayor_de_edad(
+    db: Session, *, persona_id_objetivo: int, persona_id_solicitante: int | None,
+) -> bool:
+    if persona_id_solicitante is None or persona_id_solicitante != persona_id_objetivo:
+        return False
+    persona = PersonaRepositorio(db).obtener_por_id(persona_id_objetivo)
+    if persona is None:
+        # Persona objetivo inexistente: cae al 403 de siempre, no acá. La
+        # política vuelve a resolver esto mismo más abajo -- ver su propio
+        # comentario sobre por qué "inexistente" y "no es mía" dan el mismo
+        # 403 (no distinguirlos es la garantía anti-IDOR).
+        return False
+    return _calcular_edad(persona.fecha_nacimiento) >= EDAD_MAYORIA_EDAD
+
+
 _MENSAJE_SIN_ACCESO = (
-    "Solo un administrador o el representante de esta persona pueden "
-    "acceder a su ficha médica"
+    "Solo un administrador, el representante de esta persona, o la propia "
+    "persona (si es mayor de edad) pueden acceder a su ficha médica"
 )
 
 
@@ -55,14 +84,17 @@ async def obtener_ficha_por_persona(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    """Lectura de la ficha médica: ADMINISTRADOR, o el representante legal de
-    esa persona. La identidad del solicitante sale del token verificado
-    (`persona_id`), nunca del path."""
+    """Lectura de la ficha médica: ADMINISTRADOR, el representante legal de
+    esa persona, o la propia persona si es MAYOR DE EDAD. La identidad del
+    solicitante sale del token verificado (`persona_id`), nunca del path."""
+    persona_id_solicitante = token_payload.get("persona_id")
     PoliticaAccesoPersona(db).exigir_acceso(
         persona_id_objetivo=persona_id,
-        persona_id_solicitante=token_payload.get("persona_id"),
+        persona_id_solicitante=persona_id_solicitante,
         roles_solicitante=token_payload.get("roles"),
-        incluir_titular=False,
+        incluir_titular=_es_titular_mayor_de_edad(
+            db, persona_id_objetivo=persona_id, persona_id_solicitante=persona_id_solicitante,
+        ),
         mensaje=_MENSAJE_SIN_ACCESO,
     )
     return FichaMedicaServicio(db).obtener_por_persona(persona_id)
@@ -83,12 +115,16 @@ async def actualizar_ficha_medica(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    """Mismo criterio que la lectura: ADMINISTRADOR o el representante."""
+    """Mismo criterio que la lectura: ADMINISTRADOR, el representante, o la
+    propia persona si es mayor de edad."""
+    persona_id_solicitante = token_payload.get("persona_id")
     PoliticaAccesoPersona(db).exigir_acceso(
         persona_id_objetivo=persona_id,
-        persona_id_solicitante=token_payload.get("persona_id"),
+        persona_id_solicitante=persona_id_solicitante,
         roles_solicitante=token_payload.get("roles"),
-        incluir_titular=False,
+        incluir_titular=_es_titular_mayor_de_edad(
+            db, persona_id_objetivo=persona_id, persona_id_solicitante=persona_id_solicitante,
+        ),
         mensaje=_MENSAJE_SIN_ACCESO,
     )
     return FichaMedicaServicio(db).actualizar_por_persona(persona_id, datos)

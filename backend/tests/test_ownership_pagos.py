@@ -207,4 +207,7 @@ def test_representante_si_sube_voucher_del_pago_de_su_representado(_mock_cloudin
         files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
     )
     assert resp.status_code == 201, resp.text
-    assert resp.json()["voucherUrl"] == _FAKE_URL_JPG
+    # Mismo candado que test_voucher_pago.py: la URL de entrega se firma
+    # fresca, no es la `secure_url` cruda que devolvió (acá, simuló) el SDK.
+    assert resp.json()["voucherUrl"] != _FAKE_URL_JPG
+    assert "/authenticated/" in resp.json()["voucherUrl"]

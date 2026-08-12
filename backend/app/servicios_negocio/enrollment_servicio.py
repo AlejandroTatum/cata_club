@@ -13,6 +13,8 @@ en un solo request transaccional. Endpoint público (sin auth), rate-limited.
   5. Crear AntecedentesClub (si se proporcionó y tiene nivel_tecnico_alumno).
   6. Emitir tokens JWT para auto-login del representante (o del alumno adulto).
 """
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, AntecedentesClub, Notificacion
@@ -29,9 +31,12 @@ from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.presentacion.schemas.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentCreateDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import (
     _calcular_edad, EDAD_MINIMA_ALUMNO, EDAD_MAXIMA_ALUMNO, EDAD_MAYORIA_EDAD,
 )
+
+logger = logging.getLogger("cataclub.servicios.enrollment")
 
 
 class EnrollmentServicio:
@@ -69,13 +74,26 @@ class EnrollmentServicio:
             if self.repo_usuario.obtener_por_correo(datos.representante.correo):
                 raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 
-            # Validar que el representante sea mayor de edad
+            # Validar que el representante sea mayor de edad. El piso
+            # (EDAD_MAYORIA_EDAD) ya se validaba; el techo no -- una fecha de
+            # nacimiento implausible (patrón auditado: año 1800) pasaba en
+            # silencio porque el cálculo de edad del lado del cliente
+            # devolvía NaN fuera de un rango arbitrario y `NaN < 18` es
+            # `false`. La edad del alumno, arriba, ya valida ambas cotas
+            # (EDAD_MINIMA_ALUMNO/EDAD_MAXIMA_ALUMNO); esta usa el mismo
+            # patrón, reusando EDAD_MAXIMA_ALUMNO como el único techo que
+            # define el sistema.
             edad_rep = _calcular_edad(datos.representante.fecha_nacimiento)
             if edad_rep < EDAD_MAYORIA_EDAD:
                 raise OperacionInvalida(
                     f"El representante legal debe ser mayor de edad "
                     f"({EDAD_MAYORIA_EDAD} años o más); la edad calculada "
                     f"es {edad_rep} años."
+                )
+            if edad_rep > EDAD_MAXIMA_ALUMNO:
+                raise OperacionInvalida(
+                    f"El representante legal debe tener como máximo "
+                    f"{EDAD_MAXIMA_ALUMNO} años (calculado: {edad_rep})."
                 )
 
             # Crear Persona del representante
@@ -225,18 +243,32 @@ class EnrollmentServicio:
         }
 
     def _notificar_nueva_inscripcion(self, alumno: Persona) -> None:
-        """Notifica a todos los administradores sobre una nueva inscripción."""
+        """Notifica a todos los administradores sobre una nueva inscripción.
+
+        La inscripción en sí YA está commiteada cuando esto corre (es el
+        último paso de los tres call sites que lo invocan), así que un
+        fallo al avisar a UN administrador se loguea y no interrumpe el
+        aviso a los demás ni tira la respuesta del endpoint público de
+        autoinscripción."""
         repo_notif = NotificacionRepositorio(self.db)
         rol_admin = self.repo_rol.obtener_por_tipo(TipoRol.ADMINISTRADOR)
         if not rol_admin:
             return
         admins = [u.persona for u in rol_admin.usuarios if u.persona]
-        nombre_alumno = f"{alumno.nombres} {alumno.apellidos}"
+        nombre_alumno = acortar_nombre_para_notificacion(f"{alumno.nombres} {alumno.apellidos}")
         for admin in admins:
-            notif = Notificacion(
-                tipo=TipoNotificacion.NUEVA_INSCRIPCION,
-                mensaje=f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula}).",
-                persona_id=admin.id,
-                entidad_relacionada_id=alumno.id,
-            )
-            repo_notif.crear(notif)
+            try:
+                notif = Notificacion(
+                    tipo=TipoNotificacion.NUEVA_INSCRIPCION,
+                    mensaje=f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula}).",
+                    persona_id=admin.id,
+                    entidad_relacionada_id=alumno.id,
+                )
+                repo_notif.crear(notif)
+            except Exception:
+                self.db.rollback()
+                logger.exception(
+                    "No se pudo avisar al administrador persona_id=%s de la nueva "
+                    "inscripción de persona_id=%s. La inscripción YA está commiteada.",
+                    admin.id, alumno.id,
+                )

@@ -223,16 +223,13 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                           />
                           <TableCell>
                             <div className="flex flex-wrap gap-[5px]">
+                              {/* The state name rides along as real,
+                                  visible text — a bare "9" next to a
+                                  colored dot forced every reader to
+                                  memorize what each color meant. */}
                               {STATE_ORDER.map((estado) => (
                                 <Badge key={estado} tone={getAttendanceBadgeTone(estado)}>
-                                  {sessionRow.counts[estado]}
-                                  {/* A bare "9" tells a screen reader
-                                      nothing; the state name rides along
-                                      without changing the 26px pill. */}
-                                  <span className="sr-only">
-                                    {" "}
-                                    {getAttendanceLabel(estado).toLowerCase()}
-                                  </span>
+                                  {sessionRow.counts[estado]} {getAttendanceLabel(estado)}
                                 </Badge>
                               ))}
                             </div>
@@ -260,6 +257,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                     totalItems={sessions.length}
                     pageSize={PAGE_SIZE}
                     itemNoun="sesión"
+                    itemNounPlural="sesiones"
                   />
                 )}
               </>

@@ -200,6 +200,31 @@ def test_representante_menor_de_edad_rechazado(client, db_session):
     assert "mayor" in resp.json()["detail"].lower()
 
 
+# Auditoría 2026-08-10: una fecha de nacimiento de 1700 (326 años) pasaba sin
+# aviso para JUGADOR/REPRESENTANTE/ENTRENADOR -- esta rama solo validaba el
+# piso (`edad < EDAD_MAYORIA_EDAD`), nunca el techo. El fix de MENOR de la
+# misma tanda usa `EDAD_MINIMA_ALUMNO`/`EDAD_MAXIMA_ALUMNO`; no hay una cota
+# nueva para adultos, así que reutiliza `EDAD_MAXIMA_ALUMNO` (74) -- JUGADOR y
+# REPRESENTANTE ya reciben el rol ALUMNO (`ROLES_POR_TIPO_CUENTA`), y es el
+# único techo que el sistema define.
+@pytest.mark.parametrize("tipo_cuenta,correo", [
+    ("JUGADOR", "jugador_1700@test.com"),
+    ("REPRESENTANTE", "representante_1700@test.com"),
+    ("ENTRENADOR", "entrenador_1700@test.com"),
+])
+def test_edad_imposible_rechazada_para_cuentas_adultas(client, db_session, tipo_cuenta, correo):
+    resp = client.post(
+        "/api/v1/personas/admin/cuentas",
+        json=_base_payload(
+            tipo_cuenta=tipo_cuenta,
+            fecha_nacimiento="1700-01-01",
+            correo=correo,
+        ),
+    )
+    assert resp.status_code == 400
+    assert "74" in resp.json()["detail"]
+
+
 def test_menor_mayor_de_edad_rechazado(client, db_session):
     rep = _crear_representante_adulto(db_session)
     resp = client.post(

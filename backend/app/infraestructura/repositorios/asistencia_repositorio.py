@@ -20,6 +20,28 @@ class HorarioRepositorio:
             stmt = stmt.where(HorarioEntrenamiento.categoria == categoria)
         return list(self.db.execute(stmt).scalars().unique().all())
 
+    def tiene_asistencias(self, horario_id: int) -> bool:
+        """¿Tiene este horario algún registro de `Asistencia`? Usado por
+        `AsistenciaServicio.actualizar_categoria`/`eliminar_categoria` para
+        bloquear -- ANTES de tocar nada -- quitar un día o borrar una
+        categoria entera cuando hay historial: "no se borra historial" es
+        la decisión (docs/fixes/24-abm-categorias.md), y chequear antes
+        evita depender de parsear un `IntegrityError` de un DELETE en lote
+        para saber CUÁL día bloqueó."""
+        stmt = select(Asistencia.id).where(Asistencia.horario_id == horario_id)
+        return self.db.execute(stmt).first() is not None
+
+    def existe_categoria_dia(self, categoria: str, dia_semana) -> bool:
+        """INS-3: ¿ya hay una fila para este (categoria, dia_semana)? Usado
+        por `AsistenciaServicio.crear_horario` para rechazar el duplicado
+        con un mensaje legible ANTES de que lo haga el UNIQUE de la base
+        (`uq_horario_categoria_dia`, migración `b7e4a9f2c6d1`)."""
+        stmt = select(HorarioEntrenamiento.id).where(
+            HorarioEntrenamiento.categoria == categoria,
+            HorarioEntrenamiento.dia_semana == dia_semana,
+        )
+        return self.db.execute(stmt).first() is not None
+
     def crear(self, horario: HorarioEntrenamiento) -> HorarioEntrenamiento:
         self.db.add(horario)
         self.db.commit()
@@ -68,7 +90,12 @@ class AsistenciaRepositorio:
         )
         return self.db.execute(stmt).scalars().first()
 
-    def listar_por_persona(self, persona_id: int) -> List[Asistencia]:
+    def listar_por_persona(
+        self, persona_id: int, skip: int = 0, limit: Optional[int] = None
+    ) -> List[Asistencia]:
+        # Más reciente primero, con el id de desempate para que el orden sea
+        # TOTAL -- lo que hace determinista al OFFSET/LIMIT (issue #7, mismo
+        # criterio que `MembresiaRepositorio.listar`).
         stmt = (
             select(Asistencia)
             .options(
@@ -76,8 +103,23 @@ class AsistenciaRepositorio:
                 joinedload(Asistencia.horario),
             )
             .where(Asistencia.persona_id == persona_id)
+            .order_by(Asistencia.fecha_entrenamiento.desc(), Asistencia.id.desc())
+            .offset(skip)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return list(self.db.execute(stmt).scalars().all())
+
+    def contar_por_persona(self, persona_id: int) -> int:
+        """Total del historial de ESA persona -- mismo filtro que
+        `listar_por_persona`, para que el `total` del envelope paginado
+        cuente el historial completo y no la página."""
+        stmt = (
+            select(func.count())
+            .select_from(Asistencia)
+            .where(Asistencia.persona_id == persona_id)
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def listar_reporte(
         self,
@@ -85,9 +127,37 @@ class AsistenciaRepositorio:
         persona_id: Optional[int] = None,
         fecha_inicio=None,
         fecha_fin=None,
+        skip: int = 0,
+        limit: Optional[int] = None,
     ) -> List[Asistencia]:
         """E02-RF005: reporte de asistencia por horario, periodo o alumno.
-        Los tres filtros son opcionales y combinables."""
+        Los tres filtros son opcionales y combinables. `skip`/`limit` quedan
+        opcionales (no forzados por el endpoint JSON, ver issue #7 / TRA-6)
+        porque el export a PDF (`AsistenciaServicio.generar_reporte` sin
+        argumentos) necesita el conjunto completo en una sola consulta."""
+        query = self._query_reporte(horario_id, persona_id, fecha_inicio, fecha_fin)
+        # Id de desempate: `fecha_entrenamiento` sola no da un orden TOTAL
+        # (varias sesiones el mismo día), y sin eso el OFFSET/LIMIT puede
+        # repetir o saltear filas entre páginas.
+        query = query.order_by(Asistencia.fecha_entrenamiento.desc(), Asistencia.id.desc())
+        query = query.offset(skip)
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
+
+    def contar_reporte(
+        self,
+        horario_id: Optional[int] = None,
+        persona_id: Optional[int] = None,
+        fecha_inicio=None,
+        fecha_fin=None,
+    ) -> int:
+        """Total del conjunto FILTRADO (mismos filtros que `listar_reporte`),
+        no de la tabla entera -- para que el `total` del envelope paginado
+        sea el del reporte pedido."""
+        return self._query_reporte(horario_id, persona_id, fecha_inicio, fecha_fin).count()
+
+    def _query_reporte(self, horario_id, persona_id, fecha_inicio, fecha_fin):
         query = self.db.query(Asistencia).options(
             joinedload(Asistencia.persona),
             joinedload(Asistencia.horario),
@@ -100,7 +170,59 @@ class AsistenciaRepositorio:
             query = query.filter(Asistencia.fecha_entrenamiento >= fecha_inicio)
         if fecha_fin is not None:
             query = query.filter(Asistencia.fecha_entrenamiento <= fecha_fin)
-        return query.order_by(Asistencia.fecha_entrenamiento.desc()).all()
+        return query
+
+    def listar_ultimas_sesiones(self, limit: int = 5) -> List[dict]:
+        """Las últimas `limit` sesiones (pares horario_id + fecha) que
+        tienen al menos una Asistencia, más recientes primero, con un
+        conteo por estado -- todo derivado de `Asistencia` +
+        `HorarioEntrenamiento`, sin tabla nueva (ver §8 de
+        decisiones-de-negocio-2026-08-11.md).
+
+        Dos consultas: una para encontrar los `limit` pares más recientes,
+        otra por par para sus conteos. `limit` está acotado (tope 20 en el
+        router) así que el N+1 es del mismo tamaño pequeño ya aceptado en
+        `fetchPersonaNameMap` del frontend, no una consulta por fila de
+        `Asistencia`."""
+        pares_stmt = (
+            select(
+                Asistencia.fecha_entrenamiento,
+                Asistencia.horario_id,
+                HorarioEntrenamiento.dia_semana,
+                HorarioEntrenamiento.hora_inicio,
+                HorarioEntrenamiento.hora_fin,
+            )
+            .join(HorarioEntrenamiento, HorarioEntrenamiento.id == Asistencia.horario_id)
+            .group_by(
+                Asistencia.fecha_entrenamiento, Asistencia.horario_id,
+                HorarioEntrenamiento.dia_semana, HorarioEntrenamiento.hora_inicio,
+                HorarioEntrenamiento.hora_fin,
+            )
+            .order_by(Asistencia.fecha_entrenamiento.desc(), HorarioEntrenamiento.hora_inicio.desc())
+            .limit(limit)
+        )
+        pares = self.db.execute(pares_stmt).all()
+
+        sesiones: List[dict] = []
+        for fecha, horario_id, dia_semana, hora_inicio, hora_fin in pares:
+            conteo_stmt = (
+                select(Asistencia.estado, func.count())
+                .where(
+                    Asistencia.horario_id == horario_id,
+                    Asistencia.fecha_entrenamiento == fecha,
+                )
+                .group_by(Asistencia.estado)
+            )
+            conteos = dict(self.db.execute(conteo_stmt).all())
+            sesiones.append({
+                "horario_id": horario_id,
+                "fecha_entrenamiento": fecha,
+                "dia_semana": dia_semana,
+                "hora_inicio": hora_inicio,
+                "hora_fin": hora_fin,
+                "conteos": conteos,
+            })
+        return sesiones
 
 
 class AlumnoHorarioRepositorio:
@@ -149,6 +271,33 @@ class AlumnoHorarioRepositorio:
             self.db.delete(fila)
         self.db.commit()
 
+    def listar_por_horario_sin_filtro(self, horario_id: int) -> List[AlumnoHorario]:
+        """Todas las filas de un horario, sin filtrar por alumno activo ni
+        paginar -- el mismo conjunto que recorre `eliminar_por_horario`,
+        pero SIN comprometer la transacción acá: usado por
+        `AsistenciaServicio.actualizar_categoria`/`eliminar_categoria`,
+        que arma un lote de deletes y los aplica en un único `commit()`
+        vía `CategoriaRepositorio` (edición/baja atómica de la
+        categoria)."""
+        stmt = select(AlumnoHorario).where(AlumnoHorario.horario_id == horario_id)
+        return list(self.db.execute(stmt).scalars().all())
+
+    def listar_personas_de_horarios(self, horario_ids: List[int]) -> set[int]:
+        """`persona_id` únicos inscriptos en cualquiera de estos horarios --
+        el roster actual de una categoria (por la inscripción atómica, todo
+        alumno de la categoria está en TODOS sus horarios vigentes, así que
+        cualquiera de ellos alcanza para reconstruirlo). Usado para
+        backfillear el `alumno_horario` de un día recién agregado a una
+        categoria con alumnos ya inscriptos."""
+        if not horario_ids:
+            return set()
+        stmt = (
+            select(AlumnoHorario.persona_id)
+            .where(AlumnoHorario.horario_id.in_(horario_ids))
+            .distinct()
+        )
+        return set(self.db.execute(stmt).scalars().all())
+
     def obtener_por_persona_y_horario(
         self, persona_id: int, horario_id: int
     ) -> Optional[AlumnoHorario]:
@@ -178,6 +327,21 @@ class AlumnoHorarioRepositorio:
         )
         if limit is not None:
             stmt = stmt.limit(limit)
+        return list(self.db.execute(stmt).scalars().unique().all())
+
+    def listar_activos_de_todos_los_horarios(self) -> List[AlumnoHorario]:
+        """Roster completo de TODOS los horarios en UNA consulta (TRA-7):
+        reemplaza las 26 llamadas de `listar_por_horario` (una por horario,
+        fijas -- no crecen con el padrón) que alimentaban el conteo "N
+        inscriptos" de /groups. Mismo filtro de baja lógica que su hermano;
+        `.horario` va eager-loaded para que `_a_detalle_dto` no dispare una
+        consulta lazy por cada uno de los ~26 horarios distintos."""
+        stmt = (
+            select(AlumnoHorario)
+            .options(joinedload(AlumnoHorario.persona), joinedload(AlumnoHorario.horario))
+            .join(Persona, Persona.id == AlumnoHorario.persona_id)
+            .where(Persona.activo.is_(True))
+        )
         return list(self.db.execute(stmt).scalars().unique().all())
 
     def contar_por_horario(self, horario_id: int) -> int:
