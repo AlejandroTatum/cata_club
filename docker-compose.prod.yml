@@ -4,18 +4,31 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml <comando>
 #
-# Deliberadamente angosto en esta PR (sdd/production-readiness, PR-14): la
-# base ya no tiene `build:` ni puertos publicados, así que este overlay no
+# La base ya no tiene `build:` ni puertos publicados, así que este overlay no
 # necesita QUITAR nada -- esa es la propiedad estructural que buscaba la
 # decisión de diseño 4.1 (los overlays de Compose se fusionan, nunca pueden
-# remover una clave). Caddy (TLS + reverse proxy) y logging rotado quedan
-# para la continuación de esta PR (ver decisiones de diseño 4.5/4.7): no
-# forman parte de la propiedad de seguridad medida (build en el droplet
-# OOM-ea un 2GB) que esta PR entrega. Los límites de memoria por servicio
-# (decisión de diseño 4.6) YA están resueltos acá, con `mem_limit`: es lo
-# que `docker compose up` honra fuera de Swarm, a diferencia de
-# `deploy.resources.limits`, que Compose solo aplica en modo Swarm y por eso
-# no tiene ningún efecto en este despliegue.
+# remover una clave). El contrato de operación de producción queda completo
+# acá, con tres piezas:
+#
+#   - Ingress con TLS automático (servicio `caddy`, más abajo): es el ÚNICO
+#     servicio con puertos publicados (80/443) en todo el stack de
+#     producción -- el backend nunca se expone a internet, lo consume el
+#     frontend por la red interna de Docker (decisión de arquitectura ya
+#     verificada). Ver tests/test_docker_compose_config.py:
+#     test_el_render_de_produccion_solo_caddy_publica_puertos_y_son_80_443.
+#     La configuración del proxy vive versionada en `./Caddyfile` (montada
+#     de solo lectura), no en `command:` -- así se puede diffear y validar
+#     (`caddy validate`) sin levantar el stack.
+#   - Límites de memoria por servicio (decisión de diseño 4.6), con
+#     `mem_limit`: es lo que `docker compose up` honra fuera de Swarm, a
+#     diferencia de `deploy.resources.limits`, que Compose solo aplica en
+#     modo Swarm y por eso no tiene ningún efecto en este despliegue.
+#   - Rotación de logs (`logging:`) en los siete servicios del render: sin
+#     ella, `json-file` (el driver por defecto de Docker) escribe sin límite
+#     y el disco de 50GB del droplet se llena en silencio -- Postgres es el
+#     primer servicio en morir sin espacio (no puede escribir WAL). Ver el
+#     cálculo de presupuesto más abajo, junto a la primera declaración.
+#
 # `SMTP_STARTTLS` se repite en los tres servicios porque cada uno resuelve
 # `environment: *backend_env` a su propia copia del mapa base ANTES de que
 # este overlay se fusione: un override puesto solo en `backend:` acá no
