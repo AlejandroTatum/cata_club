@@ -23,7 +23,7 @@ import { useRouter } from "next/navigation";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import BackLink from "@/components/BackLink";
+import { BackLink } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { WizardInput, WizardNavigation } from "@/components/wizard-fields";
 import { crearCuentaAdmin, searchStudents, fetchInstituciones, type Institucion } from "@/services/api";
@@ -786,7 +786,7 @@ function CrearCuentaContent(): React.ReactElement {
         </div>
       ) : (
         <>
-          <BackLink href="/members" label="Volver a Miembros" />
+          <BackLink href="/members" label="Volver a Miembros" className="mb-6" />
 
           {/* Progress bar */}
           <div>

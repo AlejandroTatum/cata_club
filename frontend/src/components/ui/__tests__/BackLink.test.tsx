@@ -43,20 +43,46 @@ describe("BackLink — never a bare \"Volver\"", () => {
   });
 });
 
-describe("BackLink — visible border, not a bare link", () => {
-  it("wears a real border a user does not have to guess is there", () => {
+describe("BackLink — the canonical red-outline skin", () => {
+  it("wears a real border in the institutional red, not a bare link", () => {
     render(<BackLink href="/queue" label="Volver a la cola" />);
     const link = screen.getByRole("link", { name: /volver a la cola/i });
     expect(link.className).toMatch(/\bborder\b/);
-    expect(link).toHaveClass("border-line-2");
+    expect(link).toHaveClass("border-cata-red");
+  });
+
+  it("rests on a transparent background, below the filled primary CTA", () => {
+    render(<BackLink href="/queue" label="Volver a la cola" />);
+    const link = screen.getByRole("link", { name: /volver a la cola/i });
+    expect(link).toHaveClass("bg-transparent");
+    expect(link).not.toHaveClass("bg-cata-red");
+  });
+
+  it("sets text in the AA stop of the institutional red", () => {
+    render(<BackLink href="/queue" label="Volver a la cola" />);
+    const link = screen.getByRole("link", { name: /volver a la cola/i });
+    expect(link).toHaveClass("text-cata-red-dark");
+  });
+
+  it("gives hover and focus-visible a clearly visible red wash", () => {
+    render(<BackLink href="/queue" label="Volver a la cola" />);
+    const link = screen.getByRole("link", { name: /volver a la cola/i });
+    expect(link.className).toMatch(/hover:bg-cata-red\/10/);
+    expect(link.className).toMatch(/focus-visible:bg-cata-red\/10/);
+  });
+
+  it("keeps the accessible minimum pointer/touch target height", () => {
+    render(<BackLink href="/queue" label="Volver a la cola" />);
+    const link = screen.getByRole("link", { name: /volver a la cola/i });
+    expect(link).toHaveClass("h-ctl-sm");
   });
 });
 
 describe("BackLink — passthrough", () => {
-  it("forwards an extra className without dropping the button skin", () => {
+  it("forwards an extra className without dropping the canonical skin", () => {
     render(<BackLink href="/queue" label="Volver a la cola" className="ml-2" />);
     const link = screen.getByRole("link", { name: /volver a la cola/i });
-    expect(link).toHaveClass("ml-2", "border-line-2");
+    expect(link).toHaveClass("ml-2", "border-cata-red");
   });
 });
 

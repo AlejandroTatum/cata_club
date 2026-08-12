@@ -16,8 +16,7 @@
 import { HelpCircle } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
-import BackLink from "@/components/BackLink";
-import { Button } from "@/components/ui";
+import { BackLink, Button } from "@/components/ui";
 import { openHelpChat } from "@/components/chatbot/help-chat-store";
 import { FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
 
@@ -27,7 +26,7 @@ export default function AyudaPage(): React.ReactElement {
       title="Preguntas frecuentes"
       subtitle="Cómo funciona la app del club, sección por sección."
     >
-      <BackLink href="/" label="Volver al inicio" />
+      <BackLink href="/" label="Volver al inicio" className="mb-6" />
 
       <div className="mx-auto flex max-w-3xl flex-col gap-page">
         {/*
