@@ -24,9 +24,9 @@
 services:
   # Valores de arranque del presupuesto de memoria (decisión de diseño 4.6):
   # db 320m | redis 64m | backend 320m | celery-worker 320m | celery-beat
-  # 160m | frontend 256m. Suman 1440m sobre los 2048m del droplet, dejando
-  # margen para el sistema operativo y los picos. `mem_limit` (no
-  # `deploy.resources.limits`, ver arriba) es lo único que `docker compose
+  # 160m | frontend 256m | caddy 48m. Suman 1488m sobre los 2048m del
+  # droplet, dejando margen para el sistema operativo y los picos. `mem_limit`
+  # (no `deploy.resources.limits`, ver arriba) es lo único que `docker compose
   # up` honra fuera de Swarm.
   db:
     mem_limit: 320m
@@ -70,3 +70,57 @@ services:
 
   frontend:
     mem_limit: 256m
+
+  # Ingress único del stack de producción. Imagen oficial con tag fijo (nunca
+  # `latest`: un `docker compose pull` sin aviso no debe poder cambiar de
+  # versión mayor el único servicio con TLS y puertos públicos).
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Named volumes, MANDATORIOS: sin `/data` persistente, cada reinicio
+      # del contenedor pierde los certificados de Let's Encrypt, y la
+      # emisión tiene límites de tasa -- un puñado de reinicios seguidos
+      # deja el sitio sin certificado válido durante aproximadamente una
+      # semana. `/config` guarda el estado de configuración autogenerado
+      # (JSON derivado del Caddyfile); se persiste por la misma razón,
+      # aunque su pérdida sea menos grave que la de `/data`.
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      # Mismo patrón que CORS_ORIGENES: sin default utilizable en
+      # producción, para que un despliegue sin exportar DOMINIO falle en
+      # el render de compose -- antes de que el contenedor arranque mal --
+      # en vez de emitir un certificado para un host equivocado o ninguno.
+      # `{$DOMINIO}` en ./Caddyfile lee esta misma variable directamente
+      # del entorno del proceso Caddy.
+      DOMINIO: "${DOMINIO:?Error: define DOMINIO en el entorno de producción (dominio real del frontend, para el certificado TLS)}"
+      ACME_EMAIL: "${ACME_EMAIL:?Error: define ACME_EMAIL en el entorno de producción (contacto para avisos de Let's Encrypt sobre el certificado)}"
+    depends_on:
+      # `condition: service_healthy`: la base (`docker-compose.yml`) ya
+      # declara `healthcheck` para `frontend` -- ver el `depends_on` de ahí
+      # mismo, que usa la misma condición para pasar de `backend` a
+      # `frontend`. Caddy espera lo mismo: no tiene sentido rutear tráfico
+      # público hacia un frontend que todavía no responde.
+      frontend:
+        condition: service_healthy
+    mem_limit: 48m
+    healthcheck:
+      # Contra la API de administración de Caddy (127.0.0.1:2019, activa por
+      # defecto dentro del contenedor) en vez de contra `{$DOMINIO}`: la
+      # sonda no debe depender de resolución DNS externa ni de que el
+      # handshake TLS con Let's Encrypt ya haya emitido el certificado.
+      # `caddy:2.8-alpine` trae `wget` (BusyBox).
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  caddy_data:
+  caddy_config:
