@@ -54,21 +54,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # Cazamoscas de correo para DESARROLLO. Sus puertos publicados (1025 SMTP,
-  # 8025 UI web) viven en `docker-compose.override.yml`, NO acá: la UI no
-  # tiene autenticación de ningún tipo, y con ellos en la base el render de
-  # producción los publicaba en 0.0.0.0 -- los overlays de Compose solo
-  # fusionan, jamás pueden remover una clave, así que
-  # `docker-compose.prod.yml` no tenía forma de quitarlos. Como
-  # `SMTP_HOST: ${SMTP_HOST:-mailpit}`, un operador que no sobrescriba el
-  # SMTP manda el correo transaccional real (incluidos los enlaces de
-  # recuperación de contraseña) a un buzón abierto a internet.
-  mailpit:
-    image: axllent/mailpit:latest
-    restart: unless-stopped
-    environment:
-      MP_MAX_MESSAGES: 500
-
   backend:
     # Imagen publicada en GHCR por el CI de ESTE repositorio, bajo el
     # namespace de su dueño actual, con el tag `IMAGE_TAG` (ver decisión de
