@@ -29,6 +29,8 @@ import {
   REFRESH_TOKEN_COOKIE,
   ACCESS_TOKEN_MAX_AGE_SECONDS,
   REFRESH_TOKEN_MAX_AGE_SECONDS,
+  type AuthResult,
+  type BackendLoginResponse,
 } from "../auth";
 import type { UserRole } from "@/types/domain";
 
@@ -125,6 +127,90 @@ describe("backendFetch", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.error.code).toBe("backend_unavailable");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// backendFetch — the deadline, and who gets to change it (issue #197)
+//
+// The deadlines are written here as literal milliseconds on purpose, not
+// imported from ../auth: a test that reads the same constant the code reads
+// moves with it and can never notice it changed. These numbers are the
+// contract — 10 s for everything, and only what asks for it gets more.
+// ---------------------------------------------------------------------------
+
+/**
+ * A backend that never answers on its own: the returned promise settles only
+ * when the `AbortSignal` `backendFetch` handed to `fetch` actually fires.
+ * Everything these tests observe about a deadline is therefore a real abort
+ * reaching the caller, not a timer inspected from the inside.
+ */
+function backendQueSoloRespondeAlAbort(): void {
+  vi.mocked(global.fetch).mockImplementation(
+    (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = (init as RequestInit | undefined)?.signal;
+        if (!signal) {
+          reject(new Error("backendFetch dejó de pasar un AbortSignal — no hay plazo que observar."));
+          return;
+        }
+        signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      }),
+  );
+}
+
+const TIMEOUT_ESPERADO = { ok: false, error: { code: "timeout", message: expect.any(String) } };
+
+describe("backendFetch — plazo por llamada", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    backendQueSoloRespondeAlAbort();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("aborta a los 10 s cuando no se le pasa plazo, y ni un milisegundo antes", async () => {
+    const observado: AuthResult<Response>[] = [];
+    const pendiente = backendFetch("/auth/login", { method: "POST" }).then((r) => observado.push(r));
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(observado).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(observado).toHaveLength(1);
+    await pendiente;
+    expect(observado[0]).toEqual(TIMEOUT_ESPERADO);
+  });
+
+  it("respeta el plazo explícito en vez del default", async () => {
+    const observado: AuthResult<Response>[] = [];
+    const pendiente = backendFetch("/reportes/pdf", { method: "GET" }, { timeoutMs: 60_000 }).then((r) =>
+      observado.push(r),
+    );
+
+    // El default habría cortado acá. No es este el plazo de esta llamada.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(observado).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(50_000);
+    expect(observado).toHaveLength(1);
+    await pendiente;
+    expect(observado[0]).toEqual(TIMEOUT_ESPERADO);
+  });
+
+  it("mantiene el default de 10 s para la autenticación aunque exista el plazo largo", async () => {
+    const observado: AuthResult<BackendLoginResponse>[] = [];
+    const pendiente = backendLogin("admin@cataclub.com", "admin123").then((r) => observado.push(r));
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(observado).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(observado).toHaveLength(1);
+    await pendiente;
+    expect(observado[0]).toEqual(TIMEOUT_ESPERADO);
   });
 });
 

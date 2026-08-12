@@ -12,12 +12,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   ACCESS_TOKEN_COOKIE,
+  PDF_BACKEND_TIMEOUT_MS,
   REFRESH_TOKEN_COOKIE,
   backendFetch,
   backendRefresh,
   isNearExpiry,
   setAuthCookies,
   type AuthErrorCode,
+  type BackendFetchOptions,
 } from "@/lib/server/auth";
 
 /** Same threshold used by /api/auth/session — refresh proactively with 5 minutes left. */
@@ -78,11 +80,16 @@ const STATUS_BY_ERROR: Record<AuthErrorCode, number> = {
  * Callers that receive `refreshedAccessToken` MUST call `setAuthCookies`
  * (from `src/lib/server/auth.ts`) on their own `NextResponse` before
  * returning, or the refreshed token is silently dropped on this request.
+ *
+ * `options` is forwarded to `backendFetch` and applies only to the resource
+ * call (both the first attempt and the post-refresh retry). The token refresh
+ * itself is an auth round trip and keeps the default deadline.
  */
 export async function backendFetchAuthed(
   request: NextRequest,
   path: string,
   init: RequestInit = {},
+  options: BackendFetchOptions = {},
 ): Promise<BackendProxyResult> {
   const resolved = await resolveAccessToken(request);
   if (!resolved) {
@@ -90,7 +97,7 @@ export async function backendFetchAuthed(
   }
 
   const attempt = (token: string) =>
-    backendFetch(path, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } });
+    backendFetch(path, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } }, options);
 
   let result = await attempt(resolved.token);
   let refreshedAccessToken = resolved.refreshedAccessToken;
@@ -163,9 +170,13 @@ export async function proxyBackendGet(request: NextRequest, path: string, errorM
  * `Content-Disposition` FastAPI sent (falling back to `attachment` if
  * absent). Extracted so the report PDF routes under `src/app/api/` don't
  * each reimplement this same arrayBuffer-then-NextResponse tail.
+ *
+ * This is the one caller that overrides the backend deadline: generating a
+ * report is not authenticating, so it gets `PDF_BACKEND_TIMEOUT_MS` instead
+ * of the auth-sized default (issue #197).
  */
 export async function proxyBackendPdfGet(request: NextRequest, path: string, errorMessage: string): Promise<NextResponse> {
-  const result = await backendFetchAuthed(request, path);
+  const result = await backendFetchAuthed(request, path, {}, { timeoutMs: PDF_BACKEND_TIMEOUT_MS });
   if (!result.ok) {
     return NextResponse.json({ message: errorMessage }, { status: result.status });
   }
