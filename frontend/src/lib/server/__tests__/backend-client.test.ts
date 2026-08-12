@@ -447,4 +447,66 @@ describe("plazo del backend", () => {
     expect(observado[0].status).toBe(503);
     expect(await observado[0].json()).toEqual({ message: "No se pudo exportar" });
   });
+
+  it("comparte un único plazo no-default entre 401, refresh y reintento", async () => {
+    let resourceCallCount = 0;
+    vi.mocked(global.fetch).mockImplementation((input, init) => {
+      const url = String(input);
+      const signal = init?.signal;
+
+      if (url.endsWith("/reportes/pagos.pdf")) {
+        resourceCallCount += 1;
+        if (resourceCallCount > 1) {
+          return new Promise<Response>((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+          });
+        }
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => resolve(jsonResponse({ detail: "Token expirado" }, 401)), 5_000);
+          signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          }, { once: true });
+        });
+      }
+
+      if (url.endsWith("/auth/refresh")) {
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(
+            () => resolve(jsonResponse({ access_token: "token-reintento", token_type: "bearer" })),
+            5_000,
+          );
+          signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          }, { once: true });
+        });
+      }
+
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+    });
+
+    const observado: BackendProxyResult[] = [];
+    const pendiente = backendFetchAuthed(
+      requestWith({ access: TOKEN_VIGENTE, refresh: "refresh-valido" }),
+      "/reportes/pagos.pdf",
+      {},
+      { timeoutMs: 60_000 },
+    ).then((result) => observado.push(result));
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(observado).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(49_999);
+    expect(observado).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await pendiente;
+
+    expect(observado).toEqual([{ ok: false, status: 503, error: "timeout" }]);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+  });
 });
