@@ -301,8 +301,9 @@ describe("TrainerAttendanceHistoryPage", () => {
     });
     expect(mockFetchAttendanceRecords.mock.calls[0][0]).toMatchObject({ personaId: 42 });
 
-    // And the selection can be undone without retyping.
-    fireEvent.click(screen.getByRole("button", { name: "Limpiar selección" }));
+    // And the selection can be undone without retyping — the search's own X
+    // invalidates it (issue #200): no separate "Limpiar selección" action.
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
     await waitFor(() => {
       expect(mockFetchAttendanceRecords).toHaveBeenCalledTimes(2);
     });

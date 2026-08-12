@@ -296,6 +296,54 @@ describe("ReportsPage — preview area", () => {
     });
   });
 
+  it("drops the alumno from the next preview when the search's X is pressed (issue #200)", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/asistencia/i);
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
+    mockFetchAttendanceRecords.mockClear();
+
+    await pickStudent();
+    await waitFor(() => {
+      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith(
+        expect.objectContaining({ personaId: 35 }),
+      );
+    });
+    mockFetchAttendanceRecords.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
+
+    await waitFor(() => {
+      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({});
+    });
+  });
+
+  it("drops the alumno from the next preview when the text is edited after selecting (issue #200)", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/asistencia/i);
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
+    mockFetchAttendanceRecords.mockClear();
+
+    await pickStudent();
+    await waitFor(() => {
+      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith(
+        expect.objectContaining({ personaId: 35 }),
+      );
+    });
+    mockFetchAttendanceRecords.mockClear();
+
+    fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana Garcí" } });
+
+    await waitFor(() => {
+      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({});
+    });
+  });
+
   it("previews pagos with the estado filter applied", async () => {
     mockFetchPagosReporte.mockResolvedValue([PAGO]);
     render(<ReportsPage />);

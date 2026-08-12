@@ -6,16 +6,32 @@
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import AttendanceFilters, {
   type AttendanceFiltersController,
 } from "@/components/attendance/AttendanceFilters";
+import type { PersonaBusqueda } from "@/types/domain";
 
 // The panel is what is under test; the student typeahead pulls in the API layer
-// and answers a different question.
+// and answers a different question. The seam mirrors the shared primitive's own
+// contract (issue #200): its clear control must reach the parent's `onClear`.
 vi.mock("@/components/StudentSearch", () => ({
-  default: (): React.ReactElement => <input aria-label="Buscar alumno" />,
+  default: ({
+    onClear,
+  }: {
+    onSelect?: (alumno: unknown) => void;
+    onClear?: () => void;
+  }): React.ReactElement => (
+    <div>
+      <input aria-label="Buscar alumno" />
+      <button type="button" onClick={onClear}>
+        clear search
+      </button>
+    </div>
+  ),
 }));
+
+const ALUMNO: PersonaBusqueda = { id: 42, nombres: "Ana", apellidos: "García" };
 
 const controller: AttendanceFiltersController = {
   preset: "this_month",
@@ -30,7 +46,6 @@ const controller: AttendanceFiltersController = {
   student: null,
   selectStudent: () => {},
   clearStudent: () => {},
-  studentResetSignal: 0,
   query: null,
 };
 
@@ -75,5 +90,24 @@ describe("AttendanceFilters container styling", () => {
     const panel = renderPanel();
 
     expect(panel.className).not.toMatch(/\bm[btly]?-/);
+  });
+});
+
+describe("AttendanceFilters — alumno clear contract (issue #200)", () => {
+  it("offers no separate clear action — the search's own control is the only one", () => {
+    render(<AttendanceFilters filters={{ ...controller, student: ALUMNO }} schedules={[]} />);
+
+    expect(screen.queryByRole("button", { name: /limpiar selección/i })).not.toBeInTheDocument();
+  });
+
+  it("wires the search's own clear to drop the selected student", () => {
+    const clearStudent = vi.fn();
+    render(
+      <AttendanceFilters filters={{ ...controller, student: ALUMNO, clearStudent }} schedules={[]} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /clear search/i }));
+
+    expect(clearStudent).toHaveBeenCalledTimes(1);
   });
 });
