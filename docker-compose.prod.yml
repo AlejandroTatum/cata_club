@@ -37,10 +37,16 @@
 services:
   # Valores de arranque del presupuesto de memoria (decisión de diseño 4.6):
   # db 320m | redis 64m | backend 320m | celery-worker 320m | celery-beat
-  # 160m | frontend 256m | caddy 48m. Suman 1488m sobre los 2048m del
+  # 160m | frontend 256m | caddy 96m. Suman 1536m sobre los 2048m del
   # droplet, dejando margen para el sistema operativo y los picos. `mem_limit`
   # (no `deploy.resources.limits`, ver arriba) es lo único que `docker compose
   # up` honra fuera de Swarm.
+  #
+  # `caddy` subió de 48m a 96m: era la asignación más chica del stack y es
+  # el único servicio que termina TLS y comprime todo el tráfico entrante --
+  # si se pasa, el OOM-kill tumba el único camino público. 96m tampoco está
+  # medido: es un techo con margen, no un número derivado de una prueba de
+  # carga.
   #
   # Presupuesto de rotación de logs, común a los siete servicios de abajo:
   # `max-size: "10m"` x `max-file: "3"` = 30MB tope por servicio x 7 =
@@ -164,7 +170,7 @@ services:
       # corre.
       frontend:
         condition: service_started
-    mem_limit: 48m
+    mem_limit: 96m
     healthcheck:
       # Contra la API de administración de Caddy (127.0.0.1:2019, activa por
       # defecto dentro del contenedor) en vez de contra `{$DOMINIO}`: la
