@@ -38,6 +38,14 @@ _JWT_PARA_RENDER = "0" * 64
 # valor; solo de que exista.
 _CORS_PARA_RENDER = "http://localhost-para-tests.invalid"
 
+# Mismo patrón, para `DOMINIO` y `ACME_EMAIL` (`${DOMINIO:?...}` /
+# `${ACME_EMAIL:?...}` en el servicio `caddy` de `docker-compose.prod.yml`):
+# cualquier render de producción que no fije estas variables aborta, así
+# que hace falta un valor centinela en TODA renderización de este archivo,
+# no solo en los tests que prueban el ingress.
+_DOMINIO_PARA_RENDER = "ejemplo-para-tests.invalid"
+_ACME_EMAIL_PARA_RENDER = "acme-tests@ejemplo.invalid"
+
 
 def _ejecutar_config(
     *archivos_compose: str,
@@ -54,6 +62,8 @@ def _ejecutar_config(
     entorno_final = {
         "JWT_SECRET_KEY": _JWT_PARA_RENDER,
         "CORS_ORIGENES": _CORS_PARA_RENDER,
+        "DOMINIO": _DOMINIO_PARA_RENDER,
+        "ACME_EMAIL": _ACME_EMAIL_PARA_RENDER,
         **os.environ,
         **(entorno or {}),
     }
@@ -303,6 +313,40 @@ def test_todos_los_servicios_de_larga_duracion_declaran_healthcheck():
         )
 
 
+def test_ningun_healthcheck_de_produccion_sondea_localhost():
+    """`localhost` dentro de un contenedor NO es un sinónimo de `127.0.0.1`:
+    resuelve a `::1` y a `127.0.0.1`, y el `wget` de BusyBox prueba `::1`
+    primero. Un proceso Go que bindea `localhost:PUERTO` (Caddy y su admin
+    endpoint, entre otros) escucha en UNA sola de esas direcciones -- la IPv4
+    --, así que el sondeo recibe `Connection refused` en cada intento y el
+    servicio queda `unhealthy` para siempre.
+
+    Eso hundió el job "Imagenes Docker" del CI: el healthcheck de `caddy`
+    apuntaba a `http://localhost:2019/config/`, el contenedor nunca llegó a
+    `healthy` y el workflow murió por timeout a los 7 minutos. El log del
+    contenedor no ayudaba -- Caddy arrancaba perfecto y sus errores de ACME
+    (esperados con un dominio de CI inválido) parecían la causa sin serlo.
+
+    Este candado recorre TODOS los servicios del render, no una lista fija:
+    el error es invisible leyendo el YAML y solo se manifiesta dentro del
+    contenedor, así que el próximo healthcheck que se agregue tiene que
+    nacer cubierto."""
+    for con_perfiles in (False, True):
+        config = _config_produccion(con_perfiles=con_perfiles)
+        culpables = {
+            nombre: prueba
+            for nombre, datos in config["services"].items()
+            if (prueba := (datos.get("healthcheck") or {}).get("test"))
+            and "localhost" in " ".join(prueba if isinstance(prueba, list) else [prueba])
+        }
+        assert culpables == {}, (
+            f"Estos healthchecks sondean `localhost` (perfiles "
+            f"activos={con_perfiles}): {culpables}. Usá `127.0.0.1`: el "
+            f"cliente puede intentar `::1` primero y encontrar el puerto "
+            f"cerrado aunque el proceso esté sano."
+        )
+
+
 def test_overlay_de_produccion_no_declara_ninguna_clave_build():
     config = _config_produccion()
     servicios_con_build = [
@@ -315,21 +359,19 @@ def test_overlay_de_produccion_no_declara_ninguna_clave_build():
     )
 
 
-def test_el_render_de_produccion_no_publica_ni_un_solo_puerto():
-    """Recorre TODOS los servicios del render de producción -- no una lista
-    fija. La versión anterior de este test comprobaba solo `("db", "redis")` y
-    por eso daba por verificada la exposición de puertos mientras `mailpit`
-    publicaba en 0.0.0.0 su SMTP (1025) y su UI web SIN autenticación (8025),
-    con `SMTP_HOST: ${SMTP_HOST:-mailpit}` mandándole los enlaces de
-    recuperación de contraseña. Un servicio nuevo (o un puerto reintroducido
-    en la base) queda cubierto automáticamente.
+def test_el_render_de_produccion_solo_caddy_publica_puertos_y_son_80_443():
+    """Reemplaza a la versión anterior de este test (que exigía CERO puertos
+    publicados): con el ingress (`caddy`) sumado en esta PR, esa asunción dejó
+    de ser cierta a propósito -- `caddy` es la única puerta pública del stack.
+    El backend NUNCA se expone: lo consume el frontend por la red interna de
+    Docker (decisión de arquitectura ya verificada), así que este test sigue
+    siendo el guardado que evita que alguien publique el puerto del backend
+    (o de cualquier otro servicio) más adelante sin darse cuenta.
 
-    Los servicios detrás de `profiles:` NO se excluyen: se renderiza con todos
-    los perfiles declarados activos (`PERFILES_DECLARADOS`). Que en producción
-    nunca arranquen no es excusa para dejarles el puerto en la base -- ahí es
-    exactamente donde estaba el agujero. Se comprueban ambos renders (con y
-    sin perfiles) para que la garantía no dependa de si una versión concreta
-    de Compose materializa o no los servicios con perfil en `config`."""
+    Recorre TODOS los servicios del render -- no una lista fija -- igual que
+    la versión anterior: la razón sigue viva, `mailpit` publicaba puertos sin
+    que ningún test cubriera más que `("db", "redis")`. Se comprueban ambos
+    renders (con y sin perfiles) por la misma razón que antes."""
     for con_perfiles in (False, True):
         config = _config_produccion(con_perfiles=con_perfiles)
         publicadores = {
@@ -337,14 +379,144 @@ def test_el_render_de_produccion_no_publica_ni_un_solo_puerto():
             for nombre, datos in config["services"].items()
             if datos.get("ports")
         }
-        assert publicadores == {}, (
-            f"Estos servicios publican puertos en el host dentro del render de "
-            f"producción (perfiles activos={con_perfiles}): {publicadores}. Los "
-            f"puertos publicados viven SOLO en `docker-compose.override.yml` "
-            f"(decisión de diseño 4.1) -- un overlay de Compose fusiona, nunca "
-            f"puede remover una clave, así que `docker-compose.prod.yml` no "
-            f"tiene forma de quitarlos."
+        assert set(publicadores) == {"caddy"}, (
+            f"El único servicio con puertos publicados en producción debe ser "
+            f"'caddy' (perfiles activos={con_perfiles}), y se encontró: "
+            f"{publicadores}. Los puertos publicados de servicios de "
+            f"desarrollo viven SOLO en `docker-compose.override.yml` -- un "
+            f"overlay de Compose fusiona, nunca puede remover una clave, así "
+            f"que `docker-compose.prod.yml` no tiene forma de quitarlos."
         )
+        puertos_publicados = {p["published"] for p in publicadores["caddy"]}
+        assert puertos_publicados == {"80", "443"}, (
+            f"'caddy' debe publicar exactamente 80 y 443 (perfiles "
+            f"activos={con_perfiles}), y publica {puertos_publicados}"
+        )
+
+
+# ─── Ingress (Caddy) y rotación de logs ──────────────────────────────────
+
+
+def test_todos_los_servicios_de_produccion_declaran_logging_acotado():
+    """Sin rotación, `json-file` (el driver por defecto de Docker) escribe
+    logs sin límite: el disco de 50GB del droplet se llena en silencio, y
+    Postgres es el primer servicio en morir sin espacio (no puede escribir
+    WAL). Cada servicio del render -- incluido `caddy` -- tiene que declarar
+    `max-size` y `max-file` no vacíos."""
+    config = _config_produccion()
+    for nombre, datos in config["services"].items():
+        logging_cfg = datos.get("logging") or {}
+        opciones = logging_cfg.get("options") or {}
+        assert logging_cfg.get("driver") == "json-file", (
+            f"'{nombre}' no declara `logging.driver: json-file` en el render "
+            f"de producción: {logging_cfg}"
+        )
+        assert opciones.get("max-size"), (
+            f"'{nombre}' no declara `logging.options.max-size` en el render "
+            f"de producción"
+        )
+        assert opciones.get("max-file"), (
+            f"'{nombre}' no declara `logging.options.max-file` en el render "
+            f"de producción"
+        )
+
+
+def test_caddy_persiste_certificados_en_un_volumen_nombrado():
+    """Sin un volumen persistente para `/data`, cada reinicio del contenedor
+    pierde los certificados de Let's Encrypt. La emisión tiene límites de
+    tasa: un puñado de reinicios seguidos deja el sitio sin certificado
+    válido durante aproximadamente una semana. Un bind mount o un `tmpfs` no
+    sirven -- tienen que sobrevivir a `docker compose down` sin flags, que es
+    justo lo que un volumen con nombre garantiza y los otros dos no."""
+    config = _config_produccion()
+    montajes = config["services"]["caddy"].get("volumes", [])
+    montajes_data = [m for m in montajes if m.get("target") == "/data"]
+    assert montajes_data, "'caddy' no monta nada en `/data` en el render de producción"
+    tipos = {m.get("type") for m in montajes_data}
+    assert tipos == {"volume"}, (
+        f"'caddy' debe montar `/data` como volumen nombrado (`type: volume`), "
+        f"y se encontró {tipos}"
+    )
+    nombres_volumen = {m.get("source") for m in montajes_data}
+    volumenes_declarados = set(config.get("volumes", {}).keys())
+    assert nombres_volumen & volumenes_declarados, (
+        f"el volumen montado en `/data` ({nombres_volumen}) no está declarado "
+        f"en la sección `volumes:` de nivel superior ({volumenes_declarados})"
+    )
+
+
+def test_el_overlay_de_produccion_exige_dominio():
+    """Sin `DOMINIO`, Caddy no tiene para qué host emitir el certificado TLS
+    ni a dónde enrutar -- mismo patrón que
+    `test_el_overlay_de_produccion_exige_cors_origenes`."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        omitir=("DOMINIO",),
+    )
+    assert resultado.returncode != 0, (
+        "el render de producción tiene que fallar sin DOMINIO -- en cambio "
+        "completó con éxito"
+    )
+    assert "DOMINIO" in resultado.stderr, (
+        f"el render falló, pero el mensaje no menciona DOMINIO -- no es "
+        f"accionable para quien despliega: {resultado.stderr!r}"
+    )
+
+
+def test_el_overlay_de_produccion_exige_acme_email():
+    """Sin `ACME_EMAIL`, Let's Encrypt no tiene a quién avisar de expiraciones
+    o problemas con el certificado -- mismo patrón que `DOMINIO`."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        omitir=("ACME_EMAIL",),
+    )
+    assert resultado.returncode != 0, (
+        "el render de producción tiene que fallar sin ACME_EMAIL -- en "
+        "cambio completó con éxito"
+    )
+    assert "ACME_EMAIL" in resultado.stderr, (
+        f"el render falló, pero el mensaje no menciona ACME_EMAIL -- no es "
+        f"accionable para quien despliega: {resultado.stderr!r}"
+    )
+
+
+def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico():
+    """`caddy` es el único borde público del stack (ver
+    `test_el_render_de_produccion_solo_caddy_publica_puertos_y_son_80_443`), y
+    este sistema sirve fichas médicas de menores y comprobantes de pago. Los
+    tests de este archivo verifican el render del compose, pero ninguno mira
+    el CONTENIDO del `Caddyfile` -- un ruteo o un header equivocado dejaría
+    la suite entera en verde. Esta prueba cierra esa parte del hueco (no
+    valida sintaxis ni ruteo -- eso queda para `caddy validate` en CI, otro
+    cambio) leyendo el `Caddyfile` versionado y exigiendo los cuatro headers
+    del bloque `header`:
+
+    - `Strict-Transport-Security`: fuerza HTTPS en el navegador, evita que un
+      atacante en la red degrade la conexión a texto plano (downgrade/SSL
+      strip).
+    - `X-Content-Type-Options: nosniff`: evita que el navegador adivine el
+      tipo de contenido y ejecute como script algo que no lo es.
+    - `X-Frame-Options: DENY`: evita que el sitio se embeba en un iframe
+      ajeno (clickjacking) sobre un formulario que maneja datos sensibles.
+    - `Referrer-Policy: strict-origin-when-cross-origin`: evita que la URL
+      completa (con IDs de fichas médicas o comprobantes) viaje como
+      referrer hacia un sitio de terceros."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert 'Strict-Transport-Security "max-age=31536000; includeSubDomains"' in contenido, (
+        "el Caddyfile no declara Strict-Transport-Security con el max-age "
+        "esperado"
+    )
+    assert 'X-Content-Type-Options "nosniff"' in contenido, (
+        "el Caddyfile no declara X-Content-Type-Options: nosniff"
+    )
+    assert 'X-Frame-Options "DENY"' in contenido, (
+        "el Caddyfile no declara X-Frame-Options: DENY"
+    )
+    assert 'Referrer-Policy "strict-origin-when-cross-origin"' in contenido, (
+        "el Caddyfile no declara Referrer-Policy: strict-origin-when-cross-origin"
+    )
 
 
 def test_celery_worker_declara_concurrencia_explicita():

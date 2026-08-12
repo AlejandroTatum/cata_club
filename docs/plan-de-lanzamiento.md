@@ -24,24 +24,6 @@ cosas sin las cuales no se despliega.
 
 ## 🔴 Bloqueantes — sin esto no se lanza
 
-- [ ] **`docker-compose.prod.yml` no completa el contrato de operación.** ✅
-  - **Qué falta:** ingress con TLS (Caddy), límites de memoria por servicio y
-    rotación de logs. Las tres cosas están declaradas como pendientes en el
-    encabezado del propio archivo, diferidas «a la continuación de esta PR».
-  - **Dónde:** `docker-compose.prod.yml:6-15` (el comentario que las difiere).
-    El overlay completo hoy son solo overrides de `AMBIENTE`, `CORS_ORIGENES`
-    y `SMTP_STARTTLS` para los tres servicios.
-  - **Cómo se verificó:** lectura directa del archivo. **Ojo con el grep:** el
-    comentario dice `Caddy` con mayúscula, así que un `rg "caddy"`
-    case-sensitive da vacío y hace parecer que el ítem se cerró.
-  - **Qué lo cierra:** extender `tests/test_docker_compose_config.py` —
-    **en la raíz del repo, no bajo `backend/`**, que es donde lo buscaba el
-    documento viejo— con asserts de `mem_limit` y `logging` por servicio. El
-    ingress se canda en CI levantando el stack completo.
-  - **Por qué bloquea:** sin TLS no hay producción. Sin límites de memoria, un
-    droplet de 2GB se queda sin RAM: es la misma propiedad de seguridad que
-    motivó sacar `build:` de la base.
-
 - [ ] **`.env.example` incompletos.** 🚫
   - **Qué falta:** según el relevamiento anterior, el `./.env.example` raíz —el
     que lee docker-compose— no documenta `IMAGE_TAG`, `FRONTEND_URL` ni los
@@ -513,9 +495,10 @@ documentan acá para que nadie los reponga.
 
 ## Recomendación de orden
 
-Los tres bloqueantes son **un solo PR de infraestructura**, no tres frentes: el
-overlay de producción, el example de variables y el arranque de métricas viven
-todos en el borde de despliegue y comparten el mismo test de configuración.
+El overlay de producción (TLS con Caddy, límites de memoria y rotación de
+logs) ya cerró en `feat/ingress-tls-caddy`. Quedan dos bloqueantes, y siguen
+siendo **un solo frente de infraestructura**: el example de variables y el
+arranque de métricas viven los dos en el borde de despliegue.
 
 Después de los bloqueantes, **el bloque naranja antes que el amarillo**. Los
 medios y menores son deuda técnica: cuestan en cada cambio futuro, pero nadie

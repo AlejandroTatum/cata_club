@@ -1,0 +1,54 @@
+# Caddyfile de PRODUCCIÓN. Lo monta de solo lectura el servicio `caddy` de
+# `docker-compose.prod.yml`, en `/etc/caddy/Caddyfile`. Deliberadamente NO va
+# en el `command:` de ese servicio -- versionarlo acá permite diffear la
+# configuración del ingress igual que cualquier otro archivo del repo, y
+# `caddy validate` puede correr sobre este archivo sin levantar el stack.
+#
+# `{$DOMINIO}` y `{$ACME_EMAIL}` los resuelve Caddy leyendo el entorno del
+# propio proceso (Caddy soporta interpolación de variables de entorno de
+# forma nativa) -- el `environment:` del servicio `caddy` en el compose los
+# inyecta. Ambos ya son obligatorios en el compose
+# (`${DOMINIO:?...}`/`${ACME_EMAIL:?...}`), así que si este archivo se
+# procesa es porque los dos existen.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMINIO} {
+	# TLS automático vía Let's Encrypt: comportamiento por defecto de Caddy
+	# 2.x para cualquier dirección que no sea `localhost` ni una IP -- no
+	# hace falta declarar `tls` explícito.
+
+	reverse_proxy frontend:3000
+
+	encode gzip
+
+	header {
+		# El backend nunca se expone (lo consume el frontend por la red
+		# interna de Docker); este header solo endurece al único origen
+		# público del stack.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+		# Este sistema sirve fichas médicas de menores y comprobantes de
+		# pago, y este es el único borde público -- los tres headers de
+		# abajo no cuestan nada y cierran clases enteras de ataque.
+
+		# Evita que el navegador adivine el tipo de contenido de una
+		# respuesta y termine ejecutando como script algo que no lo es.
+		X-Content-Type-Options "nosniff"
+
+		# Evita que el sitio se embeba en un iframe ajeno (clickjacking)
+		# sobre un formulario que maneja datos sensibles.
+		X-Frame-Options "DENY"
+
+		# Evita que la URL completa (con IDs de fichas médicas o
+		# comprobantes) viaje como referrer hacia un sitio de terceros.
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# Content-Security-Policy: falta a propósito. Una CSP escrita a
+		# ciegas rompe Next.js (scripts inline, estilos, hidratación) y no
+		# se puede probar contra la app real en este momento. Tiene que
+		# construirse mirando lo que Next.js efectivamente inyecta y
+		# verificarse en un navegador -- no acá, no sin esa verificación.
+	}
+}
