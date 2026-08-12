@@ -24,35 +24,88 @@
   --red-dark:   #A11D22;
   --ball:       #FFD600;
   --ball-ink:   #8A6D00;
+  /* Companion a --ball-ink para la pastilla de 10.5px/700 del marco de
+     revisión (.note .mine), que es el único lugar donde la tinta cae SOBRE
+     el amarillo. Ese par mide 3.48:1 con --ball-ink, por debajo del 4.5:1
+     que pide AA; a #6E5700 —el mismo tono, un 20% más oscuro— mide 4.91:1.
+     --ball-ink NO se toca: es espejo de `ball.ink` en tailwind.config.ts y
+     cambiarlo acá dejaría al prototipo con mejor contraste que el producto,
+     que es exactamente el desfase que este archivo debe evitar. El par
+     amarillo de la app arrastra el mismo 3.48:1 y necesita su propio arreglo. */
+  --ball-ink-strong: #6E5700;
 
   /* --- tinta y superficies --- */
   --ink:        #17181C;
   --ink-2:      #4A4A55;
   --ink-3:      #74747F;
-  /* Companion a --ink-3 para las microetiquetas de 10.5px/700 en mayúsculas
-     (eyebrow de página, cabecera de tabla). --ink-3 cumple AA sobre --paper
-     (4.62:1) pero no sobre --canvas (4.24:1) ni sobre el #FAFAFB del thead
-     (4.43:1); este token cubre esos dos fondos con 4.83:1 y 5.05:1. */
-  --ink-3-strong: #6B6B76;
-  --line:       #E9E9EC;
-  --line-2:     #D8D8DE;
+  /* Companion a --ink-3 para el texto atenuado que NO cae sobre --paper:
+     microetiquetas de 10.5px/700 en mayúsculas, la fecha de la topbar, los
+     apoyos de 12-13px que aterrizan sobre el campo de página.
+     --ink-3 cumple AA sobre --paper (4.62:1) pero no sobre --canvas (3.78:1)
+     ni sobre el #FAFAFB del thead (4.43:1). Este token cubre --canvas con
+     4.86:1, --sunken con 5.40:1, el thead con 5.69:1 y --paper con 5.93:1.
+     --ink-3 se conserva tal cual para lo atenuado que vive sobre --paper:
+     oscurecer el token compartido arrastraría cada línea de 12-13px sin
+     ganancia (mismo razonamiento que tailwind.config.ts:86-91). */
+  --ink-3-strong: #63636E;
+  /* Filetes, copiados de tailwind.config.ts:108-123. --line dibuja el borde de
+     la tarjeta Y los divisores de adentro; --line-2 es el borde más firme que
+     lleva todo control interactivo.
+     Los dos eran un paso más claros (#E9E9EC / #D8D8DE), y ese par se rompió
+     con el mismo movimiento que este archivo está sincronizando: contra el
+     --canvas profundizado el viejo --line mide 1.007:1, es decir el contorno
+     de la tarjeta tenía literalmente la misma luminancia que el campo sobre el
+     que se apoya. A #DEDEE6 el mismo filete mide 1.096:1 sobre --canvas y
+     1.338:1 sobre --paper, así que un solo valor dibuja un borde real en las
+     dos superficies. --line-2 pasa de 1.419:1 a 1.545:1 sobre --paper, que es
+     lo que hace que un input se lea como campo y no como fantasma.
+     Ninguno de los dos aspira al 3:1 de 1.4.11: ese criterio pide 3:1 al
+     límite que IDENTIFICA un componente, y acá lo que separa la tarjeta del
+     campo es el escalón de relleno (--paper sobre --canvas, 1.220:1); el
+     filete es refuerzo, no el límite portador. Un borde de tarjeta a 3:1
+     sería #9A9AA4 y convertiría cada pantalla en un wireframe. */
+  --line:       #DEDEE6;
+  --line-2:     #CFCFDA;
+
+  /* La escalera de tres superficies, copiada de tailwind.config.ts:148-158.
+     Los valores viven allá; acá se replican, nunca se inventan.
+       --paper   #FFFFFF   la tarjeta
+       --sunken  #F4F4F7   un área hundida DENTRO de --paper
+       --canvas  #E8E8EE   el campo de página detrás de las tarjetas
+     --canvas era #F5F5F7: una tarjeta blanca encima medía 1.089:1 y la
+     pantalla se leía como una hoja lavada. A #E8E8EE mide 1.220:1.
+     No bajar más sin re-derivar la rampa de estados: el par que ata es
+     --warn, que sobre este campo ya está en 4.59:1. */
   --paper:      #FFFFFF;
-  --canvas:     #F5F5F7;
+  --sunken:     #F4F4F7;
+  --canvas:     #E8E8EE;
 
   /* --- estados ---
      Cada color de texto se lee SOBRE su propio -bg: ese es el par. Con los
      valores originales (#157F3D / #B45309 / #D92128) el par medía 4.49:1,
      4.46:1 y 4.27:1, por debajo del 4.5:1 que pide AA para la etiqueta de
-     11.5px/700 del badge. Los valores actuales cumplen (4.98 / 4.97 / 5.05)
-     y mejoran también sobre --paper y --canvas. */
+     11.5px/700 del badge. Los valores actuales cumplen (4.98 / 4.97 / 5.05;
+     --neutral 5.17) y siguen cumpliendo sobre las otras dos superficies,
+     aunque el canvas profundizado les recortó el margen:
+       sobre --paper   ok 5.64 · warn 5.60 · neutral 5.93 · bad 5.91
+       sobre --sunken  ok 5.13 · warn 5.10 · neutral 5.40 · bad 5.38
+       sobre --canvas  ok 4.62 · warn 4.59 · neutral 4.86 · bad 4.84
+     --warn a 4.59:1 es el par que ata el canvas: por eso #E8E8EE es el campo
+     más oscuro posible sin re-derivar primero esta rampa. */
   --ok:         #137739;  --ok-bg:      #E7F4EC;
   --warn:       #A94D08;  --warn-bg:    #FBF0E2;
   --neutral:    #63636E;  --neutral-bg: #EFEFF2;
   --bad:        #C51B22;  --bad-bg:     #FBE9EA;
 
-  /* --- gama de niveles: l1 es la cima --- */
+  /* --- gama de niveles: l1 es la cima ---
+     El peldaño base era #E9E9EC —el mismo hex que arrastraba el viejo --line—
+     y arrastraba el mismo defecto: 1.007:1 contra el --canvas profundizado,
+     o sea una pastilla de nivel 10 que sobre el campo de página desaparece.
+     La app ya lo movió a #DCDCE4 (tailwind.config.ts:227-231), que mantiene la
+     rampa monótona (L* 88.0, entre el 84.7 de l9 y el 92.2 del canvas). Acá se
+     replica: el valor vive allá. */
   --l1:#131316; --l2:#26262C; --l3:#3A3A42; --l4:#4E4E58; --l5:#62626E;
-  --l6:#7C7C88; --l7:#9A9AA4; --l8:#B8B8C0; --l9:#D3D3D9; --l10:#E9E9EC;
+  --l6:#7C7C88; --l7:#9A9AA4; --l8:#B8B8C0; --l9:#D3D3D9; --l10:#DCDCE4;
 
   /* --- métricas --- */
   --h-ctl: 40px;  --h-ctl-sm: 32px;  --h-badge: 26px;
@@ -88,7 +141,13 @@ svg { display: block; }
 .crumb a { color: var(--chrome-mute); text-decoration: none; font-weight: 600; }
 .crumb a:hover { color: var(--chrome-ink); }
 .crumb a:focus-visible, .btn:focus-visible, .tab:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; border-radius: 4px; }
-.crumb .sep { color: var(--chrome-line); }
+/* El «/» entre migas es decoración pura, pero con --chrome-line era invisible
+   (1.16:1 en claro, 1.36:1 en oscuro). Con --chrome-mute mide 5.03:1 y 7.14:1,
+   por encima del 3:1 de elemento no textual. Queda pendiente la otra mitad del
+   arreglo, que vive en el marcado y no en esta hoja: marcar cada `<span
+   class="sep">` con aria-hidden="true" en los 32 prototipos, para que el
+   lector de pantalla no lea una barra por miga. */
+.crumb .sep { color: var(--chrome-mute); }
 .crumb .here { font-weight: 700; }
 
 .ptitle { display: flex; align-items: center; gap: 11px; flex-wrap: wrap; }
@@ -107,7 +166,7 @@ svg { display: block; }
 .note p { margin: 0; font-size: 13.5px; color: var(--chrome-mute); max-width: 94ch; }
 .note p b { color: var(--chrome-ink); font-weight: 600; }
 .note code { font-family: var(--mono); font-size: .85em; background: var(--chrome-bg); border: 1px solid var(--chrome-line); border-radius: 4px; padding: 1px 5px; }
-.note .mine { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: var(--ball); color: var(--ball-ink); margin-right: 7px; }
+.note .mine { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: var(--ball); color: var(--ball-ink-strong); margin-right: 7px; }
 
 .foot { border-top: 1px solid var(--chrome-line); padding-top: 15px; margin-top: 6px; font-size: 12.5px; color: var(--chrome-mute); display: flex; flex-wrap: wrap; gap: 6px 20px; }
 
@@ -148,7 +207,9 @@ svg { display: block; }
 /* --- main y topbar --- */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .topbar { height: 56px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 22px; background: var(--canvas); border-bottom: 1px solid var(--line); }
-.topbar .date { font-size: 12.5px; color: var(--ink-3); }
+/* .date cae sobre el --canvas de la topbar, no sobre --paper: le toca el
+   companion (4.86:1 en vez de los 3.78:1 que daría --ink-3). */
+.topbar .date { font-size: 12.5px; color: var(--ink-3-strong); }
 .canvas { flex: 1; padding: 26px 26px 34px; display: flex; flex-direction: column; gap: 20px; }
 .srch { height: var(--h-ctl); border-radius: var(--r-ctl); border: 1px solid var(--line-2); background: var(--paper); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12.5px; color: var(--ink-3); }
 .srch svg { width: 15px; height: 15px; }
@@ -163,9 +224,23 @@ svg { display: block; }
 .h-page { font-size: 26px; font-weight: 800; letter-spacing: -.03em; margin: 0; }
 .eye { font-size: 10.5px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3-strong); margin: 0 0 3px; }
 .sec-t { font-size: 13px; font-weight: 700; margin: 0; }
-.muted { color: var(--ink-3); font-size: 13px; margin: 0; }
-.hint { font-size: 12px; color: var(--ink-3); font-weight: 400; }
-.statelabel { font-size: 10.5px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; color: var(--ink-3); display: flex; align-items: center; gap: 9px; margin: 0; }
+/* .muted, .hint y .statelabel viven en los DOS mundos de color de esta hoja:
+   dentro de .app caen sobre --paper o sobre --canvas, y fuera de .app —el
+   marco de revisión, ver 31-entrenador-dashboard-alternativas— sobre
+   --chrome-bg, que cambia con el esquema del sistema.
+   El default es la rampa del marco, que es la única que sabe de esquema:
+   --chrome-mute mide 5.03:1 en claro y 7.14:1 en oscuro. La regla scopeada
+   les devuelve el companion de la app adentro. No alcanza con elegir uno
+   solo: --ink-3-strong sobre el marco oscuro cae a 3.27:1, y --ink-3 sobre
+   el campo de página a 3.78:1.
+   No hay una clase que envuelva el marco —el marco es «todo lo que no está
+   dentro de .app»—, así que el default va al marco y .app es el override.
+   .statelabel es además el caso exacto para el que se creó el companion:
+   10.5px/700 en mayúsculas. */
+.muted { color: var(--chrome-mute); font-size: 13px; margin: 0; }
+.hint { font-size: 12px; color: var(--chrome-mute); font-weight: 400; }
+.statelabel { font-size: 10.5px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; color: var(--chrome-mute); display: flex; align-items: center; gap: 9px; margin: 0; }
+.app .muted, .app .hint, .app .statelabel { color: var(--ink-3-strong); }
 .statelabel::after { content: ""; height: 1px; background: var(--line); flex: 1; }
 .rowline { display: flex; align-items: center; gap: 12px; }
 .grow { flex: 1; }
