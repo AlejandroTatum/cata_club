@@ -313,6 +313,40 @@ def test_todos_los_servicios_de_larga_duracion_declaran_healthcheck():
         )
 
 
+def test_ningun_healthcheck_de_produccion_sondea_localhost():
+    """`localhost` dentro de un contenedor NO es un sinónimo de `127.0.0.1`:
+    resuelve a `::1` y a `127.0.0.1`, y el `wget` de BusyBox prueba `::1`
+    primero. Un proceso Go que bindea `localhost:PUERTO` (Caddy y su admin
+    endpoint, entre otros) escucha en UNA sola de esas direcciones -- la IPv4
+    --, así que el sondeo recibe `Connection refused` en cada intento y el
+    servicio queda `unhealthy` para siempre.
+
+    Eso hundió el job "Imagenes Docker" del CI: el healthcheck de `caddy`
+    apuntaba a `http://localhost:2019/config/`, el contenedor nunca llegó a
+    `healthy` y el workflow murió por timeout a los 7 minutos. El log del
+    contenedor no ayudaba -- Caddy arrancaba perfecto y sus errores de ACME
+    (esperados con un dominio de CI inválido) parecían la causa sin serlo.
+
+    Este candado recorre TODOS los servicios del render, no una lista fija:
+    el error es invisible leyendo el YAML y solo se manifiesta dentro del
+    contenedor, así que el próximo healthcheck que se agregue tiene que
+    nacer cubierto."""
+    for con_perfiles in (False, True):
+        config = _config_produccion(con_perfiles=con_perfiles)
+        culpables = {
+            nombre: prueba
+            for nombre, datos in config["services"].items()
+            if (prueba := (datos.get("healthcheck") or {}).get("test"))
+            and "localhost" in " ".join(prueba if isinstance(prueba, list) else [prueba])
+        }
+        assert culpables == {}, (
+            f"Estos healthchecks sondean `localhost` (perfiles "
+            f"activos={con_perfiles}): {culpables}. Usá `127.0.0.1`: el "
+            f"cliente puede intentar `::1` primero y encontrar el puerto "
+            f"cerrado aunque el proceso esté sano."
+        )
+
+
 def test_overlay_de_produccion_no_declara_ninguna_clave_build():
     config = _config_produccion()
     servicios_con_build = [

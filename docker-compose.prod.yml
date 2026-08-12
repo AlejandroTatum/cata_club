@@ -177,7 +177,13 @@ services:
       # sonda no debe depender de resolución DNS externa ni de que el
       # handshake TLS con Let's Encrypt ya haya emitido el certificado.
       # `caddy:2.8-alpine` trae `wget` (BusyBox).
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2019/config/"]
+      #
+      # `127.0.0.1`, NUNCA `localhost`: Caddy bindea su admin endpoint en una
+      # sola dirección (la IPv4), mientras que `localhost` dentro del
+      # contenedor resuelve también a `::1` -- y el `wget` de BusyBox prueba
+      # `::1` primero, recibe `Connection refused` y deja al servicio
+      # `unhealthy` para siempre aunque Caddy esté perfectamente sano.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:2019/config/"]
       interval: 30s
       timeout: 5s
       retries: 5

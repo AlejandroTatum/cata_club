@@ -102,7 +102,15 @@ services:
       # producción /docs se deshabilita (PR-10), así que el healthcheck no
       # puede depender de esa ruta -- /health no tiene dependencias (ni BD
       # ni auth) y existe justo para esto.
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      #
+      # `127.0.0.1`, NUNCA `localhost`: dentro del contenedor `localhost`
+      # resuelve también a `::1`, y un servidor que bindea una sola familia
+      # de direcciones deja la sonda contra `Connection refused`. Hoy esta
+      # sonda pasa porque `urllib` recorre todas las direcciones resueltas
+      # hasta conectar, pero eso depende del cliente, no del servidor -- el
+      # mismo `localhost` con el `wget` de BusyBox tumbó el healthcheck del
+      # ingress. Fijar la IPv4 saca al cliente de la ecuación.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 10
