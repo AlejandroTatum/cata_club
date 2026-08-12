@@ -18,12 +18,12 @@ from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepo
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
-
-logger = logging.getLogger("cataclub.servicios.personas")
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO, IndependizarDTO,
     VincularRepresentadoDTO,
 )
+
+logger = logging.getLogger("cataclub.servicios.personas")
 
 
 # --- Restricciones de dominio: edad y tutor legal ---------------------------

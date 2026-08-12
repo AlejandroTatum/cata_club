@@ -23,14 +23,14 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
-_log = logging.getLogger("cataclub.dominio.modelos")
-
 from app.dominio.enums import (
     TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
     TipoPago, EstadoAsistencia, TipoEscuela, NivelTecnicoAlumno, TipoSangre, DiaSemana,
     TipoNotificacion,
     TipoManoDominante,
 )
+
+_log = logging.getLogger("cataclub.dominio.modelos")
 
 
 def _ahora_utc() -> datetime:
