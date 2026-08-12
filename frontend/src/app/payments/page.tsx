@@ -711,8 +711,12 @@ export default function PaymentsPage(): React.ReactElement {
         // to always be `confirmation.failure` — a generic "no se pudo" even
         // when the backend named the real reason (e.g. a rejection note over
         // 255 characters) — so `err` never reached the admin. `toUserMessage`
-        // is the one place that decides whether `err` is safe to show; when
-        // it is not, it already falls back to `confirmation.failure`.
+        // is the one place that decides whether `err` is safe to show.
+        // For 400/409/422 it may surface the backend's own detail, falling
+        // back to `confirmation.failure` only when that detail isn't safe to
+        // show. For any 5xx it always returns the generic server-failure
+        // message before `fallback` is even looked at, so `confirmation.failure`
+        // is never used in that case (see `error-message.ts`).
         showError(toUserMessage(err, confirmation.failure), {
           description: `${request.studentName} volvió a la cola de pendientes.`,
         });
