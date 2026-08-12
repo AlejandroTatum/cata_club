@@ -274,6 +274,14 @@ jobs:
       # producción ahora EXIGE esta variable (`${CORS_ORIGENES:?...}`) -- sin
       # ella este job se cae en `docker compose config`, no en el servidor.
       CORS_ORIGENES: https://cataclub.ci.invalid
+      # PR del ingress TLS (feat/ingress-tls-caddy): el overlay de producción
+      # suma el servicio `caddy` y EXIGE estas dos (`${DOMINIO:?...}` y
+      # `${ACME_EMAIL:?...}`) -- sin ellas este job se cae al renderizar el
+      # compose, no en el servidor. Mismo criterio que arriba: `.invalid` no
+      # resuelve nunca, así que Let's Encrypt jamás emite un certificado para
+      # este dominio ni manda un aviso a esta casilla desde CI.
+      DOMINIO: cataclub.ci.invalid
+      ACME_EMAIL: ci@cataclub.ci.invalid
       # PR registro de Settings (sdd/production-config-contract): estas 3
       # credenciales ahora son criticas para produccion
       # (_CAMPOS_PRODUCCION_CRITICOS en configuracion.py) -- sin ellas el
