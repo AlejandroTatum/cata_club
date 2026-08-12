@@ -448,6 +448,43 @@ def test_el_overlay_de_produccion_exige_acme_email():
     )
 
 
+def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico():
+    """`caddy` es el único borde público del stack (ver
+    `test_el_render_de_produccion_solo_caddy_publica_puertos_y_son_80_443`), y
+    este sistema sirve fichas médicas de menores y comprobantes de pago. Los
+    tests de este archivo verifican el render del compose, pero ninguno mira
+    el CONTENIDO del `Caddyfile` -- un ruteo o un header equivocado dejaría
+    la suite entera en verde. Esta prueba cierra esa parte del hueco (no
+    valida sintaxis ni ruteo -- eso queda para `caddy validate` en CI, otro
+    cambio) leyendo el `Caddyfile` versionado y exigiendo los cuatro headers
+    del bloque `header`:
+
+    - `Strict-Transport-Security`: fuerza HTTPS en el navegador, evita que un
+      atacante en la red degrade la conexión a texto plano (downgrade/SSL
+      strip).
+    - `X-Content-Type-Options: nosniff`: evita que el navegador adivine el
+      tipo de contenido y ejecute como script algo que no lo es.
+    - `X-Frame-Options: DENY`: evita que el sitio se embeba en un iframe
+      ajeno (clickjacking) sobre un formulario que maneja datos sensibles.
+    - `Referrer-Policy: strict-origin-when-cross-origin`: evita que la URL
+      completa (con IDs de fichas médicas o comprobantes) viaje como
+      referrer hacia un sitio de terceros."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert 'Strict-Transport-Security "max-age=31536000; includeSubDomains"' in contenido, (
+        "el Caddyfile no declara Strict-Transport-Security con el max-age "
+        "esperado"
+    )
+    assert 'X-Content-Type-Options "nosniff"' in contenido, (
+        "el Caddyfile no declara X-Content-Type-Options: nosniff"
+    )
+    assert 'X-Frame-Options "DENY"' in contenido, (
+        "el Caddyfile no declara X-Frame-Options: DENY"
+    )
+    assert 'Referrer-Policy "strict-origin-when-cross-origin"' in contenido, (
+        "el Caddyfile no declara Referrer-Policy: strict-origin-when-cross-origin"
+    )
+
+
 def test_celery_worker_declara_concurrencia_explicita():
     """Sin `--concurrency` fijo, prefork genera un proceso hijo por core del
     host -- 745MB medidos en un host de 12 cores (decisión de diseño 4.6)."""

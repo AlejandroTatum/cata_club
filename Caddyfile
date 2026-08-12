@@ -28,5 +28,27 @@
 		# interna de Docker); este header solo endurece al único origen
 		# público del stack.
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+		# Este sistema sirve fichas médicas de menores y comprobantes de
+		# pago, y este es el único borde público -- los tres headers de
+		# abajo no cuestan nada y cierran clases enteras de ataque.
+
+		# Evita que el navegador adivine el tipo de contenido de una
+		# respuesta y termine ejecutando como script algo que no lo es.
+		X-Content-Type-Options "nosniff"
+
+		# Evita que el sitio se embeba en un iframe ajeno (clickjacking)
+		# sobre un formulario que maneja datos sensibles.
+		X-Frame-Options "DENY"
+
+		# Evita que la URL completa (con IDs de fichas médicas o
+		# comprobantes) viaje como referrer hacia un sitio de terceros.
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# Content-Security-Policy: falta a propósito. Una CSP escrita a
+		# ciegas rompe Next.js (scripts inline, estilos, hidratación) y no
+		# se puede probar contra la app real en este momento. Tiene que
+		# construirse mirando lo que Next.js efectivamente inyecta y
+		# verificarse en un navegador -- no acá, no sin esa verificación.
 	}
 }
