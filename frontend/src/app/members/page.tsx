@@ -64,13 +64,10 @@ import {
   ToggleRight,
   Pencil,
   X,
-  Upload,
   UserPlus,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { fetchMembers, obtenerRolesDePersona, asignarRol, quitarRol, cambiarEstadoCuenta, actualizarPersona, fetchFichaMedica, actualizarFichaMedica, fetchTiposMembresia, crearMembresia, registrarPago, fetchDescuentos } from "@/services/api";
-import type { TipoMembresiaCatalogo, RegistrarPagoInput, DescuentoCatalogo } from "@/services/api";
-import { computeMontoFinal, descuentosActivos, descuentoValorLabel } from "@/app/discounts/discounts-utils";
+import { fetchMembers, obtenerRolesDePersona, asignarRol, quitarRol, cambiarEstadoCuenta, actualizarPersona, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { getUserInitials } from "@/lib/auth-utils";
 import {
   buildMemberStats,
@@ -95,7 +92,8 @@ import {
 import type { BackendTipoRol, FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import MedicalRecordEditor from "./MedicalRecordEditor";
-import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
+import CreateMembershipForm from "./CreateMembershipForm";
+import RegisterPaymentForm from "./RegisterPaymentForm";
 import { toUserMessage } from "@/lib/error-message";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
@@ -187,41 +185,10 @@ function calculateAge(fechaNacimiento: string | undefined): number | null {
 }
 
 function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): React.ReactElement {
-  const { showSuccess, showError } = useToast();
   const [showMedical, setShowMedical] = useState(false);
-  const [showCreateMembership, setShowCreateMembership] = useState(false);
-  const [tiposMembresia, setTiposMembresia] = useState<TipoMembresiaCatalogo[]>([]);
-  const [selectedTipoId, setSelectedTipoId] = useState<number | "">("");
-  const [membershipLoading, setMembershipLoading] = useState(false);
-  const [membershipError, setMembershipError] = useState<string | null>(null);
-  const [membershipSuccess, setMembershipSuccess] = useState(false);
 
-  // Payment registration state
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [paymentMonto, setPaymentMonto] = useState<string>(student.membresia?.monto != null ? String(student.membresia.monto) : "");
-  // No method picker here on purpose: a cash payment is a declaration by
-  // whoever handed over the money, so only the payer (or their
-  // representative) can register one -- an administrator registering on
-  // someone else's behalf, which is exactly this form, no longer offers it.
-  // TRANSFERENCIA is therefore the only method this form can submit.
-  const [paymentFechaInicio, setPaymentFechaInicio] = useState<string>(() => clubIsoDate());
-  const [paymentFechaFin, setPaymentFechaFin] = useState<string>("");
-  const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const paymentFileInputRef = useRef<HTMLInputElement>(null);
-  const [paymentVoucherFile, setPaymentVoucherFile] = useState<File | null>(null);
-  // Discount to apply on THIS registration (issue #12). The catalog is
-  // fetched lazily when the form opens; only ACTIVE discounts are offered.
-  // `null` = not fetched yet (or fetch failed: the form degrades to the
-  // pre-discount behavior — the backend is the authority anyway).
-  //
-  // A payment carries at most ONE discount (the backend rejects more than
-  // one with a 400 — see `_congelar_descuento`), so selection is single, with
-  // "Sin descuento" (no payment discount) as the normal, default choice —
-  // never a plural array of ids.
-  const [descuentosCatalogo, setDescuentosCatalogo] = useState<DescuentoCatalogo[] | null>(null);
-  const [selectedDescuentoId, setSelectedDescuentoId] = useState<number | null>(null);
+  const personaId = Number(student.id);
+  const age = calculateAge(student.fechaNacimiento);
 
   const membershipLabel = student.membresia
     ? MEMBERSHIP_STATUS_LABELS[student.membresia.estado]
@@ -229,162 +196,12 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
   const membershipTone = student.membresia
     ? MEMBERSHIP_STATUS_TONE[student.membresia.estado]
     : "neutral";
-
   const paymentLabel = student.ultimoPago
     ? PAYMENT_STATUS_LABELS[student.ultimoPago.estado]
     : "Sin pagos";
   const paymentTone = student.ultimoPago
     ? PAYMENT_STATUS_TONE[student.ultimoPago.estado]
     : "neutral";
-
-  const personaId = Number(student.id);
-  const age = calculateAge(student.fechaNacimiento);
-  const paymentMonthlyPrice = student.membresia?.monto != null ? Number(student.membresia.monto) : 0;
-
-  // Active discounts offered in the payment form, and the DISPLAY-ONLY final
-  // amount preview (the backend freezes values and recomputes on register).
-  const descuentosOfrecidos = descuentosActivos(descuentosCatalogo ?? []);
-  const descuentosSeleccionados = descuentosOfrecidos.filter((d) => d.id === selectedDescuentoId);
-  const montoFinalPreview = computeMontoFinal(Number(paymentMonto) || 0, descuentosSeleccionados);
-
-  async function handleOpenCreateMembership(): Promise<void> {
-    setShowCreateMembership(true);
-    setMembershipError(null);
-    setMembershipSuccess(false);
-    if (tiposMembresia.length === 0) {
-      try {
-        const tipos = await fetchTiposMembresia();
-        setTiposMembresia(tipos);
-      } catch {
-        setMembershipError("No se pudieron cargar los tipos de membresía.");
-      }
-    }
-  }
-
-  async function handleCreateMembership(): Promise<void> {
-    if (!selectedTipoId || !personaId) return;
-    const tipo = tiposMembresia.find((t) => t.id === selectedTipoId);
-    if (!tipo) return;
-
-    setMembershipLoading(true);
-    setMembershipError(null);
-    try {
-      await crearMembresia({
-        personaId,
-        tipoMembresiaId: selectedTipoId,
-        montoAplicado: Number(tipo.precio),
-      });
-      setMembershipSuccess(true);
-      setShowCreateMembership(false);
-      showSuccess("Membresía creada correctamente.");
-      // Refresh the list so the new membership appears in place, instead of
-      // asking the user to reload the page themselves.
-      onMembershipCreated();
-    } catch (err) {
-      const message = toUserMessage(err, "Error al crear la membresía.");
-      setMembershipError(message);
-      showError(message);
-    } finally {
-      setMembershipLoading(false);
-    }
-  }
-
-  function calcPaymentEndDate(baseDate: Date, amount: number): string {
-    if (paymentMonthlyPrice <= 0 || amount <= 0) return "";
-    const months = amount / paymentMonthlyPrice;
-    const fin = new Date(baseDate);
-    fin.setMonth(fin.getMonth() + months);
-    return calendarIsoDate(fin);
-  }
-
-  function handlePaymentMontoChange(value: string): void {
-    setPaymentMonto(value);
-    if (!paymentFechaInicio) return;
-    const amount = parseFloat(value.replace(/[^0-9.]/g, "")) || 0;
-    setPaymentFechaFin(amount > 0 ? calcPaymentEndDate(new Date(paymentFechaInicio + "T12:00:00"), amount) : "");
-  }
-
-  function handleOpenPaymentForm(): void {
-    setShowPaymentForm(true);
-    setPaymentError(null);
-    setPaymentSuccess(false);
-    setPaymentVoucherFile(null);
-    setSelectedDescuentoId(null);
-    if (descuentosCatalogo === null) {
-      fetchDescuentos()
-        .then((catalogo) => setDescuentosCatalogo(catalogo))
-        // A failed catalog fetch never blocks registering a payment: the
-        // form simply offers no discounts (same as an empty catalog).
-        .catch(() => setDescuentosCatalogo([]));
-    }
-    // A calendar date, so `calcPaymentEndDate` adds months to a day rather
-    // than to an instant.
-    const hoy = clubToday();
-    setPaymentFechaInicio(calendarIsoDate(hoy));
-    const amount = parseFloat(String(paymentMonto).replace(/[^0-9.]/g, "")) || 0;
-    setPaymentFechaFin(amount > 0 ? calcPaymentEndDate(hoy, amount) : "");
-  }
-
-  async function handleSubmitPayment(): Promise<void> {
-    const montoNum = Number(paymentMonto);
-    if (!montoNum || montoNum <= 0) {
-      setPaymentError("El monto debe ser mayor a 0.");
-      return;
-    }
-    if (paymentMonthlyPrice > 0 && montoNum % paymentMonthlyPrice !== 0) {
-      setPaymentError(`El monto debe ser múltiplo de $${paymentMonthlyPrice}.`);
-      return;
-    }
-    if (!paymentFechaInicio || !paymentFechaFin) {
-      setPaymentError("Las fechas son obligatorias.");
-      return;
-    }
-    if (paymentFechaInicio >= paymentFechaFin) {
-      setPaymentError("La fecha de inicio debe ser anterior a la fecha de fin.");
-      return;
-    }
-    if (!student.membresia?.id) {
-      setPaymentError("No se encontró la membresía.");
-      return;
-    }
-    if (!paymentVoucherFile) {
-      setPaymentError("El comprobante de transferencia es obligatorio.");
-      return;
-    }
-    setPaymentLoading(true);
-    setPaymentError(null);
-    try {
-      const input: RegistrarPagoInput = {
-        // Always the BASE amount: with discounts attached the backend
-        // resolves and freezes the catalog values and computes the final
-        // amount itself (the preview shown in the form is display-only).
-        monto: montoNum,
-        tipoPago: "TRANSFERENCIA",
-        // No fechaInicio/fechaFin (fix período de cobertura, PAG-5): el
-        // backend las calcula del monto y la cuota. `paymentFechaInicio`/
-        // `paymentFechaFin` siguen existiendo solo para la vista previa de
-        // este formulario ("Inicio: / Fin:" más abajo).
-        personaId,
-        membresiaId: student.membresia.id,
-        ...(selectedDescuentoId != null ? { descuentoIds: [selectedDescuentoId] } : {}),
-      };
-      const nuevoPago = await registrarPago(input);
-      if (paymentVoucherFile && nuevoPago?.id) {
-        const { subirVoucherPago } = await import("@/services/api");
-        await subirVoucherPago(nuevoPago.id, paymentVoucherFile);
-      }
-      setPaymentSuccess(true);
-      setShowPaymentForm(false);
-      setPaymentVoucherFile(null);
-      showSuccess("Pago registrado correctamente.");
-    } catch (err) {
-      const msg = toUserMessage(err, "No se pudo registrar el pago.");
-      setPaymentError(msg);
-      showError(msg);
-    } finally {
-      setPaymentLoading(false);
-    }
-  }
 
   return (
     <li className="py-4 first:pt-0 last:pb-0">
@@ -456,220 +273,17 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
         </div>
       )}
 
-      {!student.membresia &&
-        (membershipSuccess ? (
-          <p className="mt-2 flex items-center gap-1 text-xs text-state-ok">
-            <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Membresía creada.
-          </p>
-        ) : showCreateMembership ? (
-          <div className="mt-2.5 space-y-section rounded-ctl border border-line bg-sunken p-3">
-            <select
-              value={selectedTipoId}
-              onChange={(e) => setSelectedTipoId(e.target.value ? Number(e.target.value) : "")}
-              className="input-field text-xs"
-            >
-              <option value="">Seleccionar tipo…</option>
-              {tiposMembresia.map((tipo) => (
-                <option key={tipo.id} value={tipo.id}>
-                  {tipo.categoria} — {formatCurrency(tipo.precio)} ({tipo.modalidad})
-                </option>
-              ))}
-            </select>
-            {membershipError && <p className="text-xs text-state-bad">{membershipError}</p>}
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleCreateMembership()}
-                disabled={!selectedTipoId || membershipLoading}
-                className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
-              >
-                {membershipLoading ? (
-                  <Loader2 size={ICON.sm} className="animate-spin" />
-                ) : (
-                  <Plus size={ICON.sm} />
-                )}
-                Crear
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateMembership(false)}
-                className="rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => handleOpenCreateMembership()}
-            className="mt-2.5 inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
-          >
-            <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Crear membresía
-          </button>
-        ))}
-
-      {/* Registrar pago — only when membership exists */}
+      {/* The two write flows are independent forms, each owning its own state
+          and its own failures — see CreateMembershipForm / RegisterPaymentForm.
+          Which one is offered is decided here, and only here: you create a
+          membership when there is none, and register a payment against one
+          that exists. */}
+      {!student.membresia && (
+        <CreateMembershipForm personaId={personaId} onCreated={onMembershipCreated} />
+      )}
       {student.membresia && (
         <div className="mt-2.5">
-          {paymentSuccess ? (
-            <p className="flex items-center gap-1 text-xs text-state-ok">
-              <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-              Pago registrado. Recarga para verlo.
-            </p>
-          ) : showPaymentForm ? (
-            <div className="space-y-field rounded-ctl border border-line bg-sunken p-3">
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs font-semibold text-ink-2">
-                  Monto
-                  <input
-                    type="number"
-                    step={paymentMonthlyPrice > 0 ? paymentMonthlyPrice : "0.01"}
-                    min="0"
-                    value={paymentMonto}
-                    onChange={(e) => handlePaymentMontoChange(e.target.value)}
-                    className="mt-0.5 w-full rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-ink"
-                    placeholder="0.00"
-                  />
-                </label>
-                {/* No picker: EFECTIVO is not offered here (see the state
-                    comment above), so there is nothing for the admin to
-                    choose between. */}
-                <div className="text-xs font-semibold text-ink-2">
-                  Método
-                  <p className="mt-0.5 w-full rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-ink">
-                    Transferencia
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 rounded-ctl border border-line bg-paper px-2.5 py-2">
-                <div className="text-xs">
-                  <span className="text-ink-3">Inicio: </span>
-                  <span className="font-semibold text-ink">{paymentFechaInicio || "—"}</span>
-                </div>
-                <div className="text-xs">
-                  <span className="text-ink-3">Fin: </span>
-                  <span className="font-semibold text-ink">{paymentFechaFin || "—"}</span>
-                </div>
-              </div>
-              {paymentMonthlyPrice > 0 && Number(paymentMonto) > 0 && (
-                <p className="text-2xs tracking-flat text-ink-3">
-                  {Number(paymentMonto) / paymentMonthlyPrice} meses de vigencia (precio mensual: ${paymentMonthlyPrice})
-                </p>
-              )}
-              {/* Descuento del catálogo (issue #12): decisión del admin al
-                  registrar. Solo se ofrecen los ACTIVOS; el monto final es
-                  una vista previa — el backend congela valores y recalcula.
-                  Un pago admite UN solo descuento (el backend rechaza más de
-                  uno con 400), así que esto es un grupo de radios — nunca
-                  checkboxes — con "Sin descuento" como opción normal. */}
-              {descuentosOfrecidos.length > 0 && (
-                <fieldset className="rounded-ctl border border-line bg-paper p-3">
-                  <legend className="px-1 text-xs font-semibold text-ink-2">Descuento</legend>
-                  {/* Single-select: exactly one radio group, "Sin descuento"
-                      first as the default — never checkboxes, a payment
-                      admits at most one discount (the backend rejects more
-                      than one with a 400). */}
-                  <div className="space-y-field">
-                    <label className="flex cursor-pointer items-center gap-2 rounded-ctl px-2 py-1.5 text-xs text-ink transition-colors hover:bg-sunken">
-                      <input
-                        type="radio"
-                        name={`descuento-${personaId}`}
-                        checked={selectedDescuentoId === null}
-                        onChange={() => setSelectedDescuentoId(null)}
-                        className="h-3.5 w-3.5 accent-coal"
-                      />
-                      <span>Sin descuento</span>
-                    </label>
-                    {descuentosOfrecidos.map((descuento) => (
-                      <label
-                        key={descuento.id}
-                        className="flex cursor-pointer items-center gap-2 rounded-ctl px-2 py-1.5 text-xs text-ink transition-colors hover:bg-sunken"
-                      >
-                        <input
-                          type="radio"
-                          name={`descuento-${personaId}`}
-                          checked={selectedDescuentoId === descuento.id}
-                          onChange={() => setSelectedDescuentoId(descuento.id)}
-                          className="h-3.5 w-3.5 accent-coal"
-                        />
-                        <span>
-                          {descuento.nombre}
-                          <span className="text-ink-3"> · {descuentoValorLabel(descuento)}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  {descuentosSeleccionados.length > 0 && (
-                    <p className="mt-1.5 border-t border-line pt-1.5 text-xs font-semibold text-ink">
-                      Monto final con descuento: {formatCurrency(montoFinalPreview)}
-                    </p>
-                  )}
-                </fieldset>
-              )}
-              {/* TRANSFERENCIA is the only method, so the voucher is
-                  always required (see the check in handleSubmitPayment). */}
-              <label className="block text-xs font-semibold text-ink-2">
-                Comprobante
-                <div className="mt-0.5 flex items-center gap-2">
-                  <input
-                    ref={paymentFileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,application/pdf"
-                    onChange={(e) => setPaymentVoucherFile(e.target.files?.[0] ?? null)}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => paymentFileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 rounded-lg border border-dashed border-line bg-paper px-2.5 py-1.5 text-xs text-ink-2 transition-colors hover:border-cata-red/30 hover:text-ink"
-                  >
-                    <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                    {paymentVoucherFile ? paymentVoucherFile.name : "Seleccionar archivo"}
-                  </button>
-                  {paymentVoucherFile && (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentVoucherFile(null)}
-                      className="text-2xs tracking-flat text-ink-3 hover:text-state-bad"
-                    >
-                      Quitar
-                    </button>
-                  )}
-                </div>
-              </label>
-              {paymentError && <p className="text-xs text-state-bad">{paymentError}</p>}
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => void handleSubmitPayment()}
-                  disabled={paymentLoading || !paymentMonto || !paymentFechaInicio || !paymentFechaFin}
-                  className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
-                >
-                  {paymentLoading ? <Loader2 size={ICON.sm} className="animate-spin" /> : <Plus size={ICON.sm} />}
-                  Registrar pago
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowPaymentForm(false); setPaymentVoucherFile(null); }}
-                  className="rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleOpenPaymentForm}
-              className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
-            >
-              <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-              Registrar pago
-            </button>
-          )}
+          <RegisterPaymentForm personaId={personaId} membresia={student.membresia} />
         </div>
       )}
 
