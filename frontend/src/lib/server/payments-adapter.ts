@@ -15,17 +15,12 @@
 import type { NextRequest } from "next/server";
 import type { PaymentValidationRequest, ProofFileType, ValidationStatus } from "@/services/api";
 import { MEMBERSHIP_STATUS_BY_ESTADO, type BackendEstadoMembresia } from "@/lib/membership-status";
+import { ESTADO_PAGO_TO_VALIDATION_STATUS } from "@/lib/status-badges";
 import { backendFetchAuthed } from "@/lib/server/backend-client";
 import { formatDateRange } from "@/lib/format-utils";
 
 export type BackendEstadoPago = "APROBADO" | "PENDIENTE_VALIDACION" | "RECHAZADO";
 export type BackendTipoPago = "EFECTIVO" | "TRANSFERENCIA";
-
-const VALIDATION_STATUS_BY_ESTADO_PAGO: Record<BackendEstadoPago, ValidationStatus> = {
-  APROBADO: "validado",
-  PENDIENTE_VALIDACION: "pendiente",
-  RECHAZADO: "rechazado",
-};
 
 // Re-exported for backward compatibility — moved to lib/membership-status.ts
 // so client components (e.g. src/app/profile/page.tsx) don't have to import
@@ -164,7 +159,7 @@ export function buildPaymentValidationRequest(
     proofFileName: proofFileName(pago.voucherUrl),
     proofFileType: proofFileType(pago.voucherFormato),
     proofPreviewUrl: pago.voucherUrl ?? undefined,
-    validationStatus: VALIDATION_STATUS_BY_ESTADO_PAGO[pago.estadoPago],
+    validationStatus: ESTADO_PAGO_TO_VALIDATION_STATUS[pago.estadoPago],
     validatedAt: pago.fechaValidacion ?? undefined,
     startDate: pago.fechaInicio,
     endDate: pago.fechaFin,

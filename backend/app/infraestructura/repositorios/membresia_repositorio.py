@@ -70,7 +70,7 @@ class MembresiaRepositorio:
         Devuelve las membresías ACTIVAS de los representados por
         `representante_id` (hijos/representados) cuya ventana de vigencia
         cubre `en_fecha`. Se usa para:
-          - Alertas de vencimiento (的家庭ar: por persona)
+          - Alertas de vencimiento (granularidad: por persona)
           - Regla Familiar E04-RF002 (contar miembros activos de la familia).
 
         La vigencia se deriva del último Pago APROBADO (pago.fecha_inicio <=

@@ -33,9 +33,6 @@ class DescuentoServicio:
     def listar(self, skip: int = 0, limit: Optional[int] = None) -> list[Descuento]:
         return self.repo.listar(skip=skip, limit=limit)
 
-    def contar_descuentos(self) -> int:
-        return self.repo.contar()
-
     def obtener(self, descuento_id: int) -> Descuento:
         descuento = self.repo.obtener_por_id(descuento_id)
         if not descuento:

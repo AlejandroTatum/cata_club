@@ -44,23 +44,19 @@ export const VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
   rechazado: "Rechazado",
 };
 
-/** `EstadoPago` → `ValidationStatus`, so both dialects share one vocabulary. */
+/**
+ * `EstadoPago` → `ValidationStatus`, so both dialects share one vocabulary.
+ *
+ * `lib/server/payments-adapter.ts` is the consumer that makes that sentence
+ * true; it used to keep a byte-identical private copy of this table while
+ * this one sat here unread, which is how one translation came to have two
+ * definitions nobody was diffing.
+ */
 export const ESTADO_PAGO_TO_VALIDATION_STATUS: Record<EstadoPago, ValidationStatus> = {
   PENDIENTE_VALIDACION: "pendiente",
   APROBADO: "validado",
   RECHAZADO: "rechazado",
 };
-
-/**
- * Resolve a raw `estadoPago` to its validation status.
- *
- * Falls back to `pendiente` for an unrecognised runtime value: an unknown
- * payment state is one nobody has confirmed, and showing it as approved would
- * be the one genuinely dangerous guess.
- */
-export function toValidationStatus(estadoPago: string): ValidationStatus {
-  return ESTADO_PAGO_TO_VALIDATION_STATUS[estadoPago as EstadoPago] ?? "pendiente";
-}
 
 /**
  * The filter options for payment state, shared by the `/payments` filter pills

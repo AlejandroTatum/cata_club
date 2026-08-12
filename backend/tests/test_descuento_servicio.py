@@ -1,6 +1,5 @@
 """
-Tests de la capa de servicio de descuentos: el pass-through de `skip`/
-`limit` y el nuevo `contar_descuentos()` (D7), espejo de `geografia_servicio`.
+Tests de la capa de servicio de descuentos: el pass-through de `skip`/`limit`.
 
 Se prueban directamente contra `db_session`, sin pasar por los routers
 (fuera del alcance de este track: `presentacion/routers/**` lo integra
@@ -30,12 +29,3 @@ def test_descuento_servicio_listar_respeta_skip_y_limit(db_session):
     assert len(servicio.listar(skip=0, limit=2)) == 2
 
 
-def test_descuento_servicio_contar_descuentos_coincide_con_el_total(db_session):
-    for i in range(3):
-        _crear_descuento(db_session, f"Descuento {i}", porcentaje=Decimal("10"))
-    db_session.commit()
-
-    servicio = DescuentoServicio(db_session)
-
-    assert servicio.contar_descuentos() == 3
-    assert servicio.contar_descuentos() == len(servicio.listar())
