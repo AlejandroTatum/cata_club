@@ -8,48 +8,34 @@ import type { PersonaBusqueda } from "@/types/domain";
 
 interface StudentSearchProps {
   onSelect: (alumno: PersonaBusqueda) => void;
+  /**
+   * Notified whenever the box stops representing a selected student: the
+   * built-in X is pressed, or the text is edited after a selection. The parent
+   * must treat its selected identity as invalidated on this signal (issue
+   * #200) — the text and the selected identity never diverge, and the X is the
+   * only clear control. Not fired for keystrokes of a fresh search.
+   */
+  onClear?: () => void;
   placeholder?: string;
   disabled?: boolean;
-  /**
-   * Token opaco que, al cambiar su valor, resetea el estado interno del
-   * componente (input + resultados + dropdown). Patrón "reset signal":
-   * el padre lo incrementa para pedir un clear externo (por ejemplo al
-   * clickear "Limpiar selección") sin necesidad de `forwardRef` ni de
-   * exponer métodos imperativos. Identidad por valor, no por referencia:
-   * el padre debe pasar un valor *nuevo* (primitivo) cada vez que quiera
-   * resetear — idealmente un contador entero o un timestamp.
-   */
-  resetSignal?: number;
 }
 
 export default function StudentSearch({
   onSelect,
+  onClear,
   placeholder = "Buscar alumno por nombre…",
   disabled = false,
-  resetSignal,
 }: StudentSearchProps): React.ReactElement {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PersonaBusqueda[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  /** The identity the box currently represents, if any. */
+  const [selected, setSelected] = useState<PersonaBusqueda | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const close = useCallback(() => setOpen(false), []);
-
-  // Reset externo: cuando el padre cambia `resetSignal`, limpiamos el
-  // input y los resultados. Miramos el valor anterior contra el nuevo
-  // para ignorar el mount inicial (donde prev === undefined y curr es el
-  // valor inicial — no hay nada que resetear).
-  const prevResetSignal = useRef<number | undefined>(resetSignal);
-  useEffect(() => {
-    if (prevResetSignal.current !== resetSignal) {
-      prevResetSignal.current = resetSignal;
-      setQuery("");
-      setResults([]);
-      setOpen(false);
-    }
-  }, [resetSignal]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent): void {
@@ -87,14 +73,28 @@ export default function StudentSearch({
 
   function handleSelect(alumno: PersonaBusqueda): void {
     onSelect(alumno);
+    setSelected(alumno);
     setQuery(`${alumno.nombres} ${alumno.apellidos}`);
     setOpen(false);
+  }
+
+  function handleQueryChange(value: string): void {
+    setQuery(value);
+    // Any edit after a selection means the box no longer represents that
+    // student — invalidate the identity immediately, once. Later keystrokes
+    // belong to a fresh search and must not notify again.
+    if (selected !== null) {
+      setSelected(null);
+      onClear?.();
+    }
   }
 
   function handleClear(): void {
     setQuery("");
     setResults([]);
     setOpen(false);
+    setSelected(null);
+    onClear?.();
   }
 
   return (
@@ -109,7 +109,7 @@ export default function StudentSearch({
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => handleQueryChange(e.target.value)}
           onFocus={() => results.length > 0 && setOpen(true)}
           placeholder={placeholder}
           disabled={disabled}

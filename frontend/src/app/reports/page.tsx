@@ -193,10 +193,8 @@ function ReportsContent(): React.ReactElement {
    * Backend already accepts `persona_id`; this was the only piece missing.
    */
   const [student, setStudent] = useState<PersonaBusqueda | null>(null);
-  const [studentResetSignal, setStudentResetSignal] = useState(0);
   const clearStudent = useCallback((): void => {
     setStudent(null);
-    setStudentResetSignal((n) => n + 1);
   }, []);
 
   const [personaResults, setPersonaResults] = useState<PersonaReporte[]>([]);
@@ -525,16 +523,10 @@ function ReportsContent(): React.ReactElement {
                   <span className="text-2xs font-bold uppercase text-ink-3">Alumno</span>
                   <StudentSearch
                     onSelect={setStudent}
+                    onClear={clearStudent}
                     placeholder="Buscar alumno…"
-                    resetSignal={studentResetSignal}
                   />
                 </div>
-
-                {student && (
-                  <Button size="sm" variant="ghost" onClick={clearStudent}>
-                    Limpiar selección
-                  </Button>
-                )}
               </>
             )}
 

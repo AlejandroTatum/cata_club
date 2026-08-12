@@ -30,7 +30,6 @@
 import { useCallback, useMemo, useState } from "react";
 import StudentSearch from "@/components/StudentSearch";
 import {
-  Button,
   FILTER_LABEL,
   FilterGroup,
   FilterPanel,
@@ -59,9 +58,8 @@ export interface AttendanceFiltersController {
   setScheduleId: (id: number | null) => void;
   student: PersonaBusqueda | null;
   selectStudent: (student: PersonaBusqueda) => void;
+  /** Invalidate the selection — wired to `<StudentSearch>`'s own clear signal. */
   clearStudent: () => void;
-  /** Bumped to ask `<StudentSearch>` to clear its own input (reset-signal pattern). */
-  studentResetSignal: number;
   /** `null` while a custom range is incomplete — the page must show no rows. */
   query: AttendanceQuery | null;
 }
@@ -75,11 +73,9 @@ export function useAttendanceFilters(
   const [customEnd, setCustomEnd] = useState("");
   const [scheduleId, setScheduleId] = useState<number | null>(null);
   const [student, setStudent] = useState<PersonaBusqueda | null>(null);
-  const [studentResetSignal, setStudentResetSignal] = useState(0);
 
   const clearStudent = useCallback(() => {
     setStudent(null);
-    setStudentResetSignal((n) => n + 1);
   }, []);
 
   const query = useMemo(
@@ -107,7 +103,6 @@ export function useAttendanceFilters(
     student,
     selectStudent: setStudent,
     clearStudent,
-    studentResetSignal,
     query,
   };
 }
@@ -135,14 +130,9 @@ export default function AttendanceFilters({
         <FilterGroup label="Alumno">
           <StudentSearch
             onSelect={filters.selectStudent}
+            onClear={filters.clearStudent}
             placeholder="Buscar alumno…"
-            resetSignal={filters.studentResetSignal}
           />
-          {filters.student && (
-            <Button size="sm" variant="ghost" className="self-start" onClick={filters.clearStudent}>
-              Limpiar selección
-            </Button>
-          )}
         </FilterGroup>
       }
       chips={
