@@ -152,13 +152,18 @@ services:
       DOMINIO: "${DOMINIO:?Error: define DOMINIO en el entorno de producción (dominio real del frontend, para el certificado TLS)}"
       ACME_EMAIL: "${ACME_EMAIL:?Error: define ACME_EMAIL en el entorno de producción (contacto para avisos de Let's Encrypt sobre el certificado)}"
     depends_on:
-      # `condition: service_healthy`: la base (`docker-compose.yml`) ya
-      # declara `healthcheck` para `frontend` -- ver el `depends_on` de ahí
-      # mismo, que usa la misma condición para pasar de `backend` a
-      # `frontend`. Caddy espera lo mismo: no tiene sentido rutear tráfico
-      # público hacia un frontend que todavía no responde.
+      # `condition: service_started`, NO `service_healthy`: un ingress tiene
+      # que ser lo último en caerse. Si el stack reinicia con el frontend
+      # enfermo y esta condición fuera `service_healthy`, Caddy directamente
+      # no arrancaría -- nadie escucharía en 80/443 y el bucle de renovación
+      # ACME tampoco correría. Let's Encrypt tiene límite semanal de
+      # emisión, así que una caída del frontend podría terminar en un
+      # certificado vencido durante días. Caddy devolviendo 502 mientras el
+      # frontend se recupera es preferible a que no haya nada escuchando, y
+      # sobre todo la renovación del certificado solo ocurre mientras Caddy
+      # corre.
       frontend:
-        condition: service_healthy
+        condition: service_started
     mem_limit: 48m
     healthcheck:
       # Contra la API de administración de Caddy (127.0.0.1:2019, activa por
