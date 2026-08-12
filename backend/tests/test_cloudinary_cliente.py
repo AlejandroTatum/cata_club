@@ -360,3 +360,28 @@ def test_resolver_url_entrega_de_un_public_id_lo_firma():
     assert resultado != "voucher-pago-00000004"
     assert "/authenticated/" in resultado
     assert "voucher-pago-00000004" in resultado
+
+
+def test_resolver_url_entrega_de_una_fila_previa_al_fix_con_esquema_en_mayusculas_no_se_toca():
+    """El esquema puede llegar en mayúsculas (`HTTPS://...`). El detector
+    debe reconocerlo igual que la variante en minúsculas -- Cloudinary
+    siempre emite el esquema en minúsculas, pero el detector no debe
+    asumirlo, porque tratar esto como `public_id` mandaría el valor a firmar
+    y produciría una URL basura."""
+    url_heredada_mayusculas = "HTTPS://res.cloudinary.com/cataclub/image/upload/voucher-pago-00000005.jpg"
+
+    resultado = cc.resolver_url_entrega(url_heredada_mayusculas, resource_type="image")
+
+    assert resultado == url_heredada_mayusculas
+
+
+def test_resolver_url_entrega_de_un_public_id_con_dos_puntos_no_se_confunde_con_una_url():
+    """Un `public_id` puede llevar `:` como separador lógico de carpeta
+    (p. ej. `foo:bar/baz`). No tiene esquema `http`/`https`, así que debe
+    firmarse como cualquier otro `public_id`, no tratarse como URL heredada."""
+    public_id_con_dos_puntos = "foo:bar/baz"
+
+    resultado = cc.resolver_url_entrega(public_id_con_dos_puntos, resource_type="image")
+
+    assert resultado != public_id_con_dos_puntos
+    assert "/authenticated/" in resultado

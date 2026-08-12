@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Optional
+from urllib.parse import urlparse
 
 import cloudinary
 import cloudinary.uploader
@@ -341,13 +342,20 @@ def resolver_url_entrega(
     `type="upload"` (público, enumerable -- exactamente el hallazgo que este
     módulo corrige). No hay forma de repararlas sin volver a subir el
     archivo bajo `type="authenticated"` con las credenciales reales de
-    Cloudinary (ausentes en este entorno); se detectan por el prefijo
-    `http` y se devuelven sin cambios en vez de romperlas en silencio --
-    siguen siendo públicas, riesgo residual documentado en
+    Cloudinary (ausentes en este entorno); se detectan por el ESQUEMA
+    (`urlparse(...).scheme in ("http", "https")`, no un prefijo de string) y
+    se devuelven sin cambios en vez de romperlas en silencio -- siguen
+    siendo públicas, riesgo residual documentado en
     docs/fixes/16-voucher-no-enumerable.md junto con la migración pendiente.
+    `urlparse` normaliza el esquema a minúsculas, así que un valor heredado
+    con `HTTPS://` en mayúsculas también se detecta como URL (diferencia
+    deliberada frente a un `startswith` literal: en la práctica no ocurre,
+    porque Cloudinary siempre emite el esquema en minúsculas, pero de
+    ocurrir es preferible devolverlo tal cual a mandarlo a firmar como si
+    fuera un `public_id`).
     """
     if not valor_almacenado:
         return None
-    if valor_almacenado.startswith("http://") or valor_almacenado.startswith("https://"):
+    if urlparse(valor_almacenado).scheme in ("http", "https"):
         return valor_almacenado
     return generar_url_firmada(valor_almacenado, resource_type=resource_type, formato=formato)
