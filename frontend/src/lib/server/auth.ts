@@ -245,7 +245,37 @@ export interface AuthError {
 
 export type AuthResult<T> = { ok: true; data: T } | { ok: false; error: AuthError };
 
+/**
+ * Default abort deadline for a backend call. Sized for an auth round trip —
+ * login, /auth/me, refresh: the backend either answers in well under a second
+ * or something is wrong, so waiting longer only makes the failure slower.
+ */
 const BACKEND_TIMEOUT_MS = 10_000;
+
+/**
+ * Abort deadline for backend PDF report generation, and ONLY for that.
+ * Rendering a report is not authenticating: the backend queries a period's
+ * worth of rows and lays out a document, which legitimately takes tens of
+ * seconds on a large range. Under the default deadline the BFF cut those
+ * reports off at 10 s and reported a timeout for a backend that was working
+ * fine, just slowly (see issue #197). This budget is deliberately not the
+ * default — every other route, authentication included, keeps
+ * `BACKEND_TIMEOUT_MS`.
+ */
+export const PDF_BACKEND_TIMEOUT_MS = 60_000;
+
+/**
+ * Per-call knobs for `backendFetch`, kept deliberately out of `RequestInit`:
+ * that object is forwarded verbatim to the platform `fetch`, which must not
+ * receive non-standard fields, and widening its type would force every
+ * existing caller's `init` through a custom alias. As a separate optional
+ * argument it is purely additive — callers that don't pass it are unchanged
+ * and keep `BACKEND_TIMEOUT_MS`.
+ */
+export interface BackendFetchOptions {
+  /** Milliseconds before the call is aborted. Defaults to `BACKEND_TIMEOUT_MS`. */
+  timeoutMs?: number;
+}
 
 /**
  * Low-level authenticated-agnostic backend fetch — timeout handling and
@@ -255,7 +285,11 @@ const BACKEND_TIMEOUT_MS = 10_000;
  * personas, ranking, ...) on top of the same primitive `backendLogin`,
  * `backendMe`, and `backendRefresh` already use.
  */
-export async function backendFetch(path: string, init: RequestInit): Promise<AuthResult<Response>> {
+export async function backendFetch(
+  path: string,
+  init: RequestInit,
+  options: BackendFetchOptions = {},
+): Promise<AuthResult<Response>> {
   // Resolved OUTSIDE the try on purpose. `getBackendApiUrl()` throws when the
   // server is misconfigured, and swallowing that into the catch below would
   // report a permanent deployment fault as a transient outage — the user is
@@ -276,7 +310,7 @@ export async function backendFetch(path: string, init: RequestInit): Promise<Aut
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? BACKEND_TIMEOUT_MS);
   try {
     const response = await fetch(`${baseUrl}${path}`, {
       ...init,

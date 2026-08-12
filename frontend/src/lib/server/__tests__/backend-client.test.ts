@@ -23,7 +23,7 @@
  * @vitest-environment node
  */
 
-import { NextRequest } from "next/server";
+import { NextRequest, type NextResponse } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import {
@@ -31,6 +31,7 @@ import {
   passthroughBackendError,
   proxyBackendGet,
   proxyBackendPdfGet,
+  type BackendProxyResult,
 } from "../backend-client";
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "../auth";
 
@@ -368,5 +369,82 @@ describe("proxyBackendPdfGet", () => {
     expect(response.status).toBe(422);
     expect(response.headers.get("Content-Type")).toContain("application/json");
     expect(await response.json()).toEqual({ message: "Rango inválido" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// El plazo del backend, y quién lo alarga (issue #197)
+//
+// Generar un reporte no es autenticar: la ruta de PDF pide 60 s y el resto
+// —autenticación incluida— se queda en los 10 s de siempre. Los dos números
+// van escritos acá como milisegundos literales, no importados de ../auth: un
+// test que lee la misma constante que lee el código se mueve con ella y nunca
+// puede avisar que cambió.
+//
+// Lo que se observa es el abort real llegando al llamador: el backend falso
+// no responde nunca por su cuenta, solo cuando el AbortSignal se dispara.
+// ---------------------------------------------------------------------------
+
+describe("plazo del backend", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.mocked(global.fetch).mockImplementation(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = (init as RequestInit | undefined)?.signal;
+          if (!signal) {
+            reject(new Error("backendFetch dejó de pasar un AbortSignal — no hay plazo que observar."));
+            return;
+          }
+          signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+        }),
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("una ruta autenticada común sigue abortando a los 10 s", async () => {
+    // La regresión peligrosa del cambio de #197 es aflojarle el plazo a todo:
+    // este candado es el que se pone rojo si el plazo largo se vuelve default.
+    const observado: BackendProxyResult[] = [];
+    const pendiente = backendFetchAuthed(requestWith({ access: TOKEN_VIGENTE }), "/pagos").then((r) =>
+      observado.push(r),
+    );
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(observado).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(observado).toHaveLength(1);
+    await pendiente;
+    expect(observado[0]).toEqual({ ok: false, status: 503, error: "timeout" });
+  });
+
+  it("la ruta de PDF no se corta a los 10 s y aborta a los 60 s", async () => {
+    const observado: NextResponse[] = [];
+    const pendiente = proxyBackendPdfGet(
+      requestWith({ access: TOKEN_VIGENTE }),
+      "/reportes/pagos.pdf",
+      "No se pudo exportar",
+    ).then((r) => observado.push(r));
+
+    // Acá cortaba antes, con el backend todavía renderizando el reporte.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(observado).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(49_999);
+    expect(observado).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(observado).toHaveLength(1);
+    await pendiente;
+
+    // El cuerpo se lee ya con timers reales: leer un stream no debe depender
+    // de que alguien avance un reloj falso.
+    vi.useRealTimers();
+    expect(observado[0].status).toBe(503);
+    expect(await observado[0].json()).toEqual({ message: "No se pudo exportar" });
   });
 });
