@@ -90,6 +90,7 @@ vi.mock("@/services/api", () => ({
 }));
 
 import { useAuth } from "@/contexts/AuthContext";
+import { getNavLinksForRole } from "@/lib/auth-utils";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 import {
   OPEN_HELP_CHAT_EVENT,
@@ -784,6 +785,32 @@ describe("resolveActiveHref", (): void => {
 
   it("returns null when nothing matches", (): void => {
     expect(resolveActiveHref(trainerLinks, "/members")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The same resolver, fed the REAL trainer navigation instead of a local
+// fixture. The block above describes the rule; this one describes what the
+// sidebar actually highlights for an entrenador — if the "Historial" entry
+// disappears from `getNavLinksForRole`, the first case here goes red even
+// though the resolver never changed.
+// ---------------------------------------------------------------------------
+
+describe("resolveActiveHref — real trainer navigation", (): void => {
+  const trainerNav = getNavLinksForRole("trainer");
+
+  it("marks Historial, not Pasar lista, on the history screen", (): void => {
+    expect(resolveActiveHref(trainerNav, "/trainer/attendance/history")).toBe(
+      "/trainer/attendance/history",
+    );
+  });
+
+  it("still marks Pasar lista on the attendance screen", (): void => {
+    expect(resolveActiveHref(trainerNav, "/trainer/attendance")).toBe("/trainer/attendance");
+  });
+
+  it("still marks Mi día on the trainer panel", (): void => {
+    expect(resolveActiveHref(trainerNav, "/trainer")).toBe("/trainer");
   });
 });
 
