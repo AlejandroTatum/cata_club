@@ -10,7 +10,8 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import Header from "@/components/Header";
+import Header, { NAV_ICON_MAP } from "@/components/Header";
+import type { UserRole } from "@/types/domain";
 
 interface MockLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children: React.ReactNode;
@@ -499,5 +500,47 @@ describe("Header", (): void => {
     fireEvent.click(logoutButtons[logoutButtons.length - 1]);
 
     expect(mockLogout).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Icon coverage.
+//
+// Adding a navigation entry is TWO edits — the link in `getNavLinksForRole`
+// and its glyph in `NAV_ICON_MAP` — and forgetting the second one is silent:
+// every call site falls back instead of failing (`House` here at Header.tsx,
+// `User` in the sidebar and the mobile tab bar at AppShell.tsx). The item just
+// ships wearing someone else's icon. This locks the two halves together for
+// every role at once, so the next entry cannot be added half-way.
+// ---------------------------------------------------------------------------
+
+describe("NAV_ICON_MAP", (): void => {
+  it("has an icon for every href getNavLinksForRole can return, for every role", async (): Promise<void> => {
+    // The real helper, not the `vi.fn` wrapper installed above: this asserts
+    // the icon map against the navigation the app actually ships.
+    const { getNavLinksForRole: realGetNavLinksForRole } =
+      await vi.importActual<typeof import("@/lib/auth-utils")>("@/lib/auth-utils");
+
+    const roles: (UserRole | null)[] = [
+      null,
+      "admin",
+      "trainer",
+      "representante",
+      "estudiante",
+      "unsupported",
+    ];
+    const hrefs = new Set<string>();
+    for (const role of roles) {
+      // Both sides of the age gate — an adult "estudiante" reaches one route a
+      // minor never sees, and it needs an icon too.
+      for (const studentIsAdult of [false, true]) {
+        for (const link of realGetNavLinksForRole(role, studentIsAdult)) {
+          hrefs.add(link.href);
+        }
+      }
+    }
+
+    const withoutIcon = [...hrefs].filter((href) => !(href in NAV_ICON_MAP));
+    expect(withoutIcon).toEqual([]);
   });
 });

@@ -69,6 +69,12 @@ export function getNavLinksForRole(
         // "Asistencias" is the record list, this one is the act of taking it.
         // One word apart, they used to read as the same destination.
         { href: "/trainer/attendance", label: "Pasar lista" },
+        // Its own section, not a detail of "Pasar lista": without this entry
+        // the only way into /trainer/attendance/history was a secondary button
+        // on the panel, and `resolveActiveHref` attributed the screen to
+        // "Pasar lista" (longest-prefix wins, and this href is the longer one
+        // as soon as it exists).
+        { href: "/trainer/attendance/history", label: "Historial" },
       );
       break;
     case "representante":

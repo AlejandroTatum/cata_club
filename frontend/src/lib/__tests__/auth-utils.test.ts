@@ -147,10 +147,27 @@ describe("getNavLinksForRole", () => {
   // and "Asistencia".
   it("returns trainer links named after their destinations, in Spanish", () => {
     const links = getNavLinksForRole("trainer");
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(4);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
     expect(links[1]).toEqual({ href: "/trainer", label: "Mi día" });
     expect(links[2]).toEqual({ href: "/trainer/attendance", label: "Pasar lista" });
+    // The history screen is a section of its own. Asserted as the whole list
+    // (not `.some(...)`) so dropping it, renaming it, or reordering it against
+    // "Pasar lista" all fail here — the order is what `resolveActiveHref` and
+    // the sidebar render.
+    expect(links[3]).toEqual({ href: "/trainer/attendance/history", label: "Historial" });
+  });
+
+  // The three trainer destinations, in the exact order the sidebar shows them.
+  // The assertion above pins each index; this one pins that there is no fourth
+  // destination and no gap between them.
+  it("gives trainer exactly Mi día, Pasar lista and Historial, in that order", () => {
+    const links = getNavLinksForRole("trainer");
+    expect(links.filter((link) => link.href !== "/")).toEqual([
+      { href: "/trainer", label: "Mi día" },
+      { href: "/trainer/attendance", label: "Pasar lista" },
+      { href: "/trainer/attendance/history", label: "Historial" },
+    ]);
   });
 
   it("uses no English labels in any role's navigation", () => {

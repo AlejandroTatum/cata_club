@@ -31,6 +31,7 @@ import {
   Users,
   Calendar,
   FileText,
+  History,
   Stethoscope,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -78,9 +79,18 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   "/attendance": ClipboardCheck,
   "/trainer": LayoutGrid,
   "/trainer/attendance": ClipboardCheck,
+  // `History` (a clock turned back), not `Clock`: within this same map
+  // time-shaped glyphs already mean scheduling — `Calendar` is "/groups"
+  // (Horarios) — and a bare clock would read as "hours", not "what was
+  // already taken". It also stays distinct from its two nav neighbours.
+  "/trainer/attendance/history": History,
   "/reports": FileText,
   "/student": User,
   "/student/payments": CreditCard,
+  // Same glyph as the admin's "/attendance": one is the club's attendance
+  // record, the other is the family's own slice of it. The roles never see
+  // each other's nav, and within the family portal it collides with nothing.
+  "/student/attendance": ClipboardCheck,
   "/student/medical-record": Stethoscope,
 };
 
