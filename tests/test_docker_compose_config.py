@@ -14,6 +14,7 @@ ejemplo: `cd backend && uv run pytest ../tests/test_docker_compose_config.py`
 """
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -454,3 +455,63 @@ def test_qa_sigue_publicando_los_puertos_documentados():
     for servicio, puerto in (("backend", "8000"), ("frontend", "3000")):
         publicados = {p["published"] for p in config["services"][servicio].get("ports", [])}
         assert puerto in publicados, f"'{servicio}' ya no publica {puerto} en QA"
+
+
+# ─── Memoria de producción (droplet de 2GB) ─────────────────────────────────
+
+
+def test_mailpit_no_aparece_en_el_render_de_produccion():
+    """mailpit es un cazamoscas de correo de DESARROLLO sin autenticación:
+    no tiene lugar en producción, ni siquiera sin puertos publicados (ver
+    `test_el_render_de_produccion_no_publica_ni_un_solo_puerto`, que ya
+    cubre eso). El servicio entero -- imagen, variables, todo -- vive
+    únicamente en `docker-compose.override.yml` (dev-only)."""
+    config = _config_produccion()
+    assert "mailpit" not in config["services"], (
+        "'mailpit' aparece en el render de producción -- el servicio "
+        "completo debe vivir solo en docker-compose.override.yml"
+    )
+
+
+# Presupuesto de memoria de un droplet de 2GB (decisión de diseño 4.6/4.7,
+# sdd/production-readiness): 1600m deja margen sobre los valores de arranque
+# (1440m) para el sistema operativo y los picos, y pone en rojo cualquier
+# servicio nuevo sin límite o cualquier límite inflado.
+_LIMITE_TOTAL_DE_MEMORIA_BYTES = 1600 * 1024 * 1024
+
+
+def test_cada_servicio_de_produccion_declara_mem_limit_y_no_se_pasa_del_presupuesto():
+    """`docker compose up` (sin Swarm) solo honra `mem_limit`, no
+    `deploy.resources.limits` -- de ahí que cada servicio lo declare
+    explícito. Sin un tope por servicio, un solo contenedor puede consumir
+    toda la RAM del droplet y tumbar al resto por OOM."""
+    config = _config_produccion()
+    total = 0
+    for nombre, datos in config["services"].items():
+        limite = datos.get("mem_limit")
+        assert limite, (
+            f"'{nombre}' no declara `mem_limit` en el render de producción -- "
+            f"sin él puede consumir toda la RAM del droplet"
+        )
+        total += int(limite)
+    assert total <= _LIMITE_TOTAL_DE_MEMORIA_BYTES, (
+        f"la suma de `mem_limit` de todos los servicios ({total} bytes) supera "
+        f"el presupuesto de un droplet de 2GB ({_LIMITE_TOTAL_DE_MEMORIA_BYTES} "
+        f"bytes)"
+    )
+
+
+def test_celery_worker_concurrencia_es_uno():
+    """Complementa `test_celery_worker_declara_concurrencia_explicita`
+    (que solo exige que la bandera exista): en un droplet de 2GB el valor
+    tiene que ser 1, no cualquier valor explícito -- cada proceso prefork
+    carga la aplicación entera (decisión de diseño 4.6)."""
+    config = _config_produccion()
+    comando = config["services"]["celery-worker"].get("command") or []
+    comando_texto = comando if isinstance(comando, str) else " ".join(comando)
+    match = re.search(r"--concurrency[= ](\d+)", comando_texto)
+    assert match, f"no se encontró '--concurrency' en el command: {comando_texto!r}"
+    assert match.group(1) == "1", (
+        f"'celery-worker' declara --concurrency={match.group(1)}, se esperaba 1 "
+        f"para un droplet de 2GB"
+    )
