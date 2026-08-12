@@ -1,0 +1,62 @@
+{"ts":"2026-08-12T00:51:36.297Z","type":"login","actor":"admin","finalUrl":"http://localhost:3000/dashboard","authenticated":true,"errs":[]}
+{"ts":"2026-08-12T00:51:37.927Z","type":"visit","actor":"admin","route":"/dashboard","viewport":"desktop","finalUrl":"http://localhost:3000/dashboard","title":"Panel de Control | Cata Club Admin","h1":"Panel de Control","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:39.541Z","type":"visit","actor":"admin","route":"/payments","viewport":"desktop","finalUrl":"http://localhost:3000/payments","title":"Membresías y Pagos | Cata Club Admin","h1":"Membresías y Pagos","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:41.130Z","type":"visit","actor":"admin","route":"/members","viewport":"desktop","finalUrl":"http://localhost:3000/members","title":"Miembros | Cata Club Admin","h1":"Miembros","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:42.704Z","type":"visit","actor":"admin","route":"/groups","viewport":"desktop","finalUrl":"http://localhost:3000/groups","title":"Horarios | Cata Club Admin","h1":"Horarios","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:44.252Z","type":"visit","actor":"admin","route":"/reports","viewport":"desktop","finalUrl":"http://localhost:3000/reports","title":"Reportes | Cata Club Admin","h1":"Reportes","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:45.798Z","type":"visit","actor":"admin","route":"/discounts","viewport":"desktop","finalUrl":"http://localhost:3000/discounts","title":"Descuentos | Cata Club Admin","h1":"Descuentos","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:47.402Z","type":"visit","actor":"admin","route":"/attendance","viewport":"desktop","finalUrl":"http://localhost:3000/attendance","title":"Asistencias | Cata Club Admin","h1":"Asistencias","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:48.966Z","type":"visit","actor":"admin","route":"/profile","viewport":"desktop","finalUrl":"http://localhost:3000/profile","title":"Perfil — Cata Club","h1":"Perfil","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:50.602Z","type":"visit","actor":"admin","route":"/ayuda","viewport":"desktop","finalUrl":"http://localhost:3000/ayuda","title":"Cata Club Admin","h1":"Preguntas frecuentes","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:52.172Z","type":"visit","actor":"admin","route":"/admin/crear-cuenta","viewport":"desktop","finalUrl":"http://localhost:3000/admin/crear-cuenta","title":"Cata Club Admin","h1":"Crear Cuenta","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:53.819Z","type":"visit","actor":"admin","route":"/unauthorized","viewport":"desktop","finalUrl":"http://localhost:3000/dashboard","title":"Panel de Control | Cata Club Admin","h1":"Panel de Control","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:51:55.429Z","type":"visit-mobile","actor":"admin","route":"/dashboard"}
+{"ts":"2026-08-12T00:51:56.985Z","type":"visit-mobile","actor":"admin","route":"/reports"}
+{"ts":"2026-08-12T00:51:58.562Z","type":"visit-mobile","actor":"admin","route":"/members"}
+{"ts":"2026-08-12T00:51:58.567Z","type":"actor-done","actor":"admin"}
+{"ts":"2026-08-12T00:52:00.793Z","type":"login","actor":"entrenador","finalUrl":"http://localhost:3000/trainer","authenticated":true,"errs":[]}
+{"ts":"2026-08-12T00:52:02.487Z","type":"visit","actor":"entrenador","route":"/trainer","viewport":"desktop","finalUrl":"http://localhost:3000/trainer","title":"Mi día — Cata Club","h1":"Hola, Carlos","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:04.035Z","type":"visit","actor":"entrenador","route":"/trainer/attendance","viewport":"desktop","finalUrl":"http://localhost:3000/trainer/attendance","title":"Pasar lista — Cata Club","h1":"Pasar lista","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:05.752Z","type":"visit","actor":"entrenador","route":"/trainer/attendance/history","viewport":"desktop","finalUrl":"http://localhost:3000/trainer/attendance/history","title":"Historial de asistencias — Cata Club","h1":"Historial de asistencias","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:07.333Z","type":"visit","actor":"entrenador","route":"/profile","viewport":"desktop","finalUrl":"http://localhost:3000/profile","title":"Perfil — Cata Club","h1":"Perfil","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:08.939Z","type":"visit","actor":"entrenador","route":"/ayuda","viewport":"desktop","finalUrl":"http://localhost:3000/ayuda","title":"Cata Club Admin","h1":"Preguntas frecuentes","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:10.614Z","type":"visit-mobile","actor":"entrenador","route":"/trainer"}
+{"ts":"2026-08-12T00:52:10.618Z","type":"actor-done","actor":"entrenador"}
+{"ts":"2026-08-12T00:52:12.844Z","type":"login","actor":"sebastian","finalUrl":"http://localhost:3000/student?alumno=37","authenticated":true,"errs":[]}
+{"ts":"2026-08-12T00:52:14.560Z","type":"visit","actor":"sebastian","route":"/student","viewport":"desktop","finalUrl":"http://localhost:3000/student?alumno=37","title":"Mi cuenta — Cata Club","h1":"Mi cuenta","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:16.256Z","type":"visit","actor":"sebastian","route":"/student/payments","viewport":"desktop","finalUrl":"http://localhost:3000/student/payments?alumno=37","title":"Pagos — Cata Club","h1":"Pagos","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:17.955Z","type":"visit","actor":"sebastian","route":"/student/add-dependent","viewport":"desktop","finalUrl":"http://localhost:3000/student/add-dependent","title":"Agregar dependiente — Cata Club","h1":"Agregar dependiente","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:19.640Z","type":"visit","actor":"sebastian","route":"/student/attendance","viewport":"desktop","finalUrl":"http://localhost:3000/student/attendance?alumno=37","title":"Asistencias — Cata Club","h1":"Asistencias","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:21.128Z","type":"visit","actor":"sebastian","route":"/student/enroll","viewport":"desktop","finalUrl":"http://localhost:3000/student/enroll","title":"Inscripción — Cata Club","h1":"Inscripción de estudiante","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:22.763Z","type":"visit","actor":"sebastian","route":"/student/medical-record","viewport":"desktop","finalUrl":"http://localhost:3000/student/medical-record?alumno=37","title":"Ficha médica — Cata Club","h1":"Ficha médica","consoleErrors":["Failed to load resource: the server responded with a status of 404 (Not Found)"],"networkFails":["404 GET http://localhost:3000/api/fichas-medicas/persona/37"]}
+{"ts":"2026-08-12T00:52:24.446Z","type":"visit","actor":"sebastian","route":"/profile","viewport":"desktop","finalUrl":"http://localhost:3000/profile","title":"Perfil — Cata Club","h1":"Perfil","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:26.043Z","type":"visit","actor":"sebastian","route":"/ayuda","viewport":"desktop","finalUrl":"http://localhost:3000/ayuda","title":"Cata Club Admin","h1":"Preguntas frecuentes","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:27.686Z","type":"visit-mobile","actor":"sebastian","route":"/student"}
+{"ts":"2026-08-12T00:52:29.352Z","type":"visit-mobile","actor":"sebastian","route":"/student/payments"}
+{"ts":"2026-08-12T00:52:29.356Z","type":"actor-done","actor":"sebastian"}
+{"ts":"2026-08-12T00:52:31.574Z","type":"login","actor":"ana","finalUrl":"http://localhost:3000/student?alumno=8","authenticated":true,"errs":[]}
+{"ts":"2026-08-12T00:52:33.167Z","type":"visit","actor":"ana","route":"/student","viewport":"desktop","finalUrl":"http://localhost:3000/student?alumno=8","title":"Mi cuenta — Cata Club","h1":"Mi cuenta","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:34.721Z","type":"visit","actor":"ana","route":"/profile","viewport":"desktop","finalUrl":"http://localhost:3000/profile","title":"Perfil — Cata Club","h1":"Perfil","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:36.317Z","type":"visit","actor":"ana","route":"/ayuda","viewport":"desktop","finalUrl":"http://localhost:3000/ayuda","title":"Cata Club Admin","h1":"Preguntas frecuentes","consoleErrors":[],"networkFails":[]}
+{"ts":"2026-08-12T00:52:36.321Z","type":"actor-done","actor":"ana"}
+{"ts":"2026-08-12T00:52:38.541Z","type":"login","actor":"entrenador","finalUrl":"http://localhost:3000/trainer","authenticated":true,"errs":[]}
+{"ts":"2026-08-12T00:52:40.225Z","type":"visit","actor":"entrenador","route":"/trainer","viewport":"desktop","finalUrl":"http://localhost:3000/trainer","title":"Mi día — Cata Club","consoleErrors":[],"networkFails":[],"h1":"Hola, Carlos"}
+{"ts":"2026-08-12T00:52:40.229Z","type":"dsh2-trainer-density","vh":900,"lastContentY":1034.390625,"blankBelowPx":-134.390625,"blankPct":-15,"verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:52:41.909Z","type":"visit","actor":"entrenador","route":"/trainer","viewport":"desktop","finalUrl":"http://localhost:3000/trainer","title":"Mi día — Cata Club","consoleErrors":[],"networkFails":[],"h1":"Hola, Carlos"}
+{"ts":"2026-08-12T00:52:41.913Z","type":"n1-trainer-persona","hasPersonaFallback":false,"verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:52:43.791Z","type":"a1-trainer-attendance-steps","stepsCount":5,"hasConfirmarStep":true,"sample":"Volver al Panel del Entrenador1Horario2Pasar lista3ConfirmarElija el horarioHorarios de hoy · MartesVer todos los díasMartes(5 horarios)15:00 — 16:0016:00 — 17:0017:00 — 18:0018:00 — 20:0020:00 — 21:15Continuar","verdict":"STILL_OPEN"}
+{"ts":"2026-08-12T00:52:45.859Z","type":"asi6-history-footer","hasSesions":false,"hasSesiones":true,"verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:52:48.093Z","type":"login","actor":"admin","finalUrl":"http://localhost:3000/dashboard","authenticated":true,"errs":[]}
+{"ts":"2026-08-12T00:52:49.702Z","type":"visit","actor":"admin","route":"/ayuda","viewport":"desktop","finalUrl":"http://localhost:3000/ayuda","title":"Cata Club Admin","consoleErrors":[],"networkFails":[],"h1":"Preguntas frecuentes"}
+{"ts":"2026-08-12T00:52:49.709Z","type":"dsh3-ayuda-volver","actor":"admin","linksVolverCount":1,"accordionCount":5,"verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:52:51.636Z","type":"asi7-reports-alumno-filter","labels":"desde|hasta","hasAlumnoFilter":false,"verdict":"STILL_OPEN"}
+{"ts":"2026-08-12T00:52:53.517Z","type":"asi8-reports-mobile-overlap","hasBoth":true,"h1":{"top":68,"right":374,"text":"Reportes"},"btn":{"top":110,"left":16,"text":"Generar PDF"},"overlap":false,"verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:52:55.313Z","type":"dsh5-dashboard-mobile-focus","hasBoth":true,"focused":{"top":789,"bottom":834},"bar":{"top":782,"bottom":844},"overlap":true,"verdict":"STILL_OPEN"}
+{"ts":"2026-08-12T00:52:57.871Z","type":"dsh6-outage-redirect","finalUrl":"http://localhost:3000/dashboard","verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:53:00.157Z","type":"login","actor":"sebastian","finalUrl":"http://localhost:3000/student?alumno=37","authenticated":true,"errs":[]}
+{"ts":"2026-08-12T00:53:01.762Z","type":"visit","actor":"sebastian","route":"/ayuda","viewport":"desktop","finalUrl":"http://localhost:3000/ayuda","title":"Cata Club Admin","consoleErrors":[],"networkFails":[],"h1":"Preguntas frecuentes"}
+{"ts":"2026-08-12T00:53:01.769Z","type":"dsh3-ayuda-volver","actor":"sebastian","linksVolverCount":1,"accordionCount":4,"verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:53:05.428Z","type":"pag5-monto-invalido","registrarDisabled":true,"helperVisible":true,"helperText":"MONTO El monto debe ser un múltiplo del valor mensual ($25,00): pague uno o más meses completos.","verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:53:07.229Z","type":"a5-payment-instructions","visible":true,"steps":3,"paragraphs":3,"verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:53:09.943Z","type":"ins8-add-dependent-fecha","siguienteDisabled":true,"verdict":"RESOLVED"}
+{"ts":"2026-08-12T00:53:09.966Z","type":"done"}
