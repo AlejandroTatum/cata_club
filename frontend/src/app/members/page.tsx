@@ -43,7 +43,6 @@ import {
   TableNameCell,
   TableRow,
 } from "@/components/ui";
-import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Users,
@@ -52,14 +51,12 @@ import {
   ShieldCheck,
   Search,
   User,
-  Mail,
   GraduationCap,
   CheckCircle2,
   Building2,
   Stethoscope,
   Loader2,
   Plus,
-  Save,
   ToggleLeft,
   ToggleRight,
   Pencil,
@@ -67,7 +64,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { fetchMembers, obtenerRolesDePersona, asignarRol, quitarRol, cambiarEstadoCuenta, actualizarPersona, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
+import { fetchMembers, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { getUserInitials } from "@/lib/auth-utils";
 import {
   buildMemberStats,
@@ -92,9 +89,10 @@ import {
 import type { BackendTipoRol, FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import MedicalRecordEditor from "./MedicalRecordEditor";
+import AccountInfoSection from "./AccountInfoSection";
+import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
 import CreateMembershipForm from "./CreateMembershipForm";
 import RegisterPaymentForm from "./RegisterPaymentForm";
-import { toUserMessage } from "@/lib/error-message";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
@@ -328,12 +326,6 @@ interface MemberEditDialogProps {
 
 const ALL_BACKEND_ROLES: BackendTipoRol[] = ["ADMINISTRADOR", "ENTRENADOR", "REPRESENTANTE", "ALUMNO"];
 
-const ROLE_LABELS: Record<BackendTipoRol, string> = {
-  ADMINISTRADOR: "Admin",
-  ENTRENADOR: "Entrenador",
-  REPRESENTANTE: "Representante",
-  ALUMNO: "Alumno",
-};
 
 const ROLE_ICONS: Record<BackendTipoRol, typeof ShieldCheck> = {
   ADMINISTRADOR: ShieldCheck,
@@ -414,111 +406,25 @@ function MemberEditDialog({
   onClose,
   onMembershipCreated,
 }: MemberEditDialogProps): React.ReactElement {
-  const { showSuccess, showError } = useToast();
-  // `roles`/`activo` start empty/true only as placeholders — they get
-  // overwritten by `obtenerRolesDePersona` as soon as the edit modal opens
-  // (see the `editModalOpen` effect below). Before that fetch resolves,
-  // `rolesReady` is false and the roles/estado controls stay disabled, so
-  // the checkboxes never render (or can be toggled) against a stale "no
-  // roles yet" placeholder — that mismatch was the original bug.
-  const [roles, setRoles] = useState<BackendTipoRol[]>([]);
-  const [activo, setActivo] = useState(true);
-  const [rolesLoading, setRolesLoading] = useState(false);
-  const [rolesLoaded, setRolesLoaded] = useState(false);
-  const [roleLoading, setRoleLoading] = useState<BackendTipoRol | null>(null);
-  const [stateLoading, setStateLoading] = useState(false);
-  const [roleError, setRoleError] = useState<string | null>(null);
-  const [stateError, setStateError] = useState<string | null>(null);
-  const rolesReady = rolesLoaded && !rolesLoading;
+  // Roles and estado are ONE concern, not two: a single request answers both,
+  // a failed load has to show up in both places, and the header badge below
+  // renders `activo`. See useAccountRolesAndStatus for why that is a hook and
+  // the identity fields are a component.
+  const {
+    roles,
+    activo,
+    ready: rolesReady,
+    loading: rolesLoading,
+    roleLoading,
+    stateLoading,
+    roleError,
+    stateError,
+    toggleRole,
+    toggleEstado,
+  } = useAccountRolesAndStatus(Number(account.id));
   const statusBadge = getAccountStatusBadge(account);
   const personaId = Number(account.id);
 
-  // Nombre/Teléfono editing — `PATCH /personas/{id}` already exists in the
-  // backend (via PersonaUpdateDTO) and `actualizarPersona` already wraps it
-  // in the frontend (used by the student etiquetas editor elsewhere), it was
-  // just never wired into this modal even though its trigger is labeled
-  // "Editar". Same save-per-action pattern as roles/estado above, not a big
-  // form. Local edits don't retroactively update the row's `account` prop
-  // (same as `crearMembresia`'s "Recarga para verla." note) — a reload
-  // reflects the change everywhere else.
-  const [nombresInput, setNombresInput] = useState(account.nombres);
-  const [apellidosInput, setApellidosInput] = useState(account.apellidos);
-  const [telefonoInput, setTelefonoInput] = useState(account.telefono);
-  const [infoSaving, setInfoSaving] = useState(false);
-  const [infoError, setInfoError] = useState<string | null>(null);
-  const [infoSuccess, setInfoSuccess] = useState(false);
-
-  async function handleSaveInfo(): Promise<void> {
-    setInfoSaving(true);
-    setInfoError(null);
-    setInfoSuccess(false);
-    try {
-      await actualizarPersona(personaId, {
-        nombres: nombresInput.trim(),
-        apellidos: apellidosInput.trim(),
-        telefono: telefonoInput.trim(),
-      });
-      setInfoSuccess(true);
-    } catch (error: unknown) {
-      setInfoError(toUserMessage(error, "No se pudieron guardar los cambios."));
-    } finally {
-      setInfoSaving(false);
-    }
-  }
-
-  async function toggleRole(role: BackendTipoRol): Promise<void> {
-    setRoleLoading(role);
-    setRoleError(null);
-    const hasRole = roles.includes(role);
-
-    try {
-      if (hasRole) {
-        await quitarRol(personaId, role);
-        setRoles((prev) => prev.filter((r) => r !== role));
-        showSuccess(`Rol ${ROLE_LABELS[role]} quitado correctamente.`);
-      } else {
-        await asignarRol(personaId, role);
-        setRoles((prev) => [...prev, role]);
-        showSuccess(`Rol ${ROLE_LABELS[role]} asignado correctamente.`);
-      }
-    } catch (error: unknown) {
-      const message = toUserMessage(error, "No se pudo actualizar el rol.");
-      // If the backend says the role is already present/absent, reconcile local
-      // state. This reads the TRANSLATED message, so it only reconciles while
-      // the backend's sentence survives the vocabulary gate — it does today
-      // (plain Spanish on a 4xx), but a reworded detail carrying an underscore
-      // would silently stop reconciling. The durable fix is a status or an
-      // error code the frontend can branch on; see the PR's follow-ups.
-      if (message.toLowerCase().includes("ya tiene el rol")) {
-        setRoles((prev) => (prev.includes(role) ? prev : [...prev, role]));
-      } else if (message.toLowerCase().includes("no tiene el rol")) {
-        setRoles((prev) => prev.filter((r) => r !== role));
-      } else {
-        setRoleError(message);
-        showError(message);
-      }
-    } finally {
-      setRoleLoading(null);
-    }
-  }
-
-  async function toggleEstado(): Promise<void> {
-    setStateLoading(true);
-    setStateError(null);
-    const next = !activo;
-
-    try {
-      await cambiarEstadoCuenta(personaId, next);
-      setActivo(next);
-      showSuccess(next ? "Cuenta activada correctamente." : "Cuenta desactivada correctamente.");
-    } catch (error: unknown) {
-      const message = toUserMessage(error, "No se pudo cambiar el estado.");
-      setStateError(message);
-      showError(message);
-    } finally {
-      setStateLoading(false);
-    }
-  }
 
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -541,8 +447,6 @@ function MemberEditDialog({
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
-    setRoleError(null);
-    setStateError(null);
     if (!dialog.open) dialog.showModal();
     closeButtonRef.current?.focus();
 
@@ -561,44 +465,6 @@ function MemberEditDialog({
       previouslyFocused?.focus();
     };
   }, [onClose]);
-
-  // Seed `roles`/`activo` from the persona's real current state every time
-  // the modal opens — this is the actual bug fix. Before this fetch, both
-  // stayed at their `[]`/`true` placeholders forever (no code seeded them),
-  // so the role checkboxes always rendered as "nothing assigned" regardless
-  // of reality: toggling a role the person already had looked like turning
-  // it ON, then the backend correctly rejected it with 400 "ya tiene el rol
-  // ...". `rolesReady` gates the roles/estado controls so nothing can be
-  // toggled against that stale placeholder while the fetch is in flight or
-  // failed — reusing `roleError`/`stateError` (rather than a new error
-  // state) keeps the failure visible in the same spots those sections
-  // already render errors in.
-  useEffect(() => {
-    let cancelled = false;
-
-    setRolesLoading(true);
-    setRolesLoaded(false);
-    void obtenerRolesDePersona(personaId)
-      .then((current) => {
-        if (cancelled) return;
-        setRoles(current.roles);
-        setActivo(current.activo);
-        setRolesLoaded(true);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        const message = toUserMessage(error, "No se pudieron cargar los roles y el estado actuales de esta cuenta.");
-        setRoleError(message);
-        setStateError(message);
-      })
-      .finally(() => {
-        if (!cancelled) setRolesLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [personaId]);
 
   return (
     <>
@@ -669,85 +535,7 @@ function MemberEditDialog({
                 each student's membership/ficha médica has its own save. */}
             <div className="flex-1 space-y-section overflow-y-auto bg-canvas px-5 py-4">
               <ModalSection title="Datos de la cuenta" saveMode="manual">
-                <dl className="space-y-field text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <dt className="shrink-0 text-ink-3" id={`nombres-label-${account.id}`}>Nombres</dt>
-                    <dd className="min-w-0 flex-1">
-                      <input
-                        type="text"
-                        value={nombresInput}
-                        onChange={(e) => setNombresInput(e.target.value)}
-                        aria-labelledby={`nombres-label-${account.id}`}
-                        className="input-field w-full py-1 text-right text-sm"
-                      />
-                    </dd>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <dt className="shrink-0 text-ink-3" id={`apellidos-label-${account.id}`}>Apellidos</dt>
-                    <dd className="min-w-0 flex-1">
-                      <input
-                        type="text"
-                        value={apellidosInput}
-                        onChange={(e) => setApellidosInput(e.target.value)}
-                        aria-labelledby={`apellidos-label-${account.id}`}
-                        className="input-field w-full py-1 text-right text-sm"
-                      />
-                    </dd>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <dt className="shrink-0 text-ink-3" id={`telefono-label-${account.id}`}>Teléfono</dt>
-                    <dd className="min-w-0 flex-1">
-                      <input
-                        type="text"
-                        value={telefonoInput}
-                        onChange={(e) => setTelefonoInput(e.target.value)}
-                        aria-labelledby={`telefono-label-${account.id}`}
-                        className="input-field w-full py-1 text-right text-sm"
-                      />
-                    </dd>
-                  </div>
-                  {/* Email deliberately read-only, no editable input: no
-                      admin endpoint mutates it (email lives on Usuario,
-                      not on the Persona that PATCH /personas/{id} edits). */}
-                  {account.email && (
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="text-ink-3">Correo</dt>
-                      <dd className="flex min-w-0 items-center gap-1.5 truncate font-semibold text-ink">
-                        <Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                        <span className="truncate">{account.email}</span>
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => void handleSaveInfo()}
-                    disabled={infoSaving}
-                    className={buttonClasses("primary", "sm")}
-                  >
-                    {infoSaving ? (
-                      <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                    )}
-                    {/* Explicit scope: this button only PATCHes
-                        nombres/apellidos/teléfono. Roles, estado, ficha
-                        médica and membresía each save themselves. */}
-                    {infoSaving ? "Guardando…" : "Guardar nombre, apellido y teléfono"}
-                  </button>
-                  {infoSuccess && (
-                    <p className="flex items-center gap-1 text-xs text-state-ok" role="status">
-                      <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                      Guardado.
-                    </p>
-                  )}
-                </div>
-                {infoError && (
-                  <p className="mt-2 text-xs text-state-bad" role="alert">
-                    {infoError}
-                  </p>
-                )}
+                <AccountInfoSection account={account} />
               </ModalSection>
 
               <ModalSection title="Estado de la cuenta" saveMode="instant">
