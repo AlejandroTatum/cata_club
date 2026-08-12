@@ -149,6 +149,10 @@ test.describe("Back navigation + toasts", () => {
     // updatePaymentValidation() (src/services/api.ts) sends PUT, not PATCH.
     await page.route("**/api/payments/pay-1", (route) => {
       if (route.request().method() === "PUT") {
+        // The status (500) is what drives the assertion below, not this body:
+        // `toUserMessage` never reads a 5xx's `detail`/`message`, so this text
+        // is deliberately never shown anywhere — it just has to be a plausible
+        // failed-request body.
         return fulfillJson(route, { error: "server_error", message: "No se pudo procesar el rechazo." }, 500);
       }
       return route.fallback();
@@ -197,9 +201,22 @@ test.describe("Back navigation + toasts", () => {
      * The queue reports the failure through a toast rather than an inline
      * banner: by the time it lands, the window is gone and the admin may have
      * moved on, so there is no control left to attach it to.
+     *
+     * The mocked failure is a 500, and `toUserMessage` (src/lib/error-message.ts)
+     * deliberately gives every 5xx the SAME generic sentence app-wide, no matter
+     * what the caller's own fallback text says — a 5xx `detail` describes the
+     * SERVER's failure, never the user's business, so there is nothing
+     * operation-specific worth showing (see `error-message.test.ts`, "gives
+     * every 5xx the same answer, whatever the body said"). This assertion used
+     * to expect the payment-specific fallback ("No se pudo rechazar el pago.")
+     * because /payments' onError still hardcoded `confirmation.failure` and
+     * never routed `err` through `toUserMessage` at all. Now that it does
+     * (matching every other error site in the app — see the `showError` call a
+     * few lines above `handleRejectSubmit` in payments/page.tsx), a 500 here
+     * reads the same generic sentence a 500 would produce anywhere else.
      */
     await expect(
-      page.getByRole("alert").filter({ hasText: /no se pudo rechazar el pago/i }).first(),
+      page.getByRole("alert").filter({ hasText: /el servidor no pudo completar la operación/i }).first(),
     ).toBeVisible({ timeout: 20_000 });
 
     // And it names the payment that came back, so the admin knows what to redo.
