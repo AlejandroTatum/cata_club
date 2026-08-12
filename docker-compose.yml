@@ -146,10 +146,14 @@ services:
     # --concurrency fijo (decisión de diseño 4.6, sdd/production-readiness):
     # sin esto, el modo prefork por defecto de Celery genera un proceso
     # hijo POR CORE DEL HOST -- 745MB medidos en un host de desarrollo de
-    # 12 cores, un valor que un droplet de 2GB no puede sostener.
+    # 12 cores, un valor que un droplet de 2GB no puede sostener. En 1 (no
+    # 2): cada hijo prefork carga la aplicación entera, y ese proceso de
+    # más es justo lo que este droplet no tiene margen para pagar -- el
+    # costo funcional es que la tarea nocturna de vencimientos (02:30)
+    # procesa las membresías de a una en vez de a dos en paralelo.
     # --max-tasks-per-child recicla los hijos periódicamente, la defensa
     # más barata disponible contra fugas de memoria lentas.
-    command: uv run celery -A app.infraestructura.tareas.celery_app worker --loglevel=info --concurrency=2 --max-tasks-per-child=100
+    command: uv run celery -A app.infraestructura.tareas.celery_app worker --loglevel=info --concurrency=1 --max-tasks-per-child=100
     healthcheck:
       # `inspect ping` SIN `-d` interroga a todos los workers del broker y
       # responde OK si contesta cualquiera -- inútil como healthcheck de ESTE
