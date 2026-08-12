@@ -113,7 +113,14 @@ describe("GET /api/members", () => {
   });
 
   it("propagates the backend's status and message when /personas/ fails", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 401));
+    // The other three go out alongside personas now, so they need mocks even
+    // though the route discards them: personas failing still decides the
+    // response, but it no longer gates whether the rest were dispatched.
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 401)) // /personas/
+      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: [] })); // /membresias/
 
     const access = makeJwt(3600);
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
@@ -237,6 +244,94 @@ describe("GET /api/members", () => {
     const cuentaTardia = body.accounts.find((account: { id: string }) => account.id === "999");
     expect(cuentaTardia.estudiantes[0].membresia).toMatchObject({ id: 201, estado: "activa" });
     expect(body.membresiasDegraded).toBe(false);
+  });
+
+  it("loops every backend page so a payment past the 200-row cap is never dropped", async () => {
+    // Same failure mode `fetchAllMembresias` already closes, on the other
+    // list: payments accumulate per persona over time (one row per renewal),
+    // so the payment table outgrows the persona table just as the membership
+    // table does. A single `GET /membresias/pagos?limit=200` drops everything
+    // past row 200 while `personasCapped` stays false, and the socio whose
+    // payment fell outside renders as "sin pago" — a swallowed truncation
+    // reported as a confident absence.
+    const personaTardia = { ...persona, id: 999, nombres: "Zoe", apellidos: "Tardia" };
+    const page1 = Array.from({ length: 200 }, (_, i) => ({
+      ...pago, id: i + 1, personaId: i + 1, membresiaId: undefined,
+    }));
+    // A monto no row on page 1 carries, so the assertion below can only pass
+    // with the page-2 row actually in hand — not with a page-1 lookalike.
+    const pagoTardio = { ...pago, id: 201, personaId: 999, membresiaId: 77, monto: "88.00" };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ items: [persona, personaTardia], total: 2, skip: 0, limit: 200 })) // /personas/
+      .mockResolvedValueOnce(jsonResponse({ items: page1, total: 201, skip: 0, limit: 200 })) // /membresias/pagos page 1
+      .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })) // /membresias/
+      .mockResolvedValueOnce(jsonResponse({ items: [pagoTardio], total: 201, skip: 200, limit: 200 })); // /membresias/pagos page 2
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls).toContain("http://localhost:8000/api/v1/membresias/pagos?skip=0&limit=200");
+    expect(urls).toContain("http://localhost:8000/api/v1/membresias/pagos?skip=200&limit=200");
+
+    const cuentaTardia = body.accounts.find((account: { id: string }) => account.id === "999");
+    expect(cuentaTardia.estudiantes[0].ultimoPago).toMatchObject({ monto: 88 });
+  });
+
+  it("treats a mid-loop payment page failure as no payments at all, never as a partial list", async () => {
+    // A partial payment list is the same lie as a truncated one: the personas
+    // whose rows were on the page that failed render as "sin pago" with the
+    // same confidence as the ones who genuinely never paid. Payments are
+    // best-effort here (see the route's header comment), so the honest
+    // degradation is the empty list the route already handles — not half of one.
+    const page1 = Array.from({ length: 200 }, (_, i) => ({
+      ...pago, id: i + 1, personaId: i + 1, membresiaId: undefined,
+    }));
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/
+      .mockResolvedValueOnce(jsonResponse({ items: page1, total: 201, skip: 0, limit: 200 })) // /membresias/pagos page 1
+      .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })) // /membresias/
+      .mockResolvedValueOnce(jsonResponse({ detail: "boom" }, 500)); // /membresias/pagos page 2
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.accounts[0].estudiantes[0].ultimoPago).toBeNull();
+  });
+
+  it("fires every independent backend call at once instead of waiting for /personas/", async () => {
+    // Nothing in the pagos/tipos/membresías batch reads the personas response,
+    // so awaiting personas first only serialises four independent round trips
+    // into two stages. Each `backendFetchAuthed` carries its own deadline
+    // (10 s by default), so the wasted stage is real latency on the heaviest
+    // admin screen, not just a stylistic detail.
+    let releasePersonas: (response: Response) => void = () => {};
+    const personasPending = new Promise<Response>((resolve) => {
+      releasePersonas = resolve;
+    });
+
+    vi.mocked(global.fetch)
+      .mockReturnValueOnce(personasPending) // /personas/ — deliberately left in flight
+      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: [] })); // /membresias/
+
+    const pending = GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+
+    // Can only pass if the other three were dispatched without waiting on
+    // personas — while it stays unresolved, a sequential route makes 1 call.
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(4));
+
+    releasePersonas(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 }));
+    const response = await pending;
+
+    expect(response.status).toBe(200);
   });
 
   it("degrades gracefully (empty pagos/tipos) when those calls fail", async () => {

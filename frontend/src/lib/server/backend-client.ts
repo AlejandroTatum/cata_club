@@ -12,6 +12,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   ACCESS_TOKEN_COOKIE,
+  BACKEND_TIMEOUT_MS,
   PDF_BACKEND_TIMEOUT_MS,
   REFRESH_TOKEN_COOKIE,
   backendFetch,
@@ -32,7 +33,11 @@ interface ResolvedToken {
 }
 
 /** Resolve a usable access token from cookies, refreshing first if missing or near expiry. Null when unrecoverable. */
-async function resolveAccessToken(request: NextRequest): Promise<ResolvedToken | null> {
+function remainingTimeout(deadline: number): BackendFetchOptions {
+  return { timeoutMs: Math.max(0, deadline - Date.now()) };
+}
+
+async function resolveAccessToken(request: NextRequest, deadline: number): Promise<ResolvedToken | null> {
   const accessCookie = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
   const refreshCookie = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
 
@@ -41,7 +46,7 @@ async function resolveAccessToken(request: NextRequest): Promise<ResolvedToken |
   const needsRefresh = accessCookie !== undefined && isNearExpiry(accessCookie, PROACTIVE_REFRESH_THRESHOLD_SECONDS);
 
   if ((!accessCookie || needsRefresh) && refreshCookie) {
-    const refreshResult = await backendRefresh(refreshCookie);
+    const refreshResult = await backendRefresh(refreshCookie, remainingTimeout(deadline));
     if (refreshResult.ok) {
       return { token: refreshResult.data.access_token, refreshedAccessToken: refreshResult.data.access_token };
     }
@@ -81,9 +86,11 @@ const STATUS_BY_ERROR: Record<AuthErrorCode, number> = {
  * (from `src/lib/server/auth.ts`) on their own `NextResponse` before
  * returning, or the refreshed token is silently dropped on this request.
  *
- * `options` is forwarded to `backendFetch` and applies only to the resource
- * call (both the first attempt and the post-refresh retry). The token refresh
- * itself is an auth round trip and keeps the default deadline.
+ * `options.timeoutMs` is one absolute budget for this complete authenticated
+ * operation: token resolution, the first resource attempt, refresh after a
+ * 401, and the retry. Each backend call receives only the time remaining, so
+ * a retry can never receive a fresh budget. Callers without an override keep
+ * the 10-second default.
  */
 export async function backendFetchAuthed(
   request: NextRequest,
@@ -91,13 +98,19 @@ export async function backendFetchAuthed(
   init: RequestInit = {},
   options: BackendFetchOptions = {},
 ): Promise<BackendProxyResult> {
-  const resolved = await resolveAccessToken(request);
+  const timeoutMs = options.timeoutMs ?? BACKEND_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+  const resolved = await resolveAccessToken(request, deadline);
   if (!resolved) {
     return { ok: false, status: 401, error: "unauthorized" };
   }
 
   const attempt = (token: string) =>
-    backendFetch(path, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } }, options);
+    backendFetch(
+      path,
+      { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } },
+      remainingTimeout(deadline),
+    );
 
   let result = await attempt(resolved.token);
   let refreshedAccessToken = resolved.refreshedAccessToken;
@@ -105,7 +118,7 @@ export async function backendFetchAuthed(
   if (result.ok && result.data.status === 401 && !refreshedAccessToken) {
     const refreshCookie = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
     if (refreshCookie) {
-      const refreshResult = await backendRefresh(refreshCookie);
+      const refreshResult = await backendRefresh(refreshCookie, remainingTimeout(deadline));
       if (refreshResult.ok) {
         refreshedAccessToken = refreshResult.data.access_token;
         result = await attempt(refreshedAccessToken);

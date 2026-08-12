@@ -20,51 +20,70 @@ import type { BackendMembresia, BackendPagoListItem, BackendTipoMembresia } from
 
 const PERSONAS_PAGE_LIMIT = 200;
 const MEMBRESIAS_PAGE_LIMIT = 200;
+const PAGOS_PAGE_LIMIT = 200;
 
-interface PaginatedPersonas {
-  items: BackendPersonaFull[];
+/** The envelope every paginated FastAPI list endpoint answers with. */
+interface PaginatedPage<T> {
+  items: T[];
   total: number;
 }
 
-interface PaginatedPagos {
-  items: BackendPagoListItem[];
-}
+type PaginatedPersonas = PaginatedPage<BackendPersonaFull>;
 
-interface PaginatedMembresias {
-  items: BackendMembresia[];
-  total: number;
-}
-
-type MembresiasFetchResult =
-  | { ok: true; items: BackendMembresia[] }
-  | { ok: false };
+type PagedFetchResult<T> = { ok: true; items: T[] } | { ok: false };
 
 /**
- * `GET /membresias/` is paginated at the backend (tope 200) — a single call
- * silently truncates once the club has more than 200 membership rows, which
- * happens well before it has 200 PERSONAS: a membership accumulates per
- * persona over time (vencida, inactiva, la activa), so the membership table
- * outgrows the persona table. `personasCapped` (below) would stay false
- * while a real chunk of the membership map was already gone — a swallowed
- * truncation must never render as a confident membership-less student, same
+ * Both `GET /membresias/` and `GET /membresias/pagos` are paginated at the
+ * backend (tope 200) — a single call silently truncates once the club has
+ * more than 200 rows in either table, which happens well before it has 200
+ * PERSONAS: memberships accumulate per persona over time (vencida, inactiva,
+ * la activa) and payments accumulate one row per renewal, so both tables
+ * outgrow the persona table. `personasCapped` (below) would stay false while
+ * a real chunk of either map was already gone — a swallowed truncation must
+ * never render as a confident membership-less or payment-less student, same
  * principle as `membresiasDegraded`. This loops every page instead.
+ *
+ * A page that fails mid-loop fails the WHOLE source rather than returning
+ * what arrived so far: a partial list is the same lie as a truncated one,
+ * because the personas on the missing page render as an absence with the
+ * same confidence as the ones who genuinely have no row.
  */
-async function fetchAllMembresias(request: NextRequest): Promise<MembresiasFetchResult> {
-  const items: BackendMembresia[] = [];
+async function fetchAllPages<T>(
+  request: NextRequest,
+  path: string,
+  limit: number,
+): Promise<PagedFetchResult<T>> {
+  const separator = path.includes("?") ? "&" : "?";
+  const items: T[] = [];
   let skip = 0;
   while (true) {
-    const result = await backendFetchAuthed(request, `/membresias/?skip=${skip}&limit=${MEMBRESIAS_PAGE_LIMIT}`);
+    const result = await backendFetchAuthed(request, `${path}${separator}skip=${skip}&limit=${limit}`);
     if (!result.ok || !result.response.ok) return { ok: false };
-    const page = (await result.response.json()) as PaginatedMembresias;
+    const page = (await result.response.json()) as PaginatedPage<T>;
     items.push(...page.items);
-    if (page.items.length < MEMBRESIAS_PAGE_LIMIT || items.length >= page.total) break;
-    skip += MEMBRESIAS_PAGE_LIMIT;
+    if (page.items.length < limit || items.length >= page.total) break;
+    skip += limit;
   }
   return { ok: true, items };
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const personasResult = await backendFetchAuthed(request, `/personas/?limit=${PERSONAS_PAGE_LIMIT}`);
+  /*
+   * All four sources are independent — nothing in the pagos/tipos/membresías
+   * batch reads the personas response — so they go out together. Awaiting
+   * personas first only split four independent round trips into two stages,
+   * and since each `backendFetchAuthed` carries its own deadline, that stage
+   * was real latency on the heaviest admin screen. The array order is also
+   * the dispatch order, which is what the positional fetch mocks in
+   * `__tests__/route.test.ts` assert against.
+   */
+  const [personasResult, pagosFetch, tiposResult, membresiasFetch] = await Promise.all([
+    backendFetchAuthed(request, `/personas/?limit=${PERSONAS_PAGE_LIMIT}`),
+    fetchAllPages<BackendPagoListItem>(request, "/membresias/pagos", PAGOS_PAGE_LIMIT),
+    backendFetchAuthed(request, "/membresias/tipos"),
+    fetchAllPages<BackendMembresia>(request, "/membresias/", MEMBRESIAS_PAGE_LIMIT),
+  ]);
+
   if (!personasResult.ok) {
     return NextResponse.json({ message: "No se pudieron cargar las personas." }, { status: personasResult.status });
   }
@@ -73,14 +92,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   const personasBody = (await personasResult.response.json()) as PaginatedPersonas;
 
-  const [pagosResult, tiposResult, membresiasFetch] = await Promise.all([
-    backendFetchAuthed(request, "/membresias/pagos?limit=200"),
-    backendFetchAuthed(request, "/membresias/tipos"),
-    fetchAllMembresias(request),
-  ]);
-
-  const pagos: BackendPagoListItem[] =
-    pagosResult.ok && pagosResult.response.ok ? ((await pagosResult.response.json()) as PaginatedPagos).items : [];
+  const pagos: BackendPagoListItem[] = pagosFetch.ok ? pagosFetch.items : [];
   const tipos: BackendTipoMembresia[] =
     tiposResult.ok && tiposResult.response.ok ? await tiposResult.response.json() : [];
 
