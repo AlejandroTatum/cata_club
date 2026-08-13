@@ -445,7 +445,17 @@ MENSAJES_NO_VERIFICABLES = sorted(
 # llamador. Su literal no está en la excepción sino en el call site, que este
 # mismo archivo barre con `prosa_con_enum` y que hoy es un solo sitio
 # (`asistencia_repositorio.py`) con prosa limpia.
-NO_VERIFICABLES_ADMITIDOS = ("app/infraestructura/repositorios/eliminacion_segura.py:29",)
+#
+# `main.py::_validation_exception_handler` (PR 4b) arma su `mensaje` en
+# runtime a partir de `exc.errors()[0]["msg"]`: es exactamente el texto que
+# un `field_validator` de `app/presentacion/schemas/` levantó como
+# `ValueError`, y ESE literal sí lo barre esta guarda (`es_schema=True` en
+# `mensajes_de_usuario`) en el archivo donde se escribió. No hay un segundo
+# texto sin revisar -- solo el mismo, leído dos veces por dos sitios.
+NO_VERIFICABLES_ADMITIDOS = (
+    "app/infraestructura/repositorios/eliminacion_segura.py:29",
+    "main.py:149",
+)
 
 FUGAS_EN_PROSA = sorted(
     hallazgo
