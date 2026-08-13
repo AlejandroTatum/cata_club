@@ -41,7 +41,7 @@ function horarioLinks(container: HTMLElement): HTMLAnchorElement[] {
 
 describe("SessionCard", () => {
   it("renders nothing for a rest day / loading / error — state is null", () => {
-    const { container } = render(<SessionCard state={null} enrolledCount={null} />);
+    const { container } = render(<SessionCard state={null} enrolledCounts={{}} />);
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -51,8 +51,9 @@ describe("SessionCard", () => {
       schedule: schedule(7, "15:00", "16:00"),
       minutesAway: 25,
       href: "/trainer/attendance?horario=7&paso=lista",
+      later: [],
     };
-    render(<SessionCard state={state} enrolledCount={12} />);
+    render(<SessionCard state={state} enrolledCounts={{ 7: 12 }} />);
 
     expect(screen.getByText("25")).toBeInTheDocument();
     expect(screen.getByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
@@ -72,8 +73,9 @@ describe("SessionCard", () => {
       schedule: schedule(7, "15:00", "16:00"),
       minutesElapsed: 10,
       href: "/trainer/attendance?horario=7&paso=lista",
+      later: [],
     };
-    render(<SessionCard state={state} enrolledCount={12} />);
+    render(<SessionCard state={state} enrolledCounts={{ 7: 12 }} />);
 
     // The number that used to be the countdown is now the start hour.
     expect(screen.getByText("15:00")).toBeInTheDocument();
@@ -84,8 +86,83 @@ describe("SessionCard", () => {
     expect(primary).toHaveAttribute("href", "/trainer/attendance?horario=7&paso=lista");
   });
 
+  // -------------------------------------------------------------------------
+  // "The rest of today" — QA's actual complaint: five short lines stretched
+  // to fill a 470px card, with mt-auto leaving the surplus dead in the
+  // middle. The fix fills it with every OTHER session still to come today.
+  // -------------------------------------------------------------------------
+
+  it("lists every remaining session today as a proper list, each one written as 'Por venir'", () => {
+    const state: SessionCardState = {
+      kind: "next",
+      schedule: schedule(7, "15:00", "16:00"),
+      minutesAway: 25,
+      href: "/trainer/attendance?horario=7&paso=lista",
+      later: [schedule(8, "16:00", "17:00"), schedule(9, "17:00", "18:00")],
+    };
+    // 9 has 0 enrolled — a correct, seeded value (issue #211: no fabricated
+    // capacity/attendance), not a missing-data blank, so it still shows.
+    render(<SessionCard state={state} enrolledCounts={{ 7: 12, 8: 1, 9: 0 }} />);
+
+    const list = screen.getByRole("list", { name: "Después, más tarde hoy" });
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+
+    expect(screen.getByText("16:00 — 17:00")).toBeInTheDocument();
+    expect(screen.getByText("17:00 — 18:00")).toBeInTheDocument();
+    expect(screen.getByText(/1 estudiante inscrito\b/)).toBeInTheDocument();
+    expect(screen.getByText(/0 estudiantes inscritos/)).toBeInTheDocument();
+    // Written, not only positioned or colored.
+    expect(screen.getAllByText("Por venir")).toHaveLength(2);
+    // None of this is interactive — it is context, not a second CTA.
+    expect(list.querySelectorAll("a, button")).toHaveLength(0);
+  });
+
+  it("renders a single later session as one plain row — nothing carousel-shaped to look odd", () => {
+    const state: SessionCardState = {
+      kind: "next",
+      schedule: schedule(7, "15:00", "16:00"),
+      minutesAway: 25,
+      href: "/trainer/attendance?horario=7&paso=lista",
+      later: [schedule(8, "16:00", "17:00")],
+    };
+    render(<SessionCard state={state} enrolledCounts={{}} />);
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByText("16:00 — 17:00")).toBeInTheDocument();
+  });
+
+  it("says the hero session is the last one, with no list at all, when nothing else remains today", () => {
+    const state: SessionCardState = {
+      kind: "live",
+      schedule: schedule(7, "15:00", "16:00"),
+      minutesElapsed: 10,
+      href: "/trainer/attendance?horario=7&paso=lista",
+      later: [],
+    };
+    render(<SessionCard state={state} enrolledCounts={{ 7: 12 }} />);
+
+    expect(screen.getByText("Es tu última sesión de hoy.")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Después, más tarde hoy" })).not.toBeInTheDocument();
+  });
+
+  it("never leaves a horario= link inside the 'rest of today' list, whatever it shows", () => {
+    const state: SessionCardState = {
+      kind: "next",
+      schedule: schedule(7, "15:00", "16:00"),
+      minutesAway: 25,
+      href: "/trainer/attendance?horario=7&paso=lista",
+      later: [schedule(8, "16:00", "17:00"), schedule(9, "17:00", "18:00")],
+    };
+    const { container } = render(<SessionCard state={state} enrolledCounts={{}} />);
+
+    // Exactly the two real actions carry a link — nothing per later-session row.
+    expect(horarioLinks(container)).toHaveLength(1);
+    expect(container.querySelectorAll("a")).toHaveLength(2);
+  });
+
   it("'done': no countdown, and the only action is the generic 'Elegir otro horario' — no session link at all", () => {
-    const { container } = render(<SessionCard state={{ kind: "done" }} enrolledCount={null} />);
+    const { container } = render(<SessionCard state={{ kind: "done" }} enrolledCounts={{}} />);
 
     expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
       "href",
@@ -96,10 +173,10 @@ describe("SessionCard", () => {
   });
 
   it("never leaves a horario= link anywhere for the three no-session states", () => {
-    const nullRender = render(<SessionCard state={null} enrolledCount={null} />);
+    const nullRender = render(<SessionCard state={null} enrolledCounts={{}} />);
     expect(horarioLinks(nullRender.container)).toHaveLength(0);
 
-    const doneRender = render(<SessionCard state={{ kind: "done" }} enrolledCount={null} />);
+    const doneRender = render(<SessionCard state={{ kind: "done" }} enrolledCounts={{}} />);
     expect(horarioLinks(doneRender.container)).toHaveLength(0);
   });
 });

@@ -25,6 +25,7 @@ import type {
   TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
 import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
+import type { AlumnoHorario } from "@/services/api";
 
 // ---------------------------------------------------------------------------
 // Clock helpers
@@ -270,6 +271,8 @@ export interface SessionCardNext {
   schedule: TrainingSchedule;
   minutesAway: number;
   href: string;
+  /** Everything still to come today, after `schedule` — see `selectTodaySessions`. */
+  later: TrainingSchedule[];
 }
 
 export interface SessionCardLive {
@@ -277,6 +280,8 @@ export interface SessionCardLive {
   schedule: TrainingSchedule;
   minutesElapsed: number;
   href: string;
+  /** Everything still to come today, after `schedule` — see `selectTodaySessions`. */
+  later: TrainingSchedule[];
 }
 
 export interface SessionCardDone {
@@ -299,21 +304,44 @@ export function buildSessionCardState(
 ): SessionCardState {
   if (todaySchedules.length === 0) return null;
 
-  const { next } = selectTodaySessions(todaySchedules, now);
+  const { next, later } = selectTodaySessions(todaySchedules, now);
   if (!next) return { kind: "done" };
 
   const href = `/trainer/attendance${buildWizardQuery(next.id, null, "mark-attendance")}`;
   const minutesAway = minutesUntilStart(next, now);
 
   return minutesAway > 0
-    ? { kind: "next", schedule: next, minutesAway, href }
-    : { kind: "live", schedule: next, minutesElapsed: -minutesAway, href };
+    ? { kind: "next", schedule: next, minutesAway, href, later }
+    : { kind: "live", schedule: next, minutesElapsed: -minutesAway, href, later };
 }
 
 /** "Hace N minutos" for the live state's support line. Never "hace 0 minutos". */
 export function formatElapsedMinutes(minutes: number): string {
   if (minutes <= 0) return "Recién empezó";
   return minutes === 1 ? "Hace 1 minuto" : `Hace ${minutes} minutos`;
+}
+
+/**
+ * Enrolled-count-by-horario map for TODAY's schedules, built from the club's
+ * one-call roster (`fetchRosterDeTodosLosHorarios`) instead of one
+ * `fetchAlumnosPorHorario` per card — the same N+1-avoiding move `/groups`
+ * already made (TRA-7), now paying for the hero session AND every session
+ * still to come today in a single fetch.
+ *
+ * Every schedule in `todaySchedules` gets an entry, even 0 — a genuinely
+ * empty class still counts as a known "0 estudiantes inscritos", not the
+ * missing-data blank `formatEnrolledCount(null)` renders.
+ */
+export function buildEnrolledCountsByHorario(
+  todaySchedules: TrainingSchedule[],
+  roster: AlumnoHorario[],
+): Record<number, number> {
+  const counts: Record<number, number> = {};
+  for (const schedule of todaySchedules) counts[schedule.id] = 0;
+  for (const alumno of roster) {
+    if (alumno.horarioId in counts) counts[alumno.horarioId] += 1;
+  }
+  return counts;
 }
 
 // ---------------------------------------------------------------------------

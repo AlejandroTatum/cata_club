@@ -43,7 +43,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchTrainingSchedules,
   fetchAttendanceRecords,
-  fetchAlumnosPorHorario,
+  fetchRosterDeTodosLosHorarios,
   fetchRecentAttendanceSessions,
   type RecentAttendanceSession,
 } from "@/services/api";
@@ -55,6 +55,7 @@ import {
 } from "@/app/attendance/attendance-utils";
 import { todayDiaSemana } from "@/lib/club-date";
 import {
+  buildEnrolledCountsByHorario,
   buildSessionCardState,
   findAbsenceAlert,
   formatAbsenceCount,
@@ -78,7 +79,7 @@ export default function TrainerPage(): React.ReactElement {
 
   const [schedules, setSchedules] = useState<TrainingSchedule[]>([]);
   const [monthRecords, setMonthRecords] = useState<AttendanceRecord[]>([]);
-  const [enrolledCount, setEnrolledCount] = useState<number | null>(null);
+  const [enrolledCounts, setEnrolledCounts] = useState<Record<number, number>>({});
   const [recentSessions, setRecentSessions] = useState<RecentAttendanceSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,38 +132,35 @@ export default function TrainerPage(): React.ReactElement {
   const absenceAlert = useMemo(() => findAbsenceAlert(monthRecords), [monthRecords]);
   const attendanceStats = useMemo(() => buildAttendanceStats(monthRecords), [monthRecords]);
 
-  // The card's own schedule when there is one to show ("next" or "live") —
-  // `null` for "done" and for a rest day, when there is nothing to fetch a
-  // roster for.
-  const activeSchedule =
-    sessionCardState?.kind === "next" || sessionCardState?.kind === "live"
-      ? sessionCardState.schedule
-      : null;
-
   /**
-   * The roster count for the card. Loaded separately because it needs the
-   * resolved active schedule, and it is a garnish: if it fails the card still
-   * says when and where to be, so the failure stays silent (null → the clause
-   * is simply not rendered) instead of blocking the card's one CTA.
+   * Enrolled counts for every session shown on the card today — the hero
+   * session AND the "rest of today" list underneath it. One club-wide roster
+   * call (`fetchRosterDeTodosLosHorarios`, the same TRA-7 move `/groups`
+   * already made) instead of one `fetchAlumnosPorHorario` per row, so the new
+   * list does not turn into an N+1 as the day's session count grows.
+   *
+   * Loaded separately from `loadData`, once `todaySchedules` is known: it is
+   * a garnish, so a failure here leaves every count unknown (each clause
+   * simply not rendered) instead of blocking the card's one CTA.
    */
   useEffect((): (() => void) => {
     let cancelled = false;
-    if (!activeSchedule) {
-      setEnrolledCount(null);
+    if (todaySchedules.length === 0) {
+      setEnrolledCounts({});
       return (): void => {};
     }
-    fetchAlumnosPorHorario(activeSchedule.id)
-      .then((alumnos) => {
-        if (!cancelled) setEnrolledCount(alumnos.length);
+    fetchRosterDeTodosLosHorarios()
+      .then((roster) => {
+        if (!cancelled) setEnrolledCounts(buildEnrolledCountsByHorario(todaySchedules, roster));
       })
       .catch((err: unknown) => {
-        console.error("[trainer] fetchAlumnosPorHorario failed", err);
-        if (!cancelled) setEnrolledCount(null);
+        console.error("[trainer] fetchRosterDeTodosLosHorarios failed", err);
+        if (!cancelled) setEnrolledCounts({});
       });
     return (): void => {
       cancelled = true;
     };
-  }, [activeSchedule]);
+  }, [todaySchedules]);
 
   return (
     <ProtectedRoute allowedRoles={["trainer"]}>
@@ -197,7 +195,7 @@ export default function TrainerPage(): React.ReactElement {
               standing alone in half of it.
             */}
             <div className={`grid items-stretch gap-[18px] ${sessionCardState ? "split:grid-cols-2" : ""}`}>
-              <SessionCard state={sessionCardState} enrolledCount={enrolledCount} />
+              <SessionCard state={sessionCardState} enrolledCounts={enrolledCounts} />
 
               <section className="card flex flex-col gap-4 p-[18px]">
                 {absenceAlert && (
