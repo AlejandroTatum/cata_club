@@ -134,6 +134,21 @@ describe("DiscountsPage — listado", () => {
     expect(await screen.findByText(/sin descuentos/i)).toBeInTheDocument();
   });
 
+  it("keeps a single primary action to create the first discount", async () => {
+    // Issue #199: the header's "Nuevo descuento" and the empty state's own
+    // action used to share the exact same label, reading as two competing
+    // ways to do the same thing. The header action stays the one generic
+    // control; the empty state's is worded for the first-discount moment,
+    // same distinction Groups already draws between "Nueva categoría" and
+    // "Crear primera categoría".
+    mockFetchDescuentos.mockResolvedValue([]);
+    renderPage();
+    await screen.findByText(/sin descuentos/i);
+
+    expect(screen.getAllByRole("button", { name: /^nuevo descuento$/i })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /crear primer descuento/i })).toBeInTheDocument();
+  });
+
   it("shows an error state with retry when loading fails", async () => {
     mockFetchDescuentos.mockRejectedValueOnce(new Error("caído"));
     renderPage();
@@ -296,21 +311,50 @@ describe("DiscountsPage — la segunda columna", () => {
     expect(form?.contains(table)).toBe(false);
   });
 
-  it("answers the missing delete button when no form is open", async () => {
-    // There is no "Eliminar" anywhere on this screen and there never will be:
-    // applied discounts reference the catalog by FK. Until now that rule lived
-    // only in a source comment.
+  it("leaves the rail empty when no form is open", async () => {
+    // Issue #199: the catalog rules no longer live in a permanent rail card —
+    // that is what pushed the empty state's action off-balance and left too
+    // much unexplained lateral space. The split itself stays (see the two
+    // tests above), but with no form open the rail now holds nothing.
     renderPage();
     await screen.findByText("Beca municipal");
 
     const rail = screen.getByTestId("discounts-rail");
-    expect(within(rail).getByText(/Cómo funciona el catálogo/i)).toBeInTheDocument();
-    expect(within(rail).getByText(/no se elimina/i)).toBeInTheDocument();
+    expect(rail).toBeEmptyDOMElement();
+  });
+});
 
-    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+// ---------------------------------------------------------------------------
+// Contextual help — issue #199
+// ---------------------------------------------------------------------------
 
-    // The rail holds one thing at a time: the form replaces the rules.
-    expect(screen.queryByText(/Cómo funciona el catálogo/i)).not.toBeInTheDocument();
+describe("DiscountsPage — ayuda contextual", () => {
+  it("keeps the catalog rules collapsed behind a Ver ayuda toggle", async () => {
+    // There is no "Eliminar" anywhere on this screen and there never will be:
+    // applied discounts reference the catalog by FK. That rule used to sit in
+    // a permanent lateral card; it now follows the Members disclosure
+    // pattern instead — available, but not occupying space until asked for.
+    renderPage();
+    await screen.findByText("Beca municipal");
+
+    expect(screen.queryByText(/no se elimina/i)).not.toBeInTheDocument();
+
+    const toggle = screen.getByRole("button", { name: /cómo funciona el catálogo/i });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(toggle);
+
+    expect(await screen.findByText(/no se elimina/i)).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("does not put the catalog rules inside the form rail", async () => {
+    renderPage();
+    await screen.findByText("Beca municipal");
+    fireEvent.click(screen.getByRole("button", { name: /cómo funciona el catálogo/i }));
+
+    const rail = screen.getByTestId("discounts-rail");
+    expect(within(rail).queryByText(/no se elimina/i)).not.toBeInTheDocument();
   });
 });
 
