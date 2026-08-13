@@ -22,6 +22,8 @@ import {
   csvField,
   csvFilename,
   toCsv,
+  buildReportDateRange,
+  REPORT_DATE_PRESETS,
 } from "../reports-utils";
 
 function buildPersonas(count: number): PersonaReporte[] {
@@ -202,5 +204,68 @@ describe("toCsv", () => {
 describe("csvFilename", () => {
   it("mirrors the backend's PDF naming, zero-padded", () => {
     expect(csvFilename("periodo", new Date(2026, 6, 5))).toBe("reporte-periodo_2026-07-05.csv");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Quick date-range presets (issue #201)
+// ---------------------------------------------------------------------------
+
+describe("REPORT_DATE_PRESETS", () => {
+  it("offers exactly the six presets the issue names, in the funnel order", () => {
+    expect(REPORT_DATE_PRESETS.map((p) => p.key)).toEqual([
+      "today",
+      "this_week",
+      "this_month",
+      "last_3_months",
+      "full_history",
+      "custom",
+    ]);
+    expect(REPORT_DATE_PRESETS.map((p) => p.label)).toEqual([
+      "Hoy",
+      "Esta semana",
+      "Este mes",
+      "Últimos 3 meses",
+      "Histórico completo",
+      "Personalizado",
+    ]);
+  });
+});
+
+describe("buildReportDateRange", () => {
+  const WEDNESDAY = new Date("2026-08-12T15:00:00Z"); // clubIsoDate → 2026-08-12
+
+  it("delegates today/this_week/this_month/custom to the shared buildDateRange", () => {
+    expect(buildReportDateRange("today", WEDNESDAY)).toEqual({
+      fechaInicio: "2026-08-12",
+      fechaFin: "2026-08-12",
+    });
+    expect(buildReportDateRange("this_month", WEDNESDAY)).toEqual({
+      fechaInicio: "2026-08-01",
+      fechaFin: "2026-08-12",
+    });
+    expect(buildReportDateRange("custom", WEDNESDAY)).toEqual({ fechaInicio: "", fechaFin: "" });
+  });
+
+  it("resolves 'últimos 3 meses' to the first day of the month two months back", () => {
+    expect(buildReportDateRange("last_3_months", WEDNESDAY)).toEqual({
+      fechaInicio: "2026-06-01",
+      fechaFin: "2026-08-12",
+    });
+  });
+
+  it("crosses a year boundary when the 3-month window reaches back into the prior year", () => {
+    const january = new Date("2026-01-15T15:00:00Z");
+    expect(buildReportDateRange("last_3_months", january)).toEqual({
+      fechaInicio: "2025-11-01",
+      fechaFin: "2026-01-15",
+    });
+  });
+
+  it("resolves 'histórico completo' to the club's founding date, never an open range", () => {
+    expect(buildReportDateRange("full_history", WEDNESDAY)).toEqual({
+      fechaInicio: "2013-10-10",
+      fechaFin: "2026-08-12",
+    });
   });
 });
