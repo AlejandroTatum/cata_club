@@ -214,6 +214,9 @@ describe("TrainerPage — Mi día", () => {
     expect(screen.getByText(/0 estudiantes inscritos/)).toBeInTheDocument();
     // No hidden or tabbable session link snuck in through the list.
     expect(within(list).queryAllByRole("link")).toHaveLength(0);
+    // Three sessions today, ONE roster call: the list must not reintroduce
+    // the per-horario N+1 `fetchAlumnosPorHorario` replaced.
+    expect(mockFetchRosterDeTodosLosHorarios).toHaveBeenCalledTimes(1);
   });
 
   it("does not block the 'rest of today' list when the roster fails to load", async () => {
