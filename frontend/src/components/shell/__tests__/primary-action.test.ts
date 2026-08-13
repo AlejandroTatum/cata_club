@@ -49,9 +49,6 @@ const ADMIN_SCREENS = [
  * screen's action move".
  */
 const FAMILY_SCREENS = [
-  // "Pasar lista" lived in two places on one screen: `.btn.xl` in the coal hero
-  // when a next session existed, in the empty state's action when none did.
-  "app/trainer/page.tsx",
   // Its admin twin `/attendance` has carried the identical link since #74, and
   // this screen offered no way to pass a list unless the table came back empty.
   "app/trainer/attendance/history/page.tsx",
@@ -82,6 +79,13 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // Read-only. The student consults sessions the trainer recorded; there is no
   // verb on this screen to promote.
   "app/student/attendance/page.tsx": "read-only — there is no action to hoist",
+  // --- Reversed by #211 ------------------------------------------------------
+  // #43 put "Pasar lista" in the header because it was generic and fell into
+  // the wizard's picker step regardless of which session was next. #211 gave
+  // the dashboard's `SessionCard` a specific action instead — "Pasar lista de
+  // las 15:00", landing straight on that session's roster — so the verb now
+  // lives where its context does, once, and the header slot is empty again.
+  "app/trainer/page.tsx": "the action moved onto SessionCard, named by the session's hour (#211)",
   // "Registrar un pago" is a DISCLOSURE: it opens a form in place, inside the
   // membership card that says what is being paid for. It is also absent
   // whenever a payment is already awaiting validation. A header button would be
