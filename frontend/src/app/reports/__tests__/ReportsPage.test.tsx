@@ -143,7 +143,21 @@ function choosePreset(name: RegExp): void {
   fireEvent.click(screen.getByRole("radio", { name }));
 }
 
+/** Pick one of the six quick date-range pills (issue #201). */
+function chooseRangePreset(name: string): void {
+  fireEvent.click(screen.getByRole("button", { name }));
+}
+
+/**
+ * Switches the shared range to "Personalizado" — which is what reveals the
+ * "Desde"/"Hasta" pickers, per issue #201 — and fills it in. A no-op click if
+ * "Personalizado" is already active, so tests that start there stay correct.
+ */
 function setRange(desde: string, hasta: string): void {
+  const custom = screen.getByRole("button", { name: "Personalizado" });
+  if (custom.getAttribute("aria-pressed") !== "true") {
+    fireEvent.click(custom);
+  }
   fireEvent.change(screen.getByLabelText("Desde"), { target: { value: desde } });
   fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: hasta } });
 }
@@ -230,10 +244,83 @@ describe("ReportsPage — preview area", () => {
   it("tells the user what the empty canvas is waiting for, instead of sitting blank", async () => {
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+    mockFetchNuevosPorPeriodo.mockClear();
+
+    // "Este mes" is the default and already resolves a usable range (see the
+    // next test) — the still-reachable empty state is "Personalizado" with
+    // nothing typed in yet.
+    chooseRangePreset("Personalizado");
 
     expect(screen.getByRole("heading", { name: /vista previa — reporte de período/i })).toBeInTheDocument();
     expect(screen.getByText("Elija un rango de fechas")).toBeInTheDocument();
     expect(mockFetchNuevosPorPeriodo).not.toHaveBeenCalled();
+  });
+
+  it("defaults to 'Este mes' and previews it immediately, with no manual entry", async () => {
+    mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    expect(screen.getByRole("button", { name: "Este mes" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(mockFetchNuevosPorPeriodo).toHaveBeenCalled());
+    const [fechaInicio, fechaFin] = mockFetchNuevosPorPeriodo.mock.calls[0] as [string, string];
+    expect(fechaInicio).toMatch(/^\d{4}-\d{2}-01$/);
+    expect(fechaFin).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Manual "Desde"/"Hasta" are hidden until "Personalizado" is chosen.
+    expect(screen.queryByLabelText("Desde")).not.toBeInTheDocument();
+  });
+
+  it("never defaults to 'Histórico completo' and never queries it on load", async () => {
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    expect(screen.getByRole("button", { name: "Histórico completo" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await waitFor(() => expect(mockFetchNuevosPorPeriodo).toHaveBeenCalled());
+    expect(mockFetchNuevosPorPeriodo).not.toHaveBeenCalledWith("2013-10-10", expect.anything());
+  });
+
+  it("resolves 'Histórico completo' to the club's founding date only once explicitly chosen", async () => {
+    mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+    mockFetchNuevosPorPeriodo.mockClear();
+
+    chooseRangePreset("Histórico completo");
+
+    await waitFor(() => {
+      expect(mockFetchNuevosPorPeriodo).toHaveBeenCalledWith("2013-10-10", expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    });
+    // One click, one effective query — the debounce does not double-fire.
+    expect(mockFetchNuevosPorPeriodo).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the named empty state for the pagos histórico, same as any other empty range", async () => {
+    mockFetchPagosReporte.mockResolvedValue([]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/pagos/i);
+    await waitFor(() => expect(mockFetchPagosReporte).toHaveBeenCalled());
+    mockFetchPagosReporte.mockClear();
+
+    chooseRangePreset("Histórico completo");
+
+    await waitFor(() => expect(mockFetchPagosReporte).toHaveBeenCalled());
+    expect(await screen.findByText("No se encontraron pagos")).toBeInTheDocument();
+  });
+
+  it("keeps the chosen range preset when switching report tabs (same vocabulary for all three)", async () => {
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    chooseRangePreset("Últimos 3 meses");
+    expect(screen.getByRole("button", { name: "Últimos 3 meses" })).toHaveAttribute("aria-pressed", "true");
+
+    choosePreset(/pagos/i);
+    expect(screen.getByRole("button", { name: "Últimos 3 meses" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("generates the período preview as soon as the range is complete", async () => {
@@ -267,12 +354,13 @@ describe("ReportsPage — preview area", () => {
     expect(await screen.findByText("No se encontraron personas")).toBeInTheDocument();
   });
 
-  it("previews attendance with an open range, because that endpoint allows one", async () => {
+  it("previews attendance with an open range, when 'Personalizado' is chosen with nothing typed", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     choosePreset(/asistencia/i);
+    chooseRangePreset("Personalizado");
 
     await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({}));
     expect(await screen.findByText("Ana Pérez")).toBeInTheDocument();
@@ -284,7 +372,7 @@ describe("ReportsPage — preview area", () => {
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     choosePreset(/asistencia/i);
-    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({}));
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
     mockFetchAttendanceRecords.mockClear();
 
     await pickStudent();
@@ -316,7 +404,9 @@ describe("ReportsPage — preview area", () => {
     fireEvent.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
 
     await waitFor(() => {
-      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({});
+      const lastCall = mockFetchAttendanceRecords.mock.calls.at(-1)?.[0];
+      expect(lastCall).toBeDefined();
+      expect(lastCall).not.toHaveProperty("personaId");
     });
   });
 
@@ -340,7 +430,9 @@ describe("ReportsPage — preview area", () => {
     fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana Garcí" } });
 
     await waitFor(() => {
-      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({});
+      const lastCall = mockFetchAttendanceRecords.mock.calls.at(-1)?.[0];
+      expect(lastCall).toBeDefined();
+      expect(lastCall).not.toHaveProperty("personaId");
     });
   });
 
@@ -470,6 +562,7 @@ describe("ReportsPage — Generar PDF", () => {
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     choosePreset(/asistencia/i);
+    chooseRangePreset("Personalizado");
     await waitFor(() => expect(generateButton()).toBeEnabled());
     fireEvent.click(generateButton());
 

@@ -97,13 +97,18 @@ import {
   PERSONA_REPORT_PAGE_SIZE,
   ASISTENCIA_REPORT_PAGE_SIZE,
   PAGOS_REPORT_PAGE_SIZE,
+  buildReportDateRange,
+  REPORT_DATE_PRESETS,
+  type ReportRangePreset,
 } from "@/app/reports/reports-utils";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import {
   Badge,
   Button,
   EmptyState,
+  FilterGroup,
   FilterPanel,
+  FilterPill,
   LoadingState,
   Pagination,
   Table,
@@ -179,9 +184,31 @@ function ReportsContent(): React.ReactElement {
   /**
    * ONE range for every preset. The screen used to keep three independent
    * pairs, so switching report silently discarded the dates you had just set.
+   *
+   * `rangePreset` starts at "this_month" (issue #201's mandated default) and
+   * resolves eagerly so the FIRST render already has a usable range — no
+   * separate mount effect, no extra render, no flash of the empty state.
+   * "full_history" is deliberately excluded from this initializer: it is
+   * reached only by an explicit click, never by mounting the screen.
    */
-  const [fechaInicio, setFechaInicio] = useState("");
-  const [fechaFin, setFechaFin] = useState("");
+  const [rangePreset, setRangePreset] = useState<ReportRangePreset>("this_month");
+  const [fechaInicio, setFechaInicio] = useState(() => buildReportDateRange("this_month").fechaInicio);
+  const [fechaFin, setFechaFin] = useState(() => buildReportDateRange("this_month").fechaFin);
+
+  /**
+   * A quick-preset click resolves both ends of the range in the same handler
+   * — one state update batch, so the debounced preview effect below fires
+   * exactly once per click, never twice for "desde" then "hasta". Switching
+   * TO "custom" clears the range instead of keeping the last preset's dates:
+   * the two pickers are then the only source of truth, and a stale prefilled
+   * range would read as already-chosen when it was not.
+   */
+  const selectRangePreset = useCallback((key: ReportRangePreset): void => {
+    setRangePreset(key);
+    const range = key === "custom" ? { fechaInicio: "", fechaFin: "" } : buildReportDateRange(key);
+    setFechaInicio(range.fechaInicio);
+    setFechaFin(range.fechaFin);
+  }, []);
 
   /** The single preset-specific filter: horario for asistencia, estado for pagos. */
   const [horarioId, setHorarioId] = useState("");
@@ -471,33 +498,51 @@ function ReportsContent(): React.ReactElement {
           pixel off the panel every other screen filters through. */}
       <FilterPanel
         label="Filtros del reporte"
-        fields={
-          <div className="flex flex-wrap items-end gap-section">
-            <div className="flex min-w-[150px] flex-col gap-1.5">
-              <label htmlFor="fechaInicio" className="text-2xs font-bold uppercase text-ink-3">
-                Desde
-              </label>
-              <input
-                type="date"
-                id="fechaInicio"
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                className="input-field h-ctl"
-              />
-            </div>
-            <div className="flex min-w-[150px] flex-col gap-1.5">
-              <label htmlFor="fechaFin" className="text-2xs font-bold uppercase text-ink-3">
-                Hasta
-              </label>
-              <input
-                type="date"
-                id="fechaFin"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
-                className="input-field h-ctl"
-              />
+        chips={
+          <FilterGroup label="Rango de fechas">
+            <div className="flex flex-wrap gap-2">
+              {REPORT_DATE_PRESETS.map((option) => (
+                <FilterPill
+                  key={option.key}
+                  label={option.label}
+                  active={rangePreset === option.key}
+                  onClick={() => selectRangePreset(option.key)}
+                />
+              ))}
             </div>
 
+            {rangePreset === "custom" && (
+              <div className="flex flex-wrap items-end gap-section">
+                <div className="flex min-w-[150px] flex-col gap-1.5">
+                  <label htmlFor="fechaInicio" className="text-2xs font-bold uppercase text-ink-3">
+                    Desde
+                  </label>
+                  <input
+                    type="date"
+                    id="fechaInicio"
+                    value={fechaInicio}
+                    onChange={(e) => setFechaInicio(e.target.value)}
+                    className="input-field h-ctl"
+                  />
+                </div>
+                <div className="flex min-w-[150px] flex-col gap-1.5">
+                  <label htmlFor="fechaFin" className="text-2xs font-bold uppercase text-ink-3">
+                    Hasta
+                  </label>
+                  <input
+                    type="date"
+                    id="fechaFin"
+                    value={fechaFin}
+                    onChange={(e) => setFechaFin(e.target.value)}
+                    className="input-field h-ctl"
+                  />
+                </div>
+              </div>
+            )}
+          </FilterGroup>
+        }
+        fields={
+          <div className="flex flex-wrap items-end gap-section">
             {preset === "asistencia" && (
               <>
                 <div className="flex min-w-[150px] flex-col gap-1.5">
