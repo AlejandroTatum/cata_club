@@ -19,6 +19,7 @@ from datetime import date
 
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.excepciones import CredencialesInvalidas
 from app.dominio.modelos import Persona, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -103,7 +104,7 @@ def test_retraso_duplica_y_tiene_techo_de_60_segundos(db_session):
 
 def test_contador_es_por_cuenta_no_global(db_session):
     _crear_usuario(db_session, correo="ana@cataclub.test", cedula="1710034065")
-    _crear_usuario(db_session, correo="beto@cataclub.test", cedula="1799999999")
+    _crear_usuario(db_session, correo="beto@cataclub.test", cedula=cedula_valida(150))
     espia = _SleeperEspia()
     servicio = AuthServicio(db_session, dormir=espia)
 

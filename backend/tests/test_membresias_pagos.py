@@ -1,3 +1,4 @@
+from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -374,7 +375,7 @@ def test_listar_membresias_devuelve_paginated_response_con_shape_correcta(client
 def test_listar_membresias_respeta_skip_y_limit(client):
     tipo = _crear_tipo_membresia(client)
     for i in range(3):
-        persona = _crear_persona(client, cedula=f"171003{4200 + i}")
+        persona = _crear_persona(client, cedula=cedula_valida(402 + i))
         client.post(
             "/api/v1/membresias/",
             json={
@@ -440,12 +441,12 @@ def test_representante_ve_los_pagos_de_su_representado(client_sin_permisos, clie
     (admin) y luego se restaura el token de `client_sin_permisos` (persona_id=1,
     rol ALUMNO, sin ADMINISTRADOR) para que la autorización dependa
     exclusivamente del vínculo representante_id, no de un bypass admin."""
-    representante = _crear_persona(client, cedula="1733344455")
+    representante = _crear_persona(client, cedula=cedula_valida(430))
     assert representante["id"] == 1
     alumno = client.post(
         "/api/v1/personas/",
         json={
-            "nombres": "Hijo", "apellidos": "Representado", "cedula": "1744455566",
+            "nombres": "Hijo", "apellidos": "Representado", "cedula": cedula_valida(431),
             "fecha_nacimiento": "2015-05-14", "telefono": "0991234567",
             "representante_id": representante["id"],
         },
@@ -480,7 +481,7 @@ def test_representante_ve_los_pagos_de_su_representado(client_sin_permisos, clie
 
 
 def test_admin_puede_listar_pagos_de_cualquier_persona(client):
-    persona = _crear_persona(client, cedula="1799999997")
+    persona = _crear_persona(client, cedula=cedula_valida(432))
     tipo = _crear_tipo_membresia(client)
     membresia = client.post(
         "/api/v1/membresias/",
@@ -509,8 +510,8 @@ def test_persona_sin_relacion_no_puede_ver_historial_de_pagos_ajeno(client_sin_p
     rol ALUMNO) antes de la petición que se evalúa -- mismo truco que
     `test_voucher_pago.py::test_subir_voucher_sin_ser_duenio_ni_admin_da_403`.
     Relleno para que `otra_persona` no quede con id=1."""
-    _crear_persona(client, cedula="1700000002")
-    otra_persona = _crear_persona(client, cedula="1799999996")
+    _crear_persona(client, cedula=cedula_valida(433))
+    otra_persona = _crear_persona(client, cedula=cedula_valida(434))
 
     from main import app
     app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
@@ -522,7 +523,7 @@ def test_persona_sin_relacion_no_puede_ver_historial_de_pagos_ajeno(client_sin_p
 
 
 def test_historial_de_pagos_vacio_cuando_no_hay(client):
-    persona = _crear_persona(client, cedula="1755566677")
+    persona = _crear_persona(client, cedula=cedula_valida(435))
 
     resp = client.get(f"/api/v1/membresias/pagos/persona/{persona['id']}")
     assert resp.status_code == 200
@@ -555,12 +556,12 @@ def test_representante_ve_membresias_de_representado(client_sin_permisos, client
     """Esquema: se crea todo con `client` (admin) y luego se restaura el token
     de `client_sin_permisos` (persona_id=1, rol ALUMNO) para que la autorización
     dependa exclusivamente del vínculo representante_id."""
-    representante = _crear_persona(client, cedula="1733344455")
+    representante = _crear_persona(client, cedula=cedula_valida(430))
     assert representante["id"] == 1
     alumno = client.post(
         "/api/v1/personas/",
         json={
-            "nombres": "Hijo", "apellidos": "Representado", "cedula": "1744455566",
+            "nombres": "Hijo", "apellidos": "Representado", "cedula": cedula_valida(431),
             "fecha_nacimiento": "2015-05-14", "telefono": "0991234567",
             "representante_id": representante["id"],
         },
@@ -587,7 +588,7 @@ def test_representante_ve_membresias_de_representado(client_sin_permisos, client
 
 
 def test_admin_puede_listar_membresias_de_cualquier_persona(client):
-    persona = _crear_persona(client, cedula="1799999997")
+    persona = _crear_persona(client, cedula=cedula_valida(432))
     tipo = _crear_tipo_membresia(client)
     client.post(
         "/api/v1/membresias/",
@@ -606,8 +607,8 @@ def test_persona_sin_relacion_no_puede_ver_membresias_ajenas(client_sin_permisos
     """POST /personas/ es admin-only, así que las personas se crean con `client`
     y luego se restaura el token de `client_sin_permisos` (persona_id=1, rol
     ALUMNO) antes de la petición que se evalúa."""
-    _crear_persona(client, cedula="1700000002")
-    otra_persona = _crear_persona(client, cedula="1799999996")
+    _crear_persona(client, cedula=cedula_valida(433))
+    otra_persona = _crear_persona(client, cedula=cedula_valida(434))
 
     from main import app
     app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
@@ -619,7 +620,7 @@ def test_persona_sin_relacion_no_puede_ver_membresias_ajenas(client_sin_permisos
 
 
 def test_listar_membresias_por_persona_vacio_cuando_no_hay(client):
-    persona = _crear_persona(client, cedula="1755566688")
+    persona = _crear_persona(client, cedula=cedula_valida(436))
 
     resp = client.get(f"/api/v1/membresias/persona/{persona['id']}")
     assert resp.status_code == 200
@@ -633,16 +634,16 @@ def test_membresias_mias_aplica_matriz_de_propiedad_sin_exponer_al_extrano(clien
     app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
         "sub": "admin@cataclub.test", "persona_id": 999, "roles": ["ADMINISTRADOR"],
     }
-    representante = _crear_persona(client, cedula="1733344455")
+    representante = _crear_persona(client, cedula=cedula_valida(430))
     alumno = client.post(
         "/api/v1/personas/",
         json={
-            "nombres": "Hijo", "apellidos": "Representado", "cedula": "1744455566",
+            "nombres": "Hijo", "apellidos": "Representado", "cedula": cedula_valida(431),
             "fecha_nacimiento": "2015-05-14", "telefono": "0991234567",
             "representante_id": representante["id"],
         },
     ).json()
-    ajeno = _crear_persona(client, cedula="1799999996")
+    ajeno = _crear_persona(client, cedula=cedula_valida(434))
     tipo = _crear_tipo_membresia(client)
     client.post(
         "/api/v1/membresias/",
@@ -719,8 +720,8 @@ def test_e04_rf002_primera_membresia_familiar_sin_gratuidad(client):
     """1er miembro de la familia: precio normal, sin gratuidad."""
     from decimal import Decimal
 
-    representante = _crear_persona(client, cedula="1700000011")
-    alumno = _crear_alumno_con_representante(client, "1700000012", representante["id"])
+    representante = _crear_persona(client, cedula=cedula_valida(400))
+    alumno = _crear_alumno_con_representante(client, cedula_valida(401), representante["id"])
     tipo = _crear_tipo_membresia(client)
     membresia, resp = _crear_membresia_activa(client, alumno["id"], tipo["id"])
     assert resp.status_code == 200
@@ -735,17 +736,17 @@ def test_e04_rf002_cuarta_membresia_familiar_con_gratuidad(client):
     monto_aplicado debe quedar en 0 por gratuidad familiar E04-RF002."""
     from decimal import Decimal
 
-    representante = _crear_persona(client, cedula="1700000021")
+    representante = _crear_persona(client, cedula=cedula_valida(410))
     tipo = _crear_tipo_membresia(client)
 
     # Crear 3 membresías aprobadas (familia con 3 miembros activos)
     for i in range(3):
-        alumno = _crear_alumno_con_representante(client, f"170000002{i + 2}", representante["id"])
+        alumno = _crear_alumno_con_representante(client, cedula_valida(411 + i), representante["id"])
         _, resp = _crear_membresia_activa(client, alumno["id"], tipo["id"])
         assert resp.status_code == 200
 
     # 4ta membresía: debe recibir gratuidad familiar
-    alumno_4 = _crear_alumno_con_representante(client, "1700000025", representante["id"])
+    alumno_4 = _crear_alumno_con_representante(client, cedula_valida(414), representante["id"])
     membresia_4, resp = _crear_membresia_activa(client, alumno_4["id"], tipo["id"])
     assert resp.status_code == 200
     membresia_4_actualizada = client.get(f"/api/v1/membresias/{membresia_4['id']}").json()
@@ -758,16 +759,16 @@ def test_e04_rf002_tercera_membresia_familiar_sin_gratuidad(client):
     """3er miembro de la familia: precio normal, aún no alcanza el umbral de 4."""
     from decimal import Decimal
 
-    representante = _crear_persona(client, cedula="1700000031")
+    representante = _crear_persona(client, cedula=cedula_valida(420))
     tipo = _crear_tipo_membresia(client)
 
     # Crear 2 membresías activas primero
     for i in range(2):
-        alumno = _crear_alumno_con_representante(client, f"170000003{i + 2}", representante["id"])
+        alumno = _crear_alumno_con_representante(client, cedula_valida(421 + i), representante["id"])
         _crear_membresia_activa(client, alumno["id"], tipo["id"])
 
     # 3ra membresía: NO debe tener gratuidad (umbral es 4, no 3)
-    alumno_3 = _crear_alumno_con_representante(client, "1700000034", representante["id"])
+    alumno_3 = _crear_alumno_con_representante(client, cedula_valida(423), representante["id"])
     membresia_3, resp = _crear_membresia_activa(client, alumno_3["id"], tipo["id"])
     assert resp.status_code == 200
     membresia_3_actualizada = client.get(f"/api/v1/membresias/{membresia_3['id']}").json()
@@ -800,11 +801,11 @@ def test_obtener_membresia_owner_puede_acceder(client):
 
 def test_obtener_membresia_representante_puede_acceder(client_sin_permisos, client):
     """El representante del dueño puede consultar la membresía."""
-    representante = _crear_persona(client, cedula="1700000041")
+    representante = _crear_persona(client, cedula=cedula_valida(440))
     alumno = client.post(
         "/api/v1/personas/",
         json={
-            "nombres": "Hijo", "apellidos": "Representado", "cedula": "1700000042",
+            "nombres": "Hijo", "apellidos": "Representado", "cedula": cedula_valida(441),
             "fecha_nacimiento": "2015-05-14", "telefono": "0991234567",
             "representante_id": representante["id"],
         },
@@ -829,7 +830,7 @@ def test_obtener_membresia_representante_puede_acceder(client_sin_permisos, clie
 
 def test_obtener_membresia_admin_puede_acceder(client_sin_permisos, client):
     """Un administrador puede consultar cualquier membresía."""
-    persona = _crear_persona(client, cedula="1700000051")
+    persona = _crear_persona(client, cedula=cedula_valida(442))
     tipo = _crear_tipo_membresia(client)
     membresia = client.post(
         "/api/v1/membresias/",
@@ -850,7 +851,7 @@ def test_obtener_membresia_admin_puede_acceder(client_sin_permisos, client):
 
 def test_obtener_membresia_stranger_no_puede_acceder(client_sin_permisos, client):
     """Un usuario sin vínculo no puede consultar una membresía ajena (403)."""
-    persona = _crear_persona(client, cedula="1700000061")
+    persona = _crear_persona(client, cedula=cedula_valida(443))
     tipo = _crear_tipo_membresia(client)
     membresia = client.post(
         "/api/v1/membresias/",
@@ -861,7 +862,7 @@ def test_obtener_membresia_stranger_no_puede_acceder(client_sin_permisos, client
     ).json()
 
     # "extraña" persona con id=9998
-    otra_persona = _crear_persona(client, cedula="1700000062")
+    otra_persona = _crear_persona(client, cedula=cedula_valida(444))
 
     from main import app
     app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {

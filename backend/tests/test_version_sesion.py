@@ -12,6 +12,7 @@ en las pruebas de revocación agregadas a test_auth_tipo_token.py.
 import jwt
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.soporte_transversal.configuracion import settings
@@ -36,7 +37,7 @@ def test_usuario_nuevo_arranca_en_version_sesion_uno(db_session):
     from app.dominio.modelos import Persona
 
     persona = Persona(
-        nombres="Zoe", apellidos="Paredes", cedula="1712345678",
+        nombres="Zoe", apellidos="Paredes", cedula=cedula_valida(620),
         fecha_nacimiento=date(1995, 3, 3), telefono="0990001111",
     )
     db_session.add(persona)

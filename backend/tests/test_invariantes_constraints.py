@@ -36,6 +36,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import (
     EstadoMembresia, EstadoPago, TipoRol,
 )
@@ -65,7 +66,7 @@ from tests.fabricas_pagos import crear_persona_api as _crear_persona_api_compart
 def test_dos_pagos_pendientes_para_la_misma_membresia_violan_el_indice(db_session):
     """INSERT crudo que salta el chequeo de `registrar_pago`: la base debe
     rechazar el segundo pendiente con el índice único parcial."""
-    persona = _crear_persona(db_session, "1799000801")
+    persona = _crear_persona(db_session, cedula_valida(340))
     tipo = _crear_tipo_membresia(db_session)
     membresia = _crear_membresia(db_session, persona, tipo, EstadoMembresia.INACTIVA)
 
@@ -80,7 +81,7 @@ def test_dos_pagos_pendientes_para_la_misma_membresia_violan_el_indice(db_sessio
 def test_un_pendiente_y_un_aprobado_coexisten_para_la_misma_membresia(db_session):
     """El índice es PARCIAL: solo restringe pendientes. El historial de pagos
     aprobados/rechazados de la membresía no queda limitado."""
-    persona = _crear_persona(db_session, "1799000802")
+    persona = _crear_persona(db_session, cedula_valida(341))
     tipo = _crear_tipo_membresia(db_session)
     membresia = _crear_membresia(db_session, persona, tipo, EstadoMembresia.INACTIVA)
 
@@ -95,7 +96,7 @@ def test_un_pendiente_y_un_aprobado_coexisten_para_la_misma_membresia(db_session
 # Invariante 2: una sola membresía ACTIVA por persona.
 # ---------------------------------------------------------------------------
 def test_dos_membresias_activas_para_la_misma_persona_violan_el_indice(db_session):
-    persona = _crear_persona(db_session, "1799000803")
+    persona = _crear_persona(db_session, cedula_valida(342))
     tipo = _crear_tipo_membresia(db_session)
 
     _crear_membresia(db_session, persona, tipo, EstadoMembresia.ACTIVA)
@@ -114,7 +115,7 @@ def test_membresias_historicas_coexisten_con_la_activa(db_session):
     """La semántica actual permite historial: VENCIDA e INACTIVA conviven con
     la ACTIVA (el índice parcial solo cubre `estado = 'ACTIVA'`, espejo exacto
     del chequeo de `crear_membresia`)."""
-    persona = _crear_persona(db_session, "1799000804")
+    persona = _crear_persona(db_session, cedula_valida(343))
     tipo = _crear_tipo_membresia(db_session)
 
     _crear_membresia(db_session, persona, tipo, EstadoMembresia.VENCIDA)
@@ -150,11 +151,11 @@ def escenario_ultimo_admin(motor_test):
         sesion.add(rol)
         sesion.flush()
     persona_a = Persona(
-        nombres="Admin", apellidos="Alfa", cedula="1799000905",
+        nombres="Admin", apellidos="Alfa", cedula=cedula_valida(344),
         fecha_nacimiento=date(1980, 1, 1), telefono="0990000905",
     )
     persona_b = Persona(
-        nombres="Admin", apellidos="Beta", cedula="1799000906",
+        nombres="Admin", apellidos="Beta", cedula=cedula_valida(345),
         fecha_nacimiento=date(1980, 1, 1), telefono="0990000906",
     )
     sesion.add_all([persona_a, persona_b])
@@ -336,7 +337,7 @@ def test_membresia_activa_duplicada_responde_igual_por_chequeo_o_por_constraint(
     aprobables son la carrera que el chequeo de `crear_membresia` no puede
     ver: al aprobar la segunda, el constraint debe responder el MISMO error
     que el chequeo, no un 409 genérico."""
-    persona = _crear_persona(db_session, "1799000807")
+    persona = _crear_persona(db_session, cedula_valida(346))
     tipo = _crear_tipo_membresia(db_session)
     _crear_membresia(db_session, persona, tipo, EstadoMembresia.ACTIVA)
     db_session.commit()

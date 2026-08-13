@@ -14,6 +14,7 @@ La vía de TRANSFERENCIA para un tercero no cambia (ver
 `test_ownership_pagos.py::test_admin_sigue_registrando_y_aprobando_pago_valido_de_cualquier_persona`):
 esta guarda es específica de EFECTIVO.
 """
+from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
 from tests.fabricas_pagos import (
     crear_membresia_api,
@@ -34,7 +35,7 @@ def _autenticar_como(persona_id, roles):
 
 def test_admin_no_puede_registrar_pago_efectivo_de_otra_persona(client):
     """Token del conftest: ADMINISTRADOR persona_id=1, distinto del dueño."""
-    crear_persona_api(client, cedula="0000000001")  # relleno -> id=1 (el admin)
+    crear_persona_api(client, cedula=cedula_valida(240))  # relleno -> id=1 (el admin)
     persona = crear_persona_api(client, cedula="1710034073")  # id=2
     tipo = crear_tipo_membresia_api(client)
     membresia = crear_membresia_api(client, persona["id"], tipo["id"])
@@ -65,12 +66,12 @@ def test_duenio_si_puede_registrar_su_propio_pago_efectivo(client):
 
 def test_representante_si_registra_pago_efectivo_de_su_representado(client):
     """E04-RF003: el representante paga -- y declara -- por su representado."""
-    representante = crear_persona_api(client, cedula="1733344455")  # id=1
+    representante = crear_persona_api(client, cedula=cedula_valida(241))  # id=1
     hijo = client.post(
         "/api/v1/personas/",
         json={
             "nombres": "Hijo", "apellidos": "Representado",
-            "cedula": "1744455566", "fecha_nacimiento": "2015-05-14",
+            "cedula": cedula_valida(242), "fecha_nacimiento": "2015-05-14",
             "telefono": "0991234567",
             "representante_id": representante["id"],
         },

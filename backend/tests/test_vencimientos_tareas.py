@@ -12,6 +12,7 @@ tarea como callable (ver `celery.app.task.Task.__call__`).
 from datetime import date
 from contextlib import contextmanager
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona, Membresia, TipoMembresia, Pago
 from app.dominio.enums import (
     EstadoMembresia, EstadoPago, TipoPago, TipoModalidad,
@@ -22,7 +23,7 @@ from app.infraestructura.tareas.vencimientos_tareas import marcar_membresias_ven
 
 def _crear_persona_y_membresia(db, estado_membresia: EstadoMembresia) -> tuple[Persona, Membresia]:
     persona = Persona(
-        nombres="Ana", apellidos="Test", cedula="1002003001",
+        nombres="Ana", apellidos="Test", cedula=cedula_valida(610),
         fecha_nacimiento=date(1990, 1, 1), telefono="0991112222",
     )
     db.add(persona)

@@ -46,6 +46,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 import app.servicios_negocio.membresia_pago_servicio as mps
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import (
@@ -191,7 +192,7 @@ def escenario_pago_concurrente(motor_test):
     `test_ranking_concurrencia.py::escenario_concurrente`."""
     sesion = Session(bind=motor_test)
     persona = crear_persona_orm(
-        sesion, "1799000902", nombres="Carrera", apellidos="Aprobación",
+        sesion, cedula_valida(500), nombres="Carrera", apellidos="Aprobación",
         telefono="0990000902",
     )
     tipo = crear_tipo_membresia_orm(
@@ -367,16 +368,16 @@ def test_reconciliacion_redespacha_solo_aprobados_viejos_sin_comprobante(
     viejo = ahora - timedelta(minutes=30)
     reciente = ahora - timedelta(minutes=1)
 
-    perdido = _sembrar_pago(db_session, "1712000001", EstadoPago.APROBADO, viejo)
-    fresco = _sembrar_pago(db_session, "1712000002", EstadoPago.APROBADO, reciente)
-    completado = _sembrar_pago(db_session, "1712000003", EstadoPago.APROBADO, viejo)
+    perdido = _sembrar_pago(db_session, cedula_valida(501), EstadoPago.APROBADO, viejo)
+    fresco = _sembrar_pago(db_session, cedula_valida(502), EstadoPago.APROBADO, reciente)
+    completado = _sembrar_pago(db_session, cedula_valida(503), EstadoPago.APROBADO, viejo)
     db_session.add(ComprobantePago(
         pago_id=completado.id,
         archivo_url="https://res.cloudinary.com/demo/comprobante-completado.pdf",
         formato_archivo="pdf",
     ))
     pendiente = _sembrar_pago(
-        db_session, "1712000004", EstadoPago.PENDIENTE_VALIDACION, None
+        db_session, cedula_valida(504), EstadoPago.PENDIENTE_VALIDACION, None
     )
     db_session.commit()
 
@@ -400,7 +401,7 @@ def test_redespacho_es_idempotente_si_ya_hay_comprobante(db_session, monkeypatch
     `comprobante-{id:08d}` cubre además la carrera de dos workers: el segundo
     upload sobrescribe el mismo objeto, nunca duplica.)"""
     viejo = datetime.now(timezone.utc) - timedelta(minutes=30)
-    pago = _sembrar_pago(db_session, "1712000005", EstadoPago.APROBADO, viejo)
+    pago = _sembrar_pago(db_session, cedula_valida(505), EstadoPago.APROBADO, viejo)
     url_historica = "https://res.cloudinary.com/demo/comprobante-historico.pdf"
     db_session.add(ComprobantePago(
         pago_id=pago.id, archivo_url=url_historica, formato_archivo="pdf",
@@ -433,7 +434,7 @@ def test_genera_comprobante_sin_carrera_ni_comprobante_previo(db_session, monkey
     pruebas de este archivo solo ejercitan las ramas de "ya existe" y de
     "carrera")."""
     viejo = datetime.now(timezone.utc) - timedelta(minutes=30)
-    pago = _sembrar_pago(db_session, "1712000006", EstadoPago.APROBADO, viejo)
+    pago = _sembrar_pago(db_session, cedula_valida(506), EstadoPago.APROBADO, viejo)
     url_nueva = "https://res.cloudinary.com/demo/comprobante-nuevo.pdf"
     monkeypatch.setattr(ct, "generar_comprobante_pago_pdf", lambda **kwargs: b"pdf-falso")
     monkeypatch.setattr(ct, "subir_pdf_membresia", lambda *a, **k: url_nueva)
@@ -474,7 +475,7 @@ def test_integrityerror_devuelve_url_del_ganador(motor_test):
     otro worker podría completar su INSERT primero."""
     sesion = Session(bind=motor_test)
     persona = crear_persona_orm(
-        sesion, "1799000903", nombres="Carrera", apellidos="Comprobante",
+        sesion, cedula_valida(507), nombres="Carrera", apellidos="Comprobante",
         telefono="0990000903",
     )
     tipo = crear_tipo_membresia_orm(

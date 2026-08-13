@@ -18,6 +18,7 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import (
     Categoria, DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago,
     NivelTecnicoAlumno, TipoModalidad, TipoPago,
@@ -161,13 +162,13 @@ def test_el_propio_duenio_si_lee_su_persona(db_session, victima):
 
 def test_el_representante_si_lee_a_su_representado(db_session):
     representante = Persona(
-        nombres="Madre", apellidos="Tutora", cedula="1710034070",
+        nombres="Madre", apellidos="Tutora", cedula=cedula_valida(590),
         fecha_nacimiento=date(1980, 1, 1), telefono="0991110000",
     )
     db_session.add(representante)
     db_session.flush()
     hijo = Persona(
-        nombres="Hijo", apellidos="Tutorado", cedula="1710034071",
+        nombres="Hijo", apellidos="Tutorado", cedula=cedula_valida(591),
         fecha_nacimiento=date(2015, 1, 1), telefono="0991110001",
         representante_id=representante.id,
     )
@@ -206,7 +207,7 @@ def test_el_administrador_si_lee_cualquier_persona(client, victima):
 def familia(db_session):
     """Representante + hijo menor, cada uno con su propio persona_id."""
     representante = Persona(
-        nombres="Madre", apellidos="Tutora", cedula="1710034080",
+        nombres="Madre", apellidos="Tutora", cedula=cedula_valida(592),
         fecha_nacimiento=date(1980, 1, 1), telefono="0991110000",
     )
     db_session.add(representante)

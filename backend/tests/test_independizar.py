@@ -21,6 +21,7 @@ import pytest
 from app.dominio.enums import (
     TipoRol, EstadoMembresia, EstadoPago, TipoPago, TipoModalidad,
 )
+from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona, Usuario, Rol, Membresia, Pago, TipoMembresia
 from app.presentacion.schemas.persona_schemas import IndependizarDTO
 from app.servicios_negocio.persona_servicio import PersonaServicio
@@ -30,7 +31,7 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 
 # --- helpers ----------------------------------------------------------------
 
-def _crear_persona_adulta(db_session, *, cedula: str = "1712345678",
+def _crear_persona_adulta(db_session, *, cedula: str = cedula_valida(330),
                            representante_id: int | None = None) -> Persona:
     """Crea una Persona adulta (> 18) con fecha de nacimiento fija."""
     p = Persona(
@@ -67,7 +68,7 @@ def _crear_usuario(db_session, persona: Persona, *, correo: str = "carlos@test.c
     return usuario
 
 
-def _crear_representante(db_session, *, cedula: str = "1790012345") -> Persona:
+def _crear_representante(db_session, *, cedula: str = cedula_valida(331)) -> Persona:
     """Crea un representante adulto (>= 18)."""
     rep = Persona(
         nombres="María", apellidos="López",
@@ -218,7 +219,7 @@ def test_independizar_menor_de_edad_rechazado(db_session):
     rep = _crear_representante(db_session)
     menor = Persona(
         nombres="Lucía", apellidos="Pérez",
-        cedula="1712345679",
+        cedula=cedula_valida(332),
         fecha_nacimiento=date(2015, 6, 15),  # menor de 18 (congelado a 2029-01-01 = 13 años)
         telefono="0991234567",
         representante_id=rep.id,
@@ -369,7 +370,7 @@ def test_independizar_endpoint_menor_de_edad(client, db_session):
     rep = _crear_representante(db_session)
     menor = Persona(
         nombres="Lucía", apellidos="Pérez",
-        cedula="1712345680",
+        cedula=cedula_valida(333),
         fecha_nacimiento=date(2015, 6, 15),
         telefono="0991234567",
         representante_id=rep.id,

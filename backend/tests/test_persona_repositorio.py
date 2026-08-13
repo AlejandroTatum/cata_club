@@ -18,6 +18,7 @@ solo el largo de la rebanada no prueba nada si el repositorio ignora
 """
 from datetime import date
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import Persona, Rol, Usuario
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -45,9 +46,9 @@ def _crear_roster_desordenado(db_session) -> None:
     """Inserta apellidos en orden INVERSO al alfabético para que un listado
     sin `ORDER BY` (que en la práctica devuelve el orden físico de inserción)
     no pueda pasar el test por casualidad."""
-    _crear_persona(db_session, "1710034301", "Zoe", "Zambrano")
-    _crear_persona(db_session, "1710034302", "Mario", "Mendoza")
-    _crear_persona(db_session, "1710034303", "Beatriz", "Alvarez")
+    _crear_persona(db_session, cedula_valida(510), "Zoe", "Zambrano")
+    _crear_persona(db_session, cedula_valida(511), "Mario", "Mendoza")
+    _crear_persona(db_session, cedula_valida(512), "Beatriz", "Alvarez")
     db_session.commit()
 
 
@@ -61,8 +62,8 @@ def test_listar_ordena_por_apellidos_y_nombres(db_session):
 
 
 def test_listar_desempata_por_id_cuando_el_nombre_completo_se_repite(db_session):
-    primera = _crear_persona(db_session, "1710034311", "Ana", "Torres")
-    segunda = _crear_persona(db_session, "1710034312", "Ana", "Torres")
+    primera = _crear_persona(db_session, cedula_valida(513), "Ana", "Torres")
+    segunda = _crear_persona(db_session, cedula_valida(514), "Ana", "Torres")
     tercera = _crear_persona(db_session, "1710034313", "Ana", "Torres")
     db_session.commit()
 

@@ -15,6 +15,7 @@ Cubre:
 """
 from datetime import date
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Usuario, Rol
 from app.dominio.enums import TipoRol
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
@@ -93,20 +94,20 @@ def test_registro_exitoso_persona_sin_usuario(client, db_session):
 
 def test_registro_sin_token_devuelve_401(client, db_session):
     _quitar_override_token()
-    _crear_persona(db_session, cedula="1710034060")
+    _crear_persona(db_session, cedula=cedula_valida(180))
     resp = client.post(
         "/api/v1/auth/registro",
-        json={"cedula": "1710034060", "correo": "x@cataclub.com", "contrasenia": "clave12345"},
+        json={"cedula": cedula_valida(180), "correo": "x@cataclub.com", "contrasenia": "clave12345"},
     )
     assert resp.status_code == 401
 
 
 def test_registro_con_rol_no_admin_devuelve_403(client, db_session):
     _restaurar_override_token(roles=["ALUMNO"])
-    _crear_persona(db_session, cedula="1710034061")
+    _crear_persona(db_session, cedula=cedula_valida(181))
     resp = client.post(
         "/api/v1/auth/registro",
-        json={"cedula": "1710034061", "correo": "x@cataclub.com", "contrasenia": "clave12345"},
+        json={"cedula": cedula_valida(181), "correo": "x@cataclub.com", "contrasenia": "clave12345"},
     )
     assert resp.status_code == 403
 
@@ -220,7 +221,7 @@ def test_refresh_con_access_token_en_vez_de_refresh_da_401(client, db_session):
 # quedar deslogueado.
 
 def test_logout_devuelve_mensaje(client, db_session):
-    persona = _crear_persona(db_session, cedula="1710034199", nombres="Uriel")
+    persona = _crear_persona(db_session, cedula=cedula_valida(182), nombres="Uriel")
     _crear_usuario_para_persona(db_session, persona, correo="uriel@cataclub.com")
     _restaurar_override_token(correo="uriel@cataclub.com", persona_id=persona.id, roles=["ALUMNO"])
     resp = client.post("/api/v1/auth/logout")
@@ -229,7 +230,7 @@ def test_logout_devuelve_mensaje(client, db_session):
 
 
 def test_logout_invalida_access_token_y_refresh_token(client_sin_token, db_session):
-    persona = _crear_persona(db_session, cedula="1710034205", nombres="Sofia")
+    persona = _crear_persona(db_session, cedula=cedula_valida(183), nombres="Sofia")
     _crear_usuario_para_persona(db_session, persona, correo="sofia@cataclub.com")
 
     login_resp = client_sin_token.post(

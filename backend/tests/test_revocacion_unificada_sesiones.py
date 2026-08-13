@@ -21,6 +21,7 @@ from datetime import date
 
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import Persona, Rol, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -49,7 +50,7 @@ def admin_real(db_session):
     token de verdad (no con el override de `client`) y, de paso, satisface la
     barrera anti-bloqueo de `RolServicio` cuando la víctima no es admin."""
     persona = Persona(
-        nombres="Marta", apellidos="Vera", cedula="1712345678",
+        nombres="Marta", apellidos="Vera", cedula=cedula_valida(580),
         fecha_nacimiento=date(1985, 6, 15), telefono="0997654321",
     )
     db_session.add(persona)

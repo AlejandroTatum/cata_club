@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.excepciones import EntidadDuplicada
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.dominio.modelos import Persona, Usuario
@@ -45,7 +46,7 @@ from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 from app.servicios_negocio.persona_servicio import PersonaServicio
 
-CEDULA_OCUPADA = "1712345678"
+CEDULA_OCUPADA = cedula_valida(450)
 CORREO_OCUPADO = "ocupado@example.com"
 
 
@@ -81,7 +82,7 @@ def _representante(correo: str = "sofia@example.com", cedula: str = "1798765432"
 
 
 def _alumno(
-    cedula: str = "1723456789",
+    cedula: str = cedula_valida(451),
     fecha_nacimiento: date = date(2015, 6, 15),
     **extra,
 ) -> EnrollmentAlumnoDTO:
@@ -140,7 +141,7 @@ def test_inscripcion_correo_de_menor_duplicado_no_divulga(db_session):
 def test_autoinscripcion_correo_duplicado_no_divulga(db_session):
     _sembrar_persona_con_cuenta(db_session)
     datos = EnrollmentCreateDTO(
-        alumno=_alumno(cedula="1723456789", fecha_nacimiento=date(2000, 1, 1)),
+        alumno=_alumno(cedula=cedula_valida(451), fecha_nacimiento=date(2000, 1, 1)),
         credenciales_alumno=EnrollmentCredencialesDTO(
             correo=CORREO_OCUPADO, contrasenia="password8",
         ),
@@ -221,7 +222,7 @@ def test_crear_representado_con_correo_duplicado_no_divulga(db_session):
     _sembrar_persona_con_cuenta(db_session)
 
     datos = RepresentadoCreateDTO(
-        nombres="Hija", apellidos="Legal", cedula="1723456789",
+        nombres="Hija", apellidos="Legal", cedula=cedula_valida(451),
         fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
         correo=CORREO_OCUPADO, contrasenia="password8",
     )

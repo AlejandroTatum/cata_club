@@ -7,6 +7,7 @@ asignación como desempate.
 """
 from datetime import date, time
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import Categoria, DiaSemana
 from app.dominio.modelos import AlumnoHorario, HorarioEntrenamiento, Persona
 from app.infraestructura.repositorios.asistencia_repositorio import (
@@ -57,7 +58,7 @@ def test_listar_por_horario_ordena_por_apellidos_y_nombres(db_session):
 def test_listar_por_horario_desempata_por_id_de_asignacion(db_session):
     horario = _crear_horario(db_session)
     asignaciones_creadas = []
-    for cedula in ("1710034511", "1710034512", "1710034513"):
+    for cedula in ("1710034511", cedula_valida(130), cedula_valida(131)):
         persona = _crear_persona(db_session, cedula, "Ana", "Torres")
         asignacion = AlumnoHorario(persona_id=persona.id, horario_id=horario.id)
         db_session.add(asignacion)

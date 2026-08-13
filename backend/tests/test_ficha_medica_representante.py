@@ -26,6 +26,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import FichaMedica, Persona
 from app.dominio.enums import TipoSangre
 from app.infraestructura.db import obtener_sesion
@@ -33,16 +34,16 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 from main import app
 
 
-def _crear_familia(db_session, sufijo: str):
+def _crear_familia(db_session, sufijo: int):
     """Representante + hijo menor con ficha médica ya cargada."""
     representante = Persona(
-        nombres="Madre", apellidos=f"Tutora{sufijo}", cedula=f"17100340{sufijo}",
+        nombres="Madre", apellidos=f"Tutora{sufijo}", cedula=cedula_valida(260 + sufijo * 2),
         fecha_nacimiento=date(1980, 1, 1), telefono="0991110000",
     )
     db_session.add(representante)
     db_session.flush()
     hijo = Persona(
-        nombres="Hijo", apellidos=f"Tutorado{sufijo}", cedula=f"17100341{sufijo}",
+        nombres="Hijo", apellidos=f"Tutorado{sufijo}", cedula=cedula_valida(260 + sufijo * 2 + 1),
         fecha_nacimiento=date(2015, 1, 1), telefono="0991110001",
         representante_id=representante.id,
     )
@@ -59,22 +60,22 @@ def _crear_familia(db_session, sufijo: str):
 
 @pytest.fixture()
 def familia(db_session):
-    return _crear_familia(db_session, "80")
+    return _crear_familia(db_session, 0)
 
 
 @pytest.fixture()
 def otra_familia(db_session):
     """Segunda familia sin ningún vínculo con la primera: el objetivo IDOR."""
-    return _crear_familia(db_session, "90")
+    return _crear_familia(db_session, 1)
 
 
-def _crear_alumno_adulto(db_session, sufijo: str):
+def _crear_alumno_adulto(db_session, sufijo: int):
     """Alumno MAYOR de edad, autogestionado -- sin representante -- con su
     propia ficha médica ya cargada. A diferencia de `_crear_familia`, nace en
     1990: no necesita representante_id (regla de `PersonaServicio`: solo
     obligatorio entre 5 y 17 años)."""
     adulto = Persona(
-        nombres="Alumno", apellidos=f"Adulto{sufijo}", cedula=f"17100350{sufijo}",
+        nombres="Alumno", apellidos=f"Adulto{sufijo}", cedula=cedula_valida(270 + sufijo),
         fecha_nacimiento=date(1990, 1, 1), telefono="0991110002",
     )
     db_session.add(adulto)
@@ -89,7 +90,7 @@ def _crear_alumno_adulto(db_session, sufijo: str):
 
 @pytest.fixture()
 def alumno_adulto(db_session):
-    return _crear_alumno_adulto(db_session, "70")
+    return _crear_alumno_adulto(db_session, 0)
 
 
 def _client_como(db_session, persona_id, roles):
@@ -145,13 +146,13 @@ def test_el_representante_crea_la_ficha_via_patch_si_el_representado_no_tiene(db
     """`actualizar_por_persona` hace upsert: el PATCH también cubre el alta
     para un representado que todavía no tiene ficha."""
     representante = Persona(
-        nombres="Madre", apellidos="SinFicha", cedula="1710034060",
+        nombres="Madre", apellidos="SinFicha", cedula=cedula_valida(280),
         fecha_nacimiento=date(1980, 1, 1), telefono="0991110000",
     )
     db_session.add(representante)
     db_session.flush()
     hijo = Persona(
-        nombres="Hijo", apellidos="SinFicha", cedula="1710034061",
+        nombres="Hijo", apellidos="SinFicha", cedula=cedula_valida(281),
         fecha_nacimiento=date(2015, 1, 1), telefono="0991110001",
         representante_id=representante.id,
     )

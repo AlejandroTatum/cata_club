@@ -13,6 +13,7 @@ con `joinedload` y no dispara una consulta adicional por fila (N+1).
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, TipoModalidad
 from app.dominio.modelos import Membresia, Persona, TipoMembresia
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
@@ -41,7 +42,7 @@ def _crear_tipo_membresia(db_session) -> TipoMembresia:
 def _crear_membresias(db_session, cantidad: int) -> None:
     tipo = _crear_tipo_membresia(db_session)
     for i in range(cantidad):
-        persona = _crear_persona(db_session, cedula=f"171003{4100 + i}")
+        persona = _crear_persona(db_session, cedula=cedula_valida(350 + i))
         db_session.add(Membresia(
             estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
             fecha_activacion=datetime.now(timezone.utc),
@@ -108,7 +109,7 @@ def test_listar_ordena_por_fecha_de_activacion_descendente(db_session):
         datetime(2026, 5, 10, tzinfo=timezone.utc),
     ]
     for i, fecha in enumerate(fechas):
-        persona = _crear_persona(db_session, cedula=f"171003{4600 + i}")
+        persona = _crear_persona(db_session, cedula=cedula_valida(360 + i))
         db_session.add(Membresia(
             estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
             fecha_activacion=fecha, persona_id=persona.id,
@@ -128,7 +129,7 @@ def test_listar_desempata_por_id_descendente_con_igual_fecha(db_session):
     fecha = datetime(2026, 4, 1, tzinfo=timezone.utc)
     creadas = []
     for i in range(3):
-        persona = _crear_persona(db_session, cedula=f"171003{4700 + i}")
+        persona = _crear_persona(db_session, cedula=cedula_valida(370 + i))
         membresia = Membresia(
             estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
             fecha_activacion=fecha, persona_id=persona.id,

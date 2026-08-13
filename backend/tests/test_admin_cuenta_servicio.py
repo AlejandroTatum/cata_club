@@ -18,6 +18,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import Persona, Usuario
 from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
@@ -31,7 +32,7 @@ def _base_payload(**overrides) -> dict:
         "tipo_cuenta": "JUGADOR",
         "nombres": "Carlos",
         "apellidos": "Ruiz",
-        "cedula": "1712345678",
+        "cedula": cedula_valida(100),
         "fecha_nacimiento": "1995-06-15",
         "telefono": "0991234567",
         "correo": "carlos@test.com",
@@ -44,7 +45,7 @@ def _base_payload(**overrides) -> dict:
 def _crear_representante_adulto(db_session) -> Persona:
     """Crea un representante adulto (>= 18) en la BD para usar en tests de MENOR."""
     rep = Persona(
-        nombres="María", apellidos="López", cedula="1790012345",
+        nombres="María", apellidos="López", cedula=cedula_valida(102),
         fecha_nacimiento=date(1985, 3, 20), telefono="0998765432",
     )
     db_session.add(rep)
@@ -286,7 +287,7 @@ def test_menor_representante_inexistente_rechazado(client, db_session):
 
 def test_menor_representante_menor_de_edad_rechazado(client, db_session):
     rep_menor = Persona(
-        nombres="Menor", apellidos="Rep", cedula="1790099999",
+        nombres="Menor", apellidos="Rep", cedula=cedula_valida(103),
         fecha_nacimiento=date(2012, 1, 1), telefono="0999999999",
     )
     db_session.add(rep_menor)
@@ -364,14 +365,14 @@ def test_crear_cuenta_sin_token_da_401(client_sin_token):
 
 def test_persona_y_usuario_persisten_correctamente(db_session):
     datos = AdminCrearCuentaDTO(**_base_payload(
-        nombres="Ana", apellidos="Torres", cedula="1712345678",
+        nombres="Ana", apellidos="Torres", cedula=cedula_valida(101),
     ))
     result = AdminCuentaServicio(db_session).crear_cuenta(datos)
 
     persona = db_session.query(Persona).get(result["persona_id"])
     assert persona.nombres == "Ana"
     assert persona.apellidos == "Torres"
-    assert persona.cedula == "1712345678"
+    assert persona.cedula == cedula_valida(101)
 
     usuario = db_session.query(Usuario).filter(Usuario.persona_id == persona.id).one()
     assert usuario.correo == "carlos@test.com"

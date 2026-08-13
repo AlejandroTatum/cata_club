@@ -17,6 +17,7 @@ representado sin credenciales no recibe Usuario — ver
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, TipoModalidad, TipoRol
 from app.dominio.modelos import Membresia, Persona, Rol, TipoMembresia, Usuario
 
@@ -97,28 +98,28 @@ def _stats(client) -> dict:
 def test_alumno_con_membresia_vencida_cuenta_como_por_regularizar(client, db_session):
     """Candado del bug: un alumno con membresía VENCIDA tiene membresía
     histórica pero NO activa — debe aparecer en "por regularizar"."""
-    alumno = _crear_alumno(db_session, "1750000001", "vencido@cataclub.test")
+    alumno = _crear_alumno(db_session, cedula_valida(200), "vencido@cataclub.test")
     _crear_membresia(db_session, alumno, EstadoMembresia.VENCIDA)
 
     assert _stats(client)["personasSinMembresia"] == 1
 
 
 def test_alumno_con_membresia_inactiva_cuenta_como_por_regularizar(client, db_session):
-    alumno = _crear_alumno(db_session, "1750000002", "inactivo@cataclub.test")
+    alumno = _crear_alumno(db_session, cedula_valida(201), "inactivo@cataclub.test")
     _crear_membresia(db_session, alumno, EstadoMembresia.INACTIVA)
 
     assert _stats(client)["personasSinMembresia"] == 1
 
 
 def test_alumno_con_membresia_activa_no_cuenta_como_por_regularizar(client, db_session):
-    alumno = _crear_alumno(db_session, "1750000003", "activo@cataclub.test")
+    alumno = _crear_alumno(db_session, cedula_valida(202), "activo@cataclub.test")
     _crear_membresia(db_session, alumno, EstadoMembresia.ACTIVA)
 
     assert _stats(client)["personasSinMembresia"] == 0
 
 
 def test_alumno_sin_ninguna_membresia_sigue_contando(client, db_session):
-    _crear_alumno(db_session, "1750000004", "nuevo@cataclub.test")
+    _crear_alumno(db_session, cedula_valida(203), "nuevo@cataclub.test")
 
     assert _stats(client)["personasSinMembresia"] == 1
 
@@ -129,7 +130,7 @@ def test_menor_sin_usuario_con_membresia_vencida_cuenta_como_por_regularizar(
     """Candado del blocker de la review: un menor representado sin Usuario
     puede tener membresía; con la VENCIDA debe contar como "por regularizar"
     y pertenecer a la población de alumnos."""
-    menor = _crear_alumno_sin_usuario(db_session, "1750000011")
+    menor = _crear_alumno_sin_usuario(db_session, cedula_valida(210))
     _crear_membresia(db_session, menor, EstadoMembresia.VENCIDA)
 
     stats = _stats(client)
@@ -141,10 +142,10 @@ def test_staff_sin_membresia_no_cuenta_como_por_regularizar(client, db_session):
     """El administrador y el entrenador nunca tienen membresía: no son
     "por regularizar" aunque no tengan ninguna."""
     _crear_persona_con_rol(
-        db_session, "1750000005", "admin.dash@cataclub.test", TipoRol.ADMINISTRADOR
+        db_session, cedula_valida(204), "admin.dash@cataclub.test", TipoRol.ADMINISTRADOR
     )
     _crear_persona_con_rol(
-        db_session, "1750000006", "coach.dash@cataclub.test", TipoRol.ENTRENADOR
+        db_session, cedula_valida(205), "coach.dash@cataclub.test", TipoRol.ENTRENADOR
     )
 
     assert _stats(client)["personasSinMembresia"] == 0
@@ -156,13 +157,13 @@ def test_total_alumnos_es_el_denominador_y_total_personas_cuenta_a_todos(
     """`total_alumnos` (denominador de "MEMBRESÍAS ACTIVAS · X de Y") cuenta
     solo alumnos; `total_personas` (tarjeta "Miembros") cuenta a todas las
     personas registradas, administrador y entrenador incluidos."""
-    alumno = _crear_alumno(db_session, "1750000007", "denom1@cataclub.test")
-    _crear_alumno(db_session, "1750000008", "denom2@cataclub.test")
+    alumno = _crear_alumno(db_session, cedula_valida(206), "denom1@cataclub.test")
+    _crear_alumno(db_session, cedula_valida(207), "denom2@cataclub.test")
     _crear_persona_con_rol(
-        db_session, "1750000009", "admin.denom@cataclub.test", TipoRol.ADMINISTRADOR
+        db_session, cedula_valida(208), "admin.denom@cataclub.test", TipoRol.ADMINISTRADOR
     )
     _crear_persona_con_rol(
-        db_session, "1750000010", "coach.denom@cataclub.test", TipoRol.ENTRENADOR
+        db_session, cedula_valida(209), "coach.denom@cataclub.test", TipoRol.ENTRENADOR
     )
     _crear_membresia(db_session, alumno, EstadoMembresia.ACTIVA)
 

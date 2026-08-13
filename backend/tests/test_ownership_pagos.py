@@ -13,6 +13,7 @@ mientras que el inexistente sigue respondiendo 404.
 """
 from unittest.mock import patch
 
+from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -135,9 +136,9 @@ def test_representante_si_registra_pago_de_su_representado(client):
     """E04-RF003: el representante paga por su representado. El pago va a
     nombre del representado (persona_id del hijo) contra la membresía del
     hijo -- eso debe seguir permitido."""
-    representante = _crear_persona(client, cedula="1733344455")  # id=1
+    representante = _crear_persona(client, cedula=cedula_valida(470))  # id=1
     hijo = _crear_persona(
-        client, cedula="1744455566", representante_id=representante["id"]
+        client, cedula=cedula_valida(471), representante_id=representante["id"]
     )  # id=2
     tipo = _crear_tipo_membresia(client)
     membresia_hijo = _crear_membresia(client, hijo["id"], tipo["id"])
@@ -154,7 +155,7 @@ def test_representante_si_registra_pago_de_su_representado(client):
 def test_admin_sigue_registrando_y_aprobando_pago_valido_de_cualquier_persona(client):
     """El flujo administrativo de hoy no cambia: registrar el pago válido de
     un tercero (membresía de ESA persona) y aprobarlo activa la membresía."""
-    _crear_persona(client, cedula="0000000001")  # relleno -> id=1 (el admin)
+    _crear_persona(client, cedula=cedula_valida(472))  # relleno -> id=1 (el admin)
     persona = _crear_persona(client, cedula="1710034073")  # id=2
     tipo = _crear_tipo_membresia(client)
     membresia = _crear_membresia(client, persona["id"], tipo["id"])
@@ -189,9 +190,9 @@ _FAKE_URL_JPG = "https://res.cloudinary.com/test/image/upload/voucher-fake.jpg"
     return_value=_FAKE_URL_JPG,
 )
 def test_representante_si_sube_voucher_del_pago_de_su_representado(_mock_cloudinary, client):
-    representante = _crear_persona(client, cedula="1733344455")  # id=1
+    representante = _crear_persona(client, cedula=cedula_valida(470))  # id=1
     hijo = _crear_persona(
-        client, cedula="1744455566", representante_id=representante["id"]
+        client, cedula=cedula_valida(471), representante_id=representante["id"]
     )  # id=2
     tipo = _crear_tipo_membresia(client)
     membresia_hijo = _crear_membresia(client, hijo["id"], tipo["id"])

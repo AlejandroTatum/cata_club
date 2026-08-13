@@ -10,6 +10,7 @@ Cubre:
 """
 from unittest.mock import patch
 
+from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -280,7 +281,7 @@ def test_subir_voucher_sin_ser_duenio_ni_admin_da_403(client_sin_permisos, clien
     creamos una persona "relleno" primero para que la persona asociada al pago
     tenga id=2 o mayor.
     """
-    _crear_persona(client, cedula="0000000001")  # relleno -> id=1
+    _crear_persona(client, cedula=cedula_valida(640))  # relleno -> id=1
     persona = _crear_persona(client, cedula="1710034107")  # id=2
     tipo = _crear_tipo_membresia(client)
     membresia = _crear_membresia(client, persona["id"], tipo["id"])
