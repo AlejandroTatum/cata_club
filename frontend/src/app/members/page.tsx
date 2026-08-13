@@ -88,6 +88,8 @@ import {
 } from "./members-utils";
 import type { BackendTipoRol, FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
+import { calculatePersonAge } from "@/lib/identity-validation";
+import { clubToday } from "@/lib/club-date";
 import MedicalRecordEditor from "./MedicalRecordEditor";
 import AccountInfoSection from "./AccountInfoSection";
 import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
@@ -172,21 +174,14 @@ interface StudentRowProps {
 }
 
 
-function calculateAge(fechaNacimiento: string | undefined): number | null {
-  if (!fechaNacimiento) return null;
-  const birth = new Date(fechaNacimiento);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-  return age;
-}
-
 function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): React.ReactElement {
   const [showMedical, setShowMedical] = useState(false);
 
   const personaId = Number(student.id);
-  const age = calculateAge(student.fechaNacimiento);
+  const rawAge = student.fechaNacimiento
+    ? calculatePersonAge(student.fechaNacimiento, clubToday())
+    : NaN;
+  const age = Number.isNaN(rawAge) ? null : rawAge;
 
   const membershipLabel = student.membresia
     ? MEMBERSHIP_STATUS_LABELS[student.membresia.estado]

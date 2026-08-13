@@ -358,6 +358,40 @@ describe("MembersPage — Editar member modal", () => {
     expect(ageText.closest("span")?.className).toContain("bg-sunken");
   });
 
+  it("computes the boxed age from the club's calendar day, not a UTC-shifted one", async () => {
+    // Birthday is tomorrow (club calendar), so the correct age is 17, one
+    // year short of 18. A private `calculateAge` used to live in this file
+    // and read the birth date via `new Date(fechaNacimiento)` — UTC midnight,
+    // which lands on 2008-07-14 local under Ecuador's UTC-5 offset. That
+    // shifted-back birth date makes the birthday look like it already
+    // happened, and the old function reported 18 for this exact case.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 6, 14));
+    try {
+      mockFetchMembers.mockResolvedValue({
+        accounts: [
+          {
+            ...ACCOUNT,
+            estudiantes: [{ ...ACCOUNT.estudiantes[0], fechaNacimiento: "2008-07-15" }],
+          },
+        ],
+      });
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      const row = await findAccountRow();
+      fireEvent.click(getEditButton(row));
+      const dialog = screen.getByRole("dialog");
+
+      expect(within(dialog).getByText("17 años")).toBeInTheDocument();
+      expect(within(dialog).queryByText("18 años")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("opens exactly one dialog, however many renderings of the account exist", async () => {
     render(
       <ToastProvider>
