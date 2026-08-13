@@ -9,14 +9,12 @@ import {
   formatAbsenceCount,
   formatElapsedMinutes,
   formatEnrolledCount,
-  formatSessionCountdown,
   groupRecordsBySession,
   minutesSinceMidnight,
   minutesUntilStart,
   monthToDateRange,
   parseHoraToMinutes,
   selectTodaySessions,
-  summarizeLastSession,
 } from "@/app/trainer/trainer-day-utils";
 
 function schedule(
@@ -136,25 +134,6 @@ describe("minutesUntilStart", () => {
   });
 });
 
-describe("formatSessionCountdown", () => {
-  it.each([
-    [25, "En 25 minutos"],
-    [1, "En 1 minuto"],
-    [59, "En 59 minutos"],
-    [60, "En 1 hora"],
-    [90, "En 1 hora y 30 min"],
-    [137, "En 2 horas y 17 min"],
-    [120, "En 2 horas"],
-  ])("formats %i minutes as %s", (minutes, expected) => {
-    expect(formatSessionCountdown(minutes)).toBe(expected);
-  });
-
-  it("says the session is running instead of counting backwards", () => {
-    expect(formatSessionCountdown(0)).toBe("En curso");
-    expect(formatSessionCountdown(-12)).toBe("En curso");
-  });
-});
-
 describe("formatEnrolledCount", () => {
   it("says inscritos, not esperan — the backend only knows who is enrolled", () => {
     expect(formatEnrolledCount(12)).toBe("12 estudiantes inscritos");
@@ -230,22 +209,6 @@ describe("groupRecordsBySession", () => {
 
   it("returns an empty list rather than throwing on no records", () => {
     expect(groupRecordsBySession([])).toEqual([]);
-  });
-});
-
-describe("summarizeLastSession", () => {
-  it("returns the most recent session", () => {
-    const summary = summarizeLastSession([
-      record({ estado: "present", fecha: "2026-07-20" }),
-      record({ estado: "absent", fecha: "2026-07-23" }),
-    ]);
-
-    expect(summary?.fecha).toBe("2026-07-23");
-    expect(summary?.counts.absent).toBe(1);
-  });
-
-  it("returns null when nothing has been filed", () => {
-    expect(summarizeLastSession([])).toBeNull();
   });
 });
 
