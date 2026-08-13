@@ -1353,10 +1353,10 @@ describe("ProfilePage — the redesigned account layout", () => {
   });
 
   it("falls back to 'Miembro desde —' when fechaCreacion is falsy", async () => {
-    // `MemberCard.memberSince` is a required string — there is no longer a
-    // way to simply omit the fact the way the old `{fechaCreacion && (...)}`
+    // `IdentityPanel.memberSince` is a required string — there is no way to
+    // simply omit the fact the way the old `{fechaCreacion && (...)}`
     // conditional did. This proves the fallback text renders instead of an
-    // empty/undefined string reaching the card.
+    // empty/undefined string reaching the panel.
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
     mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, fechaCreacion: "" });
 
