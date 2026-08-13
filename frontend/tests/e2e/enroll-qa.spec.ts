@@ -1226,6 +1226,26 @@ test.describe("X · Robustez del envío", () => {
     await shot(page, "X02", "401-no-expulsa");
   });
 
+  test("X04 · un 429 se explica solo, aunque el cuerpo no traiga detail ni message", async ({ page }) => {
+    await goToSummary(page);
+    // Cuerpo VERIFICADO contra el backend real: slowapi responde con la clave
+    // `error`, no con el `{detail, message}` que usa el resto de la API. El
+    // traductor igual acierta porque contesta por STATUS y no por cuerpo — que
+    // es exactamente para lo que se hizo así.
+    await mockEnrollment(page, {
+      status: 429,
+      body: { error: "Rate limit exceeded: 10 per 1 minute" },
+    });
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: /confirmar inscripción/i }).click();
+
+    const alerta = stepAlert(page);
+    await expect(alerta).toContainText("Demasiados intentos");
+    // Y no se filtra la jerga del limitador.
+    await expect(alerta).not.toContainText("Rate limit");
+    await shot(page, "X04", "429-traducido");
+  });
+
   test("X03 · corregir desde el resumen vuelve al paso correcto con los datos puestos", async ({ page }) => {
     await goToSummary(page);
     // El resumen ofrece "Corregir" por bloque — es el atajo que evita rehacer

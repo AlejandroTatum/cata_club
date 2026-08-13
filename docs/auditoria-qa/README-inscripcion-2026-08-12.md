@@ -252,12 +252,18 @@ usuario necesita para entender por qué se le rechazó.
 contacto y teléfono de emergencia son obligatorios y bloquean. Condiciones,
 alergias y observaciones sí son opcionales.
 
-**Resumen y envío (S01–S07, 7 casos).** Sin marcar la casilla de revisión,
+**Resumen y envío (S01–S09, 9 casos).** Sin marcar la casilla de revisión,
 confirmar está deshabilitado. El resumen muestra los datos, y **la contraseña
-nunca aparece en claro**. Un 409 de cédula duplicada llega al visitante. Un 500
-con un traceback de `psycopg2` y un 422 con la lista de errores de FastAPI se
-traducen a mensajes legibles **sin filtrar una línea del detalle interno**.
-Doble clic en confirmar envía **una sola** inscripción.
+nunca aparece en claro**. El **400** de identidad ya registrada llega completo
+al visitante, con su salida a *Iniciar sesión* / *Recuperar contraseña*, y sin
+decir cuál de los datos está tomado. Un 500 con un traceback de `psycopg2` y un
+422 con la lista de errores de FastAPI se traducen a mensajes legibles **sin
+filtrar una línea del detalle interno**. Doble clic en confirmar envía **una
+sola** inscripción.
+
+**Presentación de los mensajes (M01–M02, 2 casos).** Los dos son hallazgos, no
+aprobaciones: el mismo error sale por toast y por alerta a la vez, y el toast
+tapa los botones «Corregir». Ver la tabla de hallazgos.
 
 **Navegación (N01–N03, 3 casos).** «Atrás» conserva lo cargado, el Atrás del
 navegador es el mismo Atrás del asistente, y no se puede saltar a un paso
@@ -323,7 +329,45 @@ Queda fuera de alcance, y conviene decirlo:
   formulario con otras reglas; comparte helpers con este, así que varios
   hallazgos probablemente se repitan ahí, pero no se probó.
 - **El asistente de dependientes** (`/student/add-dependent`), por lo mismo.
-- **Límite de intentos** en el alta pública. El endpoint es público y no se
-  midió cuántas inscripciones seguidas acepta desde un mismo origen.
 - **Acceso con teclado y lector de pantalla.** Los errores llevan `aria-invalid`
   y `aria-describedby`, pero no se recorrió el formulario sin mouse.
+
+## Límite de intentos — el hallazgo más serio del informe
+
+Medido contra el backend real de QA, no mockeado.
+
+**El límite existe y corta donde dice:** `@limiter.limit("10/minute")` sobre
+`POST /api/v1/enrollment/`. Diez pedidos pasan, el once devuelve `429`.
+
+**Pero el cubo es global, no por visitante.** Doce pedidos alternando dos
+`X-Forwarded-For` distintos agotaron **un solo** cubo de 10:
+
+```
+ronda 1  visitanteA=400  visitanteB=400
+ronda 2  visitanteA=400  visitanteB=400
+ronda 3  visitanteA=400  visitanteB=400
+ronda 4  visitanteA=400  visitanteB=400
+ronda 5  visitanteA=400  visitanteB=429   <-- cubo COMPARTIDO agotado
+ronda 6  visitanteA=429  visitanteB=429
+```
+
+La causa está en la topología, no en el número. En producción solo Caddy
+publica puertos: el visitante llega al frontend, y el backend lo llama el BFF
+**server-side**. El peer TCP del backend es siempre el contenedor del frontend.
+Encima, `backendFetch` no reenvía la IP de origen y uvicorn corre sin
+`--proxy-headers`, así que aunque llegara se ignoraría.
+
+**Consecuencia: once pedidos por minuto, desde cualquier lado, dejan al club
+entero sin poder inscribir a nadie.** Y no aísla al abusador: su tráfico es
+indistinguible del legítimo.
+
+No es exclusivo del alta — la misma clave rige `auth_router` (`60/minute`), el
+chatbot y los endpoints anónimos de `personas_router`.
+
+Lo que el visitante ve está bien: el traductor contesta **por status**, no por
+cuerpo, así que el `{"error": "Rate limit exceeded…"}` de slowapi —que rompe la
+convención `{detail, message}` del resto de la API— igual se muestra como
+«Demasiados intentos. Espere un momento e intente nuevamente.» (caso `X04`).
+Falta el `Retry-After`.
+
+Registrado como issue aparte por ser de infraestructura y no de este formulario.
