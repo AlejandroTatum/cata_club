@@ -1,3 +1,15 @@
+> ## ⛔ HISTÓRICO — superado el 2026-08-13
+>
+> Este plan se re-derivó el 10 de agosto y ya **no se mantiene**: varios de
+> sus ítems están resueltos o desactualizados contra el código actual, y su
+> «bloqueante» de infraestructura (TLS, `mem_limit`, logs) está implementado
+> desde antes de esta fecha.
+>
+> La **única lista viva** de preparación para producción es
+> [`operations/production-readiness.md`](operations/production-readiness.md),
+> verificada contra `fd9f7be` el 2026-08-13. No copiar ítems de este
+> archivo sin re-verificarlos contra el código y la lista viva.
+
 # Plan de lanzamiento a producción — Cata Club
 
 - **Base verificada:** `origin/main` en `e663953`

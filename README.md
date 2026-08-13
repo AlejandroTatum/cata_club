@@ -10,6 +10,7 @@ Proyecto de la materia **Diseño de Software** — Universidad Nacional de Loja 
 cata_club/
 ├── backend/          # Python 3.13 · FastAPI · SQLAlchemy 2 · PostgreSQL · Celery
 ├── frontend/         # Next.js 14 · React 18 · TypeScript · Tailwind CSS
+├── docs/             # Documentación: portal en docs/README.md
 ├── docker-compose.yml
 ├── Makefile
 └── README.md
@@ -95,9 +96,10 @@ backend/app/
 └── soporte_transversal/  # Configuración centralizada, rate limiting
 ```
 
-**33 endpoints** · **19 entidades** · **39 tests** (pytest + SQLite en memoria).
-
-Ver `backend/README.md` para documentación completa.
+**Tests:** la suite pytest corre contra **Postgres real** (servicio
+`db-test` de Compose, vía `TEST_DATABASE_URL`), no contra SQLite; los
+conteos de endpoints, entidades y tests no se mantienen en este README por
+ser volátiles. Ver `backend/README.md` para la documentación completa.
 
 ## Estructura del Frontend
 
@@ -110,7 +112,7 @@ frontend/src/
 ├── contexts/     # React Context (auth state)
 ├── controllers/  # Contratos de controllers
 ├── lib/          # Utilidades + adaptadores server-side
-├── services/     # API client, auth mock
+├── services/     # Cliente HTTP (BFF) — ver services/README.md
 └── types/        # Tipos TypeScript del dominio
 ```
 
@@ -141,10 +143,11 @@ Credenciales sembradas:
 | Entrenador | `entrenador@cataclub.com` | `trainer12345` |
 | Alumnos y representantes del dataset grande | ver `/members` | `alumno123` |
 
-Después de sembrar hay ~55-65 alumnos repartidos en los 11 niveles de ranking,
-membresías en los tres estados, pagos con cola de validación y asistencias
-cargadas, así que las pantallas se pueden evaluar con densidad realista en vez
-de con estados vacíos. No hace falta `.env`: `make qa-up` inyecta una
+Después de sembrar hay alumnos distribuidos en las categorías de horario
+(`Mensual Infantil` / `Mensual Adultos`), membresías en los tres estados,
+pagos con cola de validación y asistencias cargadas, así que las pantallas
+se pueden evaluar con densidad realista en vez de con estados vacíos. No
+hace falta `.env`: `make qa-up` inyecta una
 `JWT_SECRET_KEY` aleatoria por corrida y `docker-compose.qa.yml` fija
 `AMBIENTE=development`.
 
@@ -205,14 +208,23 @@ El sistema gestiona un club de tenis de mesa con:
 - **Membresías** con tipos (Mensual, Personalizada) y ciclo de vida (Activa/Vencida/Inactiva)
 - **Pagos** con validación de comprobantes (CU012)
 - **Asistencia** a sesiones de entrenamiento con registro por horario
-- **Ranking** por niveles con asignación y movimiento de alumnos
+- **Categorías de horario** y asignación de alumnos a horarios
 - **Clases extra** para membresías personalizadas
 - **Fichas médicas** y antecedentes del club
 - **Automatizaciones** (Celery Beat): alertas de vencimiento de membresía y marcado automático de membresías vencidas
 
 ## Despliegue
 
-Ver `frontend/Dockerfile` y `backend/Dockerfile` para las imágenes de producción. El frontend usa modo `standalone` de Next.js.
+Ver `frontend/Dockerfile` y `backend/Dockerfile` para las imágenes de
+producción. El frontend usa modo `standalone` de Next.js. El procedimiento
+de despliegue, rollback y backup vive en
+[`docs/operations/`](docs/operations/) — empezar por
+[`docs/operations/production-readiness.md`](docs/operations/production-readiness.md).
+
+## Documentación
+
+El índice completo de la documentación (operación, configuración, ownership,
+privacidad y evidencia) está en [`docs/README.md`](docs/README.md).
 
 ## Licencia
 

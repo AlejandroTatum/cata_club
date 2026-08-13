@@ -6,6 +6,10 @@ sostuvo la sesión que cerró los doce ítems y abrió los ocho de
 estado. Cada criterio es accionable, no aspiracional: si no podés decidir con
 él en la mano, no está bien escrito.
 
+> Nota (2026-08-13): las listas de pendientes citadas abajo quedaron
+> históricas. La única lista viva de preparación para producción es
+> [`operations/production-readiness.md`](operations/production-readiness.md).
+
 ## Los doce criterios
 
 1. **Verificar antes de afirmar.** Ninguna afirmación técnica sale sin un
@@ -106,7 +110,7 @@ Errores concretos de esta sesión, para no repetirlos:
 
 ## Documento hermano
 
-Los defectos y la deuda técnica que dejó esta sesión están en
+Los defectos y la deuda técnica que dejó esa sesión están en el histórico
 [`docs/pendientes.md`](./pendientes.md), no acá — este documento es el
-método, no un pendiente. `pendientes.md` referencia este archivo como
-la explicación de cómo se llegó a cada cierre.
+método, no un pendiente. Para el estado vigente de preparación para
+producción, ver [`operations/production-readiness.md`](operations/production-readiness.md).
