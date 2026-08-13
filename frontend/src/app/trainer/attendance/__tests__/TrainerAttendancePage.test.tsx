@@ -1354,6 +1354,112 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     expect(screen.queryByRole("button", { name: /Confirmar Asistencia/ })).not.toBeInTheDocument();
     expect(mockRegisterAttendance).toHaveBeenCalledTimes(1);
   });
+
+  // Issue #241 hallazgo 1: `rosterError` used to render only on step 1, so a
+  // retry launched from the receipt failed with nothing on screen — the
+  // button "looked like it did nothing". It must surface here, next to the
+  // control that failed, and say what the trainer can do about it.
+  it("shows a visible, actionable error on the receipt when the retry's re-fetch fails", async () => {
+    mockRegisterAttendance.mockReset().mockResolvedValue({
+      createdCount: 2,
+      failed: [{ personaId: 101, message: "conflict" }],
+    });
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    await screen.findByText(/Asistencia registrada/i);
+
+    mockFetchAlumnosPorHorario.mockRejectedValueOnce(new Error("network down"));
+    fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
+
+    const errorText = await screen.findByText(/No se pudo cargar el listado/i);
+    expect(errorText.closest('[role="alert"]')).not.toBeNull();
+    // States what happened AND what to do — not just that it failed.
+    expect(errorText.textContent).toMatch(/conexión|intente|reintente/i);
+  });
+
+  // Issue #241 hallazgo 2: nothing stopped a second click from firing a
+  // second request while the first was still in flight.
+  it("disables the retry button while its own re-fetch is in flight", async () => {
+    mockRegisterAttendance.mockReset().mockResolvedValue({
+      createdCount: 2,
+      failed: [{ personaId: 101, message: "conflict" }],
+    });
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    await screen.findByText(/Asistencia registrada/i);
+
+    let releaseFetch: () => void = () => {};
+    mockFetchAlumnosPorHorario.mockReturnValueOnce(
+      new Promise((resolve) => {
+        releaseFetch = () => resolve(buildAlumnoHorarios(3));
+      }),
+    );
+    const retry = screen.getByRole("button", { name: /Reintentar/ });
+    fireEvent.click(retry);
+
+    // Perceivable as more than a color shift: the accessible disabled state
+    // and the label itself both change while the request is in flight.
+    expect(retry).toHaveAttribute("aria-disabled", "true");
+    expect(retry).toHaveTextContent(/Reintentando/i);
+
+    fireEvent.click(retry);
+    // The initial `openRoster()` call plus exactly ONE retry call — the
+    // repeated click above must not have fired a second request.
+    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      releaseFetch();
+      await Promise.resolve();
+    });
+  });
+
+  // A re-enabled control a keyboard user can no longer reach is its own kind
+  // of silent failure. `disabled` blurs the element to <body> the instant
+  // it's applied; this must stay reachable through the whole cycle.
+  it("keeps the retry button focusable once it re-enables after a failed re-fetch", async () => {
+    mockRegisterAttendance.mockReset().mockResolvedValue({
+      createdCount: 2,
+      failed: [{ personaId: 101, message: "conflict" }],
+    });
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    await screen.findByText(/Asistencia registrada/i);
+
+    let rejectFetch: (reason: unknown) => void = () => {};
+    mockFetchAlumnosPorHorario.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFetch = reject;
+        }),
+    );
+    const retry = screen.getByRole("button", { name: /Reintentar/ });
+    retry.focus();
+    fireEvent.click(retry);
+
+    // The request must actually go through its disabled phase — otherwise
+    // this test would pass trivially without ever exercising a re-enable.
+    await waitFor(() => expect(retry).toHaveAttribute("aria-disabled", "true"));
+
+    await act(async () => {
+      rejectFetch(new Error("network down"));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(retry).not.toHaveAttribute("aria-disabled", "true"));
+    expect(retry).toHaveFocus();
+  });
 });
 
 // ---------------------------------------------------------------------------

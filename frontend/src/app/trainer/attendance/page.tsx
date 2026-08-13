@@ -276,6 +276,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
    * waiting on them.
    */
   const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
+  /**
+   * The receipt's "Reintentar" button (issue #241). Its disabled phase is
+   * expressed with `aria-disabled`, not the native `disabled` attribute —
+   * the browser blurs a natively-disabled element the instant it applies,
+   * stranding keyboard focus on `<body>` with no way back. `aria-disabled`
+   * keeps it in the tab order the whole time, so there is nothing to
+   * restore once the request settles.
+   */
+  const retryButtonRef = useRef<HTMLButtonElement>(null);
   /** A position read off the URL that still needs its roster loaded. */
   const [pendingRestore, setPendingRestore] = useState<WizardLocation | null>(null);
   /**
@@ -487,7 +496,9 @@ export default function TrainerAttendancePage(): React.ReactElement {
         return true;
       } catch (err) {
         console.error("[trainer/attendance] fetchAlumnosPorHorario failed", err);
-        setRosterError("No se pudo cargar el listado de estudiantes de este horario.");
+        setRosterError(
+          "No se pudo cargar el listado de estudiantes de este horario. Revise su conexión e intente nuevamente.",
+        );
         return false;
       } finally {
         setRosterLoading(false);
@@ -780,10 +791,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
    *
    * The receipt comes down only once the roster is actually back. Clearing
    * `confirmed` first would drop the trainer onto the pre-submission review
-   * of a roster that is still fully marked — with no error in sight, since
-   * `rosterError` only renders on step 1 — where confirming again refiles
+   * of a roster that is still fully marked — where confirming again refiles
    * every student, including the ones already saved, and `result.failed`
    * would already be gone.
+   *
+   * A failed re-fetch leaves `step` at "confirm" (see `openRoster`), so
+   * `renderConfirmation` renders `rosterError` itself (issue #241) — the
+   * error used to only exist on step 1, invisible from this screen.
    */
   async function handleRetryFailed(): Promise<void> {
     if (selectedScheduleId === null) return;
@@ -1688,6 +1702,16 @@ export default function TrainerAttendancePage(): React.ReactElement {
             </ul>
           </div>
 
+          {/* Issue #241: the retry's own load failure must land here, next to
+              the button that triggered it — not only on step 1, which this
+              screen never shows. Same inline pattern step 1 uses for the
+              same `rosterError`. */}
+          {rosterError && hasFailedRecords && (
+            <div className="alert-error" role="alert">
+              {rosterError}
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             {hasFailedRecords ? (
               <>
@@ -1695,14 +1719,23 @@ export default function TrainerAttendancePage(): React.ReactElement {
                     it is the only action that actually corrects the
                     state. */}
                 <Button
+                  ref={retryButtonRef}
                   type="button"
                   variant="primary"
-                  onClick={() => void handleRetryFailed()}
-                  className="w-full justify-center sm:w-auto"
+                  onClick={() => {
+                    if (!rosterLoading) void handleRetryFailed();
+                  }}
+                  aria-disabled={rosterLoading}
+                  aria-busy={rosterLoading}
+                  className={`w-full justify-center sm:w-auto ${
+                    rosterLoading ? "cursor-not-allowed opacity-45" : ""
+                  }`}
                 >
-                  {result && result.failed.length === 1
-                    ? "Reintentar con ese alumno"
-                    : `Reintentar con esos ${result?.failed.length ?? 0} alumnos`}
+                  {rosterLoading
+                    ? "Reintentando…"
+                    : result && result.failed.length === 1
+                      ? "Reintentar con ese alumno"
+                      : `Reintentar con esos ${result?.failed.length ?? 0} alumnos`}
                 </Button>
                 <Button
                   type="button"
