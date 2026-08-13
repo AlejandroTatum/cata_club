@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
+import type { AlumnoHorario } from "@/services/api";
 import {
   ABSENCE_ALERT_THRESHOLD,
+  buildEnrolledCountsByHorario,
   buildSessionBarAriaLabel,
   buildSessionBarSegments,
   buildSessionCardState,
@@ -284,6 +286,24 @@ describe("buildSessionCardState", () => {
     expect(state.minutesAway).toBe(25);
     // `paso=lista` and no `fecha` — today needs no address (attendance-utils.ts).
     expect(state.href).toBe("/trainer/attendance?horario=1&paso=lista");
+    // One session today, nothing left to carousel.
+    expect(state.later).toEqual([]);
+  });
+
+  it("carries every session still to come today, in start order, as 'later'", () => {
+    const state = buildSessionCardState(
+      [
+        schedule(3, "17:00", "18:00"),
+        schedule(1, "15:00", "16:00"),
+        schedule(2, "16:00", "17:00"),
+      ],
+      NOW,
+    );
+
+    expect(state?.kind).toBe("next");
+    if (state?.kind !== "next") throw new Error("expected next");
+    expect(state.schedule.id).toBe(1);
+    expect(state.later.map((s) => s.id)).toEqual([2, 3]);
   });
 
   it("switches to 'live' once the session has started — the hour becomes the identifier", () => {
@@ -297,6 +317,7 @@ describe("buildSessionCardState", () => {
     expect(state.schedule.id).toBe(1);
     expect(state.minutesElapsed).toBe(10);
     expect(state.href).toBe("/trainer/attendance?horario=1&paso=lista");
+    expect(state.later).toEqual([]);
   });
 
   it("answers 'done', carrying no href at all, once every session today has ended", () => {
@@ -318,6 +339,41 @@ describe("buildSessionCardState", () => {
     expect(state?.kind).toBe("live");
     if (state?.kind !== "live") throw new Error("expected live");
     expect(state.schedule.id).toBe(1);
+    expect(state.later.map((s) => s.id)).toEqual([2]);
+  });
+});
+
+describe("buildEnrolledCountsByHorario", () => {
+  function alumno(horarioId: number): AlumnoHorario {
+    return {
+      id: Math.random(),
+      personaId: Math.random(),
+      personaNombreCompleto: "Alumno",
+      edad: 12,
+      horarioId,
+      horarioDia: "lun",
+      horarioHoraInicio: "15:00",
+      horarioHoraFin: "16:00",
+      fechaAsignacion: "2026-01-01",
+    };
+  }
+
+  it("counts the roster per today's horario, defaulting an empty class to 0", () => {
+    const today = [schedule(1, "15:00", "16:00"), schedule(2, "16:00", "17:00")];
+    const roster = [alumno(1), alumno(1), alumno(1)];
+
+    expect(buildEnrolledCountsByHorario(today, roster)).toEqual({ 1: 3, 2: 0 });
+  });
+
+  it("ignores roster rows for a horario outside today", () => {
+    const today = [schedule(1, "15:00", "16:00")];
+    const roster = [alumno(1), alumno(99)];
+
+    expect(buildEnrolledCountsByHorario(today, roster)).toEqual({ 1: 1 });
+  });
+
+  it("returns an empty map for a day with no schedules", () => {
+    expect(buildEnrolledCountsByHorario([], [alumno(1)])).toEqual({});
   });
 });
 
