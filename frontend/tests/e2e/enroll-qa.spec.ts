@@ -866,7 +866,25 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     await page.getByRole("checkbox").check();
     const confirm = page.getByRole("button", { name: /confirmar inscripción/i });
     await confirm.click();
-    await page.getByRole("button", { name: /inscribiendo/i }).click({ force: true, trial: true }).catch(() => {});
+
+    /*
+     * La guarda del doble envío es OBSERVABLE, y se afirma como tal: mientras
+     * el pedido viaja, el mismo botón queda `disabled` y rotulado
+     * "Inscribiendo…". Eso es lo que impide el segundo envío, así que es lo
+     * que hay que clavar — si alguien saca el `disabled`, esta línea se pone
+     * roja sola.
+     *
+     * El segundo clic va con `force` a propósito: sin él, Playwright espera a
+     * que el botón se habilite y el caso muere por timeout en vez de medir
+     * nada. `force` saltea la espera y despacha el evento igual, que es justo
+     * el visitante impaciente que se quiere simular. Lo que NO lleva es
+     * `trial` —que no cliquea— ni un `.catch()` que se trague el fallo: con
+     * los dos puestos, `calls` no podía valer otra cosa que 1 y el caso pasaba
+     * hubiera o no guarda.
+     */
+    const enviando = page.getByRole("button", { name: /inscribiendo/i });
+    await expect(enviando).toBeDisabled();
+    await enviando.click({ force: true });
 
     await expect(page.getByRole("heading", { name: /inscripción completada/i })).toBeVisible({
       timeout: 20_000,
@@ -973,11 +991,23 @@ test.describe("N · Navegación del asistente", () => {
   test("N03 · no se puede saltar a un paso posterior desde el indicador", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
-    // Con el paso incompleto, el indicador no debe ser un atajo al resumen.
-    const resumenPill = page.getByRole("button", { name: /^Confirmar$/ });
-    if (await resumenPill.count()) {
-      await resumenPill.first().click({ force: true });
-    }
+    /*
+     * Con el paso incompleto, el indicador no debe ser un atajo al resumen.
+     *
+     * Y no lo es por construcción, no por una guarda: `Stepper` renderiza un
+     * `<ol>` de `<li>` sin un solo control, así que no hay nada que clickear.
+     * Eso es lo que se afirma.
+     *
+     * La versión anterior buscaba un pill "Confirmar" dentro de un
+     * `if (count())`. Ese pill NO existe —verificado contra la app real, el
+     * único "Confirmar" del flujo es el botón "Confirmar inscripción" del
+     * resumen—, así que el clic nunca ocurría y la aserción de abajo pasaba
+     * en vacío: quedarse en el mismo paso es obvio si no se clickeó nada.
+     */
+    const stepper = page.getByRole("list", { name: /pasos de la inscripción/i });
+    await expect(stepper).toBeVisible();
+    await expect(stepper.getByRole("button")).toHaveCount(0);
+    await expect(stepper.getByRole("link")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
     await shot(page, "N03", "sin-salto-de-pasos");
   });

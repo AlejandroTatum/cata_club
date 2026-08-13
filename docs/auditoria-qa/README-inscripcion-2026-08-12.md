@@ -13,7 +13,7 @@ formulario, con otras reglas y otro dueño. Ese quedó fuera.
 
 Suite Playwright determinista: `frontend/tests/e2e/enroll-qa.spec.ts`.
 
-- **80 casos, 80 verdes**, 81 capturas en `docs/auditoria-qa/img-inscripcion-2026-08-12/`.
+- **81 casos, 81 verdes**, 82 capturas en `docs/auditoria-qa/img-inscripcion-2026-08-12/`.
 - Cada caso entra **desde el login y clickeando «Inscríbase»**, no navegando a
   la URL. Si ese enlace se rompe, el flujo es inalcanzable para un visitante y
   ningún test de la página sola lo notaría.
@@ -269,10 +269,11 @@ tapa los botones «Corregir». Ver la tabla de hallazgos.
 navegador es el mismo Atrás del asistente, y no se puede saltar a un paso
 posterior desde el indicador.
 
-**Robustez (X01–X03, 3 casos).** Si la red se cae al confirmar, hay mensaje y el
+**Robustez (X01–X04, 4 casos).** Si la red se cae al confirmar, hay mensaje y el
 botón vuelve a estar disponible: el intento no queda colgado. Un 401 no expulsa
-al visitante ni le borra lo cargado. Y «Corregir» desde el resumen vuelve al
-paso correcto con los datos puestos.
+al visitante ni le borra lo cargado. El 429 del limitador se traduce sin filtrar
+su jerga (`X04`, detallado en el apartado del límite de intentos). Y «Corregir»
+desde el resumen vuelve al paso correcto con los datos puestos.
 
 ## Un detalle del contrato que conviene no romper
 
