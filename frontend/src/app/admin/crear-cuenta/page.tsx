@@ -360,8 +360,8 @@ function CrearCuentaContent(): React.ReactElement {
           disabled={submitting}
           required
           pattern="[0-9]{10}"
-          maxLength={10}
           inputMode="numeric"
+          numericMode="cedula"
         />
 
         <WizardInput
@@ -382,9 +382,9 @@ function CrearCuentaContent(): React.ReactElement {
           disabled={submitting}
           required
           pattern="[0-9]+"
-          maxLength={10}
           minLength={7}
           inputMode="tel"
+          numericMode="phone"
         />
 
         {/* School selector — only for MENOR type */}
@@ -551,9 +551,9 @@ function CrearCuentaContent(): React.ReactElement {
             onChange={(v) => updateField("telefonoEmergencia", v)}
             disabled={submitting}
             pattern="[0-9]+"
-            maxLength={10}
             minLength={7}
             inputMode="tel"
+            numericMode="phone"
           />
         </div>
       </div>

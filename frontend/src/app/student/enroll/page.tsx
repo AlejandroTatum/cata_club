@@ -45,6 +45,8 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { calculatePersonAge } from "@/lib/identity-validation";
+import type { NumericFieldMode } from "@/lib/numeric-input";
+import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
   buildEnrollmentRequest,
   describeStepBlocker,
@@ -310,6 +312,7 @@ function EnrollWizard(): React.ReactElement {
       maxLength?: number;
       inputMode?: string;
       hint?: string;
+      numericMode?: NumericFieldMode;
     },
   ): React.ReactElement {
     return (
@@ -548,6 +551,7 @@ function EnrollWizard(): React.ReactElement {
           icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           pattern: "[0-9]{10}",
           inputMode: "numeric",
+          numericMode: "cedula",
           hint: CEDULA_HINT,
         })}
 
@@ -564,6 +568,7 @@ function EnrollWizard(): React.ReactElement {
           value: formData.telefonoRepresentante,
           onChange: (v) => updateField("telefonoRepresentante", v),
           inputMode: "tel",
+          numericMode: "phone",
           required: true,
           hint: PHONE_HINT,
         })}

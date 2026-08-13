@@ -4,13 +4,24 @@
  * input/textarea markup across both.
  */
 
-import type { InputHTMLAttributes, ReactElement, ReactNode } from "react";
+import type { InputHTMLAttributes, KeyboardEvent, ClipboardEvent, ReactElement, ReactNode } from "react";
+import { useState } from "react";
 import { User, Calendar, Hash, Phone, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { calculatePersonAge } from "@/lib/identity-validation";
 import { Button, buttonClasses } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
+import {
+  capDigits,
+  filterNumericInput,
+  isAllowedChar,
+  NUMERIC_FIELD_MAX_DIGITS,
+  type NumericFieldMode,
+} from "@/lib/numeric-input";
+
+/** `WizardInput`'s digit-cap warning — see numeric-input.ts for why the cap itself never strips a letter, only digits past the limit. */
+const LIMIT_REACHED_MESSAGE = "Alcanzó el máximo de 10 dígitos; no se ingresó el último carácter.";
 
 const ACCENTED_CHARS: Record<string, string> = {
   á: "a", é: "e", í: "i", ó: "o", ú: "u", ü: "u", ñ: "n",
@@ -55,12 +66,85 @@ interface WizardInputProps {
   hint?: string;
   /** Fired when the field loses focus — callers use it to mark the field "touched". */
   onBlur?: () => void;
+  /**
+   * Cédula/teléfono keystroke-and-paste filtering (see `numeric-input.ts`).
+   * A disallowed character (a letter; a separator on cédula) is rejected
+   * before it lands, silently — it was never valid input. The digit cap
+   * (10) is enforced the same way for a real keystroke or paste, but a
+   * rejected digit at the cap shows a visible, `aria-live` warning instead
+   * — the cap is real, unlike issue #225's, it is never silent.
+   */
+  numericMode?: NumericFieldMode;
 }
 
 export function WizardInput(opts: WizardInputProps): ReactElement {
   const fieldId = `${opts.idPrefix}-${slugifyLabel(opts.label)}`;
   const messageId = `${fieldId}-message`;
   const hasError = Boolean(opts.error);
+  const { numericMode } = opts;
+  const [limitReached, setLimitReached] = useState(false);
+
+  /**
+   * The `onChange` backstop: applies ONLY the digit cap, never a letter
+   * filter. It runs for every value change, including one `keydown`/`paste`
+   * never see — browser autofill, IME composition, or a test harness
+   * setting `.value` directly — so the cap holds everywhere. It does not
+   * strip letters on purpose: `enroll-qa.spec.ts`'s V01 relies on a
+   * one-shot value assignment (Playwright's `.fill()`) still reaching
+   * validation with its letters intact, so the character-class error fires
+   * from the validation layer instead of a field that already erased the
+   * evidence. A typed or pasted letter never reaches this path in the first
+   * place — `handleKeyDown`/`handlePaste` reject it before `onChange` fires.
+   */
+  function handleChange(raw: string): void {
+    if (!numericMode) {
+      opts.onChange(raw);
+      return;
+    }
+    const result = capDigits(numericMode, raw);
+    setLimitReached(result.limitReached);
+    opts.onChange(result.value);
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>): void {
+    if (!numericMode) return;
+    // Modifier combos (Ctrl+V, Cmd+A…) and non-printable keys (Backspace,
+    // Tab, arrows…) are never in the way — only a single printable
+    // character can be a disallowed letter or an over-the-cap digit.
+    if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+    if (!isAllowedChar(numericMode, e.key)) {
+      e.preventDefault();
+      return;
+    }
+    if (!/[0-9]/.test(e.key)) return; // an allowed separator — no cap concern
+    const input = e.currentTarget;
+    const replacesSelection = (input.selectionEnd ?? 0) > (input.selectionStart ?? 0);
+    if (replacesSelection) return; // replacing a selected digit never grows the count
+    if (digitCount(input.value) >= NUMERIC_FIELD_MAX_DIGITS[numericMode]) {
+      e.preventDefault();
+      setLimitReached(true);
+    }
+  }
+
+  /**
+   * Paste gets the full treatment (`filterNumericInput`: strip disallowed
+   * characters, then cap) in one pass, computed against what the field's
+   * value would become at the current cursor/selection — not just appended
+   * blindly to the end.
+   */
+  function handlePaste(e: ClipboardEvent<HTMLInputElement>): void {
+    if (!numericMode) return;
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text");
+    const input = e.currentTarget;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const nextRaw = input.value.slice(0, start) + pasted + input.value.slice(end);
+    const result = filterNumericInput(numericMode, nextRaw);
+    setLimitReached(result.limitReached);
+    opts.onChange(result.value);
+  }
+
   return (
     <div className="mb-4">
       <label htmlFor={fieldId} className="mb-1.5 block text-sm font-semibold text-cata-text">
@@ -77,7 +161,9 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           id={fieldId}
           type={opts.type ?? "text"}
           value={opts.value}
-          onChange={(e) => opts.onChange(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           onBlur={opts.onBlur}
           placeholder={opts.placeholder}
           required={opts.required}
@@ -86,7 +172,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           maxLength={opts.maxLength}
           minLength={opts.minLength}
           aria-invalid={hasError || undefined}
-          aria-describedby={opts.error || opts.hint ? messageId : undefined}
+          aria-describedby={opts.error || limitReached || opts.hint ? messageId : undefined}
           inputMode={(opts.inputMode ?? "text") as InputHTMLAttributes<HTMLInputElement>["inputMode"]}
           className={`input-field ${opts.icon ? "pl-10" : ""} ${
             hasError ? "border-cata-red ring-[3px] ring-cata-red/10" : ""
@@ -97,6 +183,15 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
         <p id={messageId} className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
           <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
           {opts.error}
+        </p>
+      ) : limitReached ? (
+        <p
+          id={messageId}
+          aria-live="polite"
+          className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-state-warn"
+        >
+          <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+          {LIMIT_REACHED_MESSAGE}
         </p>
       ) : opts.hint ? (
         <p id={messageId} className="mt-1.5 text-xs text-ink-3">
@@ -228,7 +323,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
           idPrefix={idPrefix} disabled={disabled} label="Cédula de Identidad" value={props.cedula}
           onChange={props.onCedulaChange} placeholder="p. ej. 1712345678" required
           icon={<Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          pattern="[0-9]{10}" inputMode="numeric"
+          pattern="[0-9]{10}" inputMode="numeric" numericMode="cedula"
           error={errors.cedula} onBlur={() => props.onFieldBlur?.("cedula")}
           hint={
             cedulaTyped > 0 && cedulaTyped < CEDULA_DIGITS
@@ -241,7 +336,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         idPrefix={idPrefix} disabled={disabled} label="Teléfono" value={props.telefono}
         onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
         icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-        pattern="[0-9]+" inputMode="tel"
+        pattern="[0-9]+" inputMode="tel" numericMode="phone"
         error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
         hint={PHONE_HINT}
       />
@@ -295,7 +390,7 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
           idPrefix={idPrefix} disabled={disabled} label="Teléfono de Emergencia" value={props.telefono}
           onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
           icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          pattern="[0-9]+" inputMode="tel"
+          pattern="[0-9]+" inputMode="tel" numericMode="phone"
           error={props.telefonoError} onBlur={props.onTelefonoBlur}
           hint={PHONE_HINT}
         />

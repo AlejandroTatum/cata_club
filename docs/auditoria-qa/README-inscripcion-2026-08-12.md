@@ -22,6 +22,16 @@ llamar `showError` además de `setFormErrors` — el mismo patrón repetido en
 los tres asistentes. El error del alta vive ahora solo en la alerta del
 paso, sin el toast flotante que se apoyaba encima de los botones «Corregir».
 
+**Adenda (misma fecha) — enmascarado de cédula/teléfono.** Un pase de QA
+posterior sobre este mismo informe pidió el tope de la cédula **de vuelta**
+("no puede tipear 11") y filtrado de letras en cédula y teléfono, en los tres
+asistentes. `G05` y `P09` — los dos casos que afirmaban que once dígitos
+entraban sin tope (#225) — se dieron vuelta otra vez para afirmar el nuevo
+comportamiento: el 11º dígito no entra, pero el tope ya no es silencioso —
+un aviso `aria-live` lo anuncia. La letra que #225 nunca cubrió (una tecla
+que no es dígito) tampoco entra, sin aviso, porque nunca fue una entrada
+válida. El detalle vive en `frontend/src/lib/numeric-input.ts`.
+
 ## Alcance
 
 El alta pública de cuenta: el recorrido al que llega un visitante que hace clic
@@ -139,7 +149,7 @@ vuelta, con el mismo id y la misma captura, ahora afirmando el cierre.
 | G08 | Media | **A** | Un dependiente de **3 años** pasaba el formulario entero | **Cerrado** — #224, `G08-dependiente-menor-de-5-rechazado.png` |
 | G03 | Media | **A** | **Sin techo de edad** para autoinscribirse: 120 años avanzaba | **Cerrado** — #224, `G03-techo-de-edad-jugador-120.png` |
 | G04 | Baja | **A** | El año 1750 que el representante rechaza, el jugador lo aceptaba | **Cerrado** — #224, `G04-jugador-anio-1750-rechazado.png` |
-| G05 | Media | **B** | El **11º dígito de la cédula desaparecía** sin decir nada | **Cerrado** — #225, `G05-cedula-11o-digito-ya-no-se-descarta.png` |
+| G05 | Media | **B** | El **11º dígito de la cédula desaparecía** sin decir nada | **Cerrado** — #225, `G05-cedula-11o-digito-avisado.png`; el tope volvió por pedido de QA, ahora con aviso `aria-live` (ver adenda arriba) |
 | G06 | Baja | **C** | Credenciales a medias: «Siguiente» habilitado, fallaba al clickear | **Cerrado** — #226, `G06a-…`, `G06b-…` |
 | V03–V05 | Media | **E** | Cédula validada solo por largo: verificador y provincia no se chequeaban | **Cerrado** — #228, `V03-…`–`V05-…`, control en `V06-…` |
 | V01–V02 | Media | **F** | Teléfono aceptaba letras y largos que no existen en Ecuador | **Cerrado** — #229, `V01-…`, `V02-…`; separadores siguen aceptados (`P12`) |
@@ -153,7 +163,9 @@ vuelta, con el mismo id y la misma captura, ahora afirmando el cierre.
 (`5 ≤ edad ≤ 74`) ni rechazaba fechas futuras. Cinco síntomas, un solo arreglo:
 `studentBirthDateRule` en el módulo compartido.
 **Causa raíz B** — `maxLength` recortaba en el input en lugar de validar; se sacó
-del input y quedó solo la regla.
+del input y quedó solo la regla. (Adenda misma fecha: el tope volvió por
+pedido explícito de QA, ahora pareado con un aviso — ver la adenda en
+«Estado» y en G05.)
 **Causa raíz C** — una regla era de paso y no de campo, y rompía el modelo de
 prevención de errores del resto del asistente; ahora corre desde
 `validateEnrollFields`, igual que las demás.
@@ -261,15 +273,25 @@ del representante lo frena con ese número. El del jugador no lo frena porque
 ### G05 · El 11º dígito de la cédula se descarta en silencio
 
 **Cerrado — #225.** El `maxLength` se sacó del input; la regla, no el campo,
-es la que ahora dice por qué once dígitos no son una cédula.
+era la que decía por qué once dígitos no eran una cédula.
 
 Lo de abajo describe el comportamiento que había. `maxLength=10` recortaba el exceso dentro del propio input. Al escribir
-`17123456789` el campo queda con `1712345678`, **válido**, y sin ningún aviso
-de que se comió una tecla.
+`17123456789` el campo quedaba con `1712345678`, **válido** en cuanto al
+verificador (no lo era: ver V03), y sin ningún aviso de que se había comido
+una tecla.
 
 Es el modo de fallo más silencioso del formulario: el visitante no ve un error,
 ve que su última tecla no entró — si es que lo ve. Termina inscribiéndose con
 una cédula que no escribió.
+
+**Adenda — el tope volvió, el silencio no.** Un pedido de QA posterior en esta
+misma fecha pidió el tope de vuelta explícitamente ("no puede tipear 11"), en
+los tres asistentes. El campo vuelve a no dejar entrar el 11º dígito — pero
+ahora con un aviso visible y `aria-live="polite"` en el momento exacto en que
+se rechaza, y letras (cédula y teléfono) que tampoco entran nunca, ni al
+tipear ni al pegar. La diferencia con el bug original no es el tope: es que
+ahora nunca es silencioso. Implementado en `frontend/src/lib/numeric-input.ts`
+y cableado en `WizardInput` (`frontend/src/components/wizard-fields.tsx`).
 
 ### G06 · La única regla que no previene, castiga
 
@@ -304,7 +326,8 @@ paso de tipo nunca bloquea.
 **Datos del estudiante (P01–P23, 23 casos).** Nombres y apellidos: vacío, menos
 de 3 caracteres, con dígitos o símbolos rechazados (ahora con el mensaje que
 describe el problema, no la regla — #230), y tildes y ñ aceptadas. Cédula: 9
-dígitos, con letras, y un 11º dígito que ya no se recorta en silencio (#225).
+dígitos, con letras, y un 11º dígito que no entra pero ya nunca en silencio —
+un aviso `aria-live` lo anuncia en el momento (#225, adenda misma fecha).
 Teléfono: 6 dígitos, y **con guiones sigue aceptado** — `099-123-4567` limpia a
 10 dígitos por un allowlist explícito de separadores (espacio, guion,
 paréntesis), no por un strip ciego de todo lo que no sea dígito (#229). Correo:

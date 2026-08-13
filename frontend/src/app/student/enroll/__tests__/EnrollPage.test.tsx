@@ -205,12 +205,18 @@ describe("EnrollPage — error prevention on the student step", () => {
   });
 
   /**
-   * #225: an 11-digit cédula used to be silently truncated to 10 by the
-   * input's own `maxLength` — the visitor never saw an error, just a keystroke
-   * that didn't land. The field now keeps every digit typed and lets the rule
-   * say why it's wrong, instead of hiding the mistake from the visitor.
+   * #225 (original bug) — a bare `maxLength={10}` silently ate the 11th
+   * digit with no explanation. PR #255 removed it and let the field carry
+   * every digit typed, so the length rule could say why it was wrong.
+   *
+   * A later QA pass on this same field asked for the cap BACK ("no puede
+   * tipear 11"), but never silent again: the 11th digit still doesn't land,
+   * and now an explicit, `aria-live` warning fires the moment that happens
+   * — the distinguishing feature from the original bug (see
+   * `numeric-input.ts`). This is still not a native `maxLength`: that
+   * attribute can't carry a warning, so the cap is enforced in JS instead.
    */
-  it("does not cap the cédula input — the rule speaks instead of the field truncating (#225)", () => {
+  it("caps the cédula input at 10 digits and warns instead of truncating silently (#225)", () => {
     render(<EnrollPage />);
     goToStudentStep();
 

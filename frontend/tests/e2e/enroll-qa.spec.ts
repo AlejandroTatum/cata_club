@@ -341,16 +341,26 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await shot(page, "P08", "cedula-corta");
   });
 
-  test("P09 · la cédula ya no recorta un 11º dígito: la regla lo rechaza (#225)", async ({ page }) => {
-    // El `maxLength` que se comía el 11º dígito en silencio se sacó del input:
-    // el visitante ve exactamente lo que escribió, y el mensaje explica por qué
-    // no vale — no un keystroke que desapareció sin aviso.
-    await fillAndBlur(page, "Cédula de Identidad", "17123456789");
-    await expect(field(page, "Cédula de Identidad")).toHaveValue("17123456789");
+  test("P09 · un 11º dígito de cédula no entra, y el límite se anuncia (#225, QA 2026-08-12)", async ({ page }) => {
+    // El `maxLength` original (#225) se comía el 11º dígito en silencio: el
+    // campo quedaba en 10, pero nada le decía al visitante por qué. Esta
+    // vuelta de QA pidió el tope de vuelta ("no puede tipear 11"), pero nunca
+    // silencioso: el 11º dígito sigue sin entrar, y ahora un aviso explícito
+    // (`aria-live`) dice por qué — ver `numeric-input.ts`.
+    const cedula = field(page, "Cédula de Identidad");
+    await cedula.fill("17123456789");
+    await expect(cedula).toHaveValue("1712345678");
+    await expect(page.getByText(/alcanzó el máximo de 10 dígitos/i)).toBeVisible();
+    await shot(page, "P09", "cedula-11o-digito-no-entra");
+
+    // Al salir del campo, el aviso transitorio cede el paso al veredicto
+    // definitivo de la regla: "1712345678" es EL PLACEHOLDER que el propio
+    // formulario sugiere (ver V03) — 10 dígitos, pero con el verificador
+    // equivocado.
+    await cedula.blur();
     await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
-      "La cédula de identidad debe tener 10 dígitos.",
+      "La cédula de identidad no es válida.",
     );
-    await shot(page, "P09", "cedula-larga-rechazada");
   });
 
   test("P10 · cédula con letras", async ({ page }) => {
@@ -1108,20 +1118,25 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await shot(page, "G04", "jugador-anio-1750-rechazado");
   });
 
-  test("G05 · el 11º dígito de la cédula ya no se descarta en silencio", async ({ page }) => {
+  test("G05 · el 11º dígito de la cédula no entra, y ahora lo dice en voz alta", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
 
-    await fillAndBlur(page, "Cédula de Identidad", "17123456789");
+    // QA 2026-08-12 le devolvió el tope al campo ("no puede tipear 11"), pero
+    // sin repetir #225: el 11º dígito no entra, y un aviso `aria-live` explica
+    // por qué en el momento — no un keystroke que desaparece sin explicación.
+    const cedula = field(page, "Cédula de Identidad");
+    await cedula.fill("17123456789");
+    await expect(cedula).toHaveValue("1712345678");
+    await expect(page.getByText(/alcanzó el máximo de 10 dígitos/i)).toBeVisible();
+    await shot(page, "G05", "cedula-11o-digito-avisado");
 
-    // El `maxLength` que recortaba el input se sacó (#225): el campo conserva
-    // exactamente lo que el visitante escribió, y la regla —no el input— dice
-    // por qué once dígitos no son una cédula.
-    await expect(field(page, "Cédula de Identidad")).toHaveValue("17123456789");
+    // Al salir del campo, el veredicto definitivo de la regla reemplaza el
+    // aviso transitorio.
+    await cedula.blur();
     await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
-      "La cédula de identidad debe tener 10 dígitos.",
+      "La cédula de identidad no es válida.",
     );
-    await shot(page, "G05", "cedula-11o-digito-ya-no-se-descarta");
   });
 
   test("G06 · credenciales a medias ahora bloquea en el campo, ya no hace falta clickear", async ({ page }) => {
