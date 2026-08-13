@@ -64,10 +64,9 @@ describe("POST /api/enrollment", () => {
 
     await POST(enrollRequest(validBody, "POST", { "x-forwarded-for": "198.51.100.5" }));
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/enrollment/",
-      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "198.51.100.5" }) }),
-    );
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/v1/enrollment/");
+    expect(new Headers((init as RequestInit).headers).get("x-forwarded-for")).toBe("198.51.100.5");
   });
 
   it("never returns a token in the JSON body", async () => {

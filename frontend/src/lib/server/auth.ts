@@ -277,10 +277,65 @@ export interface BackendFetchOptions {
   timeoutMs?: number;
   /**
    * Visitor IP to forward to the backend as `X-Forwarded-For`. Get it from
-   * `forwardedForFrom(request)` below. See that function's doc comment for
-   * why this exists (issue #235) and why it's safe to trust as-is.
+   * `forwardedForFrom(request)` below, which is where the value is validated
+   * — see that function's doc comment for why this exists (issue #235).
    */
   forwardedFor?: string;
+}
+
+/**
+ * One entry of an `X-Forwarded-For` list as a dotted-quad IPv4, or
+ * `undefined` when it is not one.
+ *
+ * Rebuilt from the parsed octets rather than echoed back, so the returned
+ * string is a value this function produced and not a slice of the request.
+ */
+function parseIpv4(candidate: string): string | undefined {
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(candidate);
+  if (match === null) return undefined;
+
+  const raw = match.slice(1);
+  // `\d{1,3}` also matches 256-999, and a leading zero ("010") is a second
+  // spelling of an address that already has one — two different strings for
+  // the same visitor would mean two different rate-limit buckets.
+  if (raw.some((octet) => octet.length > 1 && octet.startsWith("0"))) return undefined;
+  const octets = raw.map(Number);
+  if (octets.some((octet) => octet > 255)) return undefined;
+
+  return octets.join(".");
+}
+
+/**
+ * One entry of an `X-Forwarded-For` list as an IPv6 address, or `undefined`
+ * when it is not one. Accepts `::` zero-compression (at most one, as the
+ * grammar requires) and the trailing dotted-quad form (`::ffff:192.0.2.1`).
+ * Bracketed (`[::1]`) and zone-suffixed (`fe80::1%eth0`) spellings are not
+ * addresses a proxy puts in this header, so they are rejected like any other
+ * unparseable value.
+ */
+function parseIpv6(candidate: string): string | undefined {
+  const lower = candidate.toLowerCase();
+  const halves = lower.split("::");
+  if (halves.length > 2) return undefined;
+
+  const groups = halves.flatMap((half) => (half === "" ? [] : half.split(":")));
+
+  // A trailing dotted-quad stands in for the last two 16-bit groups.
+  let groupsFromIpv4 = 0;
+  if (groups.length > 0 && groups[groups.length - 1].includes(".")) {
+    if (parseIpv4(groups[groups.length - 1]) === undefined) return undefined;
+    groups.pop();
+    groupsFromIpv4 = 2;
+  }
+
+  if (groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return undefined;
+
+  const total = groups.length + groupsFromIpv4;
+  // `::` must stand for at least one omitted group; without it every group
+  // has to be written out.
+  if (halves.length === 2 ? total > 7 : total !== 8) return undefined;
+
+  return lower;
 }
 
 /**
@@ -297,20 +352,60 @@ export interface BackendFetchOptions {
  * into one bucket shared by the entire internet: 10-11 requests/minute from
  * anywhere could exhaust it and lock out public enrollment (issue #235).
  *
- * Trusting this header at face value is safe ONLY because of this
- * deployment's topology: Caddy (Caddyfile's `reverse_proxy frontend:3000`)
- * is the single public entry point and the only component that talks to
- * this container, and it sets `X-Forwarded-For` itself from the real TCP
- * peer — nothing on the public internet reaches this container directly to
- * inject its own value. The backend's own trust boundary
- * (`--forwarded-allow-ips`, backend/Dockerfile) is the second, REQUIRED half
- * of this fix: it re-validates that whoever calls the backend (this
- * frontend container) is itself inside the trusted internal network, so a
- * spoofed header could never be honored even if this boundary were somehow
- * bypassed.
+ * Two layers already stand between a spoofed header and the backend, and
+ * BOTH live in configuration this module cannot see. Caddy (Caddyfile's
+ * `reverse_proxy frontend:3000`) is the single public entry point and the
+ * only component that talks to this container, and `header_up
+ * X-Forwarded-For {remote_host}` makes it overwrite whatever a visitor sent
+ * with the real TCP peer. The backend's own trust boundary
+ * (`--forwarded-allow-ips`, backend/Dockerfile) is the second: it
+ * re-validates that whoever calls it is inside the internal network.
+ *
+ * Parsing the value here is the third layer, and the only one that lives in
+ * this file. The other two hold as long as nobody edits a Caddyfile or a
+ * Dockerfile in a way that reopens the hole — which is exactly the scenario
+ * `header_up X-Forwarded-For {remote_host}` was added to defend against, and
+ * exactly what a comment cannot enforce. So the value is treated as what it
+ * is at this boundary: visitor-controlled input on its way into an outgoing
+ * request header. Anything that is not an IP address never leaves this
+ * function, and the backend falls back to its previous behaviour — keying
+ * the rate limit on its direct TCP peer.
+ *
+ * The header's grammar allows a comma-separated list. Caddy sends a single
+ * address today, but the list is tolerated and forwarded whole, because the
+ * backend's uvicorn is what decides which entry to trust; handing it only
+ * the first would hand it the one a client can choose. A list where ANY
+ * entry fails to parse is dropped entirely rather than partially rescued: a
+ * malformed value means something upstream is not what this code thinks it
+ * is, and guessing which half of it to believe is worse than falling back.
  */
 export function forwardedForFrom(request: Request): string | undefined {
-  return request.headers.get("x-forwarded-for") ?? undefined;
+  const header = request.headers.get("x-forwarded-for");
+  if (header === null) return undefined;
+
+  const addresses: string[] = [];
+  for (const entry of header.split(",")) {
+    const address = parseIpv4(entry.trim()) ?? parseIpv6(entry.trim());
+    if (address === undefined) return undefined;
+    addresses.push(address);
+  }
+  return addresses.join(", ");
+}
+
+/**
+ * The caller's headers plus `X-Forwarded-For`, without dropping any of them.
+ *
+ * `HeadersInit` is a union of three shapes — a plain object, a `Headers`
+ * instance, and `string[][]` — and object-spreading the last two copies
+ * nothing at all: `{ ...new Headers({ Authorization: "..." }) }` is `{}`,
+ * silently. In a BFF that is a request leaving without its authorization
+ * header. `new Headers(init)` is the one constructor that understands all
+ * three, so the merge goes through it.
+ */
+function withForwardedFor(headers: HeadersInit | undefined, forwardedFor: string): Headers {
+  const merged = new Headers(headers);
+  merged.set("X-Forwarded-For", forwardedFor);
+  return merged;
 }
 
 /**
@@ -354,7 +449,7 @@ export async function backendFetch(
       // forward — every existing call site that doesn't pass `forwardedFor`
       // keeps sending exactly the headers it always did.
       headers: options.forwardedFor
-        ? { ...init.headers, "X-Forwarded-For": options.forwardedFor }
+        ? withForwardedFor(init.headers, options.forwardedFor)
         : init.headers,
       signal: controller.signal,
     });

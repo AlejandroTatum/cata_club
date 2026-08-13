@@ -50,10 +50,9 @@ describe("POST /api/chatbot", () => {
 
     await POST(postRequest(undefined, { "x-forwarded-for": "198.51.100.40" }));
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/chatbot/consultar",
-      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "198.51.100.40" }) }),
-    );
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/v1/chatbot/consultar");
+    expect(new Headers((init as RequestInit).headers).get("x-forwarded-for")).toBe("198.51.100.40");
   });
 
   it.each([

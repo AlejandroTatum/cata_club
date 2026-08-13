@@ -47,10 +47,9 @@ describe("POST /api/auth/restablecer-contrasenia", () => {
 
     await POST(restablecerRequest({ token: "tok", nueva_contrasenia: "12345678" }, { "x-forwarded-for": "198.51.100.70" }));
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/auth/restablecer-contrasenia",
-      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "198.51.100.70" }) }),
-    );
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/v1/auth/restablecer-contrasenia");
+    expect(new Headers((init as RequestInit).headers).get("x-forwarded-for")).toBe("198.51.100.70");
   });
 
   it("returns 400 with no fetch call when the new password is under 8 characters", async () => {

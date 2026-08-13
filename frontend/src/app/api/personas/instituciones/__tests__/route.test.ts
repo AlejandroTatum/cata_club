@@ -53,10 +53,9 @@ describe("GET /api/personas/instituciones", () => {
 
     await GET(institucionesRequest({ "x-forwarded-for": "198.51.100.50" }));
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/personas/instituciones"),
-      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "198.51.100.50" }) }),
-    );
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toEqual(expect.stringContaining("/personas/instituciones"));
+    expect(new Headers((init as RequestInit).headers).get("x-forwarded-for")).toBe("198.51.100.50");
   });
 
   it("proxies GET /personas/instituciones and forwards the backend's paginated envelope", async () => {

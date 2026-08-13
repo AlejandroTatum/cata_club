@@ -43,10 +43,9 @@ describe("POST /api/auth/recuperar-contrasenia", () => {
 
     await POST(recuperarRequest({ correo: "ana@cataclub.com" }, { "x-forwarded-for": "198.51.100.60" }));
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/auth/recuperar-contrasenia",
-      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "198.51.100.60" }) }),
-    );
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/v1/auth/recuperar-contrasenia");
+    expect(new Headers((init as RequestInit).headers).get("x-forwarded-for")).toBe("198.51.100.60");
   });
 
   it("forwards the same success message the backend returns, regardless of whether the email exists", async () => {

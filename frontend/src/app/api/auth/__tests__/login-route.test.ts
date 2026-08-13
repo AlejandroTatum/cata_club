@@ -66,8 +66,10 @@ describe("POST /api/auth/login", () => {
     expect(global.fetch).toHaveBeenNthCalledWith(
       1,
       "http://localhost:8000/api/v1/auth/login",
-      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "198.51.100.30" }) }),
+      expect.objectContaining({ headers: expect.anything() }),
     );
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(new Headers((init as RequestInit).headers).get("x-forwarded-for")).toBe("198.51.100.30");
   });
 
   it("sets both cookies as HttpOnly, SameSite=Lax on success", async () => {
