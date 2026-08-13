@@ -62,7 +62,7 @@ import {
 
 function CrearCuentaContent(): React.ReactElement {
   const router = useRouter();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess } = useToast();
 
   const [formData, setFormData] = useState<CrearCuentaFormData>(initialCrearCuentaFormData);
   const [submitting, setSubmitting] = useState(false);
@@ -204,7 +204,6 @@ function CrearCuentaContent(): React.ReactElement {
       setSubmitting(false);
       const message = getCrearCuentaErrorMessage(error);
       setFormErrors([message]);
-      showError(message);
     }
   }
 
