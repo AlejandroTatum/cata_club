@@ -19,6 +19,7 @@ import { Loader2, Pencil, Percent, Plus, Power } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
+import ContextualHelp from "@/components/ContextualHelp";
 import {
   Badge,
   Button,
@@ -264,6 +265,33 @@ export default function DiscountsPage(): React.ReactElement {
         )}
 
         {/*
+         * The catalog rules used to be a permanent lateral card (see the
+         * rail comment below) that competed with the empty state's own
+         * action and ate the screen's spacing budget whether or not anyone
+         * needed it (issue #199). Same disclosure pattern Members already
+         * uses for its own aggregate-limit note: available on demand,
+         * occupying nothing while collapsed.
+         */}
+        {!loading && (
+          <ContextualHelp title="Cómo funciona el catálogo">
+            <ul className="flex flex-col gap-3">
+              <li>
+                Un descuento no se elimina: se <b className="font-semibold text-ink">desactiva</b>. Deja
+                de ofrecerse al registrar pagos y sigue en la lista para reactivarlo.
+              </li>
+              <li>
+                Los pagos que ya lo usaron conservan el valor que tenía cuando se aplicó, así que
+                editarlo nunca reescribe el historial.
+              </li>
+              <li>
+                El descuento se aplica al registrar el pago, en Membresías y Pagos — no desde esta
+                pantalla.
+              </li>
+            </ul>
+          </ContextualHelp>
+        )}
+
+        {/*
          * The form is a RAIL, not a slab above the table.
          *
          * It used to render between the page header and the catalog, so
@@ -275,9 +303,9 @@ export default function DiscountsPage(): React.ReactElement {
          * The grid keeps its two columns UNCONDITIONALLY, for the reason #81
          * gave the dashboard: a split that appears with the form is a layout
          * that moves under the admin every time they open one. With no form
-         * open the rail carries the rule this screen raises and never
-         * answers — there is no "Eliminar" button anywhere on it, and until
-         * now the only explanation lived in a source comment.
+         * open the rail is empty — it used to carry a permanent "Cómo
+         * funciona el catálogo" card, which is now the `ContextualHelp`
+         * disclosure above (issue #199).
          *
          * What this is NOT is a cure for vertical emptiness. A rail moves
          * content sideways; it cannot make a six-row table taller. See the
@@ -295,9 +323,13 @@ export default function DiscountsPage(): React.ReactElement {
                 title="Sin descuentos en el catálogo"
                 description="Cree el primer descuento para poder aplicarlo al registrar pagos."
                 action={
+                  // Worded distinctly from the header's "Nuevo descuento" —
+                  // same "Nueva categoría" / "Crear primera categoría" split
+                  // Groups already draws — so the two controls read as one
+                  // clear action for this moment, not a duplicate (issue #199).
                   <Button variant="dark" onClick={openCreateForm}>
                     <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                    Nuevo descuento
+                    Crear primer descuento
                   </Button>
                 }
               />
@@ -373,43 +405,16 @@ export default function DiscountsPage(): React.ReactElement {
             ) : null}
           </div>
 
-          <div data-testid="discounts-rail">{renderForm() ?? <CatalogRules />}</div>
+          {/*
+           * With no form open, the rail holds nothing — the anti-jump grid
+           * from the comment above still needs its second track (see
+           * PAGE_RAIL), but there is no longer a permanent card claiming it.
+           * The catalog rules moved to the `ContextualHelp` above.
+           */}
+          <div data-testid="discounts-rail">{renderForm()}</div>
         </div>
       </AppShell>
     </ProtectedRoute>
   );
 }
 
-/**
- * What the rail says when no form is open.
- *
- * Every other screen's "why can't I delete this?" is answered by a delete
- * button being disabled or absent with a tooltip. Here the answer is a domain
- * rule with money behind it — applied discounts reference the catalog by FK
- * and freeze their values at application time — so it is written out where
- * the question is asked, rather than left to the admin to infer from a button
- * that was never drawn.
- */
-function CatalogRules(): React.ReactElement {
-  return (
-    <section aria-labelledby="discounts-rules-title" className="card p-5">
-      <h2 id="discounts-rules-title" className="text-sm font-semibold text-ink">
-        Cómo funciona el catálogo
-      </h2>
-      <ul className="mt-3 flex flex-col gap-3 text-sm leading-relaxed text-ink-2">
-        <li>
-          Un descuento no se elimina: se <b className="font-semibold text-ink">desactiva</b>. Deja
-          de ofrecerse al registrar pagos y sigue en la lista para reactivarlo.
-        </li>
-        <li>
-          Los pagos que ya lo usaron conservan el valor que tenía cuando se aplicó, así que
-          editarlo nunca reescribe el historial.
-        </li>
-        <li>
-          El descuento se aplica al registrar el pago, en Membresías y Pagos — no desde esta
-          pantalla.
-        </li>
-      </ul>
-    </section>
-  );
-}
