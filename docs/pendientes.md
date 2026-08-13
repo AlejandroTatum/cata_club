@@ -1,3 +1,14 @@
+> ## ⛔ HISTÓRICO — superado el 2026-08-13
+>
+> Este fue el índice de candados hasta el 8 de agosto de 2026 y **ya no se
+> mantiene**. Su reemplazo inmediato (`pendientes-2026-08-11.md`) también
+> quedó superado.
+>
+> La **única lista viva** de preparación para producción es
+> [`operations/production-readiness.md`](operations/production-readiness.md),
+> verificada contra `fd9f7be` el 2026-08-13. No copiar ítems de este
+> archivo sin re-verificarlos contra el código y la lista viva.
+
 # Pendientes — índice de candados — Cata Club
 
 - **Fecha:** 8 de agosto de 2026

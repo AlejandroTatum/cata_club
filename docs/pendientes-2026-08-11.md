@@ -1,3 +1,16 @@
+> ## ⛔ HISTÓRICO — superado el 2026-08-13
+>
+> Este documento fue el índice vivo de pendientes hasta el 13 de agosto de
+> 2026. **Ya no se mantiene** y puede contener afirmaciones que no son
+> ciertas contra el código actual (por ejemplo, su ítem sobre
+> `docker-compose.prod.yml` sin TLS/límites/logs está resuelto desde antes
+> de esta fecha).
+>
+> La **única lista viva** de preparación para producción es
+> [`operations/production-readiness.md`](operations/production-readiness.md),
+> verificada contra `fd9f7be` el 2026-08-13. No copiar ítems de este
+> archivo sin re-verificarlos contra el código y la lista viva.
+
 # Pendientes — al cierre del 11 de agosto de 2026
 
 - **Base:** `main` local en `e863341`. **`origin/main` está en `e663953`** — 134

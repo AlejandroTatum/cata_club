@@ -1,121 +1,140 @@
 # Cata Club Backend
 
-Arquitectura de software limpia por capas (Dominio, Infraestructura, Servicios de Negocio, Seguridad y Presentación), alineada al diagrama de clases UML del proyecto, con patrón **Repository + Service Layer**.
+API del sistema de administración del Club de Tenis de Mesa: membresías,
+validación de pagos, asistencia, fichas médicas, inscripción pública y más.
+Arquitectura limpia por capas con patrón Repository + Service Layer.
 
-## Tecnologías
-Python 3.13, FastAPI, Pydantic v2, SQLAlchemy 2, PostgreSQL, Alembic, PyJWT & Passlib, uv, pytest.
+> **Estado:** Activa
+>
+> **Responsable:** Desarrollo backend (asignación nominal pendiente — ver
+> [`../docs/reference/ownership.md`](../docs/reference/ownership.md))
+>
+> **Audiencia:** desarrolladores del backend
+>
+> **Última verificación:** 2026-08-13 · **Verificado contra commit:** `fd9f7be`
+>
+> **Revisión recomendada:** con cada cambio de routers, dominio o configuración
 
-## Instalación y Gestión de Dependencias
+## Stack
+
+Python 3.13 · FastAPI · Pydantic v2 · SQLAlchemy 2 · PostgreSQL 16 · Alembic ·
+Celery + Redis · uv. Los tests corren contra **Postgres real** (servicio
+`db-test`), no contra SQLite.
+
+## Inicio rápido
+
+**Opción recomendada: todo el stack con Docker Compose** (desde la raíz del
+repo — ver [`../README.md`](../README.md)):
+
+```bash
+cp .env.example .env        # y generar JWT_SECRET_KEY: openssl rand -hex 32
+docker compose up -d
 ```
-git clone [URL]
-cd product-admin-backend
-uv sync                  # Instala dependencias y crea entorno .venv
-cp .env.example .env     # Configurar DATABASE_URL y JWT_SECRET_KEY
+
+El backend queda en [http://localhost:8000](http://localhost:8000) y su
+Swagger en [http://localhost:8000/docs](http://localhost:8000/docs)
+(solo fuera de producción).
+
+**Solo backend, local:**
+
+```bash
+cd backend
+uv sync
+cp .env.example .env        # configurar DATABASE_URL y JWT_SECRET_KEY
 uv run uvicorn main:app --reload
 ```
 
-## Estructura del Proyecto
-```
-app/
- ├── presentacion/         # Routers y Schemas (DTOs) — CERO SQL, cero lógica de negocio
- │    ├── routers/         # auth, personas, membresias_pagos, asistencias, ficha_medica,
- │    │                    # geografia, ranking, enrollment, dashboard, chatbot
- │    └── schemas/         # DTOs Pydantic por dominio
- ├── servicios_negocio/    # Reglas de negocio. Usa repositorios, NO conoce FastAPI/SQLAlchemy.
- │                         # Lanza excepciones de dominio (app/dominio/excepciones.py)
- ├── seguridad/            # Autenticación JWT y hashing (bcrypt)
- ├── dominio/               # Entidades ORM (modelos.py), enums.py, excepciones.py
- ├── infraestructura/
- │    ├── db.py             # Conexión y sesión de BD
- │    └── repositorios/     # ÚNICA capa que ejecuta db.query/add/commit
- └── soporte_transversal/  # Configuración centralizada (.env)
-tests/                     # Suite pytest (SQLite en memoria, no requiere Postgres)
+### Tests
+
+```bash
+# Postgres de test (servicio del perfil "test"; publica en 127.0.0.1:5436)
+docker compose --profile test up -d db-test
+make test-backend           # o: cd backend && uv run pytest tests/ -v
 ```
 
-**Flujo de una petición:** Router recibe el DTO → instancia el Servicio pasándole la sesión →
-el Servicio aplica reglas de negocio y llama al Repositorio → el Repositorio ejecuta SQLAlchemy
-→ si algo falla, el Servicio lanza una excepción de dominio → un manejador global en `main.py`
-la traduce al código HTTP correspondiente. El router nunca ve `HTTPException` ni `db.query`.
+`make test-backend` fija `TEST_DATABASE_URL` (default
+`localhost:5436/cataclub_test`). `AMBIENTE` y `JWT_SECRET_KEY` las pone
+`backend/tests/conftest.py` con `setdefault` — es el único lugar donde vive
+el contrato de entorno de la suite. Ver también `make test-compose`
+(validación del layering de producción) y el job `migraciones-desde-cero`
+de CI.
 
-## Modelo de Dominio (21 entidades)
-Pais → Provincia → Canton → Direccion · Institucion · Rol · Usuario · **Persona** (relación
-reflexiva Representante/Representados) · AntecedentesClub · TipoMembresia · Membresia · Pago ·
-ComprobantePago · NivelRanking · **HorarioEntrenamiento** (con entrenador titular) ·
-**Asistencia** (con entrenador de la sesión, puede ser un sustituto) · AlumnoHorario ·
-FichaMedica · Enfermedades · Ranking · Notificacion.
-
-### Correcciones aplicadas sobre el diagrama original
-| Relación | Diagrama original | Corregido a | Motivo |
-|---|---|---|---|
-| Rol ↔ Usuario | `1..*` / `0..*` | `0..*` / `0..*` | Un rol puede crearse sin usuarios asignados aún |
-| Persona ↔ Direccion | `1` obligatorio | `0..1` | Permite compartir dirección o no registrarla |
-| Pago ↔ Membresia | Composición (◆) | Asociación simple | El historial de pagos no debe borrarse en cascada |
-| FichaMedica ↔ Enfermedades | `1..*` | `0..*` | Una persona sin enfermedades no debe forzar el registro de una |
-| Pago → Persona | No existía en el diagrama | Agregada | Ya estaba en el modelo ORM base; se hizo trazable |
-| `EstadoMembresia` (D11) | Incluía `PENDIENTE_PAGO`, mezclando el ciclo de vida de `Pago` dentro de `Membresia` | `INACTIVA \| ACTIVA \| VENCIDA` | Dos objetos con ciclos de vida distintos no deben compartir estados |
-| `HorarioEntrenamiento` (D23) | Sin día de la semana | Se agregó `dia_semana: DiaSemana` | Un horario "10:00–11:00" era ambiguo sin el día |
-
-### Reglas de negocio confirmadas e implementadas
-| Requisito | Implementación |
-|---|---|
-| Entrenador fijo por horario, pero puede cambiar (sustitución) | `HorarioEntrenamiento.entrenador_id` = titular fijo. `Asistencia.entrenador_id` = quien dictó *esa* sesión puntual (puede diferir del titular). Ambos se validan contra personas con rol `ENTRENADOR` real vía `AsistenciaServicio._validar_entrenador`. |
-
-**Descartado deliberadamente** (no son huecos, son alternativas de diseño sin necesidad de negocio confirmada): tipar `formatoArchivo` como enum, entidad `Grupo`.
-
-## Pruebas
-Suite de **218 pruebas automatizadas** con `pytest` + `TestClient`, usando SQLite
-en memoria (no requiere PostgreSQL para correr). Cubre: CRUD de Persona y
-relación reflexiva de representante, permisos por rol (403), la corrección de
-estados Membresía↔Pago, validación de rol ENTRENADOR real, sustitución de
-entrenador en Asistencia, subida de voucher de transferencia (JPG/PDF),
-registro de usuario para persona ya existente, refresh de tokens (incluido el
-rechazo al mandar access en vez de refresh), CRUD de geografía
-(País/Provincia/Cantón con filtros y permisos admin), ranking (niveles,
-asignaciones, movimientos de nivel, notificaciones), autoinscripción
-(enrollment), dashboard de estadísticas y chatbot de FAQ.
+## Arquitectura
 
 ```
-uv run pytest tests/ -v --cov=app --cov-report=term-missing
+backend/
+├── app/
+│   ├── presentacion/          # Routers + Schemas (DTOs Pydantic) — sin SQL ni reglas
+│   │   └── routers/           # auth, personas, membresias_pagos, descuentos,
+│   │                          # asistencias, ficha_medica, geografia,
+│   │                          # notificaciones, enrollment, dashboard, chatbot
+│   ├── servicios_negocio/     # Reglas de negocio; usa repos, no conoce FastAPI
+│   ├── seguridad/             # JWT, hashing, gestión de sesiones y permisos
+│   ├── dominio/               # Entidades ORM (modelos.py), enums, excepciones
+│   ├── infraestructura/       # db.py, repositorios (única capa con queries),
+│   │                          # tareas Celery, clientes externos (Cloudinary, SMTP)
+│   └── soporte_transversal/   # configuracion.py (Settings), rate_limit, circuito_breaker
+├── alembic/                   # Migraciones versionadas (versions/)
+├── scripts/                   # entrypoint.sh, seeds, reset_dev_db.py
+└── tests/                     # Suite pytest
 ```
-Resultado: **218 passed**, 0 errores, solo advertencias de deprecación internas de
-librerías de terceros (FastAPI/Starlette), no del código propio.
 
-## Estado Actual
-Implementado: Modelo de dominio completo (21 entidades), DTOs por dominio,
-Routers CRUD, Autenticación JWT + login + registro + me + refresh + logout +
-recuperación/restablecimiento de contraseña, Gestor de permisos por rol,
-patrón Repository + Service Layer, manejo global de excepciones de dominio,
-suite de pruebas automatizadas, voucher de cliente (imagen/PDF en Cloudinary
-con carpeta separada), CRUD de geografía (País/Provincia/Cantón), ranking de
-alumnos (niveles, asignaciones, movimientos, notificaciones), autoinscripción
-(enrollment), dashboard de estadísticas, chatbot de FAQ (DeepSeek vía gateway
-OpenAI-compatible), base Alembic inicializada con historial de migraciones del
-esquema completo.
+**Flujo de una petición:** el Router recibe el DTO → instancia el Servicio →
+el Servicio aplica reglas y llama al Repositorio → el Repositorio ejecuta
+SQLAlchemy → ante una falla, el Servicio lanza una excepción de dominio → un
+manejador global en `main.py` la traduce a HTTP. El router no ve
+`HTTPException` ni `db.query`.
 
-### Implementado en esta iteración
-| Cambio | Detalle |
-|---|---|
-| Voucher de transferencia (cliente) | 3 columnas nuevas en `Pago` (`voucher_url`, `voucher_formato`, `voucher_fecha_carga`). Endpoint `POST /membresias/pagos/{id}/voucher` con validación de estado, permisos (dueño o admin) y tipo/tamaño de archivo. Subida a Cloudinary (carpeta `cataclub/vouchers`) con `overwrite` para permitir re-corrección del voucher mientras el pago siga `PENDIENTE_VALIDACION`. `ComprobantePago` **NO** se toca (sigue siendo el PDF oficial generado por Celery al aprobar). |
-| Registro de usuario (público) | `POST /auth/registro` crea el `Usuario` (credenciales) para una `Persona` ya existente (no crea Persona; el alta de Persona sigue siendo exclusiva de admin vía `POST /personas`). Auto-login: devuelve `access_token` + `refresh_token`. Sin roles asignados (asignación perezosa coherente con el resto del sistema). |
-| Perfil del usuario autenticado | `GET /auth/me` devuelve correo, persona_id, nombres, apellidos y roles actuales. |
-| Refresh token | `POST /auth/refresh`: recibe refresh token en el body (no en header), valida `type=refresh`, reemite access token con roles ACTUALES del usuario. `POST /auth/logout` stateless (el cierre real ocurre en el frontend borrando cookies httpOnly — no hay blacklist; ver limitación documentada). |
-| JWT claims | `type=access` en access tokens, `type=refresh` en refresh tokens (vida configurable `JWT_REFRESH_EXPIRA_DIAS`). |
-| CRUD de Geografía | País/Provincia/Cantón con repositorios, servicios y routers nuevos (mismo patrón que personas). `provincias?pais_id=` y `cantones?provincia_id=` con filtros opcionales. POST exige admin; GET es de lectura general. |
-| Migraciones Alembic | Carpeta `alembic/` inicializada + primera migración autogenerate (`esquema inicial + voucher en pago`) que captura las 20 tablas (19 entidades + `usuario_rol`) incluyendo enums, FKs, unique constraints y las 3 columnas nuevas de voucher. No se ejecutó `upgrade head` (fase posterior, al conectar PostgreSQL). |
+**Routers montados** (todos bajo `/api/v1`): `auth`, `personas`,
+`membresias_pagos`, `descuentos`, `asistencias`, `ficha_medica`, `geografia`,
+`notificaciones`, `enrollment`, `dashboard`, `chatbot`. El listado exacto de
+endpoints está en `/docs` (no se mantiene un conteo en este README: es
+volátil).
 
-### Pendiente 
-Endpoints CRUD de Direccion e Institucion (mismo patrón que geografía), rotación/blacklist
-de refresh tokens (ver `AuthServicio.refrescar_sesion`).
+## Dominio
 
-## Endpoints disponibles (80)
-Ejecutar el servidor y visitar `/docs` para el Swagger interactivo. Resumen por router (todos montados bajo `/api/v1`):
-- **Auth** (9): `POST /auth/login`, `POST /auth/registro`, `GET|PATCH /auth/me`, `POST /auth/me/foto`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/recuperar-contrasenia`, `POST /auth/restablecer-contrasenia`
-- **Personas** (19): `POST|GET /personas/`, `GET /personas/reportes/nuevos-por-periodo`(+`/pdf`), `GET /personas/entrenadores`, `GET /personas/buscar`, `GET|PATCH|DELETE /personas/{id}`, `GET|POST /personas/{id}/representados`, `GET|POST|PATCH /personas/{id}/antecedentes-club`, `GET|POST /personas/{id}/roles`, `DELETE /personas/{id}/roles/{tipo_rol}`, `PATCH /personas/{id}/cuenta/estado`, `PATCH /personas/{id}/nivel`
-- **Membresías y Pagos** (17): `GET|POST /membresias/tipos`, `GET|POST /membresias/`, `GET /membresias/mias`, `GET /membresias/persona/{id}`, `GET /membresias/estadisticas`, `GET /membresias/{id}`, `GET|POST /membresias/pagos`, `GET /membresias/pagos/reportes`(+`/pdf`), `GET|PATCH /membresias/pagos/{id}`(`/validar`), `GET /membresias/pagos/persona/{id}`, `POST /membresias/pagos/{id}/comprobante`, `POST /membresias/pagos/{id}/voucher`
-- **Asistencias** (12): `POST|PUT|DELETE /asistencias/horarios`(`/{id}`), `GET|POST /asistencias/`, `GET /asistencias/persona/{id}`, `GET /asistencias/reportes`(+`/pdf`), `POST|DELETE /asistencias/asignar-alumno`(`/desasignar-alumno`), `GET /asistencias/horarios/{id}/alumnos`, `GET /asistencias/alumnos/{persona_id}/horarios`
-- **Ranking** (7): `GET|POST /ranking/niveles`, `GET /ranking/asignaciones`, `GET /ranking/niveles/{id}/tabla`, `GET /ranking/{persona_id}/perfil`, `GET /ranking/notificaciones/mias`, `PATCH /ranking/notificaciones/{id}/leer`
-- **Geografía** (9): `GET|POST /geografia/paises`(`/{id}`), `GET|POST /geografia/provincias`(`/{id}`), `GET|POST /geografia/cantones`(`/{id}`)
-- **Ficha Médica** (3): `POST|GET|PATCH /fichas-medicas/`(`/persona/{id}`)
-- **Enrollment** (1): `POST /enrollment/`
-- **Dashboard** (1): `GET /dashboard/stats`
-- **Chatbot** (1): `POST /chatbot/consultar`
+Personas con roles (Administrador, Entrenador, Responsable de Pago, Alumno),
+representantes y autogestionados · membresías con tipos y ciclo de vida ·
+pagos con validación de comprobantes y vouchers · horarios de entrenamiento
+y asistencia · categorías de horario · fichas médicas · notificaciones ·
+inscripción pública (`enrollment`) · geografía. La feature de
+ranking/niveles **se removió** (`#165`); hoy las categorías de horario la
+reemplazan.
+
+## Configuración
+
+Toda la configuración está centralizada en
+`app/soporte_transversal/configuracion.py` (pydantic-settings). En
+producción (`AMBIENTE=production`) el arranque es fail-fast: rechaza
+`DATABASE_URL` de ejemplo, `CORS_ORIGENES` vacío, `SMTP_HOST` catcher,
+`FRONTEND_URL` loopback y credenciales de Cloudinary ausentes. `JWT_SECRET_KEY`
+se valida en todos los ambientes. Inventario completo de variables:
+[`../docs/reference/configuration.md`](../docs/reference/configuration.md).
+
+## Migraciones
+
+- `make migrate` → `alembic upgrade head`.
+- El entrypoint del contenedor (`scripts/entrypoint.sh`) corre
+  `alembic upgrade head` en cada arranque con `set -eu`: si la migración
+  falla, el backend **no** arranca.
+- CI verifica la cadena `empty → head` en cada PR (job
+  `migraciones-desde-cero`).
+- Reset destructivo de desarrollo: `make db-reset` (allow-list de hosts,
+  ver `scripts/RUNBOOK_reset_db.md`).
+
+## Salud y operación
+
+| Ruta | Rol | Qué mide |
+|---|---|---|
+| `GET /health` | anónimo | Liveness, sin dependencias |
+| `GET /health/ready` | anónimo | Readiness: Postgres + Redis (503 si una cae) |
+| `GET /diagnostico/circuitos` | ADMINISTRADOR | Estado de los circuit breakers (Cloudinary, SMTP) |
+
+Correlación de requests: toda respuesta lleva `X-Request-ID`. Rate limiting
+por endpoint (usuario autenticado o IP). Runbooks: [`../docs/operations/`](../docs/operations/).
+
+## Portal documental
+
+Índice completo de la documentación (operación, configuración, ownership,
+privacidad): [`../docs/README.md`](../docs/README.md). Estado de preparación
+para producción: [`../docs/operations/production-readiness.md`](../docs/operations/production-readiness.md).
