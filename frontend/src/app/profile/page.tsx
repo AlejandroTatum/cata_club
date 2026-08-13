@@ -501,11 +501,18 @@ function IdentityPanel({
 
       {/* The one full-width row at the foot of the panel — never squeezed
           beside anything else, so the full correo always has the panel's
-          whole width to wrap into. */}
+          whole width to wrap into.
+
+          The two muted lines take `ink-3-strong`, not `ink-3`: this row is the
+          one `sunken` surface in the panel, and `ink-3` measures 4.21:1 there
+          (see the token's own note in tailwind.config.ts) — under AA for text
+          this small. `ink-3-strong` is the AA companion the ramp defines for
+          exactly this case at 5.40:1, and it is already what the identical
+          `bg-sunken` footnote further down this file uses. */}
       <div className="border-t border-line bg-sunken px-5 py-3">
-        <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Correo de acceso</p>
+        <p className="text-2xs font-bold uppercase tracking-wide text-ink-3-strong">Correo de acceso</p>
         <p className="mt-1 break-words text-sm font-semibold text-ink">{correo}</p>
-        <p className="mt-1 text-xs text-ink-3">El correo lo gestiona el club, no se edita aquí.</p>
+        <p className="mt-1 text-xs text-ink-3-strong">El correo lo gestiona el club, no se edita aquí.</p>
       </div>
     </section>
   );
