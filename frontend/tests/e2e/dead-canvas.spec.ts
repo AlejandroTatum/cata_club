@@ -367,10 +367,11 @@ const SCREENS: Screen[] = [
         fulfillJson(r, personas(n)),
       );
       await page.goto("/reports");
-      // `periodo` is the default preset and the only one that refuses to query
-      // without a range, so the range is what makes the preview exist at all.
-      await page.locator("#fechaInicio").fill("2026-07-01");
-      await page.locator("#fechaFin").fill("2026-07-31");
+      // `periodo` is the default preset, and the range quick-preset defaults to
+      // "this_month" (issue #201) with dates already resolved on first render —
+      // no manual fill needed to make the preview exist. The manual "Desde"/
+      // "Hasta" inputs only render under the "Personalizado" range preset, which
+      // this canvas-occupancy check has no reason to select.
       await expect(page.locator("table tbody tr").first()).toBeVisible({ timeout: 20_000 });
     },
   },
