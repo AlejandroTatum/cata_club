@@ -178,8 +178,13 @@ def _reporte_pagos_items(
     """Valida el rango de fechas y trae TODOS los pagos que matchean el
     filtro -- compartido por el endpoint JSON y el de PDF de abajo, que
     necesitan exactamente la misma validación + fetch (única diferencia:
-    qué hacen con `items` después)."""
-    if fecha_inicio is not None and fecha_fin is not None and fecha_inicio >= fecha_fin:
+    qué hacen con `items` después).
+
+    Se compara con `>` (no `>=`, como en `asistencias_router.py`) porque
+    `pago_repositorio.py` filtra inclusivo en ambos extremos (`>= inicio`,
+    `<= fin`): un reporte de un solo día se pide con
+    `fecha_inicio == fecha_fin` y es una consulta legítima."""
+    if fecha_inicio is not None and fecha_fin is not None and fecha_inicio > fecha_fin:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="La fecha de inicio debe ser anterior a la fecha de fin.",
