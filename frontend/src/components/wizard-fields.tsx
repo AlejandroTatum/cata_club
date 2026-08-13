@@ -182,7 +182,13 @@ interface PersonIdentityFieldsProps {
 }
 
 /** How many digits an Ecuadorian cédula carries. Mirrors the backend's own rule. */
-const CEDULA_DIGITS = 10;
+export const CEDULA_DIGITS = 10;
+
+/** The cédula field's resting hint — shared with `/student/enroll`'s representative fields, which render their own copy of `PersonIdentityFields`'s cédula input. */
+export const CEDULA_HINT = `${CEDULA_DIGITS} dígitos, sin guiones.`;
+
+/** The phone field's hint — shared by both `PersonIdentityFields`, `EmergencyContactFields`, and `/student/enroll`'s representative phone field. */
+export const PHONE_HINT = "Celular: 09 y 8 dígitos más. Fijo: 0, código de área y 7 dígitos.";
 
 function digitCount(value: string): number {
   return value.replace(/\D/g, "").length;
@@ -227,7 +233,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
           hint={
             cedulaTyped > 0 && cedulaTyped < CEDULA_DIGITS
               ? `Lleva ${cedulaTyped} de ${CEDULA_DIGITS} dígitos.`
-              : `${CEDULA_DIGITS} dígitos, sin guiones.`
+              : CEDULA_HINT
           }
         />
       </div>
@@ -237,7 +243,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         pattern="[0-9]+" inputMode="tel"
         error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
-        hint="Celular: 09 y 8 dígitos más. Fijo: 0, código de área y 7 dígitos."
+        hint={PHONE_HINT}
       />
       {props.fechaNacimiento && (
         <div className="rounded-ctl bg-canvas p-3 text-xs text-ink-3">
@@ -291,7 +297,7 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
           icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           pattern="[0-9]+" inputMode="tel"
           error={props.telefonoError} onBlur={props.onTelefonoBlur}
-          hint="Celular: 09 y 8 dígitos más. Fijo: 0, código de área y 7 dígitos."
+          hint={PHONE_HINT}
         />
       </div>
     </>
