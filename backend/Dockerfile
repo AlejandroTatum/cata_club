@@ -41,4 +41,13 @@ EXPOSE 8000
 # X-Forwarded-For y estrene un cubo de rate limit por request -- sería PEOR
 # que el bug que esto arregla, porque ni siquiera compartir un cubo global
 # lo frenaría.
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=172.16.0.0/12"]
+#
+# `--frozen --no-build` en el `uv run` de arranque (SonarCloud, "C Security
+# Rating on New Code"): las dependencias ya quedaron instaladas y bloqueadas
+# en build time (líneas 10 y 13), así que estas banderas no cambian qué se
+# ejecuta -- solo le prohíben a `uv run` volver a resolver versiones o
+# construir un sdist en el arranque de producción. `--frozen` garantiza que
+# lo desplegado sea exactamente lo que ya se sincronizó contra `uv.lock`;
+# `--no-build` evita ejecutar el `setup.py`/build backend de un paquete
+# fuente si algo disparara una reconstrucción.
+CMD ["uv", "run", "--frozen", "--no-build", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=172.16.0.0/12"]

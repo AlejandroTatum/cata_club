@@ -98,6 +98,17 @@ def test_dockerfile_habilita_proxy_headers():
     assert "--proxy-headers" in _cmd_dockerfile()
 
 
+def test_dockerfile_uv_run_no_resuelve_ni_construye_en_el_arranque():
+    """SonarCloud, "C Security Rating on New Code": las dependencias ya
+    quedan instaladas y bloqueadas en build time (`uv sync --frozen`), así
+    que `uv run` en el CMD no necesita -- y no debe -- volver a resolver
+    versiones ni construir un sdist al arrancar el contenedor en
+    producción."""
+    cmd = _cmd_dockerfile()
+    assert "--frozen" in cmd
+    assert "--no-build" in cmd
+
+
 def test_forwarded_allow_ips_no_es_comodin():
     """CRÍTICO de seguridad: `*` deja que cualquiera en internet forje su
     propia X-Forwarded-For y estrene cubo en cada request -- sería PEOR que
