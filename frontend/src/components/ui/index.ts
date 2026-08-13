@@ -8,6 +8,9 @@
  * something each caller re-derives from padding.
  */
 
+export { default as Accordion } from "./Accordion";
+export type { AccordionItem, AccordionProps } from "./Accordion";
+
 export { default as Badge } from "./Badge";
 export type { BadgeProps, BadgeTone } from "./Badge";
 
