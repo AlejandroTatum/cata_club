@@ -999,6 +999,90 @@ test.describe("G · Huecos de validación detectados", () => {
 });
 
 // ===========================================================================
+// V — Laxitud frente a la norma ecuatoriana
+//
+// Los casos de arriba miden el formulario contra SUS PROPIAS reglas. Estos lo
+// miden contra la realidad: cédula de 10 dígitos con verificador módulo 10
+// (código de provincia 01-24, más 30 para el exterior), celular de 10 dígitos
+// y fijo de 9. Todos PASAN hoy, y por eso están acá.
+// ===========================================================================
+
+test.describe("V · Laxitud frente a la norma ecuatoriana", () => {
+  test.beforeEach(async ({ page }) => {
+    await enterFromLogin(page);
+    await goToPersonal(page, "Jugador");
+  });
+
+  test("V01 · un teléfono con letras adentro pasa: las letras se descartan antes de medir", async ({ page }) => {
+    // `phoneRule` mide `digitsOf(value)`, que borra todo lo que no sea dígito.
+    // "099abc1234" queda en 7 dígitos, y 7 entra en el rango 7-10.
+    await fillAndBlur(page, "Teléfono", "099abc1234");
+    await expectFieldValid(page, "Teléfono");
+    await shot(page, "V01", "telefono-con-letras-aceptado");
+  });
+
+  test("V02 · un teléfono de 7 dígitos pasa, y en Ecuador no existe", async ({ page }) => {
+    // El piso real es 9 (fijo: 0 + código de área + 7) o 10 (celular 09…).
+    // Ningún número ecuatoriano tiene 7 u 8 dígitos marcables.
+    await fillAndBlur(page, "Teléfono", "0991234");
+    await expectFieldValid(page, "Teléfono");
+    await shot(page, "V02", "telefono-de-7-digitos-aceptado");
+  });
+
+  test("V03 · una cédula con dígito verificador incorrecto pasa", async ({ page }) => {
+    // 1712345678 es EL PLACEHOLDER que el propio formulario sugiere. Su
+    // verificador debería ser 5, no 8: no es una cédula que exista.
+    await fillAndBlur(page, "Cédula de Identidad", "1712345678");
+    await expectFieldValid(page, "Cédula de Identidad");
+    await shot(page, "V03", "cedula-verificador-invalido-aceptado");
+  });
+
+  test("V04 · una cédula con código de provincia inexistente pasa", async ({ page }) => {
+    // Las provincias van de 01 a 24, más 30 para registrados en el exterior.
+    // 99 no es ninguna.
+    await fillAndBlur(page, "Cédula de Identidad", "9912345678");
+    await expectFieldValid(page, "Cédula de Identidad");
+    await shot(page, "V04", "cedula-provincia-99-aceptada");
+  });
+
+  test("V05 · una cédula de puros ceros pasa", async ({ page }) => {
+    await fillAndBlur(page, "Cédula de Identidad", "0000000000");
+    await expectFieldValid(page, "Cédula de Identidad");
+    await shot(page, "V05", "cedula-ceros-aceptada");
+  });
+
+  test("V07 · un apellido con guion se RECHAZA, y es un apellido real", async ({ page }) => {
+    // Acá el formulario es estricto de más, no de menos: `NAME_PATTERN` acepta
+    // letras, tildes y espacios, pero ni guion ni apóstrofo. "Pérez-Mora" y
+    // "D'Angelo" son nombres que existen y quedan afuera.
+    await fillAndBlur(page, "Apellidos", "Pérez-Mora");
+    await expect(fieldError(page, "Apellidos")).toHaveText(
+      "Los apellidos solo pueden contener letras y espacios.",
+    );
+    await shot(page, "V07", "apellido-con-guion-rechazado");
+  });
+
+  test("V08 · la contraseña más previsible del mundo pasa si tiene 8 caracteres", async ({ page }) => {
+    // La única regla es el largo. "12345678" entra; también "password".
+    await fillAndBlur(page, "Contraseña", "12345678");
+    await expectFieldValid(page, "Contraseña");
+    await shot(page, "V08", "contrasenia-debil-aceptada");
+  });
+
+  test("V06 · control: una cédula real y bien formada también pasa", async ({ page }) => {
+    // Sin este control, los cinco casos de arriba podrían estar pasando porque
+    // la validación de cédula no corre nunca, y no porque sea laxa.
+    await fillAndBlur(page, "Cédula de Identidad", "1798765432");
+    await expectFieldValid(page, "Cédula de Identidad");
+    await fillAndBlur(page, "Cédula de Identidad", "17987654");
+    await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
+      "La cédula debe tener 10 dígitos.",
+    );
+    await shot(page, "V06", "control-la-validacion-si-corre");
+  });
+});
+
+// ===========================================================================
 // X — Robustez del envío
 // ===========================================================================
 
