@@ -728,18 +728,72 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     await shot(page, "S02", "resumen-datos-visibles");
   });
 
-  test("S03 · cédula ya registrada: el 409 del backend llega al visitante", async ({ page }) => {
+  /**
+   * Status y cuerpo VERIFICADOS contra el backend real (`POST
+   * /api/v1/enrollment/` con una cédula ya sembrada): responde **400**, no 409,
+   * con `{detail, message}` y este texto exacto.
+   *
+   * La primera versión de este test inventaba un 409 y un texto propio. Pasaba
+   * igual, que es lo peligroso: un mock infiel certifica la traducción de una
+   * respuesta que el servidor nunca manda. Es el mismo error que ya se pagó una
+   * vez en este repo con los mocks sin `status`.
+   */
+  const DUPLICADO_REAL = "Ya existe una cuenta registrada con los datos ingresados.";
+
+  test("S03 · identidad ya registrada: el 400 real del backend llega al visitante", async ({ page }) => {
     await goToSummary(page);
     await mockEnrollment(page, {
-      status: 409,
-      body: { detail: "La cédula ingresada ya está registrada." },
+      status: 400,
+      body: { detail: DUPLICADO_REAL, message: DUPLICADO_REAL },
     });
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /confirmar inscripción/i }).click();
-    await expect(stepAlert(page)).toContainText("ya está registrada");
+
+    await expect(stepAlert(page)).toContainText(DUPLICADO_REAL);
     // Y no se declara éxito por un error.
     await expect(page.getByRole("heading", { name: /inscripción completada/i })).toHaveCount(0);
-    await shot(page, "S03", "cedula-duplicada-409");
+    await shot(page, "S03", "identidad-duplicada-400");
+  });
+
+  test("S08 · el mensaje de duplicado ofrece una salida, no solo el problema", async ({ page }) => {
+    await goToSummary(page);
+    await mockEnrollment(page, {
+      status: 400,
+      body: { detail: DUPLICADO_REAL, message: DUPLICADO_REAL },
+    });
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: /confirmar inscripción/i }).click();
+
+    // `isDuplicateIdentityError` reconoce el texto del backend y engancha la
+    // ayuda de `audience="self-service"`: quien ya se inscribió no tiene que
+    // volver a hacerlo, tiene que entrar. Un error que solo repite el problema
+    // es un callejón sin salida.
+    const alerta = stepAlert(page);
+    await expect(alerta).toContainText("Si ya se inscribió antes, no necesita volver a hacerlo");
+    await expect(alerta.getByRole("link", { name: /iniciar sesión/i })).toBeVisible();
+    await expect(alerta.getByRole("link", { name: /recuperar contraseña/i })).toBeVisible();
+    await shot(page, "S08", "duplicado-ofrece-salida");
+  });
+
+  test("S09 · el mensaje de duplicado no dice CUÁL dato está tomado", async ({ page }) => {
+    await goToSummary(page);
+    await mockEnrollment(page, {
+      status: 400,
+      body: { detail: DUPLICADO_REAL, message: DUPLICADO_REAL },
+    });
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: /confirmar inscripción/i }).click();
+
+    // Verificado en el backend: cédula de alumno, cédula de representante y
+    // correo de representante devuelven los tres el MISMO mensaje. Es
+    // deliberado — distinguirlos convierte el alta pública en un oráculo para
+    // averiguar si una cédula o un correo están registrados.
+    const alerta = stepAlert(page);
+    await expect(alerta).not.toContainText(/cédula/i);
+    await expect(alerta).not.toContainText(/correo/i);
+    await expect(alerta).not.toContainText(VALID_STUDENT.cedula);
+    await expect(alerta).not.toContainText(VALID_CREDENTIALS.correo);
+    await shot(page, "S09", "duplicado-no-divulga-cual-dato");
   });
 
   test("S04 · un 500 no filtra la respuesta cruda: se traduce a un mensaje legible", async ({ page }) => {
@@ -819,6 +873,65 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     });
     expect(calls).toBe(1);
     await shot(page, "S07", "doble-envio-evitado");
+  });
+});
+
+// ===========================================================================
+// M — Cómo se presentan los mensajes de error del servidor
+//
+// No qué dicen —eso ya está en S03-S09— sino cómo llegan a la pantalla.
+// ===========================================================================
+
+test.describe("M · Presentación de los mensajes", () => {
+  const DUPLICADO = "Ya existe una cuenta registrada con los datos ingresados.";
+
+  async function fallarConDuplicado(page: Page): Promise<void> {
+    await goToSummary(page);
+    await mockEnrollment(page, {
+      status: 400,
+      body: { detail: DUPLICADO, message: DUPLICADO },
+    });
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: /confirmar inscripción/i }).click();
+    await expect(stepAlert(page)).toBeVisible();
+  }
+
+  test("M01 · el mismo mensaje se muestra dos veces a la vez: toast y alerta", async ({ page }) => {
+    await fallarConDuplicado(page);
+
+    // `handleConfirm` hace las dos cosas con el mismo texto: `setFormErrors([m])`
+    // y `showError(m)`. El visitante lee lo mismo en dos lugares.
+    const toast = page.locator('[role="alert"].toast-error');
+    await expect(toast).toContainText(DUPLICADO);
+    await expect(stepAlert(page)).toContainText(DUPLICADO);
+    await shot(page, "M01", "mensaje-duplicado-toast-y-alerta");
+  });
+
+  test("M02 · el toast tapa los botones «Corregir» del resumen", async ({ page }) => {
+    await fallarConDuplicado(page);
+
+    const toast = page.locator('[role="alert"].toast-error').first();
+    const caja = await toast.boundingBox();
+    expect(caja).not.toBeNull();
+
+    // ¿Algún «Corregir» queda debajo del toast? Corregir es justamente la
+    // acción que este error pide, así que taparla es tapar la salida.
+    const corregir = page.getByRole("button", { name: /corregir/i });
+    const total = await corregir.count();
+    const tapados: number[] = [];
+    for (let i = 0; i < total; i++) {
+      const c = await corregir.nth(i).boundingBox();
+      if (!c || !caja) continue;
+      const solapa =
+        c.x < caja.x + caja.width && c.x + c.width > caja.x &&
+        c.y < caja.y + caja.height && c.y + c.height > caja.y;
+      if (solapa) tapados.push(i);
+    }
+
+    // Se afirma el comportamiento de HOY. Si alguien mueve el toast, este test
+    // se pone rojo y hay que actualizar el informe.
+    expect(tapados.length).toBeGreaterThan(0);
+    await shot(page, "M02", "toast-tapa-boton-corregir");
   });
 });
 
