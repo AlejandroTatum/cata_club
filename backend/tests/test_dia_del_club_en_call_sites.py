@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import (
     EstadoMembresia, EstadoPago, NivelTecnicoAlumno, TipoModalidad, TipoPago,
 )
@@ -24,7 +25,7 @@ from app.dominio.modelos import AntecedentesClub, Membresia, Pago, Persona, Tipo
 DIA_DEL_CLUB = date(2029, 6, 15)
 
 
-def _persona(db, cedula="1002003001") -> Persona:
+def _persona(db, cedula=cedula_valida(230)) -> Persona:
     persona = Persona(
         nombres="Ana", apellidos="Test", cedula=cedula,
         fecha_nacimiento=date(1990, 1, 1), telefono="0991112222",

@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 import jwt
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import Persona, Rol, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -145,7 +146,7 @@ def test_invalidar_sesion_de_otro_usuario_no_afecta_token_propio(
     )
 
     otra_persona = Persona(
-        nombres="Beto", apellidos="Ruiz", cedula="1799999999",
+        nombres="Beto", apellidos="Ruiz", cedula=cedula_valida(190),
         fecha_nacimiento=date(1992, 1, 1), telefono="0990000000",
     )
     db_session.add(otra_persona)

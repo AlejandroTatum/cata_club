@@ -5,6 +5,7 @@ de club (mano dominante), estado de cuenta, y solo-lectura financiera
 para menores.
 """
 import pytest
+from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -32,13 +33,13 @@ def test_asignar_rol_requiere_admin(client_sin_permisos):
 
 
 def test_asignar_rol_falla_sin_credenciales_registradas(client):
-    persona = _crear_persona(client, "1711111111")
+    persona = _crear_persona(client, cedula_valida(300))
     resp = client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ENTRENADOR"})
     assert resp.status_code == 400
 
 
 def test_asignar_y_quitar_rol(client):
-    persona = _crear_persona(client, "1722222222")
+    persona = _crear_persona(client, cedula_valida(301))
     _registrar_credenciales(client, persona["cedula"], "u1@x.com")
 
     resp = client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ENTRENADOR"})
@@ -59,7 +60,7 @@ def test_obtener_roles_requiere_admin(client_sin_permisos):
 
 
 def test_obtener_roles_refleja_estado_actual_sin_mutar(client):
-    persona = _crear_persona(client, "1740000004")
+    persona = _crear_persona(client, cedula_valida(302))
     _registrar_credenciales(client, persona["cedula"], "u_roles@x.com")
 
     # Sin roles asignados todavía: el GET debe reflejar eso, no un 404 ni un error.
@@ -86,7 +87,7 @@ def test_obtener_roles_refleja_estado_actual_sin_mutar(client):
 def test_login_real_funciona_tras_asignar_rol(client):
     """Antes de este fix, un Usuario nunca podía obtener ningún rol -> nunca
     pasaba GestorPermisos. Prueba end-to-end de que ahora sí funciona."""
-    persona = _crear_persona(client, "1733333333")
+    persona = _crear_persona(client, cedula_valida(303))
     _registrar_credenciales(client, persona["cedula"], "u2@x.com")
     client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ADMINISTRADOR"})
 
@@ -104,7 +105,7 @@ def test_login_real_funciona_tras_asignar_rol(client):
 def test_alumno_se_asigna_automaticamente_al_matricularse(client):
     """Asignación perezosa: al crear la primera Membresia de una persona con
     credenciales ya registradas, se le otorga ALUMNO automáticamente."""
-    persona = _crear_persona(client, "1744444444")
+    persona = _crear_persona(client, cedula_valida(304))
     _registrar_credenciales(client, persona["cedula"], "u3@x.com")
 
     tipo = client.post(
@@ -153,7 +154,7 @@ def _crear_administrador(client, cedula: str, correo: str) -> dict:
 
 
 def test_admin_no_puede_quitarse_su_propio_rol_administrador(client):
-    uno = _crear_administrador(client, "1766000001", "admin_a@x.com")
+    uno = _crear_administrador(client, cedula_valida(305), "admin_a@x.com")
     _crear_administrador(client, "1766000002", "admin_b@x.com")
 
     _autenticar_como(uno["id"])
@@ -166,7 +167,7 @@ def test_admin_no_puede_quitarse_su_propio_rol_administrador(client):
 
 
 def test_no_se_puede_quitar_el_ultimo_rol_administrador_del_sistema(client):
-    solo = _crear_administrador(client, "1766000003", "admin_c@x.com")
+    solo = _crear_administrador(client, cedula_valida(306), "admin_c@x.com")
 
     _autenticar_como(9999)
     resp = client.delete(f"/api/v1/personas/{solo['id']}/roles/ADMINISTRADOR")
@@ -176,8 +177,8 @@ def test_no_se_puede_quitar_el_ultimo_rol_administrador_del_sistema(client):
 
 
 def test_se_puede_quitar_el_rol_administrador_si_queda_otro_activo(client):
-    uno = _crear_administrador(client, "1766000004", "admin_d@x.com")
-    otro = _crear_administrador(client, "1766000005", "admin_e@x.com")
+    uno = _crear_administrador(client, cedula_valida(307), "admin_d@x.com")
+    otro = _crear_administrador(client, cedula_valida(308), "admin_e@x.com")
 
     _autenticar_como(uno["id"])
     resp = client.delete(f"/api/v1/personas/{otro['id']}/roles/ADMINISTRADOR")
@@ -187,8 +188,8 @@ def test_se_puede_quitar_el_rol_administrador_si_queda_otro_activo(client):
 
 
 def test_una_cuenta_admin_desactivada_no_cuenta_como_administrador_restante(client):
-    activo = _crear_administrador(client, "1766000006", "admin_f@x.com")
-    inactivo = _crear_administrador(client, "1766000007", "admin_g@x.com")
+    activo = _crear_administrador(client, cedula_valida(309), "admin_f@x.com")
+    inactivo = _crear_administrador(client, cedula_valida(310), "admin_g@x.com")
     client.patch(f"/api/v1/personas/{inactivo['id']}/cuenta/estado", json={"activo": False})
 
     _autenticar_como(9999)
@@ -199,7 +200,7 @@ def test_una_cuenta_admin_desactivada_no_cuenta_como_administrador_restante(clie
 
 
 def test_no_se_puede_desactivar_la_cuenta_del_ultimo_administrador(client):
-    solo = _crear_administrador(client, "1766000008", "admin_h@x.com")
+    solo = _crear_administrador(client, cedula_valida(311), "admin_h@x.com")
 
     _autenticar_como(9999)
     resp = client.patch(f"/api/v1/personas/{solo['id']}/cuenta/estado", json={"activo": False})
@@ -211,7 +212,7 @@ def test_no_se_puede_desactivar_la_cuenta_del_ultimo_administrador(client):
 def test_quitar_un_rol_no_administrador_no_activa_la_barrera(client):
     """La barrera es específica de ADMINISTRADOR: quitar ENTRENADOR al único
     entrenador del sistema sigue siendo una operación legítima."""
-    persona = _crear_persona(client, "1766000009")
+    persona = _crear_persona(client, cedula_valida(312))
     _registrar_credenciales(client, persona["cedula"], "entrenador_unico@x.com")
     client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ENTRENADOR"})
 
@@ -222,7 +223,7 @@ def test_quitar_un_rol_no_administrador_no_activa_la_barrera(client):
 
 # --- Estado de cuenta (E01-RF013) --------------------------------------------
 def test_cuenta_desactivada_no_puede_loguearse(client):
-    persona = _crear_persona(client, "1755555555")
+    persona = _crear_persona(client, cedula_valida(313))
     _registrar_credenciales(client, persona["cedula"], "u4@x.com")
 
     resp = client.patch(f"/api/v1/personas/{persona['id']}/cuenta/estado", json={"activo": False})
@@ -248,7 +249,7 @@ def test_solicitar_recuperacion_no_revela_si_el_correo_existe(client):
 
 
 def test_restablecer_contrasenia_con_token_valido(client):
-    persona = _crear_persona(client, "1766666666")
+    persona = _crear_persona(client, cedula_valida(314))
     _registrar_credenciales(client, persona["cedula"], "u5@x.com")
 
     token = GestorAutenticacion.crear_token_recuperacion("u5@x.com", version_contrasenia=1)
@@ -275,7 +276,7 @@ def test_restablecer_contrasenia_con_token_de_acceso_falla():
 def test_restablecer_contrasenia_token_no_se_puede_reusar(client):
     """Tras un restablecimiento exitoso la versión de contraseña cambia, por
     lo que el mismo token debe quedar invalidado (single-use)."""
-    persona = _crear_persona(client, "1766666667")
+    persona = _crear_persona(client, cedula_valida(315))
     _registrar_credenciales(client, persona["cedula"], "u6@x.com")
 
     token = GestorAutenticacion.crear_token_recuperacion("u6@x.com", version_contrasenia=1)
@@ -295,7 +296,7 @@ def test_restablecer_contrasenia_token_no_se_puede_reusar(client):
 
 # --- Antecedentes de club / mano dominante (E01-RF008) -----------------------
 def test_crear_antecedentes_club_con_mano_dominante(client):
-    persona = _crear_persona(client, "1799999991")
+    persona = _crear_persona(client, cedula_valida(316))
     resp = client.post(
         f"/api/v1/personas/{persona['id']}/antecedentes-club",
         json={
@@ -308,7 +309,7 @@ def test_crear_antecedentes_club_con_mano_dominante(client):
 
 
 def test_antecedentes_club_duplicado_falla(client):
-    persona = _crear_persona(client, "1799999992")
+    persona = _crear_persona(client, cedula_valida(317))
     datos = {
         "nivel_tecnico_alumno": "NIVEL 1", "fecha_inicio_club": "2024-01-01",
         "persona_id": persona["id"],
@@ -320,8 +321,8 @@ def test_antecedentes_club_duplicado_falla(client):
 
 # --- Solo-lectura financiera para menores (E01-RF006/007, punto 8) ----------
 def test_menor_no_puede_registrar_su_propio_pago(client):
-    representante = _crear_persona(client, "1701010101", fecha_nacimiento="1990-01-01")
-    menor = _crear_persona(client, "1701010102", fecha_nacimiento="2020-01-01", representante_id=representante["id"])
+    representante = _crear_persona(client, cedula_valida(318), fecha_nacimiento="1990-01-01")
+    menor = _crear_persona(client, cedula_valida(319), fecha_nacimiento="2020-01-01", representante_id=representante["id"])
     _registrar_credenciales(client, menor["cedula"], "menor@x.com")
 
     tipo = client.post(
@@ -355,8 +356,8 @@ def test_menor_no_puede_registrar_su_propio_pago(client):
 
 
 def test_representante_si_puede_registrar_pago_del_representado(client):
-    representante = _crear_persona(client, "1701010201", fecha_nacimiento="1985-01-01")
-    menor = _crear_persona(client, "1701010202", fecha_nacimiento="2020-01-01", representante_id=representante["id"])
+    representante = _crear_persona(client, cedula_valida(320), fecha_nacimiento="1985-01-01")
+    menor = _crear_persona(client, cedula_valida(321), fecha_nacimiento="2020-01-01", representante_id=representante["id"])
 
     tipo = client.post(
         "/api/v1/membresias/tipos",

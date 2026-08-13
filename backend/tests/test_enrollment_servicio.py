@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoNotificacion, TipoRol
 from app.dominio.modelos import Notificacion, Persona, Usuario
 from app.presentacion.schemas.enrollment_schemas import (
@@ -24,7 +25,7 @@ from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 # request boundary requires an explicit `rollback()` after the service call:
 # only a real `commit()` survives that.
 
-def _alumno_dto(cedula: str = "1723456789", fecha_nacimiento: date = date(2015, 6, 15)) -> EnrollmentAlumnoDTO:
+def _alumno_dto(cedula: str = cedula_valida(251), fecha_nacimiento: date = date(2015, 6, 15)) -> EnrollmentAlumnoDTO:
     return EnrollmentAlumnoDTO(
         nombres="Lucas", apellidos="Martinez", cedula=cedula,
         fecha_nacimiento=fecha_nacimiento, telefono="0991234567",
@@ -34,7 +35,7 @@ def _alumno_dto(cedula: str = "1723456789", fecha_nacimiento: date = date(2015, 
 def test_inscripcion_representante_persiste_roles_mas_alla_del_flush(db_session):
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia@example.com", contrasenia="password8",
         ),
@@ -75,12 +76,12 @@ def test_inscripcion_menor_con_credenciales_crea_usuario_menor(db_session):
     un Usuario + ALUMNO para el menor con esas credenciales."""
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia@example.com", contrasenia="password8",
         ),
         alumno=EnrollmentAlumnoDTO(
-            nombres="Lucas", apellidos="Martinez", cedula="1723456789",
+            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
             correo="lucas@example.com", contrasenia="password8",
         ),
@@ -98,7 +99,7 @@ def test_inscripcion_menor_con_credenciales_crea_usuario_menor(db_session):
     assert roles_menor == {TipoRol.ALUMNO}
 
     # El menor apunta al mismo representante
-    alumno = db_session.query(Persona).filter(Persona.cedula == "1723456789").one()
+    alumno = db_session.query(Persona).filter(Persona.cedula == cedula_valida(251)).one()
     assert alumno.representante_id is not None
 
 
@@ -106,7 +107,7 @@ def test_inscripcion_menor_sin_credenciales_no_crea_usuario_menor(db_session):
     """Sin credencialesMenor, solo se crea cuenta del representante."""
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia@example.com", contrasenia="password8",
         ),
@@ -123,7 +124,7 @@ def test_inscripcion_menor_correo_duplicado_rechazada(db_session):
     """Si el correo del menor ya está en uso, se rechaza."""
     # Crear un usuario con ese correo primero
     persona = Persona(
-        nombres="Existente", apellidos="Test", cedula="1799999999",
+        nombres="Existente", apellidos="Test", cedula=cedula_valida(253),
         fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
     )
     db_session.add(persona)
@@ -137,12 +138,12 @@ def test_inscripcion_menor_correo_duplicado_rechazada(db_session):
 
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia@example.com", contrasenia="password8",
         ),
         alumno=EnrollmentAlumnoDTO(
-            nombres="Lucas", apellidos="Martinez", cedula="1723456789",
+            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
             correo="ocupado@example.com", contrasenia="password8",
         ),
@@ -170,12 +171,12 @@ def test_alumno_menor_de_5_anos_rechazado(db_session):
     """Alumnos menores de 5 años no son admitidos."""
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia@example.com", contrasenia="password8",
         ),
         alumno=EnrollmentAlumnoDTO(
-            nombres="Bebé", apellidos="Martinez", cedula="1723456789",
+            nombres="Bebé", apellidos="Martinez", cedula=cedula_valida(251),
             fecha_nacimiento=date(2026, 1, 1), telefono="0991234567",
         ),
     )
@@ -187,11 +188,11 @@ def test_alumno_menor_de_5_anos_rechazado(db_session):
 def test_alumno_cedula_duplicada_rechazada(db_session):
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia@example.com", contrasenia="password8",
         ),
-        alumno=_alumno_dto(cedula="1712345678"),  # misma cédula que representante
+        alumno=_alumno_dto(cedula=cedula_valida(250)),  # misma cédula que representante
     )
     from app.dominio.excepciones import EntidadDuplicada
     with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
@@ -201,7 +202,7 @@ def test_alumno_cedula_duplicada_rechazada(db_session):
 def test_representante_cedula_duplicada_rechazada(db_session):
     """Si la cédula del representante ya existe, se rechaza."""
     persona = Persona(
-        nombres="Existente", apellidos="Test", cedula="1712345678",
+        nombres="Existente", apellidos="Test", cedula=cedula_valida(250),
         fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
     )
     db_session.add(persona)
@@ -209,7 +210,7 @@ def test_representante_cedula_duplicada_rechazada(db_session):
 
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia@example.com", contrasenia="password8",
         ),
@@ -224,7 +225,7 @@ def test_representante_menor_de_edad_rechazado(db_session):
     """El representante debe ser mayor de 18 años."""
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Menor Rep", apellidos="Martinez", cedula="1712345678",
+            nombres="Menor Rep", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(2012, 5, 20), telefono="0991234567",
             correo="menorrep@example.com", contrasenia="password8",
         ),
@@ -245,7 +246,7 @@ def test_representante_edad_maxima_rechazada(db_session):
     techo, el 400 nunca llega y el registro se completa igual."""
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Muy Longevo", apellidos="Martinez", cedula="1712345678",
+            nombres="Muy Longevo", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1800, 1, 1), telefono="0991234567",
             correo="longevo@example.com", contrasenia="password8",
         ),
@@ -259,7 +260,7 @@ def test_representante_edad_maxima_rechazada(db_session):
 def test_representante_correo_duplicado_rechazado(db_session):
     """Si el correo del representante ya está en uso, se rechaza."""
     persona = Persona(
-        nombres="Existente", apellidos="Test", cedula="1799999999",
+        nombres="Existente", apellidos="Test", cedula=cedula_valida(253),
         fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
     )
     db_session.add(persona)
@@ -273,7 +274,7 @@ def test_representante_correo_duplicado_rechazado(db_session):
 
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="ocupado@example.com", contrasenia="password8",
         ),
@@ -289,7 +290,7 @@ def test_credenciales_menor_correo_invalido_rechazado_schema(db_session):
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         EnrollmentAlumnoDTO(
-            nombres="Lucas", apellidos="Martinez", cedula="1723456789",
+            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
             correo="no-es-correo", contrasenia="password8",
         )
@@ -300,7 +301,7 @@ def test_credenciales_menor_contrasenia_corta_rechazada_schema(db_session):
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         EnrollmentAlumnoDTO(
-            nombres="Lucas", apellidos="Martinez", cedula="1723456789",
+            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
             correo="lucas@test.com", contrasenia="123",
         )
@@ -319,7 +320,7 @@ def _crear_administrador(db_session, correo: str = "admin@cataclub.test") -> int
     from app.dominio.modelos import Rol
 
     persona = Persona(
-        nombres="Admin", apellidos="Principal", cedula="1701010101",
+        nombres="Admin", apellidos="Principal", cedula=cedula_valida(252),
         fecha_nacimiento=date(1985, 3, 10), telefono="0990000001",
     )
     db_session.add(persona)
@@ -339,7 +340,7 @@ def test_inscripcion_con_representante_notifica_a_los_administradores(db_session
     admin_id = _crear_administrador(db_session)
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula="1712345678",
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia@example.com", contrasenia="password8",
         ),
@@ -382,7 +383,7 @@ def test_inscripcion_sin_credenciales_notifica_a_los_administradores(db_session)
     """Tercer camino de `enroll()`: registro sin auto-login."""
     admin_id = _crear_administrador(db_session)
     datos = EnrollmentCreateDTO(
-        alumno=_alumno_dto(cedula="1755555555", fecha_nacimiento=date(2000, 1, 1)),
+        alumno=_alumno_dto(cedula=cedula_valida(254), fecha_nacimiento=date(2000, 1, 1)),
     )
 
     resultado = EnrollmentServicio(db_session).enroll(datos)

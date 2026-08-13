@@ -27,6 +27,7 @@ from celery.exceptions import Retry as CeleryRetry
 from sqlalchemy.orm import Session
 
 import app.infraestructura.tareas.alertas_tareas as alertas_mod
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoModalidad, TipoPago
 from app.dominio.excepciones import ServicioNoDisponible
 from app.dominio.modelos import Membresia, Notificacion, Pago, Persona, TipoMembresia, Usuario
@@ -49,7 +50,7 @@ def escenario_vencimiento_real(motor_test):
     `test_pago_comprobante_atomico.py::escenario_pago_concurrente`)."""
     sesion = Session(bind=motor_test)
     persona = Persona(
-        nombres="Marta", apellidos="Vence", cedula="1799000991",
+        nombres="Marta", apellidos="Vence", cedula=cedula_valida(122),
         fecha_nacimiento=date(1990, 1, 1), telefono="0990009991",
     )
     sesion.add(persona)
@@ -204,7 +205,7 @@ def test_notificacion_guarda_entidad_relacionada_id_del_pago(
     db_session, sesion_inyectada, monkeypatch
 ):
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    persona = _crear_persona(db_session, "1002003011")
+    persona = _crear_persona(db_session, cedula_valida(110))
     _crear_usuario(db_session, persona, "alumno011@cataclub.test")
     _, pago = _crear_membresia_con_pago(db_session, persona, VENCE)
     _mock_envio(monkeypatch)
@@ -219,7 +220,7 @@ def test_notificacion_guarda_entidad_relacionada_id_del_pago(
 
 def test_fallo_de_envio_no_deja_fila_marcada(db_session, sesion_inyectada, monkeypatch):
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    persona = _crear_persona(db_session, "1002003012")
+    persona = _crear_persona(db_session, cedula_valida(111))
     _crear_usuario(db_session, persona, "alumno012@cataclub.test")
     _crear_membresia_con_pago(db_session, persona, VENCE)
     _mock_envio(monkeypatch, falla=ConnectionError("smtp caído"))
@@ -237,7 +238,7 @@ def test_no_hay_transaccion_abierta_durante_el_envio(
     db_session, sesion_inyectada, monkeypatch
 ):
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    persona = _crear_persona(db_session, "1002003013")
+    persona = _crear_persona(db_session, cedula_valida(112))
     _crear_usuario(db_session, persona, "alumno013@cataclub.test")
     _crear_membresia_con_pago(db_session, persona, VENCE)
 
@@ -261,7 +262,7 @@ def test_sin_smtp_configurado_igual_crea_notificacion(
     db_session, sesion_inyectada, monkeypatch
 ):
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    persona = _crear_persona(db_session, "1002003014")
+    persona = _crear_persona(db_session, cedula_valida(113))
     _crear_usuario(db_session, persona, "alumno014@cataclub.test")
     _crear_membresia_con_pago(db_session, persona, VENCE)
     _mock_envio(monkeypatch, falla=RuntimeError("SMTP_HOST no está configurado"))
@@ -279,7 +280,7 @@ def test_persona_sin_usuario_crea_notificacion_sin_correo(
     db_session, sesion_inyectada, monkeypatch
 ):
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    persona = _crear_persona(db_session, "1002003015")
+    persona = _crear_persona(db_session, cedula_valida(114))
     _crear_membresia_con_pago(db_session, persona, VENCE)
     llamadas = _mock_envio(monkeypatch)
 
@@ -297,7 +298,7 @@ def test_reintento_no_duplica_notificacion_ni_correo(
     db_session, sesion_inyectada, monkeypatch
 ):
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    persona = _crear_persona(db_session, "1002003016")
+    persona = _crear_persona(db_session, cedula_valida(115))
     _crear_usuario(db_session, persona, "alumno016@cataclub.test")
     _crear_membresia_con_pago(db_session, persona, VENCE)
     llamadas = _mock_envio(monkeypatch)
@@ -325,7 +326,7 @@ def test_reintento_del_lote_usa_el_cooldown_del_circuito(
     perdería. La tarea debe llamar a `self.retry(countdown=...)` con el
     cooldown del circuito en vez de dejar el backoff por defecto."""
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    persona = _crear_persona(db_session, "1002003019")
+    persona = _crear_persona(db_session, cedula_valida(118))
     _crear_usuario(db_session, persona, "alumno019@cataclub.test")
     _crear_membresia_con_pago(db_session, persona, VENCE)
     _mock_envio(monkeypatch, falla=ServicioNoDisponible("circuito SMTP abierto"))
@@ -378,7 +379,7 @@ def test_alertar_vencimientos_no_incurre_en_n_mas_uno_al_cargar_usuario(
     db_session.expire_on_commit = False
     cantidad = 3
     for i in range(cantidad):
-        persona = _crear_persona(db_session, f"17100340{70 + i}")
+        persona = _crear_persona(db_session, cedula_valida(119 + i))
         _crear_usuario(db_session, persona, f"alumno{70 + i}@cataclub.test")
         _crear_membresia_con_pago(db_session, persona, VENCE)
     _mock_envio(monkeypatch)
@@ -399,8 +400,8 @@ def test_representante_recibe_una_sola_notificacion_en_reintento(
     db_session, sesion_inyectada, monkeypatch
 ):
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    representante = _crear_persona(db_session, "1002003017")
-    alumno = _crear_persona(db_session, "1002003018", representante_id=representante.id)
+    representante = _crear_persona(db_session, cedula_valida(116))
+    alumno = _crear_persona(db_session, cedula_valida(117), representante_id=representante.id)
     _crear_usuario(db_session, alumno, "alumno018@cataclub.test")
     _crear_membresia_con_pago(db_session, alumno, VENCE)
     _mock_envio(monkeypatch)

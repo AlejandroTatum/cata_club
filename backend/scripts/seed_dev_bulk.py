@@ -57,6 +57,7 @@ from app.dominio.enums import (
     DiaSemana,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.dominio.cedula import cedula_valida
 
 CONTRASENIA_COMPARTIDA = "alumno123"
 DEFAULT_SEED_VOUCHER_BASE_URL = "https://placehold.co/600x400.png?text=Cata+Club+Voucher"
@@ -67,12 +68,13 @@ def voucher_fixture_url() -> str:
     return os.environ.get("SEED_VOUCHER_BASE_URL", "").strip() or DEFAULT_SEED_VOUCHER_BASE_URL
 
 # ---------------------------------------------------------------------------
-# Rango de cédulas propio para este seed: 0000000001-0000000005 ya están
-# tomadas por seed_dev_admin.py / seed_dev_base.py (admin, entrenador, Ana,
-# Luis, Maria). Arrancamos en 1000000001 para garantizar cero colisiones,
-# incluso si este script corre contra una BD ya sembrada por esos otros dos.
+# Rango de secuencia propio para este seed: `cedula_valida` acepta cualquier
+# entero, así que un offset alcanza para garantizar cero colisiones con
+# seed_dev_base.py (que usa secuencia 1-14 para admin/entrenador/alumnos/
+# representantes), incluso si este script corre contra una BD ya sembrada
+# por ese otro.
 # ---------------------------------------------------------------------------
-CEDULA_BASE = 1_000_000_000
+CEDULA_SECUENCIA_BASE = 1_000
 
 DIA_A_WEEKDAY = {
     DiaSemana.LUNES: 0,
@@ -134,7 +136,7 @@ def _apellido_para(indice: int) -> str:
 
 
 def _cedula_para(indice: int) -> str:
-    return str(CEDULA_BASE + indice)
+    return cedula_valida(CEDULA_SECUENCIA_BASE + indice)
 
 
 def _telefono_para(indice: int) -> str:

@@ -52,17 +52,18 @@ from app.dominio.enums import (
     TipoPago,
 )
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
+from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
 # ---------------------------------------------------------------------------
 # Credentials
 # ---------------------------------------------------------------------------
-ADMIN_CEDULA = "0000000001"
+ADMIN_CEDULA = cedula_valida(1)
 ADMIN_CORREO = "admin@cataclub.com"
 ADMIN_CONTRASENIA = "admin12345"
 
-TRAINER_CEDULA = "0000000002"
+TRAINER_CEDULA = cedula_valida(2)
 TRAINER_CORREO = "entrenador@cataclub.com"
 TRAINER_CONTRASENIA = "trainer12345"
 
@@ -104,7 +105,7 @@ ALUMNOS = [
     {
         "nombres": "Ana",
         "apellidos": "Garcia",
-        "cedula": "0000000003",
+        "cedula": cedula_valida(3),
         "correo": "ana@cataclub.com",
         "contrasenia": "alumno123",
         "telefono": "0971111111",
@@ -114,7 +115,7 @@ ALUMNOS = [
     {
         "nombres": "Luis",
         "apellidos": "Lopez",
-        "cedula": "0000000004",
+        "cedula": cedula_valida(4),
         "correo": "luis@cataclub.com",
         "contrasenia": "alumno123",
         "telefono": "0972222222",
@@ -124,7 +125,7 @@ ALUMNOS = [
     {
         "nombres": "Maria",
         "apellidos": "Torres",
-        "cedula": "0000000005",
+        "cedula": cedula_valida(5),
         "correo": "maria@cataclub.com",
         "contrasenia": "alumno123",
         "telefono": "0973333333",
@@ -137,7 +138,7 @@ ALUMNOS = [
         # pago de verdad en vez del bloqueo por minoría de edad.
         "nombres": "Pedro",
         "apellidos": "Salgado",
-        "cedula": "0000000006",
+        "cedula": cedula_valida(6),
         "correo": "pedro@cataclub.com",
         "contrasenia": "alumno123",
         "telefono": "0974444444",
@@ -162,7 +163,7 @@ REPRESENTANTES = [
         "representante": {
             "nombres": "Laura",
             "apellidos": "Vera",
-            "cedula": "0000000010",
+            "cedula": cedula_valida(10),
             "correo": "laura@cataclub.com",
             "telefono": "0981000010",
         },
@@ -170,7 +171,7 @@ REPRESENTANTES = [
             {
                 "nombres": "Sofia",
                 "apellidos": "Vera",
-                "cedula": "0000000011",
+                "cedula": cedula_valida(11),
                 "correo": "sofia@cataclub.com",
                 "telefono": "0981000011",
                 "edad_anios": 10,
@@ -179,7 +180,7 @@ REPRESENTANTES = [
             {
                 "nombres": "Martin",
                 "apellidos": "Vera",
-                "cedula": "0000000014",
+                "cedula": cedula_valida(14),
                 "correo": "martin@cataclub.com",
                 "telefono": "0981000014",
                 "edad_anios": 16,
@@ -191,7 +192,7 @@ REPRESENTANTES = [
         "representante": {
             "nombres": "Carlos",
             "apellidos": "Mendoza",
-            "cedula": "0000000012",
+            "cedula": cedula_valida(12),
             "correo": "carlos@cataclub.com",
             "telefono": "0981000012",
         },
@@ -199,7 +200,7 @@ REPRESENTANTES = [
             {
                 "nombres": "Diego",
                 "apellidos": "Mendoza",
-                "cedula": "0000000013",
+                "cedula": cedula_valida(13),
                 "correo": "diego@cataclub.com",
                 "telefono": "0981000013",
                 "edad_anios": 12,

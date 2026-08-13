@@ -1,3 +1,4 @@
+from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
@@ -262,7 +263,7 @@ def test_listar_alumnos_por_horario_rechaza_aunque_el_propio_este_inscrito(
     habilita a un ALUMNO a leerlo -- para eso existe el endpoint dedicado
     `GET /asistencias/alumnos/{persona_id}/horarios` (ownership-gated,
     sin cambios por este fix)."""
-    alumno = _crear_persona_api(client, "0000000001")  # relleno -> id=1
+    alumno = _crear_persona_api(client, cedula_valida(140))  # relleno -> id=1
     assert alumno["id"] == 1  # coincide con persona_id del token de client_sin_permisos
 
     horario = client.post(
@@ -284,7 +285,7 @@ def test_roster_de_todos_los_horarios_junta_varios_horarios_en_una_consulta(clie
     """Un solo GET trae el roster de TODOS los horarios, agrupable por
     `horarioId` en el cliente -- reemplaza las 26 llamadas (una por horario)
     que /groups hacía antes para el conteo "N inscriptos"."""
-    alumno_a = _crear_persona_api(client, "1710034080", "Ana")
+    alumno_a = _crear_persona_api(client, cedula_valida(141), "Ana")
     alumno_b = _crear_persona_api(client, "1710034081", "Beto")
 
     horario_a = client.post(
@@ -317,7 +318,7 @@ def test_roster_de_todos_los_horarios_junta_varios_horarios_en_una_consulta(clie
 def test_roster_de_todos_los_horarios_excluye_a_los_dados_de_baja(client, db_session):
     """Mismo filtro de baja lógica que `listar_por_horario`: alguien que ya
     no está en el club no puede figurar en ningún roster."""
-    alumno = _crear_persona_api(client, "1710034082", "Cami")
+    alumno = _crear_persona_api(client, cedula_valida(142), "Cami")
     horario = client.post(
         "/api/v1/asistencias/horarios",
         json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
@@ -397,7 +398,7 @@ def test_listar_ultimas_listas_cuenta_los_cuatro_estados(client):
 
 def test_listar_ultimas_listas_ordena_las_mas_recientes_primero(client):
     horario = _crear_horario_api(client)
-    alumno = _crear_persona_api(client, "1710035010", "Ana")
+    alumno = _crear_persona_api(client, cedula_valida(143), "Ana")
     _registrar_lista(client, alumno["id"], horario["id"], "2026-07-06", "PRESENTE")
     _registrar_lista(client, alumno["id"], horario["id"], "2026-08-03", "PRESENTE")
 
@@ -409,7 +410,7 @@ def test_listar_ultimas_listas_ordena_las_mas_recientes_primero(client):
 def test_listar_ultimas_listas_no_expone_autor(client):
     """Candado del recorte de alcance: la lista no dice quién la tomó."""
     horario = _crear_horario_api(client)
-    alumno = _crear_persona_api(client, "1710035020", "Ana")
+    alumno = _crear_persona_api(client, cedula_valida(144), "Ana")
     _registrar_lista(client, alumno["id"], horario["id"], "2026-08-03", "PRESENTE")
 
     resp = client.get("/api/v1/asistencias/ultimas-listas")
@@ -421,7 +422,7 @@ def test_listar_ultimas_listas_no_expone_autor(client):
 
 def test_listar_ultimas_listas_entrenador_puede_acceder(client_entrenador, client):
     horario = _crear_horario_api(client)
-    alumno = _crear_persona_api(client, "1710035030", "Ana")
+    alumno = _crear_persona_api(client, cedula_valida(145), "Ana")
     _registrar_lista(client, alumno["id"], horario["id"], "2026-08-03", "PRESENTE")
 
     _restaurar_token_entrenador()

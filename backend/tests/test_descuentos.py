@@ -24,6 +24,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago
 from tests.fabricas_pagos import (
     crear_membresia_orm,
@@ -364,7 +365,7 @@ def test_pago_con_descuento_id_pero_sin_valor_congelado_viola_el_check(db_sessio
     que se lo salte (directo por ORM, como acá) debe seguir rechazado por
     `ck_pago_descuento_valor_congelado`: el servicio es el camino primario de
     error, la base es la red de seguridad."""
-    persona = crear_persona_orm(db_session, "1710034071")
+    persona = crear_persona_orm(db_session, cedula_valida(220))
     tipo = crear_tipo_membresia_orm(db_session)
     membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.INACTIVA)
     descuento = crear_descuento_orm(db_session, porcentaje=Decimal("50"))
