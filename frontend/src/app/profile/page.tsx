@@ -1,31 +1,29 @@
 /**
- * /profile — the account screen, transcribed from
- * `docs/ux/prototipos/25-perfil.html`.
+ * /profile — the account screen, rebuilt for issue #204 from
+ * `docs/ux/prototipos/30-perfil-rediseño.html` (visual reference only — never
+ * a source of logic or data; every field below still traces back to a real
+ * API response).
  *
- * Four blocks at the prototype's 820px measure, not a grid of cramped boxes:
+ * Two regions, not four stacked blocks:
  *
- *   1. `.idcard` — a 72px coal/ball avatar, the name and the correo on the
- *      left; a rail of account facts on the right (rol, membresía,
- *      miembro desde — whichever of them this account actually has). Per the
- *      prototype's own decision note, "Estado de cuenta" does not earn a
- *      section: it is one binary fact, so it folds in beside the role.
- *   2. "Datos personales" — a list of 56px `.drow`s, ONE datum per row, an
- *      uppercase 150px label on the left and the value in bold on the right.
- *   3. "Seguridad" — the same row pattern, carrying actions instead of values.
- *   4. "Estudiantes a mi cargo" — kept, because for a representante it is the
- *      reason to open this page at all.
+ *   1. `IdentityPanel` — a COMPACT ~292px white panel, clearly its own
+ *      surface (never a second coal mass beside the sidebar): the coal
+ *      avatar, the name/role/status "quick recognition" block, and — in its
+ *      own full-width row — "Correo de acceso". The institutional-red field
+ *      across the top and the yellow dot inside it are the one brand
+ *      gesture; the avatar sits astride the red/white boundary.
+ *   2. The workspace — "Datos personales" (one datum per `DetailRow`),
+ *      "Información de tu rol" (role-specific facts the panel's fixed shape
+ *      cannot itself state — only rendered when there IS something to add),
+ *      "Estudiantes a mi cargo" (representante only, including the
+ *      no-representados state), and "Seguridad".
  *
- * ## Why the content starts high
+ * Below `split` (980px) the panel collapses to a horizontal band above the
+ * workspace; both stack to one column on a phone. Nothing here truncates —
+ * every name, correo, role, estado and dependant fact wraps (`break-words`),
+ * never `truncate`.
  *
- * The page used to open with a "Volver al Panel" link, then a line carrying
- * nothing but "Editar datos", and only then the identity card — which landed
- * at y=317 of a 900px viewport, i.e. ~35% down, with the first two thirds of
- * the screen spent on chrome. Both rows are gone: the action moved into
- * `PageHeader`'s own row (`.rowline` in the prototype) via `AppShell`'s
- * `actions` slot, and the back link went with it because `25-perfil.html`
- * draws none — the shell's sidebar is the way back.
- *
- * Data sources are unchanged:
+ * ## Data sources (unchanged since #36)
  *
  * - ADMINISTRADOR/ENTRENADOR ("tesorero" falls through to this same branch
  *   too — it's a dead backend role no real account can carry anymore) fetch
@@ -36,18 +34,17 @@
  *   auth_servicio.py).
  *
  * - ALUMNO / representante-linked accounts fetch `fetchStudentPortal()` — the
- *   same data `/student` uses — for the membership badge and the dependants
- *   list, PLUS `fetchMiPerfil()` for the identity fields the portal payload
- *   does not carry (teléfono, fecha de creación, foto).
+ *   same data `/student` uses — for the membership badge, the dependants
+ *   list, `fechaNacimiento` and `representante`, PLUS `fetchMiPerfil()` for
+ *   the identity fields the portal payload does not carry (teléfono, fecha
+ *   de creación, foto).
  *
  * Two fields the prototype draws are NOT rendered, because nothing in the API
- * can produce them (see the report accompanying this change):
- *
- * "Cédula" is NOT rendered, because nothing in the API can produce it (see
- * the report accompanying this change): neither `PerfilPropio`
- * (`UsuarioMeResponseDTO`) nor `StudentProfileSummary` carries it. Only the
- * admin-facing `/personas/{id}` does, and that is not readable by the
- * account itself.
+ * can produce them: "Cédula" (only the admin-facing `/personas/{id}` carries
+ * it, and that is not readable by the account itself) and "Cuenta activa"
+ * (no `activo` flag on `UsuarioMeResponseDTO`) — a staff account's quick
+ * block therefore shows no status badge at all, honestly, rather than one
+ * invented as always-on.
  */
 
 "use client";
@@ -77,8 +74,6 @@ import {
   DataBox,
   ErrorState,
   LoadingState,
-  MemberCard,
-  PAGE_RAIL,
   buttonClasses,
 } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
@@ -130,7 +125,7 @@ type StudentLoadState =
 
 // ---------------------------------------------------------------------------
 // The 56px detail row (`.drow`, _sistema.css:247-250) — the single row shape
-// this page is built from. One datum, an uppercase label on the left, the
+// the workspace is built from. One datum, an uppercase label on the left, the
 // value in bold on the right, the note (if any) inline beside the value.
 // ---------------------------------------------------------------------------
 
@@ -192,11 +187,6 @@ function DetailRow({
  * stops loading, error and the loaded layout from drifting apart now that
  * the loaded layout owns its own `AppShell` (it has to, because the header's
  * action depends on the layout's edit state).
- *
- * No subtitle: "Gestione su información y consulte su estado en el club."
- * restated what being on a profile page already says — a screen earns its
- * one line of prose, it doesn't default to it. The member card below now
- * carries the identity that line used to gesture at.
  */
 function ProfileShell({
   actions,
@@ -209,30 +199,6 @@ function ProfileShell({
     <AppShell title="Perfil" actions={actions}>
       {children}
     </AppShell>
-  );
-}
-
-/**
- * One fact beside the member card, for whatever it cannot itself express —
- * today that is a multi-role breakdown and the membership state, the two
- * facts that don't fit `MemberCard`'s single `role` string. Same grey,
- * normal-weight label as `DetailRow`'s: it orients, it doesn't shout.
- *
- * Every item here is a value the page has already fetched — a slot with no
- * source is not rendered at all.
- */
-function IdentityFact({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <div className="min-w-0">
-      <p className="mb-1 text-xs text-ink-3">{label}</p>
-      <div className="flex items-center text-sm font-semibold text-ink">{children}</div>
-    </div>
   );
 }
 
@@ -254,6 +220,152 @@ function CardSection({
         {action}
       </div>
       {children}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// IdentityPanel — the compact ~292px identity surface (issue #204).
+//
+// A WHITE card, not a second coal mass beside the sidebar: `.card` gives it
+// the paper background, hairline and shadow every card in the product
+// already shares. The only color gesture is the asymmetric institutional-red
+// field across the top (`clip-path`, matching `.identity-rail::before` in
+// the prototype) with the yellow dot inside it, and the coal avatar
+// straddling the red/white boundary via a negative top margin.
+//
+// Nothing here truncates: `break-words` on the name and the correo, never
+// `truncate` — the issue's own hard content rule.
+// ---------------------------------------------------------------------------
+
+interface IdentityPanelProps {
+  name: string;
+  initials: string;
+  fotoUrl?: string | null;
+  roleLabel: string;
+  /** Rendered ONLY when there is a real status to report — see the module docstring. */
+  statusBadge: { label: string; tone: BadgeTone } | null;
+  /** Pre-formatted, e.g. "Miembro desde 10/03/2024" or the "—" fallback. */
+  memberSince: string;
+  correo: string;
+  uploadingFoto: boolean;
+  fotoError: string | null;
+  fotoInputRef: React.RefObject<HTMLInputElement>;
+  onFotoChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+function IdentityPanel({
+  name,
+  initials,
+  fotoUrl,
+  roleLabel,
+  statusBadge,
+  memberSince,
+  correo,
+  uploadingFoto,
+  fotoError,
+  fotoInputRef,
+  onFotoChange,
+}: IdentityPanelProps): React.ReactElement {
+  return (
+    <section
+      data-testid="profile-hero"
+      aria-label={`Identidad de la cuenta de ${name}`}
+      className="card relative flex-none overflow-hidden split:w-[292px]"
+    >
+      {/* The one club gesture: an asymmetric red field bridging into the
+          white body, with the yellow dot as the only secondary mark. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-[100px] bg-cata-red [clip-path:polygon(0_0,100%_0,100%_68%,72%_100%,0_86%)]"
+      />
+      <span
+        aria-hidden="true"
+        className="absolute right-6 top-[62px] h-4 w-4 rounded-full border-[3px] border-cata-red bg-cata-yellow"
+      />
+
+      {/*
+        The identity block clears the red field entirely — `pt-[112px]` against
+        a 100px field whose deepest point (the polygon's 72% vertex) is exactly
+        100px down. It has to: `text-ink` (#17181C) on `cata-red` (#D92128) is
+        3.6:1, under AA, and at `pt-8` the name, the badges and "Miembro desde"
+        all rendered ON the red — the last one straddling its edge, grey on red
+        at ~1.1:1. Text belongs on the white body; the red is a field, not a
+        backdrop for copy.
+
+        `items-start`, not `items-end`: the text column is taller than the
+        avatar, so bottom-aligning pinned the text to the top of the row and put
+        it back under the red. Aligned to the top, the avatar's `-mt-9` lifts it
+        (72px tall, spanning 76px–148px) across the red/white boundary, which
+        at its own x sits at 87–92px — the "avatar carbón puenteando" the issue
+        asks for, now the only thing crossing that edge.
+      */}
+      <div className="relative flex items-start gap-4 px-5 pb-4 pt-[112px]">
+        <div className="relative -mt-9 flex-none">
+          <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border-4 border-paper bg-coal text-xl font-extrabold text-ball shadow-elevated">
+            {fotoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset
+              <img
+                src={fotoUrl}
+                alt="Foto de perfil"
+                className="h-[72px] w-[72px] rounded-full object-cover"
+              />
+            ) : (
+              <span aria-hidden="true">{initials}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => fotoInputRef.current?.click()}
+            disabled={uploadingFoto}
+            aria-label="Cambiar foto de perfil"
+            className="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-paper bg-coal text-white disabled:opacity-45"
+          >
+            {uploadingFoto ? (
+              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Camera size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            )}
+          </button>
+          <input
+            ref={fotoInputRef}
+            type="file"
+            accept="image/jpeg,image/png"
+            onChange={onFotoChange}
+            className="hidden"
+            data-testid="foto-perfil-input"
+          />
+        </div>
+
+        {/* The "quick recognition" block: name, role, and — only when there
+            is a real one — estado. */}
+        <div className="min-w-0 flex-1 pb-1">
+          <h2 className="break-words text-lg font-extrabold leading-tight text-ink">{name}</h2>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <Badge tone="neutral">{roleLabel}</Badge>
+            {statusBadge && <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
+          </div>
+          {/* Account metadata, not personal data — it lives HERE only. Repeating
+              it as a "Datos personales" row would be the same fact printed
+              twice on one screen. */}
+          <p className="mt-2 text-xs text-ink-3">{memberSince}</p>
+        </div>
+      </div>
+
+      {fotoError && (
+        <p role="alert" className="px-5 pb-3 text-xs text-state-bad">
+          {fotoError}
+        </p>
+      )}
+
+      {/* The one full-width row at the foot of the panel — never squeezed
+          beside anything else, so the full correo always has the panel's
+          whole width to wrap into. */}
+      <div className="border-t border-line bg-sunken px-5 py-3">
+        <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Correo de acceso</p>
+        <p className="mt-1 break-words text-sm font-semibold text-ink">{correo}</p>
+        <p className="mt-1 text-xs text-ink-3">El correo lo gestiona el club, no se edita aquí.</p>
+      </div>
     </section>
   );
 }
@@ -459,23 +571,47 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     fullName.split(/\s+/).slice(1).join(" "),
   );
 
+  /**
+   * The panel's own quick-block badge takes a single string, and a
+   * multi-role account cannot repeat one specific role there — the full
+   * breakdown (including which role is active this session) already lives in
+   * "Información de tu rol" below, so stating "Administrador" in BOTH places
+   * would be the same fact printed twice on one screen (the same class of
+   * defect this redesign fixes for correo).
+   */
+  const panelRoleLabel = assignedRoles.length > 1 ? `${assignedRoles.length} roles asignados` : roleLabel;
+
   const telefonoDisplay =
     props.kind === "staff" ? props.perfil.telefono : (props.perfil?.telefono ?? "");
   const fechaCreacion = props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
+  const memberSince = fechaCreacion ? `Miembro desde ${formatDate(fechaCreacion)}` : "Miembro desde —";
 
-  /**
-   * `MemberCard.role` takes a single string, so a multi-role account cannot
-   * print all of them there — the full breakdown (including which role is
-   * active this session) moves to the `IdentityFact` rail beside the card
-   * instead, so the two never state the exact same fact twice.
-   */
-  const memberCardRole = assignedRoles.length > 1 ? `${assignedRoles.length} roles asignados` : roleLabel;
-  const memberCardSince = fechaCreacion ? `Miembro desde ${formatDate(fechaCreacion)}` : "Miembro desde —";
+  // The quick-recognition badge in the identity panel — only when there IS a
+  // real membership status to report. When `self` exists but has no
+  // membership row, the honest "no disponible" note lives in "Información de
+  // tu rol" instead (see below): a fact is stated exactly once, never both as
+  // a badge here AND as text there.
+  const statusBadge = props.kind === "student" && self ? membership : null;
 
-  // The page action lives in `PageHeader`'s own row (`.rowline` in
-  // `25-perfil.html`), passed up through `AppShell`. It used to sit on a line
-  // of its own below a "Volver al Panel" link, and those two rows together
-  // pushed the identity card to ~35% of the viewport before anything was read.
+  // "Información de tu rol" — role-specific facts the panel's fixed shape
+  // cannot itself state. Only rendered when there is something real to add:
+  // a single-role staff account has nothing beyond the badge already on the
+  // panel, so (per this codebase's existing discipline — see the multi-role
+  // rail this replaces) that section is simply absent for it.
+  //
+  // Not gated on `kind`. `roles` comes from `GET /auth/me`, which BOTH
+  // branches fetch, and a representante who is also an alumno is an ordinary
+  // account here — so the student branch reaches `assignedRoles.length > 1`
+  // too. Gating this on staff left exactly the dangling label this redesign
+  // exists to remove: the panel badge reads "2 roles asignados" (that label
+  // has no `kind` guard either) while nothing on the page said WHICH two.
+  const showsMultiRoleBreakdown = assignedRoles.length > 1;
+  const showsStudentRoleInfo =
+    props.kind === "student" && (self !== null || props.role === "representante");
+  const showsRoleInfo = showsMultiRoleBreakdown || showsStudentRoleInfo;
+
+  // The page action lives in `PageHeader`'s own row (`.rowline` in the
+  // prototype), passed up through `AppShell`.
   const headerAction =
     props.kind === "student" ? (
       <Link href="/student" className={buttonClasses("secondary")}>
@@ -503,283 +639,216 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 
   return (
     <ProfileShell actions={headerAction}>
-      {/* Full content width, like `/dashboard` and like the rest of the family
-          area. The prototype's 820px `.canvas` left ~317px of the content
-          column empty at 1440 while every admin screen filled it. The identity
-          card spans the width it already wanted; below it the page splits into
-          the data the reader came to check and the two account controls, which
-          are a rail and never needed 820px of their own. */}
-      {/* 1 — the identity block: the avatar (still the one place a photo is
-          uploaded) beside the member carnet, and — only when there is extra
-          information the carnet's own fixed shape cannot state — a small rail
-          for the multi-role breakdown and the membership state. */}
-      <section
-        data-testid="profile-hero"
-        className="card flex flex-col gap-5 px-6 py-[22px] sm:flex-row sm:items-start sm:gap-6"
-      >
-        <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:items-center sm:gap-[18px]">
-        <div className="relative flex-none">
-          <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-coal text-xl font-extrabold text-ball">
-            {currentFotoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset
-              <img
-                src={currentFotoUrl}
-                alt="Foto de perfil"
-                className="h-[72px] w-[72px] rounded-full object-cover"
-              />
-            ) : (
-              <span aria-hidden="true">{initials}</span>
+      {/* The compact ~292px panel beside the wide workspace — a `split`
+          (980px) breakpoint, not `lg`: below it the panel collapses to a
+          horizontal band above the workspace, and both stack to one column
+          on a phone. Not `PAGE_RAIL` — that token is the opposite shape (a
+          fluid main column plus a fixed-width RIGHT rail); this is a
+          fixed-width LEFT panel plus a fluid workspace. */}
+      <div className="flex flex-col gap-5 split:flex-row split:items-start split:gap-6">
+        <IdentityPanel
+          name={fullName}
+          initials={initials}
+          fotoUrl={currentFotoUrl}
+          roleLabel={panelRoleLabel}
+          statusBadge={statusBadge}
+          memberSince={memberSince}
+          correo={correoDisplay}
+          uploadingFoto={uploadingFoto}
+          fotoError={fotoError}
+          fotoInputRef={fotoInputRef}
+          onFotoChange={(e) => void handleFotoChange(e)}
+        />
+
+        <div className="flex min-w-0 flex-1 flex-col gap-5">
+          {/* Datos personales — one datum per row. Correo is NOT a row here:
+              it lives on the identity panel only. */}
+          <CardSection title="Datos personales" testId="profile-column-info">
+            <DetailRow label="Nombres">{fullName}</DetailRow>
+            <DetailRow label="Teléfono">
+              {props.kind === "staff" && editing ? (
+                <input
+                  id="perfil-telefono"
+                  type="tel"
+                  inputMode="tel"
+                  aria-label="Teléfono"
+                  value={telefono}
+                  onChange={(e) => setTelefono(e.target.value)}
+                  disabled={saving}
+                  className="input-field max-w-xs"
+                />
+              ) : (
+                <DataBox>{telefonoDisplay || "—"}</DataBox>
+              )}
+            </DetailRow>
+            {props.kind === "student" && (
+              <p className="border-t border-line bg-sunken px-5 py-3 text-xs text-ink-3-strong">
+                Esta información no se puede editar desde aquí. Escriba al club para corregirla.
+              </p>
             )}
-          </div>
-          <button
-            type="button"
-            onClick={() => fotoInputRef.current?.click()}
-            disabled={uploadingFoto}
-            aria-label="Cambiar foto de perfil"
-            className="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-paper bg-coal text-white disabled:opacity-45"
-          >
-            {uploadingFoto ? (
-              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Camera size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            {saveError && (
+              <p role="alert" className="border-t border-line px-5 py-3 text-sm text-state-bad">
+                {saveError}
+              </p>
             )}
-          </button>
-          <input
-            ref={fotoInputRef}
-            type="file"
-            accept="image/jpeg,image/png"
-            onChange={(e) => void handleFotoChange(e)}
-            className="hidden"
-            data-testid="foto-perfil-input"
-          />
-        </div>
-        <div className="min-w-0 flex-1">
-          {/* The identity object: name, correo, role and "member since" in
-              one carnet — not a header with facts scattered beside it.
-              Correo now appears HERE ONLY: the "Datos personales" row that
-              used to repeat it is gone (that repetition was the defect). */}
-          <MemberCard
-            name={fullName}
-            email={correoDisplay}
-            role={memberCardRole}
-            memberSince={memberCardSince}
-          />
-          {/* The note the removed correo row used to carry, kept because the
-              policy behind it ("Correo lo gestiona el club, no se edita
-              aquí") is still true and still worth saying once. */}
-          <p className="mt-2 text-xs text-ink-3">
-            El correo lo gestiona el club, no se edita aquí.
-          </p>
-          {fotoError && (
-            <p role="alert" className="mt-2 text-xs text-state-bad">
-              {fotoError}
-            </p>
+          </CardSection>
+
+          {showsRoleInfo && (
+            <CardSection title="Información de tu rol" testId="profile-role-info">
+              {showsMultiRoleBreakdown && (
+                // EVERY assigned role, not just the session's. `mapBackendRoleToUserRole`
+                // collapses an account's backend roles to the single
+                // highest-privilege one, so a person who is administrator AND
+                // trainer AND representante AND alumno used to read only
+                // "Administrador" here — and the other three appeared nowhere
+                // in the product. The session's own role keeps the solid
+                // badge; the rest are neutral, so "which one am I using right
+                // now" survives.
+                <DetailRow label="Roles asignados">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {assignedRoles.map((rol) => (
+                      <Badge key={rol} tone={rol === sessionBackendRole ? "ok" : "neutral"}>
+                        {getBackendRoleLabel(rol)}
+                        {rol === sessionBackendRole && (
+                          <span className="sr-only"> — rol activo en esta sesión</span>
+                        )}
+                      </Badge>
+                    ))}
+                  </div>
+                </DetailRow>
+              )}
+              {props.kind === "student" && self && (
+                <>
+                  <DetailRow label="Fecha de nacimiento">
+                    {formatDate(self.fechaNacimiento) || "—"}
+                  </DetailRow>
+                  {/* The membership FACT is stated once on the whole page —
+                      as a badge on the identity panel when there is one, or,
+                      only when there is not, as this honest note. */}
+                  {!membership && (
+                    <DetailRow label="Membresía">
+                      <span className="text-sm font-normal text-ink-2">{NO_MEMBERSHIP_FALLBACK}</span>
+                    </DetailRow>
+                  )}
+                  {self.representante && (
+                    <DetailRow label="Su representante">
+                      {`${self.representante.nombres} ${self.representante.apellidos}`.trim()}
+                    </DetailRow>
+                  )}
+                </>
+              )}
+              {props.role === "representante" && (
+                <DetailRow label="Personas representadas">{String(representados.length)}</DetailRow>
+              )}
+            </CardSection>
           )}
-        </div>
-        </div>
 
-        {/* The rail — ONLY for facts the carnet's fixed shape cannot itself
-            state: which of several roles is active, and the membership
-            state. A single-role staff account renders none of this; its one
-            role already lives on the card.
-
-            Two facts the prototype draws are still absent, for want of a
-            source: "Cuenta activa" (no `activo` flag on `UsuarioMeResponseDTO`)
-            and "Cédula" (admin-only, via `/personas/{id}`). */}
-        {(assignedRoles.length > 1 || (props.kind === "student" && self)) && (
-          <div className="flex flex-wrap gap-x-8 gap-y-section border-t border-line pt-5 sm:flex-none sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
-            {assignedRoles.length > 1 && (
-              // EVERY assigned role, not just the session's. `mapBackendRoleToUserRole`
-              // collapses an account's backend roles to the single
-              // highest-privilege one, so a person who is administrator AND
-              // trainer AND representante AND alumno used to read only
-              // "Administrador" here — and the other three appeared nowhere
-              // in the product. The session's own role keeps the solid
-              // badge; the rest are neutral, so "which one am I using right
-              // now" survives.
-              <IdentityFact label="Roles asignados">
-                {/* Capped, and wrapping. The rail is `flex-none`, so four
-                    badges laid out in one line grew it far enough to break
-                    "Admin Dev" across two lines — the same squeeze the
-                    membership fallback below was already capped for. */}
-                <div className="flex max-w-[15rem] flex-wrap items-center gap-1.5">
-                  {assignedRoles.map((rol) => (
-                    <Badge key={rol} tone={rol === sessionBackendRole ? "ok" : "neutral"}>
-                      {getBackendRoleLabel(rol)}
-                      {rol === sessionBackendRole && (
-                        <span className="sr-only"> — rol activo en esta sesión</span>
-                      )}
-                    </Badge>
-                  ))}
-                </div>
-              </IdentityFact>
-            )}
-            {props.kind === "student" && self && (
-              <IdentityFact label="Membresía">
-                {membership ? (
-                  <Badge tone={membership.tone}>{membership.label}</Badge>
-                ) : (
-                  // Capped measure: at its natural width this 45-character
-                  // sentence is the widest thing in the rail, and the rail is
-                  // `flex-none`, so it was squeezing the account holder's own
-                  // name onto two lines beside it.
-                  <span className="max-w-[22ch] text-xs font-normal text-ink-3">
-                    {NO_MEMBERSHIP_FALLBACK}
-                  </span>
-                )}
-              </IdentityFact>
-            )}
-          </div>
-        )}
-      </section>
-
-      <div className={PAGE_RAIL}>
-      <div className="flex min-w-0 flex-col gap-5">
-      {/* 2 — Datos personales, one datum per row. Correo is NOT a row here
-          anymore: it lives on the member card only (see the hero section) —
-          repeating it was the exact duplication defect this redesign
-          fixes. */}
-      <CardSection title="Datos personales" testId="profile-column-info">
-        <DetailRow label="Nombres">{fullName}</DetailRow>
-        <DetailRow label="Teléfono">
-          {props.kind === "staff" && editing ? (
-            <input
-              id="perfil-telefono"
-              type="tel"
-              inputMode="tel"
-              aria-label="Teléfono"
-              value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
-              disabled={saving}
-              className="input-field max-w-xs"
-            />
-          ) : (
-            <DataBox>{telefonoDisplay || "—"}</DataBox>
-          )}
-        </DetailRow>
-        {/* "Miembro desde" is NOT a row: it is account metadata, it lives on
-            the identity card's rail, and repeating it here would be the same
-            datum printed twice on one screen. */}
-        {/* A note ABOUT the card, not a datum in it — so it sits on `sunken`
-            below the rows instead of occupying a 56px `.drow` with an empty
-            label column, which is what it did before. */}
-        {props.kind === "student" && (
-          <p className="border-t border-line bg-sunken px-5 py-3 text-xs text-ink-3-strong">
-            Esta información no se puede editar desde aquí. Escriba al club para corregirla.
-          </p>
-        )}
-        {saveError && (
-          <p role="alert" className="border-t border-line px-5 py-3 text-sm text-state-bad">
-            {saveError}
-          </p>
-        )}
-      </CardSection>
-
-      {/* 4 — Estudiantes a mi cargo. For a representante this is the reason to
-          open the page, so it stays — and it belongs beside the reader's own
-          data, not below the two account controls. */}
-      {props.kind === "student" && representados.length > 0 && (
-        <CardSection
-          title="Estudiantes a mi cargo"
-          action={
-            <Link href="/student/add-dependent" className={buttonClasses("secondary", "sm")}>
-              + Agregar
-            </Link>
-          }
-        >
-          {representados.map((dependant) => (
-            <DependantRow key={dependant.personaId} profile={dependant} />
-          ))}
-        </CardSection>
-      )}
-
-      <div className="flex flex-col gap-3">
-      {/* 3 — Seguridad: the same 56px row shape as "Datos personales", label
-          on the left and the action on the right. The two rows used to put
-          "Contraseña" in the VALUE column with no label at all, which broke
-          the page's own grammar three rows after establishing it — and left
-          the reader guessing what the button beside a bare noun would do.
-
-          Three rows now (E01, slice B4): `POST /auth/sesiones/invalidar`
-          exists, so "Otras sesiones" is no longer a button that cannot do
-          what it says. */}
-      <CardSection title="Seguridad" testId="profile-column-status">
-        <DetailRow
-          label="Contraseña"
-          action={
-            <Button size="sm" onClick={() => void handleChangePassword()} disabled={requestingPassword}>
-              {requestingPassword ? "Enviando…" : "Cambiar contraseña"}
-            </Button>
-          }
-        >
-          <span className="text-sm font-normal text-ink-2">
-            Le enviamos un enlace de cambio a su correo
-          </span>
-        </DetailRow>
-        <DetailRow
-          label="Sesión"
-          action={
-            <Button size="sm" onClick={() => void logout()}>
-              Salir
-            </Button>
-          }
-        >
-          <span className="text-sm font-normal text-ink-2">
-            Cerrar sesión en este equipo
-          </span>
-        </DetailRow>
-        <DetailRow
-          label="Otras sesiones"
-          action={
-            <Button
-              size="sm"
-              onClick={() => setConfirmingInvalidation(true)}
-              disabled={invalidatingSessions}
+          {/* Estudiantes a mi cargo — representante only, ALWAYS present for
+              that role (even with zero representados: an explicit empty
+              state, not a silently missing section), because for a
+              representante this is the reason to open the page at all. */}
+          {props.kind === "student" && props.role === "representante" && (
+            <CardSection
+              title="Estudiantes a mi cargo"
+              testId="profile-dependants"
+              action={
+                <Link href="/student/add-dependent" className={buttonClasses("secondary", "sm")}>
+                  + Agregar
+                </Link>
+              }
             >
-              {invalidatingSessions ? "Cerrando…" : "Cerrar otras sesiones"}
-            </Button>
-          }
-        >
-          <span className="text-sm font-normal text-ink-2">
-            Cierra su sesión en todos los demás dispositivos; este equipo sigue conectado
-          </span>
-        </DetailRow>
-      </CardSection>
+              {representados.length > 0 ? (
+                representados.map((dependant) => (
+                  <DependantRow key={dependant.personaId} profile={dependant} />
+                ))
+              ) : (
+                <p className="px-5 py-4 text-sm text-ink-2">
+                  Todavía no hay estudiantes representados vinculados a esta cuenta.
+                </p>
+              )}
+            </CardSection>
+          )}
 
-      {sessionsMessage && (
-        <p role="status" className="text-sm text-state-ok">
-          {sessionsMessage}
-        </p>
-      )}
-      {sessionsError && (
-        <p role="alert" className="text-sm text-state-bad">
-          {sessionsError}
-        </p>
-      )}
+          <div className="flex flex-col gap-3">
+            {/* Seguridad: the same row shape as "Datos personales", label on
+                the left and the action on the right. */}
+            <CardSection title="Seguridad" testId="profile-column-status">
+              <DetailRow
+                label="Contraseña"
+                action={
+                  <Button size="sm" onClick={() => void handleChangePassword()} disabled={requestingPassword}>
+                    {requestingPassword ? "Enviando…" : "Cambiar contraseña"}
+                  </Button>
+                }
+              >
+                <span className="text-sm font-normal text-ink-2">
+                  Le enviamos un enlace de cambio a su correo
+                </span>
+              </DetailRow>
+              <DetailRow
+                label="Sesión"
+                action={
+                  <Button size="sm" onClick={() => void logout()}>
+                    Salir
+                  </Button>
+                }
+              >
+                <span className="text-sm font-normal text-ink-2">
+                  Cerrar sesión en este equipo
+                </span>
+              </DetailRow>
+              <DetailRow
+                label="Otras sesiones"
+                action={
+                  <Button
+                    size="sm"
+                    onClick={() => setConfirmingInvalidation(true)}
+                    disabled={invalidatingSessions}
+                  >
+                    {invalidatingSessions ? "Cerrando…" : "Cerrar otras sesiones"}
+                  </Button>
+                }
+              >
+                <span className="text-sm font-normal text-ink-2">
+                  Cierra su sesión en todos los demás dispositivos; este equipo sigue conectado
+                </span>
+              </DetailRow>
+            </CardSection>
 
-      <ConfirmDialog
-        open={confirmingInvalidation}
-        variant="danger"
-        title="Cerrar otras sesiones"
-        message="Se cerrará su sesión en todos los demás dispositivos y navegadores. Este equipo seguirá conectado. ¿Desea continuar?"
-        confirmLabel="Cerrar otras sesiones"
-        cancelLabel="Cancelar"
-        onConfirm={() => void handleInvalidateOtherSessions()}
-        onCancel={() => setConfirmingInvalidation(false)}
-      />
+            {sessionsMessage && (
+              <p role="status" className="text-sm text-state-ok">
+                {sessionsMessage}
+              </p>
+            )}
+            {sessionsError && (
+              <p role="alert" className="text-sm text-state-bad">
+                {sessionsError}
+              </p>
+            )}
 
-      {passwordMessage && (
-        <p role="status" className="text-sm text-state-ok">
-          {passwordMessage}
-        </p>
-      )}
-      {passwordError && (
-        <p role="alert" className="text-sm text-state-bad">
-          {passwordError}
-        </p>
-      )}
-      </div>
-      </div>
+            <ConfirmDialog
+              open={confirmingInvalidation}
+              variant="danger"
+              title="Cerrar otras sesiones"
+              message="Se cerrará su sesión en todos los demás dispositivos y navegadores. Este equipo seguirá conectado. ¿Desea continuar?"
+              confirmLabel="Cerrar otras sesiones"
+              cancelLabel="Cancelar"
+              onConfirm={() => void handleInvalidateOtherSessions()}
+              onCancel={() => setConfirmingInvalidation(false)}
+            />
+
+            {passwordMessage && (
+              <p role="status" className="text-sm text-state-ok">
+                {passwordMessage}
+              </p>
+            )}
+            {passwordError && (
+              <p role="alert" className="text-sm text-state-bad">
+                {passwordError}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </ProfileShell>
   );
