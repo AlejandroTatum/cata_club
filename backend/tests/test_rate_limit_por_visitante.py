@@ -4,7 +4,7 @@ el rate limit anónimo era global (compartido por todo internet) en vez de
 por visitante, porque el backend nunca veía la IP real -- su peer TCP
 siempre era el contenedor del frontend (BFF).
 
-El arreglo necesita las DOS mitades (ninguna alcanza sola):
+El arreglo necesita TRES piezas (ninguna alcanza sola):
   1. uvicorn corre con `--proxy-headers --forwarded-allow-ips=<red interna>`
      (backend/Dockerfile) para que reescriba `scope["client"]` a partir de
      `X-Forwarded-For`, SOLO cuando el peer inmediato es la red interna de
@@ -13,6 +13,15 @@ El arreglo necesita las DOS mitades (ninguna alcanza sola):
   2. `clave_cliente` (rate_limit.py) sigue leyendo `get_remote_address`, que
      lee `request.client.host` -- una vez que (1) reescribe ese campo, la
      clave cambia sola, sin tocar `clave_cliente`.
+  3. El Caddyfile REEMPLAZA X-Forwarded-For por el peer TCP real
+     (`header_up X-Forwarded-For {remote_host}`) en vez de anexarle lo que
+     el visitante haya mandado. Sin esto, la protección del peer confiable
+     dependería de un detalle interno de uvicorn (en qué orden recorre una
+     lista con hops falsos) que este repo no fija en ningún lado -- ver
+     `test_xff_provisto_por_el_cliente_no_estrena_cubo` más abajo, y
+     `test_caddyfile_reemplaza_x_forwarded_for_por_el_peer_real` en
+     tests/test_docker_compose_config.py para el guardia estructural sobre
+     el Caddyfile real.
 
 Esta suite NO usa `main.app` (fixture `client` de conftest.py): en
 AMBIENTE=test el limiter activo es `_NoOpLimiter` (ver rate_limit.py) y el
@@ -170,7 +179,67 @@ def test_peer_no_confiable_comparte_un_solo_cubo_pese_a_xff_distinto():
     assert respuesta.status_code == 429
 
 
-# --- (c) El 429 trae Retry-After y respeta el contrato {detail, message} ---
+# --- (c) Lo que el cliente intenta imponer nunca sale de Caddy tal cual ----
+#
+# `test_peer_no_confiable_no_puede_falsificar_xff` (arriba) ya cubre el caso
+# del peer NO confiable, ejercitando el recorrido real de
+# `ProxyHeadersMiddleware` sobre una lista con hops falsos -- ESE es,
+# legítimamente, un detalle de implementación de uvicorn (en qué orden
+# camina la lista), y ese test lo prueba a propósito para ese caso.
+#
+# Esta prueba es la otra mitad, para el peer SÍ confiable (el frontend
+# real): ahí la garantía NO puede depender de que uvicorn resuelva bien una
+# lista con hops falsos -- tiene que ser que esos hops falsos NUNCA lleguen
+# a existir. Eso es exactamente lo que hace el Caddyfile
+# (`header_up X-Forwarded-For {remote_host}`, ver
+# test_caddyfile_reemplaza_x_forwarded_for_por_el_peer_real en
+# tests/test_docker_compose_config.py): REEMPLAZA el header completo por el
+# peer TCP real, así que lo que el frontend real reenvía al backend es
+# SIEMPRE un único valor, nunca una lista influida por el cliente.
+
+
+def _cabecera_que_caddy_realmente_envia(ip_real_del_visitante: str, intento_de_falsificacion: str) -> str:
+    """Modela lo que el Caddyfile REAL garantiza (`header_up
+    X-Forwarded-For {remote_host}`, ver el guardia estructural
+    `test_caddyfile_reemplaza_x_forwarded_for_por_el_peer_real` en
+    tests/test_docker_compose_config.py): Caddy REEMPLAZA el header
+    completo por el peer TCP real, sin importar qué haya mandado el
+    cliente. `intento_de_falsificacion` está en la firma solo para dejar
+    explícito que NUNCA participa del resultado -- si algún día esta
+    función tuviera que usarlo, sería la señal de que el Caddyfile real
+    dejó de reemplazar y volvió al comportamiento por defecto de
+    `reverse_proxy` (anexar), y esta prueba tendría que empezar a fallar."""
+    del intento_de_falsificacion
+    return ip_real_del_visitante
+
+
+def test_xff_provisto_por_el_cliente_no_estrena_cubo():
+    """Property de punta a punta (issue #235): dos requests del MISMO
+    visitante real, cada uno con un valor DISTINTO que el cliente intentó
+    imponer como su propio X-Forwarded-For, caen en el MISMO cubo -- porque
+    lo único que el peer confiable (el frontend) reenvía es lo que Caddy ya
+    resolvió (el peer TCP real), nunca el intento del cliente. No depende
+    de cómo uvicorn camine una lista (ver comentario de sección arriba)."""
+    peer = _peer_dentro_de_la_red_confiable()
+    cliente = _cliente("1/minute", peer)
+    ip_real_del_visitante = "203.0.113.77"
+
+    cabecera_1 = _cabecera_que_caddy_realmente_envia(ip_real_del_visitante, "9.9.9.9")
+    cabecera_2 = _cabecera_que_caddy_realmente_envia(ip_real_del_visitante, "6.6.6.6, 5.5.5.5, 4.4.4.4")
+    assert cabecera_1 == cabecera_2, "el modelo del Caddyfile dejó de ignorar el intento del cliente"
+
+    respuesta_1 = cliente.get("/probe", headers={"x-forwarded-for": cabecera_1})
+    assert respuesta_1.status_code == 200
+
+    # Mismo visitante real, "intento de falsificación" distinto: si ese
+    # intento comprara un cubo nuevo, esta segunda request pasaría con 200
+    # en vez de agotar el límite de 1/minute.
+    respuesta_2 = cliente.get("/probe", headers={"x-forwarded-for": cabecera_2})
+    assert respuesta_2.status_code == 429
+    assert respuesta_2.json()["detail"]
+
+
+# --- (d) El 429 trae Retry-After y respeta el contrato {detail, message} ---
 
 def test_429_incluye_retry_after_y_respeta_contrato_detail_message():
     peer = _peer_dentro_de_la_red_confiable()

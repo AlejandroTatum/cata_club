@@ -19,7 +19,35 @@
 	# 2.x para cualquier dirección que no sea `localhost` ni una IP -- no
 	# hace falta declarar `tls` explícito.
 
-	reverse_proxy frontend:3000
+	reverse_proxy frontend:3000 {
+		# Fija X-Forwarded-For al peer TCP real en vez de dejar el
+		# comportamiento por defecto de `reverse_proxy` (ANEXAR el valor que
+		# haya llegado en el request, incluido lo que un visitante haya
+		# mandado a mano) -- issue #235, mitad 2. `{remote_host}` es la
+		# conexión que le llega a Caddy, no negociable por el cliente.
+		#
+		# Por qué esto tiene que ser explícito y no implícito: el backend
+		# (rate_limit.py, `clave_cliente`) confía en `X-Forwarded-For` para
+		# el rate limit anónimo en cuanto uvicorn ve a este frontend como
+		# peer de confianza (`--forwarded-allow-ips`, backend/Dockerfile).
+		# Con el comportamiento por defecto (anexar), un visitante podría
+		# mandar `X-Forwarded-For: 9.9.9.9` y Caddy lo dejaría pasar como
+		# primer eslabón de la lista, agregando el peer real al final --
+		# `9.9.9.9, <ip-real>`. Hoy eso NO se explota porque uvicorn recorre
+		# esa lista de derecha a izquierda y devuelve el primer host que no
+		# es de confianza, así que igual termina resolviendo la IP real. Pero
+		# esa protección depende de DOS detalles internos que este repo no
+		# fija en ningún lado (que Caddy anexe en vez de reemplazar, y el
+		# orden de recorrido de uvicorn) -- un bump de versión de cualquiera
+		# de los dos reabre el DoS trivial sobre el alta pública (issue #235)
+		# sin que ningún test se ponga en rojo. Reemplazar el header acá,
+		# en el borde, saca esa garantía de la implementación interna de una
+		# librería y la deja escrita como configuración explícita: lo que
+		# sale de Caddy es SIEMPRE el peer real, sin importar qué haya
+		# mandado el visitante ni cómo lo procese la próxima versión de
+		# uvicorn.
+		header_up X-Forwarded-For {remote_host}
+	}
 
 	encode gzip
 

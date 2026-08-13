@@ -539,6 +539,37 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     )
 
 
+def test_caddyfile_reemplaza_x_forwarded_for_por_el_peer_real():
+    """issue #235, mitad 2 (ingress): sin esta directiva, `reverse_proxy`
+    ANEXA lo que sea que un visitante haya mandado como su propio
+    `X-Forwarded-For` a la lista, en vez de reemplazarlo. El backend confía
+    en esa cabecera para el rate limit anónimo por IP (`clave_cliente`, ver
+    backend/app/soporte_transversal/rate_limit.py) en cuanto uvicorn ve a
+    este frontend como peer de confianza (`--forwarded-allow-ips`,
+    backend/Dockerfile) -- así que si Caddy alguna vez dejara de reemplazar
+    el header acá, un visitante podría intentar imponer su propia entrada.
+
+    Hoy eso no se explota porque uvicorn recorre la lista de derecha a
+    izquierda, pero ESO es un detalle interno de una librería, no algo que
+    este repo fije en ningún lado -- un bump de uvicorn o un cambio de
+    `reverse_proxy` reabriría el DoS trivial del issue #235 sin que ningún
+    test se ponga en rojo. `header_up X-Forwarded-For {remote_host}` saca esa
+    garantía de un detalle de implementación ajeno y la deja escrita acá,
+    como configuración explícita del único borde público del stack (ver
+    `test_el_render_de_produccion_solo_caddy_publica_puertos_y_son_80_443`).
+
+    No valida que Caddy interprete esto como reemplazo y no como agregado --
+    eso es exactamente lo que corre `caddy validate` en CI (mencionado en el
+    comentario de cabecera del propio Caddyfile), no algo que un test de
+    texto pueda demostrar."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert "header_up X-Forwarded-For {remote_host}" in contenido, (
+        "el Caddyfile ya no fija X-Forwarded-For al peer real dentro del "
+        "bloque reverse_proxy -- un visitante podría volver a imponer su "
+        "propia cabecera (issue #235)"
+    )
+
+
 def test_celery_worker_declara_concurrencia_explicita():
     """Sin `--concurrency` fijo, prefork genera un proceso hijo por core del
     host -- 745MB medidos en un host de 12 cores (decisión de diseño 4.6)."""
