@@ -492,7 +492,7 @@ function AddDependentContent(): React.ReactElement {
     return (
       <div
         className={`flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0 ${
-          flagged ? "border-l-4 border-l-state-warn bg-state-warn-bg" : ""
+          flagged ? "bg-state-warn-bg" : ""
         }`}
       >
         <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">
