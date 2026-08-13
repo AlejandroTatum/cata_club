@@ -13,7 +13,7 @@ formulario, con otras reglas y otro dueño. Ese quedó fuera.
 
 Suite Playwright determinista: `frontend/tests/e2e/enroll-qa.spec.ts`.
 
-- **68 casos, 68 verdes**, 69 capturas en `docs/auditoria-qa/img-inscripcion-2026-08-12/`.
+- **80 casos, 80 verdes**, 81 capturas en `docs/auditoria-qa/img-inscripcion-2026-08-12/`.
 - Cada caso entra **desde el login y clickeando «Inscríbase»**, no navegando a
   la URL. Si ese enlace se rompe, el flujo es inalcanzable para un visitante y
   ningún test de la página sola lo notaría.
@@ -79,13 +79,13 @@ exactamente el mensaje esperado, los bordes de edad (18 exactos, 17 años y 11
 meses, 74, 80) caen del lado correcto, y ningún error del servidor —500, 422,
 caída de red— filtra texto interno a la pantalla.
 
-Lo que apareció son **ocho huecos que se reducen a cuatro causas raíz**. Y la
+Lo que apareció son **diez huecos que se reducen a cuatro causas raíz**. Y la
 principal, ya con la verificación en la mano, se puede enunciar en una línea:
 
 > **El backend tiene UNA regla para el alumno —`5 ≤ edad ≤ 74`— y el formulario
 > público no implementa casi nada de ella.**
 
-Cinco de los ocho hallazgos son esa sola ausencia, vista desde cinco ángulos.
+Cinco de los diez hallazgos son esa sola ausencia, vista desde cinco ángulos.
 
 Lo que lo vuelve un defecto y no una decisión de diseño: **los otros dos
 asistentes del mismo repo sí la implementan.**
@@ -109,11 +109,14 @@ pone rojo y obliga a actualizar este informe.
 | G04 | Baja | **A** | El año 1750 que el representante rechaza, el jugador lo acepta | `G04-jugador-anio-1750-aceptado.png` |
 | G05 | Media | **B** | El **11º dígito de la cédula desaparece** sin decir nada | `G05-cedula-11o-digito-descartado.png` |
 | G06 | Baja | **C** | Credenciales a medias: «Siguiente» habilitado, falla al clickear | `G06a-…`, `G06b-…` |
+| M01 | Baja | **D** | El mismo error se muestra en toast y en alerta a la vez | `M01-mensaje-duplicado-toast-y-alerta.png` |
+| M02 | Baja | **D** | El toast tapa los botones «Corregir» del resumen | `M02-toast-tapa-boton-corregir.png` |
 | G07 | — | — | Un nombre de solo espacios se rechaza como vacío (correcto, no es hallazgo) | `G07-nombres-solo-espacios.png` |
 
 **Causa raíz A** — el formulario público no aplica las cotas de edad del alumno
 (`5 ≤ edad ≤ 74`) ni rechaza fechas futuras. Cinco síntomas, un solo arreglo.
 **Causa raíz B** — `maxLength` recorta en el input en lugar de validar.
+**Causa raíz D** — el mismo mensaje se emite por dos canales, y el flotante tapa un control.
 **Causa raíz C** — una regla es de paso y no de campo, y rompe el modelo de
 prevención de errores del resto del asistente.
 
@@ -277,18 +280,50 @@ Se documenta acá porque el primer mock de esta suite devolvía
 502. El defecto era del mock. Quien escriba el próximo test contra este endpoint
 se ahorra el rato.
 
+## Identidades ya registradas — verificado de punta a punta
+
+Se sembró una inscripción real y se reintentó por HTTP contra
+`POST /api/v1/enrollment/`:
+
+| Caso | Status | Cuerpo |
+|---|---|---|
+| Cédula de alumno ya registrada | **400** | `Ya existe una cuenta registrada con los datos ingresados.` |
+| Cédula de representante ya registrada | **400** | *idéntico* |
+| Correo de representante ya registrado | **400** | *idéntico* |
+| **Control:** todo nuevo | 201 | alta creada |
+
+Los tres devuelven **exactamente el mismo texto**. Es deliberado y es lo
+correcto: distinguirlos convertiría el alta pública en un oráculo para
+averiguar si una cédula o un correo están registrados en el club.
+
+En pantalla, ese mensaje llega completo y **con una salida**: la alerta engancha
+la ayuda de identidad duplicada —«Si ya se inscribió antes, no necesita volver a
+hacerlo» con enlaces a *Iniciar sesión* y *Recuperar contraseña*—. Un error que
+solo repite el problema es un callejón sin salida; este no lo es.
+
+### Un mock infiel que casi pasa por bueno
+
+La primera versión del caso `S03` inventaba un **409** y un texto propio
+(«La cédula ingresada ya está registrada»). **Pasaba en verde.** El backend real
+responde **400** y otro texto.
+
+Un mock infiel no falla: certifica la traducción de una respuesta que el
+servidor nunca manda. Es el mismo error que este repo ya pagó una vez con los
+mocks de error sin `status`. `S03` ahora usa el status y el texto verificados.
+
 ## Qué falta
 
 La pregunta que más importaba —si el backend ataja lo que el formulario deja
-pasar— quedó contestada arriba: **sí lo ataja, todo.**
+pasar— quedó contestada: **sí lo ataja, todo.** La segunda —qué pasa con
+identidades ya registradas— también, arriba.
 
-Queda sin verificar, y necesita `make qa-up` con base sembrada:
+Queda fuera de alcance, y conviene decirlo:
 
-- Que una **cédula realmente duplicada** en la base sea rechazada. El backend
-  tiene el chequeo (`obtener_por_cedula` → `EntidadDuplicada`), pero acá se probó
-  el 409 simulado, no el real.
-- Que un **correo ya registrado** no divulgue la existencia de la cuenta. Hay
-  tests de unidad que lo cubren (`test_mensajes_identidad_duplicada.py`); falta
-  verlo de punta a punta.
-
-Ninguna de las dos cambia la severidad de los hallazgos de este informe.
+- **El alta del panel de administración** (`/admin/crear-cuenta`). Es otro
+  formulario con otras reglas; comparte helpers con este, así que varios
+  hallazgos probablemente se repitan ahí, pero no se probó.
+- **El asistente de dependientes** (`/student/add-dependent`), por lo mismo.
+- **Límite de intentos** en el alta pública. El endpoint es público y no se
+  midió cuántas inscripciones seguidas acepta desde un mismo origen.
+- **Acceso con teclado y lector de pantalla.** Los errores llevan `aria-invalid`
+  y `aria-describedby`, pero no se recorrió el formulario sin mouse.
