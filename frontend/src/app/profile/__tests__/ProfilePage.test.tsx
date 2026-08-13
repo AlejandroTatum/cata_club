@@ -214,17 +214,18 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     // session name ("Ana Admin") also appears once more in the AppShell
     // sidebar footer, which is unrelated shell chrome.
     //
-    // Correo appears ONLY ONCE now — on the member card. The old
-    // "Datos personales" row repeating it was the exact defect this redesign
-    // fixes (owner: "el correo aparece DOS VECES ... que quede una sola vez").
+    // Correo appears TWICE by design (issue #204's own requirement, reversed
+    // from the first #204 pass): once on the identity panel ("Correo de
+    // acceso") and once as the "Correo de cuenta" row in "Datos personales".
     await waitForStaffProfile();
     const main = screen.getByRole("main");
     expect(within(main).getAllByText("Ana Admin").length).toBe(2);
-    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(1);
+    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(2);
     expect(screen.getByText("099111222")).toBeInTheDocument();
     // The role reads as Spanish prose on the identity card, not as the raw
     // backend enum ("ADMINISTRADOR") the old status column printed.
-    expect(within(main).getByText("Administrador")).toBeInTheDocument();
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText("Administrador")).toBeInTheDocument();
     expect(within(main).queryByText("ADMINISTRADOR")).not.toBeInTheDocument();
     // "Miembro desde" now lives on the member card's own fact, as one string
     // — not a separate label/value pair, and not duplicated by a
@@ -253,11 +254,16 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     await waitForStaffProfile();
     const main = within(screen.getByRole("main"));
     expect(main.getByText("Roles asignados")).toBeInTheDocument();
+    // Scoped to the "Roles asignados" row itself — "Administrador" alone
+    // also appears in "Datos personales" (Rol) and in "Información de tu
+    // rol" (Rol principal), both real per-account facts this same page now
+    // states beside the multi-role breakdown.
+    const rolesRow = within(main.getByText("Roles asignados").closest("div") as HTMLElement);
     for (const label of ["Administrador", "Entrenador", "Alumno", "Representante"]) {
-      expect(main.getByText(new RegExp(`^${label}`))).toBeInTheDocument();
+      expect(rolesRow.getByText(new RegExp(`^${label}`))).toBeInTheDocument();
     }
     // Which one is in use right now is still legible without colour alone.
-    expect(main.getByText(/rol activo en esta sesión/i)).toBeInTheDocument();
+    expect(rolesRow.getByText(/rol activo en esta sesión/i)).toBeInTheDocument();
   });
 
   it("keeps the singular label for a single-role account", async () => {
@@ -272,10 +278,12 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
 
     await waitForStaffProfile();
     const main = within(screen.getByRole("main"));
-    // A single role is the member card's own fact — no separate "Rol" label
-    // row exists for it; that rail only earns its place when there is more
-    // than one role to disambiguate (see the multi-role test above).
-    expect(main.getByText("Administrador")).toBeInTheDocument();
+    // A single role reads on the member card ("Administrador" is not
+    // ambiguous by itself). No "Roles asignados" breakdown row exists for
+    // it — that rail only earns its place when there is more than one role
+    // to disambiguate (see the multi-role test above).
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText("Administrador")).toBeInTheDocument();
     expect(main.queryByText("Roles asignados")).not.toBeInTheDocument();
     expect(main.queryByText(/rol activo en esta sesión/i)).not.toBeInTheDocument();
   });
@@ -299,8 +307,9 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     );
 
     expect((await screen.findAllByText("Carla Entrenadora")).length).toBe(2);
-    expect(screen.getAllByText("carla.entrenadora@cataclub.com").length).toBe(1);
-    expect(within(screen.getByRole("main")).getByText("Entrenador")).toBeInTheDocument();
+    // Correo appears twice by design — see the dedicated dedupe-reversal test.
+    expect(screen.getAllByText("carla.entrenadora@cataclub.com").length).toBe(2);
+    expect(within(screen.getByTestId("profile-hero")).getByText("Entrenador")).toBeInTheDocument();
     // Different fechaCreacion than the admin fixture — proves the date is
     // computed from `perfil.fechaCreacion`, not hardcoded.
     expect(screen.getAllByText("Miembro desde 02/11/2025").length).toBe(1);
@@ -420,9 +429,13 @@ describe("ProfilePage — student/representante summary view", () => {
     expect(await screen.findByText("Juan Hijo")).toBeInTheDocument();
     expect(screen.getByText("Ana Hija")).toBeInTheDocument();
     // No `self` profile here — the hero shows no membership badge at all
-    // (there is no personal status to report), so only the 2 representado
-    // cards contribute the fallback text.
-    expect(screen.getAllByText("No disponible — consulte con administración")).toHaveLength(2);
+    // (there is no personal status to report). The fallback text now appears
+    // 3 times: the 2 representado rows, PLUS "Información de tu rol"'s own
+    // "Membresía propia" fact (self === null is a definite "not enrolled as
+    // a student", not the ambiguous case — see the module docstring).
+    expect(screen.getAllByText("No disponible — consulte con administración")).toHaveLength(3);
+    const roleInfo = screen.getByTestId("profile-role-info");
+    expect(within(roleInfo).getByText("Membresía propia")).toBeInTheDocument();
     expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
     // A `self: null` account has no personal membership to report, so the
     // identity card claims nothing about one — it does not say "no disponible"
@@ -524,7 +537,7 @@ describe("ProfilePage — student/representante summary view", () => {
 });
 
 describe("ProfilePage — issue #204 redesign: four role variants share one architecture", () => {
-  it("shows the Administrador variant's role on the identity panel", async () => {
+  it("shows the Administrador variant's role on the identity panel, plus 'Cuenta administrativa' with Rol principal/Estado in Información de tu rol", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
     mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
 
@@ -536,9 +549,20 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
 
     const hero = await waitForStaffProfile();
     expect(within(hero).getByText("Administrador")).toBeInTheDocument();
+    // "Cuenta activa" is not membership status — it is a logically-guaranteed
+    // fact from reaching this page at all (see the module docstring).
+    expect(within(hero).getByText("Cuenta activa")).toBeInTheDocument();
+    // "Información de tu rol" is now ALWAYS rendered — single-role staff
+    // accounts used to get nothing here at all.
+    const roleInfo = screen.getByTestId("profile-role-info");
+    expect(within(roleInfo).getByText("Cuenta administrativa")).toBeInTheDocument();
+    expect(within(roleInfo).getByText(/Los datos de miembros se gestionan/)).toBeInTheDocument();
+    expect(within(roleInfo).getByText("Rol principal")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("Estado")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("Activo")).toBeInTheDocument();
   });
 
-  it("shows the Entrenador variant's role on the identity panel", async () => {
+  it("shows the Entrenador variant's role on the identity panel, plus 'Perfil de entrenador' with Rol principal/Estado in Información de tu rol", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("trainer"));
     mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, roles: ["ENTRENADOR"] });
 
@@ -550,6 +574,11 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
 
     const hero = await waitForStaffProfile();
     expect(within(hero).getByText("Entrenador")).toBeInTheDocument();
+    expect(within(hero).getByText("Cuenta activa")).toBeInTheDocument();
+    const roleInfo = screen.getByTestId("profile-role-info");
+    expect(within(roleInfo).getByText("Perfil de entrenador")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("Rol principal")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("Activo")).toBeInTheDocument();
   });
 
   it("shows the Estudiante variant's role and real fecha de nacimiento in 'Información de tu rol'", async () => {
@@ -576,7 +605,9 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
 
     const hero = await screen.findByTestId("profile-hero");
     expect(within(hero).getByText("Estudiante")).toBeInTheDocument();
+    expect(within(hero).getByText("Cuenta activa")).toBeInTheDocument();
     const roleInfo = screen.getByTestId("profile-role-info");
+    expect(within(roleInfo).getByText("Perfil estudiantil")).toBeInTheDocument();
     // `self.fechaNacimiento` and `self.representante` are real fields on
     // `StudentProfileSummary` that the old layout fetched but never rendered
     // for the account holder — this is the redesign putting them to use, not
@@ -585,7 +616,7 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
     expect(within(roleInfo).getByText("Laura Vera")).toBeInTheDocument();
   });
 
-  it("shows the Representante variant's role and 'Personas representadas' count", async () => {
+  it("shows the Representante variant's role, 'Cuenta representante', 'Personas representadas' count, and the honest 'Membresía propia' fact when there is no self profile", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("representante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: null,
@@ -603,9 +634,18 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
 
     const hero = await screen.findByTestId("profile-hero");
     expect(within(hero).getByText("Representante")).toBeInTheDocument();
+    expect(within(hero).getByText("Cuenta activa")).toBeInTheDocument();
     const roleInfo = screen.getByTestId("profile-role-info");
+    expect(within(roleInfo).getByText("Cuenta representante")).toBeInTheDocument();
     expect(within(roleInfo).getByText("Personas representadas")).toBeInTheDocument();
     expect(within(roleInfo).getByText("1")).toBeInTheDocument();
+    // `self` is null (this account has no alumno role of its own) — a
+    // definite fact, honestly stated, not the invented "2 dispositivos"
+    // this same pass deliberately did NOT add elsewhere.
+    expect(within(roleInfo).getByText("Membresía propia")).toBeInTheDocument();
+    expect(
+      within(roleInfo).getByText("No disponible — consulte con administración"),
+    ).toBeInTheDocument();
   });
 
   it("lists WHICH roles a multi-role representante holds, not just how many", async () => {
@@ -634,10 +674,15 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
     expect(within(hero).getByText("2 roles asignados")).toBeInTheDocument();
     // ...so the page owes the reader WHICH two. Gated on the staff branch,
     // that label dangled with nothing anywhere on the page to resolve it.
+    // Scoped to the "Roles asignados" row itself — "Representante" alone
+    // also appears in this role's own explanatory sentence just above.
     const roleInfo = await screen.findByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Roles asignados")).toBeInTheDocument();
-    expect(within(roleInfo).getByText(/Representante/)).toBeInTheDocument();
-    expect(within(roleInfo).getByText(/Alumno/)).toBeInTheDocument();
+    const rolesRow = within(
+      within(roleInfo).getByText("Roles asignados").closest("div") as HTMLElement,
+    );
+    expect(rolesRow.getByText(/Representante/)).toBeInTheDocument();
+    expect(rolesRow.getByText(/Alumno/)).toBeInTheDocument();
   });
 });
 
@@ -807,7 +852,9 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
 
     expect(screen.queryByLabelText(/correo electrónico/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(1);
+    // Correo appears twice (identity panel + "Correo de cuenta" row) but is
+    // never an editable field in EITHER spot.
+    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(2);
   });
 
   it("surfaces an error and reverts the teléfono when the save fails", async () => {
@@ -1272,15 +1319,19 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(identityRow).not.toHaveClass("items-end");
   });
 
-  it("shows the correo exactly once on the whole page — the duplication defect this redesign fixes", async () => {
+  it("shows the correo twice by design — the identity panel AND the 'Datos personales' row (issue #204's own requirement)", async () => {
+    // The first #204 pass read "if the prototype shows a field the product
+    // doesn't compute, drop it" as "when in doubt, cut it" and removed this
+    // exact row. The prototype repeats correo in both places on purpose —
+    // this test locks that reversal in.
     await renderAdmin();
 
-    expect(screen.getAllByText("ana.admin@cataclub.com")).toHaveLength(1);
-    // The old, now-removed "Datos personales" row for correo took the note
-    // explaining it isn't editable with it — the note has to survive
-    // SOMEWHERE, next to the identity that owns it.
+    expect(screen.getAllByText("ana.admin@cataclub.com")).toHaveLength(2);
     const hero = screen.getByTestId("profile-hero");
     expect(within(hero).getByText(/lo gestiona el club/i)).toBeInTheDocument();
+    const info = screen.getByTestId("profile-column-info");
+    expect(within(info).getByText("Correo de cuenta")).toBeInTheDocument();
+    expect(within(info).getByText("ana.admin@cataclub.com")).toBeInTheDocument();
   });
 
   it("wraps the teléfono value in a DataBox instead of leaving it as loose text", async () => {
@@ -1296,12 +1347,12 @@ describe("ProfilePage — the redesigned account layout", () => {
     await renderAdmin();
 
     const info = screen.getByTestId("profile-column-info");
-    for (const label of ["Nombres", "Teléfono"]) {
+    // "Correo de cuenta" and "Rol" are deliberately repeated from the member
+    // card here (issue #204's own requirement) — see the dedicated dedupe-
+    // reversal test above.
+    for (const label of ["Nombres", "Correo de cuenta", "Teléfono", "Rol"]) {
       expect(within(info).getByText(label)).toBeInTheDocument();
     }
-    // Correo moved to the member card entirely — it is not repeated as a row
-    // anymore (that repetition was the defect this redesign fixes).
-    expect(within(info).queryByText("Correo")).not.toBeInTheDocument();
     // "Miembro desde" is account metadata, not personal data: it lives on the
     // member card and must NOT also be repeated as a row.
     expect(within(info).queryByText("Miembro desde")).not.toBeInTheDocument();
@@ -1513,5 +1564,101 @@ describe("ProfilePage — close other sessions (E01, slice B4)", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "No se pudieron cerrar las otras sesiones.",
     );
+  });
+});
+
+describe("ProfilePage — issue #204 redesign: prototype elements the first pass silently dropped", () => {
+  async function renderAdmin(): Promise<void> {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+  }
+
+  it("shows the 'Sin foto cargada' state and a labelled 'Cambiar foto' button, reading straight off fotoUrl", async () => {
+    await renderAdmin();
+
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText(/Foto de perfil: Sin foto cargada/)).toBeInTheDocument();
+    expect(within(hero).getByRole("button", { name: /cambiar foto/i })).toBeInTheDocument();
+  });
+
+  it("shows 'Foto de perfil: Foto cargada' once fotoUrl is set", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce({
+      ...PERFIL_ADMIN,
+      fotoUrl: "https://res.cloudinary.com/test/image/upload/perfil-ana.jpg",
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const hero = await waitForStaffProfile();
+    expect(within(hero).getByText(/Foto de perfil: Foto cargada/)).toBeInTheDocument();
+  });
+
+  it("triggers the same hidden file input from the 'Cambiar foto' rail button", async () => {
+    await renderAdmin();
+
+    const hero = screen.getByTestId("profile-hero");
+    const input = screen.getByTestId("foto-perfil-input") as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    fireEvent.click(within(hero).getByRole("button", { name: /cambiar foto/i }));
+
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  it("offers a 'Cerrar sesión' button inside the identity panel itself, distinct from the Seguridad row's 'Salir'", async () => {
+    const auth = sessionForRole("admin");
+    mockUseAuth.mockReturnValue(auth);
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    const hero = screen.getByTestId("profile-hero");
+    const panelLogout = within(hero).getByRole("button", { name: /cerrar sesión/i });
+    fireEvent.click(panelLogout);
+
+    expect(auth.logout).toHaveBeenCalled();
+    // Seguridad's own "Sesión" row keeps its separate "Salir" trigger — the
+    // panel button is an addition, not a replacement.
+    expect(
+      within(screen.getByTestId("profile-column-status")).getByRole("button", { name: /^salir$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("labels each section with the prototype's own subtitle copy", async () => {
+    await renderAdmin();
+
+    expect(within(screen.getByTestId("profile-column-info")).getByText("Información de tu cuenta")).toBeInTheDocument();
+    expect(within(screen.getByTestId("profile-role-info")).getByText("Rol asignado a esta cuenta")).toBeInTheDocument();
+    expect(within(screen.getByTestId("profile-column-status")).getByText("Acciones de acceso")).toBeInTheDocument();
+  });
+
+  it("shows the role-specific 'bajada' under the page title", async () => {
+    await renderAdmin();
+
+    expect(screen.getByText("Revisá tus datos y mantené segura tu cuenta.")).toBeInTheDocument();
+  });
+
+  it("shows a decorative icon on each of the three Seguridad rows", async () => {
+    await renderAdmin();
+
+    const security = screen.getByTestId("profile-column-status");
+    // Icons are `aria-hidden`; the descriptive text already carries the
+    // meaning for assistive tech — this only checks the icon itself renders.
+    expect(security.querySelectorAll("svg[aria-hidden='true']").length).toBeGreaterThanOrEqual(3);
   });
 });

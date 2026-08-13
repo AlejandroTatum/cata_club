@@ -1,22 +1,24 @@
 /**
  * /profile — the account screen, rebuilt for issue #204 from
- * `docs/ux/prototipos/30-perfil-rediseño.html` (visual reference only — never
- * a source of logic or data; every field below still traces back to a real
- * API response).
+ * `docs/ux/prototipos/30-perfil-rediseño.html` (visual reference for
+ * structure and copy; every field below still traces back to a real API
+ * response — see "Data sources" and "Fields deliberately excluded" below).
  *
  * Two regions, not four stacked blocks:
  *
  *   1. `IdentityPanel` — a COMPACT ~292px white panel, clearly its own
  *      surface (never a second coal mass beside the sidebar): the coal
- *      avatar, the name/role/status "quick recognition" block, and — in its
+ *      avatar, the name/role/estado "quick recognition" block, the photo
+ *      state + "Cambiar foto"/"Cerrar sesión" rail actions, and — in its
  *      own full-width row — "Correo de acceso". The institutional-red field
  *      across the top and the yellow dot inside it are the one brand
  *      gesture; the avatar sits astride the red/white boundary.
- *   2. The workspace — "Datos personales" (one datum per `DetailRow`),
- *      "Información de tu rol" (role-specific facts the panel's fixed shape
- *      cannot itself state — only rendered when there IS something to add),
- *      "Estudiantes a mi cargo" (representante only, including the
- *      no-representados state), and "Seguridad".
+ *   2. The workspace — "Datos personales" (one datum per `DetailRow`,
+ *      including "Correo de cuenta" and "Rol" — deliberately repeated from
+ *      the identity panel, see below), "Información de tu rol" (ALWAYS
+ *      rendered — every one of the four role variants has something real to
+ *      state there), "Estudiantes a mi cargo" (representante only, including
+ *      the no-representados state), and "Seguridad".
  *
  * Below `split` (980px) the panel collapses to a horizontal band above the
  * workspace; both stack to one column on a phone. Nothing here truncates —
@@ -39,12 +41,46 @@
  *   the identity fields the portal payload does not carry (teléfono, fecha
  *   de creación, foto).
  *
- * Two fields the prototype draws are NOT rendered, because nothing in the API
- * can produce them: "Cédula" (only the admin-facing `/personas/{id}` carries
- * it, and that is not readable by the account itself) and "Cuenta activa"
- * (no `activo` flag on `UsuarioMeResponseDTO`) — a staff account's quick
- * block therefore shows no status badge at all, honestly, rather than one
- * invented as always-on.
+ * ## Reversed since the #204 first pass
+ *
+ * The first implementation of this issue read "if the prototype shows a
+ * field the product doesn't compute, drop it" as "when in doubt, cut it" —
+ * and dropped whole sections that DO have real data behind them. This pass
+ * re-checked every prototype element against the API instead of against the
+ * previous code:
+ *
+ * - **Correo / Rol inside "Datos personales"** — deliberately repeated from
+ *   the identity panel now (they were NOT, by design, in the first pass).
+ *   The owner named this exact duplication as a requirement, not a defect.
+ * - **"Cuenta activa"** — real, not invented. `UsuarioMeResponseDTO` carries
+ *   no `activo` flag, but `GestorAutenticacion.sesion_vigente` (the gate
+ *   EVERY authenticated request passes through, including the one that loads
+ *   this page) is `usuario.activo and epoch_valido(...)` — an inactive
+ *   account's token is rejected before any handler runs. Reaching this page
+ *   at all is proof the account is active, for all four role variants alike
+ *   (the gate has no role branch). The badge and the "Estado" role-fact are
+ *   therefore a logically-guaranteed fact, not a fabricated always-on value.
+ * - **Foto de perfil (state) + "Cambiar foto"** — `fotoUrl` was already
+ *   fetched; only the explicit state row and the labelled button were
+ *   missing (the trigger used to be an icon-only overlay on the avatar).
+ * - **"Cerrar sesión" in the identity panel** — same `logout()` the
+ *   Seguridad "Sesión" row already calls; added as a second, panel-local
+ *   trigger to match the prototype's rail-actions.
+ * - **Security row icons** — decorative only; the descriptive text next to
+ *   them already existed.
+ *
+ * ## Fields deliberately excluded (still, and for a different reason each)
+ *
+ * - **"Cédula"** — only the admin-facing `/personas/{id}` carries it, and
+ *   that is not readable by the account itself.
+ * - **"2 dispositivos" (device count on "Otras sesiones")** — the backend
+ *   has no session enumeration at all. `POST /auth/sesiones/invalidar` bumps
+ *   `Usuario.version_sesion` (an opaque epoch counter) and invalidates every
+ *   token stamped with an older value; it does not track individual
+ *   sessions/devices (IP, user-agent, issued-at), so there is nothing to
+ *   count. Showing a number here would be invented, not read. Building this
+ *   for real needs a `sesiones` table (device/UA/IP/issued-at) the backend
+ *   does not have yet.
  */
 
 "use client";
@@ -65,17 +101,14 @@ import {
   ApiClientError,
 } from "@/services/api";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import type { StudentPortalSummary, StudentProfileSummary, MembershipSummary } from "@/services/api";
+import type {
+  StudentPortalSummary,
+  StudentProfileSummary,
+  MembershipSummary,
+} from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
 import { personInitials } from "@/app/student/student-utils";
-import {
-  Badge,
-  Button,
-  DataBox,
-  ErrorState,
-  LoadingState,
-  buttonClasses,
-} from "@/components/ui";
+import { Badge, Button, DataBox, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
 // Reused as-is (not duplicated) for consistency — this is the same
@@ -83,7 +116,7 @@ import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/
 // it's a pure value object with no server-only APIs, safe in a client bundle.
 import { MEMBERSHIP_STATUS_BY_ESTADO } from "@/lib/membership-status";
 import { backendRoleForUserRole, getBackendRoleLabel, getRoleLabel } from "@/lib/auth-utils";
-import { Loader2, Save, X, Camera, ArrowRight } from "lucide-react";
+import { Loader2, Save, X, Camera, ArrowRight, Lock, Monitor, LogOut } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
@@ -99,13 +132,80 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return toUserMessage(error, fallback);
 }
 
-function describeMembership(membership: MembershipSummary | null): { label: string; tone: BadgeTone } | null {
+function describeMembership(
+  membership: MembershipSummary | null,
+): { label: string; tone: BadgeTone } | null {
   if (!membership) return null;
-  const estado = MEMBERSHIP_STATUS_BY_ESTADO[membership.estado as keyof typeof MEMBERSHIP_STATUS_BY_ESTADO];
-  return { label: MEMBERSHIP_STATUS_LABELS[estado], tone: MEMBERSHIP_STATUS_TONE[estado] };
+  const estado =
+    MEMBERSHIP_STATUS_BY_ESTADO[membership.estado as keyof typeof MEMBERSHIP_STATUS_BY_ESTADO];
+  return {
+    label: MEMBERSHIP_STATUS_LABELS[estado],
+    tone: MEMBERSHIP_STATUS_TONE[estado],
+  };
 }
 
 const NO_MEMBERSHIP_FALLBACK = "No disponible — consulte con administración";
+
+/**
+ * Per-role copy for the workspace lede and "Información de tu rol" —
+ * `docs/ux/prototipos/30-perfil-rediseño.html`'s four review variants,
+ * keyed by the same `UserRole` this page already branches on.
+ *
+ * `roleText` for "estudiante"/"representante" is NOT copied verbatim: the
+ * prototype's synthetic sentences assert "la información de membresía no
+ * está disponible" / "la cuenta tiene personas representadas vinculadas" as
+ * if always true, but this page DOES show real membership status and MAY
+ * have zero representados — an unconditional copy-paste would print a false
+ * claim next to the real fact just below it. The title and lede are still
+ * verbatim; only the two state-dependent clauses are adapted.
+ */
+const ROLE_COPY: Record<
+  UserRole,
+  {
+    lede: string;
+    roleCaption: string;
+    roleTitle: string;
+    roleText: (hasDependents: boolean) => string;
+  }
+> = {
+  admin: {
+    lede: "Revisá tus datos y mantené segura tu cuenta.",
+    roleCaption: "Rol asignado a esta cuenta",
+    roleTitle: "Cuenta administrativa",
+    roleText: () =>
+      "Esta cuenta tiene el rol de Administrador. Los datos de miembros se gestionan desde las superficies administrativas.",
+  },
+  trainer: {
+    lede: "Revisá tu información de contacto y el acceso a tu cuenta.",
+    roleCaption: "Información de tu perfil",
+    roleTitle: "Perfil de entrenador",
+    roleText: () =>
+      "Tu cuenta está identificada con el rol de Entrenador. El resto de la información operativa aparece en sus pantallas correspondientes.",
+  },
+  estudiante: {
+    lede: "Consultá tus datos de cuenta y la información disponible de tu portal.",
+    roleCaption: "Datos del portal estudiantil",
+    roleTitle: "Perfil estudiantil",
+    roleText: () => "Estos datos describen la cuenta del estudiante.",
+  },
+  representante: {
+    lede: "Administrá tus datos de cuenta y revisá las personas representadas.",
+    roleCaption: "Datos disponibles para tu cuenta",
+    roleTitle: "Cuenta representante",
+    roleText: (hasDependents) =>
+      hasDependents
+        ? "La cuenta tiene personas representadas vinculadas. El estado de membresía se muestra solo cuando la información está disponible."
+        : "Esta cuenta tiene el rol de Representante. El estado de membresía se muestra solo cuando la información está disponible.",
+  },
+  // `ProtectedRoute`'s `allowedRoles` on this page never admits "unsupported"
+  // — kept only so the lookup stays total and this never throws.
+  unsupported: {
+    lede: "Revisá tus datos y mantené segura tu cuenta.",
+    roleCaption: "Información de tu cuenta",
+    roleTitle: "Cuenta",
+    roleText: () => "Esta cuenta no tiene un rol reconocido asignado.",
+  },
+};
 
 // Mirrors the backend's own allow-list (`TIPOS_MIME_PERMITIDOS_FOTO_PERFIL` /
 // `TAMANO_MAXIMO_FOTO_PERFIL_BYTES` in auth_servicio.py) so an invalid file
@@ -131,11 +231,15 @@ type StudentLoadState =
 
 function DetailRow({
   label,
+  icon,
   children,
   note,
   action,
 }: {
   label?: string;
+  /** Decorative only — the descriptive text already carries the meaning
+   *  (Seguridad's three rows are the only current callers). */
+  icon?: React.ReactNode;
   children: React.ReactNode;
   note?: string;
   action?: React.ReactNode;
@@ -151,14 +255,17 @@ function DetailRow({
     // primitive, not for a row holding one line of text — it left ~40px of
     // dead air around a 20px value. The row now sizes to its own content.
     <div className="flex flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-2 last:border-b-0">
+      {icon && (
+        <span aria-hidden="true" className="flex-none text-ink-3">
+          {icon}
+        </span>
+      )}
       {label && (
         // Grey and normal weight, not bold uppercase caps: the label only
         // has to orient, the VALUE is what the reader came to read. Bold
         // uppercase at the same size as the value made the two compete for
         // attention instead of one leading the other.
-        <span className="w-[110px] flex-none text-xs text-ink-3 sm:w-[150px]">
-          {label}
-        </span>
+        <span className="w-[110px] flex-none text-xs text-ink-3 sm:w-[150px]">{label}</span>
       )}
       <span className="flex min-w-[9rem] flex-1 flex-wrap items-center gap-x-2 gap-y-field text-sm font-semibold text-ink">
         {children}
@@ -190,13 +297,17 @@ function DetailRow({
  */
 function ProfileShell({
   actions,
+  subtitle,
   children,
 }: {
   actions?: React.ReactNode;
+  /** The role-specific "bajada" under the title (issue #204's prototype
+   *  copy) — omitted for the loading/error shells, which have no role yet. */
+  subtitle?: string;
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <AppShell title="Perfil" actions={actions}>
+    <AppShell title="Perfil" subtitle={subtitle} actions={actions}>
       {children}
     </AppShell>
   );
@@ -204,19 +315,24 @@ function ProfileShell({
 
 function CardSection({
   title,
+  subtitle,
   action,
   testId,
   children,
 }: {
   title: string;
+  /** The prototype's `.section-head p` — a short caption to the right of the
+   *  title (e.g. "Información de tu cuenta", "Acciones de acceso"). */
+  subtitle?: string;
   action?: React.ReactNode;
   testId?: string;
   children: React.ReactNode;
 }): React.ReactElement {
   return (
     <section data-testid={testId} className="card overflow-hidden">
-      <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-field border-b border-line px-5 py-4">
         <h2 className="flex-1 text-sm font-bold text-ink">{title}</h2>
+        {subtitle && <p className="text-xs text-ink-3">{subtitle}</p>}
         {action}
       </div>
       {children}
@@ -252,6 +368,7 @@ interface IdentityPanelProps {
   fotoError: string | null;
   fotoInputRef: React.RefObject<HTMLInputElement>;
   onFotoChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onLogout: () => void;
 }
 
 function IdentityPanel({
@@ -266,7 +383,12 @@ function IdentityPanel({
   fotoError,
   fotoInputRef,
   onFotoChange,
+  onLogout,
 }: IdentityPanelProps): React.ReactElement {
+  // "Sin foto cargada" is the prototype's own string for the empty state;
+  // "Foto cargada" is the honest counterpart — both read straight off
+  // `fotoUrl`, never invented.
+  const photoStateLabel = fotoUrl ? "Foto cargada" : "Sin foto cargada";
   return (
     <section
       data-testid="profile-hero"
@@ -314,41 +436,25 @@ function IdentityPanel({
               <span aria-hidden="true">{initials}</span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => fotoInputRef.current?.click()}
-            disabled={uploadingFoto}
-            aria-label="Cambiar foto de perfil"
-            className="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-paper bg-coal text-white disabled:opacity-45"
-          >
-            {uploadingFoto ? (
-              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Camera size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            )}
-          </button>
-          <input
-            ref={fotoInputRef}
-            type="file"
-            accept="image/jpeg,image/png"
-            onChange={onFotoChange}
-            className="hidden"
-            data-testid="foto-perfil-input"
-          />
         </div>
 
         {/* The "quick recognition" block: name, role, and — only when there
-            is a real one — estado. */}
+            is a real one — the membership estado. "Cuenta activa" is a
+            SEPARATE fact from membership: reaching this page at all proves
+            the account passed `sesion_vigente` (usuario.activo), for every
+            role alike — see the module docstring. */}
         <div className="min-w-0 flex-1 pb-1">
           <h2 className="break-words text-lg font-extrabold leading-tight text-ink">{name}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <Badge tone="neutral">{roleLabel}</Badge>
+            <Badge tone="ok">Cuenta activa</Badge>
             {statusBadge && <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
           </div>
-          {/* Account metadata, not personal data — it lives HERE only. Repeating
-              it as a "Datos personales" row would be the same fact printed
-              twice on one screen. */}
+          {/* Account metadata, not personal data — "Miembro desde" lives HERE
+              only. "Foto de perfil" is the prototype's own explicit state
+              line — read straight off `fotoUrl`, see `photoStateLabel`. */}
           <p className="mt-2 text-xs text-ink-3">{memberSince}</p>
+          <p className="mt-1 text-xs text-ink-3">Foto de perfil: {photoStateLabel}</p>
         </div>
       </div>
 
@@ -357,6 +463,41 @@ function IdentityPanel({
           {fotoError}
         </p>
       )}
+
+      {/* Rail actions — photo upload trigger (now a labelled button, not an
+          icon-only overlay on the avatar) and the panel-local "Cerrar
+          sesión", both from the prototype's identity rail. */}
+      <div className="flex flex-col gap-2 px-5 pb-4 sm:flex-row">
+        <button
+          type="button"
+          onClick={() => fotoInputRef.current?.click()}
+          disabled={uploadingFoto}
+          className={buttonClasses("primary", "sm", "flex-1 justify-center")}
+        >
+          {uploadingFoto ? (
+            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Camera size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          )}
+          {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
+        </button>
+        <button
+          type="button"
+          onClick={onLogout}
+          className={buttonClasses("secondary", "sm", "flex-1 justify-center")}
+        >
+          <LogOut size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Cerrar sesión
+        </button>
+        <input
+          ref={fotoInputRef}
+          type="file"
+          accept="image/jpeg,image/png"
+          onChange={onFotoChange}
+          className="hidden"
+          data-testid="foto-perfil-input"
+        />
+      </div>
 
       {/* The one full-width row at the foot of the panel — never squeezed
           beside anything else, so the full correo always has the panel's
@@ -579,12 +720,16 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
    * would be the same fact printed twice on one screen (the same class of
    * defect this redesign fixes for correo).
    */
-  const panelRoleLabel = assignedRoles.length > 1 ? `${assignedRoles.length} roles asignados` : roleLabel;
+  const panelRoleLabel =
+    assignedRoles.length > 1 ? `${assignedRoles.length} roles asignados` : roleLabel;
 
   const telefonoDisplay =
     props.kind === "staff" ? props.perfil.telefono : (props.perfil?.telefono ?? "");
-  const fechaCreacion = props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
-  const memberSince = fechaCreacion ? `Miembro desde ${formatDate(fechaCreacion)}` : "Miembro desde —";
+  const fechaCreacion =
+    props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
+  const memberSince = fechaCreacion
+    ? `Miembro desde ${formatDate(fechaCreacion)}`
+    : "Miembro desde —";
 
   // The quick-recognition badge in the identity panel — only when there IS a
   // real membership status to report. When `self` exists but has no
@@ -593,22 +738,15 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   // a badge here AND as text there.
   const statusBadge = props.kind === "student" && self ? membership : null;
 
-  // "Información de tu rol" — role-specific facts the panel's fixed shape
-  // cannot itself state. Only rendered when there is something real to add:
-  // a single-role staff account has nothing beyond the badge already on the
-  // panel, so (per this codebase's existing discipline — see the multi-role
-  // rail this replaces) that section is simply absent for it.
-  //
-  // Not gated on `kind`. `roles` comes from `GET /auth/me`, which BOTH
-  // branches fetch, and a representante who is also an alumno is an ordinary
-  // account here — so the student branch reaches `assignedRoles.length > 1`
-  // too. Gating this on staff left exactly the dangling label this redesign
-  // exists to remove: the panel badge reads "2 roles asignados" (that label
-  // has no `kind` guard either) while nothing on the page said WHICH two.
+  // "Información de tu rol" — ALWAYS rendered now (issue #204: every one of
+  // the four role variants has a real title/text/fact set to show there —
+  // see `ROLE_COPY` and the module docstring's "Reversed since the #204
+  // first pass" note). Not gated on `kind`. `roles` comes from `GET
+  // /auth/me`, which BOTH branches fetch, and a representante who is also an
+  // alumno is an ordinary account here — so the student branch reaches
+  // `assignedRoles.length > 1` too.
   const showsMultiRoleBreakdown = assignedRoles.length > 1;
-  const showsStudentRoleInfo =
-    props.kind === "student" && (self !== null || props.role === "representante");
-  const showsRoleInfo = showsMultiRoleBreakdown || showsStudentRoleInfo;
+  const roleCopy = ROLE_COPY[props.role];
 
   // The page action lives in `PageHeader`'s own row (`.rowline` in the
   // prototype), passed up through `AppShell`.
@@ -638,7 +776,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     );
 
   return (
-    <ProfileShell actions={headerAction}>
+    <ProfileShell actions={headerAction} subtitle={roleCopy.lede}>
       {/* The compact ~292px panel beside the wide workspace — a `split`
           (980px) breakpoint, not `lg`: below it the panel collapses to a
           horizontal band above the workspace, and both stack to one column
@@ -658,13 +796,21 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           fotoError={fotoError}
           fotoInputRef={fotoInputRef}
           onFotoChange={(e) => void handleFotoChange(e)}
+          onLogout={() => void logout()}
         />
 
         <div className="flex min-w-0 flex-1 flex-col gap-5">
-          {/* Datos personales — one datum per row. Correo is NOT a row here:
-              it lives on the identity panel only. */}
-          <CardSection title="Datos personales" testId="profile-column-info">
+          {/* Datos personales — one datum per row. Correo and Rol are
+              deliberately repeated from the identity panel (issue #204's own
+              requirement — see the module docstring's "Reversed since the
+              #204 first pass" note). */}
+          <CardSection
+            title="Datos personales"
+            subtitle="Información de tu cuenta"
+            testId="profile-column-info"
+          >
             <DetailRow label="Nombres">{fullName}</DetailRow>
+            <DetailRow label="Correo de cuenta">{correoDisplay}</DetailRow>
             <DetailRow label="Teléfono">
               {props.kind === "staff" && editing ? (
                 <input
@@ -681,6 +827,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                 <DataBox>{telefonoDisplay || "—"}</DataBox>
               )}
             </DetailRow>
+            <DetailRow label="Rol">{roleLabel}</DetailRow>
             {props.kind === "student" && (
               <p className="border-t border-line bg-sunken px-5 py-3 text-xs text-ink-3-strong">
                 Esta información no se puede editar desde aquí. Escriba al club para corregirla.
@@ -693,55 +840,84 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
           </CardSection>
 
-          {showsRoleInfo && (
-            <CardSection title="Información de tu rol" testId="profile-role-info">
-              {showsMultiRoleBreakdown && (
-                // EVERY assigned role, not just the session's. `mapBackendRoleToUserRole`
-                // collapses an account's backend roles to the single
-                // highest-privilege one, so a person who is administrator AND
-                // trainer AND representante AND alumno used to read only
-                // "Administrador" here — and the other three appeared nowhere
-                // in the product. The session's own role keeps the solid
-                // badge; the rest are neutral, so "which one am I using right
-                // now" survives.
-                <DetailRow label="Roles asignados">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {assignedRoles.map((rol) => (
-                      <Badge key={rol} tone={rol === sessionBackendRole ? "ok" : "neutral"}>
-                        {getBackendRoleLabel(rol)}
-                        {rol === sessionBackendRole && (
-                          <span className="sr-only"> — rol activo en esta sesión</span>
-                        )}
-                      </Badge>
-                    ))}
-                  </div>
+          <CardSection
+            title="Información de tu rol"
+            subtitle={roleCopy.roleCaption}
+            testId="profile-role-info"
+          >
+            <div className="border-b border-line px-5 py-3">
+              <h3 className="text-sm font-bold text-ink">{roleCopy.roleTitle}</h3>
+              <p className="mt-1 text-xs text-ink-2">
+                {roleCopy.roleText(representados.length > 0)}
+              </p>
+            </div>
+            {props.kind === "staff" && (
+              <>
+                <DetailRow label="Rol principal">{roleLabel}</DetailRow>
+                <DetailRow label="Estado">
+                  <Badge tone="ok">Activo</Badge>
                 </DetailRow>
-              )}
-              {props.kind === "student" && self && (
-                <>
-                  <DetailRow label="Fecha de nacimiento">
-                    {formatDate(self.fechaNacimiento) || "—"}
-                  </DetailRow>
-                  {/* The membership FACT is stated once on the whole page —
+              </>
+            )}
+            {showsMultiRoleBreakdown && (
+              // EVERY assigned role, not just the session's. `mapBackendRoleToUserRole`
+              // collapses an account's backend roles to the single
+              // highest-privilege one, so a person who is administrator AND
+              // trainer AND representante AND alumno used to read only
+              // "Administrador" here — and the other three appeared nowhere
+              // in the product. The session's own role keeps the solid
+              // badge; the rest are neutral, so "which one am I using right
+              // now" survives.
+              <DetailRow label="Roles asignados">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {assignedRoles.map((rol) => (
+                    <Badge key={rol} tone={rol === sessionBackendRole ? "ok" : "neutral"}>
+                      {getBackendRoleLabel(rol)}
+                      {rol === sessionBackendRole && (
+                        <span className="sr-only"> — rol activo en esta sesión</span>
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+              </DetailRow>
+            )}
+            {props.kind === "student" && self && (
+              <>
+                <DetailRow label="Fecha de nacimiento">
+                  {formatDate(self.fechaNacimiento) || "—"}
+                </DetailRow>
+                {/* The membership FACT is stated once on the whole page —
                       as a badge on the identity panel when there is one, or,
                       only when there is not, as this honest note. */}
-                  {!membership && (
-                    <DetailRow label="Membresía">
-                      <span className="text-sm font-normal text-ink-2">{NO_MEMBERSHIP_FALLBACK}</span>
-                    </DetailRow>
-                  )}
-                  {self.representante && (
-                    <DetailRow label="Su representante">
-                      {`${self.representante.nombres} ${self.representante.apellidos}`.trim()}
-                    </DetailRow>
-                  )}
-                </>
-              )}
-              {props.role === "representante" && (
-                <DetailRow label="Personas representadas">{String(representados.length)}</DetailRow>
-              )}
-            </CardSection>
-          )}
+                {!membership && (
+                  <DetailRow label="Membresía">
+                    <span className="text-sm font-normal text-ink-2">{NO_MEMBERSHIP_FALLBACK}</span>
+                  </DetailRow>
+                )}
+                {self.representante && (
+                  <DetailRow label="Su representante">
+                    {`${self.representante.nombres} ${self.representante.apellidos}`.trim()}
+                  </DetailRow>
+                )}
+              </>
+            )}
+            {props.role === "representante" && (
+              <DetailRow label="Personas representadas">{String(representados.length)}</DetailRow>
+            )}
+            {/* Only when there is no `self` profile at all: a representante
+                  who is ALSO an alumno already gets their own membership
+                  fact above (the `!membership` row inside the `self` block),
+                  and stating it twice would be the exact duplication this
+                  redesign otherwise avoids. `self === null` genuinely means
+                  "not enrolled as a student" — a definite fact, not the
+                  ambiguous "lookup vs. no membership" case that fallback
+                  text elsewhere is careful about. */}
+            {props.role === "representante" && !self && (
+              <DetailRow label="Membresía propia">
+                <span className="text-sm font-normal text-ink-2">{NO_MEMBERSHIP_FALLBACK}</span>
+              </DetailRow>
+            )}
+          </CardSection>
 
           {/* Estudiantes a mi cargo — representante only, ALWAYS present for
               that role (even with zero representados: an explicit empty
@@ -772,11 +948,20 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           <div className="flex flex-col gap-3">
             {/* Seguridad: the same row shape as "Datos personales", label on
                 the left and the action on the right. */}
-            <CardSection title="Seguridad" testId="profile-column-status">
+            <CardSection
+              title="Seguridad"
+              subtitle="Acciones de acceso"
+              testId="profile-column-status"
+            >
               <DetailRow
                 label="Contraseña"
+                icon={<Lock size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
                 action={
-                  <Button size="sm" onClick={() => void handleChangePassword()} disabled={requestingPassword}>
+                  <Button
+                    size="sm"
+                    onClick={() => void handleChangePassword()}
+                    disabled={requestingPassword}
+                  >
                     {requestingPassword ? "Enviando…" : "Cambiar contraseña"}
                   </Button>
                 }
@@ -787,18 +972,18 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               </DetailRow>
               <DetailRow
                 label="Sesión"
+                icon={<LogOut size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
                 action={
                   <Button size="sm" onClick={() => void logout()}>
                     Salir
                   </Button>
                 }
               >
-                <span className="text-sm font-normal text-ink-2">
-                  Cerrar sesión en este equipo
-                </span>
+                <span className="text-sm font-normal text-ink-2">Cerrar sesión en este equipo</span>
               </DetailRow>
               <DetailRow
                 label="Otras sesiones"
+                icon={<Monitor size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
                 action={
                   <Button
                     size="sm"
@@ -897,7 +1082,9 @@ function ProfileContent(): React.ReactElement | null {
   const role = session?.user.role ?? null;
   const isStudentRole = role !== null && STUDENT_SUMMARY_ROLES.has(role);
 
-  const [staffState, setStaffState] = useState<StaffLoadState>({ status: "loading" });
+  const [staffState, setStaffState] = useState<StaffLoadState>({
+    status: "loading",
+  });
   const [staffReload, setStaffReload] = useState(0);
 
   useEffect(() => {
@@ -922,7 +1109,9 @@ function ProfileContent(): React.ReactElement | null {
   }, [isStudentRole, staffReload]);
 
   const personaId = session?.user.id ?? "";
-  const [studentState, setStudentState] = useState<StudentLoadState>({ status: "loading" });
+  const [studentState, setStudentState] = useState<StudentLoadState>({
+    status: "loading",
+  });
   const [studentReload, setStudentReload] = useState(0);
 
   useEffect(() => {
@@ -1021,9 +1210,7 @@ function ProfileContent(): React.ReactElement | null {
 
 export default function ProfilePage(): React.ReactElement {
   return (
-    <ProtectedRoute
-      allowedRoles={["admin", "trainer", "representante", "estudiante"]}
-    >
+    <ProtectedRoute allowedRoles={["admin", "trainer", "representante", "estudiante"]}>
       <ProfileContent />
     </ProtectedRoute>
   );
