@@ -11,6 +11,7 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 
 from app.presentacion.schemas.base import ResponseBase
+from app.presentacion.schemas.validadores import CedulaValidada, TelefonoValidado
 
 
 class RegistroUsuarioDTO(BaseModel):
@@ -20,7 +21,7 @@ class RegistroUsuarioDTO(BaseModel):
     una `Persona` que YA existe (dada de alta antes por un ADMINISTRADOR vía
     POST /personas). No se crea Persona aquí.
     """
-    cedula: str = Field(..., min_length=10, max_length=10)
+    cedula: CedulaValidada = Field(..., max_length=32)
     correo: EmailStr
     contrasenia: str = Field(..., min_length=8)
 
@@ -64,7 +65,7 @@ class ActualizarPerfilPropioDTO(BaseModel):
     por diseño (ver auth_servicio.py). `telefono` es opcional (edición
     parcial); solo se actualiza si viene presente en el request
     (`exclude_unset=True` en el servicio)."""
-    telefono: Optional[str] = Field(default=None, max_length=15)
+    telefono: Optional[TelefonoValidado] = Field(default=None, max_length=32)
 
 
 class ActualizarPerfilPropioResponseDTO(ResponseBase, BaseModel):

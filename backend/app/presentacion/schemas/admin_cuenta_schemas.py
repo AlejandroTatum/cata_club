@@ -10,6 +10,7 @@ from datetime import date
 from typing import Optional, Literal
 
 from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
+from app.presentacion.schemas.validadores import CedulaValidada, TelefonoValidado
 
 
 class AdminCrearCuentaDTO(BaseModel):
@@ -22,10 +23,10 @@ class AdminCrearCuentaDTO(BaseModel):
     # --- Datos de la Persona (comunes a todos los tipos) ---
     nombres: str = Field(..., min_length=1, max_length=100)
     apellidos: str = Field(..., min_length=1, max_length=100)
-    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
-    telefono: str = Field(..., max_length=15, pattern=r"^\d{7,10}$")
-    telefono_contacto: Optional[str] = Field(default=None, max_length=15)
+    telefono: TelefonoValidado = Field(..., max_length=32)
+    telefono_contacto: Optional[TelefonoValidado] = Field(default=None, max_length=32)
     direccion_id: Optional[int] = None
     institucion_id: Optional[int] = None
 

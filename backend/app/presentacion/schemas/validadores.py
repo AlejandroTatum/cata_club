@@ -1,0 +1,44 @@
+"""
+Validadores de identidad compartidos por los DTOs de entrada (PR 4b, issue
+#228: "una regla de identidad que solo vive en el navegador no es una
+regla"). Antes de este módulo, cada DTO repetía su propio
+`pattern=r"^\\d{10}$"` de Pydantic -- eso solo comprueba el largo, así que
+cualquier secuencia de 10 dígitos entraba, dígito verificador o provincia
+inexistentes incluidos.
+
+Se define una sola vez acá y se reusa vía `Annotated` (`CedulaValidada`,
+`TelefonoValidado`) en cada DTO que recibe cédula o teléfono, en vez de
+repetir el `field_validator` en cada clase. El largo lo valida el propio
+validador -- no `Field(pattern=...)` -- para poder distinguir en castellano
+"no tiene el largo correcto" de "ese número no es válido": son dos errores
+y se corrigen distinto.
+"""
+from typing import Annotated
+
+from pydantic import AfterValidator
+
+from app.dominio.cedula import es_cedula_valida
+from app.dominio.telefono import es_telefono_valido
+
+
+def _validar_cedula(valor: str) -> str:
+    if not valor.isdigit() or len(valor) != 10:
+        raise ValueError("La cédula debe tener exactamente 10 dígitos.")
+    if not es_cedula_valida(valor):
+        raise ValueError("Ese número de cédula no es válido.")
+    return valor
+
+
+def _validar_telefono(valor: str) -> str:
+    if not valor.isdigit():
+        raise ValueError("El teléfono solo puede tener dígitos.")
+    if not es_telefono_valido(valor):
+        raise ValueError(
+            "El teléfono debe tener 10 dígitos y empezar en 09, "
+            "o 9 dígitos empezando en 0."
+        )
+    return valor
+
+
+CedulaValidada = Annotated[str, AfterValidator(_validar_cedula)]
+TelefonoValidado = Annotated[str, AfterValidator(_validar_telefono)]
