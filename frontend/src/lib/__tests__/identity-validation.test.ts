@@ -1,0 +1,423 @@
+import { describe, it, expect } from "vitest";
+import {
+  cedulaError,
+  isValidCedula,
+  cedulaRule,
+  phoneError,
+  isValidEcuadorianPhone,
+  phoneRule,
+  PERSON_NAME_PATTERN,
+  personNameRule,
+  EDAD_MINIMA_ALUMNO,
+  EDAD_MAXIMA_ALUMNO,
+  calculatePersonAge,
+  isValidCalendarDate,
+  isFutureBirthDate,
+  studentBirthDateRule,
+  PASSWORD_MIN_LENGTH,
+  isCommonPassword,
+  passwordRule,
+} from "@/lib/identity-validation";
+
+// The backend test suite freezes "today" at 2029-01-01 (`FECHA_CONGELADA_HOY`
+// in backend/tests/conftest.py). Every age-related test below anchors to the
+// same date so results agree with the backend instead of drifting by
+// however many years have passed since that freeze.
+const FROZEN_TODAY = new Date(2029, 0, 1);
+
+describe("cédula", () => {
+  describe("cedulaError / isValidCedula — the four cases from issue #228", () => {
+    it("rejects 1712345678 — check digit should be 5, has 8", () => {
+      expect(cedulaError("1712345678")).toBe("invalid");
+      expect(isValidCedula("1712345678")).toBe(false);
+    });
+
+    it("rejects 9912345678 — province 99 does not exist", () => {
+      expect(cedulaError("9912345678")).toBe("invalid");
+      expect(isValidCedula("9912345678")).toBe(false);
+    });
+
+    it("rejects 0000000000 — no valid province, even though checksum degenerately closes", () => {
+      expect(cedulaError("0000000000")).toBe("invalid");
+      expect(isValidCedula("0000000000")).toBe(false);
+    });
+
+    it("accepts 1798765432 — the control case", () => {
+      expect(cedulaError("1798765432")).toBeNull();
+      expect(isValidCedula("1798765432")).toBe(true);
+    });
+  });
+
+  describe("length", () => {
+    it("flags fewer than 10 digits as a length error, not a checksum error", () => {
+      expect(cedulaError("171234567")).toBe("length");
+    });
+
+    it("flags more than 10 digits as a length error (issue #225's 11th digit)", () => {
+      expect(cedulaError("17123456789")).toBe("length");
+    });
+
+    it("flags non-digit characters as a length error", () => {
+      expect(cedulaError("171234567a")).toBe("length");
+    });
+  });
+
+  describe("province boundaries", () => {
+    it("accepts province 30 (registered abroad) with a matching check digit", () => {
+      // First 9 digits "301234587" -> check digit 6 (module-10 computation).
+      expect(cedulaError("3012345876")).toBeNull();
+    });
+
+    it("rejects province 00", () => {
+      expect(cedulaError("0012345678")).toBe("invalid");
+    });
+
+    it("rejects province 25 (between the valid range and 30)", () => {
+      expect(cedulaError("2512345678")).toBe("invalid");
+    });
+
+    it("rejects province 31", () => {
+      expect(cedulaError("3112345678")).toBe("invalid");
+    });
+  });
+
+  describe("cedulaRule", () => {
+    it("requires a value", () => {
+      expect(cedulaRule("", "La cédula")).toBe("La cédula es obligatoria.");
+      expect(cedulaRule("   ", "La cédula")).toBe("La cédula es obligatoria.");
+    });
+
+    it("names the length problem distinctly from the validity problem", () => {
+      expect(cedulaRule("171234567", "La cédula")).toBe("La cédula debe tener 10 dígitos.");
+      expect(cedulaRule("1712345678", "La cédula")).toBe("La cédula no es válida.");
+    });
+
+    it("carries the subject through to the representative variant", () => {
+      expect(cedulaRule("9912345678", "La cédula del representante")).toBe(
+        "La cédula del representante no es válida.",
+      );
+    });
+
+    it("passes a valid cédula", () => {
+      expect(cedulaRule("1798765432", "La cédula")).toBeNull();
+    });
+  });
+});
+
+describe("teléfono", () => {
+  describe("phoneError / isValidEcuadorianPhone", () => {
+    it("accepts a valid 10-digit celular starting with 09", () => {
+      expect(phoneError("0991234567")).toBeNull();
+      expect(isValidEcuadorianPhone("0991234567")).toBe(true);
+    });
+
+    it("accepts a valid 9-digit fijo — Loja's area code is 7", () => {
+      expect(phoneError("072570000")).toBeNull();
+      expect(isValidEcuadorianPhone("072570000")).toBe(true);
+    });
+
+    it("rejects letters instead of silently stripping them (issue #229)", () => {
+      expect(phoneError("099abc1234")).toBe("invalid-chars");
+    });
+
+    it("rejects a 7-digit number — no Ecuadorian line has 7 digits", () => {
+      expect(phoneError("0991234")).toBe("invalid-number");
+    });
+
+    it("rejects an 11-digit number", () => {
+      expect(phoneError("09912345678")).toBe("invalid-number");
+    });
+
+    it("rejects a 10-digit number not starting with 09", () => {
+      expect(phoneError("0812345678")).toBe("invalid-number");
+    });
+
+    it("tolerates the explicit allowed separators (space, hyphen, parentheses)", () => {
+      expect(phoneError("099-123-4567")).toBeNull();
+      expect(phoneError("099 123 4567")).toBeNull();
+      expect(phoneError("(099) 123-4567")).toBeNull();
+    });
+
+    it("does NOT tolerate a separator outside the explicit allowlist", () => {
+      expect(phoneError("099.123.4567")).toBe("invalid-chars");
+      expect(phoneError("099/123/4567")).toBe("invalid-chars");
+    });
+  });
+
+  describe("phoneRule", () => {
+    it("requires a value", () => {
+      expect(phoneRule("", "El teléfono")).toBe("El teléfono es obligatorio.");
+    });
+
+    it("names what is expected instead of the old incorrect 7-10 digit hint", () => {
+      const message = phoneRule("0991234", "El teléfono");
+      expect(message).toContain("celular");
+      expect(message).toContain("fijo");
+    });
+
+    it("flags disallowed characters distinctly", () => {
+      expect(phoneRule("099abc1234", "El teléfono")).toBe(
+        "El teléfono solo puede contener dígitos y separadores (espacio, guion, paréntesis).",
+      );
+    });
+
+    it("passes a valid number", () => {
+      expect(phoneRule("0991234567", "El teléfono")).toBeNull();
+    });
+
+    it("carries the subject through to the emergency-contact variant", () => {
+      expect(phoneRule("0991234", "El teléfono de emergencia")).toContain(
+        "El teléfono de emergencia debe ser",
+      );
+    });
+  });
+});
+
+describe("nombre de persona", () => {
+  describe("PERSON_NAME_PATTERN", () => {
+    it("accepts a hyphenated surname (issue #230 — Pérez-Mora)", () => {
+      expect(PERSON_NAME_PATTERN.test("Pérez-Mora")).toBe(true);
+    });
+
+    it("accepts an apostrophe surname (D'Angelo)", () => {
+      expect(PERSON_NAME_PATTERN.test("D'Angelo")).toBe(true);
+    });
+
+    it("still accepts accented letters and spaces (José Ñandú)", () => {
+      expect(PERSON_NAME_PATTERN.test("José Ñandú")).toBe(true);
+    });
+
+    it("rejects a connector at the start", () => {
+      expect(PERSON_NAME_PATTERN.test("-Pérez")).toBe(false);
+      expect(PERSON_NAME_PATTERN.test("'Angelo")).toBe(false);
+    });
+
+    it("rejects a connector at the end", () => {
+      expect(PERSON_NAME_PATTERN.test("Pérez-")).toBe(false);
+    });
+
+    it("rejects two connectors in a row", () => {
+      expect(PERSON_NAME_PATTERN.test("Pérez--Mora")).toBe(false);
+      expect(PERSON_NAME_PATTERN.test("Pérez  Mora")).toBe(false);
+    });
+
+    it("still rejects digits and symbols outside the allowed connectors", () => {
+      expect(PERSON_NAME_PATTERN.test("Pérez123")).toBe(false);
+      expect(PERSON_NAME_PATTERN.test("Pérez@Mora")).toBe(false);
+    });
+
+    it("rejects the two mathematical signs sitting inside the Latin-1 letter block", () => {
+      // × is U+00D7 and ÷ is U+00F7, both embedded between letters in the
+      // À(U+00C0)-ɏ(U+024F) span. They are signs, not letters.
+      expect(PERSON_NAME_PATTERN.test("Pérez×Mora")).toBe(false);
+      expect(PERSON_NAME_PATTERN.test("Pérez÷Mora")).toBe(false);
+    });
+  });
+
+  describe("personNameRule", () => {
+    it("requires a value, plural form by default", () => {
+      expect(personNameRule("", "Los apellidos")).toBe("Los apellidos son obligatorios.");
+    });
+
+    it("requires a value, singular form when told", () => {
+      expect(personNameRule("", "El nombre del contacto de emergencia", { plural: false })).toBe(
+        "El nombre del contacto de emergencia es obligatorio.",
+      );
+    });
+
+    it("enforces the minimum length, in the right grammatical number", () => {
+      expect(personNameRule("Al", "Los apellidos")).toBe(
+        "Los apellidos deben tener al menos 3 caracteres.",
+      );
+      expect(personNameRule("Al", "El nombre del contacto de emergencia", { plural: false })).toBe(
+        "El nombre del contacto de emergencia debe tener al menos 3 caracteres.",
+      );
+    });
+
+    it("does not claim the pattern only allows letters and spaces", () => {
+      const message = personNameRule("Pérez123", "Los apellidos");
+      expect(message).not.toContain("solo pueden contener letras y espacios");
+    });
+
+    it("passes a real hyphenated surname", () => {
+      expect(personNameRule("Pérez-Mora", "Los apellidos")).toBeNull();
+    });
+
+    it("passes a valid single-word contact name (singular)", () => {
+      expect(personNameRule("María", "El nombre del contacto de emergencia", { plural: false })).toBeNull();
+    });
+  });
+});
+
+describe("edad del alumno", () => {
+  describe("calculatePersonAge", () => {
+    it("computes age from a birth date component-wise, not via UTC parsing", () => {
+      expect(calculatePersonAge("2024-01-01", FROZEN_TODAY)).toBe(5);
+    });
+
+    it("has not had this year's birthday yet", () => {
+      expect(calculatePersonAge("2024-01-02", FROZEN_TODAY)).toBe(4);
+    });
+
+    it("returns NaN for a non-existent calendar date (Feb 31)", () => {
+      expect(Number.isNaN(calculatePersonAge("2024-02-31", FROZEN_TODAY))).toBe(true);
+    });
+
+    it("returns NaN for malformed input", () => {
+      expect(Number.isNaN(calculatePersonAge("not-a-date", FROZEN_TODAY))).toBe(true);
+      expect(Number.isNaN(calculatePersonAge("", FROZEN_TODAY))).toBe(true);
+    });
+
+    it("does not cap implausible-but-real years — that is a domain rule, not a parsing concern", () => {
+      expect(calculatePersonAge("1800-01-01", FROZEN_TODAY)).toBe(229);
+    });
+  });
+
+  describe("isValidCalendarDate", () => {
+    it("accepts a real date", () => {
+      expect(isValidCalendarDate("2024-01-01")).toBe(true);
+    });
+
+    it("rejects a non-existent date", () => {
+      expect(isValidCalendarDate("2024-04-31")).toBe(false);
+    });
+  });
+
+  describe("isFutureBirthDate", () => {
+    it("flags a date after today", () => {
+      expect(isFutureBirthDate("2029-06-15", FROZEN_TODAY)).toBe(true);
+    });
+
+    it("does not flag today itself", () => {
+      expect(isFutureBirthDate("2029-01-01", FROZEN_TODAY)).toBe(false);
+    });
+
+    it("does not flag a past date", () => {
+      expect(isFutureBirthDate("2020-01-01", FROZEN_TODAY)).toBe(false);
+    });
+  });
+
+  describe("studentBirthDateRule — issue #224's five reproduction cases", () => {
+    it("requires a value", () => {
+      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("La fecha de nacimiento es obligatoria.");
+    });
+
+    it("rejects an invalid calendar date", () => {
+      expect(studentBirthDateRule("2024-02-30", FROZEN_TODAY)).toBe(
+        "La fecha de nacimiento ingresada no es válida.",
+      );
+    });
+
+    it("rejects a future date by naming it future, never as a bogus negative age", () => {
+      const message = studentBirthDateRule("2030-01-01", FROZEN_TODAY);
+      expect(message).toBe("La fecha de nacimiento no puede ser en el futuro.");
+      expect(message).not.toContain("menor");
+    });
+
+    it("rejects a birth date 3 years ago, naming the computed age", () => {
+      expect(studentBirthDateRule("2026-01-01", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 3).`,
+      );
+    });
+
+    it("rejects a birth date 120 years ago, naming the computed age", () => {
+      expect(studentBirthDateRule("1909-01-01", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 120).`,
+      );
+    });
+
+    it("rejects an implausible historical date (1750), naming the computed age", () => {
+      expect(studentBirthDateRule("1750-03-15", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 278).`,
+      );
+    });
+
+    it("accepts the minimum boundary (exactly 5 years old today)", () => {
+      expect(studentBirthDateRule("2024-01-01", FROZEN_TODAY)).toBeNull();
+    });
+
+    it("accepts the maximum boundary (exactly 74 years old today)", () => {
+      expect(studentBirthDateRule("1955-01-01", FROZEN_TODAY)).toBeNull();
+    });
+
+    it("rejects one day past the maximum boundary (75 years old)", () => {
+      expect(studentBirthDateRule("1954-01-01", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 75).`,
+      );
+    });
+
+    it("rejects one day short of the minimum boundary (4 years old)", () => {
+      expect(studentBirthDateRule("2024-01-02", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 4).`,
+      );
+    });
+  });
+});
+
+describe("contraseña", () => {
+  describe("isCommonPassword", () => {
+    it("flags the three examples issue #230 says currently pass", () => {
+      expect(isCommonPassword("12345678")).toBe(true);
+      expect(isCommonPassword("password")).toBe(true);
+      expect(isCommonPassword("aaaaaaaa")).toBe(true);
+    });
+
+    it("compares case-insensitively", () => {
+      expect(isCommonPassword("PASSWORD")).toBe(true);
+      expect(isCommonPassword("PaSsWoRd")).toBe(true);
+    });
+
+    it("does not flag an uncommon password", () => {
+      expect(isCommonPassword("Xk29mQzTr7Lp")).toBe(false);
+    });
+  });
+
+  describe("passwordRule", () => {
+    it("enforces the minimum length first", () => {
+      expect(passwordRule("abc", "La contraseña")).toBe(
+        `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`,
+      );
+    });
+
+    it("rejects a common password that meets the length floor", () => {
+      expect(passwordRule("12345678", "La contraseña")).toBe(
+        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+      );
+      expect(passwordRule("password", "La contraseña")).toBe(
+        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+      );
+      expect(passwordRule("aaaaaaaa", "La contraseña")).toBe(
+        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+      );
+    });
+
+    it("does NOT require composition (uppercase/digit/symbol) — decision from issue #230", () => {
+      // A long, lowercase-only, non-common phrase must pass with no composition demand.
+      expect(passwordRule("nubesverdesdeloja", "La contraseña")).toBeNull();
+    });
+
+    it("passes an uncommon password meeting the length floor", () => {
+      expect(passwordRule("Xk29mQzTr7Lp", "La contraseña")).toBeNull();
+    });
+
+    it("measures the length floor on the same value the common-list check reads", () => {
+      // One real character padded to 8 with spaces: the floor used to see 8
+      // while the common-list check saw "a", so a 1-character password passed.
+      expect(passwordRule("a       ", "La contraseña")).toBe(
+        `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`,
+      );
+    });
+
+    it("still flags a common password that arrives padded", () => {
+      expect(passwordRule("  password  ", "La contraseña")).toBe(
+        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+      );
+    });
+
+    it("carries the subject through to the representative variant", () => {
+      expect(passwordRule("abc", "La contraseña del representante")).toBe(
+        `La contraseña del representante debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`,
+      );
+    });
+  });
+});
