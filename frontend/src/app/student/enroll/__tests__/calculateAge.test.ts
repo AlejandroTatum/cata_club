@@ -1,5 +1,9 @@
 /**
- * Unit tests for the calculateAge helper.
+ * Unit tests for `calculatePersonAge` (`@/lib/identity-validation`), exercised
+ * through this file's exhaustive edge-case list. `enroll-utils.ts` used to
+ * re-export the function as `calculateAge`; now that every caller imports
+ * `calculatePersonAge` directly (no shim left to test through), this suite
+ * imports it the same way.
  *
  * Pure function — no React dependencies, easy to test.
  *
@@ -8,7 +12,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { calculateAge } from "../enroll-utils";
+import { calculatePersonAge as calculateAge } from "@/lib/identity-validation";
 
 /** Fixed reference date for all deterministic tests — July 1, 2026. */
 const TODAY = new Date(2026, 6, 1); // month is 0-indexed: 6 = July

@@ -7,7 +7,7 @@
 import type { InputHTMLAttributes, ReactElement, ReactNode } from "react";
 import { User, Calendar, Hash, Phone, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { calculateAge } from "@/app/student/enroll/enroll-utils";
+import { calculatePersonAge } from "@/lib/identity-validation";
 import { Button, buttonClasses } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
@@ -192,7 +192,7 @@ function digitCount(value: string): number {
 export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactElement {
   const { idPrefix, disabled } = props;
   const errors = props.errors ?? {};
-  const age = calculateAge(props.fechaNacimiento);
+  const age = calculatePersonAge(props.fechaNacimiento);
   const ageValid = !isNaN(age);
   const cedulaTyped = digitCount(props.cedula);
   return (

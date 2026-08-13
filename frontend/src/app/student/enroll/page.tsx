@@ -36,8 +36,8 @@ import {
   Mail,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { calculatePersonAge } from "@/lib/identity-validation";
 import {
-  calculateAge,
   buildEnrollmentRequest,
   describeStepBlocker,
   ENROLLMENT_TYPES,
@@ -706,7 +706,7 @@ function EnrollWizard(): React.ReactElement {
   }
 
   function renderSummary(): React.ReactElement {
-    const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
+    const age = formData.fechaNacimiento ? calculatePersonAge(formData.fechaNacimiento) : null;
     const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
     const isChild = formData.enrollmentType === ENROLLMENT_TYPES.CHILD;
     return (
