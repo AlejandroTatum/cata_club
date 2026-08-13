@@ -70,9 +70,12 @@ const SKIN =
   // `AppShell`'s `<main>`, a flex column with the default `align-items:
   // stretch` — without this, the control stretches to the panel's full
   // width instead of hugging its own content. Row-context callers
-  // (`payments`, `enroll`) are unaffected: `align-self` only governs the
-  // cross axis, which is height there, and this control's height is already
-  // pinned by `h-ctl-sm`.
+  // (`payments`' `items-center`, `enroll`'s `items-baseline`) are unaffected
+  // for a narrower reason than "align-self does nothing in a row" -- it does
+  // govern vertical placement there. It changes nothing because this control
+  // is the TALLEST item in both of those rows (`h-ctl-sm` = 32px, against a
+  // 24px help trigger and 32px `sm` buttons), so it already spans the whole
+  // flex line: start, center and baseline all resolve to the same top edge.
   "inline-flex h-ctl-sm items-center justify-center gap-1.5 self-start whitespace-nowrap rounded-lg border px-3 text-xs font-semibold " +
   "transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-45 " +
   // Resting: institutional red outline on a transparent surface.
