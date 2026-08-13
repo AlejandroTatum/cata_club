@@ -69,6 +69,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 
@@ -111,7 +112,7 @@ import {
   tapWizardAttendance,
   saveAttendanceDraft,
   toAttendanceMarks,
-  buildAttendanceSummary,
+  buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
   type SessionStudent,
   type StoredAttendanceDraft,
@@ -128,9 +129,21 @@ import {
   getTotalPages,
 } from "@/app/attendance/attendance-utils";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Badge, BackLink, Button, EmptyState, ErrorState, LoadingState, Pagination, Stepper } from "@/components/ui";
+import {
+  Badge,
+  BackLink,
+  Button,
+  buttonClasses,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Pagination,
+  StatCard,
+  Stepper,
+} from "@/components/ui";
 import { getUserInitials } from "@/lib/auth-utils";
 import { clubIsoDate, todayDiaSemana } from "@/lib/club-date";
+import { formatDateTime } from "@/lib/format-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DiaSemana } from "@/types/domain";
 import {
@@ -199,6 +212,18 @@ const TOTAL_LABELS: Record<EstadoAsistencia, [singular: string, plural: string]>
 /** Best news first — the same order every attendance surface reads in. */
 const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
 
+/**
+ * Solid fill for the receipt's proportional bar and its per-row dot — the
+ * system's state colors (issue #213): presente verde, tardanza ámbar,
+ * justificado gris neutro, ausente rojo.
+ */
+const RECEIPT_TONE_CLASS: Record<EstadoAsistencia, string> = {
+  present: "bg-state-ok",
+  late: "bg-state-warn",
+  justified: "bg-state-neutral",
+  absent: "bg-state-bad",
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -237,6 +262,20 @@ export default function TrainerAttendancePage(): React.ReactElement {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [result, setResult] = useState<RegisterAttendanceResult | null>(null);
+  /**
+   * The moment the batch was actually filed — captured once, at the same time
+   * `confirmed` flips, rather than re-read at render time. The receipt's
+   * identity band reads it as "when this got archived", and a value computed
+   * on every render would keep ticking forward after the fact.
+   */
+  const [confirmedAt, setConfirmedAt] = useState<Date | null>(null);
+  /**
+   * Where focus goes when the receipt appears (issue #213 accessibility
+   * requirement): the screen's own heading, not the first button — a filed
+   * session is a state change the trainer needs read out, not a decision
+   * waiting on them.
+   */
+  const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
   /** A position read off the URL that still needs its roster loaded. */
   const [pendingRestore, setPendingRestore] = useState<WizardLocation | null>(null);
   /**
@@ -334,6 +373,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
   // /trainer is gated to the "trainer" role only — an admin using this page
   // must bounce back to their own attendance overview, not the trainer panel.
   const backHref = session?.user?.role === "admin" ? "/attendance" : "/trainer";
+  /**
+   * The receipt's "salida hacia el historial" (issue #213). `/attendance` —
+   * `backHref`'s own admin destination — already IS the admin's history view
+   * (filterable records, same screen `backHref` sends them to); a trainer has
+   * no such overlap, so this points at the trainer's own history route
+   * instead of doubling up on `backHref`.
+   */
+  const attendanceHistoryHref =
+    session?.user?.role === "admin" ? "/attendance" : "/trainer/attendance/history";
 
   // ---- The wizard's address ----
   //
@@ -383,6 +431,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
    * filed on all derive from it. Hard-wiring today here is what stopped the
    * history's "Corregir" from being able to correct anything — it would open
    * today's list for that group and file a second session instead.
+   *
+   * Resolves `true` only when the roster actually landed on `target`. The
+   * failure path sets `rosterError` and leaves `step` where it was, which is
+   * invisible to a caller that cannot tell the two apart — see
+   * `handleRetryFailed`, which must not tear the receipt down over a load
+   * that never happened.
    */
   const openRoster = useCallback(
     async (
@@ -390,7 +444,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
       requestedDate: string | null,
       target: Exclude<WizardStep, "select-session">,
       mode: "push" | "replace",
-    ): Promise<void> => {
+    ): Promise<boolean> => {
       setRosterLoading(true);
       setRosterError(null);
       try {
@@ -430,9 +484,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
         setOnlyUnreviewed(false);
         setStep(target);
         writeWizardUrl(horarioId, requestedDate, target, mode);
+        return true;
       } catch (err) {
         console.error("[trainer/attendance] fetchAlumnosPorHorario failed", err);
         setRosterError("No se pudo cargar el listado de estudiantes de este horario.");
+        return false;
       } finally {
         setRosterLoading(false);
       }
@@ -531,6 +587,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [confirmed, selectedScheduleId, requestedDate, students.length]);
+
+  // Receipt a11y requirement (issue #213): focus lands on the screen's own
+  // heading when it appears, not on the first button — a filed session is a
+  // state change to announce, not a decision waiting on input.
+  useEffect(() => {
+    if (confirmed) confirmationHeadingRef.current?.focus();
+  }, [confirmed]);
 
   function toggleDay(day: DiaSemana): void {
     setExpandedDays((prev) => {
@@ -672,6 +735,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
         students: toAttendanceMarks(students),
       });
       setResult(registration);
+      setConfirmedAt(new Date());
       setConfirmed(true);
       // The session is filed; the draft has nothing left to protect. Kept when
       // some records failed, so a retry still starts from the trainer's marks.
@@ -704,6 +768,35 @@ export default function TrainerAttendancePage(): React.ReactElement {
     setSubmitting(false);
     setSubmitError(null);
     setResult(null);
+    setConfirmedAt(null);
+  }
+
+  /**
+   * The receipt's primary action when some records failed (decision 2,
+   * issue #213): re-open the SAME session's roster, freshly re-fetched, so
+   * the students who saved show as already reviewed and only the failed
+   * ones are left to correct — never the picker, which would make the
+   * trainer re-find this exact horario and date by hand.
+   *
+   * The receipt comes down only once the roster is actually back. Clearing
+   * `confirmed` first would drop the trainer onto the pre-submission review
+   * of a roster that is still fully marked — with no error in sight, since
+   * `rosterError` only renders on step 1 — where confirming again refiles
+   * every student, including the ones already saved, and `result.failed`
+   * would already be gone.
+   */
+  async function handleRetryFailed(): Promise<void> {
+    if (selectedScheduleId === null) return;
+    const opened = await openRoster(
+      selectedScheduleId,
+      requestedDate,
+      "mark-attendance",
+      "replace",
+    );
+    if (!opened) return;
+    setConfirmed(false);
+    setResult(null);
+    setConfirmedAt(null);
   }
 
   // ---- Student list pagination (attendance wizard) ----
@@ -745,6 +838,30 @@ export default function TrainerAttendancePage(): React.ReactElement {
    */
   const reviewedCount = students.length - unreviewedCount;
   const hasUnsavedMarks = !confirmed && reviewedCount > 0;
+
+  // ---- The confirmation receipt (issue #213) ----
+
+  /**
+   * Counts what got SAVED, not what the trainer marked (decision 2): a failed
+   * record is excluded from every one of the four states, not just tallied
+   * separately, because the receipt describes the archive, not the intent.
+   */
+  const receiptCounts = useMemo(
+    () => buildAttendanceReceipt(students, result?.failed.map((f) => f.personaId) ?? []),
+    [students, result],
+  );
+  const receiptTotal = TOTAL_ORDER.reduce((sum, state) => sum + receiptCounts[state], 0);
+  const hasFailedRecords = (result?.failed.length ?? 0) > 0;
+  /**
+   * The bar's accessible name (issue #213 a11y requirement): it is decorative
+   * on its own, so this has to say out loud the four values a sighted reader
+   * gets from the bar's proportions and the row list beside it.
+   */
+  const receiptBarAriaLabel = TOTAL_ORDER.map((state) => {
+    const count = receiptCounts[state];
+    const [singular, plural] = TOTAL_LABELS[state];
+    return `${count} ${(count === 1 ? singular : plural).toLowerCase()}`;
+  }).join(", ");
 
   /**
    * The one exit the app cannot re-enter: `sessionStorage` dies with the tab,
@@ -1399,16 +1516,22 @@ export default function TrainerAttendancePage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
       <AppShell title="Pasar lista">
-      {!confirmed && (
-        <BackLink
-          href={backHref}
-          label={session?.user?.role === "admin" ? "Volver a Asistencias" : "Volver al Panel del Entrenador"}
-          // Walking out of a started roll call is the one navigation on this
-          // screen that costs something, so it is the one that asks.
-          onClick={handleLeaveWizard}
-          className="mb-6"
-        />
-      )}
+      {/*
+        Issue #213: this used to hide behind `!confirmed`, which took the
+        page's own frame down with it exactly when the receipt needed it —
+        `handleLeaveWizard` already no-ops once `confirmed` is true (it only
+        asks while `hasUnsavedMarks`, and a filed session has none), so
+        rendering it unconditionally costs nothing and restores the frame
+        every other screen in the panel keeps.
+      */}
+      <BackLink
+        href={backHref}
+        label={session?.user?.role === "admin" ? "Volver a Asistencias" : "Volver al Panel del Entrenador"}
+        // Walking out of a started roll call is the one navigation on this
+        // screen that costs something, so it is the one that asks.
+        onClick={handleLeaveWizard}
+        className="mb-6"
+      />
       <ConfirmDialog
         open={pendingConfirmation !== null}
         variant="danger"
@@ -1432,64 +1555,183 @@ export default function TrainerAttendancePage(): React.ReactElement {
         onCancel={() => setPendingConfirmation(null)}
       />
       {confirmed ? (
-        <div className="flex min-h-[50vh] items-center justify-center py-8">
-          <div className="w-full max-w-lg text-center">
-            <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
-              <CheckCircle size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
-            </div>
-            <h2 className="mb-3 text-xl font-bold tracking-tight text-ink">
-              Asistencia Registrada
+        // The receipt (issue #213): a record of what got archived, in the
+        // page's own left-aligned frame — not a centered announcement of a
+        // fact the trainer already knows from having just tapped the button.
+        <div className="flex flex-col gap-5">
+          <div>
+            <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">
+              {hasFailedRecords ? "Asistencia registrada parcialmente" : "Asistencia registrada"}
+            </p>
+            {/* `tabIndex={-1}`: reachable only by the focus effect above, never
+                a Tab stop of its own. The system focus ring excludes
+                `[tabindex="-1"]` (see `globals.css`), so the ring is redrawn
+                by hand here — the same pattern `payments/page.tsx` uses for
+                its own programmatically-focused detail heading. */}
+            <h2
+              ref={confirmationHeadingRef}
+              tabIndex={-1}
+              className="text-xl font-extrabold tracking-tight text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball focus-visible:shadow-focus-band"
+            >
+              {selectedSchedule
+                ? `${formatDay(selectedSchedule.diaSemana)} ${selectedSchedule.horaInicio} — ${selectedSchedule.horaFin}`
+                : "Horario seleccionado"}
             </h2>
-            <p className="mb-2 text-sm leading-relaxed text-ink-2">
-              La asistencia para{" "}
-              <strong className="text-ink">
-                {selectedSchedule
-                  ? `${formatDay(selectedSchedule.diaSemana)} ${selectedSchedule.horaInicio} — ${selectedSchedule.horaFin}`
-                  : "el horario seleccionado"}
-              </strong>{" "}
-              ha sido registrada exitosamente.
-            </p>
-            <p className="mb-2 text-sm leading-relaxed text-ink-2">
-              Se registró la asistencia de{" "}
-              <strong className="text-ink">{result?.createdCount ?? 0} estudiantes</strong>.
-            </p>
-            {students.length > 0 && (
-              <p className="mb-4 text-xs text-ink-3">{buildAttendanceSummary(students)}</p>
-            )}
-            {result && result.failed.length > 0 && (
-              /*
-               * NAME the students. This used to say "N registro(s) no se
-               * pudieron guardar" and then ask the trainer to retry for
-               * students it refused to identify — leaving them to re-mark the
-               * whole roster to find out who was missing.
-               */
-              <div
-                role="alert"
-                className="mb-8 rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3.5 text-left text-xs text-state-warn"
-              >
-                <p className="flex items-center gap-1.5 font-bold">
-                  <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                  {result.failed.length === 1
-                    ? "No se pudo guardar 1 registro"
-                    : `No se pudieron guardar ${result.failed.length} registros`}
-                </p>
-                <ul className="mt-1.5 list-inside list-disc font-semibold">
-                  {resolveFailedStudentNames(result.failed, students).map((name) => (
-                    <li key={name}>{name}</li>
-                  ))}
-                </ul>
-                <p className="mt-1.5 text-state-warn/80">
-                  Vuelva a tomar lista de este horario para reintentar con estos alumnos — el resto
-                  ya quedó guardado.
-                </p>
-              </div>
-            )}
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <Button type="button" variant="primary" onClick={handleReset}>
-                Registrar Otra Asistencia
-              </Button>
-              <BackLink href={backHref} label="Volver al Panel" />
+          </div>
+
+          {/* The identity band: what quedó archivado, sobre cuántos, cuándo y
+              quién. */}
+          <StatCard
+            variant="hot"
+            label={
+              hasFailedRecords
+                ? `Falta${result && result.failed.length === 1 ? "" : "n"} ${result?.failed.length ?? 0} ${result?.failed.length === 1 ? "alumno" : "alumnos"} por guardar`
+                : "Guardada en el historial del club"
+            }
+            value={result?.createdCount ?? 0}
+            unit={`/${students.length} ${students.length === 1 ? "alumno" : "alumnos"}`}
+            hint={
+              confirmedAt
+                ? `${formatDateTime(confirmedAt.toISOString())} · ${session?.user?.name ?? ""}`
+                : undefined
+            }
+          />
+
+          {result && result.failed.length > 0 && (
+            /*
+             * NAME the students. This used to say "N registro(s) no se
+             * pudieron guardar" and then ask the trainer to retry for
+             * students it refused to identify — leaving them to re-mark the
+             * whole roster to find out who was missing. Kept as-is (issue
+             * #213 decision 3): only its position moved, above the
+             * breakdown instead of below it.
+             */
+            <div
+              role="alert"
+              className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3.5 text-xs text-state-warn"
+            >
+              <p className="flex items-center gap-1.5 font-bold">
+                <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                {result.failed.length === 1
+                  ? "No se pudo guardar 1 registro"
+                  : `No se pudieron guardar ${result.failed.length} registros`}
+              </p>
+              <ul className="mt-1.5 list-inside list-disc font-semibold">
+                {resolveFailedStudentNames(result.failed, students).map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-state-warn/80">
+                Vuelva a tomar lista de este horario para reintentar con estos alumnos — el resto
+                ya quedó guardado.
+              </p>
             </div>
+          )}
+
+          {/* The desglose: the one number the old screen buried. Four states,
+              always all four (issue #213 decision 1 — a zero is atenuado,
+              never omitted), plus a proportional bar for the at-a-glance
+              read. */}
+          <div className="card flex flex-col gap-4 p-5 sm:p-6">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-3">
+              {hasFailedRecords
+                ? `Cómo quedó la sesión · ${receiptTotal} guardados`
+                : "Cómo quedó la sesión"}
+            </p>
+
+            <div
+              role="img"
+              aria-label={receiptBarAriaLabel}
+              className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-line"
+            >
+              {TOTAL_ORDER.filter((state) => receiptCounts[state] > 0).map((state) => (
+                <span
+                  key={state}
+                  aria-hidden="true"
+                  className={`h-full ${RECEIPT_TONE_CLASS[state]}`}
+                  style={{ width: `${(receiptCounts[state] / Math.max(receiptTotal, 1)) * 100}%` }}
+                />
+              ))}
+            </div>
+
+            <ul className="flex flex-col">
+              {TOTAL_ORDER.map((state) => {
+                const count = receiptCounts[state];
+                const isZero = count === 0;
+                const percent = receiptTotal > 0 ? Math.round((count / receiptTotal) * 100) : 0;
+                return (
+                  <li
+                    key={state}
+                    className="grid grid-cols-[10px_1fr_auto_auto] items-center gap-x-3 border-t border-line py-2.5 first:border-t-0"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`h-2.5 w-2.5 rounded-[3px] ${isZero ? "bg-line-2" : RECEIPT_TONE_CLASS[state]}`}
+                    />
+                    {/* The state name is real text, not just the dot's
+                        color — no row here is distinguishable by color
+                        alone (issue #213 a11y requirement). */}
+                    <span className={`text-sm ${isZero ? "font-normal text-ink-3" : "font-semibold text-ink"}`}>
+                      {ATTENDANCE_LABELS[state]}
+                    </span>
+                    <span
+                      className={`min-w-[3ch] text-right text-lg font-extrabold tabular-nums tracking-tight ${isZero ? "text-ink-3" : "text-ink"}`}
+                    >
+                      {count}
+                    </span>
+                    <span className="min-w-[5ch] text-right text-xs tabular-nums text-ink-3">
+                      {isZero ? "—" : `${percent} %`}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            {hasFailedRecords ? (
+              <>
+                {/* Decision 2: the primary action displaces to the retry —
+                    it is the only action that actually corrects the
+                    state. */}
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => void handleRetryFailed()}
+                  className="w-full justify-center sm:w-auto"
+                >
+                  {result && result.failed.length === 1
+                    ? "Reintentar con ese alumno"
+                    : `Reintentar con esos ${result?.failed.length ?? 0} alumnos`}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleReset}
+                  className="w-full justify-center sm:w-auto"
+                >
+                  Registrar Otra Asistencia
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handleReset}
+                  className="w-full justify-center sm:w-auto"
+                >
+                  Registrar Otra Asistencia
+                </Button>
+                <Link
+                  href={attendanceHistoryHref}
+                  className={buttonClasses("secondary", "md", "w-full justify-center sm:w-auto")}
+                >
+                  Ver historial de asistencias
+                </Link>
+              </>
+            )}
+            <BackLink href={backHref} label="Volver al Panel" className="w-full justify-center sm:w-auto" />
           </div>
         </div>
       ) : (
