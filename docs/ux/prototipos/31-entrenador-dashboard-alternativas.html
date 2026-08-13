@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard del entrenador — Prototipos Cata Club</title>
+<link rel="stylesheet" href="_sistema.css">
+<style>
+  /* ---------------------------------------------------------------------
+     Piezas propias de esta pantalla. Todo lo demás sale de _sistema.css.
+     Cada bloque explica por qué existe, no qué hace.
+     --------------------------------------------------------------------- */
+
+  /* Las dos tarjetas de arriba comparten ANCHO, no altura. `align-items:
+     start` es la corrección al hueco muerto: con `stretch`, la tarjeta más
+     corta se estiraba hasta la altura de la otra y el sobrante quedaba en
+     blanco dentro del carbón. La simetría que importa en una grilla de dos
+     columnas es la vertical del borde, no la horizontal del piso. */
+  /* Las dos tarjetas comparten ancho Y alto: sus bordes cierran parejos arriba
+     y abajo. La altura la reparte `.acts` con `margin-top:auto` — el sobrante
+     va todo al pie, nunca a un hueco en el medio. */
+  .top2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: stretch; }
+  @media (max-width: 980px) { .top2 { grid-template-columns: 1fr; } }
+
+  /* Tarjeta carbón. No fija altura: mide lo que pide su contenido, que es
+     poco a propósito — señal y acción, sin relleno. */
+  .agenda { background: var(--coal); color: #FFF; border-radius: var(--r-card); padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 18px; }
+  .agenda .eye { color: rgba(255,255,255,.6); display: flex; align-items: center; gap: 8px; margin: 0; }
+  .agenda .eye::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ball); flex: none; }
+
+  /* Jerarquía invertida a propósito: el horario es fijo y semanal, el
+     entrenador ya lo sabe. Lo que no sabe es cuánto falta, así que la
+     cuenta regresiva es el número grande y el horario baja a apoyo. */
+  .cd { font-size: 56px; font-weight: 800; letter-spacing: -.05em; line-height: 1; font-variant-numeric: tabular-nums; display: block; }
+  .cd small { font-size: 17px; font-weight: 600; letter-spacing: -.01em; color: rgba(255,255,255,.6); margin-left: 7px; }
+  .sup { margin: 8px 0 0; font-size: 13px; color: rgba(255,255,255,.66); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .sup span { display: inline-flex; align-items: center; gap: 14px; }
+  .sup span + span::before { content: ""; width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,.38); flex: none; }
+
+  /* La acción, no el informe. La tarjeta termina en el botón que lleva a la
+     lista de ESTA sesión: el contexto ya está arriba, así que el botón no
+     tiene que repetirlo. La secundaria queda al lado, discreta. */
+  /* `margin-top:auto` ancla las acciones al pie de la tarjeta: cuando el carbón
+     es más bajo que el donut, el sobrante se acumula acá abajo en vez de abrir
+     un hueco entre la cuenta regresiva y los botones. */
+  .acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; }
+  /* El `.btn` del sistema es claro por defecto y sobre el carbón se leería
+     como un segundo bloque blanco compitiendo con la primaria. La variante
+     sobre carbón copia el idioma de `.vbtn`: contorno translúcido y texto
+     blanco, que sobre `--coal` mide muy por encima de AA. */
+  .btn.oncoal { background: transparent; border-color: rgba(255,255,255,.24); color: #FFF; }
+  .btn.oncoal:hover { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.44); }
+
+  /* Los tres días que la cuenta regresiva sabe producir. Sólo uno se
+     muestra, y con él la acción que le corresponde: cuando ya no queda
+     sesión, tampoco queda botón que apunte a una. */
+  .agenda .day { display: none; }
+  .agenda[data-day="next"] .day-next,
+  .agenda[data-day="live"] .day-live,
+  .agenda[data-day="done"] .day-done { display: block; }
+  .agenda .act-next, .agenda .act-live { display: none; }
+  .agenda[data-day="next"] .act-next,
+  .agenda[data-day="live"] .act-live { display: inline-flex; }
+  /* En curso el punto del eyebrow deja de ser una espera y pasa a ser un
+     aviso: mismo lugar, otro color, y la palabra «En curso» al lado para
+     que no dependa sólo del color. */
+  .agenda[data-day="live"] .eye::before { background: var(--red); }
+  .cdline { margin: 10px 0 0; }
+  /* El día cerrado no tiene número que mostrar: la frase ocupa el lugar de
+     la cuenta regresiva, en el peso que le corresponde a un dato que ya no
+     es urgente. */
+  .doneline { margin: 10px 0 0; font-size: 19px; font-weight: 700; letter-spacing: -.02em; color: #FFF; }
+
+  /* Barra proporcional — misma pieza que el prototipo 32, mismo nombre.
+     Los dos prototipos tienen que leerse como un sistema. */
+  .prop { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--line); gap: 2px; }
+  .prop i { display: block; height: 100%; }
+  .prop i:first-child { border-radius: 999px 0 0 999px; }
+  .prop i:last-child  { border-radius: 0 999px 999px 0; }
+
+  /* Desglose en grilla — también del prototipo 32: una columna de números
+     a la derecha, tabular-nums, fila en cero atenuada pero presente. */
+  .brk { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .brk li { display: grid; align-items: center; gap: 0 12px; grid-template-columns: 10px 1fr auto auto; height: 38px; border-top: 1px solid var(--line); }
+  .brk li:first-child { border-top: none; }
+  .brk .dt { width: 10px; height: 10px; border-radius: 3px; }
+  .brk .lb { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .brk .n  { font-size: 17px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; min-width: 4ch; }
+  .brk .pc { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; text-align: right; min-width: 5ch; }
+  .brk li.zero .lb { color: var(--ink-3); font-weight: 500; }
+  .brk li.zero .n  { color: var(--ink-3); font-weight: 600; }
+  .brk li.zero .dt { background: var(--line-2) !important; }
+
+  /* Donut: el color vive en el anillo y en los puntos del desglose; el
+     número del centro va en tinta y lleva etiqueta, porque «200» solo no
+     dice de qué. */
+  .dnut { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 22px; align-items: center; padding: 18px 20px 20px; }
+  @media (max-width: 520px) { .dnut { grid-template-columns: 1fr; justify-items: center; } }
+  .dnut svg { width: 148px; height: 148px; }
+  .dnut .seg { fill: none; stroke-width: 19; }
+  .dnut .trk { fill: none; stroke: var(--line); stroke-width: 19; }
+  .dnut .ctr-n { fill: var(--ink); font-size: 30px; font-weight: 800; letter-spacing: -.04em; }
+  .dnut .ctr-k { fill: var(--ink-3); font-size: 10.5px; font-weight: 700; letter-spacing: .1em; }
+
+  /* Últimas listas. En reposo la fila es tranquila: fecha (el eje de
+     lectura), horario, una barra proporcional y el total en tinta. Los
+     cuatro conteos aparecen al pasar el mouse OCUPANDO LA MISMA CELDA que
+     la barra, para que la lista no salte cuando el puntero la recorre. */
+  .rl { display: flex; flex-direction: column; }
+  .rl-row { position: relative; display: grid; grid-template-columns: minmax(108px,.75fr) minmax(140px,.9fr) minmax(150px,1.35fr) auto; gap: 6px 20px; align-items: center; min-height: var(--h-row); padding: 11px 20px; border-bottom: 1px solid var(--line); }
+  .rl-row:last-child { border-bottom: none; }
+  .rl-row:hover { background: #FAFAFB; }
+  /* La fecha pesa más que el horario: es por dónde se busca una lista. */
+  .rl-d b { display: block; font-size: 14px; font-weight: 700; color: var(--ink); }
+  .rl-d span { display: block; font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .rl-h { font-size: 13px; font-weight: 500; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .rl-t { text-align: right; }
+  .rl-t b { display: block; font-size: 17px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .rl-t span { display: block; font-size: 11px; color: var(--ink-3); }
+  .rl-bar:focus-visible { outline: 2px solid var(--ball); outline-offset: 3px; border-radius: 999px; }
+  .rl-brk { display: none; flex-wrap: wrap; gap: 6px 14px; }
+  .rl-brk .c { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .rl-brk .c i { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+  .rl-brk .c b { font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .rl-row:hover .rl-bar { display: none; }
+  .rl-row:hover .rl-brk { display: flex; }
+  /* Con el foco por teclado la barra NO se oculta: si desapareciera, el
+     elemento enfocado se iría con ella y el foco se perdería. */
+  .rl-row:focus-within .rl-brk { display: flex; }
+  .rl-row:focus-within .rl-bar { display: flex; }
+  .rl-c3 { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+  /* Estados del prototipo. */
+  .stbox { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 9px; min-height: 260px; padding: 34px 24px; text-align: center; }
+  .stbox b { font-size: 15px; color: var(--ink); }
+  .stbox p { margin: 0; max-width: 46ch; font-size: 13px; color: var(--ink-2); }
+  .stbox .ic { width: 46px; height: 46px; border-radius: 50%; background: var(--neutral-bg); color: var(--ink-3); display: flex; align-items: center; justify-content: center; }
+  .stbox .ic svg { width: 22px; height: 22px; }
+  .stbox.err { border-color: rgba(197,27,34,.25); background: var(--bad-bg); }
+  .stbox.err .ic { background: var(--paper); color: var(--bad); }
+  .dash[data-state="loading"] .dash-body,
+  .dash[data-state="error"] .dash-body,
+  .dash[data-state="rest"] .dash-body { display: none; }
+  .dash[data-state="loading"] .st-loading,
+  .dash[data-state="error"] .st-error,
+  .dash[data-state="rest"] .st-rest { display: flex; }
+  .dash-body { display: flex; flex-direction: column; gap: 18px; }
+  .rl-empty { display: none; }
+  .dash.no-recent .rl { display: none; }
+  .dash.no-recent .rl-empty { display: flex; }
+
+  /* Conmutador de estados: vive en el chrome de revisión, no en la app,
+     así que usa los tokens del chrome y no los del producto. */
+  .switcher { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .switcher > span { font-size: 12px; font-weight: 700; color: var(--chrome-mute); }
+  .stbtn { min-height: 32px; padding: 6px 11px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--chrome-surf); color: var(--chrome-ink); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .stbtn:hover { border-color: var(--chrome-mute); }
+  .stbtn[aria-pressed="true"] { background: var(--coal); border-color: var(--coal); color: #FFF; }
+  .stbtn:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; }
+
+  /* Veredicto de una comparación. Va como pill y no como texto coloreado
+     por dos razones: el sistema reserva el color para badges y pills, y el
+     texto suelto en `--bad`/`--ok` sobre el chrome oscuro medía 3.3:1. Los
+     pares `-bg`/color de _sistema.css sí están calibrados para AA. */
+  .verd { height: 22px; padding: 0 10px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 6px; background: var(--neutral-bg); color: var(--neutral); }
+  .verd::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .verd.bad { background: var(--bad-bg); color: var(--bad); }
+  .verd.ok  { background: var(--ok-bg);  color: var(--ok); }
+
+  /* Toda maqueta de UI fuera de `.app` debe re-anclar los tokens claros:
+     el chrome de la página de prototipos es oscuro en modo oscuro y si no
+     se re-anclan queda texto oscuro sobre fondo oscuro. */
+  .uipreview { background: var(--canvas); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px; }
+
+  @media (max-width: 760px) {
+    /* En móvil la fila se reorganiza sin perder información: el desglose
+       deja de depender del puntero y se muestra siempre bajo la barra. */
+    .rl-row { grid-template-columns: minmax(0,1fr) auto; gap: 10px 14px; padding: 14px 16px; align-items: start; }
+    .rl-d { grid-column: 1; grid-row: 1; }
+    .rl-t { grid-column: 2; grid-row: 1; }
+    .rl-h { grid-column: 1 / -1; grid-row: 2; }
+    .rl-c3 { grid-column: 1 / -1; grid-row: 3; }
+    .rl-brk { display: flex; }
+    .rl-row:hover .rl-bar { display: flex; }
+    .cd { font-size: 46px; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-ball" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 1 6.4 15.4l-2.8-2.8"/><path d="M12 3a9 9 0 0 0-6.4 15.4L14 10"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2h4a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4"/><path d="M9 2h6v4H9z"/><path d="m9 13 2 2 4-4"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-load" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></symbol>
+  <symbol id="i-hist" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></symbol>
+</svg>
+
+<div class="wrap">
+  <p class="crumb"><a href="index.html">Prototipos</a> <span class="sep">/</span> <a href="19-entrenador.html">Entrenador</a> <span class="sep">/</span> <span class="here">Mi día</span></p>
+  <div class="ptitle">
+    <h1>Mi día · dashboard del entrenador</h1><span class="route">/trainer</span>
+    <span class="grow"></span><span class="flag">agenda, no tablero</span>
+  </div>
+
+  <div class="note">
+    <h2><span class="mine">Propuesta</span> La tarjeta no informa sobre la sesión: la resuelve</h2>
+    <p>
+      La versión anterior llenaba el carbón con <b>el riel del día</b>, la línea temporal de las sesiones
+      que venían después. Era contenido honesto, pero contenido para mirar: el entrenador ya sabe su
+      horario semanal de memoria. Sale el riel y entra <b>la acción</b> —«Pasar lista de esta sesión»—
+      apuntando a la sesión que la cuenta regresiva acaba de nombrar.
+    </p>
+    <p>
+      <b>El botón no inventa nada:</b> el wizard ya sabe abrirse con el horario puesto. La URL
+      <code>/trainer/attendance?horario=&lt;id&gt;&amp;fecha=&lt;YYYY-MM-DD&gt;&amp;paso=lista</code> cae
+      directo en la lista de alumnos y saltea el paso de elegir horario — es el contrato que leen
+      <code>parseWizardQuery</code> y la restauración de posición en
+      <code>attendance-utils.ts:496-549</code>. «Elegir otro horario» cubre el caso de querer otra sesión.
+    </p>
+    <p>
+      <b>Se invierte la jerarquía:</b> el horario es fijo y semanal, el entrenador ya lo sabe de memoria.
+      Lo que no sabe es cuánto falta, así que <b>la cuenta regresiva es el número grande</b> y el horario,
+      la duración y los inscritos bajan a una línea de apoyo.
+    </p>
+    <p>
+      <b>No es UI propuesta:</b> es un prototipo estático de revisión. Los horarios, cantidades y estados
+      son datos sintéticos, y ninguna tarjeta muestra un dato que la app no tenga: día, hora de inicio y
+      fin, cuenta regresiva e inscritos.
+    </p>
+  </div>
+
+  <div class="switcher" aria-label="Estados del prototipo">
+    <span>Estado del prototipo:</span>
+    <button class="stbtn" type="button" aria-pressed="true" data-state="normal">Día normal</button>
+    <button class="stbtn" type="button" aria-pressed="false" data-state="live">Sesión en curso</button>
+    <button class="stbtn" type="button" aria-pressed="false" data-state="done">Sin más sesiones hoy</button>
+    <button class="stbtn" type="button" aria-pressed="false" data-state="rest">Día sin sesiones</button>
+    <button class="stbtn" type="button" aria-pressed="false" data-state="loading">Cargando</button>
+    <button class="stbtn" type="button" aria-pressed="false" data-state="error">Error de carga</button>
+    <button class="stbtn" type="button" aria-pressed="false" data-recent-toggle>Sin listas recientes</button>
+  </div>
+
+  <!-- =====================================================================
+       A · Pantalla propuesta
+       ===================================================================== -->
+  <p class="statelabel" style="margin-top:6px">A · Mi día del entrenador</p>
+
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><span class="disc"><svg><use href="#i-ball"/></svg></span><div><b>Cata Club</b><span>Panel de gestión</span></div></div>
+      <nav>
+        <a class="nav-i on" href="19-entrenador.html"><svg><use href="#i-grid"/></svg>Mi día</a>
+        <!-- La etiqueta real de /trainer/attendance es «Pasar lista»
+             (frontend/src/lib/auth-utils.ts:65-72), no «Asistencia». -->
+        <a class="nav-i" href="20-tomar-lista.html"><svg><use href="#i-clip"/></svg>Pasar lista</a>
+        <!-- Tercer ítem del issue #212: hoy /trainer/attendance/history no
+             figura en la navegación y el sidebar marca «Pasar lista» cuando
+             el entrenador está ahí. Este prototipo ya lo muestra resuelto. -->
+        <a class="nav-i" href="21-entrenador-historial.html"><svg><use href="#i-hist"/></svg>Historial</a>
+      </nav>
+      <div class="foot-nav">
+        <div class="user"><span class="av">CM</span><div><b>Carlos Mendoza</b><span>Entrenador</span></div></div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <div class="topbar">
+        <span class="date">Lunes 20 de julio · 14:35</span>
+        <span class="grow"></span>
+        <span class="srch"><svg><use href="#i-search"/></svg>Buscar una sección… <kbd>Ctrl K</kbd></span>
+        <span class="icob"><svg><use href="#i-bell"/></svg></span>
+      </div>
+
+      <div class="canvas">
+        <!-- La CTA primaria sigue apareciendo una sola vez, pero ya no acá:
+             el botón del encabezado era genérico y caía en el selector de
+             horario. El de la tarjeta carbón es específico y cae en la lista
+             de la sesión que toca, que es donde está el contexto. -->
+        <div class="rowline" style="flex-wrap:wrap;gap:12px">
+          <div style="min-width:0">
+            <p class="eye">Área de entrenadores</p>
+            <h2 class="h-page">Hola, Carlos</h2>
+          </div>
+        </div>
+
+        <section class="dash" data-state="normal">
+          <div class="card stbox st-loading" role="status" aria-live="polite">
+            <span class="ic"><svg class="spin"><use href="#i-load"/></svg></span>
+            <b>Cargando tu día…</b>
+            <p>Se están consultando tus horarios y las listas recientes.</p>
+          </div>
+          <div class="card stbox st-error err" role="alert">
+            <span class="ic"><svg><use href="#i-warn"/></svg></span>
+            <b>No se pudo cargar tu día</b>
+            <p>Volvé a intentarlo para consultar de nuevo los horarios y las listas.</p>
+            <button class="btn sm" type="button" data-retry>Reintentar</button>
+          </div>
+          <div class="card stbox st-rest">
+            <span class="ic"><svg><use href="#i-cal"/></svg></span>
+            <b>Hoy no tenés sesiones</b>
+            <p>Es un día de descanso. El resumen del mes y las últimas listas siguen disponibles.</p>
+          </div>
+
+          <div class="dash-body">
+            <div class="top2">
+              <!-- Tarjeta carbón: cuenta regresiva grande + la acción que
+                   resuelve esa sesión. El `href` es el contrato real del
+                   wizard —`horario`, `fecha` y `paso=lista`, verificado en
+                   frontend/src/app/trainer/attendance/attendance-utils.ts:496-549—
+                   así que el botón cae en la lista de alumnos, no en el
+                   selector de horario. -->
+              <section class="agenda" data-day="next" aria-label="Tu día de hoy">
+                <div class="day day-next">
+                  <p class="eye">Empieza en</p>
+                  <p class="cdline"><span class="cd">25<small>minutos</small></span></p>
+                  <p class="sup">
+                    <span>Lunes 15:00 — 16:00</span><span>60 minutos</span><span>12 inscritos</span>
+                  </p>
+                </div>
+
+                <!-- Ya empezada, la cuenta regresiva dejó de decidir nada: el
+                     entrenador no va a llegar antes por saber que pasaron 10
+                     minutos. Lo que necesita ahora es identificar CUÁL sesión
+                     abrir, y el identificador de una sesión es su hora de
+                     inicio. Por eso el número grande cambia de rol. -->
+                <div class="day day-live">
+                  <p class="eye">En curso · empezó a las</p>
+                  <p class="cdline"><span class="cd">15:00</span></p>
+                  <p class="sup">
+                    <span>Lunes · termina 16:00</span><span>Hace 10 minutos</span><span>12 inscritos</span>
+                  </p>
+                </div>
+
+                <div class="day day-done">
+                  <p class="eye">Hoy</p>
+                  <p class="doneline">Ya pasaron todas tus sesiones del día.</p>
+                  <p class="sup">
+                    <span>La última fue 17:30 — 18:30</span><span>14 inscritos</span>
+                  </p>
+                </div>
+
+                <div class="acts">
+                  <!-- El botón nombra la sesión por su hora en los dos estados:
+                       es la única etiqueta que no deja duda sobre cuál se abre. -->
+                  <a class="btn pri act-next" href="/trainer/attendance?horario=7&amp;fecha=2026-07-20&amp;paso=lista"><svg><use href="#i-clip"/></svg> Pasar lista de las 15:00</a>
+                  <a class="btn pri act-live" href="/trainer/attendance?horario=7&amp;fecha=2026-07-20&amp;paso=lista"><svg><use href="#i-clip"/></svg> Pasar lista de las 15:00</a>
+                  <a class="btn oncoal" href="/trainer/attendance">Elegir otro horario</a>
+                </div>
+              </section>
+
+              <!-- Tarjeta clara: mide lo que su contenido pide, ni un píxel más. -->
+              <section class="card" aria-labelledby="dn-t">
+                <div class="cardhead"><h3 class="sec-t" id="dn-t" style="flex:1">Distribución de asistencias</h3><span class="hint">Este mes</span></div>
+                <div class="dnut">
+                  <svg viewBox="0 0 148 148" role="img" aria-label="Distribución de 200 registros del mes: 152 presentes (76 %), 22 tardanzas (11 %), 10 justificados (5 %) y 16 ausentes (8 %).">
+                    <g transform="rotate(-90 74 74)">
+                      <circle class="trk" cx="74" cy="74" r="54"/>
+                      <circle class="seg" cx="74" cy="74" r="54" pathLength="100" stroke-dasharray="76 24" stroke-dashoffset="0"   style="stroke:var(--ok)"/>
+                      <circle class="seg" cx="74" cy="74" r="54" pathLength="100" stroke-dasharray="11 89" stroke-dashoffset="-76"  style="stroke:var(--warn)"/>
+                      <circle class="seg" cx="74" cy="74" r="54" pathLength="100" stroke-dasharray="5 95"  stroke-dashoffset="-87"  style="stroke:var(--neutral)"/>
+                      <circle class="seg" cx="74" cy="74" r="54" pathLength="100" stroke-dasharray="8 92"  stroke-dashoffset="-92"  style="stroke:var(--bad)"/>
+                    </g>
+                    <!-- El centro lleva etiqueta: «200» solo no dice de qué. -->
+                    <text class="ctr-n" x="74" y="70" text-anchor="middle" dominant-baseline="middle">200</text>
+                    <text class="ctr-k" x="74" y="90" text-anchor="middle" dominant-baseline="middle">REGISTROS</text>
+                  </svg>
+                  <ul class="brk">
+                    <li><span class="dt" style="background:var(--ok)"></span><span class="lb">Presente</span><span class="n">152</span><span class="pc">76 %</span></li>
+                    <li><span class="dt" style="background:var(--warn)"></span><span class="lb">Tardanza</span><span class="n">22</span><span class="pc">11 %</span></li>
+                    <li><span class="dt" style="background:var(--neutral)"></span><span class="lb">Justificado</span><span class="n">10</span><span class="pc">5 %</span></li>
+                    <li><span class="dt" style="background:var(--bad)"></span><span class="lb">Ausente</span><span class="n">16</span><span class="pc">8 %</span></li>
+                  </ul>
+                </div>
+              </section>
+            </div>
+
+            <section class="card" aria-labelledby="rl-t">
+              <div class="cardhead"><h3 class="sec-t" id="rl-t" style="flex:1">Últimas listas</h3><span class="hint">Pasá el mouse por una fila para ver el desglose</span></div>
+
+              <div class="rl">
+                <div class="rl-row">
+                  <div class="rl-d"><b>Hoy</b><span>20 jul</span></div>
+                  <div class="rl-h">Lunes 09:00 — 10:00</div>
+                  <div class="rl-c3">
+                    <div class="prop rl-bar" role="img" tabindex="0" aria-label="9 presentes, 1 tardanza, 1 justificado y 1 ausente sobre 12 registros">
+                      <i style="width:75%;background:var(--ok)"></i><i style="width:8.4%;background:var(--warn)"></i><i style="width:8.3%;background:var(--neutral)"></i><i style="width:8.3%;background:var(--bad)"></i>
+                    </div>
+                    <div class="rl-brk">
+                      <span class="c"><i style="background:var(--ok)"></i><b>9</b> Presente</span>
+                      <span class="c"><i style="background:var(--warn)"></i><b>1</b> Tardanza</span>
+                      <span class="c"><i style="background:var(--neutral)"></i><b>1</b> Justificado</span>
+                      <span class="c"><i style="background:var(--bad)"></i><b>1</b> Ausente</span>
+                    </div>
+                  </div>
+                  <div class="rl-t"><b>12</b><span>registros</span></div>
+                </div>
+
+                <div class="rl-row">
+                  <div class="rl-d"><b>Ayer</b><span>19 jul</span></div>
+                  <div class="rl-h">Domingo 09:00 — 10:00</div>
+                  <div class="rl-c3">
+                    <div class="prop rl-bar" role="img" tabindex="0" aria-label="8 presentes, 1 tardanza, 0 justificados y 1 ausente sobre 10 registros">
+                      <i style="width:80%;background:var(--ok)"></i><i style="width:10%;background:var(--warn)"></i><i style="width:10%;background:var(--bad)"></i>
+                    </div>
+                    <div class="rl-brk">
+                      <span class="c"><i style="background:var(--ok)"></i><b>8</b> Presente</span>
+                      <span class="c"><i style="background:var(--warn)"></i><b>1</b> Tardanza</span>
+                      <span class="c"><i style="background:var(--line-2)"></i><b>0</b> Justificado</span>
+                      <span class="c"><i style="background:var(--bad)"></i><b>1</b> Ausente</span>
+                    </div>
+                  </div>
+                  <div class="rl-t"><b>10</b><span>registros</span></div>
+                </div>
+
+                <div class="rl-row">
+                  <div class="rl-d"><b>Sábado</b><span>18 jul</span></div>
+                  <div class="rl-h">Sábado 10:00 — 11:00</div>
+                  <div class="rl-c3">
+                    <div class="prop rl-bar" role="img" tabindex="0" aria-label="12 presentes, 1 tardanza, 1 justificado y 0 ausentes sobre 14 registros">
+                      <i style="width:85.7%;background:var(--ok)"></i><i style="width:7.15%;background:var(--warn)"></i><i style="width:7.15%;background:var(--neutral)"></i>
+                    </div>
+                    <div class="rl-brk">
+                      <span class="c"><i style="background:var(--ok)"></i><b>12</b> Presente</span>
+                      <span class="c"><i style="background:var(--warn)"></i><b>1</b> Tardanza</span>
+                      <span class="c"><i style="background:var(--neutral)"></i><b>1</b> Justificado</span>
+                      <span class="c"><i style="background:var(--line-2)"></i><b>0</b> Ausente</span>
+                    </div>
+                  </div>
+                  <div class="rl-t"><b>14</b><span>registros</span></div>
+                </div>
+
+                <div class="rl-row">
+                  <div class="rl-d"><b>Viernes</b><span>17 jul</span></div>
+                  <div class="rl-h">Viernes 15:00 — 16:00</div>
+                  <div class="rl-c3">
+                    <div class="prop rl-bar" role="img" tabindex="0" aria-label="10 presentes, 2 tardanzas, 0 justificados y 1 ausente sobre 13 registros">
+                      <i style="width:76.9%;background:var(--ok)"></i><i style="width:15.4%;background:var(--warn)"></i><i style="width:7.7%;background:var(--bad)"></i>
+                    </div>
+                    <div class="rl-brk">
+                      <span class="c"><i style="background:var(--ok)"></i><b>10</b> Presente</span>
+                      <span class="c"><i style="background:var(--warn)"></i><b>2</b> Tardanza</span>
+                      <span class="c"><i style="background:var(--line-2)"></i><b>0</b> Justificado</span>
+                      <span class="c"><i style="background:var(--bad)"></i><b>1</b> Ausente</span>
+                    </div>
+                  </div>
+                  <div class="rl-t"><b>13</b><span>registros</span></div>
+                </div>
+
+                <div class="rl-row">
+                  <div class="rl-d"><b>Jueves</b><span>16 jul</span></div>
+                  <div class="rl-h">Jueves 17:30 — 18:30</div>
+                  <div class="rl-c3">
+                    <div class="prop rl-bar" role="img" tabindex="0" aria-label="9 presentes, 0 tardanzas, 1 justificado y 1 ausente sobre 11 registros">
+                      <i style="width:81.8%;background:var(--ok)"></i><i style="width:9.1%;background:var(--neutral)"></i><i style="width:9.1%;background:var(--bad)"></i>
+                    </div>
+                    <div class="rl-brk">
+                      <span class="c"><i style="background:var(--ok)"></i><b>9</b> Presente</span>
+                      <span class="c"><i style="background:var(--line-2)"></i><b>0</b> Tardanza</span>
+                      <span class="c"><i style="background:var(--neutral)"></i><b>1</b> Justificado</span>
+                      <span class="c"><i style="background:var(--bad)"></i><b>1</b> Ausente</span>
+                    </div>
+                  </div>
+                  <div class="rl-t"><b>11</b><span>registros</span></div>
+                </div>
+              </div>
+
+              <div class="emptyst rl-empty">
+                <span class="ic"><svg><use href="#i-list"/></svg></span>
+                <b>Todavía no hay listas registradas</b>
+                <p class="muted">En cuanto alguien pase lista en el club, la sesión aparece acá con su desglose.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="note" style="border-left-color:var(--line-2)">
+    <h2>Cómo las dos tarjetas miden lo mismo sin abrir un hueco</h2>
+    <p>
+      La grilla es <code>1fr 1fr</code> con <code>align-items:stretch</code>: las dos tarjetas comparten
+      ancho y alto, y sus bordes cierran parejos arriba y abajo. Eso es lo que se pide de una fila de dos
+      columnas fijas.
+    </p>
+    <p>
+      El problema de la altura igualada nunca fue igualar: fue <b>dónde caía el sobrante</b>. La versión
+      anterior lo dejaba en el medio de la tarjeta, entre la cuenta regresiva y el contenido de abajo, y
+      ahí se leía como un hueco de 50&nbsp;px. Acá el sobrante lo absorbe <code>.acts</code> con
+      <code>margin-top:auto</code>: las acciones se anclan al pie y el aire queda por encima de ellas,
+      donde se lee como respiro y no como olvido. El carbón dice cuatro cosas —cuánto falta, qué sesión
+      es, el botón que la abre y la salida hacia otra— y ninguna quinta existe para llenar.
+    </p>
+  </div>
+
+  <div class="note" style="border-left-color:var(--line-2)">
+    <h2>El número grande sigue a la pregunta viva</h2>
+    <p>
+      El lugar del número grande no lo ocupa siempre el mismo dato: lo ocupa el que responde lo que el
+      entrenador se está preguntando en ese momento.
+    </p>
+    <p>
+      <b>Antes de empezar</b> la pregunta es <i>cuánto falta</i>, y la responde la cuenta regresiva:
+      <code>25 minutos</code>. La hora de inicio es fija y semanal, ya se la sabe de memoria.
+      <b>Una vez empezada</b>, esa cuenta deja de decidir nada — nadie llega antes por saber que pasaron
+      diez minutos. La pregunta pasa a ser <i>cuál abro</i>, y el identificador de una sesión es su hora
+      de inicio: el número grande pasa a <code>15:00</code> y los minutos transcurridos bajan a la línea
+      de apoyo, donde siguen disponibles sin competir.
+    </p>
+    <p>
+      Por eso mismo el botón <b>nombra la sesión por su hora</b> en los dos estados —«Pasar lista de las
+      15:00»— en vez de decir «esta sesión» o «ahora»: es la única etiqueta que no deja duda sobre cuál
+      se abre al tocarla.
+    </p>
+  </div>
+
+  <!-- =====================================================================
+       B · Antes / después de la fila de «Últimas listas»
+       ===================================================================== -->
+  <p class="statelabel" style="margin-top:6px">B · La fila de «Últimas listas», antes y después</p>
+
+  <div class="grid2">
+    <div>
+      <p class="statelabel">Antes <span class="verd bad">Doce elementos por fila</span></p>
+      <div class="uipreview">
+        <div class="card" style="padding:12px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <div class="rl-d" style="min-width:88px"><b>Hoy</b><span>20 jul</span></div>
+          <div class="rl-h">Lunes 09:00 — 10:00</div>
+          <div class="rl-t" style="text-align:left"><b>12</b><span>total</span></div>
+          <div style="display:flex;gap:7px 12px;flex-wrap:wrap;font-size:11px">
+            <span style="color:var(--ok)">9 Presente</span>
+            <span style="color:var(--warn)">1 Tardanza</span>
+            <span style="color:var(--neutral)">1 Justificado</span>
+            <span style="color:var(--bad)">1 Ausente</span>
+          </div>
+        </div>
+      </div>
+      <p class="hint" style="display:block;margin-top:10px">
+        Cuatro conteos coloreados, cada uno con número y palabra: doce elementos por fila y treinta y seis
+        en la lista. El sistema reserva el color para badges y pills, no para números sueltos, y acá
+        compiten cuatro tonos por fila contra la CTA roja del encabezado.
+      </p>
+    </div>
+
+    <div>
+      <p class="statelabel">Después <span class="verd ok">Un eje, una barra, un total</span></p>
+      <div class="uipreview">
+        <div class="card" style="padding:0">
+          <div class="rl">
+            <div class="rl-row" style="border-bottom:none">
+              <div class="rl-d"><b>Hoy</b><span>20 jul</span></div>
+              <div class="rl-h">Lunes 09:00 — 10:00</div>
+              <div class="rl-c3">
+                <div class="prop rl-bar" role="img" aria-label="9 presentes, 1 tardanza, 1 justificado y 1 ausente sobre 12 registros">
+                  <i style="width:75%;background:var(--ok)"></i><i style="width:8.4%;background:var(--warn)"></i><i style="width:8.3%;background:var(--neutral)"></i><i style="width:8.3%;background:var(--bad)"></i>
+                </div>
+                <div class="rl-brk">
+                  <span class="c"><i style="background:var(--ok)"></i><b>9</b> Presente</span>
+                  <span class="c"><i style="background:var(--warn)"></i><b>1</b> Tardanza</span>
+                  <span class="c"><i style="background:var(--neutral)"></i><b>1</b> Justificado</span>
+                  <span class="c"><i style="background:var(--bad)"></i><b>1</b> Ausente</span>
+                </div>
+              </div>
+              <div class="rl-t"><b>12</b><span>registros</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="hint" style="display:block;margin-top:10px">
+        La fecha manda —es por donde se busca una lista—, el horario la acompaña con menos peso, la barra
+        muestra la proporción de un vistazo y el total va en tinta. Los cuatro números siguen ahí: el
+        <code>aria-label</code> de la barra los enuncia siempre, y al pasar el mouse ocupan el lugar de la
+        barra, en la misma celda, para que la lista no salte.
+      </p>
+    </div>
+  </div>
+
+  <div class="note" style="border-left-color:var(--line-2)">
+    <h2>Volúmenes y accesibilidad</h2>
+    <p>
+      <b>Datos:</b> el mes del entrenador son <b>200 registros</b> repartidos en 152 presentes, 22
+      tardanzas, 10 justificados y 16 ausentes — no siete. Con sesiones de 10 a 14 alumnos eso son unas
+      diecisiete listas en el mes, que es el orden de magnitud que el donut tiene que aguantar sin que
+      un segmento del 5&nbsp;% desaparezca.
+    </p>
+    <p>
+      <b>Accesibilidad:</b> la barra proporcional es decorativa por sí sola, así que lleva
+      <code>role="img"</code> con un <code>aria-label</code> que enuncia los cuatro valores y el total.
+      Ningún estado se distingue únicamente por color: cada punto tiene su palabra al lado, y la sesión
+      en curso no se anuncia con el punto rojo del eyebrow sino con las palabras «En curso» al lado. La
+      barra es enfocable, y con el foco puesto <b>no</b> se oculta —si se ocultara, el foco se perdería
+      con ella—, así que el desglose se agrega en lugar de reemplazarla. En móvil el desglose se muestra
+      siempre, porque ahí no hay puntero que revele nada.
+    </p>
+  </div>
+
+  <div class="foot">
+    <span>Prototipo 31 · Mi día del entrenador</span>
+    <span>Ruta real: <code>/trainer</code></span>
+    <span>Etiqueta del sidebar verificada en <code>frontend/src/lib/auth-utils.ts:65-72</code></span>
+    <span>Referencia visual, no fuente de lógica ni de datos reales.</span>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const dash = document.querySelector(".dash");
+    const agenda = document.querySelector(".agenda");
+    const stateButtons = Array.from(document.querySelectorAll(".stbtn[data-state]"));
+    const recentToggle = document.querySelector("[data-recent-toggle]");
+
+    // Los tres estados con sesión comparten el cuerpo del dashboard y sólo
+    // cambian la cara de la tarjeta carbón. Los otros tres esconden el
+    // cuerpo entero, así que con ellos no queda ningún enlace a una sesión.
+    const DAY_BY_STATE = { normal: "next", live: "live", done: "done" };
+
+    function selectState(state) {
+      stateButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.state === state)));
+      dash.dataset.state = state;
+      const day = DAY_BY_STATE[state];
+      if (day && agenda) agenda.dataset.day = day;
+    }
+
+    stateButtons.forEach((b) => b.addEventListener("click", () => selectState(b.dataset.state)));
+
+    recentToggle?.addEventListener("click", () => {
+      const on = recentToggle.getAttribute("aria-pressed") !== "true";
+      recentToggle.setAttribute("aria-pressed", String(on));
+      dash.classList.toggle("no-recent", on);
+    });
+
+    document.querySelectorAll("[data-retry]").forEach((b) => b.addEventListener("click", () => selectState("normal")));
+  })();
+</script>
+</body>
+</html>
