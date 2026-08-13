@@ -24,6 +24,7 @@ import type {
   AttendanceRecord,
   TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
+import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 
 // ---------------------------------------------------------------------------
 // Clock helpers
@@ -271,4 +272,124 @@ export function formatAbsenceCount(ausencias: number): string {
  */
 export function monthToDateRange(instant: Date = new Date()): DateRange {
   return buildDateRange("this_month", instant);
+}
+
+// ---------------------------------------------------------------------------
+// The immediate-session card (issue #211)
+//
+// The card's big number follows whichever question is still live: "how long
+// until" before the session starts, "which one" once it has (the hour is a
+// session's identifier — `19-entrenador.html`'s successor,
+// `31-entrenador-dashboard-alternativas.html`, names this directly). "done"
+// carries no schedule and no href at all — a state with nothing to point at
+// must not be able to grow one by accident.
+// ---------------------------------------------------------------------------
+
+export interface SessionCardNext {
+  kind: "next";
+  schedule: TrainingSchedule;
+  minutesAway: number;
+  href: string;
+}
+
+export interface SessionCardLive {
+  kind: "live";
+  schedule: TrainingSchedule;
+  minutesElapsed: number;
+  href: string;
+}
+
+export interface SessionCardDone {
+  kind: "done";
+}
+
+/** `null` stands for the three states that never render a card: rest day, loading, error. */
+export type SessionCardState = SessionCardNext | SessionCardLive | SessionCardDone | null;
+
+/**
+ * Derive the immediate-session card's state from today's schedules.
+ *
+ * `fecha` is deliberately never passed to `buildWizardQuery`: this card is
+ * always about TODAY, which is the wizard's own default and needs no address
+ * (`attendance-utils.ts`'s own note on `fecha` being optional).
+ */
+export function buildSessionCardState(
+  todaySchedules: TrainingSchedule[],
+  now: Date = new Date(),
+): SessionCardState {
+  if (todaySchedules.length === 0) return null;
+
+  const { next } = selectTodaySessions(todaySchedules, now);
+  if (!next) return { kind: "done" };
+
+  const href = `/trainer/attendance${buildWizardQuery(next.id, null, "mark-attendance")}`;
+  const minutesAway = minutesUntilStart(next, now);
+
+  return minutesAway > 0
+    ? { kind: "next", schedule: next, minutesAway, href }
+    : { kind: "live", schedule: next, minutesElapsed: -minutesAway, href };
+}
+
+/** "Hace N minutos" for the live state's support line. Never "hace 0 minutos". */
+export function formatElapsedMinutes(minutes: number): string {
+  if (minutes <= 0) return "Recién empezó";
+  return minutes === 1 ? "Hace 1 minuto" : `Hace ${minutes} minutos`;
+}
+
+// ---------------------------------------------------------------------------
+// "Últimas listas" proportional bar (issue #211)
+//
+// Color is reserved for badges and pills — four loose colored counts per row
+// compete with the page's own red CTA, so the composition renders as one
+// proportional bar instead. The bar is decorative on its own, so every number
+// still has to reach an accessibility tree: the `aria-label` built below
+// states all four counts and the total every time.
+// ---------------------------------------------------------------------------
+
+/** Reading order for the four attendance states — best news first, as on every other screen. */
+export const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
+
+export interface SessionBarSegment {
+  estado: EstadoAsistencia;
+  count: number;
+  /** Share of `total`, as a raw (unrounded) 0-100 percentage — a CSS width, not a displayed figure. */
+  widthPercent: number;
+}
+
+/** One segment per state, in `STATE_ORDER`. Every width is 0 when `total` is 0, never NaN. */
+export function buildSessionBarSegments(
+  counts: Record<EstadoAsistencia, number>,
+  total: number,
+): SessionBarSegment[] {
+  return STATE_ORDER.map((estado) => ({
+    estado,
+    count: counts[estado],
+    widthPercent: total > 0 ? (counts[estado] / total) * 100 : 0,
+  }));
+}
+
+/** Singular/plural noun pair for each state, used only by `buildSessionBarAriaLabel`. */
+const BAR_STATE_NOUNS: Record<EstadoAsistencia, [singular: string, plural: string]> = {
+  present: ["presente", "presentes"],
+  late: ["tardanza", "tardanzas"],
+  justified: ["justificado", "justificados"],
+  absent: ["ausente", "ausentes"],
+};
+
+function pluralizedCount(count: number, [singular, plural]: [string, string]): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/**
+ * The bar's `role="img"` `aria-label`: every count, in `STATE_ORDER`, plus
+ * the total — the one place the bar's information reaches a screen reader,
+ * since the bar itself carries no other text.
+ */
+export function buildSessionBarAriaLabel(
+  counts: Record<EstadoAsistencia, number>,
+  total: number,
+): string {
+  const parts = STATE_ORDER.map((estado) => pluralizedCount(counts[estado], BAR_STATE_NOUNS[estado]));
+  const last = parts[parts.length - 1];
+  return `${parts.slice(0, -1).join(", ")} y ${last} sobre ${total} registros`;
 }
