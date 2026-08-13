@@ -695,18 +695,42 @@ function EnrollWizard(): React.ReactElement {
     );
   }
 
-  /** One 56px detail row with the step it came from — `.drow` (_sistema.css:247-250). */
+  /**
+   * One 56px detail row with the step it came from — `.drow`
+   * (_sistema.css:247-250).
+   *
+   * `duplicateCandidate: true` flags a row as one of the fields a
+   * duplicate-identity 400 could not tell apart (issue #233): student
+   * cédula, representative cédula, representative correo. When the backend
+   * answers with that error, EVERY candidate row gets the SAME "Revisar"
+   * marker — never just one — so the visitor's eye lands on the right
+   * "Corregir" button without the app ever singling out which field was
+   * actually the duplicate. The marker lives here, outside `WizardNavigation`'s
+   * alert box: `enroll-qa.spec.ts`'s S09 pins the alert itself to never
+   * mention "cédula" or "correo" at all, so any field-naming guidance has to
+   * live somewhere else on the page.
+   */
   function summaryRow(
     label: string,
     value: React.ReactNode,
     correctStep: WizardStep,
+    opts: { duplicateCandidate?: boolean } = {},
   ): React.ReactElement {
+    const flagged = Boolean(opts.duplicateCandidate) && formErrors.some(isDuplicateIdentityError);
     return (
-      <div key={label} className="flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0">
+      <div
+        key={label}
+        className={`flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0 ${
+          flagged ? "border-l-4 border-l-state-warn bg-state-warn-bg" : ""
+        }`}
+      >
         <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">
           {label}
         </span>
         <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
+        {flagged && (
+          <span className="flex-none text-2xs font-bold uppercase text-state-warn">Revisar</span>
+        )}
         <button
           type="button"
           onClick={() => goToStep(correctStep)}
@@ -741,7 +765,7 @@ function EnrollWizard(): React.ReactElement {
             `${formData.nombres} ${formData.apellidos}`.trim() + ageLabel,
             "personal",
           )}
-          {summaryRow("Cédula", formData.cedula || "—", "personal")}
+          {summaryRow("Cédula", formData.cedula || "—", "personal", { duplicateCandidate: true })}
           {summaryRow("Teléfono", formData.telefono || "—", "personal")}
           {isChild
             ? summaryRow(
@@ -762,6 +786,7 @@ function EnrollWizard(): React.ReactElement {
             isChild ? "Correo del representante" : "Correo",
             (isChild ? formData.correoRepresentante : formData.correo) || "—",
             isChild ? "representative" : "personal",
+            { duplicateCandidate: isChild },
           )}
           {isChild && formData.correo.trim()
             ? summaryRow("Cuenta del estudiante", formData.correo, "personal")

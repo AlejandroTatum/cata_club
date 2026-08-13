@@ -16,6 +16,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
+import { enrollStudent } from "@/services/api";
+import { MENSAJE_IDENTIDAD_DUPLICADA } from "@/lib/duplicate-identity";
 
 // The wizard's step lives in the query string now. The double is backed by
 // jsdom's real history so these tests walk the same URL a browser would.
@@ -226,10 +228,17 @@ describe("EnrollPage — error prevention on the student step", () => {
     expect(cedula).toHaveAttribute("pattern", "[0-9]{10}");
 
     fireEvent.change(cedula, { target: { value: "17123456789" } });
-    expect(cedula).toHaveValue("17123456789");
+    // The 11th digit never lands...
+    expect(cedula).toHaveValue("1712345678");
+    // ...and the visitor is told why, not left to wonder where it went.
+    const warning = screen.getByText(/alcanzó el máximo de 10 dígitos/i);
+    expect(warning.closest("[aria-live]")).toHaveAttribute("aria-live", "polite");
 
     fireEvent.blur(cedula);
-    expect(screen.getByText("La cédula de identidad debe tener 10 dígitos.")).toBeInTheDocument();
+    // "1712345678" is EL PLACEHOLDER this same form suggests (see V03 in
+    // enroll-qa.spec.ts): 10 digits, but the wrong check digit — the rule
+    // still catches it, now with "not valid" instead of "wrong length".
+    expect(screen.getByText("La cédula de identidad no es válida.")).toBeInTheDocument();
   });
 
   it("enables 'Siguiente' once every field on the step is valid", () => {
@@ -260,5 +269,98 @@ describe("EnrollPage — error prevention on the student step", () => {
 
     expect(screen.getByText(/menores de edad no pueden autoinscribirse/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+  });
+});
+
+/**
+ * Task 2 (QA cycle 2026-08-12): a duplicate-identity 400 used to leave the
+ * visitor on the summary with only the generic message — no indication of
+ * which step/field to revisit. The fix flags the summary rows that hold a
+ * candidate field (student cédula; for a dependent, also the representative's
+ * cédula/correo) so the visitor's eye lands on the right "Corregir" button —
+ * without the alert itself ever naming a field, which would turn the public
+ * enrollment form into an oracle for probing who's already registered
+ * (issue #233). `stepAlert`'s equivalent here — the `role="alert"` box — is
+ * checked for exactly that absence, mirroring `enroll-qa.spec.ts`'s S09.
+ */
+describe("EnrollPage — duplicate-identity recovery on the summary step", () => {
+  function fillValidSelfEnrollment(): void {
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
+    fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    fireEvent.click(screen.getByRole("checkbox"));
+  }
+
+  async function submitAndFailWithDuplicate(): Promise<void> {
+    vi.mocked(enrollStudent).mockRejectedValueOnce(
+      Object.assign(new Error(MENSAJE_IDENTIDAD_DUPLICADA), { status: 400 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
+    await screen.findByRole("alert");
+  }
+
+  it("flags the Cédula summary row without naming any field inside the alert itself", async () => {
+    render(<EnrollPage />);
+    fillValidSelfEnrollment();
+    await submitAndFailWithDuplicate();
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(MENSAJE_IDENTIDAD_DUPLICADA);
+    // The oracle guard: the alert names no field, mirroring S09 in
+    // enroll-qa.spec.ts at the unit level.
+    expect(alert.textContent ?? "").not.toMatch(/cédula/i);
+    expect(alert.textContent ?? "").not.toMatch(/correo/i);
+
+    // The flag lives OUTSIDE the alert, on the summary row itself, right
+    // next to the pre-existing "Corregir" button — no new navigation, no
+    // field name inside the alert.
+    const cedulaRow = screen.getByText("Cédula").closest("div");
+    expect(cedulaRow).not.toBeNull();
+    expect(within(cedulaRow as HTMLElement).getByText(/revisar/i)).toBeInTheDocument();
+    expect(within(cedulaRow as HTMLElement).getByRole("button", { name: /corregir/i })).toBeVisible();
+  });
+
+  it("still offers the two exits (Iniciar sesión / Recuperar contraseña)", async () => {
+    render(<EnrollPage />);
+    fillValidSelfEnrollment();
+    await submitAndFailWithDuplicate();
+
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByRole("link", { name: /iniciar sesión/i })).toHaveAttribute("href", "/login");
+    expect(within(alert).getByRole("link", { name: /recuperar contraseña/i })).toHaveAttribute(
+      "href",
+      "/forgot-password",
+    );
+  });
+
+  it("keeps every 'Corregir' button visible — no auto-navigation away from the summary", async () => {
+    render(<EnrollPage />);
+    fillValidSelfEnrollment();
+    await submitAndFailWithDuplicate();
+
+    const corregirButtons = screen.getAllByRole("button", { name: /corregir/i });
+    expect(corregirButtons.length).toBeGreaterThan(0);
+    corregirButtons.forEach((button) => expect(button).toBeVisible());
+  });
+
+  it("does not flag an unrelated row (Teléfono is not a duplicate-identity candidate)", async () => {
+    render(<EnrollPage />);
+    fillValidSelfEnrollment();
+    await submitAndFailWithDuplicate();
+
+    const telefonoRow = screen.getByText("Teléfono").closest("div");
+    expect(within(telefonoRow as HTMLElement).queryByText(/revisar/i)).not.toBeInTheDocument();
   });
 });
