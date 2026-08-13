@@ -1,6 +1,10 @@
 # Propuesta de servicio — alojamiento y mantenimiento
 
-- **Derivado:** 11 de agosto de 2026
+- **Derivado:** 11 de agosto de 2026 — actualizado el 13 de agosto de 2026
+- **Estado:** **aceptado por el club el 13 de agosto de 2026**, incluidos los tres
+  ajustes por crecimiento de la sección 4. Los términos pactados viven en
+  [`acuerdo-de-servicio.md`](acuerdo-de-servicio.md); este documento conserva la
+  derivación de dónde salen.
 - **Precio vigente:** USD 35 / mes — USD 385 / año (11 meses abonados, 12 de servicio)
 - **Para qué sirve este documento:** guardar el mensaje que se le envía al club
   y, sobre todo, **de dónde sale el número**. Un precio sin su derivación se
@@ -161,36 +165,66 @@ El plan pago de Resend (USD 20/mes, sin tope diario) es el primer ajuste de
 precio que va a hacer falta, y recién cuando el club supere ~80 vencimientos
 mensuales.
 
+**Mitigación sin costo, acordada el 13 de agosto de 2026:** escalonar las
+inscripciones por horario para que los vencimientos no caigan todos la misma
+fecha. Reparte el pico diario, pero **no toca el tope mensual de 3.000** y
+depende de que el club sostenga la práctica: es un hábito operativo, no un
+candado del sistema. Aleja el techo, no lo elimina.
+
+### Los tres techos están trasladados por escrito
+
+Hasta el 13 de agosto de 2026 el mensaje al club trasladaba **solo** el del
+servidor (+USD 12, párrafo «Si el club crece»). Los otros dos los absorbía el
+margen: con Resend pago, el servicio quedaba en **−USD 1.85**.
+
+El club aceptó los tres. Quedan en `acuerdo-de-servicio.md` con monto y
+disparador:
+
+| Caso | Ajuste | Disparador |
+|---|---|---|
+| Capacidad del servidor | +USD 12 / mes | El droplet queda justo (`docker stats`) |
+| Plan de correo sin tope diario | +USD 20 / mes | ~80 vencimientos concentrados en una fecha |
+| Salto de almacenamiento | USD 99 / mes | Se supera el tier gratis de Cloudinary |
+
+**No bajar el precio sin revisar esta tabla.** El margen no es ganancia: es lo
+único que separa «el club creció» de «pago por trabajar». Se evaluó bajar a USD
+30 el 13 de agosto de 2026 y se descartó por eso — el recorte sale entero del
+margen, porque los proveedores cobran lo mismo.
+
 ---
 
-## 5. Prerrequisito técnico de este precio
+## 5. Prerrequisito técnico de este precio — CERRADO
 
-El precio de USD 35 asume tres cambios que **todavía no están hechos**. Sin
-ellos, la máquina de 2GB no es viable y el costo real es el de 4GB (USD 24 de
-droplet en lugar de USD 12).
+El precio de USD 35 asume tres cambios sin los cuales la máquina de 2GB no es
+viable y el costo real sería el de 4GB (USD 24 de droplet en lugar de USD 12).
 
-1. **`celery-worker` de `--concurrency=2` a `--concurrency=1`**
-   (`docker-compose.yml:152`). Libera un proceso con la aplicación completa
-   cargada. Costo funcional: la tarea nocturna de vencimientos procesa de a una
-   membresía en vez de dos, a las 02:30, sobre decenas de filas.
-2. **`mem_limit` por servicio** en `docker-compose.prod.yml`. Hoy no existen —
-   están diferidos en el encabezado del propio archivo (`:6-15`). Sin ellos, un
-   contenedor que se dispara se lleva puestos a los otros seis.
-3. **Sacar `mailpit` de producción.** `docker-compose.yml:66` no declara
-   `profiles:`, así que arranca junto con el resto. El único servicio con
-   profile es `db-test` (`:28`). **No se puede resolver desde el overlay de
-   producción**: los overlays de Compose se fusionan, nunca remueven — hay que
-   agregarle un profile en la base.
+**Los tres están hechos.** Verificado el 13 de agosto de 2026 contra `bc32a49`:
 
-Los tres van en el mismo PR que el ingress TLS (Caddy) y la rotación de logs,
-que son el bloqueante #1 de `docs/plan-de-lanzamiento.md`.
+1. **`celery-worker` en `--concurrency=1`** — `docker-compose.yml:149`. Libera un
+   proceso con la aplicación completa cargada. Costo funcional: la tarea nocturna
+   de vencimientos procesa de a una membresía en vez de dos, a las 02:30, sobre
+   decenas de filas.
+2. **`mem_limit` por servicio** — nueve declaraciones en `docker-compose.prod.yml`.
+   Sin ellos, un contenedor que se dispara se lleva puestos a los otros seis.
+3. **`mailpit` fuera de producción** — quedó solo en
+   `docker-compose.override.yml:56`, y ya no se declara en la base. No se podía
+   resolver desde el overlay de producción, porque los overlays de Compose se
+   fusionan y nunca remueven.
+
+El ingress TLS (Caddy) y la rotación de logs también cerraron; Caddy figura en el
+overlay de producción. **El precio de USD 35 ya no depende de trabajo pendiente.**
+
+> Cómo re-verificarlo, en vez de creerle a este párrafo:
+> `rg -n 'concurrency=' docker-compose.yml`, `rg -c 'mem_limit' docker-compose.prod.yml`,
+> `rg -n '^  mailpit:' docker-compose.yml docker-compose.override.yml`.
 
 ---
 
 ## 6. Qué NO incluye este precio
 
-Pendiente de acordar por escrito con el club antes de firmar. Se anota acá para
-que la omisión sea deliberada y no un olvido:
+**Acordado por escrito el 13 de agosto de 2026** y asentado en
+[`acuerdo-de-servicio.md`](acuerdo-de-servicio.md), cláusula 6. Se conserva acá
+para que la omisión siga siendo deliberada y no un olvido:
 
 - Desarrollo de funcionalidad nueva (distinto de corrección de defectos).
 - Carga inicial de datos históricos del club.
