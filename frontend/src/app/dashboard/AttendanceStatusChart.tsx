@@ -88,28 +88,35 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
             </circle>
           );
         })}
-        <text
-          x={SIZE / 2}
-          y={SIZE / 2 - 6}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="rotate-90 fill-ink text-xl font-bold"
-          style={{ transformOrigin: "center", transformBox: "fill-box" }}
-        >
-          {stats.totalStudents}
-        </text>
-        {/* The center number needs its label — "200" alone does not say what
-            it counts. */}
-        <text
-          x={SIZE / 2}
-          y={SIZE / 2 + 13}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="rotate-90 fill-ink-3-strong text-2xs font-bold tracking-caps-wide"
-          style={{ transformOrigin: "center", transformBox: "fill-box" }}
-        >
-          REGISTROS
-        </text>
+        {/* Counter-rotates the whole label group +90° around the SAME
+            center the parent `<svg>` rotates -90° around, so the two
+            transforms cancel exactly and both texts land in plain,
+            unrotated SVG coordinates. The previous approach rotated EACH
+            `<text>` individually around its own `fill-box` center — since
+            the number and the label have different box sizes, their
+            "centers" differed, so the two texts drifted apart on the X
+            axis instead of stacking: the number was left off-center and
+            "REGISTROS" spilled sideways underneath it ("218TROS"). */}
+        <g transform={`rotate(90 ${SIZE / 2} ${SIZE / 2})`}>
+          <text
+            x={SIZE / 2}
+            y={SIZE / 2 - 8}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="fill-ink text-xl font-bold"
+          >
+            {stats.totalStudents}
+          </text>
+          <text
+            x={SIZE / 2}
+            y={SIZE / 2 + 14}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="fill-ink-3-strong text-2xs font-bold tracking-caps-wide"
+          >
+            REGISTROS
+          </text>
+        </g>
       </svg>
 
       <table className="w-full text-left text-sm">

@@ -133,7 +133,11 @@ async def reporte_nuevos_por_periodo(
     fecha_fin: date = Query(...),
     db: Session = Depends(obtener_sesion),
 ):
-    if fecha_inicio >= fecha_fin:
+    # Se compara con `>` (no `>=`, como en `asistencias_router.py`) porque
+    # `persona_repositorio.py` filtra inclusivo en ambos extremos
+    # (`>= fecha_inicio`, `<= fecha_fin`): un reporte de un solo día se pide
+    # con `fecha_inicio == fecha_fin` y es una consulta legítima.
+    if fecha_inicio > fecha_fin:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="La fecha de inicio debe ser anterior a la fecha de fin.",
@@ -166,7 +170,9 @@ async def reporte_nuevos_por_periodo_pdf(
     fecha_fin: date = Query(...),
     db: Session = Depends(obtener_sesion),
 ):
-    if fecha_inicio >= fecha_fin:
+    # Mismo criterio que el endpoint JSON hermano de arriba: rango inclusivo,
+    # `fecha_inicio == fecha_fin` es un reporte de un solo día válido.
+    if fecha_inicio > fecha_fin:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="La fecha de inicio debe ser anterior a la fecha de fin.",

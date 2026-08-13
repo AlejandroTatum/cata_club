@@ -66,7 +66,17 @@ export interface BackLinkProps {
 /** Compact secondary navigation: red outline, transparent resting surface. */
 const SKIN =
   // Shape + typography + focus transition, matching the `sm` button metrics.
-  "inline-flex h-ctl-sm items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-xs font-semibold " +
+  // `self-start`: several screens render this as a direct child of
+  // `AppShell`'s `<main>`, a flex column with the default `align-items:
+  // stretch` — without this, the control stretches to the panel's full
+  // width instead of hugging its own content. Row-context callers
+  // (`payments`' `items-center`, `enroll`'s `items-baseline`) are unaffected
+  // for a narrower reason than "align-self does nothing in a row" -- it does
+  // govern vertical placement there. It changes nothing because this control
+  // is the TALLEST item in both of those rows (`h-ctl-sm` = 32px, against a
+  // 24px help trigger and 32px `sm` buttons), so it already spans the whole
+  // flex line: start, center and baseline all resolve to the same top edge.
+  "inline-flex h-ctl-sm items-center justify-center gap-1.5 self-start whitespace-nowrap rounded-lg border px-3 text-xs font-semibold " +
   "transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-45 " +
   // Resting: institutional red outline on a transparent surface.
   "border-cata-red bg-transparent text-cata-red-dark " +

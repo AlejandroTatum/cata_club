@@ -479,13 +479,51 @@ describe("ReportsPage — date-range validation", () => {
     mockSearchStudents.mockResolvedValue([]);
   });
 
-  it("período: never queries with an end date equal to the start date", async () => {
+  /**
+   * A single day is a legitimate range, not an inverted one: the período
+   * endpoint filters inclusively on both ends (see the `>` in
+   * `personas_router.py`), so `desde == hasta` asks for exactly that day.
+   * This screen used to refuse it locally with `>=` and sit on the "Elija un
+   * rango de fechas" empty state, which made the "Hoy" pill a dead end on the
+   * report that is selected by default.
+   */
+  it("período: queries the single day when both ends are the same date", async () => {
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+    mockFetchNuevosPorPeriodo.mockClear();
 
     setRange("2026-05-10", "2026-05-10");
-    await waitFor(() => expect(screen.getByText("Elija un rango de fechas")).toBeInTheDocument());
-    expect(mockFetchNuevosPorPeriodo).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(mockFetchNuevosPorPeriodo).toHaveBeenCalledWith("2026-05-10", "2026-05-10");
+    });
+    expect(
+      screen.queryByText("La fecha de inicio debe ser anterior a la fecha de fin."),
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * The bug a human tester reported in QA round 1: picking "Hoy" answered
+   * with "La fecha de inicio debe ser anterior a la fecha de fin." instead of
+   * a report. "Hoy" resolves to `desde == hasta` by definition, so every gate
+   * it crosses has to accept an equal pair — this screen's own, and the two
+   * routers behind it (locked by `test_reportes.py`).
+   */
+  it("'Hoy' previews a single-day range instead of the inverted-range error", async () => {
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+    mockFetchNuevosPorPeriodo.mockClear();
+
+    chooseRangePreset("Hoy");
+
+    await waitFor(() => expect(mockFetchNuevosPorPeriodo).toHaveBeenCalled());
+    const [fechaInicio, fechaFin] = mockFetchNuevosPorPeriodo.mock.calls[0] as [string, string];
+    expect(fechaInicio).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(fechaFin).toBe(fechaInicio);
+    expect(
+      screen.queryByText("La fecha de inicio debe ser anterior a la fecha de fin."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Elija un rango de fechas")).not.toBeInTheDocument();
   });
 
   it("período: never queries with an end date before the start date", async () => {

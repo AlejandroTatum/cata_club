@@ -237,10 +237,16 @@ function ReportsContent(): React.ReactElement {
    * The range is only "usable" once it is coherent. `periodo` needs both ends
    * (the endpoint takes no open range); the other two treat an empty range as
    * "everything", which is what their endpoints do.
+   *
+   * "Incomplete" means missing an end, and nothing more: an inverted range is
+   * `rangeInverted`'s job, for all three reports alike. This used to also
+   * reject `fechaInicio === fechaFin`, mirroring a backend that has since been
+   * corrected — every report endpoint filters inclusively on both ends, so a
+   * single day is a legitimate query, and refusing it here made the "Hoy" pill
+   * a dead end on the report selected by default.
    */
   const rangeInverted = fechaInicio !== "" && fechaFin !== "" && fechaInicio > fechaFin;
-  const periodoRangeIncomplete =
-    preset === "periodo" && (fechaInicio === "" || fechaFin === "" || fechaInicio >= fechaFin);
+  const periodoRangeIncomplete = preset === "periodo" && (fechaInicio === "" || fechaFin === "");
   const canQuery = !rangeInverted && !periodoRangeIncomplete;
 
   // Horarios feed the asistencia filter's dropdown (once, on mount).

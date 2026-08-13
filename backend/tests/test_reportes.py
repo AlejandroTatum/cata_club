@@ -157,6 +157,19 @@ def test_reporte_alumnos_nuevos_por_periodo_requiere_admin(client_sin_permisos):
     assert resp.status_code == 403
 
 
+def test_reporte_alumnos_nuevos_por_periodo_acepta_un_solo_dia(client):
+    """El preset "Hoy" pide `fecha_inicio == fecha_fin`: un rango de un solo
+    día es una consulta legítima, no un rango invertido."""
+    persona = _crear_persona(client, cedula_valida(553))
+    hoy = persona["fechaRegistro"][:10]
+    resp = client.get(
+        "/api/v1/personas/reportes/nuevos-por-periodo",
+        params={"fecha_inicio": hoy, "fecha_fin": hoy},
+    )
+    assert resp.status_code == 200
+    assert any(p["id"] == persona["id"] for p in resp.json())
+
+
 # --- Phase 1: generar_reporte_pdf (unit) ------------------------------------
 
 def test_generar_reporte_pdf_produce_bytes_pdf_validos():
@@ -411,6 +424,19 @@ def test_reporte_pagos_422_fechas_invertidas(client):
         params={"fecha_inicio": "2026-12-31", "fecha_fin": "2026-01-01"},
     )
     assert resp.status_code == 422
+
+
+def test_reporte_pagos_acepta_un_solo_dia(client):
+    """El preset "Hoy" pide `fecha_inicio == fecha_fin`: un rango de un solo
+    día es una consulta legítima, no un rango invertido."""
+    pago = _crear_pago(client, cedula_valida(558))
+    hoy = pago["fechaRegistro"][:10]
+    resp = client.get(
+        "/api/v1/membresias/pagos/reportes",
+        params={"fecha_inicio": hoy, "fecha_fin": hoy},
+    )
+    assert resp.status_code == 200
+    assert any(p["id"] == pago["id"] for p in resp.json())
 
 
 def test_reporte_pagos_pdf_sin_token_da_401(client_sin_token):

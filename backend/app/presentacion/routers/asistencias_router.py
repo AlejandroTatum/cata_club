@@ -30,8 +30,8 @@ def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[d
     `membresias_pagos_router`). Sin esto, invertir las fechas devolvía 200 con
     una lista vacía: una respuesta silenciosa y equivocada.
 
-    A diferencia de sus hermanos (que usan `>=`), aquí se compara con `>`
-    porque el filtro del repositorio es inclusivo en ambos extremos
+    Se compara con `>` (igual que sus hermanos, que se corrigieron para
+    seguir este criterio) porque el filtro del repositorio es inclusivo en ambos extremos
     (`>= fecha_inicio`, `<= fecha_fin`): un reporte de un solo día se pide con
     `fecha_inicio == fecha_fin` y es una consulta legítima."""
     if fecha_inicio is None or fecha_fin is None:

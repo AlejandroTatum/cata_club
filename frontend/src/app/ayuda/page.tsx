@@ -72,9 +72,9 @@ export default function AyudaPage(): React.ReactElement {
       title="Preguntas frecuentes"
       subtitle="Cómo funciona la app del club, sección por sección."
     >
-      <BackLink href="/" label="Volver al inicio" className="mb-6" />
-
       <div className="mx-auto flex max-w-3xl flex-col gap-page">
+        <BackLink href="/" label="Volver al inicio" />
+
         {/*
          * The schedule first, and as a table rather than prose. It is the most
          * asked question in the club and the only answer here that someone
