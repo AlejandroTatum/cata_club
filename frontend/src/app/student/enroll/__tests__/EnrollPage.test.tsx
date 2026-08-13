@@ -189,10 +189,10 @@ describe("EnrollPage — error prevention on the student step", () => {
 
     const cedula = screen.getByLabelText(/cédula de identidad/i);
     fireEvent.change(cedula, { target: { value: "13100456" } });
-    expect(screen.queryByText("La cédula debe tener 10 dígitos.")).not.toBeInTheDocument();
+    expect(screen.queryByText("La cédula de identidad debe tener 10 dígitos.")).not.toBeInTheDocument();
 
     fireEvent.blur(cedula);
-    expect(screen.getByText("La cédula debe tener 10 dígitos.")).toBeInTheDocument();
+    expect(screen.getByText("La cédula de identidad debe tener 10 dígitos.")).toBeInTheDocument();
     expect(cedula).toHaveAttribute("aria-invalid", "true");
   });
 
@@ -204,14 +204,26 @@ describe("EnrollPage — error prevention on the student step", () => {
     expect(screen.getByText("Lleva 8 de 10 dígitos.")).toBeInTheDocument();
   });
 
-  it("caps the cédula input at ten characters and keeps it numeric", () => {
+  /**
+   * #225: an 11-digit cédula used to be silently truncated to 10 by the
+   * input's own `maxLength` — the visitor never saw an error, just a keystroke
+   * that didn't land. The field now keeps every digit typed and lets the rule
+   * say why it's wrong, instead of hiding the mistake from the visitor.
+   */
+  it("does not cap the cédula input — the rule speaks instead of the field truncating (#225)", () => {
     render(<EnrollPage />);
     goToStudentStep();
 
     const cedula = screen.getByLabelText(/cédula de identidad/i);
-    expect(cedula).toHaveAttribute("maxLength", "10");
+    expect(cedula).not.toHaveAttribute("maxLength");
     expect(cedula).toHaveAttribute("inputMode", "numeric");
     expect(cedula).toHaveAttribute("pattern", "[0-9]{10}");
+
+    fireEvent.change(cedula, { target: { value: "17123456789" } });
+    expect(cedula).toHaveValue("17123456789");
+
+    fireEvent.blur(cedula);
+    expect(screen.getByText("La cédula de identidad debe tener 10 dígitos.")).toBeInTheDocument();
   });
 
   it("enables 'Siguiente' once every field on the step is valid", () => {
@@ -221,7 +233,7 @@ describe("EnrollPage — error prevention on the student step", () => {
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
     fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
-    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1712345678" } });
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     // A self enrollment signs in as the student, so its credentials are part
     // of this step (they moved here when the representante got its own step).
