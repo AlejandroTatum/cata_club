@@ -1,29 +1,18 @@
 /**
- * Trainer — "Mi día" (`docs/ux/prototipos/19-entrenador.html`).
+ * Trainer — "Mi día" (issue #211,
+ * `docs/ux/prototipos/31-entrenador-dashboard-alternativas.html`).
  *
- * Redesigned for Fix 8 / DSH-2 (decisiones-de-negocio-2026-08-11.md §8): the
- * audit measured ~43-47% of a 1440×900 viewport left blank below a "última
- * lista" card that showed its four counts as loose `Badge`s in a flex row —
- * the same shape the audit already flagged and fixed on `/dashboard`. The
- * approved pattern is that admin panel: a hero, a `StatGrid` pulse, then two
- * content cards sharing one row. This screen now follows it:
+ * Compacted from the Fix 8 / DSH-2 layout it replaces: two symmetric cards up
+ * top — coal `SessionCard` for the immediate session, white
+ * "Distribución de asistencias" for the month's donut — then `RecentSessionsList`
+ * ("Últimas listas") as dense, full-width rows below. `SessionCard` moved the
+ * one primary action out of the page header (compare the old `actions` prop
+ * this file used to pass `AppShell`) and onto the card itself, named by the
+ * session's own hour: "Pasar lista de las 15:00", never "esta sesión".
  *
- *   1. The hero — one decision, unchanged from the original redesign below.
- *   2. The last session's four counts in `StatGrid` tiles, replacing the
- *      `Badge` row DSH-2 named directly.
- *   3. "Últimas listas del club" — the club's own recent sessions, not the
- *      trainer's: there is no entrenador–horario relation to filter by
- *      (issue #13, `modelos.py:506-507`), so the closest honest content is
- *      what's actually recorded, whoever took it. Fed by the new
- *      `GET /asistencias/ultimas-listas` (no migration — computed from
- *      `Asistencia` + `HorarioEntrenamiento`, both already there).
- *   4. The 4-state donut — `/dashboard`'s own `AttendanceStatusChart`,
- *      reused rather than rebuilt — sharing a card with the chronic-absence
- *      notice that already lived here.
- *
- * Deliberately absent: the full week's agenda. The club's horarios are fixed
- * and a trainer has them memorized; a schedule grid would spend half the
- * screen restating something nobody needed restated.
+ * The old per-trainer "Última lista" `StatGrid` recap is gone — it duplicated
+ * what the dense rows below already show for the same (fecha, horario) pair,
+ * once the badge-table version of that list became the proportional bar.
  *
  * ## Only what the backend can sustain
  *
@@ -33,23 +22,22 @@
  * competitive-ranking feature the old level concept belonged to was removed
  * from the MVP entirely.
  *
- * ## "Últimas listas del club" has no author column
+ * ## "Últimas listas" has no author column
  *
  * `Asistencia` deliberately doesn't record who took the list
  * (`modelos.py:536`) — the trainers are paid a flat monthly rate and the club
  * never asked "who marked this kid absent". Adding it is a real, separate
  * idea (`registrado_por`, for audit trail) parked for after launch — see
- * decisiones-de-negocio-2026-08-11.md §8's own closing note. This table does
+ * decisiones-de-negocio-2026-08-11.md §8's own closing note. This list does
  * not grow a column to fill that gap.
  */
 
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { ArrowRight, CalendarCheck, ClipboardList } from "lucide-react";
+import { CalendarCheck } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -59,52 +47,26 @@ import {
   fetchRecentAttendanceSessions,
   type RecentAttendanceSession,
 } from "@/services/api";
-import {
-  Badge,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PAGE_RAIL,
-  STAT_GRID,
-  StatCard,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeaderCell,
-  TableNameCell,
-  TableRow,
-  buttonClasses,
-} from "@/components/ui";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import {
   buildAttendanceStats,
-  formatDay,
-  getAttendanceBadgeTone,
-  getAttendanceLabel,
   type AttendanceRecord,
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
-import type { EstadoAsistencia } from "@/types/domain";
 import { todayDiaSemana } from "@/lib/club-date";
-import { formatDate } from "@/lib/format-utils";
 import {
+  buildSessionCardState,
   findAbsenceAlert,
   formatAbsenceCount,
-  formatEnrolledCount,
-  formatSessionCountdown,
-  minutesUntilStart,
   monthToDateRange,
-  selectTodaySessions,
-  summarizeLastSession,
 } from "./trainer-day-utils";
+import SessionCard from "./SessionCard";
+import RecentSessionsList from "./RecentSessionsList";
 // Reused, not rebuilt (decisión §8: "el gráfico de torta ya existe ahí;
 // reusalo, no construyas uno nuevo"). It's a plain presentational component
 // (props: AttendanceDayStats) with no route of its own, so importing it from
 // another screen's folder costs nothing beyond the import line itself.
 import AttendanceStatusChart from "@/app/dashboard/AttendanceStatusChart";
-
-/** The order the four states are read in — best news first, as on every other screen. */
-const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
 
 /** First name only — "Hola, Carlos Mendoza" is a greeting nobody says out loud. */
 function firstNameOf(fullName: string | undefined): string {
@@ -165,24 +127,31 @@ export default function TrainerPage(): React.ReactElement {
     return schedules.filter((s) => s.diaSemana === today);
   }, [schedules]);
 
-  const { next, later } = useMemo(() => selectTodaySessions(todaySchedules), [todaySchedules]);
-  const lastSession = useMemo(() => summarizeLastSession(monthRecords), [monthRecords]);
+  const sessionCardState = useMemo(() => buildSessionCardState(todaySchedules), [todaySchedules]);
   const absenceAlert = useMemo(() => findAbsenceAlert(monthRecords), [monthRecords]);
   const attendanceStats = useMemo(() => buildAttendanceStats(monthRecords), [monthRecords]);
 
+  // The card's own schedule when there is one to show ("next" or "live") —
+  // `null` for "done" and for a rest day, when there is nothing to fetch a
+  // roster for.
+  const activeSchedule =
+    sessionCardState?.kind === "next" || sessionCardState?.kind === "live"
+      ? sessionCardState.schedule
+      : null;
+
   /**
-   * The roster count for the hero. Loaded separately because it needs the
-   * resolved next session, and it is a garnish: if it fails the hero still
+   * The roster count for the card. Loaded separately because it needs the
+   * resolved active schedule, and it is a garnish: if it fails the card still
    * says when and where to be, so the failure stays silent (null → the clause
-   * is simply not rendered) instead of blocking the one CTA on the screen.
+   * is simply not rendered) instead of blocking the card's one CTA.
    */
   useEffect((): (() => void) => {
     let cancelled = false;
-    if (!next) {
+    if (!activeSchedule) {
       setEnrolledCount(null);
       return (): void => {};
     }
-    fetchAlumnosPorHorario(next.id)
+    fetchAlumnosPorHorario(activeSchedule.id)
       .then((alumnos) => {
         if (!cancelled) setEnrolledCount(alumnos.length);
       })
@@ -193,9 +162,7 @@ export default function TrainerPage(): React.ReactElement {
     return (): void => {
       cancelled = true;
     };
-  }, [next]);
-
-  const enrolledLabel = formatEnrolledCount(enrolledCount);
+  }, [activeSchedule]);
 
   return (
     <ProtectedRoute allowedRoles={["trainer"]}>
@@ -205,28 +172,14 @@ export default function TrainerPage(): React.ReactElement {
        * greeting is not a page name, and every other authenticated screen names
        * itself, so the subtitle carries "Mi día" — the same name the sidebar
        * and the browser tab use — instead of overwriting the welcome.
+       *
+       * No `actions` prop here any more: the one primary action lives on
+       * `SessionCard` now, named by the session's own hour — see the module
+       * doc for why it moved.
        */}
       <AppShell
         title={`Hola, ${firstNameOf(session?.user?.name)}`}
-        subtitle="Mi día — tu próxima sesión y el resumen de la última lista."
-        /*
-         * "Pasar lista" used to live in TWO places on this one screen: `.btn.xl`
-         * inside the coal hero when there was a next session, and inside the
-         * empty state's action when there was not. Which is to say the trainer's
-         * only verb moved depending on the data — the exact shape #74 named on
-         * the admin side ("teaches a rule and then breaks it"), except here one
-         * screen breaks it against itself.
-         *
-         * The header slot is the one place that does not move. It also brings
-         * this screen level with `/dashboard`, whose hero was emptied of its CTA
-         * for the same reason and now "carries ONE number" and nothing else.
-         */
-        actions={
-          <Link href="/trainer/attendance" className={buttonClasses("primary")}>
-            Pasar lista
-            <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          </Link>
-        }
+        subtitle="Mi día — tu próxima sesión y el resumen de asistencias."
       >
         {loading && <LoadingState label="Cargando tu día…" />}
 
@@ -234,145 +187,17 @@ export default function TrainerPage(): React.ReactElement {
 
         {!loading && !error && (
           <>
-            {/* --- The hero: the one thing to do next. --- */}
-            {next ? (
-              <div className="flex flex-wrap items-end gap-6 rounded-card bg-coal px-7 py-6 text-white">
-                <span className="text-display font-extrabold leading-none tabular-nums">
-                  {next.horaInicio}
-                </span>
-                <div className="flex min-w-[200px] flex-1 flex-col gap-1.5">
-                  <b className="text-base font-bold">
-                    {formatDay(next.diaSemana)} {next.horaInicio} — {next.horaFin}
-                  </b>
-                  <span className="flex items-center gap-2 text-sm text-white/60">
-                    <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
-                    {formatSessionCountdown(minutesUntilStart(next))}
-                    {enrolledLabel ? ` · ${enrolledLabel}` : ""}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <EmptyState
-                icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                title={
-                  todaySchedules.length > 0
-                    ? "Ya no quedan sesiones hoy"
-                    : "Hoy no tienes sesiones"
-                }
-                description="Puedes pasar lista de cualquier horario disponible desde Pasar lista."
-                action={
-                  <Link href="/trainer/attendance" className={buttonClasses("primary")}>
-                    Pasar lista
-                  </Link>
-                }
-              />
-            )}
-
-            {/* --- What comes after it. One line, not a second list. --- */}
-            {later.length > 0 && (
-              <p className="text-sm text-ink-3">
-                Después:{" "}
-                {later.map((s, index) => (
-                  <span key={s.id}>
-                    {index > 0 ? " · " : ""}
-                    <b className="font-semibold text-ink">{s.horaInicio}</b>
-                  </span>
-                ))}
-              </p>
-            )}
-
-            {/* --- Última lista: its four counts, as StatGrid tiles (DSH-2:
-                these used to be loose Badges in a flex row). --- */}
-            <section
-              aria-labelledby="ultima-lista-title"
-              data-testid="ultima-lista"
-              className="card overflow-hidden"
-            >
-              <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-                <h2 id="ultima-lista-title" className="flex-1 text-sm font-bold text-ink">
-                  {lastSession
-                    ? `Última lista — ${formatDate(lastSession.fecha)} · ${lastSession.horario}`
-                    : "Última lista"}
-                </h2>
-                <Link
-                  href="/trainer/attendance/history"
-                  className={buttonClasses("secondary", "sm")}
-                >
-                  Ver historial
-                </Link>
-              </div>
-
-              {lastSession ? (
-                <div className={`p-5 ${STAT_GRID}`}>
-                  {STATE_ORDER.map((estado) => (
-                    <StatCard
-                      key={estado}
-                      label={getAttendanceLabel(estado)}
-                      value={lastSession.counts[estado]}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  surface="inset"
-                  icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                  title="Todavía no registraste ninguna lista este mes"
-                  description="En cuanto pases lista, el resumen de la sesión aparece aquí."
-                />
-              )}
-            </section>
-
             {/*
-              Two cards sharing one row, same grammar as /dashboard's own
-              "Actividad reciente" + donut row: a flexible column and a fixed
-              narrower one, both always rendered so an empty state reads as
-              "nothing here yet", never as a layout that broke.
+              Two symmetric cards on desktop (`split:grid-cols-2`), sharing
+              height. `SessionCard` anchors its actions to the bottom with
+              `mt-auto` so the surplus of an uneven pair lands there, never in
+              the middle. On a rest day `sessionCardState` is `null`,
+              `SessionCard` renders nothing, and the grid collapses to one
+              column so the summary card takes the full row instead of
+              standing alone in half of it.
             */}
-            <div className={PAGE_RAIL}>
-              <section data-testid="recent-club-sessions" className="card overflow-hidden">
-                <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-                  <h2 className="flex-1 text-sm font-bold text-ink">Últimas listas del club</h2>
-                </div>
-                {recentSessions.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHead>
-                        <tr>
-                          <TableHeaderCell>Sesión</TableHeaderCell>
-                          <TableHeaderCell>Resultado</TableHeaderCell>
-                        </tr>
-                      </TableHead>
-                      <TableBody>
-                        {recentSessions.map((s) => (
-                          <TableRow key={`${s.horarioId}|${s.fecha}`}>
-                            <TableNameCell name={formatDate(s.fecha)} sub={s.horario} />
-                            <TableCell>
-                              <div className="flex flex-wrap gap-[5px]">
-                                {/* The state name rides along as real,
-                                    visible text — a bare "9" next to a
-                                    colored dot forced every reader to
-                                    memorize what each color meant. */}
-                                {STATE_ORDER.map((estado) => (
-                                  <Badge key={estado} tone={getAttendanceBadgeTone(estado)}>
-                                    {s.counts[estado]} {getAttendanceLabel(estado)}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <EmptyState
-                    surface="inset"
-                    icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                    title="Todavía no hay listas registradas"
-                    description="En cuanto alguien pase lista en el club, aparece aquí."
-                  />
-                )}
-              </section>
+            <div className={`grid items-stretch gap-[18px] ${sessionCardState ? "split:grid-cols-2" : ""}`}>
+              <SessionCard state={sessionCardState} enrolledCount={enrolledCount} />
 
               <section className="card flex flex-col gap-4 p-[18px]">
                 {absenceAlert && (
@@ -400,6 +225,8 @@ export default function TrainerPage(): React.ReactElement {
                 </div>
               </section>
             </div>
+
+            <RecentSessionsList sessions={recentSessions} />
           </>
         )}
       </AppShell>
