@@ -13,11 +13,16 @@ El arreglo necesita TRES piezas (ninguna alcanza sola):
   2. `clave_cliente` (rate_limit.py) sigue leyendo `get_remote_address`, que
      lee `request.client.host` -- una vez que (1) reescribe ese campo, la
      clave cambia sola, sin tocar `clave_cliente`.
-  3. El Caddyfile REEMPLAZA X-Forwarded-For por el peer TCP real
-     (`header_up X-Forwarded-For {remote_host}`) en vez de anexarle lo que
-     el visitante haya mandado. Sin esto, la protección del peer confiable
-     dependería de un detalle interno de uvicorn (en qué orden recorre una
-     lista con hops falsos) que este repo no fija en ningún lado -- ver
+  3. El Caddyfile fija X-Forwarded-For al peer TCP real de forma explícita
+     (`header_up X-Forwarded-For {remote_host}`). Verificado con curl contra
+     un upstream real: Caddy 2.8 ya reemplaza (no anexa) el valor que mande
+     el visitante mientras no haya `trusted_proxies` en la config global, así
+     que hoy esta línea no cambia el comportamiento en runtime -- es defensa
+     a futuro. Sin ella, si algún día se agrega `trusted_proxies` (por
+     ejemplo para meter un CDN adelante), Caddy pasaría a anexar según esa
+     lista, y la protección del peer confiable pasaría a depender de un
+     detalle interno de uvicorn (en qué orden recorre una lista con hops
+     falsos) que este repo no fija en ningún lado -- ver
      `test_xff_provisto_por_el_cliente_no_estrena_cubo` más abajo, y
      `test_caddyfile_reemplaza_x_forwarded_for_por_el_peer_real` en
      tests/test_docker_compose_config.py para el guardia estructural sobre
@@ -207,8 +212,9 @@ def _cabecera_que_caddy_realmente_envia(ip_real_del_visitante: str, intento_de_f
     cliente. `intento_de_falsificacion` está en la firma solo para dejar
     explícito que NUNCA participa del resultado -- si algún día esta
     función tuviera que usarlo, sería la señal de que el Caddyfile real
-    dejó de reemplazar y volvió al comportamiento por defecto de
-    `reverse_proxy` (anexar), y esta prueba tendría que empezar a fallar."""
+    perdió esa directiva (por ejemplo, al agregar `trusted_proxies` a la
+    config global sin mantenerla -- ver Caddyfile), y esta prueba tendría
+    que empezar a fallar."""
     del intento_de_falsificacion
     return ip_real_del_visitante
 

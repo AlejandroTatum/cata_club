@@ -20,32 +20,32 @@
 	# hace falta declarar `tls` explícito.
 
 	reverse_proxy frontend:3000 {
-		# Fija X-Forwarded-For al peer TCP real en vez de dejar el
-		# comportamiento por defecto de `reverse_proxy` (ANEXAR el valor que
-		# haya llegado en el request, incluido lo que un visitante haya
-		# mandado a mano) -- issue #235, mitad 2. `{remote_host}` es la
-		# conexión que le llega a Caddy, no negociable por el cliente.
+		# Fija X-Forwarded-For al peer TCP real -- issue #235, mitad 2.
+		# `{remote_host}` es la conexión que le llega a Caddy, no negociable
+		# por el cliente.
 		#
-		# Por qué esto tiene que ser explícito y no implícito: el backend
-		# (rate_limit.py, `clave_cliente`) confía en `X-Forwarded-For` para
-		# el rate limit anónimo en cuanto uvicorn ve a este frontend como
-		# peer de confianza (`--forwarded-allow-ips`, backend/Dockerfile).
-		# Con el comportamiento por defecto (anexar), un visitante podría
-		# mandar `X-Forwarded-For: 9.9.9.9` y Caddy lo dejaría pasar como
-		# primer eslabón de la lista, agregando el peer real al final --
-		# `9.9.9.9, <ip-real>`. Hoy eso NO se explota porque uvicorn recorre
-		# esa lista de derecha a izquierda y devuelve el primer host que no
-		# es de confianza, así que igual termina resolviendo la IP real. Pero
-		# esa protección depende de DOS detalles internos que este repo no
-		# fija en ningún lado (que Caddy anexe en vez de reemplazar, y el
-		# orden de recorrido de uvicorn) -- un bump de versión de cualquiera
-		# de los dos reabre el DoS trivial sobre el alta pública (issue #235)
-		# sin que ningún test se ponga en rojo. Reemplazar el header acá,
-		# en el borde, saca esa garantía de la implementación interna de una
-		# librería y la deja escrita como configuración explícita: lo que
-		# sale de Caddy es SIEMPRE el peer real, sin importar qué haya
-		# mandado el visitante ni cómo lo procese la próxima versión de
-		# uvicorn.
+		# Verificado con curl contra un upstream echo detrás de este mismo
+		# Caddy (2.8-alpine): SIN esta directiva, `reverse_proxy` ya
+		# reemplaza (no anexa) cualquier X-Forwarded-For que mande el
+		# visitante por el peer real, mientras no haya `trusted_proxies`
+		# declarado en la config global. O sea que hoy esta línea no cambia
+		# ningún comportamiento en runtime.
+		#
+		# Se deja igual, explícita, porque ese default es una propiedad de
+		# la config global de Caddy, no del backend: el día que alguien
+		# agregue `trusted_proxies` acá (para, por ejemplo, meter un CDN
+		# adelante) el default deja de reemplazar y pasa a anexar según esa
+		# lista -- y el backend (rate_limit.py, `clave_cliente`) sigue
+		# confiando ciegamente en `X-Forwarded-For` en cuanto uvicorn ve a
+		# este frontend como peer de confianza
+		# (`--forwarded-allow-ips`, backend/Dockerfile). Sin esta línea, ese
+		# cambio reabriría en silencio el keying del rate limit anónimo por
+		# visitante (issue #235) sin que ningún test se ponga en rojo.
+		#
+		# Por eso `caddy validate` marca esta directiva como
+		# "Unnecessary header_up X-Forwarded-For": el validador solo conoce
+		# el default de HOY, no esta protección a futuro. Ese warning es
+		# esperado -- no es señal de que haya que borrarla.
 		header_up X-Forwarded-For {remote_host}
 	}
 
