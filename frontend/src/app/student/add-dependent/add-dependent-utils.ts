@@ -12,7 +12,13 @@
 import type { RepresentadoCreatePayload } from "@/services/api";
 import type { TipoSangre } from "@/types/domain";
 import { toUserMessage } from "@/lib/error-message";
-import { calculateAge } from "@/app/student/enroll/enroll-utils";
+import {
+  cedulaRule,
+  phoneRule,
+  personNameRule,
+  passwordRule,
+  studentBirthDateRule,
+} from "@/lib/identity-validation";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -137,69 +143,15 @@ export type AddDependentField = keyof AddDependentFormData;
 /** Field → its first unmet rule. A field with no entry is currently valid. */
 export type AddDependentFieldErrors = Partial<Record<AddDependentField, string>>;
 
-function digitsOf(value: string): string {
-  return value.replace(/\D/g, "");
-}
-
-/** Letters (incl. accents) and spaces — a person's name, not an identifier. */
-const NAME_PATTERN = /^[A-Za-z\u00C0-\u024F\s]+$/;
-
-function nameRule(value: string, subject: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return `${subject} son obligatorios.`;
-  if (trimmed.length < 3) return `${subject} deben tener al menos 3 caracteres.`;
-  return NAME_PATTERN.test(trimmed) ? null : `${subject} solo pueden contener letras y espacios.`;
-}
-
-/**
- * Real domain limits (`EDAD_MINIMA_ALUMNO` / `EDAD_MAXIMA_ALUMNO` in
- * `backend/app/servicios_negocio/persona_servicio.py`), not the category
- * age-range copy — that one is orientation only, not a rule (INS-6b). This
- * mirrors the backend check on the client so an impossible birth date (the
- * audited case: 226 years) is caught on step 1, where it's typed, instead of
- * at final submit after three more steps of data entry.
- */
-const EDAD_MINIMA_ALUMNO = 5;
-const EDAD_MAXIMA_ALUMNO = 74;
-
-/** Ecuadorian numbers run 7 (landline) to 10 (mobile) digits. */
-function phoneRule(value: string, subject: string): string | null {
-  if (!value.trim()) return `${subject} es obligatorio.`;
-  const digits = digitsOf(value);
-  return digits.length >= 7 && digits.length <= 10
-    ? null
-    : `${subject} debe tener entre 7 y 10 dígitos.`;
-}
-
 const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) => string | null>> = {
-  nombres: (d) => nameRule(d.nombres, "Los nombres"),
-  apellidos: (d) => nameRule(d.apellidos, "Los apellidos"),
-  fechaNacimiento: (d) => {
-    if (!d.fechaNacimiento) return "La fecha de nacimiento es obligatoria.";
-    if (!isValidDate(d.fechaNacimiento)) return "La fecha de nacimiento ingresada no es válida.";
-    if (isFutureDate(d.fechaNacimiento)) return "La fecha de nacimiento no puede ser en el futuro.";
-    // `calculateAge` no longer caps its input year (see its docstring in
-    // enroll-utils.ts) — an implausibly old year like 1800 now produces a
-    // real (large) number instead of NaN, so this check catches it by name.
-    const edad = calculateAge(d.fechaNacimiento);
-    if (edad < EDAD_MINIMA_ALUMNO || edad > EDAD_MAXIMA_ALUMNO) {
-      return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${edad}).`;
-    }
-    return null;
-  },
-  cedula: (d) => {
-    if (!d.cedula.trim()) return "La cédula de identidad es obligatoria.";
-    return /^\d{10}$/.test(d.cedula.trim()) ? null : "La cédula debe tener 10 dígitos.";
-  },
+  nombres: (d) => personNameRule(d.nombres, "Los nombres"),
+  apellidos: (d) => personNameRule(d.apellidos, "Los apellidos"),
+  fechaNacimiento: (d) => studentBirthDateRule(d.fechaNacimiento),
+  cedula: (d) => cedulaRule(d.cedula, "La cédula de identidad"),
   telefono: (d) => phoneRule(d.telefono, "El teléfono"),
   tipoSangre: (d) => (isTipoSangre(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
-  contactoEmergencia: (d) => {
-    const trimmed = d.contactoEmergencia.trim();
-    if (!trimmed) return "El nombre de contacto de emergencia es obligatorio.";
-    return trimmed.length >= 3
-      ? null
-      : "El nombre del contacto de emergencia debe tener al menos 3 caracteres.";
-  },
+  contactoEmergencia: (d) =>
+    personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
   telefonoEmergencia: (d) => phoneRule(d.telefonoEmergencia, "El teléfono de emergencia"),
 };
 
@@ -247,8 +199,12 @@ export function validateAddDependentFields(
     if (hasCorreo || hasContrasenia) {
       if (!hasCorreo) errors.correo = "El correo electrónico es obligatorio si se desea crear una cuenta.";
       else if (!isEmail(data.correo)) errors.correo = "El correo electrónico no es válido.";
-      if (!hasContrasenia) errors.contrasenia = "La contraseña es obligatoria si se desea crear una cuenta.";
-      else if (data.contrasenia.length < 8) errors.contrasenia = "La contraseña debe tener al menos 8 caracteres.";
+      if (!hasContrasenia) {
+        errors.contrasenia = "La contraseña es obligatoria si se desea crear una cuenta.";
+      } else {
+        const passwordError = passwordRule(data.contrasenia, "La contraseña");
+        if (passwordError) errors.contrasenia = passwordError;
+      }
     }
   }
   return errors;
@@ -317,29 +273,6 @@ function isTipoSangre(value: string): value is TipoSangre {
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
-function isValidDate(value: string): boolean {
-  if (!value) return false;
-  const parts = value.split("-");
-  if (parts.length !== 3) return false;
-  const [year, month, day] = parts.map(Number);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
-  const parsed = new Date(year, month - 1, day);
-  return (
-    parsed.getFullYear() === year &&
-    parsed.getMonth() === month - 1 &&
-    parsed.getDate() === day
-  );
-}
-
-/** `value` is a valid "YYYY-MM-DD" already — compares by local calendar date, not UTC, to avoid off-by-one near midnight. */
-function isFutureDate(value: string): boolean {
-  const [year, month, day] = value.split("-").map(Number);
-  const parsed = new Date(year, month - 1, day);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return parsed > today;
 }
 
 /**

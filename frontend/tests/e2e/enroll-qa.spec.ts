@@ -129,7 +129,7 @@ const VALID_STUDENT = {
   nombres: "Juan Carlos",
   apellidos: "Pérez Mora",
   fechaNacimiento: isoYearsAgo(30),
-  cedula: "1712345678",
+  cedula: "1798765432",
   telefono: "0991234567",
 };
 
@@ -298,7 +298,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P03 · nombres con dígitos", async ({ page }) => {
     await fillAndBlur(page, "Nombres", "Juan123");
     await expect(fieldError(page, "Nombres")).toHaveText(
-      "Los nombres solo pueden contener letras y espacios.",
+      "Los nombres tienen un carácter que no reconocemos en un nombre de persona.",
     );
     await shot(page, "P03", "nombres-con-digitos");
   });
@@ -306,7 +306,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P04 · nombres con símbolos", async ({ page }) => {
     await fillAndBlur(page, "Nombres", "Juan@Carlos");
     await expect(fieldError(page, "Nombres")).toHaveText(
-      "Los nombres solo pueden contener letras y espacios.",
+      "Los nombres tienen un carácter que no reconocemos en un nombre de persona.",
     );
     await shot(page, "P04", "nombres-con-simbolos");
   });
@@ -328,7 +328,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P07 · apellidos con dígitos", async ({ page }) => {
     await fillAndBlur(page, "Apellidos", "Pérez2");
     await expect(fieldError(page, "Apellidos")).toHaveText(
-      "Los apellidos solo pueden contener letras y espacios.",
+      "Los apellidos tienen un carácter que no reconocemos en un nombre de persona.",
     );
     await shot(page, "P07", "apellidos-con-digitos");
   });
@@ -336,24 +336,27 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P08 · cédula de 9 dígitos", async ({ page }) => {
     await fillAndBlur(page, "Cédula de Identidad", "123456789");
     await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
-      "La cédula debe tener 10 dígitos.",
+      "La cédula de identidad debe tener 10 dígitos.",
     );
     await shot(page, "P08", "cedula-corta");
   });
 
-  test("P09 · la cédula no admite un 11º dígito — el campo lo recorta", async ({ page }) => {
-    // `maxLength={10}` corta el exceso en el propio input: el usuario no ve un
-    // error, ve que su última tecla no entró. Se afirma el VALOR, porque el
-    // recorte silencioso es el comportamiento real que hay que documentar.
+  test("P09 · la cédula ya no recorta un 11º dígito: la regla lo rechaza (#225)", async ({ page }) => {
+    // El `maxLength` que se comía el 11º dígito en silencio se sacó del input:
+    // el visitante ve exactamente lo que escribió, y el mensaje explica por qué
+    // no vale — no un keystroke que desapareció sin aviso.
     await fillAndBlur(page, "Cédula de Identidad", "17123456789");
-    await expect(field(page, "Cédula de Identidad")).toHaveValue("1712345678");
-    await shot(page, "P09", "cedula-larga-recortada");
+    await expect(field(page, "Cédula de Identidad")).toHaveValue("17123456789");
+    await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
+      "La cédula de identidad debe tener 10 dígitos.",
+    );
+    await shot(page, "P09", "cedula-larga-rechazada");
   });
 
   test("P10 · cédula con letras", async ({ page }) => {
     await fillAndBlur(page, "Cédula de Identidad", "17A2345678");
     await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
-      "La cédula debe tener 10 dígitos.",
+      "La cédula de identidad debe tener 10 dígitos.",
     );
     await shot(page, "P10", "cedula-con-letras");
   });
@@ -361,14 +364,16 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P11 · teléfono de 6 dígitos", async ({ page }) => {
     await fillAndBlur(page, "Teléfono", "099123");
     await expect(fieldError(page, "Teléfono")).toHaveText(
-      "El teléfono debe tener entre 7 y 10 dígitos.",
+      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
     );
     await shot(page, "P11", "telefono-corto");
   });
 
-  test("P12 · teléfono con guiones: los separadores no cuentan como dígitos", async ({ page }) => {
-    // `digitsOf` limpia el valor antes de medirlo, así que "099-123-4567" son
-    // 10 dígitos y pasa. Es intencional, y conviene tenerlo clavado.
+  test("P12 · teléfono con guiones: los separadores siguen siendo válidos", async ({ page }) => {
+    // La regla compartida (#229) ya no borra "todo lo que no sea dígito": tiene
+    // un allowlist explícito de separadores de tipeo (espacio, guion, paréntesis).
+    // "099-123-4567" limpia a 10 dígitos por ESE allowlist, no por un strip
+    // ciego, y sigue pasando — pero "099abc1234" ya no (ver V01).
     await fillAndBlur(page, "Teléfono", "099-123-4567");
     await expectFieldValid(page, "Teléfono");
     await shot(page, "P12", "telefono-con-guiones-valido");
@@ -445,8 +450,12 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await shot(page, "P20", "contrasenia-corta");
   });
 
-  test("P21 · contraseña de 8 caracteres exactos pasa el borde", async ({ page }) => {
-    await fillAndBlur(page, "Contraseña", "12345678");
+  test("P21 · contraseña de 8 caracteres exactos pasa el borde de largo", async ({ page }) => {
+    // "12345678" ya no sirve para este borde: es una contraseña común y la
+    // rechaza esa regla (ver V08), no la de largo. Este caso necesita un valor
+    // que sea exactamente 8 caracteres Y no esté en la lista de comunes, para
+    // medir el borde de largo en aislamiento.
+    await fillAndBlur(page, "Contraseña", "Xk9mQr2p");
     await expectFieldValid(page, "Contraseña");
     await shot(page, "P21", "borde-contrasenia-8");
   });
@@ -498,24 +507,31 @@ test.describe("C · Datos del estudiante (inscripción de un dependiente)", () =
     await shot(page, "C02", "menor-dependiente-valido");
   });
 
-  test("C03 · credenciales a medias: solo el correo", async ({ page }) => {
+  test("C03 · credenciales a medias: solo el correo bloquea Siguiente en el campo (#226)", async ({ page }) => {
     await fillValidStudent(page);
     await field(page, "Correo electrónico del Estudiante").fill("hijo@example.com");
-    // Ojo: esta regla NO es de campo, así que "Siguiente" NO se deshabilita.
-    // El bloqueo aparece recién al clickear, como alerta del paso.
-    await nextButton(page).click();
-    await expect(stepAlert(page)).toContainText(
+    // La regla ahora es de CAMPO, como el resto del asistente: "Siguiente" se
+    // deshabilita apenas el correo queda solo, sin esperar a que se clickee.
+    await expect(nextButton(page)).toBeDisabled();
+    await expect(page.getByText(/^Para continuar, revise:/)).toContainText("Contraseña");
+
+    await field(page, "Contraseña del Estudiante").focus();
+    await field(page, "Contraseña del Estudiante").blur();
+    await expect(fieldError(page, "Contraseña del Estudiante")).toHaveText(
       "La contraseña del estudiante es obligatoria si se desea crear una cuenta.",
     );
     await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
     await shot(page, "C03", "credenciales-a-medias-solo-correo");
   });
 
-  test("C04 · credenciales a medias: solo la contraseña", async ({ page }) => {
+  test("C04 · credenciales a medias: solo la contraseña bloquea Siguiente en el campo", async ({ page }) => {
     await fillValidStudent(page);
     await field(page, "Contraseña del Estudiante").fill("clave-segura-8");
-    await nextButton(page).click();
-    await expect(stepAlert(page)).toContainText(
+    await expect(nextButton(page)).toBeDisabled();
+
+    await field(page, "Correo electrónico del Estudiante").focus();
+    await field(page, "Correo electrónico del Estudiante").blur();
+    await expect(fieldError(page, "Correo electrónico del Estudiante")).toHaveText(
       "El correo del estudiante es obligatorio si se desea crear una cuenta.",
     );
     await shot(page, "C04", "credenciales-a-medias-solo-clave");
@@ -523,21 +539,23 @@ test.describe("C · Datos del estudiante (inscripción de un dependiente)", () =
 
   test("C05 · correo del estudiante inválido cuando sí se piden credenciales", async ({ page }) => {
     await fillValidStudent(page);
-    await field(page, "Correo electrónico del Estudiante").fill("hijo@example");
+    await fillAndBlur(page, "Correo electrónico del Estudiante", "hijo@example");
     await field(page, "Contraseña del Estudiante").fill("clave-segura-8");
-    await nextButton(page).click();
-    await expect(stepAlert(page)).toContainText("El correo del estudiante no es válido.");
+    await expect(fieldError(page, "Correo electrónico del Estudiante")).toHaveText(
+      "El correo del estudiante no es válido.",
+    );
+    await expect(nextButton(page)).toBeDisabled();
     await shot(page, "C05", "correo-estudiante-invalido");
   });
 
   test("C06 · contraseña del estudiante de menos de 8 caracteres", async ({ page }) => {
     await fillValidStudent(page);
     await field(page, "Correo electrónico del Estudiante").fill("hijo@example.com");
-    await field(page, "Contraseña del Estudiante").fill("1234567");
-    await nextButton(page).click();
-    await expect(stepAlert(page)).toContainText(
+    await fillAndBlur(page, "Contraseña del Estudiante", "1234567");
+    await expect(fieldError(page, "Contraseña del Estudiante")).toHaveText(
       "La contraseña del estudiante debe tener al menos 8 caracteres.",
     );
+    await expect(nextButton(page)).toBeDisabled();
     await shot(page, "C06", "clave-estudiante-corta");
   });
 });
@@ -626,7 +644,7 @@ test.describe("R · Datos del representante", () => {
   test("R09 · nombres del representante con dígitos", async ({ page }) => {
     await fillAndBlur(page, "Nombres del Representante", "María3");
     await expect(fieldError(page, "Nombres del Representante")).toHaveText(
-      "Los nombres del representante solo pueden contener letras y espacios.",
+      "Los nombres del representante tienen un carácter que no reconocemos en un nombre de persona.",
     );
     await shot(page, "R09", "nombres-representante-con-digitos");
   });
@@ -680,7 +698,7 @@ test.describe("H · Salud y emergencia", () => {
   test("H04 · teléfono de emergencia de 5 dígitos", async ({ page }) => {
     await fillAndBlur(page, "Teléfono de Emergencia", "12345");
     await expect(fieldError(page, "Teléfono de Emergencia")).toHaveText(
-      "El teléfono de emergencia debe tener entre 7 y 10 dígitos.",
+      "El teléfono de emergencia debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
     );
     await expect(nextButton(page)).toBeDisabled();
     await shot(page, "H04", "telefono-emergencia-corto");
@@ -1023,25 +1041,26 @@ test.describe("N · Navegación del asistente", () => {
 // de un registro de hallazgos.
 // ===========================================================================
 
-test.describe("G · Huecos de validación detectados", () => {
-  test("G01 · una fecha de nacimiento FUTURA se rechaza con el mensaje equivocado", async ({ page }) => {
+test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)", () => {
+  test("G01 · una fecha de nacimiento FUTURA ahora se rechaza con su propio mensaje", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
 
     const nextYear = new Date().getFullYear() + 1;
     await fillAndBlur(page, "Fecha de Nacimiento", `${nextYear}-06-15`);
 
-    // Queda bloqueado, sí — pero por la regla de mayoría de edad, no por ser
-    // una fecha imposible. Al visitante se le dice que es menor de edad
-    // cuando en realidad todavía no nació. No existe regla de fecha futura.
-    await expect(fieldError(page, "Fecha de Nacimiento")).toContainText(
-      "Los menores de edad no pueden autoinscribirse.",
+    // La regla compartida (#224) rechaza una fecha futura POR SER futura, con
+    // su propio mensaje — ya no se enruta por la regla de mayoría de edad, que
+    // antes leía la edad negativa como "menor de edad" sobre alguien que
+    // todavía no nació.
+    await expect(fieldError(page, "Fecha de Nacimiento")).toHaveText(
+      "La fecha de nacimiento no puede ser en el futuro.",
     );
     await expect(nextButton(page)).toBeDisabled();
-    await shot(page, "G01", "fecha-futura-mensaje-equivocado");
+    await shot(page, "G01", "fecha-futura-mensaje-correcto");
   });
 
-  test("G02 · una fecha FUTURA en un dependiente pasa el paso sin una sola queja", async ({ page }) => {
+  test("G02 · una fecha FUTURA en un dependiente ahora también se rechaza", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
     await fillValidStudent(page);
@@ -1049,16 +1068,17 @@ test.describe("G · Huecos de validación detectados", () => {
     const nextYear = new Date().getFullYear() + 1;
     await fillAndBlur(page, "Fecha de Nacimiento", `${nextYear}-06-15`);
 
-    // La regla de edad del estudiante solo corre para la autoinscripción, así
-    // que a un dependiente no se le mira la fecha más allá de que sea un día
-    // real del calendario. Un alumno con fecha de nacimiento del año que viene
-    // avanza al siguiente paso.
-    await expectFieldValid(page, "Fecha de Nacimiento");
-    await expect(nextButton(page)).toBeEnabled();
-    await shot(page, "G02", "dependiente-fecha-futura-aceptada");
+    // La regla de fecha de nacimiento del alumno ya no depende de si es
+    // autoinscripción o dependiente: corre siempre (#224). Un alumno con
+    // fecha de nacimiento del año que viene bloquea el paso, no lo pasa.
+    await expect(fieldError(page, "Fecha de Nacimiento")).toHaveText(
+      "La fecha de nacimiento no puede ser en el futuro.",
+    );
+    await expect(nextButton(page)).toBeDisabled();
+    await shot(page, "G02", "dependiente-fecha-futura-rechazada");
   });
 
-  test("G03 · no hay techo de edad para autoinscribirse: 120 años avanza", async ({ page }) => {
+  test("G03 · ahora SÍ hay techo de edad para autoinscribirse: 120 años se rechaza", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
     await fillValidStudent(page);
@@ -1066,70 +1086,82 @@ test.describe("G · Huecos de validación detectados", () => {
     await field(page, "Contraseña").fill(VALID_CREDENTIALS.contrasenia);
     await fillAndBlur(page, "Fecha de Nacimiento", isoYearsAgo(120));
 
-    // El representante tiene piso Y techo (18-74). El estudiante que se
-    // autoinscribe tiene solo el piso. La misma persona sería rechazada como
-    // representante y aceptada como jugador.
-    await expectFieldValid(page, "Fecha de Nacimiento");
-    await expect(nextButton(page)).toBeEnabled();
-    await shot(page, "G03", "sin-techo-de-edad-jugador");
+    // El estudiante que se autoinscribe ahora comparte el mismo techo que ya
+    // tenía el representante (74 años) — la regla compartida no distingue por
+    // tipo de inscripción, así que la misma persona ya no puede ser rechazada
+    // como representante y aceptada como jugador (ver también G04).
+    await expect(fieldError(page, "Fecha de Nacimiento")).toContainText(
+      "La edad del alumno debe estar entre 5 y 74 años",
+    );
+    await expect(nextButton(page)).toBeDisabled();
+    await shot(page, "G03", "techo-de-edad-jugador-120");
   });
 
-  test("G04 · el mismo 1750 que el representante rechaza, el jugador lo acepta", async ({ page }) => {
+  test("G04 · el mismo 1750 que el representante rechaza, ahora el jugador también lo rechaza", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
     await fillValidStudent(page);
     await fillAndBlur(page, "Fecha de Nacimiento", "1750-03-15");
 
-    await expectFieldValid(page, "Fecha de Nacimiento");
-    await shot(page, "G04", "jugador-anio-1750-aceptado");
+    await expect(fieldError(page, "Fecha de Nacimiento")).toContainText(
+      "La edad del alumno debe estar entre 5 y 74 años",
+    );
+    await expect(nextButton(page)).toBeDisabled();
+    await shot(page, "G04", "jugador-anio-1750-rechazado");
   });
 
-  test("G05 · el 11º dígito de la cédula desaparece sin decir nada", async ({ page }) => {
+  test("G05 · el 11º dígito de la cédula ya no se descarta en silencio", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
 
     await fillAndBlur(page, "Cédula de Identidad", "17123456789");
 
-    // `maxLength` corta en el input. El campo queda VÁLIDO con un número que
-    // el visitante no escribió, y sin ningún aviso de que se le comió una
-    // tecla — el modo de fallo más silencioso de todo el formulario.
-    await expect(field(page, "Cédula de Identidad")).toHaveValue("1712345678");
-    await expectFieldValid(page, "Cédula de Identidad");
-    await shot(page, "G05", "cedula-11o-digito-descartado");
+    // El `maxLength` que recortaba el input se sacó (#225): el campo conserva
+    // exactamente lo que el visitante escribió, y la regla —no el input— dice
+    // por qué once dígitos no son una cédula.
+    await expect(field(page, "Cédula de Identidad")).toHaveValue("17123456789");
+    await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
+      "La cédula de identidad debe tener 10 dígitos.",
+    );
+    await shot(page, "G05", "cedula-11o-digito-ya-no-se-descarta");
   });
 
-  test("G06 · credenciales a medias: Siguiente se ve habilitado y falla al clickear", async ({ page }) => {
+  test("G06 · credenciales a medias ahora bloquea en el campo, ya no hace falta clickear", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
     await fillValidStudent(page);
     await field(page, "Correo electrónico del Estudiante").fill("hijo@example.com");
 
-    // Todas las demás reglas del asistente previenen el error deshabilitando
-    // "Siguiente". Esta no: es regla de paso, no de campo, así que el botón
-    // invita a avanzar y recién el clic descubre el bloqueo. Es la única
-    // inconsistencia del modelo de prevención de errores.
-    await expect(nextButton(page)).toBeEnabled();
-    await shot(page, "G06a", "siguiente-habilitado-enganioso");
+    // La regla de "ambos o ninguno" corre ahora desde `validateEnrollFields`,
+    // igual que el resto del modelo de prevención de errores (#226): ya no es
+    // la única regla de paso del asistente. "Siguiente" se deshabilita apenas
+    // el correo queda solo.
+    await expect(nextButton(page)).toBeDisabled();
+    await expect(page.getByText(/^Para continuar, revise:/)).toContainText("Contraseña");
+    await shot(page, "G06a", "siguiente-deshabilitado-consistente");
 
-    await nextButton(page).click();
-    await expect(stepAlert(page)).toBeVisible();
+    await field(page, "Contraseña del Estudiante").focus();
+    await field(page, "Contraseña del Estudiante").blur();
+    await expect(fieldError(page, "Contraseña del Estudiante")).toHaveText(
+      "La contraseña del estudiante es obligatoria si se desea crear una cuenta.",
+    );
     await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
-    await shot(page, "G06b", "recien-al-clickear-bloquea");
+    await shot(page, "G06b", "mensaje-en-el-campo");
   });
 
-  test("G08 · un dependiente de 3 años pasa el formulario entero", async ({ page }) => {
+  test("G08 · un dependiente de 3 años ya no pasa: el piso de 5 años ahora se aplica", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
     await fillValidStudent(page);
     await fillAndBlur(page, "Fecha de Nacimiento", isoYearsAgo(3));
 
-    // Verificado contra el servicio real: el backend exige 5 ≤ edad ≤ 74 para
-    // el alumno y contesta «La edad del alumno debe estar entre 5 y 74 años
-    // (calculado: 2)». El formulario no conoce ese piso, así que deja avanzar
-    // tres pasos más antes de que el visitante se entere.
-    await expectFieldValid(page, "Fecha de Nacimiento");
-    await expect(nextButton(page)).toBeEnabled();
-    await shot(page, "G08", "dependiente-menor-de-5-aceptado");
+    // La regla compartida trae el mismo piso que ya exigía el backend (#224):
+    // un dependiente de 3 años bloquea en el primer paso, no en el resumen.
+    await expect(fieldError(page, "Fecha de Nacimiento")).toContainText(
+      "La edad del alumno debe estar entre 5 y 74 años",
+    );
+    await expect(nextButton(page)).toBeDisabled();
+    await shot(page, "G08", "dependiente-menor-de-5-rechazado");
   });
 
   test("G07 · un nombre de solo espacios se rechaza como vacío, no como corto", async ({ page }) => {
@@ -1150,76 +1182,92 @@ test.describe("G · Huecos de validación detectados", () => {
 // y fijo de 9. Todos PASAN hoy, y por eso están acá.
 // ===========================================================================
 
-test.describe("V · Laxitud frente a la norma ecuatoriana", () => {
+test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #228, #229, #230)", () => {
   test.beforeEach(async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
   });
 
-  test("V01 · un teléfono con letras adentro pasa: las letras se descartan antes de medir", async ({ page }) => {
-    // `phoneRule` mide `digitsOf(value)`, que borra todo lo que no sea dígito.
-    // "099abc1234" queda en 7 dígitos, y 7 entra en el rango 7-10.
+  test("V01 · un teléfono con letras adentro ahora se rechaza: ya no se descartan antes de medir", async ({ page }) => {
+    // La regla compartida (#229) rechaza cualquier carácter que no sea dígito
+    // o un separador de tipeo explícito (espacio, guion, paréntesis) — ya no
+    // borra "todo lo que no sea dígito" en silencio. "099abc1234" conserva las
+    // letras y falla por eso, no por el largo que quede después de limpiarlas.
     await fillAndBlur(page, "Teléfono", "099abc1234");
-    await expectFieldValid(page, "Teléfono");
-    await shot(page, "V01", "telefono-con-letras-aceptado");
-  });
-
-  test("V02 · un teléfono de 7 dígitos pasa, y en Ecuador no existe", async ({ page }) => {
-    // El piso real es 9 (fijo: 0 + código de área + 7) o 10 (celular 09…).
-    // Ningún número ecuatoriano tiene 7 u 8 dígitos marcables.
-    await fillAndBlur(page, "Teléfono", "0991234");
-    await expectFieldValid(page, "Teléfono");
-    await shot(page, "V02", "telefono-de-7-digitos-aceptado");
-  });
-
-  test("V03 · una cédula con dígito verificador incorrecto pasa", async ({ page }) => {
-    // 1712345678 es EL PLACEHOLDER que el propio formulario sugiere. Su
-    // verificador debería ser 5, no 8: no es una cédula que exista.
-    await fillAndBlur(page, "Cédula de Identidad", "1712345678");
-    await expectFieldValid(page, "Cédula de Identidad");
-    await shot(page, "V03", "cedula-verificador-invalido-aceptado");
-  });
-
-  test("V04 · una cédula con código de provincia inexistente pasa", async ({ page }) => {
-    // Las provincias van de 01 a 24, más 30 para registrados en el exterior.
-    // 99 no es ninguna.
-    await fillAndBlur(page, "Cédula de Identidad", "9912345678");
-    await expectFieldValid(page, "Cédula de Identidad");
-    await shot(page, "V04", "cedula-provincia-99-aceptada");
-  });
-
-  test("V05 · una cédula de puros ceros pasa", async ({ page }) => {
-    await fillAndBlur(page, "Cédula de Identidad", "0000000000");
-    await expectFieldValid(page, "Cédula de Identidad");
-    await shot(page, "V05", "cedula-ceros-aceptada");
-  });
-
-  test("V07 · un apellido con guion se RECHAZA, y es un apellido real", async ({ page }) => {
-    // Acá el formulario es estricto de más, no de menos: `NAME_PATTERN` acepta
-    // letras, tildes y espacios, pero ni guion ni apóstrofo. "Pérez-Mora" y
-    // "D'Angelo" son nombres que existen y quedan afuera.
-    await fillAndBlur(page, "Apellidos", "Pérez-Mora");
-    await expect(fieldError(page, "Apellidos")).toHaveText(
-      "Los apellidos solo pueden contener letras y espacios.",
+    await expect(fieldError(page, "Teléfono")).toHaveText(
+      "El teléfono solo puede contener dígitos y separadores (espacio, guion, paréntesis).",
     );
-    await shot(page, "V07", "apellido-con-guion-rechazado");
+    await shot(page, "V01", "telefono-con-letras-rechazado");
   });
 
-  test("V08 · la contraseña más previsible del mundo pasa si tiene 8 caracteres", async ({ page }) => {
-    // La única regla es el largo. "12345678" entra; también "password".
+  test("V02 · un teléfono de 7 dígitos ahora se rechaza: no existe en la numeración ecuatoriana", async ({ page }) => {
+    // La regla compartida (#229) solo acepta 10 dígitos empezando en 09
+    // (celular) o 9 dígitos empezando en 0 (fijo) — los únicos largos que el
+    // Plan Técnico Fundamental de Numeración de ARCOTEL admite.
+    await fillAndBlur(page, "Teléfono", "0991234");
+    await expect(fieldError(page, "Teléfono")).toHaveText(
+      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+    );
+    await shot(page, "V02", "telefono-de-7-digitos-rechazado");
+  });
+
+  test("V03 · una cédula con dígito verificador incorrecto ahora se rechaza", async ({ page }) => {
+    // 1712345678 es EL PLACEHOLDER que el propio formulario sugería. Su
+    // verificador debería ser 5, no 8: no es una cédula que exista, y la
+    // regla compartida (#228) ya la reconoce como inválida.
+    await fillAndBlur(page, "Cédula de Identidad", "1712345678");
+    await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
+      "La cédula de identidad no es válida.",
+    );
+    await shot(page, "V03", "cedula-verificador-invalido-rechazado");
+  });
+
+  test("V04 · una cédula con código de provincia inexistente ahora se rechaza", async ({ page }) => {
+    // Las provincias van de 01 a 24, más 30 para registrados en el exterior.
+    // 99 no es ninguna, y la regla compartida (#228) ahora la revisa.
+    await fillAndBlur(page, "Cédula de Identidad", "9912345678");
+    await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
+      "La cédula de identidad no es válida.",
+    );
+    await shot(page, "V04", "cedula-provincia-99-rechazada");
+  });
+
+  test("V05 · una cédula de puros ceros ahora se rechaza", async ({ page }) => {
+    await fillAndBlur(page, "Cédula de Identidad", "0000000000");
+    await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
+      "La cédula de identidad no es válida.",
+    );
+    await shot(page, "V05", "cedula-ceros-rechazada");
+  });
+
+  test("V07 · un apellido con guion ahora se ACEPTA — la regla vieja rechazaba un apellido real (#230)", async ({ page }) => {
+    // La regla compartida acepta letras, tildes, apóstrofo, guion e interpunto
+    // como conectores de un nombre de persona. "Pérez-Mora" y "D'Angelo" son
+    // apellidos reales que la regla vieja rechazaba; ya no.
+    await fillAndBlur(page, "Apellidos", "Pérez-Mora");
+    await expectFieldValid(page, "Apellidos");
+    await shot(page, "V07", "apellido-con-guion-aceptado");
+  });
+
+  test("V08 · la contraseña más previsible del mundo ahora se rechaza (#230)", async ({ page }) => {
+    // La regla compartida agrega una lista de contraseñas comunes además del
+    // piso de largo. "12345678" tiene 8 caracteres —pasa el piso— pero es una
+    // de las más usadas del mundo, así que la lista la ataja igual.
     await fillAndBlur(page, "Contraseña", "12345678");
-    await expectFieldValid(page, "Contraseña");
-    await shot(page, "V08", "contrasenia-debil-aceptada");
+    await expect(fieldError(page, "Contraseña")).toHaveText(
+      "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+    );
+    await shot(page, "V08", "contrasenia-debil-rechazada");
   });
 
-  test("V06 · control: una cédula real y bien formada también pasa", async ({ page }) => {
-    // Sin este control, los cinco casos de arriba podrían estar pasando porque
-    // la validación de cédula no corre nunca, y no porque sea laxa.
+  test("V06 · control: una cédula real y bien formada sigue pasando", async ({ page }) => {
+    // Sin este control, los cuatro casos de arriba podrían estar pasando
+    // porque la validación de cédula no corre nunca, y no porque sea estricta.
     await fillAndBlur(page, "Cédula de Identidad", "1798765432");
     await expectFieldValid(page, "Cédula de Identidad");
     await fillAndBlur(page, "Cédula de Identidad", "17987654");
     await expect(fieldError(page, "Cédula de Identidad")).toHaveText(
-      "La cédula debe tener 10 dígitos.",
+      "La cédula de identidad debe tener 10 dígitos.",
     );
     await shot(page, "V06", "control-la-validacion-si-corre");
   });

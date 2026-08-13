@@ -1,5 +1,19 @@
 # QA del registro de cuentas — 12 de agosto de 2026
 
+## Estado
+
+**Los seis hallazgos de este informe están cerrados** (issues #224, #225,
+#226, #228, #229, #230). `enroll-utils.ts`, `add-dependent-utils.ts` y
+`crear-cuenta-utils.ts` pasaron a consumir un único módulo de reglas
+compartido (`frontend/src/lib/identity-validation.ts`) y sus copias
+divergentes de cédula, teléfono, nombre de persona, edad del alumno y
+contraseña se borraron. La suite de abajo (`enroll-qa.spec.ts`) sigue
+afirmando el comportamiento exacto de HOY — ya no el de esta fecha — porque
+cada caso `G*` y `V*` que documentaba un hueco se dio vuelta para afirmar el
+cierre, con el mismo id y la misma captura. El resto de este documento es el
+registro histórico de la auditoría original; las secciones que describían el
+comportamiento viejo quedan marcadas **Cerrado**.
+
 ## Alcance
 
 El alta pública de cuenta: el recorrido al que llega un visitante que hace clic
@@ -45,7 +59,7 @@ modelo tiene un agujero.
 ## Verificación contra el backend
 
 Antes de asignar severidades se mandaron los payloads exactos que el formulario
-deja pasar contra el **servicio real** de inscripción
+dejaba pasar contra el **servicio real** de inscripción
 (`EnrollmentServicio.enroll`), no contra un mock. Resultado:
 
 | Caso | Respuesta del backend |
@@ -57,13 +71,18 @@ deja pasar contra el **servicio real** de inscripción
 | Dependiente de 3 años | RECHAZADO — «(calculado: 2)» |
 | **Control:** 5 años exactos | ACEPTADO (correcto) |
 
-El control importa tanto como los rechazos: sin él, una sonda rota devuelve
+El control importaba tanto como los rechazos: sin él, una sonda rota devuelve
 "todo rechazado" y parece una buena noticia.
 
-**Conclusión: ningún dato malo llega a la base.** Los huecos de fecha y edad son
-defectos de **experiencia**, no de integridad. Eso baja la severidad de todos
-ellos — que es exactamente por lo que se hizo esta verificación antes de abrir
-los issues.
+**En ese momento, ningún dato malo llegaba a la base** solo porque el backend
+lo frenaba solo; el formulario público no aplicaba ninguna de estas cotas. Los
+huecos de fecha y edad eran defectos de **experiencia**, no de integridad —
+eso bajó la severidad de todos ellos, y es exactamente por lo que se hizo esta
+verificación antes de abrir los issues.
+
+**Cerrado:** el frontend ahora aplica las mismas cotas (`studentBirthDateRule`
+en `frontend/src/lib/identity-validation.ts`), así que el visitante ve el
+rechazo en el campo donde lo escribió, no tres pasos después al confirmar.
 
 > Una trampa que casi arruina esta medición: la suite del backend **congela
 > «hoy» en 2029-01-01** (`FECHA_CONGELADA_HOY` en `conftest.py`). El primer
@@ -80,52 +99,80 @@ meses, 74, 80) caen del lado correcto, y ningún error del servidor —500, 422,
 caída de red— filtra texto interno a la pantalla.
 
 Lo que apareció son **diez huecos que se reducen a cuatro causas raíz**. Y la
-principal, ya con la verificación en la mano, se puede enunciar en una línea:
+principal, ya con la verificación en la mano, se podía enunciar en una línea:
 
 > **El backend tiene UNA regla para el alumno —`5 ≤ edad ≤ 74`— y el formulario
-> público no implementa casi nada de ella.**
+> público no implementaba casi nada de ella.**
 
-Cinco de los diez hallazgos son esa sola ausencia, vista desde cinco ángulos.
+Cinco de los diez hallazgos eran esa sola ausencia, vista desde cinco ángulos.
 
-Lo que lo vuelve un defecto y no una decisión de diseño: **los otros dos
-asistentes del mismo repo sí la implementan.**
-`add-dependent-utils.ts` tiene `EDAD_MINIMA_ALUMNO = 5`, `EDAD_MAXIMA_ALUMNO = 74`
-y un `isFutureDate` explícito; `crear-cuenta-utils.ts` tiene las mismas dos
-constantes. La regla ya está escrita dos veces en el código — solo que no en el
+Lo que lo volvía un defecto y no una decisión de diseño: **los otros dos
+asistentes del mismo repo sí la implementaban.**
+`add-dependent-utils.ts` tenía `EDAD_MINIMA_ALUMNO = 5`, `EDAD_MAXIMA_ALUMNO = 74`
+y un `isFutureDate` explícito; `crear-cuenta-utils.ts` tenía las mismas dos
+constantes. La regla estaba escrita dos veces en el código — solo que no en el
 formulario por el que entra el público.
+
+**Cerrado.** La causa raíz no se volvió a escribir una tercera vez: las tres
+copias —incluida la que faltaba— se reemplazaron por un solo import a
+`frontend/src/lib/identity-validation.ts`, que trae `EDAD_MINIMA_ALUMNO`,
+`EDAD_MAXIMA_ALUMNO` y `studentBirthDateRule` para los tres asistentes.
 
 ## Hallazgos
 
-Cada uno tiene su caso en la suite y su captura. Los casos `G*` afirman el
-comportamiento **tal cual es hoy**: si mañana se cierra el hueco, el test se
-pone rojo y obliga a actualizar este informe.
+Cada uno tiene su caso en la suite y su captura. Los casos `G*` y `V*` daban
+vuelta a **rojo** apenas se cerraba el hueco correspondiente — y se dieron
+vuelta, con el mismo id y la misma captura, ahora afirmando el cierre.
 
-| ID | Severidad | Causa raíz | Hallazgo | Captura |
+| ID | Severidad | Causa raíz | Hallazgo (estado original) | Estado |
 |---|---|---|---|---|
-| G02 | Media | **A** | Fecha **futura** en un dependiente pasa sin una queja | `G02-dependiente-fecha-futura-aceptada.png` |
-| G01 | Media | **A** | Fecha **futura** en autoinscripción: rechazada con el mensaje equivocado | `G01-fecha-futura-mensaje-equivocado.png` |
-| G08 | Media | **A** | Un dependiente de **3 años** pasa el formulario entero | `G08-dependiente-menor-de-5-aceptado.png` |
-| G03 | Media | **A** | **Sin techo de edad** para autoinscribirse: 120 años avanza | `G03-sin-techo-de-edad-jugador.png` |
-| G04 | Baja | **A** | El año 1750 que el representante rechaza, el jugador lo acepta | `G04-jugador-anio-1750-aceptado.png` |
-| G05 | Media | **B** | El **11º dígito de la cédula desaparece** sin decir nada | `G05-cedula-11o-digito-descartado.png` |
-| G06 | Baja | **C** | Credenciales a medias: «Siguiente» habilitado, falla al clickear | `G06a-…`, `G06b-…` |
-| M01 | Baja | **D** | El mismo error se muestra en toast y en alerta a la vez | `M01-mensaje-duplicado-toast-y-alerta.png` |
-| M02 | Baja | **D** | El toast tapa los botones «Corregir» del resumen | `M02-toast-tapa-boton-corregir.png` |
-| G07 | — | — | Un nombre de solo espacios se rechaza como vacío (correcto, no es hallazgo) | `G07-nombres-solo-espacios.png` |
+| G02 | Media | **A** | Fecha **futura** en un dependiente pasaba sin una queja | **Cerrado** — #224, `G02-dependiente-fecha-futura-rechazada.png` |
+| G01 | Media | **A** | Fecha **futura** en autoinscripción: rechazada con el mensaje equivocado | **Cerrado** — #224, `G01-fecha-futura-mensaje-correcto.png` |
+| G08 | Media | **A** | Un dependiente de **3 años** pasaba el formulario entero | **Cerrado** — #224, `G08-dependiente-menor-de-5-rechazado.png` |
+| G03 | Media | **A** | **Sin techo de edad** para autoinscribirse: 120 años avanzaba | **Cerrado** — #224, `G03-techo-de-edad-jugador-120.png` |
+| G04 | Baja | **A** | El año 1750 que el representante rechaza, el jugador lo aceptaba | **Cerrado** — #224, `G04-jugador-anio-1750-rechazado.png` |
+| G05 | Media | **B** | El **11º dígito de la cédula desaparecía** sin decir nada | **Cerrado** — #225, `G05-cedula-11o-digito-ya-no-se-descarta.png` |
+| G06 | Baja | **C** | Credenciales a medias: «Siguiente» habilitado, fallaba al clickear | **Cerrado** — #226, `G06a-…`, `G06b-…` |
+| V03–V05 | Media | **E** | Cédula validada solo por largo: verificador y provincia no se chequeaban | **Cerrado** — #228, `V03-…`–`V05-…`, control en `V06-…` |
+| V01–V02 | Media | **F** | Teléfono aceptaba letras y largos que no existen en Ecuador | **Cerrado** — #229, `V01-…`, `V02-…`; separadores siguen aceptados (`P12`) |
+| V07 | Media | **G** | Apellido con guion o apóstrofo (`Pérez-Mora`, `D'Angelo`) se rechazaba siendo real | **Cerrado** — #230, `V07-apellido-con-guion-aceptado.png` |
+| V08 | Baja | **G** | Contraseña sin política más allá del largo (`12345678` pasaba) | **Cerrado** — #230, `V08-contrasenia-debil-rechazada.png` |
+| M01 | Baja | **D** | El mismo error se muestra en toast y en alerta a la vez | Sin cambios — fuera del alcance de este cableado |
+| M02 | Baja | **D** | El toast tapa los botones «Corregir» del resumen | Sin cambios — fuera del alcance de este cableado |
+| G07 | — | — | Un nombre de solo espacios se rechaza como vacío (correcto, no es hallazgo) | Sin cambios — ya era correcto |
 
-**Causa raíz A** — el formulario público no aplica las cotas de edad del alumno
-(`5 ≤ edad ≤ 74`) ni rechaza fechas futuras. Cinco síntomas, un solo arreglo.
-**Causa raíz B** — `maxLength` recorta en el input en lugar de validar.
-**Causa raíz D** — el mismo mensaje se emite por dos canales, y el flotante tapa un control.
-**Causa raíz C** — una regla es de paso y no de campo, y rompe el modelo de
-prevención de errores del resto del asistente.
+**Causa raíz A** — el formulario público no aplicaba las cotas de edad del alumno
+(`5 ≤ edad ≤ 74`) ni rechazaba fechas futuras. Cinco síntomas, un solo arreglo:
+`studentBirthDateRule` en el módulo compartido.
+**Causa raíz B** — `maxLength` recortaba en el input en lugar de validar; se sacó
+del input y quedó solo la regla.
+**Causa raíz C** — una regla era de paso y no de campo, y rompía el modelo de
+prevención de errores del resto del asistente; ahora corre desde
+`validateEnrollFields`, igual que las demás.
+**Causa raíz D** — el mismo mensaje se emite por dos canales, y el flotante tapa
+un control. No es una regla de validación de campo, así que queda fuera del
+alcance de este cableado.
+**Causa raíz E** — la cédula se validaba con `/^\d{10}$/`: solo el largo, sin
+provincia ni dígito verificador.
+**Causa raíz F** — el teléfono se limpiaba con un `replace(/\D/g, "")` que
+borraba letras junto con separadores, y aceptaba largos (7-8 dígitos) que no
+existen en la numeración ecuatoriana.
+**Causa raíz G** — el patrón de nombre de persona (`/^[A-Za-zÀ-ɏ\s]+$/`) no
+admitía guion ni apóstrofo, y la contraseña no tenía más regla que el largo.
+Las causas E, F y G compartían el mismo arreglo: las tres reglas duplicadas en
+`enroll-utils.ts`, `add-dependent-utils.ts` y `crear-cuenta-utils.ts` se
+reemplazaron por el módulo compartido `frontend/src/lib/identity-validation.ts`.
 
 ### G01 · La fecha futura se rechaza por el motivo equivocado
 
-No existe regla de «fecha futura». Al cargar `2027-06-15` el asistente calcula
-la edad, le da un número negativo, y como es menor que 18 dispara la regla de
-mayoría de edad. El visitante lee **«Los menores de edad no pueden
-autoinscribirse»** sobre una persona que todavía no nació.
+**Cerrado — #224.** `studentBirthDateRule` rechaza una fecha futura por SER
+futura, con su propio mensaje, antes de calcular ninguna edad.
+
+Lo de abajo describe el comportamiento que había hasta este cableado. No
+existía regla de «fecha futura». Al cargar `2027-06-15` el asistente calculaba
+la edad, le daba un número negativo, y como era menor que 18 disparaba la regla
+de mayoría de edad. El visitante leía **«Los menores de edad no pueden
+autoinscribirse»** sobre una persona que todavía no había nacido.
 
 La captura lo muestra sin ambigüedad: en pantalla se lee **«Edad calculada: −1
 años»**. Una edad negativa mostrada al usuario.
@@ -135,7 +182,10 @@ a resolver el problema equivocado.
 
 ### G02 · La misma fecha futura, en un dependiente, entra
 
-Es la contracara exacta de G01, y el síntoma más visible de la causa raíz A.
+**Cerrado — #224.** La misma regla ahora corre para los dos tipos de
+inscripción; una fecha futura bloquea el paso sea o no autoinscripción.
+
+Lo de abajo describe el comportamiento que había. Es la contracara exacta de G01, y el síntoma más visible de la causa raíz A.
 
 La regla de edad del estudiante **solo corre para la autoinscripción**. En una
 inscripción de hijo o dependiente, a la fecha de nacimiento no se le mira nada
@@ -161,7 +211,10 @@ tapa por casualidad, el dato entra.
 
 ### G08 · Un dependiente de 3 años pasa el formulario entero
 
-Este apareció recién al probar contra el backend, y es el que mejor muestra el
+**Cerrado — #224.** El piso de 5 años (`EDAD_MINIMA_ALUMNO`) ahora se aplica
+también a la autoinscripción y al dependiente por igual, en el campo.
+
+Lo de abajo describe el comportamiento que había. Este apareció recién al probar contra el backend, y es el que mejor muestra el
 costo de la causa raíz A.
 
 El backend exige **5 años como mínimo** para el alumno. El formulario público no
@@ -180,7 +233,11 @@ asistente hermano, **ya valida esto** con el mensaje correcto y en el campo.
 
 ### G03 y G04 · El estudiante no tiene techo de edad; el representante sí
 
-El representante tiene piso **y** techo, 18 a 74, y se afirma en R03, R04 y R05.
+**Cerrado — #224.** El estudiante ahora comparte el mismo techo de 74 años
+(`EDAD_MAXIMA_ALUMNO`) que ya tenía el representante — misma persona, mismo
+resultado, sea cual sea el rol.
+
+Lo de abajo describe el comportamiento que había. El representante tenía piso **y** techo, 18 a 74, y se afirma en R03, R04 y R05.
 El estudiante que se autoinscribe tiene **solo el piso**.
 
 Consecuencia: **la misma persona sería rechazada como representante y aceptada
@@ -194,7 +251,10 @@ del representante lo frena con ese número. El del jugador no lo frena porque
 
 ### G05 · El 11º dígito de la cédula se descarta en silencio
 
-`maxLength=10` recorta el exceso dentro del propio input. Al escribir
+**Cerrado — #225.** El `maxLength` se sacó del input; la regla, no el campo,
+es la que ahora dice por qué once dígitos no son una cédula.
+
+Lo de abajo describe el comportamiento que había. `maxLength=10` recortaba el exceso dentro del propio input. Al escribir
 `17123456789` el campo queda con `1712345678`, **válido**, y sin ningún aviso
 de que se comió una tecla.
 
@@ -204,7 +264,11 @@ una cédula que no escribió.
 
 ### G06 · La única regla que no previene, castiga
 
-Todas las reglas del asistente previenen el error deshabilitando «Siguiente».
+**Cerrado — #226.** La regla de credenciales opcionales del estudiante corre
+ahora desde `validateEnrollFields`, igual que el resto: es de campo, no de
+paso, y ya no es la única inconsistencia del modelo.
+
+Lo de abajo describe el comportamiento que había. Todas las demás reglas del asistente prevenían el error deshabilitando «Siguiente».
 Una no: las credenciales opcionales del estudiante dependiente a medio llenar
 —solo el correo, o solo la contraseña—. Es regla de paso, no de campo, así que
 el botón **invita a avanzar** y recién el clic descubre el bloqueo.
@@ -229,18 +293,32 @@ alta sin sesión. El tipo por defecto es Jugador, se cambia a Representante, y e
 paso de tipo nunca bloquea.
 
 **Datos del estudiante (P01–P23, 23 casos).** Nombres y apellidos: vacío, menos
-de 3 caracteres, con dígitos, con símbolos, y tildes y ñ aceptadas. Cédula: 9
-dígitos, con letras. Teléfono: 6 dígitos, y **con guiones aceptado** —
-`099-123-4567` son 10 dígitos porque los separadores se limpian antes de medir;
-es intencional y quedó clavado. Correo: sin arroba, sin dominio de primer nivel,
-con espacios. Contraseña: 7 caracteres rechazada, 8 exactos aceptada. Edad: 18
-exactos pasa, **17 años y 11 meses no** — el cálculo resta el año que todavía no
-se cumplió en lugar de redondear hacia arriba. Y la autoinscripción **salta** el
+de 3 caracteres, con dígitos o símbolos rechazados (ahora con el mensaje que
+describe el problema, no la regla — #230), y tildes y ñ aceptadas. Cédula: 9
+dígitos, con letras, y un 11º dígito que ya no se recorta en silencio (#225).
+Teléfono: 6 dígitos, y **con guiones sigue aceptado** — `099-123-4567` limpia a
+10 dígitos por un allowlist explícito de separadores (espacio, guion,
+paréntesis), no por un strip ciego de todo lo que no sea dígito (#229). Correo:
+sin arroba, sin dominio de primer nivel, con espacios. Contraseña: 7 caracteres
+rechazada, y el borde de 8 caracteres exactos ahora se mide con un valor que no
+esté en la lista de comunes (`12345678` ya no pasa — ver V08). Edad: 18 exactos
+pasa, **17 años y 11 meses no** — el cálculo resta el año que todavía no se
+cumplió en lugar de redondear hacia arriba. Y la autoinscripción **salta** el
 paso de representante.
 
 **Dependiente (C01–C06, 6 casos).** Credenciales del estudiante vacías: válido,
 son opcionales. Un menor dependiente es válido. Y las cuatro formas de llenarlas
-a medias dan cada una su mensaje.
+a medias dan cada una su mensaje — ahora en el campo, con «Siguiente»
+deshabilitado, no recién al clickear (#226).
+
+**Laxitud frente a la norma ecuatoriana (V01–V08, 8 casos).** Cerraba el
+capítulo de reglas de identidad reales en vez de solo internamente
+consistentes: cédula con dígito verificador módulo 10 y provincia 01-24/30
+(#228); teléfono que rechaza letras y solo admite los largos que existen en el
+Plan Técnico Fundamental de Numeración de ARCOTEL (#229); apellido con guion o
+apóstrofo aceptado y contraseña contra una lista de las más comunes (#230). El
+control `V06` confirma que la cédula sigue validando lo que siempre validó
+bien (largo).
 
 **Representante (R01–R10, 10 casos).** Paso en blanco, cédula corta, correo
 inválido, contraseña corta, nombres con dígitos. Y los tres bordes de edad: 17
@@ -327,9 +405,14 @@ identidades ya registradas— también, arriba.
 Queda fuera de alcance, y conviene decirlo:
 
 - **El alta del panel de administración** (`/admin/crear-cuenta`). Es otro
-  formulario con otras reglas; comparte helpers con este, así que varios
-  hallazgos probablemente se repitan ahí, pero no se probó.
-- **El asistente de dependientes** (`/student/add-dependent`), por lo mismo.
+  formulario con otras reglas; no tiene su propia suite e2e como esta, pero
+  ahora comparte el mismo módulo de reglas (`identity-validation.ts`) que este
+  asistente, así que los hallazgos de identidad (cédula, teléfono, nombre,
+  contraseña) que aquí se cerraron se cerraron ahí también — verificado por
+  los tests unitarios de `crear-cuenta-utils.test.ts`, no por e2e.
+- **El asistente de dependientes** (`/student/add-dependent`), por lo mismo:
+  mismo módulo compartido, mismos cierres, verificados por
+  `add-dependent-utils.test.ts`, no por e2e.
 - **Acceso con teclado y lector de pantalla.** Los errores llevan `aria-invalid`
   y `aria-describedby`, pero no se recorrió el formulario sin mouse.
 

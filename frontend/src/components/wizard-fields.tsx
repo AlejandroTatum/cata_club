@@ -222,7 +222,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
           idPrefix={idPrefix} disabled={disabled} label="Cédula de Identidad" value={props.cedula}
           onChange={props.onCedulaChange} placeholder="p. ej. 1712345678" required
           icon={<Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          pattern="[0-9]{10}" maxLength={CEDULA_DIGITS} inputMode="numeric"
+          pattern="[0-9]{10}" inputMode="numeric"
           error={errors.cedula} onBlur={() => props.onFieldBlur?.("cedula")}
           hint={
             cedulaTyped > 0 && cedulaTyped < CEDULA_DIGITS
@@ -235,9 +235,9 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         idPrefix={idPrefix} disabled={disabled} label="Teléfono" value={props.telefono}
         onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
         icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-        pattern="[0-9]+" maxLength={10} minLength={7} inputMode="tel"
+        pattern="[0-9]+" inputMode="tel"
         error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
-        hint="Entre siete y diez dígitos, con o sin espacios."
+        hint="Celular: 09 y 8 dígitos más. Fijo: 0, código de área y 7 dígitos."
       />
       {props.fechaNacimiento && (
         <div className="rounded-ctl bg-canvas p-3 text-xs text-ink-3">
@@ -289,9 +289,9 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
           idPrefix={idPrefix} disabled={disabled} label="Teléfono de Emergencia" value={props.telefono}
           onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
           icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          pattern="[0-9]+" maxLength={10} minLength={7} inputMode="tel"
+          pattern="[0-9]+" inputMode="tel"
           error={props.telefonoError} onBlur={props.onTelefonoBlur}
-          hint="Entre siete y diez dígitos, con o sin espacios."
+          hint="Celular: 09 y 8 dígitos más. Fijo: 0, código de área y 7 dígitos."
         />
       </div>
     </>

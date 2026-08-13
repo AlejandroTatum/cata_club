@@ -22,7 +22,7 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     nombres: "Juan",
     apellidos: "Pérez",
     fechaNacimiento: "2000-01-15",
-    cedula: "1712345678",
+    cedula: "1798765432",
     telefono: "0991234567",
     correo: "juan@example.com",
     contrasenia: "password8",
@@ -90,7 +90,7 @@ describe("validateEnrollFields", () => {
   it("keys each message to the field that owns it", () => {
     const errors = validateEnrollFields("personal", validForm({ nombres: "", cedula: "13100456" }));
     expect(errors.nombres).toBe("Los nombres son obligatorios.");
-    expect(errors.cedula).toBe("La cédula debe tener 10 dígitos.");
+    expect(errors.cedula).toBe("La cédula de identidad debe tener 10 dígitos.");
     expect(errors.apellidos).toBeUndefined();
   });
 
@@ -98,7 +98,9 @@ describe("validateEnrollFields", () => {
     expect(validateEnrollFields("personal", validForm({ telefono: "0981 000 010" })).telefono)
       .toBeUndefined();
     expect(validateEnrollFields("personal", validForm({ telefono: "09810" })).telefono)
-      .toBe("El teléfono debe tener entre 7 y 10 dígitos.");
+      .toBe(
+        "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      );
   });
 
   it("blames the birth date for the minors rule on a self enrollment", () => {
@@ -158,7 +160,7 @@ describe("validateEnrollFields", () => {
     );
     expect(errors.tipoSangre).toBe("El tipo de sangre es obligatorio.");
     expect(errors.telefonoEmergencia).toBe(
-      "El teléfono de emergencia debe tener entre 7 y 10 dígitos.",
+      "El teléfono de emergencia debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
     );
   });
 });
@@ -177,5 +179,25 @@ describe("isStepComplete", () => {
   it("never blocks the type or summary steps", () => {
     expect(isStepComplete("type", initialFormData)).toBe(true);
     expect(isStepComplete("summary", initialFormData)).toBe(true);
+  });
+
+  /**
+   * Root-cause fix for #226: `validateOptionalStudentCredentials` used to run
+   * only from `validateEnrollStep` (on click), never from the field-level
+   * rules that gate "Siguiente" — so the button stayed enabled with half-filled
+   * optional credentials and only failed once clicked. `validateEnrollFields`
+   * now applies the same both-or-neither rule the personal step's flat
+   * validation already enforced.
+   */
+  it("blocks a child enrollment's personal step when the optional student account is half-filled (#226)", () => {
+    const halfFilled = validForm({
+      enrollmentType: "child",
+      correo: "lucas@example.com",
+      contrasenia: "",
+    });
+    expect(isStepComplete("personal", halfFilled)).toBe(false);
+    expect(validateEnrollFields("personal", halfFilled).contrasenia).toBe(
+      "La contraseña del estudiante es obligatoria si se desea crear una cuenta.",
+    );
   });
 });

@@ -253,7 +253,7 @@ function EnrollWizard(): React.ReactElement {
           nombres: "Sofia",
           apellidos: "Martinez",
           fechaNacimiento: "1990-05-20",
-          cedula: "1712345678",
+          cedula: "1798765432",
           telefono: "0991234567",
           correo: "sofia@example.com",
           contrasenia: "password8",
@@ -267,11 +267,11 @@ function EnrollWizard(): React.ReactElement {
           nombres: "Lucas",
           apellidos: "Martinez",
           fechaNacimiento: "2015-06-15",
-          cedula: "1723456789",
+          cedula: "1723456719",
           telefono: "0991234567",
           nombreRepresentante: "Sofia",
           apellidosRepresentante: "Martinez",
-          cedulaRepresentante: "1712345678",
+          cedulaRepresentante: "0998765432",
           fechaNacimientoRepresentante: "1990-05-20",
           telefonoRepresentante: "0991234567",
           correoRepresentante: "sofia@example.com",
@@ -542,7 +542,6 @@ function EnrollWizard(): React.ReactElement {
           required: true,
           icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           pattern: "[0-9]{10}",
-          maxLength: 10,
           inputMode: "numeric",
           hint: "10 dígitos, sin guiones.",
         })}
@@ -561,7 +560,7 @@ function EnrollWizard(): React.ReactElement {
           onChange: (v) => updateField("telefonoRepresentante", v),
           inputMode: "tel",
           required: true,
-          hint: "Entre siete y diez dígitos, con o sin espacios.",
+          hint: "Celular: 09 y 8 dígitos más. Fijo: 0, código de área y 7 dígitos.",
         })}
 
         <div className="my-4 h-px bg-line" />

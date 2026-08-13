@@ -22,7 +22,7 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     nombres: "Juan",
     apellidos: "Pérez",
     fechaNacimiento: "2000-01-15",
-    cedula: "1712345678",
+    cedula: "1798765432",
     telefono: "0991234567",
     correo: "juan@example.com",
     contrasenia: "password8",
@@ -86,12 +86,12 @@ describe("validateEnrollStep — personal step", () => {
 
   it("validates cedula has exactly 10 digits", () => {
     const errors = validateEnrollStep("personal", validForm({ cedula: "12345" }));
-    expect(errors).toContain("La cédula debe tener 10 dígitos.");
+    expect(errors).toContain("La cédula de identidad debe tener 10 dígitos.");
   });
 
   it("validates cedula with non-digit characters", () => {
     const errors = validateEnrollStep("personal", validForm({ cedula: "1712abcd78" }));
-    expect(errors).toContain("La cédula debe tener 10 dígitos.");
+    expect(errors).toContain("La cédula de identidad debe tener 10 dígitos.");
   });
 
   it("reports multiple errors at once", () => {
@@ -262,7 +262,7 @@ describe("validateEnrollStep — representative step", () => {
         cedulaRepresentante: "",
       }),
     );
-    expect(errors).toContain("La cédula del representante debe tener 10 dígitos.");
+    expect(errors).toContain("La cédula del representante es obligatoria.");
   });
 
   it("validates cedula representante has 10 digits for child enrollment", () => {
@@ -355,7 +355,7 @@ describe("validateEnrollStep — representative step", () => {
       }),
     );
     expect(errors).toContain("Los nombres del representante son obligatorios.");
-    expect(errors).toContain("La cédula del representante debe tener 10 dígitos.");
+    expect(errors).toContain("La cédula del representante es obligatoria.");
   });
 });
 
@@ -371,7 +371,7 @@ describe("validateEnrollStep — health step", () => {
 
   it("requires contactoEmergencia", () => {
     const errors = validateEnrollStep("health", validForm({ contactoEmergencia: "" }));
-    expect(errors).toContain("El nombre de contacto de emergencia es obligatorio.");
+    expect(errors).toContain("El nombre del contacto de emergencia es obligatorio.");
   });
 
   it("requires telefonoEmergencia", () => {
@@ -419,6 +419,6 @@ describe("validateEnrollStep — edge cases", () => {
 
   it("handles emergency contact with only whitespace", () => {
     const errors = validateEnrollStep("health", validForm({ contactoEmergencia: "   " }));
-    expect(errors).toContain("El nombre de contacto de emergencia es obligatorio.");
+    expect(errors).toContain("El nombre del contacto de emergencia es obligatorio.");
   });
 });
