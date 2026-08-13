@@ -14,6 +14,14 @@ cierre, con el mismo id y la misma captura. El resto de este documento es el
 registro histórico de la auditoría original; las secciones que describían el
 comportamiento viejo quedan marcadas **Cerrado**.
 
+`M01` y `M02` quedaron explícitamente **fuera** del alcance de ese cableado
+(causa raíz D, más abajo) porque no eran una regla de validación de campo.
+Se cerraron después, por separado, con #233: `handleConfirm` en
+`/student/enroll`, `/student/add-dependent` y `/admin/crear-cuenta` dejó de
+llamar `showError` además de `setFormErrors` — el mismo patrón repetido en
+los tres asistentes. El error del alta vive ahora solo en la alerta del
+paso, sin el toast flotante que se apoyaba encima de los botones «Corregir».
+
 ## Alcance
 
 El alta pública de cuenta: el recorrido al que llega un visitante que hace clic
@@ -137,8 +145,8 @@ vuelta, con el mismo id y la misma captura, ahora afirmando el cierre.
 | V01–V02 | Media | **F** | Teléfono aceptaba letras y largos que no existen en Ecuador | **Cerrado** — #229, `V01-…`, `V02-…`; separadores siguen aceptados (`P12`) |
 | V07 | Media | **G** | Apellido con guion o apóstrofo (`Pérez-Mora`, `D'Angelo`) se rechazaba siendo real | **Cerrado** — #230, `V07-apellido-con-guion-aceptado.png` |
 | V08 | Baja | **G** | Contraseña sin política más allá del largo (`12345678` pasaba) | **Cerrado** — #230, `V08-contrasenia-debil-rechazada.png` |
-| M01 | Baja | **D** | El mismo error se muestra en toast y en alerta a la vez | Sin cambios — fuera del alcance de este cableado |
-| M02 | Baja | **D** | El toast tapa los botones «Corregir» del resumen | Sin cambios — fuera del alcance de este cableado |
+| M01 | Baja | **D** | El mismo error se muestra en toast y en alerta a la vez | **Cerrado** — #233, `M01-mensaje-duplicado-solo-en-alerta.png` |
+| M02 | Baja | **D** | El toast tapa los botones «Corregir» del resumen | **Cerrado** — #233, `M02-sin-toast-boton-corregir-visible.png` |
 | G07 | — | — | Un nombre de solo espacios se rechaza como vacío (correcto, no es hallazgo) | Sin cambios — ya era correcto |
 
 **Causa raíz A** — el formulario público no aplicaba las cotas de edad del alumno
@@ -150,8 +158,9 @@ del input y quedó solo la regla.
 prevención de errores del resto del asistente; ahora corre desde
 `validateEnrollFields`, igual que las demás.
 **Causa raíz D** — el mismo mensaje se emite por dos canales, y el flotante tapa
-un control. No es una regla de validación de campo, así que queda fuera del
-alcance de este cableado.
+un control. No era una regla de validación de campo, así que quedó fuera del
+alcance de este cableado; se cerró después con #233, sacando la llamada a
+`showError` del camino de error de `handleConfirm`.
 **Causa raíz E** — la cédula se validaba con `/^\d{10}$/`: solo el largo, sin
 provincia ni dígito verificador.
 **Causa raíz F** — el teléfono se limpiaba con un `replace(/\D/g, "")` que
@@ -339,9 +348,10 @@ decir cuál de los datos está tomado. Un 500 con un traceback de `psycopg2` y u
 filtrar una línea del detalle interno**. Doble clic en confirmar envía **una
 sola** inscripción.
 
-**Presentación de los mensajes (M01–M02, 2 casos).** Los dos son hallazgos, no
-aprobaciones: el mismo error sale por toast y por alerta a la vez, y el toast
-tapa los botones «Corregir». Ver la tabla de hallazgos.
+**Presentación de los mensajes (M01–M02, 2 casos).** Cerrados con #233: el
+error del alta ya no sale por dos canales a la vez. `handleConfirm` deja de
+llamar `showError`, así que el mensaje vive solo en la alerta del paso, junto
+al botón «Corregir» que pide usar, y ningún toast queda encima de él.
 
 **Navegación (N01–N03, 3 casos).** «Atrás» conserva lo cargado, el Atrás del
 navegador es el mismo Atrás del asistente, y no se puede saltar a un paso

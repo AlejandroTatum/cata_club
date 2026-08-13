@@ -20,7 +20,6 @@ import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "
 import Link from "next/link";
 import { enrollStudent, fetchInstituciones, type Institucion } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/contexts/ToastContext";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
@@ -84,7 +83,6 @@ const ENROLLMENT_CHOICES: { value: EnrollmentType; title: string; description: s
 
 function EnrollWizard(): React.ReactElement {
   const { refreshSession, isAuthenticated } = useAuth();
-  const { showError } = useToast();
   const demoQuickFillEnabled = isDemoQuickFillEnabled();
   const [formData, setFormData] = useState<EnrollFormData>(initialFormData);
   const [submitting, setSubmitting] = useState(false);
@@ -222,7 +220,6 @@ function EnrollWizard(): React.ReactElement {
       setSubmitting(false);
       const message = getEnrollmentErrorMessage(error);
       setFormErrors([message]);
-      showError(message);
     }
   }
 

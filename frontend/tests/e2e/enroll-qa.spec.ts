@@ -932,42 +932,40 @@ test.describe("M · Presentación de los mensajes", () => {
     await expect(stepAlert(page)).toBeVisible();
   }
 
-  test("M01 · el mismo mensaje se muestra dos veces a la vez: toast y alerta", async ({ page }) => {
+  test("M01 · el mensaje aparece una sola vez, en la alerta del paso", async ({ page }) => {
     await fallarConDuplicado(page);
 
-    // `handleConfirm` hace las dos cosas con el mismo texto: `setFormErrors([m])`
-    // y `showError(m)`. El visitante lee lo mismo en dos lugares.
+    // `handleConfirm` ya no dispara `showError`: el error del alta vive
+    // solo en la alerta del paso, junto al botón «Corregir» que pide usar.
+    //
+    // El timeout corto es deliberado: el toast, si existiera, dura ~4.8s
+    // (`toastDurationFor` para este mensaje) antes de auto-descartarse, más
+    // que el default de 5s de `expect`. Sin acortar la espera, esta
+    // aserción terminaría coincidiendo con su propio auto-dismiss y pasaría
+    // igual con el bug presente — un candado que nunca se pone rojo no es
+    // candado.
     const toast = page.locator('[role="alert"].toast-error');
-    await expect(toast).toContainText(DUPLICADO);
+    await expect(toast).toHaveCount(0, { timeout: 1000 });
     await expect(stepAlert(page)).toContainText(DUPLICADO);
-    await shot(page, "M01", "mensaje-duplicado-toast-y-alerta");
+    await shot(page, "M01", "mensaje-duplicado-solo-en-alerta");
   });
 
-  test("M02 · el toast tapa los botones «Corregir» del resumen", async ({ page }) => {
+  test("M02 · sin toast, ningún «Corregir» del resumen queda tapado", async ({ page }) => {
     await fallarConDuplicado(page);
 
-    const toast = page.locator('[role="alert"].toast-error').first();
-    const caja = await toast.boundingBox();
-    expect(caja).not.toBeNull();
+    // Sin `showError` no hay toast que pueda solaparse con nada. Se mide
+    // igual, por si algún otro elemento flotante llegara a ocupar ese lugar.
+    // Ver M01 sobre por qué el timeout es corto.
+    const toast = page.locator('[role="alert"].toast-error');
+    await expect(toast).toHaveCount(0, { timeout: 1000 });
 
-    // ¿Algún «Corregir» queda debajo del toast? Corregir es justamente la
-    // acción que este error pide, así que taparla es tapar la salida.
     const corregir = page.getByRole("button", { name: /corregir/i });
     const total = await corregir.count();
-    const tapados: number[] = [];
+    expect(total).toBeGreaterThan(0);
     for (let i = 0; i < total; i++) {
-      const c = await corregir.nth(i).boundingBox();
-      if (!c || !caja) continue;
-      const solapa =
-        c.x < caja.x + caja.width && c.x + c.width > caja.x &&
-        c.y < caja.y + caja.height && c.y + c.height > caja.y;
-      if (solapa) tapados.push(i);
+      await expect(corregir.nth(i)).toBeVisible();
     }
-
-    // Se afirma el comportamiento de HOY. Si alguien mueve el toast, este test
-    // se pone rojo y hay que actualizar el informe.
-    expect(tapados.length).toBeGreaterThan(0);
-    await shot(page, "M02", "toast-tapa-boton-corregir");
+    await shot(page, "M02", "sin-toast-boton-corregir-visible");
   });
 });
 

@@ -64,7 +64,7 @@ import {
 function AddDependentContent(): React.ReactElement {
   const { session } = useAuth();
   const router = useRouter();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess } = useToast();
 
   const [formData, setFormData] = useState<AddDependentFormData>(initialAddDependentFormData);
   const [submitting, setSubmitting] = useState(false);
@@ -210,7 +210,6 @@ function AddDependentContent(): React.ReactElement {
       setSubmitting(false);
       const message = getAddDependentErrorMessage(error);
       setFormErrors([message]);
-      showError(message);
     }
   }
 
@@ -241,7 +240,6 @@ function AddDependentContent(): React.ReactElement {
       setLinkingExisting(false);
       const message = getLinkExistingErrorMessage(error);
       setFormErrors([message]);
-      showError(message);
     }
   }
 
