@@ -27,6 +27,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal, crearRepresentado, vincularRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
 import { calculatePersonAge } from "@/lib/identity-validation";
+import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { WizardTextarea, WizardInput, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
 import { BackLink, Stepper, buttonClasses } from "@/components/ui";
 import { BLOOD_TYPES } from "@/types/enrollment";
@@ -468,18 +469,39 @@ function AddDependentContent(): React.ReactElement {
     );
   }
 
-  /** One 56px detail row with the step it came from — `.drow` (_sistema.css:247-250). */
+  /**
+   * One 56px detail row with the step it came from — `.drow`
+   * (_sistema.css:247-250).
+   *
+   * `duplicateCandidate: true` flags a row as one of the fields a
+   * duplicate-identity 400 could not tell apart (issue #233): here, the
+   * dependent's cédula and its optional correo. When the backend answers
+   * with that error, EVERY candidate row gets the SAME "Revisar" marker —
+   * never just one — so the visitor's eye lands on the right "Corregir"
+   * button without the app ever singling out which field was actually the
+   * duplicate. The marker lives outside `WizardNavigation`'s alert box on
+   * purpose: that alert must never name a field either.
+   */
   function summaryRow(
     label: string,
     value: React.ReactNode,
     correctStep: AddDependentStep,
+    opts: { duplicateCandidate?: boolean } = {},
   ): React.ReactElement {
+    const flagged = Boolean(opts.duplicateCandidate) && formErrors.some(isDuplicateIdentityError);
     return (
-      <div className="flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0">
+      <div
+        className={`flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0 ${
+          flagged ? "bg-state-warn-bg" : ""
+        }`}
+      >
         <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">
           {label}
         </span>
         <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
+        {flagged && (
+          <span className="flex-none text-2xs font-bold uppercase text-state-warn">Revisar</span>
+        )}
         <button
           type="button"
           onClick={() => goToStep(correctStep)}
@@ -506,7 +528,7 @@ function AddDependentContent(): React.ReactElement {
             `${formData.nombres} ${formData.apellidos}`.trim() + ageLabel,
             "child",
           )}
-          {summaryRow("Cédula", formData.cedula || "—", "child")}
+          {summaryRow("Cédula", formData.cedula || "—", "child", { duplicateCandidate: true })}
           {summaryRow("Teléfono", formData.telefono || "—", "child")}
           {summaryRow(
             "Institución",
@@ -518,6 +540,7 @@ function AddDependentContent(): React.ReactElement {
             "Cuenta de acceso",
             formData.correo.trim() || "Sin cuenta propia",
             "credentials",
+            { duplicateCandidate: true },
           )}
           {summaryRow(
             "Tipo de sangre",
