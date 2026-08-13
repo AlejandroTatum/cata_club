@@ -275,6 +275,42 @@ export const PDF_BACKEND_TIMEOUT_MS = 60_000;
 export interface BackendFetchOptions {
   /** Milliseconds before the call is aborted. Defaults to `BACKEND_TIMEOUT_MS`. */
   timeoutMs?: number;
+  /**
+   * Visitor IP to forward to the backend as `X-Forwarded-For`. Get it from
+   * `forwardedForFrom(request)` below. See that function's doc comment for
+   * why this exists (issue #235) and why it's safe to trust as-is.
+   */
+  forwardedFor?: string;
+}
+
+/**
+ * Extract the visitor's real IP from the incoming request, so a BFF route
+ * that proxies an anonymous/rate-limited backend endpoint can forward it —
+ * pass the result as `backendFetch`'s `forwardedFor` option (or a
+ * `backendLogin`/etc. wrapper that accepts it).
+ *
+ * Without this, every anonymous request the backend sees comes from the
+ * SAME peer: its own TCP client is always this frontend container (the BFF
+ * calls it server-side), never the real visitor. That collapsed the
+ * backend's per-visitor rate limit (`clave_cliente`, keyed by IP for
+ * anonymous traffic — see backend/app/soporte_transversal/rate_limit.py)
+ * into one bucket shared by the entire internet: 10-11 requests/minute from
+ * anywhere could exhaust it and lock out public enrollment (issue #235).
+ *
+ * Trusting this header at face value is safe ONLY because of this
+ * deployment's topology: Caddy (Caddyfile's `reverse_proxy frontend:3000`)
+ * is the single public entry point and the only component that talks to
+ * this container, and it sets `X-Forwarded-For` itself from the real TCP
+ * peer — nothing on the public internet reaches this container directly to
+ * inject its own value. The backend's own trust boundary
+ * (`--forwarded-allow-ips`, backend/Dockerfile) is the second, REQUIRED half
+ * of this fix: it re-validates that whoever calls the backend (this
+ * frontend container) is itself inside the trusted internal network, so a
+ * spoofed header could never be honored even if this boundary were somehow
+ * bypassed.
+ */
+export function forwardedForFrom(request: Request): string | undefined {
+  return request.headers.get("x-forwarded-for") ?? undefined;
 }
 
 /**
@@ -314,6 +350,12 @@ export async function backendFetch(
   try {
     const response = await fetch(`${baseUrl}${path}`, {
       ...init,
+      // Only touches headers when a caller actually has a visitor IP to
+      // forward — every existing call site that doesn't pass `forwardedFor`
+      // keeps sending exactly the headers it always did.
+      headers: options.forwardedFor
+        ? { ...init.headers, "X-Forwarded-For": options.forwardedFor }
+        : init.headers,
       signal: controller.signal,
     });
     return { ok: true, data: response };
@@ -337,13 +379,21 @@ export async function backendFetch(
 // Backend calls
 // ---------------------------------------------------------------------------
 
-export async function backendLogin(username: string, password: string): Promise<AuthResult<BackendLoginResponse>> {
+export async function backendLogin(
+  username: string,
+  password: string,
+  forwardedFor?: string,
+): Promise<AuthResult<BackendLoginResponse>> {
   const body = new URLSearchParams({ username, password }).toString();
-  const result = await backendFetch("/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
+  const result = await backendFetch(
+    "/auth/login",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    },
+    { forwardedFor },
+  );
   if (!result.ok) return result;
 
   const response = result.data;

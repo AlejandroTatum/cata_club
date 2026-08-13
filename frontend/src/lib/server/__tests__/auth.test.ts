@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   getBackendApiUrl,
   backendFetch,
+  forwardedForFrom,
   backendLogin,
   backendMe,
   backendRefresh,
@@ -127,6 +128,68 @@ describe("backendFetch", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.error.code).toBe("backend_unavailable");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// forwardedForFrom + backendFetch's forwardedFor option (issue #235) — the
+// backend's anonymous rate limiter is keyed by IP (clave_cliente), but its
+// only view of a caller's IP is its own TCP peer, which is ALWAYS this BFF
+// container. Without forwarding the real visitor's IP, every anonymous
+// request from anywhere on the internet shares one rate-limit bucket.
+// ---------------------------------------------------------------------------
+
+describe("forwardedForFrom", () => {
+  it("reads the visitor IP Caddy already set on X-Forwarded-For", () => {
+    const request = new Request("http://localhost/api/enrollment", {
+      headers: { "x-forwarded-for": "198.51.100.7" },
+    });
+    expect(forwardedForFrom(request)).toBe("198.51.100.7");
+  });
+
+  it("returns undefined when the header is absent", () => {
+    const request = new Request("http://localhost/api/enrollment");
+    expect(forwardedForFrom(request)).toBeUndefined();
+  });
+});
+
+describe("backendFetch — forwardedFor", () => {
+  it("sends X-Forwarded-For to the backend when forwardedFor is provided", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+    await backendFetch("/enrollment/", { method: "POST" }, { forwardedFor: "203.0.113.9" });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/enrollment/",
+      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "203.0.113.9" }) }),
+    );
+  });
+
+  it("does not add X-Forwarded-For when forwardedFor is not provided (existing call sites unchanged)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+    await backendFetch("/auth/login", { method: "POST", headers: { "Content-Type": "application/json" } });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(Object.keys((init as RequestInit).headers as Record<string, string>)).not.toContain("X-Forwarded-For");
+  });
+});
+
+describe("backendLogin — forwardedFor", () => {
+  it("forwards the visitor IP to POST /auth/login", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: "a", refresh_token: "r", token_type: "bearer" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await backendLogin("admin@cataclub.com", "admin123", "198.51.100.20");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/auth/login",
+      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "198.51.100.20" }) }),
+    );
   });
 });
 

@@ -12,10 +12,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function recuperarRequest(body: unknown): NextRequest {
+function recuperarRequest(body: unknown, extraHeaders?: Record<string, string>): NextRequest {
   return new NextRequest("http://localhost/api/auth/recuperar-contrasenia", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
   });
 }
@@ -36,6 +36,17 @@ describe("POST /api/auth/recuperar-contrasenia", () => {
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards the visitor's X-Forwarded-For to the backend (issue #235)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ mensaje: "ok" }));
+
+    await POST(recuperarRequest({ correo: "ana@cataclub.com" }, { "x-forwarded-for": "198.51.100.60" }));
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/auth/recuperar-contrasenia",
+      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "198.51.100.60" }) }),
+    );
   });
 
   it("forwards the same success message the backend returns, regardless of whether the email exists", async () => {

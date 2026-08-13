@@ -17,10 +17,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function postRequest(body: unknown = { mensaje: "¿Cómo veo mis pagos?" }): Request {
+function postRequest(body: unknown = { mensaje: "¿Cómo veo mis pagos?" }, extraHeaders?: Record<string, string>): Request {
   return new Request("http://localhost/api/chatbot", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
   });
 }
@@ -43,6 +43,17 @@ describe("POST /api/chatbot", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ reply: "En Mi Cuenta." });
+  });
+
+  it("forwards the visitor's X-Forwarded-For to the backend (issue #235)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ respuesta: "En Mi Cuenta." }));
+
+    await POST(postRequest(undefined, { "x-forwarded-for": "198.51.100.40" }));
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/chatbot/consultar",
+      expect.objectContaining({ headers: expect.objectContaining({ "X-Forwarded-For": "198.51.100.40" }) }),
+    );
   });
 
   it.each([
