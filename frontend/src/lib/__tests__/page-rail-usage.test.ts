@@ -110,8 +110,14 @@ describe("a page splits into a main column and a rail one way", () => {
     // The rule is only worth anything while it covers the screens the audit
     // named. If this drops, the walk above stopped finding files and the first
     // assertion is passing on an empty set.
+    //
+    // Was 6 until #211. The trainer dashboard was the sixth user and no longer
+    // splits into main+rail: its top block is two symmetric `1fr / 1fr` cards
+    // and "Últimas listas" runs full width beneath them. A screen that stops
+    // being a rail is not a rail written by hand, so it leaves the rule rather
+    // than breaking it — and the canary above still bites at 5.
     const users = FILES.filter(({ code }) => USES_CONSTANT.test(code)).map(({ path }) => path);
 
-    expect(users.length).toBeGreaterThanOrEqual(6);
+    expect(users.length).toBeGreaterThanOrEqual(5);
   });
 });
