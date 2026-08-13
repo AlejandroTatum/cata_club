@@ -99,21 +99,6 @@ export function minutesUntilStart(schedule: TrainingSchedule, now: Date = new Da
 }
 
 /**
- * The countdown line. Says "En curso" for a session already running, counts
- * plain minutes under an hour, and switches to hours beyond that — "En 137
- * minutos" is a number nobody converts in their head at courtside.
- */
-export function formatSessionCountdown(minutesAway: number): string {
-  if (minutesAway <= 0) return "En curso";
-  if (minutesAway === 1) return "En 1 minuto";
-  if (minutesAway < 60) return `En ${minutesAway} minutos`;
-  const hours = Math.floor(minutesAway / 60);
-  const minutes = minutesAway % 60;
-  const hourPart = hours === 1 ? "1 hora" : `${hours} horas`;
-  return minutes === 0 ? `En ${hourPart}` : `En ${hourPart} y ${minutes} min`;
-}
-
-/**
  * "12 estudiantes inscritos" — or the singular, or nothing at all while the
  * roster count is still unknown.
  *
@@ -192,11 +177,6 @@ export function groupRecordsBySession(records: AttendanceRecord[]): SessionSumma
     if (a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1;
     return horarioStartMinutes(b.horario) - horarioStartMinutes(a.horario);
   });
-}
-
-/** The most recent session in the set, or `null` when there is none. */
-export function summarizeLastSession(records: AttendanceRecord[]): SessionSummary | null {
-  return groupRecordsBySession(records)[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------

@@ -12,30 +12,23 @@ import type {
   StudentSessionSummary,
 } from "@/services/api";
 import { CLUB_TIME_ZONE, calendarIsoDate, clubToday } from "@/lib/club-date";
-
-const MAJORITY_AGE = 18;
+import { calculatePersonAge, EDAD_MAYORIA_EDAD } from "@/lib/identity-validation";
 
 // ---------------------------------------------------------------------------
 // Age gate
 // ---------------------------------------------------------------------------
 
 /**
- * True when the persona is younger than 18 as of today. Uses the same
- * component-wise calculation as `enroll-utils.ts::calculateAge` (avoids
- * UTC midnight shifts in Ecuador timezone). Returns `false` for
- * invalid/empty dates so the portal does not accidentally restrict access.
+ * True when the persona is younger than 18 as of today. Delegates to
+ * `calculatePersonAge` (`@/lib/identity-validation`) — the shared
+ * component-wise calculation every wizard uses — rather than a private copy.
+ * Returns `false` for invalid/empty/calendar-invalid dates (`calculatePersonAge`
+ * returns `NaN` for those, and `NaN < 18` is `false`) so the portal does not
+ * accidentally restrict access.
  */
 export function isMinor(fechaNacimiento: string | null | undefined): boolean {
   if (!fechaNacimiento) return false;
-  const parts = fechaNacimiento.split("-");
-  if (parts.length !== 3) return false;
-  const [y, m, d] = parts.map(Number);
-  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return false;
-  const today = new Date();
-  let age = today.getFullYear() - y;
-  const monthDiff = today.getMonth() - (m - 1);
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < d)) age--;
-  return age < MAJORITY_AGE;
+  return calculatePersonAge(fechaNacimiento) < EDAD_MAYORIA_EDAD;
 }
 
 // ---------------------------------------------------------------------------

@@ -42,7 +42,7 @@ import {
   Dumbbell,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { calculateAge } from "@/app/student/enroll/enroll-utils";
+import { calculatePersonAge } from "@/lib/identity-validation";
 import {
   CREAR_CUENTA_STEP_ORDER,
   CREAR_CUENTA_STEP_LABELS,
@@ -226,7 +226,7 @@ function CrearCuentaContent(): React.ReactElement {
   // ---- Step renderers ----
 
   function renderTypeStep(): React.ReactElement {
-    const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
+    const age = formData.fechaNacimiento ? calculatePersonAge(formData.fechaNacimiento) : null;
     return (
       <div className="space-y-section">
         <p className="text-sm leading-relaxed text-cata-text/65">
@@ -593,7 +593,7 @@ function CrearCuentaContent(): React.ReactElement {
   }
 
   function renderSummary(): React.ReactElement {
-    const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
+    const age = formData.fechaNacimiento ? calculatePersonAge(formData.fechaNacimiento) : null;
     const typeLabels: Record<AccountType, string> = {
       JUGADOR: "Jugador",
       REPRESENTANTE: "Representante que también entrena",

@@ -26,7 +26,7 @@ import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal, crearRepresentado, vincularRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
-import { calculateAge } from "@/app/student/enroll/enroll-utils";
+import { calculatePersonAge } from "@/lib/identity-validation";
 import { WizardTextarea, WizardInput, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
 import { BackLink, Stepper, buttonClasses } from "@/components/ui";
 import { BLOOD_TYPES } from "@/types/enrollment";
@@ -492,7 +492,7 @@ function AddDependentContent(): React.ReactElement {
   }
 
   function renderSummary(): React.ReactElement {
-    const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
+    const age = formData.fechaNacimiento ? calculatePersonAge(formData.fechaNacimiento) : null;
     const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
     return (
       <div className="space-y-section">

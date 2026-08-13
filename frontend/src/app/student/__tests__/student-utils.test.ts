@@ -85,6 +85,17 @@ describe("isMinor", () => {
   it("returns false for invalid date format", () => {
     expect(isMinor("not-a-date")).toBe(false);
   });
+
+  it("returns false for a calendar-invalid date instead of computing a bogus age", () => {
+    const today = new Date();
+    const birthYear = today.getFullYear() - 10;
+    // Feb 31 doesn't exist in any year. The old inline arithmetic only
+    // checked that year/month/day were integers, not that they formed a
+    // real calendar date, so a plausible-looking invalid date silently
+    // produced a small (and therefore falsely "true") age instead of
+    // being rejected.
+    expect(isMinor(`${birthYear}-02-31`)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

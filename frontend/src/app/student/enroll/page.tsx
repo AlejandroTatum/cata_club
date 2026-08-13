@@ -23,7 +23,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
-import { WizardInput, WizardTextarea, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
+import {
+  WizardInput,
+  WizardTextarea,
+  PersonIdentityFields,
+  EmergencyContactFields,
+  WizardNavigation,
+  CEDULA_HINT,
+  PHONE_HINT,
+} from "@/components/wizard-fields";
 import { BackLink, Stepper, buttonClasses } from "@/components/ui";
 import { BLOOD_TYPES } from "@/types/enrollment";
 import {
@@ -36,8 +44,8 @@ import {
   Mail,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { calculatePersonAge } from "@/lib/identity-validation";
 import {
-  calculateAge,
   buildEnrollmentRequest,
   describeStepBlocker,
   ENROLLMENT_TYPES,
@@ -540,7 +548,7 @@ function EnrollWizard(): React.ReactElement {
           icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           pattern: "[0-9]{10}",
           inputMode: "numeric",
-          hint: "10 dígitos, sin guiones.",
+          hint: CEDULA_HINT,
         })}
 
         {renderField("fechaNacimientoRepresentante", {
@@ -557,7 +565,7 @@ function EnrollWizard(): React.ReactElement {
           onChange: (v) => updateField("telefonoRepresentante", v),
           inputMode: "tel",
           required: true,
-          hint: "Celular: 09 y 8 dígitos más. Fijo: 0, código de área y 7 dígitos.",
+          hint: PHONE_HINT,
         })}
 
         <div className="my-4 h-px bg-line" />
@@ -706,7 +714,7 @@ function EnrollWizard(): React.ReactElement {
   }
 
   function renderSummary(): React.ReactElement {
-    const age = formData.fechaNacimiento ? calculateAge(formData.fechaNacimiento) : null;
+    const age = formData.fechaNacimiento ? calculatePersonAge(formData.fechaNacimiento) : null;
     const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
     const isChild = formData.enrollmentType === ENROLLMENT_TYPES.CHILD;
     return (

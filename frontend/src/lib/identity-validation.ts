@@ -20,11 +20,10 @@
  * three wizards and was missing from the third, the one the public uses to
  * self-enroll.
  *
- * This module is the single place those rules live from now on. It is
- * intentionally used by NOTHING yet — no wizard imports it. Wiring the three
- * wizards to it (and deleting their private copies) is a separate change;
- * this one only adds the shared rules and their tests, so the module can be
- * reviewed and trusted on its own before anything depends on it.
+ * This module is the single place those rules live now: `enroll-utils.ts`,
+ * `add-dependent-utils.ts`, and `crear-cuenta-utils.ts` (PR #255) all import
+ * from here instead of carrying their own copy, so the three wizards can no
+ * longer drift against each other or against the backend's bounds.
  *
  * ## The "today" parameter
  *
@@ -216,7 +215,8 @@ export const EDAD_MAYORIA_EDAD = 18;
  * every numeric bound comparison against it silently `false` (`NaN < 5` and
  * `NaN > 74` both are), which is how an 1800 birth year used to sail through
  * every age check in this codebase instead of failing the one meant to catch
- * it — see the equivalent history in `enroll-utils.ts`'s `calculateAge`.
+ * it — see `calculateAge.test.ts`'s "computes a real (large) age" cases for
+ * the regression this guards.
  */
 export function calculatePersonAge(birthDate: string, today: Date = new Date()): number {
   if (!birthDate) return NaN;

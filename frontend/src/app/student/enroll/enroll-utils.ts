@@ -475,16 +475,3 @@ function isBloodType(value: string): value is BloodType {
   return Object.values(BLOOD_TYPES).includes(value as BloodType);
 }
 
-// ---------------------------------------------------------------------------
-// Age calculation
-// ---------------------------------------------------------------------------
-
-/**
- * Re-exported under its old name for existing consumers of this module
- * (`page.tsx`, `wizard-fields.tsx`) that predate the shared identity-validation
- * module. New code should import `calculatePersonAge` from
- * `@/lib/identity-validation` directly — see that module's docstring for the
- * full history of the bug this used to carry (a capped birth year that
- * silently defeated every age check built on top of it).
- */
-export const calculateAge = calculatePersonAge;
