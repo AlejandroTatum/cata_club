@@ -16,7 +16,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import ProfilePage from "@/app/profile/page";
 import type { PerfilPropio } from "@/types/domain";
@@ -348,11 +348,11 @@ describe("ProfilePage — student/representante summary view", () => {
     // Full name appears twice by design (hero card + "Información personal"
     // column, same as the staff branch).
     expect((await screen.findAllByText("Sofía Alumna")).length).toBe(2);
-    // Membership state is ONE badge in the identity card's rail — the
-    // prototype's own decision: a binary fact does not earn a section.
+    // Membership state is ONE badge on the compact identity panel's quick
+    // block — issue #204's own "estado" fact, not a separate labelled row.
     const hero = screen.getByTestId("profile-hero");
     expect(screen.getAllByText("Activa").length).toBe(1);
-    expect(within(hero).getByText("Membresía")).toBeInTheDocument();
+    expect(within(hero).getByText("Activa")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -378,9 +378,12 @@ describe("ProfilePage — student/representante summary view", () => {
     );
 
     expect((await screen.findAllByText("Sofía Alumna")).length).toBe(2);
-    const hero = screen.getByTestId("profile-hero");
-    expect(within(hero).getByText("Membresía")).toBeInTheDocument();
-    expect(within(hero).getByText("No disponible — consulte con administración")).toBeInTheDocument();
+    // No membership row exists to badge on the compact panel, so the honest
+    // "no disponible" note lives in "Información de tu rol" instead — a fact
+    // is stated exactly once, never both as an absent badge AND text.
+    const roleInfo = screen.getByTestId("profile-role-info");
+    expect(within(roleInfo).getByText("Membresía")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("No disponible — consulte con administración")).toBeInTheDocument();
   });
 
   it("renders one row per representado for a representante session, always showing the honest 'no disponible' note for their membership (the backend never scopes /membresias/mias to a dependent, only to the caller) (triangulation)", async () => {
@@ -517,6 +520,224 @@ describe("ProfilePage — student/representante summary view", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar su cuenta.");
     expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+  });
+});
+
+describe("ProfilePage — issue #204 redesign: four role variants share one architecture", () => {
+  it("shows the Administrador variant's role on the identity panel", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const hero = await waitForStaffProfile();
+    expect(within(hero).getByText("Administrador")).toBeInTheDocument();
+  });
+
+  it("shows the Entrenador variant's role on the identity panel", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("trainer"));
+    mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, roles: ["ENTRENADOR"] });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const hero = await waitForStaffProfile();
+    expect(within(hero).getByText("Entrenador")).toBeInTheDocument();
+  });
+
+  it("shows the Estudiante variant's role and real fecha de nacimiento in 'Información de tu rol'", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: {
+        personaId: "1",
+        nombres: "Sofía",
+        apellidos: "Alumna",
+        fechaNacimiento: "2012-05-10",
+        recentSessions: [],
+        membership: null,
+        representante: { nombres: "Laura", apellidos: "Vera" },
+      },
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const hero = await screen.findByTestId("profile-hero");
+    expect(within(hero).getByText("Estudiante")).toBeInTheDocument();
+    const roleInfo = screen.getByTestId("profile-role-info");
+    // `self.fechaNacimiento` and `self.representante` are real fields on
+    // `StudentProfileSummary` that the old layout fetched but never rendered
+    // for the account holder — this is the redesign putting them to use, not
+    // inventing new data.
+    expect(within(roleInfo).getByText("10/05/2012")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("Laura Vera")).toBeInTheDocument();
+  });
+
+  it("shows the Representante variant's role and 'Personas representadas' count", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("representante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: null,
+      representados: [
+        { personaId: "20", nombres: "Juan", apellidos: "Hijo", fechaNacimiento: "2014-02-01", recentSessions: [], membership: null },
+      ],
+      membershipPlans: [],
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const hero = await screen.findByTestId("profile-hero");
+    expect(within(hero).getByText("Representante")).toBeInTheDocument();
+    const roleInfo = screen.getByTestId("profile-role-info");
+    expect(within(roleInfo).getByText("Personas representadas")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("1")).toBeInTheDocument();
+  });
+
+  it("lists WHICH roles a multi-role representante holds, not just how many", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("representante"));
+    // A representante who is also an alumno — an ordinary account, and the
+    // reason the breakdown cannot be gated on the staff branch: `roles` comes
+    // from `GET /auth/me`, which the student branch fetches too.
+    mockFetchMiPerfil.mockResolvedValue({
+      ...PERFIL_ADMIN,
+      roles: ["REPRESENTANTE", "ALUMNO"],
+    });
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: null,
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    // The panel says "2 roles asignados" instead of naming one of them...
+    const hero = await screen.findByTestId("profile-hero");
+    expect(within(hero).getByText("2 roles asignados")).toBeInTheDocument();
+    // ...so the page owes the reader WHICH two. Gated on the staff branch,
+    // that label dangled with nothing anywhere on the page to resolve it.
+    const roleInfo = await screen.findByTestId("profile-role-info");
+    expect(within(roleInfo).getByText("Roles asignados")).toBeInTheDocument();
+    expect(within(roleInfo).getByText(/Representante/)).toBeInTheDocument();
+    expect(within(roleInfo).getByText(/Alumno/)).toBeInTheDocument();
+  });
+});
+
+describe("ProfilePage — issue #204 redesign: representante with no representados", () => {
+  it("shows an explicit empty state instead of silently omitting the section", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("representante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: null,
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const dependants = await screen.findByTestId("profile-dependants");
+    expect(
+      within(dependants).getByText(/todavía no hay estudiantes representados/i),
+    ).toBeInTheDocument();
+    // The way to fix that state stays reachable even while it's empty.
+    expect(within(dependants).getByRole("link", { name: /agregar/i })).toBeInTheDocument();
+  });
+
+  it("still shows the role-specific 'Personas representadas: 0' fact for a representante with none", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("representante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: null,
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const roleInfo = await screen.findByTestId("profile-role-info");
+    expect(within(roleInfo).getByText("Personas representadas")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("0")).toBeInTheDocument();
+  });
+});
+
+describe("ProfilePage — issue #204 redesign: long content wraps, never truncates", () => {
+  const LONG_NAME_PERFIL: PerfilPropio = {
+    ...PERFIL_ADMIN,
+    nombres: "Jefferson Alejandro Maximiliano",
+    apellidos: "Delgado Rivadeneira Fernández-Villalobos",
+    correo: "jefferson.alejandro.maximiliano.delgado.rivadeneira@administracion.cataclub.com",
+  };
+
+  // `window.innerWidth` is a shared global: left at 375 it would follow every
+  // test declared after this one in the file, which is how a suite acquires an
+  // order-dependent failure that nobody can reproduce in isolation.
+  const originalInnerWidth = window.innerWidth;
+  afterEach(() => {
+    window.innerWidth = originalInnerWidth;
+  });
+
+  it("renders the full nombre and correo text with no truncation class", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(LONG_NAME_PERFIL);
+    // Narrowest supported viewport. jsdom evaluates no media queries, so this
+    // does not itself prove the narrow case — the assertions below prove the
+    // stronger, width-independent property: no truncation class exists to
+    // clip anything at ANY width.
+    window.innerWidth = 375;
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const hero = await waitForStaffProfile();
+    const fullName = `${LONG_NAME_PERFIL.nombres} ${LONG_NAME_PERFIL.apellidos}`;
+
+    const nameHeading = within(hero).getByRole("heading", { level: 2, name: fullName });
+    // The heading wraps safely (`break-words`) — it never carries `truncate`
+    // or any class that would clip or ellipsize the text.
+    expect(nameHeading.className).not.toMatch(/\btruncate\b/);
+    expect(nameHeading).toHaveTextContent(fullName);
+
+    const correoNode = within(hero).getByText(LONG_NAME_PERFIL.correo);
+    expect(correoNode.className).not.toMatch(/\btruncate\b/);
+    expect(correoNode).toHaveTextContent(LONG_NAME_PERFIL.correo);
+
+    // Nowhere in the /profile content does ANY element carry a truncation
+    // class — the issue's hard rule covers this screen's own content, not
+    // the shared `AppShell` chrome (e.g. the sidebar's own account footer)
+    // that sits outside this redesign's scope.
+    const main = screen.getByRole("main");
+    for (const node of main.querySelectorAll("[class]")) {
+      // `getAttribute`, not `.className` — an SVG element's `className` is an
+      // `SVGAnimatedString`, not a plain string.
+      expect(node.getAttribute("class")).not.toMatch(/\btruncate\b/);
+    }
   });
 });
 
@@ -1015,20 +1236,40 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(screen.queryByRole("link", { name: /volver al panel/i })).not.toBeInTheDocument();
   });
 
-  it("reads identity as a member card, not a header with facts beside it", async () => {
+  it("reads identity as a compact panel, not a header with facts beside it", async () => {
     await renderAdmin();
 
     const hero = screen.getByTestId("profile-hero");
     // The identity object: name, correo (once — see the dedicated dedupe
-    // test below), role and "member since" all live on the carnet, aria-
-    // labelled by the member's own name (MemberCard's contract).
-    expect(within(hero).getByRole("region", { name: /ana admin/i })).toBeInTheDocument();
+    // test below), role and "member since" all live on the panel, aria-
+    // labelled by the account holder's own name (issue #204's contract).
+    expect(hero).toHaveAccessibleName(/ana admin/i);
+    expect(within(hero).getByRole("heading", { level: 2, name: "Ana Admin" })).toBeInTheDocument();
     expect(within(hero).getByText("Ana Admin")).toBeInTheDocument();
     expect(within(hero).getByText("ana.admin@cataclub.com")).toBeInTheDocument();
     expect(within(hero).getByText("Administrador")).toBeInTheDocument();
     expect(within(hero).getByText("Miembro desde 10/03/2024")).toBeInTheDocument();
     // Contact data still belongs to the rows below, not to the card.
     expect(within(hero).queryByText("099111222")).not.toBeInTheDocument();
+  });
+
+  it("keeps the identity text off the red field, which it is not legible on", async () => {
+    await renderAdmin();
+
+    const hero = screen.getByTestId("profile-hero");
+    const heading = within(hero).getByRole("heading", { level: 2, name: "Ana Admin" });
+    const identityRow = heading.parentElement?.parentElement;
+
+    // `text-ink` (#17181C) on `cata-red` (#D92128) is 3.6:1 — under AA — and
+    // the grey "Miembro desde" beside it is ~1.1:1. The red field is 100px
+    // tall and its polygon's deepest vertex reaches exactly 100px, so the row
+    // holding the name, the badges and that line has to start below it. This
+    // used to be `pt-8`, which put all three of them on the red.
+    expect(identityRow).toHaveClass("pt-[112px]");
+    // And aligned to the TOP: the text column is taller than the avatar, so
+    // `items-end` pinned the text back up under the field.
+    expect(identityRow).toHaveClass("items-start");
+    expect(identityRow).not.toHaveClass("items-end");
   });
 
   it("shows the correo exactly once on the whole page — the duplication defect this redesign fixes", async () => {
