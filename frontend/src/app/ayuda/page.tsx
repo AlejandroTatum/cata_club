@@ -39,30 +39,26 @@ import { FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
  * is the copy that is tested against the chatbot's own source of truth, and
  * this is presentation the content module has no reason to know about.
  */
-const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; iconFg: string; stripe: string }> = {
+const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; iconFg: string }> = {
   "Para empezar": {
     icon: Rocket,
     iconBg: "bg-cata-yellow-soft",
     iconFg: "text-ball-ink",
-    stripe: "border-l-ball",
   },
   "Si es estudiante o representante": {
     icon: Users,
     iconBg: "bg-cuenta-representante-bg",
     iconFg: "text-cuenta-representante",
-    stripe: "border-l-cuenta-representante",
   },
   "Si es entrenador": {
     icon: Dumbbell,
     iconBg: "bg-cuenta-entrenador-bg",
     iconFg: "text-cuenta-entrenador",
-    stripe: "border-l-cuenta-entrenador",
   },
   "Si es administrador": {
     icon: ShieldCheck,
     iconBg: "bg-cata-red/15",
     iconFg: "text-cata-red",
-    stripe: "border-l-cata-red",
   },
 };
 
@@ -150,7 +146,7 @@ export default function AyudaPage(): React.ReactElement {
               <section
                 key={section.title}
                 aria-labelledby={headingId}
-                className={`card border-l-4 p-5 sm:p-6 ${accent.stripe}`}
+                className="card p-5 sm:p-6"
               >
                 <div className="mb-4 flex items-center gap-3">
                   <span
