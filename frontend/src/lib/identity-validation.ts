@@ -20,11 +20,10 @@
  * three wizards and was missing from the third, the one the public uses to
  * self-enroll.
  *
- * This module is the single place those rules live from now on. It is
- * intentionally used by NOTHING yet — no wizard imports it. Wiring the three
- * wizards to it (and deleting their private copies) is a separate change;
- * this one only adds the shared rules and their tests, so the module can be
- * reviewed and trusted on its own before anything depends on it.
+ * This module is the single place those rules live now: `enroll-utils.ts`,
+ * `add-dependent-utils.ts`, and `crear-cuenta-utils.ts` (PR #255) all import
+ * from here instead of carrying their own copy, so the three wizards can no
+ * longer drift against each other or against the backend's bounds.
  *
  * ## The "today" parameter
  *
