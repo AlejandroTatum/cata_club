@@ -33,7 +33,7 @@ function validForm(overrides: Partial<AddDependentFormData> = {}): AddDependentF
     nombres: "Juan",
     apellidos: "Pérez",
     fechaNacimiento: "2015-06-15",
-    cedula: "1712345678",
+    cedula: "1798765432",
     telefono: "0991234567",
     tipoSangre: "O_POSITIVO",
     enfermedades: "",
@@ -113,12 +113,12 @@ describe("validateAddDependentStep — child step", () => {
 
   it("validates cedula has exactly 10 digits", () => {
     expect(validateAddDependentStep("child", validForm({ cedula: "12345" })))
-      .toContain("La cédula debe tener 10 dígitos.");
+      .toContain("La cédula de identidad debe tener 10 dígitos.");
   });
 
   it("validates cedula with non-digit characters", () => {
     expect(validateAddDependentStep("child", validForm({ cedula: "1712abcd78" })))
-      .toContain("La cédula debe tener 10 dígitos.");
+      .toContain("La cédula de identidad debe tener 10 dígitos.");
   });
 
   it("requires telefono", () => {
@@ -157,7 +157,7 @@ describe("validateAddDependentStep — health step", () => {
 
   it("requires contactoEmergencia", () => {
     expect(validateAddDependentStep("health", validForm({ contactoEmergencia: "" })))
-      .toContain("El nombre de contacto de emergencia es obligatorio.");
+      .toContain("El nombre del contacto de emergencia es obligatorio.");
   });
 
   it("requires telefonoEmergencia", () => {
@@ -213,7 +213,7 @@ describe("buildRepresentadoPayload", () => {
     expect(payload).toEqual({
       nombres: "Juan",
       apellidos: "Pérez",
-      cedula: "1712345678",
+      cedula: "1798765432",
       fechaNacimiento: "2015-06-15",
       telefono: "0991234567",
       fichaMedica: {

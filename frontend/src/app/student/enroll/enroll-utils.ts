@@ -7,6 +7,17 @@
 
 import { BLOOD_TYPES, type BloodType, type EnrollmentRequest } from "@/types/enrollment";
 import { toUserMessage } from "@/lib/error-message";
+import {
+  cedulaRule,
+  phoneRule,
+  personNameRule,
+  passwordRule,
+  studentBirthDateRule,
+  calculatePersonAge,
+  isValidCalendarDate,
+  EDAD_MAYORIA_EDAD,
+  EDAD_MAXIMA_ALUMNO,
+} from "@/lib/identity-validation";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -267,93 +278,46 @@ export function digitsOf(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-/** Letters (incl. accents) and spaces — a person's name, not an identifier. */
-const NAME_PATTERN = /^[A-Za-z\u00C0-\u024F\s]+$/;
-
-/** A name must be present, plausible in length, and free of digits/symbols. */
-function nameRule(value: string, subject: string, article: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return `${subject} ${article} obligatorios.`;
-  if (trimmed.length < 3) return `${subject} deben tener al menos 3 caracteres.`;
-  return NAME_PATTERN.test(trimmed) ? null : `${subject} solo pueden contener letras y espacios.`;
-}
-
-/**
- * Same domain limits the backend enforces for a legal representative
- * (`enrollment_servicio.py`'s `edad_rep` check): a floor of 18 (a minor
- * cannot be a legal guardian) and a ceiling reusing `EDAD_MAXIMA_ALUMNO`
- * (74) — the only ceiling this system defines. Before this fix, the
- * representative's field rule below checked only the floor; an implausible
- * birth year (the audited pattern: 1700-1800) used to slip past silently
- * because `calculateAge` capped its own output to `NaN` outside 1900-2200,
- * and `NaN >= 18` is `false` either way. Now that `calculateAge` returns a
- * real number for any syntactically valid date, the missing ceiling is a
- * plain, visible gap — closed here.
- */
-const EDAD_MAYORIA_EDAD = 18;
-const EDAD_MAXIMA_REPRESENTANTE = 74;
-
-/** Ecuadorian numbers run 7 (landline) to 10 (mobile) digits. */
-function phoneRule(value: string, subject: string, article: string): string | null {
-  if (!value.trim()) return `${subject} ${article} obligatorio.`;
-  const digits = digitsOf(value);
-  return digits.length >= 7 && digits.length <= 10
-    ? null
-    : `${subject} debe tener entre 7 y 10 dígitos.`;
-}
-
 const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string | null>> = {
-  nombres: (d) => nameRule(d.nombres, "Los nombres", "son"),
-  apellidos: (d) => nameRule(d.apellidos, "Los apellidos", "son"),
+  nombres: (d) => personNameRule(d.nombres, "Los nombres"),
+  apellidos: (d) => personNameRule(d.apellidos, "Los apellidos"),
   fechaNacimiento: (d) => {
-    if (!d.fechaNacimiento) return "La fecha de nacimiento es obligatoria.";
-    if (!isDate(d.fechaNacimiento)) return "La fecha de nacimiento ingresada no es válida.";
-    if (d.enrollmentType === ENROLLMENT_TYPES.SELF && calculateAge(d.fechaNacimiento) < EDAD_MAYORIA_EDAD) {
+    const boundsError = studentBirthDateRule(d.fechaNacimiento);
+    if (boundsError) return boundsError;
+    if (
+      d.enrollmentType === ENROLLMENT_TYPES.SELF &&
+      calculatePersonAge(d.fechaNacimiento) < EDAD_MAYORIA_EDAD
+    ) {
       return "Los menores de edad no pueden autoinscribirse. Seleccione 'Inscribo a un hijo / dependiente' o un representante debe completar la inscripción.";
     }
     return null;
   },
-  cedula: (d) => {
-    if (!d.cedula.trim()) return "La cédula de identidad es obligatoria.";
-    return /^\d{10}$/.test(d.cedula.trim()) ? null : "La cédula debe tener 10 dígitos.";
-  },
-  telefono: (d) => phoneRule(d.telefono, "El teléfono", "es"),
+  cedula: (d) => cedulaRule(d.cedula, "La cédula de identidad"),
+  telefono: (d) => phoneRule(d.telefono, "El teléfono"),
   correo: (d) => (isEmail(d.correo) ? null : "El correo electrónico no es válido."),
-  contrasenia: (d) =>
-    d.contrasenia.length >= 8 ? null : "La contraseña debe tener al menos 8 caracteres.",
-  nombreRepresentante: (d) => nameRule(d.nombreRepresentante, "Los nombres del representante", "son"),
+  contrasenia: (d) => passwordRule(d.contrasenia, "La contraseña"),
+  nombreRepresentante: (d) => personNameRule(d.nombreRepresentante, "Los nombres del representante"),
   apellidosRepresentante: (d) =>
-    nameRule(d.apellidosRepresentante, "Los apellidos del representante", "son"),
-  cedulaRepresentante: (d) =>
-    /^\d{10}$/.test(d.cedulaRepresentante.trim())
-      ? null
-      : "La cédula del representante debe tener 10 dígitos.",
+    personNameRule(d.apellidosRepresentante, "Los apellidos del representante"),
+  cedulaRepresentante: (d) => cedulaRule(d.cedulaRepresentante, "La cédula del representante"),
   fechaNacimientoRepresentante: (d) => {
-    if (!isDate(d.fechaNacimientoRepresentante)) {
+    if (!isValidCalendarDate(d.fechaNacimientoRepresentante)) {
       return "El representante debe ser mayor de edad (18+).";
     }
-    const edad = calculateAge(d.fechaNacimientoRepresentante);
-    return edad >= EDAD_MAYORIA_EDAD && edad <= EDAD_MAXIMA_REPRESENTANTE
+    const edad = calculatePersonAge(d.fechaNacimientoRepresentante);
+    return edad >= EDAD_MAYORIA_EDAD && edad <= EDAD_MAXIMA_ALUMNO
       ? null
-      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_REPRESENTANTE} años (calculado: ${edad}).`;
+      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${edad}).`;
   },
-  telefonoRepresentante: (d) =>
-    phoneRule(d.telefonoRepresentante, "El teléfono del representante", "es"),
+  telefonoRepresentante: (d) => phoneRule(d.telefonoRepresentante, "El teléfono del representante"),
   correoRepresentante: (d) =>
     isEmail(d.correoRepresentante) ? null : "El correo del representante no es válido.",
   contraseniaRepresentante: (d) =>
-    d.contraseniaRepresentante.length >= 8
-      ? null
-      : "La contraseña del representante debe tener al menos 8 caracteres.",
+    passwordRule(d.contraseniaRepresentante, "La contraseña del representante"),
   tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
-  contactoEmergencia: (d) => {
-    const trimmed = d.contactoEmergencia.trim();
-    if (!trimmed) return "El nombre de contacto de emergencia es obligatorio.";
-    return trimmed.length >= 3
-      ? null
-      : "El nombre del contacto de emergencia debe tener al menos 3 caracteres.";
-  },
-  telefonoEmergencia: (d) => phoneRule(d.telefonoEmergencia, "El teléfono de emergencia", "es"),
+  contactoEmergencia: (d) =>
+    personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
+  telefonoEmergencia: (d) => phoneRule(d.telefonoEmergencia, "El teléfono de emergencia"),
 };
 
 const STUDENT_FIELDS: EnrollField[] = [
@@ -413,6 +377,13 @@ export function validateEnrollFields(step: WizardStep, data: EnrollFormData): En
     const message = FIELD_RULES[field]?.(data) ?? null;
     if (message !== null) errors[field] = message;
   }
+  // A child enrollment's student account is optional, but half-filled blocks
+  // the step the same way `validateAddDependentFields` gates its own
+  // "credentials" step — the message has to land on the field that is
+  // actually wrong, and "Siguiente" has to see it too (#226).
+  if (step === "personal" && data.enrollmentType !== ENROLLMENT_TYPES.SELF) {
+    Object.assign(errors, optionalStudentCredentialErrors(data));
+  }
   return errors;
 }
 
@@ -466,25 +437,34 @@ function validateStudentCredentials(data: EnrollFormData): string[] {
   return collect(CREDENTIAL_FIELDS, data);
 }
 
-function validateOptionalStudentCredentials(data: EnrollFormData): string[] {
-  const errors: string[] = [];
+/**
+ * The "both-or-neither" rule for a child enrollment's optional student
+ * account, keyed to the field that owns each message — mirrors
+ * `validateAddDependentFields`'s "credentials" step in `add-dependent-utils.ts`.
+ */
+function optionalStudentCredentialErrors(data: EnrollFormData): EnrollFieldErrors {
+  const errors: EnrollFieldErrors = {};
   const hasCorreo = data.correo.trim().length > 0;
   const hasContrasenia = data.contrasenia.length > 0;
   if (hasCorreo || hasContrasenia) {
-    if (!hasCorreo) errors.push("El correo del estudiante es obligatorio si se desea crear una cuenta.");
-    else if (!isEmail(data.correo)) errors.push("El correo del estudiante no es válido.");
-    if (!hasContrasenia) errors.push("La contraseña del estudiante es obligatoria si se desea crear una cuenta.");
-    else if (data.contrasenia.length < 8) errors.push("La contraseña del estudiante debe tener al menos 8 caracteres.");
+    if (!hasCorreo) errors.correo = "El correo del estudiante es obligatorio si se desea crear una cuenta.";
+    else if (!isEmail(data.correo)) errors.correo = "El correo del estudiante no es válido.";
+    if (!hasContrasenia) {
+      errors.contrasenia = "La contraseña del estudiante es obligatoria si se desea crear una cuenta.";
+    } else {
+      const passwordError = passwordRule(data.contrasenia, "La contraseña del estudiante");
+      if (passwordError) errors.contrasenia = passwordError;
+    }
   }
   return errors;
 }
 
-function validateRepresentative(data: EnrollFormData): string[] {
-  return collect(REPRESENTATIVE_FIELDS, data);
+function validateOptionalStudentCredentials(data: EnrollFormData): string[] {
+  return Object.values(optionalStudentCredentialErrors(data));
 }
 
-function isDate(value: string): boolean {
-  return !Number.isNaN(calculateAge(value));
+function validateRepresentative(data: EnrollFormData): string[] {
+  return collect(REPRESENTATIVE_FIELDS, data);
 }
 
 function isEmail(value: string): boolean {
@@ -500,89 +480,11 @@ function isBloodType(value: string): value is BloodType {
 // ---------------------------------------------------------------------------
 
 /**
- * Calculate age from an ISO date string (YYYY-MM-DD).
- *
- * Parses the date-string component-wise (year, month, day) to avoid the
- * UTC-midnight interpretation of `new Date("YYYY-MM-DD")`, which shifts
- * the date backward in negative-UTC-offset timezones such as Ecuador
- * (UTC-5). Using calendar-component parsing keeps the comparison in local
- * time, ensuring boundary cases like "birthday is tomorrow" are correct.
- *
- * Accepts an optional `today` parameter (defaults to `new Date()`) so that
- * tests can pass a fixed reference date for deterministic results.
- *
- * NO year-plausibility cap. An earlier version capped `birthYear` to
- * 1900-2200 and returned `NaN` outside that range — meant as a guard, it
- * became the bug: `NaN < 18`, `NaN > 74` and every other comparison against
- * `NaN` evaluate to `false`, so a wildly implausible birth date (the audited
- * case: year 1800, a 226-year-old) silently PASSED every age check built on
- * top of this helper instead of failing one. That defect shipped three
- * times in three different forms because each rediscovery treated it as a
- * local problem and wrote its own uncapped calculation instead of fixing
- * the shared one (see `add-dependent-utils.ts` and `crear-cuenta-utils.ts`
- * git history).
- *
- * The fix: `NaN` is now reserved for input that is not a valid calendar
- * date at all (wrong format, non-integer components, a month/day outside
- * 1-12/1-31, or a day that doesn't exist in that month, e.g. Feb 31). Any
- * string that IS a real calendar date — no matter how implausible the year
- * — produces a real, comparable integer, so a caller's `< EDAD_MINIMA` /
- * `> EDAD_MAXIMA` check catches it by name instead of being silently
- * skipped. Plausibility (is this a believable human birth date) is a
- * DOMAIN rule, not a parsing concern — it belongs to `EDAD_MINIMA_ALUMNO`/
- * `EDAD_MAXIMA_ALUMNO` at the call site, not to this helper.
- *
- * Extreme-but-nonsensical years (older than JS `Date` can represent, e.g.
- * 999999) still resolve to `NaN`, not silently: `new Date(y, ...)` produces
- * an Invalid Date whose `getFullYear()` is `NaN`, and NaN`!==` the input
- * year, so the round-trip check below rejects it the same way it rejects
- * Feb 31 — a genuine "this isn't a date" case, not a plausibility judgment.
- *
- * @param birthDate — ISO date string "YYYY-MM-DD".
- * @param today — Reference date (default `new Date()`).
- * @returns Age in whole years, or `NaN` for input that isn't a valid
- *   calendar date at all.
+ * Re-exported under its old name for existing consumers of this module
+ * (`page.tsx`, `wizard-fields.tsx`) that predate the shared identity-validation
+ * module. New code should import `calculatePersonAge` from
+ * `@/lib/identity-validation` directly — see that module's docstring for the
+ * full history of the bug this used to carry (a capped birth year that
+ * silently defeated every age check built on top of it).
  */
-export function calculateAge(
-  birthDate: string,
-  today: Date = new Date(),
-): number {
-  if (!birthDate) return NaN;
-
-  const parts = birthDate.split("-");
-  if (parts.length !== 3) return NaN;
-
-  const [birthYear, birthMonth, birthDay] = parts.map(Number);
-
-  if (
-    !Number.isInteger(birthYear) ||
-    !Number.isInteger(birthMonth) ||
-    !Number.isInteger(birthDay) ||
-    birthMonth < 1 ||
-    birthMonth > 12 ||
-    birthDay < 1 ||
-    birthDay > 31
-  ) {
-    return NaN;
-  }
-
-  // Calendar validation: reject dates like Feb 31 or Apr 31 that JS
-  // silently "overflows" into the next valid calendar date, and reject
-  // years so extreme that `Date` itself can't represent them (Invalid
-  // Date's getFullYear() is NaN, which never equals birthYear).
-  const parsed = new Date(birthYear, birthMonth - 1, birthDay);
-  if (
-    parsed.getFullYear() !== birthYear ||
-    parsed.getMonth() !== birthMonth - 1 ||
-    parsed.getDate() !== birthDay
-  ) {
-    return NaN;
-  }
-
-  let age = today.getFullYear() - birthYear;
-  const monthDiff = today.getMonth() - (birthMonth - 1);
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDay)) {
-    age--;
-  }
-  return age;
-}
+export const calculateAge = calculatePersonAge;

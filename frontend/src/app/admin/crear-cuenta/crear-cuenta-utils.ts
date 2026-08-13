@@ -1,5 +1,16 @@
 import { toUserMessage } from "@/lib/error-message";
-import { calculateAge } from "@/app/student/enroll/enroll-utils";
+import {
+  cedulaRule,
+  phoneRule,
+  personNameRule,
+  passwordRule,
+  calculatePersonAge,
+  isValidCalendarDate,
+  isFutureBirthDate,
+  EDAD_MINIMA_ALUMNO,
+  EDAD_MAXIMA_ALUMNO,
+  EDAD_MAYORIA_EDAD,
+} from "@/lib/identity-validation";
 
 /**
  * Pure utility functions for the Admin "Create Account" wizard.
@@ -119,28 +130,25 @@ function validateType(data: CrearCuentaFormData): string[] {
 
 function validatePersonal(data: CrearCuentaFormData): string[] {
   const errors: string[] = [];
-  if (!data.nombres.trim()) errors.push("Los nombres son obligatorios.");
-  else if (data.nombres.trim().length < 3) errors.push("Los nombres deben tener al menos 3 caracteres.");
-  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.nombres.trim())) errors.push("Los nombres solo pueden contener letras y espacios.");
-  if (!data.apellidos.trim()) errors.push("Los apellidos son obligatorios.");
-  else if (data.apellidos.trim().length < 3) errors.push("Los apellidos deben tener al menos 3 caracteres.");
-  else if (!/^[A-Za-z\u00C0-\u024F\s]+$/.test(data.apellidos.trim())) errors.push("Los apellidos solo pueden contener letras y espacios.");
+  const nombresError = personNameRule(data.nombres, "Los nombres");
+  if (nombresError) errors.push(nombresError);
+  const apellidosError = personNameRule(data.apellidos, "Los apellidos");
+  if (apellidosError) errors.push(apellidosError);
   if (!data.fechaNacimiento) errors.push("La fecha de nacimiento es obligatoria.");
-  else if (!isValidDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento ingresada no es válida.");
-  else if (isFutureDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento no puede ser en el futuro.");
-  if (!data.cedula.trim()) errors.push("La cédula de identidad es obligatoria.");
-  else if (!/^\d{10}$/.test(data.cedula.trim())) errors.push("La cédula debe tener 10 dígitos.");
-  if (!data.telefono.trim()) errors.push("El teléfono es obligatorio.");
-  else if (!/^\d{7,10}$/.test(data.telefono.trim())) errors.push("El teléfono debe tener entre 7 y 10 dígitos.");
+  else if (!isValidCalendarDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento ingresada no es válida.");
+  else if (isFutureBirthDate(data.fechaNacimiento)) errors.push("La fecha de nacimiento no puede ser en el futuro.");
+  const cedulaMessage = cedulaRule(data.cedula, "La cédula de identidad");
+  if (cedulaMessage) errors.push(cedulaMessage);
+  const telefonoMessage = phoneRule(data.telefono, "El teléfono");
+  if (telefonoMessage) errors.push(telefonoMessage);
 
-  // Age validation based on account type. `calculateAge` no longer caps its
-  // input year (see its docstring in enroll-utils.ts) — an implausibly old
-  // year like 1700 used to return NaN there, and `NaN < 18` / `NaN > 74` are
-  // both `false`, so it passed every check below in silence (this file used
-  // to carry its own capped copy of `calculateAge` with the identical bug —
-  // now it imports the fixed shared helper instead).
-  if (data.accountType && data.fechaNacimiento && isValidDate(data.fechaNacimiento)) {
-    const age = calculateAge(data.fechaNacimiento);
+  // Age validation based on account type. `calculatePersonAge` never caps its
+  // input year (see its docstring in `@/lib/identity-validation`) — an
+  // implausibly old year like 1700 used to return NaN from this file's own
+  // capped copy, and `NaN < 18` / `NaN > 74` are both `false`, so it passed
+  // every check below in silence.
+  if (data.accountType && data.fechaNacimiento && isValidCalendarDate(data.fechaNacimiento)) {
+    const age = calculatePersonAge(data.fechaNacimiento);
     if (ADULT_ACCOUNT_TYPES.includes(data.accountType)) {
       if (age < EDAD_MAYORIA_EDAD || age > EDAD_MAXIMA_ALUMNO) {
         errors.push(
@@ -165,7 +173,8 @@ function validatePersonal(data: CrearCuentaFormData): string[] {
 function validateCredentials(data: CrearCuentaFormData): string[] {
   const errors: string[] = [];
   if (!isEmail(data.correo)) errors.push("El correo electrónico no es válido.");
-  if (data.contrasenia.length < 8) errors.push("La contraseña debe tener al menos 8 caracteres.");
+  const passwordError = passwordRule(data.contrasenia, "La contraseña");
+  if (passwordError) errors.push(passwordError);
   return errors;
 }
 
@@ -178,10 +187,10 @@ function validateMedical(data: CrearCuentaFormData): string[] {
   if (!BLOOD_TYPE_OPTIONS.includes(data.tipoSangre as typeof BLOOD_TYPE_OPTIONS[number])) {
     errors.push("El tipo de sangre es obligatorio.");
   }
-  if (!data.contactoEmergencia.trim()) errors.push("El nombre de contacto de emergencia es obligatorio.");
-  else if (data.contactoEmergencia.trim().length < 3) errors.push("El nombre del contacto de emergencia debe tener al menos 3 caracteres.");
-  if (!data.telefonoEmergencia.trim()) errors.push("El teléfono de emergencia es obligatorio.");
-  else if (!/^\d{7,10}$/.test(data.telefonoEmergencia.trim())) errors.push("El teléfono de emergencia debe tener entre 7 y 10 dígitos.");
+  const contactoMessage = personNameRule(data.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false });
+  if (contactoMessage) errors.push(contactoMessage);
+  const telefonoEmergenciaMessage = phoneRule(data.telefonoEmergencia, "El teléfono de emergencia");
+  if (telefonoEmergenciaMessage) errors.push(telefonoEmergenciaMessage);
   return errors;
 }
 
@@ -189,42 +198,9 @@ function validateMedical(data: CrearCuentaFormData): string[] {
 // Domain helpers
 // ---------------------------------------------------------------------------
 
-function isValidDate(value: string): boolean {
-  if (!value) return false;
-  const parts = value.split("-");
-  if (parts.length !== 3) return false;
-  const [year, month, day] = parts.map(Number);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
-  const parsed = new Date(year, month - 1, day);
-  return (
-    parsed.getFullYear() === year &&
-    parsed.getMonth() === month - 1 &&
-    parsed.getDate() === day
-  );
-}
-
-function isFutureDate(value: string): boolean {
-  const [year, month, day] = value.split("-").map(Number);
-  const parsed = new Date(year, month - 1, day);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return parsed > today;
-}
-
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
-
-/**
- * Real domain limits (`EDAD_MINIMA_ALUMNO` / `EDAD_MAXIMA_ALUMNO` /
- * `EDAD_MAYORIA_EDAD` in `backend/app/servicios_negocio/persona_servicio.py`).
- * `calculateAge` itself is imported from `enroll-utils.ts` — this file used
- * to carry its own copy that capped the birth year to 1900-2200 and returned
- * `NaN` outside it, the same defect audited and fixed there.
- */
-const EDAD_MINIMA_ALUMNO = 5;
-const EDAD_MAXIMA_ALUMNO = 74;
-const EDAD_MAYORIA_EDAD = 18;
 
 /**
  * One of three hand-rolled versions of the same idea that used to live in this

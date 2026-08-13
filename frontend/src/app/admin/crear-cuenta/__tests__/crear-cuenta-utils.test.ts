@@ -20,7 +20,7 @@ function form(overrides: Partial<CrearCuentaFormData> = {}): CrearCuentaFormData
     accountType: "ENTRENADOR",
     nombres: "Carla",
     apellidos: "Ramirez",
-    cedula: "1712345678",
+    cedula: "1798765432",
     fechaNacimiento: "1990-04-12",
     telefono: "0991234567",
     correo: "carla@cataclub.test",
