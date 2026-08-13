@@ -65,6 +65,17 @@ def clave_cliente(request: Request) -> str:
 def _crear_limiter() -> Limiter | _NoOpLimiter:
     if settings.ambiente == "test":
         return _NoOpLimiter()
+    # Deliberadamente SIN `headers_enabled=True`: ese flag no solo habilita
+    # `Retry-After` en el 429 (que main.py agrega manualmente, ver
+    # `_manejador_limite_excedido`), también hace que slowapi intente
+    # inyectar cabeceras en CADA respuesta exitosa de un endpoint decorado
+    # -- y eso rompe con `Exception: parameter 'response' must be an
+    # instance of starlette.responses.Response` en cualquier endpoint que no
+    # declare `response: Response` de más (ninguno de los actuales lo hace;
+    # verificado con un `Limiter` real en
+    # tests/test_rate_limit_por_visitante.py). Prender esto exigiría tocar
+    # la firma de cada endpoint ya decorado en todos los routers, muy por
+    # fuera del alcance de este arreglo (issue #235).
     return Limiter(key_func=clave_cliente)
 
 

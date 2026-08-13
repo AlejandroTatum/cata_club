@@ -539,6 +539,41 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     )
 
 
+def test_caddyfile_reemplaza_x_forwarded_for_por_el_peer_real():
+    """issue #235, mitad 2 (ingress). Verificado con curl contra un upstream
+    real detrás de Caddy 2.8: SIN esta directiva, `reverse_proxy` YA
+    reemplaza (no anexa) cualquier `X-Forwarded-For` que mande un visitante
+    por el peer TCP real, mientras no haya `trusted_proxies` declarado en la
+    config global -- hoy esta línea no cambia el comportamiento en runtime.
+    (`caddy validate` incluso la marca como "Unnecessary header_up
+    X-Forwarded-For" por esto mismo -- esperado, no es señal de borrarla.)
+
+    Se deja igual, explícita, porque ese default es una propiedad de la
+    config GLOBAL de Caddy, no del backend: el día que alguien agregue
+    `trusted_proxies` (verificado empíricamente: eso hace que Caddy pase a
+    ANEXAR el `X-Forwarded-For` del visitante en vez de reemplazarlo), el
+    backend seguiría confiando en esa cabecera para el rate limit anónimo
+    por IP (`clave_cliente`, ver backend/app/soporte_transversal/rate_limit.py)
+    en cuanto uvicorn ve a este frontend como peer de confianza
+    (`--forwarded-allow-ips`, backend/Dockerfile) -- sin `header_up`, esa
+    combinación reabriría en silencio el DoS trivial del issue #235,
+    dependiendo de un detalle interno de uvicorn (en qué orden camina una
+    lista con hops falsos) que este repo no fija en ningún lado. Ver
+    `test_el_render_de_produccion_solo_caddy_publica_puertos_y_son_80_443`
+    para el resto de la postura del único borde público del stack.
+
+    No valida que Caddy interprete esto como reemplazo y no como agregado --
+    eso es exactamente lo que corre `caddy validate` en CI (mencionado en el
+    comentario de cabecera del propio Caddyfile), no algo que un test de
+    texto pueda demostrar."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert "header_up X-Forwarded-For {remote_host}" in contenido, (
+        "el Caddyfile ya no fija X-Forwarded-For al peer real dentro del "
+        "bloque reverse_proxy -- un visitante podría volver a imponer su "
+        "propia cabecera (issue #235)"
+    )
+
+
 def test_celery_worker_declara_concurrencia_explicita():
     """Sin `--concurrency` fijo, prefork genera un proceso hijo por core del
     host -- 745MB medidos en un host de 12 cores (decisión de diseño 4.6)."""

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { backendFetch } from "@/lib/server/auth";
+import { backendFetch, forwardedForFrom } from "@/lib/server/auth";
 
 interface RecuperarBody {
   correo: string;
@@ -38,11 +38,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const result = await backendFetch("/auth/recuperar-contrasenia", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ correo: body.correo }),
-  });
+  const result = await backendFetch(
+    "/auth/recuperar-contrasenia",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ correo: body.correo }),
+    },
+    { forwardedFor: forwardedForFrom(request) },
+  );
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error.code, message: result.error.message }, { status: 503 });

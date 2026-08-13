@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { backendFetch, setAuthCookies } from "@/lib/server/auth";
+import { backendFetch, forwardedForFrom, setAuthCookies } from "@/lib/server/auth";
 import { passthroughBackendError } from "@/lib/server/backend-client";
 import { buildEnrollmentCreateDTO, isBackendEnrollmentResponse } from "@/lib/server/enrollment-adapter";
 import { BLOOD_TYPES, type EnrollmentRequest, type EnrollmentResponse } from "@/types/enrollment";
@@ -30,11 +30,15 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ detail: "Los datos de inscripción son inválidos o están incompletos." }, { status: 400 });
   }
 
-  const result = await backendFetch("/enrollment/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(buildEnrollmentCreateDTO(body)),
-  });
+  const result = await backendFetch(
+    "/enrollment/",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildEnrollmentCreateDTO(body)),
+    },
+    { forwardedFor: forwardedForFrom(request) },
+  );
 
   if (!result.ok) {
     const status = result.error.code === "timeout" ? 504 : 503;

@@ -18,7 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { backendFetch } from "@/lib/server/auth";
+import { backendFetch, forwardedForFrom } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (limit) qs.set("limit", limit);
   const suffix = qs.size > 0 ? `?${qs.toString()}` : "";
 
-  const result = await backendFetch(`/personas/instituciones${suffix}`, { method: "GET" });
+  const result = await backendFetch(
+    `/personas/instituciones${suffix}`,
+    { method: "GET" },
+    { forwardedFor: forwardedForFrom(request) },
+  );
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error.code, message: result.error.message }, { status: 503 });

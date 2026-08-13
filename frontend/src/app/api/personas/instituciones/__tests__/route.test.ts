@@ -18,8 +18,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function institucionesRequest(): NextRequest {
-  return new NextRequest("http://localhost/api/personas/instituciones", { method: "GET" });
+function institucionesRequest(extraHeaders?: Record<string, string>): NextRequest {
+  return new NextRequest("http://localhost/api/personas/instituciones", { method: "GET", headers: extraHeaders });
 }
 
 beforeEach(() => {
@@ -44,6 +44,18 @@ describe("GET /api/personas/instituciones", () => {
     const [, init] = vi.mocked(global.fetch).mock.calls[0];
     const headers = new Headers(init?.headers);
     expect(headers.has("Authorization")).toBe(false);
+  });
+
+  it("forwards the visitor's X-Forwarded-For to the backend (issue #235)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ items: [], total: 0, skip: 0, limit: 200 }),
+    );
+
+    await GET(institucionesRequest({ "x-forwarded-for": "198.51.100.50" }));
+
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toEqual(expect.stringContaining("/personas/instituciones"));
+    expect(new Headers((init as RequestInit).headers).get("x-forwarded-for")).toBe("198.51.100.50");
   });
 
   it("proxies GET /personas/instituciones and forwards the backend's paginated envelope", async () => {

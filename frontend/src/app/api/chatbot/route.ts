@@ -13,7 +13,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getBackendApiUrl } from "@/lib/server/auth";
+import { forwardedForFrom, getBackendApiUrl } from "@/lib/server/auth";
 import { passthroughBackendError } from "@/lib/server/backend-client";
 
 /**
@@ -67,11 +67,15 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CHATBOT_TIMEOUT_MS);
+  const forwardedFor = forwardedForFrom(request);
   let response: Response;
   try {
     response = await fetch(`${getBackendApiUrl()}/chatbot/consultar`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(forwardedFor ? { "X-Forwarded-For": forwardedFor } : {}),
+      },
       body: JSON.stringify({ mensaje: body.mensaje, historial: body.historial }),
       signal: controller.signal,
     });

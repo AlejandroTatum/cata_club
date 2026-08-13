@@ -27,8 +27,12 @@ function jsonResponse(body: unknown, status = 201): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function enrollRequest(body: unknown, method = "POST"): Request {
-  return new Request("http://localhost/api/enrollment", { method, body: method === "POST" ? JSON.stringify(body) : undefined });
+function enrollRequest(body: unknown, method = "POST", headers?: HeadersInit): Request {
+  return new Request("http://localhost/api/enrollment", {
+    method,
+    body: method === "POST" ? JSON.stringify(body) : undefined,
+    headers,
+  });
 }
 
 beforeEach(() => {
@@ -53,6 +57,16 @@ describe("POST /api/enrollment", () => {
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=lax");
     expect(cookie).not.toContain(validBody.alumno.cedula);
+  });
+
+  it("forwards the visitor's X-Forwarded-For to the backend (issue #235)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    await POST(enrollRequest(validBody, "POST", { "x-forwarded-for": "198.51.100.5" }));
+
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/v1/enrollment/");
+    expect(new Headers((init as RequestInit).headers).get("x-forwarded-for")).toBe("198.51.100.5");
   });
 
   it("never returns a token in the JSON body", async () => {

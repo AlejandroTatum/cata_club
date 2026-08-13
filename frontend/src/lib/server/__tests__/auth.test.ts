@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   getBackendApiUrl,
   backendFetch,
+  forwardedForFrom,
   backendLogin,
   backendMe,
   backendRefresh,
@@ -127,6 +128,136 @@ describe("backendFetch", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.error.code).toBe("backend_unavailable");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// forwardedForFrom + backendFetch's forwardedFor option (issue #235) — the
+// backend's anonymous rate limiter is keyed by IP (clave_cliente), but its
+// only view of a caller's IP is its own TCP peer, which is ALWAYS this BFF
+// container. Without forwarding the real visitor's IP, every anonymous
+// request from anywhere on the internet shares one rate-limit bucket.
+// ---------------------------------------------------------------------------
+
+/** Header value the last `fetch` call was made with, whatever `HeadersInit` shape it used. */
+function sentHeaders(callIndex = 0): Headers {
+  const [, init] = vi.mocked(global.fetch).mock.calls[callIndex];
+  return new Headers((init as RequestInit).headers);
+}
+
+function requestWithForwardedFor(value: string): Request {
+  return new Request("http://localhost/api/enrollment", { headers: { "x-forwarded-for": value } });
+}
+
+describe("forwardedForFrom", () => {
+  it("reads the visitor IP Caddy already set on X-Forwarded-For", () => {
+    expect(forwardedForFrom(requestWithForwardedFor("198.51.100.7"))).toBe("198.51.100.7");
+  });
+
+  it("returns undefined when the header is absent", () => {
+    const request = new Request("http://localhost/api/enrollment");
+    expect(forwardedForFrom(request)).toBeUndefined();
+  });
+
+  // The header is visitor-controlled input on its way to an outgoing request
+  // header. Two other layers already stop a spoofed value (Caddy's
+  // `header_up X-Forwarded-For {remote_host}` and the backend's
+  // `--forwarded-allow-ips`), but both live in configuration this code cannot
+  // see. Parsing it here is the third, independent layer.
+
+  it("accepts an IPv6 address", () => {
+    expect(forwardedForFrom(requestWithForwardedFor("2001:db8::1"))).toBe("2001:db8::1");
+  });
+
+  it("accepts the comma-separated list form the header allows", () => {
+    expect(forwardedForFrom(requestWithForwardedFor("198.51.100.7, 203.0.113.9"))).toBe("198.51.100.7, 203.0.113.9");
+  });
+
+  it("discards a value that is not an IP at all", () => {
+    expect(forwardedForFrom(requestWithForwardedFor("not-an-ip"))).toBeUndefined();
+  });
+
+  it("discards an empty header value", () => {
+    expect(forwardedForFrom(requestWithForwardedFor(""))).toBeUndefined();
+  });
+
+  it("discards an out-of-range IPv4 octet", () => {
+    expect(forwardedForFrom(requestWithForwardedFor("198.51.100.999"))).toBeUndefined();
+  });
+
+  // A malformed entry means something upstream is wrong. Rescuing the
+  // well-formed half would forward a value assembled from a request we already
+  // know we cannot trust, so the whole list goes.
+  it("discards the whole list when any single entry fails to parse", () => {
+    expect(forwardedForFrom(requestWithForwardedFor("198.51.100.7, not-an-ip"))).toBeUndefined();
+  });
+
+  it("discards a list with an empty entry", () => {
+    expect(forwardedForFrom(requestWithForwardedFor("198.51.100.7,,203.0.113.9"))).toBeUndefined();
+  });
+});
+
+describe("backendFetch — forwardedFor", () => {
+  it("sends X-Forwarded-For to the backend when forwardedFor is provided", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+    await backendFetch("/enrollment/", { method: "POST" }, { forwardedFor: "203.0.113.9" });
+
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe("http://localhost:8000/api/v1/enrollment/");
+    expect(sentHeaders().get("x-forwarded-for")).toBe("203.0.113.9");
+  });
+
+  it("does not add X-Forwarded-For when forwardedFor is not provided (existing call sites unchanged)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+    await backendFetch("/auth/login", { method: "POST", headers: { "Content-Type": "application/json" } });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(Object.keys((init as RequestInit).headers as Record<string, string>)).not.toContain("X-Forwarded-For");
+  });
+
+  // `HeadersInit` is a union: a plain object, a `Headers` instance, or
+  // `string[][]`. Spreading the last two copies nothing, so a caller passing a
+  // `Headers` would have silently lost every header it set — in a BFF that
+  // means a request leaving without its Authorization.
+  it("keeps the caller's headers when init.headers is a Headers instance", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+    const headers = new Headers({ Authorization: "Bearer tok", "Content-Type": "application/json" });
+    await backendFetch("/enrollment/", { method: "POST", headers }, { forwardedFor: "203.0.113.9" });
+
+    expect(sentHeaders().get("authorization")).toBe("Bearer tok");
+    expect(sentHeaders().get("content-type")).toBe("application/json");
+    expect(sentHeaders().get("x-forwarded-for")).toBe("203.0.113.9");
+  });
+
+  it("keeps the caller's headers when init.headers is an entry-pair array", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+    await backendFetch(
+      "/enrollment/",
+      { method: "POST", headers: [["Authorization", "Bearer tok"]] },
+      { forwardedFor: "203.0.113.9" },
+    );
+
+    expect(sentHeaders().get("authorization")).toBe("Bearer tok");
+    expect(sentHeaders().get("x-forwarded-for")).toBe("203.0.113.9");
+  });
+});
+
+describe("backendLogin — forwardedFor", () => {
+  it("forwards the visitor IP to POST /auth/login", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: "a", refresh_token: "r", token_type: "bearer" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await backendLogin("admin@cataclub.com", "admin123", "198.51.100.20");
+
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe("http://localhost:8000/api/v1/auth/login");
+    expect(sentHeaders().get("x-forwarded-for")).toBe("198.51.100.20");
   });
 });
 

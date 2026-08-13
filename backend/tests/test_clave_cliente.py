@@ -160,8 +160,9 @@ def test_crear_limiter_usa_clave_cliente_fuera_de_ambiente_test(monkeypatch):
     capturado = {}
 
     class _LimiterEspia:
-        def __init__(self, *, key_func, **_kwargs):
+        def __init__(self, *, key_func, **kwargs):
             capturado["key_func"] = key_func
+            capturado["kwargs"] = kwargs
 
     monkeypatch.setattr(rate_limit, "Limiter", _LimiterEspia)
     monkeypatch.setattr(rate_limit.settings, "ambiente", "production")
@@ -169,6 +170,11 @@ def test_crear_limiter_usa_clave_cliente_fuera_de_ambiente_test(monkeypatch):
     resultado = rate_limit._crear_limiter()
 
     assert capturado["key_func"] is clave_cliente
+    # Deliberadamente SIN `headers_enabled=True` -- ver el comentario en
+    # `_crear_limiter` (rompería cada endpoint decorado que no declare
+    # `response: Response`, que hoy es todos). `Retry-After` en el 429 lo
+    # agrega `main._manejador_limite_excedido` a mano.
+    assert "headers_enabled" not in capturado["kwargs"]
     assert isinstance(resultado, _LimiterEspia)
 
 
