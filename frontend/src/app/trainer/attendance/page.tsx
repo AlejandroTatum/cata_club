@@ -276,15 +276,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
    * waiting on them.
    */
   const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
-  /**
-   * The receipt's "Reintentar" button (issue #241). Its disabled phase is
-   * expressed with `aria-disabled`, not the native `disabled` attribute —
-   * the browser blurs a natively-disabled element the instant it applies,
-   * stranding keyboard focus on `<body>` with no way back. `aria-disabled`
-   * keeps it in the tab order the whole time, so there is nothing to
-   * restore once the request settles.
-   */
-  const retryButtonRef = useRef<HTMLButtonElement>(null);
   /** A position read off the URL that still needs its roster loaded. */
   const [pendingRestore, setPendingRestore] = useState<WizardLocation | null>(null);
   /**
@@ -866,6 +857,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
   );
   const receiptTotal = TOTAL_ORDER.reduce((sum, state) => sum + receiptCounts[state], 0);
   const hasFailedRecords = (result?.failed.length ?? 0) > 0;
+  const retryButtonLabel = (() => {
+    if (rosterLoading) return "Reintentando…";
+    const failedCount = result?.failed.length ?? 0;
+    if (failedCount === 1) return "Reintentar con ese alumno";
+    return `Reintentar con esos ${failedCount} alumnos`;
+  })();
   /**
    * The bar's accessible name (issue #213 a11y requirement): it is decorative
    * on its own, so this has to say out loud the four values a sighted reader
@@ -1718,8 +1715,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 {/* Decision 2: the primary action displaces to the retry —
                     it is the only action that actually corrects the
                     state. */}
+                {/*
+                 * The retry button's disabled phase is expressed with
+                 * `aria-disabled`, not the native `disabled` attribute — the
+                 * browser blurs a natively-disabled element the instant it
+                 * applies, stranding keyboard focus on `<body>` with no way
+                 * back. `aria-disabled` keeps it in the tab order the whole
+                 * time.
+                 */}
                 <Button
-                  ref={retryButtonRef}
                   type="button"
                   variant="primary"
                   onClick={() => {
@@ -1731,11 +1735,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                     rosterLoading ? "cursor-not-allowed opacity-45" : ""
                   }`}
                 >
-                  {rosterLoading
-                    ? "Reintentando…"
-                    : result && result.failed.length === 1
-                      ? "Reintentar con ese alumno"
-                      : `Reintentar con esos ${result?.failed.length ?? 0} alumnos`}
+                  {retryButtonLabel}
                 </Button>
                 <Button
                   type="button"
