@@ -32,7 +32,7 @@ import {
   tapWizardAttendance,
   DEFAULT_ATTENDANCE,
   toAttendanceMarks,
-  buildAttendanceSummary,
+  buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
   type SessionStudent,
 } from "../attendance-utils";
@@ -95,33 +95,47 @@ describe("countByState", () => {
   });
 });
 
-describe("buildAttendanceSummary", () => {
-  it("builds summary for mixed states", () => {
+describe("buildAttendanceReceipt", () => {
+  it("returns all four states, including a zero, in a plain count record", () => {
     const students: SessionStudent[] = [
       { id: "a", name: "A", attendance: "present" },
       { id: "b", name: "B", attendance: "present" },
       { id: "c", name: "C", attendance: "absent" },
-      { id: "d", name: "D", attendance: "late" },
+      { id: "d", name: "D", attendance: "justified" },
     ];
-    const summary = buildAttendanceSummary(students);
-    expect(summary).toContain("2 presente");
-    expect(summary).toContain("1 ausente");
-    expect(summary).toContain("1 tardanza");
-    expect(summary).toContain("0 justificado");
+    expect(buildAttendanceReceipt(students)).toEqual({
+      present: 2,
+      absent: 1,
+      late: 0,
+      justified: 1,
+    });
   });
 
-  it("handles empty roster", () => {
-    expect(buildAttendanceSummary([])).toBe("0 presente • 0 ausente • 0 tardanza • 0 justificado");
+  it("handles an empty roster as all zeros, not a missing key", () => {
+    expect(buildAttendanceReceipt([])).toEqual({
+      present: 0,
+      absent: 0,
+      late: 0,
+      justified: 0,
+    });
   });
 
-  it("handles all present", () => {
+  // Decision 2 (issue #213): with failed records, the receipt counts what got
+  // SAVED, not what the trainer marked — the failed student's mark must not
+  // show up in the breakdown just because the trainer set it before the
+  // batch was sent.
+  it("excludes failed persona ids from the count instead of counting what was marked", () => {
     const students: SessionStudent[] = [
-      { id: "a", name: "A", attendance: "present" },
-      { id: "b", name: "B", attendance: "present" },
+      { id: "1", name: "Ana", attendance: "present" },
+      { id: "2", name: "Beto", attendance: "present" },
+      { id: "3", name: "Caro", attendance: "absent" },
     ];
-    const summary = buildAttendanceSummary(students);
-    expect(summary).toContain("2 presente");
-    expect(summary).toContain("0 ausente");
+    expect(buildAttendanceReceipt(students, [2])).toEqual({
+      present: 1,
+      absent: 1,
+      late: 0,
+      justified: 0,
+    });
   });
 });
 
@@ -410,7 +424,7 @@ describe("toAttendanceMarks", () => {
   });
 });
 
-describe("countByState / buildAttendanceSummary with unmarked students", () => {
+describe("countByState / buildAttendanceReceipt with unmarked students", () => {
   const students: SessionStudent[] = [
     { id: "a", name: "A", attendance: "present" },
     { id: "b", name: "B", attendance: UNMARKED },
@@ -422,10 +436,13 @@ describe("countByState / buildAttendanceSummary with unmarked students", () => {
     expect(countByState(students, "present")).toBe(1);
   });
 
-  it("omits unmarked students from the human-readable summary counts", () => {
-    expect(buildAttendanceSummary(students)).toBe(
-      "1 presente • 0 ausente • 0 tardanza • 0 justificado",
-    );
+  it("omits unmarked students from the receipt counts", () => {
+    expect(buildAttendanceReceipt(students)).toEqual({
+      present: 1,
+      absent: 0,
+      late: 0,
+      justified: 0,
+    });
   });
 });
 

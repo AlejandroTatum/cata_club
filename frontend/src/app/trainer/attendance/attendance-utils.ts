@@ -259,16 +259,31 @@ export function toAttendanceMarks(students: SessionStudent[]): AttendanceStudent
 }
 
 /**
- * Build a human-readable summary of attendance counts.
- * e.g. "5 presente • 2 ausente • 1 tardanza • 0 justificado"
+ * Post-submission counts by state, for the confirmation receipt (issue
+ * #213). Replaces `buildAttendanceSummary`, which rendered the result as one
+ * joined sentence — the receipt needs the four counts as data, one per row of
+ * a grid plus a proportional bar, not pre-formatted text.
+ *
+ * Counts what was SAVED, not what the trainer marked (decision 2): pass
+ * `result.failed`'s persona ids as `failedPersonaIds` and this excludes those
+ * students from the tally, because the receipt describes what got filed, not
+ * the trainer's intent. Every one of the four states is always a key of the
+ * returned record, even at zero — the caller must render it anyway (decision
+ * 1): a missing row would read as "not reported" instead of "reported as
+ * zero".
  */
-export function buildAttendanceSummary(students: SessionStudent[]): string {
-  const parts = ATTENDANCE_STATES.map((state) => {
-    const count = countByState(students, state);
-    const label = ATTENDANCE_LABELS[state].toLowerCase();
-    return `${count} ${label}`;
-  });
-  return parts.join(" • ");
+export function buildAttendanceReceipt(
+  students: SessionStudent[],
+  failedPersonaIds: number[] = [],
+): Record<EstadoAsistencia, number> {
+  const failedIds = new Set(failedPersonaIds.map(String));
+  const saved = students.filter((s) => !failedIds.has(s.id));
+  return {
+    present: countByState(saved, "present"),
+    absent: countByState(saved, "absent"),
+    late: countByState(saved, "late"),
+    justified: countByState(saved, "justified"),
+  };
 }
 
 /**
