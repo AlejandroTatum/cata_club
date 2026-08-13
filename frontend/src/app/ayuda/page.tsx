@@ -72,7 +72,7 @@ export default function AyudaPage(): React.ReactElement {
       title="Preguntas frecuentes"
       subtitle="Cómo funciona la app del club, sección por sección."
     >
-      <div className="flex max-w-3xl flex-col gap-page">
+      <div className="flex flex-col gap-page">
         <BackLink href="/" label="Volver al inicio" />
 
         {/*
