@@ -90,13 +90,25 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
         })}
         <text
           x={SIZE / 2}
-          y={SIZE / 2}
+          y={SIZE / 2 - 6}
           textAnchor="middle"
           dominantBaseline="middle"
           className="rotate-90 fill-ink text-xl font-bold"
           style={{ transformOrigin: "center", transformBox: "fill-box" }}
         >
           {stats.totalStudents}
+        </text>
+        {/* The center number needs its label — "200" alone does not say what
+            it counts. */}
+        <text
+          x={SIZE / 2}
+          y={SIZE / 2 + 13}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          className="rotate-90 fill-ink-3-strong text-2xs font-bold tracking-caps-wide"
+          style={{ transformOrigin: "center", transformBox: "fill-box" }}
+        >
+          REGISTROS
         </text>
       </svg>
 

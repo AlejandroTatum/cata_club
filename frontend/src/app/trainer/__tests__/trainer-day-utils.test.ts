@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
 import {
   ABSENCE_ALERT_THRESHOLD,
+  buildSessionBarAriaLabel,
+  buildSessionBarSegments,
+  buildSessionCardState,
   findAbsenceAlert,
   formatAbsenceCount,
+  formatElapsedMinutes,
   formatEnrolledCount,
   formatSessionCountdown,
   groupRecordsBySession,
@@ -292,6 +296,119 @@ describe("formatAbsenceCount", () => {
   it("pluralizes", () => {
     expect(formatAbsenceCount(1)).toBe("1 ausencia");
     expect(formatAbsenceCount(3)).toBe("3 ausencias");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The immediate-session card (issue #211): the number that decides depends on
+// whether the session has started, and the primary action's href must call
+// the wizard's real query contract (`buildWizardQuery` /
+// `attendance-utils.ts`), never a hand-built string.
+// ---------------------------------------------------------------------------
+
+describe("buildSessionCardState", () => {
+  it("is null on a day with no schedules at all — the card does not render", () => {
+    expect(buildSessionCardState([], NOW)).toBeNull();
+  });
+
+  it("answers 'next' before the session starts, with the countdown and the wizard href", () => {
+    const state = buildSessionCardState([schedule(1, "15:00", "16:00")], NOW);
+
+    expect(state).not.toBeNull();
+    expect(state?.kind).toBe("next");
+    if (state?.kind !== "next") throw new Error("expected next");
+    expect(state.schedule.id).toBe(1);
+    expect(state.minutesAway).toBe(25);
+    // `paso=lista` and no `fecha` — today needs no address (attendance-utils.ts).
+    expect(state.href).toBe("/trainer/attendance?horario=1&paso=lista");
+  });
+
+  it("switches to 'live' once the session has started — the hour becomes the identifier", () => {
+    const state = buildSessionCardState(
+      [schedule(1, "14:00", "16:00")],
+      new Date(2026, 6, 23, 14, 10),
+    );
+
+    expect(state?.kind).toBe("live");
+    if (state?.kind !== "live") throw new Error("expected live");
+    expect(state.schedule.id).toBe(1);
+    expect(state.minutesElapsed).toBe(10);
+    expect(state.href).toBe("/trainer/attendance?horario=1&paso=lista");
+  });
+
+  it("answers 'done', carrying no href at all, once every session today has ended", () => {
+    const state = buildSessionCardState(
+      [schedule(1, "10:00", "11:00")],
+      new Date(2026, 6, 23, 21, 0),
+    );
+
+    expect(state).toEqual({ kind: "done" });
+    expect(state && "href" in state).toBe(false);
+  });
+
+  it("picks the session already in progress, not a later one still to come", () => {
+    const state = buildSessionCardState(
+      [schedule(1, "14:00", "15:00"), schedule(2, "16:00", "17:00")],
+      new Date(2026, 6, 23, 14, 30),
+    );
+
+    expect(state?.kind).toBe("live");
+    if (state?.kind !== "live") throw new Error("expected live");
+    expect(state.schedule.id).toBe(1);
+  });
+});
+
+describe("formatElapsedMinutes", () => {
+  it("pluralizes", () => {
+    expect(formatElapsedMinutes(1)).toBe("Hace 1 minuto");
+    expect(formatElapsedMinutes(10)).toBe("Hace 10 minutos");
+  });
+
+  it("says the session just started rather than 'hace 0 minutos'", () => {
+    expect(formatElapsedMinutes(0)).toBe("Recién empezó");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// "Últimas listas" proportional bar (issue #211): color is reserved for
+// badges/pills, so the four counts render as a bar whose `aria-label` always
+// states the four values and the total.
+// ---------------------------------------------------------------------------
+
+describe("buildSessionBarSegments", () => {
+  it("returns the four states in the fixed reading order, with a share of the total", () => {
+    const segments = buildSessionBarSegments(
+      { present: 9, late: 1, justified: 1, absent: 1 },
+      12,
+    );
+
+    expect(segments.map((s) => s.estado)).toEqual(["present", "late", "justified", "absent"]);
+    expect(segments.map((s) => s.count)).toEqual([9, 1, 1, 1]);
+    expect(segments[0].widthPercent).toBeCloseTo(75, 5);
+    expect(segments[1].widthPercent).toBeCloseTo(100 / 12, 5);
+  });
+
+  it("returns zero widths rather than dividing by zero when the session has no records", () => {
+    const segments = buildSessionBarSegments(
+      { present: 0, late: 0, justified: 0, absent: 0 },
+      0,
+    );
+
+    expect(segments.every((s) => s.widthPercent === 0)).toBe(true);
+  });
+});
+
+describe("buildSessionBarAriaLabel", () => {
+  it("enunciates all four counts and the total, singular/plural agreeing with each count", () => {
+    expect(buildSessionBarAriaLabel({ present: 9, late: 1, justified: 1, absent: 1 }, 12)).toBe(
+      "9 presentes, 1 tardanza, 1 justificado y 1 ausente sobre 12 registros",
+    );
+  });
+
+  it("still names a state at zero, rather than omitting it", () => {
+    expect(buildSessionBarAriaLabel({ present: 8, late: 1, justified: 0, absent: 1 }, 10)).toBe(
+      "8 presentes, 1 tardanza, 0 justificados y 1 ausente sobre 10 registros",
+    );
   });
 });
 

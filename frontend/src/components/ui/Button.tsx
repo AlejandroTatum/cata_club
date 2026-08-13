@@ -18,7 +18,7 @@ import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactElement } from "react";
 import { cn } from "./cn";
 
-export type ButtonVariant = "primary" | "secondary" | "dark" | "ghost";
+export type ButtonVariant = "primary" | "secondary" | "dark" | "ghost" | "onCoal";
 export type ButtonSize = "md" | "sm";
 
 /** `.btn` base — shape, typography and focus ring, without any color. */
@@ -51,6 +51,13 @@ const VARIANT: Record<ButtonVariant, string> = {
   // fixed grey, because a ghost button is the one control that has no surface
   // of its own and can therefore sit on any of the three.
   ghost: "bg-transparent border-transparent text-ink-2 hover:bg-coal/[0.06] hover:text-ink",
+  // `.btn.oncoal` (prototype 31) — the secondary action INSIDE a coal card
+  // (the trainer dashboard's immediate-session card). `secondary`'s white
+  // fill would read as a second block competing with the coal surface it
+  // sits on, so this is a translucent outline instead: transparent fill,
+  // a white-tinted border, white text — the same language `dark` speaks in
+  // reverse, for the one surface that is already coal.
+  onCoal: "bg-transparent border-white/25 text-white hover:bg-white/10 hover:border-white/45",
 };
 
 /**
