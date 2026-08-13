@@ -26,6 +26,7 @@ from datetime import date
 
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.mensajes import MENSAJE_VINCULACION_NO_DISPONIBLE
 from app.dominio.modelos import Notificacion, Persona, VinculacionRepresentante
@@ -98,7 +99,7 @@ class _SleeperEspia:
 def test_vincular_representado_reasigna_representante_id(db_session):
     representante_anterior = _adulto("1710034065", nombres="Pedro")
     representante_nuevo = _adulto("1710034073", nombres="Marcela")
-    menor = _menor("1723456789", representante_id=None)
+    menor = _menor(cedula_valida(632), representante_id=None)
     db_session.add_all([representante_anterior, representante_nuevo, menor])
     db_session.commit()
 
@@ -115,7 +116,7 @@ def test_vincular_representado_reasigna_representante_id(db_session):
 def test_vincular_representado_deja_auditoria(db_session):
     representante_anterior = _guardado(db_session, _adulto("1710034065", nombres="Pedro"))
     representante_nuevo = _adulto("1710034073", nombres="Marcela")
-    menor = _menor("1723456789", representante_id=representante_anterior.id)
+    menor = _menor(cedula_valida(632), representante_id=representante_anterior.id)
     db_session.add_all([representante_nuevo, menor])
     db_session.commit()
 
@@ -136,7 +137,7 @@ def test_vincular_representado_deja_auditoria(db_session):
 
 def test_vincular_representado_sin_representante_previo_no_notifica_a_nadie(db_session):
     representante_nuevo = _adulto("1710034073", nombres="Marcela")
-    menor = _menor("1723456789", representante_id=None)
+    menor = _menor(cedula_valida(632), representante_id=None)
     db_session.add_all([representante_nuevo, menor])
     db_session.commit()
 
@@ -157,7 +158,7 @@ def test_vincular_representado_sin_representante_previo_no_notifica_a_nadie(db_s
 def test_vincular_representado_notifica_al_representante_anterior(db_session):
     representante_anterior = _guardado(db_session, _adulto("1710034065", nombres="Pedro", apellidos="Ruiz"))
     representante_nuevo = _adulto("1710034073", nombres="Marcela")
-    menor = _menor("1723456789", representante_id=representante_anterior.id, nombres="Lucas", apellidos="Vega")
+    menor = _menor(cedula_valida(632), representante_id=representante_anterior.id, nombres="Lucas", apellidos="Vega")
     db_session.add_all([representante_nuevo, menor])
     db_session.commit()
 
@@ -200,7 +201,7 @@ def test_vincular_representado_con_nombres_largos_no_revienta(db_session):
     apellido_largo = "Rodriguez Gonzalez Martinez Fernandez Sanchez De La Torre B" * 2
     nombre_largo, apellido_largo = nombre_largo[:100], apellido_largo[:100]
     menor = _menor(
-        "1723456789", representante_id=representante_anterior.id,
+        cedula_valida(632), representante_id=representante_anterior.id,
         nombres=nombre_largo, apellidos=apellido_largo,
     )
     db_session.add_all([representante_nuevo, menor])
@@ -239,12 +240,12 @@ def test_vincular_representado_con_nombres_largos_no_revienta(db_session):
     [
         pytest.param(lambda db, rep: None, id="cedula_inexistente"),
         pytest.param(
-            lambda db, rep: db.add(_adulto("1710099999")) or db.commit(),
+            lambda db, rep: db.add(_adulto(cedula_valida(630))) or db.commit(),
             id="persona_existe_pero_es_mayor_de_edad",
         ),
         pytest.param(
             lambda db, rep: (
-                db.add(_menor("1710099999", representante_id=rep.id)),
+                db.add(_menor(cedula_valida(630), representante_id=rep.id)),
                 db.commit(),
             ),
             id="ya_vinculada_al_mismo_representante",
@@ -260,7 +261,7 @@ def test_vincular_representado_rechaza_sin_filtrar_el_motivo(db_session, armar_e
     servicio = PersonaServicio(db_session, dormir=_SleeperEspia())
     with pytest.raises(OperacionInvalida) as excinfo:
         servicio.vincular_representado(
-            representante.id, VincularRepresentadoDTO(cedula="1710099999")
+            representante.id, VincularRepresentadoDTO(cedula=cedula_valida(630))
         )
     assert excinfo.value.mensaje == MENSAJE_VINCULACION_NO_DISPONIBLE
     assert db_session.query(VinculacionRepresentante).count() == 0
@@ -284,16 +285,16 @@ def test_cedula_inexistente_y_persona_no_elegible_son_indistinguibles(db_session
     existe (pero no es elegible) y una que no existe en absoluto, ni el
     mensaje ni el tipo de excepción distinguen un caso del otro."""
     representante = _adulto("1710034073", nombres="Marcela")
-    mayor_de_edad = _adulto("1710099999", nombres="Otro")
+    mayor_de_edad = _adulto(cedula_valida(630), nombres="Otro")
     db_session.add_all([representante, mayor_de_edad])
     db_session.commit()
 
     servicio = PersonaServicio(db_session, dormir=_SleeperEspia())
 
     with pytest.raises(OperacionInvalida) as caso_existente:
-        servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula="1710099999"))
+        servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula=cedula_valida(630)))
     with pytest.raises(OperacionInvalida) as caso_inexistente:
-        servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula="1799999999"))
+        servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula=cedula_valida(631)))
 
     assert caso_existente.value.mensaje == caso_inexistente.value.mensaje == MENSAJE_VINCULACION_NO_DISPONIBLE
     assert type(caso_existente.value) is type(caso_inexistente.value)
@@ -312,7 +313,7 @@ def test_primeros_dos_intentos_fallidos_no_retrasan(db_session):
 
     for _ in range(2):
         with pytest.raises(OperacionInvalida):
-            servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula="1799999999"))
+            servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula=cedula_valida(631)))
 
     assert espia.llamadas == []
 
@@ -326,7 +327,7 @@ def test_tercer_intento_fallido_retrasa_un_segundo(db_session):
 
     for _ in range(3):
         with pytest.raises(OperacionInvalida):
-            servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula="1799999999"))
+            servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula=cedula_valida(631)))
 
     assert espia.llamadas == [1]
 
@@ -340,7 +341,7 @@ def test_retraso_duplica_y_tiene_techo_de_30_segundos(db_session):
 
     for _ in range(9):
         with pytest.raises(OperacionInvalida):
-            servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula="1799999999"))
+            servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula=cedula_valida(631)))
 
     # Intentos 3..9 -> 1, 2, 4, 8, 16, 30(techo), 30(techo)
     assert espia.llamadas == [1, 2, 4, 8, 16, 30, 30]
@@ -348,7 +349,7 @@ def test_retraso_duplica_y_tiene_techo_de_30_segundos(db_session):
 
 def test_vinculacion_exitosa_resetea_el_contador(db_session):
     representante = _adulto("1710034073")
-    menor = _menor("1723456789", representante_id=None)
+    menor = _menor(cedula_valida(632), representante_id=None)
     db_session.add_all([representante, menor])
     db_session.commit()
     espia = _SleeperEspia()
@@ -356,13 +357,13 @@ def test_vinculacion_exitosa_resetea_el_contador(db_session):
 
     for _ in range(2):
         with pytest.raises(OperacionInvalida):
-            servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula="1799999999"))
+            servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula=cedula_valida(631)))
 
     servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula=menor.cedula))
 
     espia.llamadas.clear()
     with pytest.raises(OperacionInvalida):
-        servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula="1799999999"))
+        servicio.vincular_representado(representante.id, VincularRepresentadoDTO(cedula=cedula_valida(631)))
     assert espia.llamadas == []
 
 
@@ -376,13 +377,13 @@ def test_contador_es_por_representante_no_global(db_session):
 
     for _ in range(3):
         with pytest.raises(OperacionInvalida):
-            servicio.vincular_representado(representante_a.id, VincularRepresentadoDTO(cedula="1799999999"))
+            servicio.vincular_representado(representante_a.id, VincularRepresentadoDTO(cedula=cedula_valida(631)))
     assert espia.llamadas == [1]
 
     espia.llamadas.clear()
     for _ in range(3):
         with pytest.raises(OperacionInvalida):
-            servicio.vincular_representado(representante_b.id, VincularRepresentadoDTO(cedula="1799999999"))
+            servicio.vincular_representado(representante_b.id, VincularRepresentadoDTO(cedula=cedula_valida(631)))
     assert espia.llamadas == [1]
 
 
@@ -391,7 +392,7 @@ def test_cedula_existente_no_elegible_sigue_la_misma_curva_de_retraso_que_una_in
     tampoco distingue "existe pero no es elegible" de "no existe"."""
     representante_a = _adulto("1710034073", nombres="A")
     representante_b = _adulto("1710034081", nombres="B")
-    mayor_de_edad = _adulto("1710099999", nombres="Otro")
+    mayor_de_edad = _adulto(cedula_valida(630), nombres="Otro")
     db_session.add_all([representante_a, representante_b, mayor_de_edad])
     db_session.commit()
 
@@ -402,9 +403,9 @@ def test_cedula_existente_no_elegible_sigue_la_misma_curva_de_retraso_que_una_in
 
     for _ in range(5):
         with pytest.raises(OperacionInvalida):
-            servicio_real.vincular_representado(representante_a.id, VincularRepresentadoDTO(cedula="1710099999"))
+            servicio_real.vincular_representado(representante_a.id, VincularRepresentadoDTO(cedula=cedula_valida(630)))
         with pytest.raises(OperacionInvalida):
-            servicio_fantasma.vincular_representado(representante_b.id, VincularRepresentadoDTO(cedula="1799999999"))
+            servicio_fantasma.vincular_representado(representante_b.id, VincularRepresentadoDTO(cedula=cedula_valida(631)))
 
     assert espia_real.llamadas == espia_fantasma.llamadas == [1, 2, 4]
 
@@ -416,7 +417,7 @@ def test_cedula_existente_no_elegible_sigue_la_misma_curva_de_retraso_que_una_in
 def test_vincular_representado_router_happy_path(client, db_session):
     representante_anterior = _guardado(db_session, _adulto("1710034065", nombres="Pedro"))
     representante_nuevo = _adulto("1710034073", nombres="Marcela")
-    menor = _menor("1723456789", representante_id=representante_anterior.id)
+    menor = _menor(cedula_valida(632), representante_id=representante_anterior.id)
     db_session.add_all([representante_nuevo, menor])
     db_session.commit()
     _restaurar_override_token(persona_id=representante_nuevo.id, roles=["REPRESENTANTE"])
@@ -444,7 +445,7 @@ def test_vincular_representado_router_no_elegible_da_400_generico(client, db_ses
 
     resp = client.post(
         f"/api/v1/personas/{representante.id}/vincular-representado",
-        json={"cedula": "1799999999"},
+        json={"cedula": cedula_valida(631)},
     )
     assert resp.status_code == 400
     assert resp.json()["detail"] == MENSAJE_VINCULACION_NO_DISPONIBLE
@@ -459,7 +460,7 @@ def test_vincular_representado_persona_id_no_coincide_con_token_da_403(client, d
 
     resp = client.post(
         f"/api/v1/personas/{otro_representante.id}/vincular-representado",
-        json={"cedula": "1799999999"},
+        json={"cedula": cedula_valida(631)},
     )
     assert resp.status_code == 403
     detalle = resp.json()["detail"].lower()
@@ -474,14 +475,14 @@ def test_vincular_representado_sin_rol_representante_da_403(client, db_session):
 
     resp = client.post(
         f"/api/v1/personas/{representante.id}/vincular-representado",
-        json={"cedula": "1799999999"},
+        json={"cedula": cedula_valida(631)},
     )
     assert resp.status_code == 403
 
 
 def test_vincular_representado_administrador_puede_vincular_por_cualquiera(client, db_session):
     representante = _adulto("1710034073", nombres="Marcela")
-    menor = _menor("1723456789", representante_id=None)
+    menor = _menor(cedula_valida(632), representante_id=None)
     db_session.add_all([representante, menor])
     db_session.commit()
     _restaurar_override_token(persona_id=999, roles=["ADMINISTRADOR"])

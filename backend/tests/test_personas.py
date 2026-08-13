@@ -1,5 +1,6 @@
 from datetime import date
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.dominio.modelos import Persona, Usuario, FichaMedica
@@ -143,7 +144,7 @@ def _restaurar_override_token(correo="representante@cataclub.test", persona_id=1
     }
 
 
-def _payload_representado(cedula="1723456789", ficha_medica=None):
+def _payload_representado(cedula=cedula_valida(520), ficha_medica=None):
     payload = {
         "nombres": "Lucas",
         "apellidos": "Vega",
@@ -173,10 +174,10 @@ def test_crear_representado_happy_path(client, db_session):
     )
     assert resp.status_code == 201, resp.text
     data = resp.json()
-    assert data["cedula"] == "1723456789"
+    assert data["cedula"] == cedula_valida(520)
     assert data["representanteId"] == representante.id
 
-    hijo = db_session.query(Persona).filter(Persona.cedula == "1723456789").one()
+    hijo = db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).one()
     assert hijo.representante_id == representante.id
     assert hijo.ficha_medica is not None
     assert hijo.ficha_medica.tipo_sangre.value == "O_POSITIVO"
@@ -199,7 +200,7 @@ def test_crear_representado_persona_id_no_coincide_con_token_da_403_sin_filtrar_
     # La respuesta no debe insinuar que el persona_id de la URL existe o
     # pertenece a otro representante (mismo mensaje genérico que GestorPermisos).
     assert "no encontrad" not in detalle
-    assert db_session.query(Persona).filter(Persona.cedula == "1723456789").first() is None
+    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).first() is None
 
 
 def test_crear_representado_sin_rol_representante_da_403_sin_auto_asignar(client, db_session):
@@ -211,7 +212,7 @@ def test_crear_representado_sin_rol_representante_da_403_sin_auto_asignar(client
         json=_payload_representado(),
     )
     assert resp.status_code == 403
-    assert db_session.query(Persona).filter(Persona.cedula == "1723456789").first() is None
+    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).first() is None
 
 
 def test_crear_representado_cedula_duplicada_rechazada(client, db_session):
@@ -242,7 +243,7 @@ def test_crear_representado_ficha_medica_invalida_rechazada(client, db_session):
     )
     assert resp.status_code == 422
 
-    assert db_session.query(Persona).filter(Persona.cedula == "1723456789").first() is None
+    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).first() is None
     assert db_session.query(FichaMedica).count() == 0
 
 
@@ -262,9 +263,9 @@ def test_crear_representado_con_credenciales_crea_usuario_y_rol(client, db_sessi
     )
     assert resp.status_code == 201, resp.text
     data = resp.json()
-    assert data["cedula"] == "1723456789"
+    assert data["cedula"] == cedula_valida(520)
 
-    hijo = db_session.query(Persona).filter(Persona.cedula == "1723456789").one()
+    hijo = db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).one()
     usuario = db_session.query(Usuario).filter(Usuario.persona_id == hijo.id).one()
     assert usuario.correo == "menor@test.com"
     assert usuario.contrasenia != "clave12345"  # hasheada
@@ -281,7 +282,7 @@ def test_crear_representado_sin_credenciales_no_crea_usuario(client, db_session)
         json=_payload_representado(),
     )
     assert resp.status_code == 201
-    hijo = db_session.query(Persona).filter(Persona.cedula == "1723456789").one()
+    hijo = db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).one()
     assert db_session.query(Usuario).filter(Usuario.persona_id == hijo.id).first() is None
 
 
@@ -299,7 +300,7 @@ def test_crear_representado_correo_duplicado_rechazada(client, db_session):
     )
     assert resp1.status_code == 201
 
-    payload2 = _payload_representado(cedula="1723456790")
+    payload2 = _payload_representado(cedula=cedula_valida(521))
     payload2["correo"] = "duplicado@test.com"
     payload2["contrasenia"] = "clave12345"
 
@@ -363,7 +364,7 @@ def _crear_personas_buscables(client, cantidad: int) -> None:
             "/api/v1/personas/",
             json={
                 "nombres": f"Alumno{i}", "apellidos": "Torres",
-                "cedula": f"171003{4800 + i}", "fecha_nacimiento": "2010-05-14",
+                "cedula": cedula_valida(522 + i), "fecha_nacimiento": "2010-05-14",
                 "telefono": "0991234567",
             },
         )
@@ -408,7 +409,7 @@ def _crear_persona_buscable(client, nombres: str, apellidos: str, cedula: str) -
 def test_buscar_nombre_completo_encuentra_a_la_persona(client):
     """El caso real que reportó la auditoría: cero resultados con nombre y
     apellido juntos, aunque cada uno por separado sí encontraba."""
-    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034810")
+    _crear_persona_buscable(client, "Emilio", "Zambrano", cedula_valida(527))
 
     resp = client.get("/api/v1/personas/buscar", params={"q": "Emilio Zambrano"})
 
@@ -418,7 +419,7 @@ def test_buscar_nombre_completo_encuentra_a_la_persona(client):
 
 def test_buscar_nombre_completo_en_orden_invertido_encuentra(client):
     """Mucha gente tipea apellido primero."""
-    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034811")
+    _crear_persona_buscable(client, "Emilio", "Zambrano", cedula_valida(528))
 
     resp = client.get("/api/v1/personas/buscar", params={"q": "Zambrano Emilio"})
 
@@ -429,7 +430,7 @@ def test_buscar_nombre_completo_en_orden_invertido_encuentra(client):
 def test_buscar_con_apellido_compuesto_parcial_encuentra(client):
     """"Ariana Chavez" tiene que encontrar a "Ariana Chavez Bravo": el
     apellido compuesto no se busca completo, alcanza con una porción."""
-    _crear_persona_buscable(client, "Ariana", "Chavez Bravo", "1710034812")
+    _crear_persona_buscable(client, "Ariana", "Chavez Bravo", cedula_valida(529))
 
     resp = client.get("/api/v1/personas/buscar", params={"q": "Ariana Chavez"})
 
@@ -438,7 +439,7 @@ def test_buscar_con_apellido_compuesto_parcial_encuentra(client):
 
 
 def test_buscar_con_espacios_de_mas_encuentra(client):
-    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034813")
+    _crear_persona_buscable(client, "Emilio", "Zambrano", cedula_valida(530))
 
     resp = client.get("/api/v1/personas/buscar", params={"q": "Emilio   Zambrano"})
 
@@ -447,7 +448,7 @@ def test_buscar_con_espacios_de_mas_encuentra(client):
 
 
 def test_buscar_solo_nombre_sigue_funcionando(client):
-    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034814")
+    _crear_persona_buscable(client, "Emilio", "Zambrano", cedula_valida(531))
 
     resp = client.get("/api/v1/personas/buscar", params={"q": "Emilio"})
 
@@ -456,7 +457,7 @@ def test_buscar_solo_nombre_sigue_funcionando(client):
 
 
 def test_buscar_solo_apellido_sigue_funcionando(client):
-    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034815")
+    _crear_persona_buscable(client, "Emilio", "Zambrano", cedula_valida(532))
 
     resp = client.get("/api/v1/personas/buscar", params={"q": "Zambrano"})
 
@@ -465,7 +466,7 @@ def test_buscar_solo_apellido_sigue_funcionando(client):
 
 
 def test_buscar_sin_resultados_devuelve_lista_vacia_sin_romperse(client):
-    _crear_persona_buscable(client, "Emilio", "Zambrano", "1710034816")
+    _crear_persona_buscable(client, "Emilio", "Zambrano", cedula_valida(533))
 
     resp = client.get("/api/v1/personas/buscar", params={"q": "Nadie Inexistente"})
 

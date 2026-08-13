@@ -5,6 +5,7 @@ personas por etiquetas fue removido upstream (#131) junto con
 `prioridad_municipal`/`porcentaje_beca`, así que su export PDF nunca llegó
 a existir en `main`."""
 
+from app.dominio.cedula import cedula_valida
 from app.infraestructura.generador_pdf import generar_reporte_pdf
 
 
@@ -63,7 +64,7 @@ def test_reporte_asistencia_requiere_admin_o_entrenador(client_sin_permisos):
 
 
 def test_reporte_asistencia_filtra_por_horario_y_periodo(client):
-    alumno = _crear_persona(client, "1751515152")
+    alumno = _crear_persona(client, cedula_valida(550))
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
@@ -109,7 +110,7 @@ def test_reporte_asistencia_expone_horario_id_y_persona_id(client):
     in for either. Asserted through the HTTP payload, in camelCase, because
     that is the shape the adapter parses -- `ResponseBase`'s alias generator
     is part of what is being locked down here."""
-    alumno = _crear_persona(client, "1751515153")
+    alumno = _crear_persona(client, cedula_valida(551))
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
@@ -139,7 +140,7 @@ def test_reporte_asistencia_expone_horario_id_y_persona_id(client):
 
 
 def test_reporte_alumnos_nuevos_por_periodo(client):
-    _crear_persona(client, "1761616161")
+    _crear_persona(client, cedula_valida(552))
     resp = client.get(
         "/api/v1/personas/reportes/nuevos-por-periodo",
         params={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-12-31"},
@@ -242,7 +243,7 @@ def test_reporte_asistencia_json_permite_entrenador_como_control(client_entrenad
 
 
 def test_reporte_periodo_pdf_admin_200(client):
-    _crear_persona(client, "1781818181")
+    _crear_persona(client, cedula_valida(553))
     resp = client.get(
         "/api/v1/personas/reportes/nuevos-por-periodo/pdf",
         params={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-12-31"},
@@ -299,7 +300,7 @@ def test_reporte_asistencia_acepta_un_solo_dia_y_filtros_parciales(client):
 
 
 def test_reporte_asistencia_pdf_admin_200(client):
-    alumno = _crear_persona(client, "1792929292")
+    alumno = _crear_persona(client, cedula_valida(554))
     horario = client.post(
         "/api/v1/asistencias/horarios",
         json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
@@ -376,8 +377,8 @@ def test_reporte_pagos_requiere_admin(client_sin_permisos):
 
 
 def test_reporte_pagos_filtra_por_estado(client):
-    _crear_pago(client, "1801010101", estado_pago="APROBADO")
-    _crear_pago(client, "1801010102", estado_pago="RECHAZADO")
+    _crear_pago(client, cedula_valida(555), estado_pago="APROBADO")
+    _crear_pago(client, cedula_valida(556), estado_pago="RECHAZADO")
 
     resp = client.get("/api/v1/membresias/pagos/reportes", params={"estado_pago": "APROBADO"})
     assert resp.status_code == 200
@@ -387,7 +388,7 @@ def test_reporte_pagos_filtra_por_estado(client):
 
 
 def test_reporte_pagos_filtra_por_periodo(client):
-    _crear_pago(client, "1801010103")
+    _crear_pago(client, cedula_valida(557))
 
     resp = client.get(
         "/api/v1/membresias/pagos/reportes",
@@ -423,7 +424,7 @@ def test_reporte_pagos_pdf_requiere_admin(client_sin_permisos):
 
 
 def test_reporte_pagos_pdf_admin_200(client):
-    _crear_pago(client, "1801010104", estado_pago="APROBADO")
+    _crear_pago(client, cedula_valida(558), estado_pago="APROBADO")
 
     resp = client.get("/api/v1/membresias/pagos/reportes/pdf")
     assert resp.status_code == 200
@@ -472,8 +473,8 @@ def test_reporte_pagos_supera_el_limite_maximo_da_422(client, monkeypatch):
     monkeypatch.setattr(
         "app.presentacion.routers.membresias_pagos_router.LIMITE_MAXIMO_REPORTE_PAGOS", 2,
     )
-    _crear_pago(client, "1801010105")
-    _crear_pago(client, "1801010106")
+    _crear_pago(client, cedula_valida(559))
+    _crear_pago(client, cedula_valida(560))
     _crear_pago(client, "1801010107")
 
     resp = client.get("/api/v1/membresias/pagos/reportes")
@@ -485,9 +486,9 @@ def test_reporte_pagos_pdf_supera_el_limite_maximo_da_422(client, monkeypatch):
     monkeypatch.setattr(
         "app.presentacion.routers.membresias_pagos_router.LIMITE_MAXIMO_REPORTE_PAGOS", 2,
     )
-    _crear_pago(client, "1801010108")
-    _crear_pago(client, "1801010109")
-    _crear_pago(client, "1801010110")
+    _crear_pago(client, cedula_valida(561))
+    _crear_pago(client, cedula_valida(562))
+    _crear_pago(client, cedula_valida(563))
 
     resp = client.get("/api/v1/membresias/pagos/reportes/pdf")
     assert resp.status_code == 422
@@ -497,8 +498,8 @@ def test_reporte_pagos_exactamente_en_el_limite_da_200(client, monkeypatch):
     monkeypatch.setattr(
         "app.presentacion.routers.membresias_pagos_router.LIMITE_MAXIMO_REPORTE_PAGOS", 2,
     )
-    _crear_pago(client, "1801010111")
-    _crear_pago(client, "1801010112")
+    _crear_pago(client, cedula_valida(564))
+    _crear_pago(client, cedula_valida(565))
 
     resp = client.get("/api/v1/membresias/pagos/reportes")
     assert resp.status_code == 200

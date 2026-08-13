@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 from sqlalchemy import select
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.excepciones import ServicioNoDisponible
 from app.infraestructura import notificaciones_servicio as notificaciones_servicio_mod
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
@@ -366,12 +367,12 @@ class TestNotificacionPago:
         """Si el alumno tiene representante, el representante también recibe la notificación."""
         from app.dominio.modelos import Notificacion
 
-        representante = _crear_persona(client, cedula="1733344455")
+        representante = _crear_persona(client, cedula=cedula_valida(460))
         assert representante["id"] == 1
         alumno = client.post(
             "/api/v1/personas/",
             json={
-                "nombres": "Hijo", "apellidos": "Representado", "cedula": "1744455566",
+                "nombres": "Hijo", "apellidos": "Representado", "cedula": cedula_valida(461),
                 "fecha_nacimiento": "2015-05-14", "telefono": "0991234567",
                 "representante_id": representante["id"],
             },
@@ -415,11 +416,11 @@ class TestNotificacionPago:
         `notificacion` para ese pago."""
         from app.dominio.modelos import Notificacion
 
-        representante = _crear_persona(client, cedula="1733344455")
+        representante = _crear_persona(client, cedula=cedula_valida(460))
         alumno = client.post(
             "/api/v1/personas/",
             json={
-                "nombres": "Hijo", "apellidos": "Representado", "cedula": "1744455566",
+                "nombres": "Hijo", "apellidos": "Representado", "cedula": cedula_valida(461),
                 "fecha_nacimiento": "2015-05-14", "telefono": "0991234567",
                 "representante_id": representante["id"],
             },
@@ -532,8 +533,8 @@ def test_marcar_notificacion_ajena_como_leida_falla(client, db_session):
     # (ej. 999) violaría la FK de `notificacion.persona_id` contra Postgres
     # real, que sí la hace cumplir (a diferencia de la rama SQLite
     # transitoria).
-    _crear_persona(client, "1719990000")
-    otra_persona = _crear_persona(client, "1719990011")
+    _crear_persona(client, cedula_valida(462))
+    otra_persona = _crear_persona(client, cedula_valida(463))
     assert otra_persona["id"] != 1
 
     notif = Notificacion(

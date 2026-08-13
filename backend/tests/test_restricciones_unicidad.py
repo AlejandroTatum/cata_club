@@ -14,6 +14,7 @@ from datetime import date, time
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import Categoria, DiaSemana
 from app.dominio.modelos import AlumnoHorario, HorarioEntrenamiento, Persona
 
@@ -26,7 +27,7 @@ def test_alumno_horario_duplicado_viola_uq_alumno_horario(db_session):
         categoria=Categoria.JUVENIL,
     )
     persona = Persona(
-        nombres="Duplicada", apellidos="Prueba", cedula="1710034590",
+        nombres="Duplicada", apellidos="Prueba", cedula=cedula_valida(570),
         fecha_nacimiento=date(2000, 1, 1), telefono="0991234567",
     )
     db_session.add_all([horario, persona])

@@ -25,6 +25,7 @@ prueba: la mutación vive, se ejecuta y se revierte enteramente en el test.
 from datetime import date
 from decimal import Decimal
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoEscuela
 from app.dominio.modelos import Canton, Descuento, Institucion, Pais, Persona, Provincia
 from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
@@ -167,7 +168,7 @@ def test_persona_listar_no_incurre_en_n_mas_uno(db_session, contar_selects):
     SELECTs subió de 1 a 4 (uno extra por cada una de las 3 personas)."""
     for i in range(3):
         db_session.add(Persona(
-            nombres="Ana", apellidos=f"Torres {i}", cedula=f"171003{4200 + i}",
+            nombres="Ana", apellidos=f"Torres {i}", cedula=cedula_valida(600 + i),
             fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
         ))
     db_session.commit()

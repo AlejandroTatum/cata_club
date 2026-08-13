@@ -12,6 +12,7 @@ token expirado y cuenta desactivada.
 """
 import jwt as pyjwt
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.soporte_transversal.configuracion import settings
@@ -49,7 +50,7 @@ def _romper_publicacion_celery(monkeypatch):
 
 # --- Solicitud: el éxito solo se informa si la tarea realmente se encoló -----
 def test_publicacion_fallida_con_correo_existente_no_informa_exito(client, monkeypatch):
-    persona = _crear_persona(client, "1780000001")
+    persona = _crear_persona(client, cedula_valida(540))
     _registrar_credenciales(client, persona["cedula"], "honesto@x.com")
     _romper_publicacion_celery(monkeypatch)
 
@@ -79,7 +80,7 @@ def test_publicacion_fallida_con_correo_inexistente_mantiene_exito(client, monke
 def test_publicacion_exitosa_conserva_el_mensaje_de_siempre(client, monkeypatch):
     """Regresión: con el broker sano, el camino feliz no cambia y la tarea
     se encola con el correo y un token de recuperación válido."""
-    persona = _crear_persona(client, "1780000002")
+    persona = _crear_persona(client, cedula_valida(541))
     _registrar_credenciales(client, persona["cedula"], "feliz@x.com")
 
     from app.infraestructura.tareas import recuperacion_tareas
@@ -105,7 +106,7 @@ def test_publicacion_exitosa_conserva_el_mensaje_de_siempre(client, monkeypatch)
 
 # --- Restablecimiento: huecos de cobertura -----------------------------------
 def test_restablecer_con_token_expirado_falla(client):
-    persona = _crear_persona(client, "1780000003")
+    persona = _crear_persona(client, cedula_valida(542))
     _registrar_credenciales(client, persona["cedula"], "tarde@x.com")
 
     token_vencido = GestorAutenticacion.crear_token_recuperacion(

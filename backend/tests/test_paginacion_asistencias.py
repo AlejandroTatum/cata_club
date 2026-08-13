@@ -14,6 +14,7 @@ recorra en pantalla.
 """
 from datetime import date, time
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import Categoria, DiaSemana, EstadoAsistencia
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, Persona
 
@@ -72,7 +73,7 @@ def _paginas_sin_solape_y_completas(client, url, ids_esperados, tamano_pagina):
 
 # --- GET /asistencias/persona/{persona_id} -----------------------------------
 def test_historial_persona_responde_el_envelope_paginado(client, db_session):
-    persona = _crear_persona(db_session, "Ana", "Torres", "1720020001")
+    persona = _crear_persona(db_session, "Ana", "Torres", cedula_valida(480))
     horario = _crear_horario(db_session)
     for i in range(5):
         _crear_asistencia(db_session, persona, horario, date(2026, 7, 1 + i))
@@ -100,8 +101,8 @@ def test_historial_persona_total_solo_cuenta_su_propio_historial(client, db_sess
     dos personas, cada una con el suyo, y el total de una no ve las filas de
     la otra."""
     horario = _crear_horario(db_session)
-    persona_a = _crear_persona(db_session, "Ana", "Torres", "1720020003")
-    persona_b = _crear_persona(db_session, "Beto", "Diaz", "1720020004")
+    persona_a = _crear_persona(db_session, "Ana", "Torres", cedula_valida(481))
+    persona_b = _crear_persona(db_session, "Beto", "Diaz", cedula_valida(482))
     for i in range(3):
         _crear_asistencia(db_session, persona_a, horario, date(2026, 7, 1 + i))
     for i in range(7):
@@ -137,7 +138,7 @@ def test_historial_persona_pagina_sin_solape_con_orden_estable(client, db_sessio
 
 # --- GET /asistencias/reportes ------------------------------------------------
 def test_reporte_asistencia_responde_el_envelope_paginado(client, db_session):
-    persona = _crear_persona(db_session, "Carla", "Mera", "1720020006")
+    persona = _crear_persona(db_session, "Carla", "Mera", cedula_valida(483))
     horario = _crear_horario(db_session)
     for i in range(5):
         _crear_asistencia(db_session, persona, horario, date(2026, 7, 1 + i))
@@ -165,7 +166,7 @@ def test_reporte_asistencia_total_respeta_los_filtros(client, db_session):
     tabla entera -- otro horario con más filas no puede inflarlo."""
     horario_a = _crear_horario(db_session, DiaSemana.LUNES)
     horario_b = _crear_horario(db_session, DiaSemana.MARTES)
-    persona = _crear_persona(db_session, "Dana", "Ruiz", "1720020007")
+    persona = _crear_persona(db_session, "Dana", "Ruiz", cedula_valida(484))
     for i in range(2):
         _crear_asistencia(db_session, persona, horario_a, date(2026, 7, 1 + i))
     for i in range(6):
@@ -181,7 +182,7 @@ def test_reporte_asistencia_total_respeta_los_filtros(client, db_session):
 
 
 def test_reporte_asistencia_pagina_sin_solape_con_orden_estable(client, db_session):
-    persona = _crear_persona(db_session, "Elsa", "Vega", "1720020008")
+    persona = _crear_persona(db_session, "Elsa", "Vega", cedula_valida(485))
     horario = _crear_horario(db_session)
     asistencias = [
         _crear_asistencia(db_session, persona, horario, date(2026, 7, 1 + i))

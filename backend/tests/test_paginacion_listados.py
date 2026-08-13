@@ -20,6 +20,7 @@ la guardia de regresión de ese tope.
 """
 from datetime import date, time
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import Categoria, DiaSemana, TipoEscuela, TipoRol
 from app.dominio.modelos import (
     AlumnoHorario, HorarioEntrenamiento, Institucion, Persona, Rol, Usuario,
@@ -125,7 +126,7 @@ def test_alumnos_por_horario_total_excluye_a_los_dados_de_baja(client, db_sessio
             db_session, f"Activo{i}", f"Apellido{i:02d}", f"172001070{i}"
         )
         db_session.add(AlumnoHorario(persona_id=alumno.id, horario_id=horario.id))
-    baja = _alta_alumno(db_session, "Baja", "Zulueta", "1720010799", activo=False)
+    baja = _alta_alumno(db_session, "Baja", "Zulueta", cedula_valida(490), activo=False)
     db_session.add(AlumnoHorario(persona_id=baja.id, horario_id=horario.id))
     db_session.commit()
 
