@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import time
 import uuid
 
 import redis
@@ -44,20 +45,62 @@ app = FastAPI(
     **urls_documentacion(settings.ambiente),
 )
 
-# --- Rate limiting -----------------------------------------------------------
-# Se deshabilita en ambiente de test (limiter es NoOpLimiter, ver rate_limit.py).
-if settings.ambiente != "test":
-    from slowapi import _rate_limit_exceeded_handler
-    from slowapi.errors import RateLimitExceeded
-    app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-
 # --- Respuesta de error consistente para frontend + backend -----------------
 # El frontend (Next.js) espera `message`; el backend original usa `detail`.
 # Devolvemos ambos para compatibilidad sin romper contratos existentes.
 def _respuesta_error(codigo: int, mensaje: str) -> JSONResponse:
     return JSONResponse(status_code=codigo, content={"detail": mensaje, "message": mensaje})
+
+
+# --- Rate limiting -----------------------------------------------------------
+# Se deshabilita en ambiente de test (limiter es NoOpLimiter, ver rate_limit.py).
+MENSAJE_LIMITE_EXCEDIDO = "Demasiadas solicitudes. Espere un momento e intente nuevamente."
+
+
+def _manejador_limite_excedido(request: Request, exc: Exception) -> JSONResponse:
+    """Reemplaza el handler default de slowapi (issue #235): ese devuelve
+    `{"error": "Rate limit exceeded: ..."}`, que rompe la convención
+    `{detail, message}` del resto de la API (ver `_respuesta_error` arriba,
+    documentada en el contrato de este archivo), y nunca manda
+    `Retry-After` -- el visitante no tenía forma de saber cuánto esperar.
+
+    Calcula `Retry-After` a mano en vez de delegar en
+    `Limiter._inject_headers` (lo que hace el handler default de slowapi):
+    ese método exige `headers_enabled=True` en el `Limiter`, y prender eso
+    globalmente (rate_limit.py) rompe con un 500 CUALQUIER respuesta
+    EXITOSA de un endpoint decorado que no declare `response: Response` de
+    más -- que es ninguno de los actuales (verificado con un `Limiter` real
+    en tests/test_rate_limit_por_visitante.py). `Limiter.limiter` (la
+    propiedad pública de slowapi que expone el `RateLimiter` de la librería
+    `limits`) y `get_window_stats` son la misma llamada pública que usa
+    `_inject_headers` internamente -- no hay nada privado acá.
+
+    `request.state.view_rate_limit` ya está poblado en este punto: slowapi
+    lo setea ANTES de lanzar `RateLimitExceeded`
+    (ver `Limiter.__evaluate_limits` en slowapi/extension.py).
+
+    Nunca deja que el cálculo del header tumbe el 429 en sí: si la vista del
+    límite falta o el backend de storage falla, se responde igual, sin
+    `Retry-After`, en vez de convertir un 429 legítimo en un 500.
+    """
+    respuesta = _respuesta_error(status.HTTP_429_TOO_MANY_REQUESTS, MENSAJE_LIMITE_EXCEDIDO)
+    vista_limite = getattr(request.state, "view_rate_limit", None)
+    if vista_limite:
+        limite_item, identificadores = vista_limite
+        try:
+            momento_reinicio, _restantes = request.app.state.limiter.limiter.get_window_stats(
+                limite_item, *identificadores
+            )
+            respuesta.headers["Retry-After"] = str(max(1, int(momento_reinicio - time.time()) + 1))
+        except Exception:
+            _log.warning("No se pudo calcular Retry-After para el 429", exc_info=True)
+    return respuesta
+
+
+if settings.ambiente != "test":
+    from slowapi.errors import RateLimitExceeded
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _manejador_limite_excedido)
 
 
 # --- Manejadores globales: traducen excepciones de dominio a códigos HTTP ---
