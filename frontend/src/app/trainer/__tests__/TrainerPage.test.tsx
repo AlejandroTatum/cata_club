@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import TrainerPage from "@/app/trainer/page";
 import type { TrainingSchedule, AttendanceRecord } from "@/app/attendance/attendance-utils";
-import type { RecentAttendanceSession } from "@/services/api";
+import type { AlumnoHorario, RecentAttendanceSession } from "@/services/api";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 
 vi.mock("@/components/ProtectedRoute", () => ({
@@ -53,13 +53,13 @@ vi.mock("next/image", () => ({
 
 const mockFetchTrainingSchedules = vi.fn();
 const mockFetchAttendanceRecords = vi.fn();
-const mockFetchAlumnosPorHorario = vi.fn();
+const mockFetchRosterDeTodosLosHorarios = vi.fn();
 const mockFetchRecentAttendanceSessions = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
-  fetchAlumnosPorHorario: (id: number) => mockFetchAlumnosPorHorario(id),
+  fetchRosterDeTodosLosHorarios: () => mockFetchRosterDeTodosLosHorarios(),
   fetchRecentAttendanceSessions: () => mockFetchRecentAttendanceSessions(),
   fetchNotificaciones: vi.fn().mockResolvedValue([]),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
@@ -136,13 +136,35 @@ function horarioLinks(): HTMLAnchorElement[] {
   return Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href*='horario=']"));
 }
 
+function alumno(horarioId: number): AlumnoHorario {
+  return {
+    id: Math.random(),
+    personaId: Math.random(),
+    personaNombreCompleto: "Alumno",
+    edad: 12,
+    horarioId,
+    horarioDia: "lun",
+    horarioHoraInicio: "15:00",
+    horarioHoraFin: "16:00",
+    fechaAsignacion: "2026-01-01",
+  };
+}
+
+// 12 enrolled in the hero session (id 1), 3 in the next one (id 2), and a
+// real, seeded 0 in the last (id 3) — issue #211's "no fabricated capacity"
+// rule cuts both ways: an empty class still SHOWS as 0, not as a blank.
+const ROSTER: AlumnoHorario[] = [
+  ...new Array(12).fill(null).map(() => alumno(1)),
+  ...new Array(3).fill(null).map(() => alumno(2)),
+];
+
 describe("TrainerPage — Mi día", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(NOW);
     mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
     mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
-    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(new Array(12).fill({}));
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
     mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
   });
 
@@ -170,7 +192,40 @@ describe("TrainerPage — Mi día", () => {
     // "inscritos", never "esperan": the count is of AlumnoHorario rows, and no
     // DTO says who actually turned up.
     expect(await screen.findByText(/12 estudiantes inscritos/)).toBeInTheDocument();
-    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(1);
+    expect(mockFetchRosterDeTodosLosHorarios).toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // "The rest of today" — the fix for QA's actual complaint: a card with
+  // ~250px of dead air between its five short lines and the mt-auto actions.
+  // -------------------------------------------------------------------------
+
+  it("fills the rest of the card with every OTHER session left today, roster counts included", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const list = screen.getByRole("list", { name: "Después, más tarde hoy" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("16:00 — 17:00")).toBeInTheDocument();
+    expect(screen.getByText("17:00 — 18:00")).toBeInTheDocument();
+    // The roster resolves after the initial render, so wait for it.
+    expect(await screen.findByText(/3 estudiantes inscritos/)).toBeInTheDocument();
+    // Schedule 3's real, seeded enrollment is 0 — shown, not hidden.
+    expect(screen.getByText(/0 estudiantes inscritos/)).toBeInTheDocument();
+    // No hidden or tabbable session link snuck in through the list.
+    expect(within(list).queryAllByRole("link")).toHaveLength(0);
+  });
+
+  it("does not block the 'rest of today' list when the roster fails to load", async () => {
+    mockFetchRosterDeTodosLosHorarios.mockRejectedValue(new Error("boom"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const list = screen.getByRole("list", { name: "Después, más tarde hoy" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
   });
 
   it("'next': the primary action names the session by its hour and calls the wizard's real query contract", async () => {
@@ -265,8 +320,8 @@ describe("TrainerPage — Mi día", () => {
     });
   });
 
-  it("does not block the card when the roster count cannot be loaded", async () => {
-    mockFetchAlumnosPorHorario.mockRejectedValue(new Error("boom"));
+  it("does not block the hero session's countdown when the roster fails to load", async () => {
+    mockFetchRosterDeTodosLosHorarios.mockRejectedValue(new Error("boom"));
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     render(<TrainerPage />);
