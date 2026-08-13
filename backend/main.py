@@ -6,6 +6,7 @@ import uuid
 
 import redis
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import create_engine, text
@@ -171,6 +172,24 @@ async def _integrity_error_handler(request: Request, exc: IntegrityError):
 @app.exception_handler(HTTPException)
 async def _http_exception_handler(request: Request, exc: HTTPException):
     return _respuesta_error(exc.status_code, str(exc.detail))
+
+
+# --- 422 de Pydantic también devuelve {detail, message} ---------------------
+# Sin este handler, FastAPI responde un 422 con `detail` como una LISTA de
+# errores -- y `frontend/src/services/api.ts::isApiErrorBody` exige que
+# `detail` sea un string, así que ese 422 nunca llegaba a leerse: caía al
+# `GENERIC_FAILURE` genérico aunque el `ValueError` de un `field_validator`
+# (cédula, teléfono -- PR 4b, issue #228) llevara un mensaje en castellano
+# perfectamente legible. Se toma el primer error nada más: como el resto de
+# esta app, un 422 informa UN dato rechazado por vez.
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(request: Request, exc: RequestValidationError):
+    errores = exc.errors()
+    mensaje = errores[0]["msg"] if errores else "Los datos enviados no son válidos."
+    prefijo_pydantic = "Value error, "
+    if mensaje.startswith(prefijo_pydantic):
+        mensaje = mensaje[len(prefijo_pydantic):]
+    return _respuesta_error(status.HTTP_422_UNPROCESSABLE_ENTITY, mensaje)
 
 app.add_middleware(
     CORSMiddleware,

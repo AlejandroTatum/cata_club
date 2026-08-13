@@ -6,6 +6,7 @@ from app.dominio.enums import TipoEscuela, NivelTecnicoAlumno, TipoSangre, TipoM
 from pydantic import EmailStr
 from app.presentacion.schemas.base import ResponseBase
 from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
+from app.presentacion.schemas.validadores import CedulaValidada, TelefonoValidado
 
 
 # --- Institucion ---
@@ -22,11 +23,11 @@ class InstitucionResponseDTO(ResponseBase, InstitucionCreateDTO):
 class PersonaCreateDTO(BaseModel):
     nombres: str = Field(..., min_length=1, max_length=100)
     apellidos: str = Field(..., min_length=1, max_length=100)
-    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     foto_url: Optional[str] = None
-    telefono: str = Field(..., max_length=15)
-    telefono_contacto: Optional[str] = Field(default=None, max_length=20)
+    telefono: TelefonoValidado = Field(..., max_length=32)
+    telefono_contacto: Optional[TelefonoValidado] = Field(default=None, max_length=32)
     representante_id: Optional[int] = None
     direccion_id: Optional[int] = None
     institucion_id: Optional[int] = None
@@ -42,9 +43,9 @@ class RepresentadoCreateDTO(BaseModel):
     Si se omiten, solo se crea la Persona (comportamiento anterior)."""
     nombres: str = Field(..., min_length=1, max_length=100)
     apellidos: str = Field(..., min_length=1, max_length=100)
-    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
-    telefono: str = Field(..., max_length=15, pattern=r"^\d{7,10}$")
+    telefono: TelefonoValidado = Field(..., max_length=32)
     ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
     correo: Optional[EmailStr] = None
     contrasenia: Optional[str] = Field(default=None, min_length=8)
@@ -59,14 +60,14 @@ class VincularRepresentadoDTO(BaseModel):
     solicitud, identificándola únicamente por cédula. A diferencia de
     `RepresentadoCreateDTO`, no crea nada -- solo reasigna
     `Persona.representante_id` de una fila que ya existe."""
-    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    cedula: CedulaValidada = Field(..., max_length=32)
 
 
 class PersonaUpdateDTO(BaseModel):
     nombres: Optional[str] = Field(default=None, min_length=1, max_length=100)
     apellidos: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    telefono: Optional[str] = Field(default=None, max_length=20, pattern=r"^\d{7,10}$")
-    telefono_contacto: Optional[str] = Field(default=None, max_length=20)
+    telefono: Optional[TelefonoValidado] = Field(default=None, max_length=32)
+    telefono_contacto: Optional[TelefonoValidado] = Field(default=None, max_length=32)
     foto_url: Optional[str] = None
     direccion_id: Optional[int] = None
     institucion_id: Optional[int] = None
@@ -144,7 +145,7 @@ class FichaMedicaCreateDTO(BaseModel):
     enfermedades: List[str] = Field(default_factory=list)  # nombres de enfermedades, opcional
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: Optional[str] = Field(default=None, max_length=150)
-    telefono_emergencia: Optional[str] = Field(default=None, max_length=15, pattern=r"^\d{7,10}$")
+    telefono_emergencia: Optional[TelefonoValidado] = Field(default=None, max_length=32)
 
 
 class FichaMedicaUpdateDTO(BaseModel):
@@ -155,7 +156,7 @@ class FichaMedicaUpdateDTO(BaseModel):
     enfermedades: Optional[List[str]] = None
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: Optional[str] = Field(default=None, max_length=150)
-    telefono_emergencia: Optional[str] = Field(default=None, max_length=15, pattern=r"^\d{7,10}$")
+    telefono_emergencia: Optional[TelefonoValidado] = Field(default=None, max_length=32)
 
 
 class FichaMedicaResponseDTO(ResponseBase, BaseModel):

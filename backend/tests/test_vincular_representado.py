@@ -505,3 +505,24 @@ def test_vincular_representado_cedula_invalida_da_422(client, db_session):
         json={"cedula": "123"},
     )
     assert resp.status_code == 422
+
+
+def test_vincular_representado_cedula_con_digito_verificador_incorrecto_da_422(client, db_session):
+    # PR 4b, issue #228: 10 dígitos no alcanza -- "1712345678" tiene el largo
+    # correcto pero el verificador debería ser 5, no 8. Prueba end-to-end la
+    # `_validation_exception_handler` de `main.py`: el 422 tiene que llegar
+    # como {detail, message} en castellano, no como la lista cruda de
+    # Pydantic (que el frontend descarta -- ver `services/api.ts`).
+    representante = _adulto("1710034073", nombres="Marcela")
+    db_session.add(representante)
+    db_session.commit()
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    resp = client.post(
+        f"/api/v1/personas/{representante.id}/vincular-representado",
+        json={"cedula": "1712345678"},
+    )
+    assert resp.status_code == 422
+    cuerpo = resp.json()
+    assert cuerpo["detail"] == "Ese número de cédula no es válido."
+    assert cuerpo["message"] == "Ese número de cédula no es válido."

@@ -11,15 +11,16 @@ from datetime import date
 from typing import Optional, List
 
 from app.dominio.enums import TipoSangre, NivelTecnicoAlumno, TipoManoDominante
+from app.presentacion.schemas.validadores import CedulaValidada, TelefonoValidado
 
 
 class EnrollmentRepresentanteDTO(BaseModel):
     """Datos del representante legal (solo para inscripción de hijo/dependiente)."""
     nombres: str = Field(..., min_length=1, max_length=100)
     apellidos: str = Field(..., min_length=1, max_length=100)
-    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
-    telefono: str = Field(..., max_length=15, pattern=r"^\d{7,10}$")
+    telefono: TelefonoValidado = Field(..., max_length=32)
     correo: EmailStr
     contrasenia: str = Field(..., min_length=8)
 
@@ -34,9 +35,9 @@ class EnrollmentAlumnoDTO(BaseModel):
       `credenciales_alumno`."""
     nombres: str = Field(..., min_length=1, max_length=100)
     apellidos: str = Field(..., min_length=1, max_length=100)
-    cedula: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
-    telefono: str = Field(..., max_length=15, pattern=r"^\d{7,10}$")
+    telefono: TelefonoValidado = Field(..., max_length=32)
     correo: Optional[EmailStr] = None
     contrasenia: Optional[str] = Field(default=None, min_length=8)
     institucion_id: Optional[int] = None
@@ -54,7 +55,7 @@ class EnrollmentFichaMedicaDTO(BaseModel):
     enfermedades: List[str] = Field(default_factory=list)
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: str = Field(..., min_length=1, max_length=150)
-    telefono_emergencia: str = Field(..., max_length=15, pattern=r"^\d{7,10}$")
+    telefono_emergencia: TelefonoValidado = Field(..., max_length=32)
 
 
 class EnrollmentAntecedentesDTO(BaseModel):

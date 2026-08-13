@@ -2,19 +2,20 @@
 Validación (y generación determinística) de la cédula ecuatoriana.
 
 La estructura del dígito verificador es una regla de negocio -- no una
-utilidad de test -- aunque hoy (PR 4a, sdd/identidad) solo la usen fixtures
-y seed de desarrollo. El PR 4b la cablea en los DTOs de `Persona` para
-rechazar cédulas inválidas en la entrada real: si ya está acá, ese PR solo
-la importa, no la reescribe. Vive en `dominio` en vez de duplicarse entre
-`tests/` y `scripts/` (que sí pueden importar de acá, a diferencia de
-`tests/` -> `scripts/` o viceversa) porque dos copias del mismo algoritmo
-es exactamente el defecto que este carril de identidad existe para borrar.
+utilidad de test -- aunque hasta el PR 4a (sdd/identidad) solo la usaran
+fixtures y seed de desarrollo. El PR 4b la cablea en los DTOs de `Persona`
+para rechazar cédulas inválidas en la entrada real. Vive en `dominio` en vez
+de duplicarse entre `tests/` y `scripts/` (que sí pueden importar de acá, a
+diferencia de `tests/` -> `scripts/` o viceversa) porque dos copias del
+mismo algoritmo es exactamente el defecto que este carril de identidad
+existe para borrar.
 
 Algoritmo (módulo 10):
   - 10 dígitos. Los dos primeros son la provincia: `01`-`24`, o `30` para
-    personas registradas en el exterior. `es_cedula_valida` NO valida este
-    rango -- valida sólo el dígito verificador (eso es, literalmente, lo
-    único que el PR 4b va a exigir en el DTO).
+    personas registradas en el exterior. `es_cedula_valida` SÍ valida este
+    rango (issue #228, "Comportamiento esperado" punto 2) -- una cédula con
+    provincia `00` o `99` es inválida aunque el dígito verificador cierre
+    por casualidad, como pasa con `0000000000`.
   - El décimo dígito es el verificador: coeficientes `2,1,2,1,2,1,2,1,2`
     sobre los primeros nueve; a cada producto mayor que 9 se le resta 9; se
     suman; el verificador es lo que falta para cerrar a la decena superior
@@ -24,6 +25,9 @@ Algoritmo (módulo 10):
 """
 
 _COEFICIENTES = (2, 1, 2, 1, 2, 1, 2, 1, 2)
+_PROVINCIA_MINIMA = 1
+_PROVINCIA_MAXIMA = 24
+_PROVINCIA_EXTERIOR = 30
 
 
 def digito_verificador_cedula(nueve_digitos: str) -> int:
@@ -40,10 +44,13 @@ def digito_verificador_cedula(nueve_digitos: str) -> int:
 
 
 def es_cedula_valida(cedula: str) -> bool:
-    """True si `cedula` son 10 dígitos y el décimo cierra el módulo 10 de
-    los primeros nueve. No valida la provincia -- ver el docstring del
-    módulo."""
+    """True si `cedula` son 10 dígitos, la provincia (dos primeros dígitos)
+    existe (`01`-`24` o `30`) y el décimo dígito cierra el módulo 10 de los
+    primeros nueve."""
     if len(cedula) != 10 or not cedula.isdigit():
+        return False
+    provincia = int(cedula[:2])
+    if not (_PROVINCIA_MINIMA <= provincia <= _PROVINCIA_MAXIMA or provincia == _PROVINCIA_EXTERIOR):
         return False
     return digito_verificador_cedula(cedula[:9]) == int(cedula[9])
 
