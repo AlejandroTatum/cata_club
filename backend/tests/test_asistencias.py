@@ -377,7 +377,7 @@ def _registrar_lista(client, persona_id, horario_id, fecha, estado):
 def test_listar_ultimas_listas_cuenta_los_cuatro_estados(client):
     horario = _crear_horario_api(client)
     estudiantes = [
-        _crear_persona_api(client, f"171003500{i}", f"Alumno{i}") for i in range(4)
+        _crear_persona_api(client, cedula_valida(8100 + i), f"Alumno{i}") for i in range(4)
     ]
     for persona, estado in zip(estudiantes, ["PRESENTE", "ATRASADO", "JUSTIFICADO", "AUSENTE"]):
         _registrar_lista(client, persona["id"], horario["id"], "2026-08-03", estado)

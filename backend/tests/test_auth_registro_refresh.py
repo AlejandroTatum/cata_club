@@ -113,10 +113,14 @@ def test_registro_con_rol_no_admin_devuelve_403(client, db_session):
 
 
 def test_registro_falla_si_cedula_no_tiene_persona(client, db_session):
+    # Cédula de formato válido (PR 4b, issue #228: la provincia "99" de
+    # "9999999999" ya no pasa el 422 de formato) pero sin ninguna Persona
+    # creada para ella en este test -- lo que se ejercita es el 404 de
+    # "no existe", no el de formato.
     _override_admin_token()
     resp = client.post(
         "/api/v1/auth/registro",
-        json={"cedula": "9999999999", "correo": "x@cataclub.com", "contrasenia": "clave12345"},
+        json={"cedula": cedula_valida(77777), "correo": "x@cataclub.com", "contrasenia": "clave12345"},
     )
     assert resp.status_code == 404
     assert "cédula" in resp.json()["detail"].lower() or "administrador" in resp.json()["detail"].lower()
