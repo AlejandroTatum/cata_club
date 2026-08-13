@@ -974,6 +974,21 @@ test.describe("G · Huecos de validación detectados", () => {
     await shot(page, "G06b", "recien-al-clickear-bloquea");
   });
 
+  test("G08 · un dependiente de 3 años pasa el formulario entero", async ({ page }) => {
+    await enterFromLogin(page);
+    await goToPersonal(page, "Representante");
+    await fillValidStudent(page);
+    await fillAndBlur(page, "Fecha de Nacimiento", isoYearsAgo(3));
+
+    // Verificado contra el servicio real: el backend exige 5 ≤ edad ≤ 74 para
+    // el alumno y contesta «La edad del alumno debe estar entre 5 y 74 años
+    // (calculado: 2)». El formulario no conoce ese piso, así que deja avanzar
+    // tres pasos más antes de que el visitante se entere.
+    await expectFieldValid(page, "Fecha de Nacimiento");
+    await expect(nextButton(page)).toBeEnabled();
+    await shot(page, "G08", "dependiente-menor-de-5-aceptado");
+  });
+
   test("G07 · un nombre de solo espacios se rechaza como vacío, no como corto", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");

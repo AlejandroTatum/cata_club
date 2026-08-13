@@ -13,7 +13,7 @@ formulario, con otras reglas y otro dueño. Ese quedó fuera.
 
 Suite Playwright determinista: `frontend/tests/e2e/enroll-qa.spec.ts`.
 
-- **67 casos, 67 verdes**, 68 capturas en `docs/auditoria-qa/img-inscripcion-2026-08-12/`.
+- **68 casos, 68 verdes**, 69 capturas en `docs/auditoria-qa/img-inscripcion-2026-08-12/`.
 - Cada caso entra **desde el login y clickeando «Inscríbase»**, no navegando a
   la URL. Si ese enlace se rompe, el flujo es inalcanzable para un visitante y
   ningún test de la página sola lo notaría.
@@ -42,18 +42,57 @@ campo fue tocado — un formulario en blanco no es un muro de rojo.
 Es un buen modelo. Los hallazgos de abajo son, casi todos, lugares donde ese
 modelo tiene un agujero.
 
+## Verificación contra el backend
+
+Antes de asignar severidades se mandaron los payloads exactos que el formulario
+deja pasar contra el **servicio real** de inscripción
+(`EnrollmentServicio.enroll`), no contra un mock. Resultado:
+
+| Caso | Respuesta del backend |
+|---|---|
+| Fecha futura (dependiente) | RECHAZADO — «debe estar entre 5 y 74 años (calculado: **-2**)» |
+| Fecha futura (autoinscripción) | RECHAZADO — mismo mensaje |
+| Edad 120 | RECHAZADO — «(calculado: 119)» |
+| Año 1750 | RECHAZADO — «(calculado: 278)» |
+| Dependiente de 3 años | RECHAZADO — «(calculado: 2)» |
+| **Control:** 5 años exactos | ACEPTADO (correcto) |
+
+El control importa tanto como los rechazos: sin él, una sonda rota devuelve
+"todo rechazado" y parece una buena noticia.
+
+**Conclusión: ningún dato malo llega a la base.** Los huecos de fecha y edad son
+defectos de **experiencia**, no de integridad. Eso baja la severidad de todos
+ellos — que es exactamente por lo que se hizo esta verificación antes de abrir
+los issues.
+
+> Una trampa que casi arruina esta medición: la suite del backend **congela
+> «hoy» en 2029-01-01** (`FECHA_CONGELADA_HOY` en `conftest.py`). El primer
+> intento ancló las fechas al calendario real y corrió cada caso 3 años: el
+> "dependiente de 3 años" era en verdad de 5 —justo el mínimo— y entró
+> correctamente, lo que se leía como un hueco del backend que no existe.
+
 ## Veredicto
 
-**No hay bloqueantes.** Las reglas declaradas se cumplen sin excepción: los 47
-casos de validación de campo dieron exactamente el mensaje esperado, los bordes
-de edad (18 exactos, 17 años y 11 meses, 74, 80) caen del lado correcto, y
-ningún error del servidor —500, 422, caída de red— filtra texto interno a la
-pantalla.
+**No hay bloqueantes, y ninguno es de integridad de datos.** Las reglas
+declaradas se cumplen sin excepción: los 47 casos de validación de campo dieron
+exactamente el mensaje esperado, los bordes de edad (18 exactos, 17 años y 11
+meses, 74, 80) caen del lado correcto, y ningún error del servidor —500, 422,
+caída de red— filtra texto interno a la pantalla.
 
-Lo que aparecieron son **siete huecos**: no reglas rotas, sino reglas que faltan
-o que se aplican de un lado y no del otro. Cuatro de ellos son la misma historia
-contada cuatro veces: **la fecha de nacimiento del estudiante casi no se
-valida**.
+Lo que apareció son **ocho huecos que se reducen a cuatro causas raíz**. Y la
+principal, ya con la verificación en la mano, se puede enunciar en una línea:
+
+> **El backend tiene UNA regla para el alumno —`5 ≤ edad ≤ 74`— y el formulario
+> público no implementa casi nada de ella.**
+
+Cinco de los ocho hallazgos son esa sola ausencia, vista desde cinco ángulos.
+
+Lo que lo vuelve un defecto y no una decisión de diseño: **los otros dos
+asistentes del mismo repo sí la implementan.**
+`add-dependent-utils.ts` tiene `EDAD_MINIMA_ALUMNO = 5`, `EDAD_MAXIMA_ALUMNO = 74`
+y un `isFutureDate` explícito; `crear-cuenta-utils.ts` tiene las mismas dos
+constantes. La regla ya está escrita dos veces en el código — solo que no en el
+formulario por el que entra el público.
 
 ## Hallazgos
 
@@ -61,15 +100,22 @@ Cada uno tiene su caso en la suite y su captura. Los casos `G*` afirman el
 comportamiento **tal cual es hoy**: si mañana se cierra el hueco, el test se
 pone rojo y obliga a actualizar este informe.
 
-| ID | Severidad | Hallazgo | Captura |
-|---|---|---|---|
-| G01 | Media | Una fecha de nacimiento **futura** se rechaza con el mensaje equivocado | `G01-fecha-futura-mensaje-equivocado.png` |
-| G02 | **Alta** | Una fecha **futura** en un dependiente **pasa el paso sin una queja** | `G02-dependiente-fecha-futura-aceptada.png` |
-| G03 | Media | **No hay techo de edad** para autoinscribirse: 120 años avanza | `G03-sin-techo-de-edad-jugador.png` |
-| G04 | Media | El año 1750 que el representante rechaza, el jugador lo acepta | `G04-jugador-anio-1750-aceptado.png` |
-| G05 | Media | El **11º dígito de la cédula desaparece** sin decir nada | `G05-cedula-11o-digito-descartado.png` |
-| G06 | Baja | Credenciales a medias: «Siguiente» se ve habilitado y falla al clickear | `G06a-…`, `G06b-…` |
-| G07 | Informativo | Un nombre de solo espacios se rechaza como vacío (correcto) | `G07-nombres-solo-espacios.png` |
+| ID | Severidad | Causa raíz | Hallazgo | Captura |
+|---|---|---|---|---|
+| G02 | Media | **A** | Fecha **futura** en un dependiente pasa sin una queja | `G02-dependiente-fecha-futura-aceptada.png` |
+| G01 | Media | **A** | Fecha **futura** en autoinscripción: rechazada con el mensaje equivocado | `G01-fecha-futura-mensaje-equivocado.png` |
+| G08 | Media | **A** | Un dependiente de **3 años** pasa el formulario entero | `G08-dependiente-menor-de-5-aceptado.png` |
+| G03 | Media | **A** | **Sin techo de edad** para autoinscribirse: 120 años avanza | `G03-sin-techo-de-edad-jugador.png` |
+| G04 | Baja | **A** | El año 1750 que el representante rechaza, el jugador lo acepta | `G04-jugador-anio-1750-aceptado.png` |
+| G05 | Media | **B** | El **11º dígito de la cédula desaparece** sin decir nada | `G05-cedula-11o-digito-descartado.png` |
+| G06 | Baja | **C** | Credenciales a medias: «Siguiente» habilitado, falla al clickear | `G06a-…`, `G06b-…` |
+| G07 | — | — | Un nombre de solo espacios se rechaza como vacío (correcto, no es hallazgo) | `G07-nombres-solo-espacios.png` |
+
+**Causa raíz A** — el formulario público no aplica las cotas de edad del alumno
+(`5 ≤ edad ≤ 74`) ni rechaza fechas futuras. Cinco síntomas, un solo arreglo.
+**Causa raíz B** — `maxLength` recorta en el input en lugar de validar.
+**Causa raíz C** — una regla es de paso y no de campo, y rompe el modelo de
+prevención de errores del resto del asistente.
 
 ### G01 · La fecha futura se rechaza por el motivo equivocado
 
@@ -86,7 +132,7 @@ a resolver el problema equivocado.
 
 ### G02 · La misma fecha futura, en un dependiente, entra
 
-Este es el más serio de los siete, y es la contracara exacta de G01.
+Es la contracara exacta de G01, y el síntoma más visible de la causa raíz A.
 
 La regla de edad del estudiante **solo corre para la autoinscripción**. En una
 inscripción de hijo o dependiente, a la fecha de nacimiento no se le mira nada
@@ -109,6 +155,25 @@ la trató como un dato normal.
 Que en G01 la validación acierte por accidente y en G02 no exista es la misma
 ausencia: **falta una regla de fecha futura**, y donde la regla de edad no la
 tapa por casualidad, el dato entra.
+
+### G08 · Un dependiente de 3 años pasa el formulario entero
+
+Este apareció recién al probar contra el backend, y es el que mejor muestra el
+costo de la causa raíz A.
+
+El backend exige **5 años como mínimo** para el alumno. El formulario público no
+conoce ese piso: un dependiente de 3 años avanza el paso, y sigue avanzando los
+tres pasos siguientes —representante, salud, resumen— hasta que confirma. Recién
+ahí el backend contesta **«La edad del alumno debe estar entre 5 y 74 años
+(calculado: 2)»**.
+
+El dato nunca entra a la base. Pero el visitante llenó un formulario completo
+—incluida la ficha médica— para enterarse al final de algo que se sabía en el
+segundo campo. Eso es exactamente lo que el modelo de «deshabilitar Siguiente»
+existe para evitar.
+
+Y el detalle que lo vuelve difícil de defender: `add-dependent-utils.ts`, el
+asistente hermano, **ya valida esto** con el mensaje correcto y en el campo.
 
 ### G03 y G04 · El estudiante no tiene techo de edad; el representante sí
 
@@ -214,14 +279,16 @@ se ahorra el rato.
 
 ## Qué falta
 
-Este QA cubre el frontend. Queda sin verificar, y necesita `make qa-up` con base
-sembrada:
+La pregunta que más importaba —si el backend ataja lo que el formulario deja
+pasar— quedó contestada arriba: **sí lo ataja, todo.**
 
-- Que una **cédula realmente duplicada** en la base sea rechazada por el backend.
-- Que un **correo ya registrado** no divulgue la existencia de la cuenta.
-- Que el backend **rechace** los datos que G02, G03 y G04 dejan pasar por el
-  frontend. Si los rechaza, los tres son defectos de experiencia. Si no, son
-  defectos de integridad de datos, y suben de severidad.
+Queda sin verificar, y necesita `make qa-up` con base sembrada:
 
-Esa última es la pregunta que más importa de las tres, y es la que este QA no
-puede contestar.
+- Que una **cédula realmente duplicada** en la base sea rechazada. El backend
+  tiene el chequeo (`obtener_por_cedula` → `EntidadDuplicada`), pero acá se probó
+  el 409 simulado, no el real.
+- Que un **correo ya registrado** no divulgue la existencia de la cuenta. Hay
+  tests de unidad que lo cubren (`test_mensajes_identidad_duplicada.py`); falta
+  verlo de punta a punta.
+
+Ninguna de las dos cambia la severidad de los hallazgos de este informe.
