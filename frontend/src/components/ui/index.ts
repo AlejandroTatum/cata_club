@@ -40,9 +40,6 @@ export { PAGE_RAIL } from "./layout";
 export { default as LoadingState } from "./LoadingState";
 export type { LoadingStateProps } from "./LoadingState";
 
-export { default as MemberCard } from "./MemberCard";
-export type { MemberCardProps } from "./MemberCard";
-
 export { default as Pagination } from "./Pagination";
 export type { PaginationProps } from "./Pagination";
 
