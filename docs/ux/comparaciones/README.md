@@ -88,10 +88,13 @@ quedan **destacadas** en esa última sección, no enterradas en un párrafo.
 | Fase | Qué | Estado |
 |---|---|---|
 | F1 | Fundación: tokens, tipografía, primitivas, riel | ✅ |
-| F2 | La landing renovada — la trabaja Alejandro | pendiente |
+| F2 | La landing renovada — la trabaja Alejandro. **Espera el OK del cliente** | pendiente |
 | F3 | Tres faros: Miembros · Inscripción · Login y Perfil | 1 de 3 |
-| — | **Demo al cliente sobre la app funcionando** | — |
-| F4 | El barrido de las 30 pantallas, en tres tandas | pendiente |
+| F4 | El barrido de las 24 pantallas restantes | pendiente |
 
 Los faros están elegidos por contraste, no por importancia: una tabla densa, un formulario largo y
-la cara al socio. Si el sistema aguanta esos tres, aguanta los treinta que siguen.
+la cara al socio. Si el sistema aguanta esos tres, aguanta los que siguen.
+
+**La demo al cliente dejó de ser compuerta** (14/08/2026). El cliente ya dio por bueno el sistema y
+su única acotación fue la landing, así que la calidad del producto la decide Alejandro y el barrido
+no espera aprobación externa. **La landing es la única que sí la necesita antes de entregarse.**

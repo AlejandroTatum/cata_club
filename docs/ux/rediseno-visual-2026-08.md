@@ -272,8 +272,16 @@ que dijo. Esta vez la validación pasa por la app funcionando.
 |---|---|
 | **F1** | Fundación — fuentes, tokens de marca, primitivas, `AppShell` |
 | **F2** | La landing renovada. **Revisor: el cliente** |
-| **F3** | Tres faros en la app real: `/members` (tabla densa), `/student/enroll` (formulario largo), `/login` + `/profile` (la cara al socio) → **demo al cliente** |
+| **F3** | Tres faros en la app real: `/members` (tabla densa), `/student/enroll` (formulario largo), `/login` + `/profile` (la cara al socio) |
 | **F4** | El barrido de las 30, en tres tandas: socio, entrenador, admin |
+
+**Corrección del 14/08/2026 — la demo al cliente deja de ser compuerta.** Esta tabla decía que F4
+esperaba una demo al cliente después de los tres faros. Alejandro la retiró: el cliente ya dio por
+bueno el sistema en la reunión y su única acotación fue la landing, así que **la calidad del
+producto es decisión suya, no de una aprobación externa**. Los faros siguen siendo los tres
+primeros —están elegidos por contraste y siguen sirviendo para detectar temprano un problema de
+sistema—, pero el barrido no espera. **La landing sigue siendo la única que necesita el OK del
+cliente antes de entregarse.**
 
 El socio primero: el admin usa la herramienta porque le pagan, el socio la abandona.
 
