@@ -750,3 +750,90 @@ describe("no screen paints with Tailwind's default palette", () => {
     expect(RAW_PALETTE_DEBT.filter((file) => !files.has(file))).toEqual([]);
   });
 });
+
+describe("D9's two shared pieces — the identity cell's role chips and the week strip", () => {
+  // Both live in a dense table, and a table in this product stands on `paper`
+  // (a card) and on `canvas` (the page field) depending on the screen. The
+  // pairs below are split along that fact: a label printed on an OPAQUE fill
+  // does not change when the surface underneath changes, so the label pairs are
+  // measured once, and it is the FILLS that are measured against both fields.
+  const SURFACE_STEP = 1.09;
+  /** `bg-coal/[0.08]` — the identity accent, over each field it can land on. */
+  const AVATAR_ON_PAPER = compositeOver(coal.DEFAULT, PAPER, 0.08);
+  const AVATAR_ON_CANVAS = compositeOver(coal.DEFAULT, CANVAS, 0.08);
+
+  it("meets AA for a role label on the chip fill it is printed on", () => {
+    // The chip wears the `DataBox` skin — `ink-2` on `sunken`. The tertiary
+    // button block above measures the same token pair for a different
+    // component; this is the chip's own lock, because the chip is what breaks
+    // if either half of the skin is retuned.
+    const ratio = contrastRatio(ink["2"], SUNKEN);
+    expect(ratio, `ink-2 on sunken measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("confirms the quieter chip tint could not have carried the chip on the canvas", () => {
+    // `state-neutral-bg` was the other candidate fill: it is the flattest tint
+    // in the palette and would have made the role line quieter, which in a
+    // dense cell is a real argument. On `paper` it clears the ladder's rung;
+    // on the page field it is 1.063:1 — a chip nobody can see the edge of.
+    expect(contrastRatio(state["neutral-bg"], PAPER)).toBeGreaterThanOrEqual(SURFACE_STEP);
+    expect(contrastRatio(state["neutral-bg"], CANVAS)).toBeLessThan(SURFACE_STEP);
+  });
+
+  it.each([
+    ["paper", PAPER],
+    ["canvas", CANVAS],
+  ])("keeps the identity accent readable as a disc on %s", (name, surface) => {
+    const fill = name === "paper" ? AVATAR_ON_PAPER : AVATAR_ON_CANVAS;
+    expect(contrastRatio(fill, surface), `the accent fill measures ${contrastRatio(fill, surface).toFixed(3)}:1 on ${name}`)
+      .toBeGreaterThanOrEqual(SURFACE_STEP);
+    expect(contrastRatio(coal.DEFAULT, fill)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the letter in a day that runs", () => {
+    const ratio = contrastRatio("#FFFFFF", cata.red);
+    expect(ratio, `white on cata-red measures ${ratio.toFixed(2)}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the letter in a day that does not", () => {
+    // `ink-3` is the muted ink a dimmed box reaches for by reflex, and the
+    // block above already records that it is 4.21:1 on this fill. The strip
+    // takes `ink-3-strong`, the companion that exists for exactly the surfaces
+    // that are not `paper`.
+    const ratio = contrastRatio(ink["3-strong"], SUNKEN);
+    expect(ratio, `ink-3-strong on sunken measures ${ratio.toFixed(2)}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it.each([
+    ["paper", PAPER],
+    ["canvas", CANVAS],
+  ])("keeps both kinds of box visible as boxes on %s", (_name, surface) => {
+    // The idle fill is the ladder's own rung again; the lit fill is a control
+    // fill and is held to 1.4.11's 3:1, because on a row where every day is
+    // lit the red boxes are the only thing marking the seven positions.
+    expect(contrastRatio(SUNKEN, surface)).toBeGreaterThanOrEqual(SURFACE_STEP);
+    expect(contrastRatio(cata.red, surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it("clears 3:1 between a day that runs and the day beside it that does not", () => {
+    // This is the pair WCAG 1.4.11 actually hangs on here: the information the
+    // strip carries is WHICH boxes are lit, so the boundary that has to be
+    // perceivable is lit against unlit, not box against page.
+    const ratio = contrastRatio(cata.red, SUNKEN);
+    expect(ratio, `the lit fill measures ${ratio.toFixed(2)}:1 against the idle one`)
+      .toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it("confirms an outline could not have been what distinguishes an idle box", () => {
+    // The measurement that decided the idle box has no border. Both hairlines
+    // are far under the non-text threshold on this fill, so a bordered box
+    // would have been a box whose edge is decoration — the seven positions are
+    // marked by the seven letters (5.40:1, text) and by the fill, both of
+    // which are measured above.
+    expect(contrastRatio(line.DEFAULT, SUNKEN)).toBeLessThan(AA_NON_TEXT);
+    expect(contrastRatio(line["2"], SUNKEN)).toBeLessThan(AA_NON_TEXT);
+  });
+});

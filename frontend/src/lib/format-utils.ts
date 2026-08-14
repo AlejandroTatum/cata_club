@@ -142,3 +142,29 @@ export function formatDateRange(startStr: string, endStr: string): string {
   if (start && end) return `${start} – ${end}`;
   return start || end;
 }
+
+/**
+ * Join a list of names into one Spanish enumeration — "Ana", "Ana y Luis",
+ * "Ana, Luis y Sofía".
+ *
+ * It lives here for the same reason `formatDate` does: the product had already
+ * grown one private copy of this grammar (`joinWithY` in
+ * `app/groups/groups-page-utils.ts:159`, which builds a categoría's day line),
+ * and the two shared primitives that arrived with D9 — the identity cell's
+ * "Representante de …" and the week strip's accessible label — would have made
+ * three. A separator is a format, and formats live in one file.
+ *
+ * Blank entries are dropped rather than joined, because the visible failure of
+ * an enumeration is never a missing item: it is the ", y" or the " y " with
+ * nothing on one side of it, which reads as a bug in a way an absent name does
+ * not. An empty list returns an empty string so the caller can branch on it
+ * instead of receiving a lone conjunction.
+ *
+ * No Oxford comma: Spanish does not take one ("Ana, Luis y Sofía").
+ */
+export function joinWithY(parts: readonly string[]): string {
+  const kept = parts.filter((part) => part.trim() !== "");
+  if (kept.length === 0) return "";
+  if (kept.length === 1) return kept[0];
+  return `${kept.slice(0, -1).join(", ")} y ${kept[kept.length - 1]}`;
+}
