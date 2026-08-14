@@ -184,11 +184,16 @@ describe("TrainerPage — Mi día", () => {
   // The immediate-session card's four states.
   // -------------------------------------------------------------------------
 
-  it("'next': leads with the countdown, the session's hours and the roster count", async () => {
+  // The figure is the hour in both states now, and the wait is a sentence —
+  // see the renegotiation note in `SessionCard.test.tsx`. What this test is
+  // about (which session leads, and that the roster count is fetched and
+  // worded as "inscritos") did not move.
+  it("'next': leads with the session's hour, the wait in words and the roster count", async () => {
     render(<TrainerPage />);
 
     expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    expect(screen.getByText("25")).toBeInTheDocument();
+    expect(screen.getByText("15:00")).toBeInTheDocument();
+    expect(screen.getByText("Empieza en 25 minutos")).toBeInTheDocument();
     // "inscritos", never "esperan": the count is of AlumnoHorario rows, and no
     // DTO says who actually turned up.
     expect(await screen.findByText(/12 estudiantes inscritos/)).toBeInTheDocument();
@@ -278,7 +283,7 @@ describe("TrainerPage — Mi día", () => {
     expect(horarioLinks()).toHaveLength(0);
   });
 
-  it("rest day: the card does not render at all, and no session link exists in the tree", async () => {
+  it("rest day: the session card does not render at all, and no session link exists in the tree", async () => {
     mockFetchTrainingSchedules.mockResolvedValue([
       { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
     ]);
@@ -286,8 +291,37 @@ describe("TrainerPage — Mi día", () => {
 
     await screen.findByText("Distribución de asistencias");
     expect(screen.queryByText(/Pasar lista de las/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Elegir otro horario")).not.toBeInTheDocument();
+    // `SessionCard` still renders NOTHING for `state === null` — the guard the
+    // whole component is built around is untouched.
     expect(screen.queryByLabelText("Tu día de hoy")).not.toBeInTheDocument();
+    expect(horarioLinks()).toHaveLength(0);
+  });
+
+  /*
+   * Renegotiated in the trainer sweep, with the reason written: this used to
+   * assert that "Elegir otro horario" was absent on a rest day, which was true
+   * because the screen said NOTHING about a day with no sessions — the card
+   * simply vanished and the summary took the whole row. DESIGN.md's "regla del
+   * estado flaco" was written about this very screen, and D11 asks an empty
+   * state for three things: what is missing, why, and what to do. The exit is
+   * the generic picker, which carries no `horario=` — the safety rule the
+   * assertion above protects is unchanged and still asserted.
+   */
+  it("rest day: says so, says why, and still offers the picker as the way out", async () => {
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
+    ]);
+    render(<TrainerPage />);
+
+    expect(await screen.findByText("Hoy no hay entrenamientos")).toBeInTheDocument();
+    // The day is named, and it is TODAY's day — not a fixed string.
+    expect(
+      screen.getByText(/El club no tiene sesiones programadas para hoy, lunes\./),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
+      "href",
+      "/trainer/attendance",
+    );
     expect(horarioLinks()).toHaveLength(0);
   });
 
@@ -330,7 +364,7 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    expect(screen.getByText("25")).toBeInTheDocument();
+    expect(screen.getByText("Empieza en 25 minutos")).toBeInTheDocument();
     expect(screen.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
   });
 
@@ -450,10 +484,20 @@ describe("TrainerPage — Mi día", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("puts the two top cards in one row on desktop, and drops that constraint on a rest day", async () => {
+  it("keeps the two top cards in one row on desktop, on a rest day too", async () => {
     const { container: withSession } = render(<TrainerPage />);
     await screen.findByText("Lunes 15:00 — 16:00");
     expect(withSession.querySelector(".split\\:grid-cols-2")).not.toBeNull();
+
+    // The row used to collapse to one column on a rest day, which left the
+    // summary card 1150px wide around a 260px donut. The slot is not empty any
+    // more — it carries the rest-day statement — so the pair keeps its shape.
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
+    ]);
+    const { container: restDay } = render(<TrainerPage />);
+    await screen.findAllByText("Distribución de asistencias");
+    expect(restDay.querySelector(".split\\:grid-cols-2")).not.toBeNull();
   });
 
   it("scopes the header row correctly: exactly one primary action reaches the DOM", async () => {

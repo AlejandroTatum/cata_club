@@ -1056,6 +1056,47 @@ describe("AppShell — the rail of a person with several roles", (): void => {
     ]);
   });
 
+  /*
+   * The brand block's second line names the AREA the rail covers. It used to
+   * read the COLLAPSED role, which is a single value picked by precedence, so
+   * a trainer who also plays was told he was in the "Panel de gestión" while
+   * the rail under it drew a "Mi cuenta" group — the shell contradicting
+   * itself two rows apart. It reads the same role ARRAY the rail does now, and
+   * when the person spans both areas it names neither: the group rótulos are
+   * already there, saying it properly, and one label cannot be honest about
+   * two areas.
+   */
+  it("names the area from the same roles the rail is drawn from", (): void => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
+    const { unmount } = render(<AppShell title="Mi día">{null}</AppShell>);
+    expect(screen.getByText("Panel de gestión")).toBeInTheDocument();
+    unmount();
+
+    mockUseAuth.mockReturnValue(
+      createMultiRoleAuth(["REPRESENTANTE", "ALUMNO"], "representante", "Marta Vera"),
+    );
+    const family = render(<AppShell title="Mi cuenta">{null}</AppShell>);
+    // The area line, not the `/student` row: the destination registry names
+    // that row "Mi cuenta" too, so the words alone cannot tell them apart.
+    expect(screen.getByText("Mi cuenta", { selector: ".text-2xs" })).toBeInTheDocument();
+    expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
+    family.unmount();
+  });
+
+  it("claims no single area for the person who holds both, and lets the rótulos say it", (): void => {
+    mockUseAuth.mockReturnValue(
+      createMultiRoleAuth(["ENTRENADOR", "ALUMNO"], "trainer", "Carlos Entrenador"),
+    );
+
+    render(<AppShell title="Mi día">{null}</AppShell>);
+
+    expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
+    // The two rótulos still name both areas, which is the honest version of
+    // the same statement.
+    expect(rail().getByText("Entrenar")).toBeInTheDocument();
+    expect(rail().getByText("Mi cuenta", { selector: "p" })).toBeInTheDocument();
+  });
+
   it("names each group for the assistive technology that cannot see the rótulo", (): void => {
     mockUseAuth.mockReturnValue(
       createMultiRoleAuth(["ENTRENADOR", "ALUMNO"], "trainer", "Carlos Entrenador"),

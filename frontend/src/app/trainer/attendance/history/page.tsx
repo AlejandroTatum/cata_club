@@ -52,7 +52,6 @@ import { ICON } from "@/lib/icon-size";
 import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
 import {
-  Badge,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -68,23 +67,21 @@ import {
   buttonClasses,
 } from "@/components/ui";
 import {
-  getAttendanceBadgeTone,
-  getAttendanceLabel,
   getTotalPages,
   paginateRecords,
   type AttendanceRecord,
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
-import type { EstadoAsistencia } from "@/types/domain";
 import { formatDate } from "@/lib/format-utils";
 import { groupRecordsBySession, type SessionSummary } from "../../trainer-day-utils";
+import {
+  SessionCompositionBar,
+  SessionCompositionCounts,
+} from "../../SessionComposition";
 import { buildWizardQuery } from "../attendance-utils";
 
 /** Sessions per page. */
 const PAGE_SIZE = 10;
-
-/** Best news first, same order as every other attendance surface. */
-const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
 
 /**
  * Where "Corregir" goes: that session's roll call, already open.
@@ -222,16 +219,24 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                             sub={sessionRow.horario}
                           />
                           <TableCell>
-                            <div className="flex flex-wrap gap-[5px]">
-                              {/* The state name rides along as real,
-                                  visible text — a bare "9" next to a
-                                  colored dot forced every reader to
-                                  memorize what each color meant. */}
-                              {STATE_ORDER.map((estado) => (
-                                <Badge key={estado} tone={getAttendanceBadgeTone(estado)}>
-                                  {sessionRow.counts[estado]} {getAttendanceLabel(estado)}
-                                </Badge>
-                              ))}
+                            {/*
+                              The composition, drawn the way the panel already
+                              draws it on "Mi día" — see `SessionComposition`
+                              for why there is only one drawing of it now. The
+                              state name still rides along as real, visible
+                              text: a bare "9" next to a colored dot would
+                              force every reader to memorize what each color
+                              meant.
+                            */}
+                            <div className="flex min-w-[220px] max-w-[420px] flex-col gap-2">
+                              <SessionCompositionBar
+                                counts={sessionRow.counts}
+                                total={sessionRow.total}
+                              />
+                              <SessionCompositionCounts
+                                counts={sessionRow.counts}
+                                total={sessionRow.total}
+                              />
                             </div>
                           </TableCell>
                           <TableCell align="right">

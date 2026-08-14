@@ -53,6 +53,7 @@ import {
   type NavGroup,
   type NavLinkDef,
 } from "@/lib/auth-utils";
+import type { UserRole } from "@/types/domain";
 import { isMinor } from "@/app/student/student-utils";
 import { normalizeText } from "@/app/members/members-utils";
 import { useNotificaciones } from "@/lib/useNotificaciones";
@@ -322,9 +323,27 @@ export function resolveActiveHref(navLinks: NavLinkDef[], pathname: string): str
  * The brand block's second line. Prototype `_nav-admin.html` uses a fixed
  * per-area label ("Panel de gestión" for staff, "Mi cuenta" for the family
  * portal) — it names the AREA, not the current page.
+ *
+ * It reads the whole role ARRAY, the same source the rail below it is built
+ * from. It used to read the COLLAPSED role — one value picked by precedence —
+ * and D12d had already moved the rail off that value precisely because it
+ * cannot describe a person who holds more than one: a trainer who also plays
+ * was told "Panel de gestión" while the rail under him drew a "Mi cuenta"
+ * group, the shell contradicting itself two rows apart.
+ *
+ * `null` for that person, deliberately: the rail draws a rótulo per area the
+ * moment there are two of them, so the areas ARE named, correctly, 40px below.
+ * A single label there could only be half true, and the brand block is not the
+ * place to pick a favourite.
  */
-function getAreaLabel(role: string | null): string {
-  return role === "representante" || role === "estudiante" ? "Mi cuenta" : "Panel de gestión";
+export function getAreaLabel(roles: readonly UserRole[]): string | null {
+  const staff = roles.some((role) => role === "admin" || role === "trainer");
+  const family = roles.some((role) => role === "representante" || role === "estudiante");
+  if (staff && family) return null;
+  if (family) return "Mi cuenta";
+  // Includes the unauthenticated and unrecognised-role rails, which have kept
+  // this label since the prototype.
+  return "Panel de gestión";
 }
 
 /** `.nav-i` — 40px row, 10px radius, 13.5px label. */
@@ -402,13 +421,19 @@ export default function AppShell({
    * same destination twice. `Header`, which has no brand row of its own, keeps
    * it. A group emptied by that filter is not drawn at all.
    */
+  const heldRoles = useMemo<UserRole[]>(
+    () => (session ? userRolesFromBackendRoles(session.roles) : []),
+    [session],
+  );
   const navGroups = useMemo<NavGroup[]>(
     () =>
-      getNavGroupsForRoles(session ? userRolesFromBackendRoles(session.roles) : [], studentIsAdult)
+      getNavGroupsForRoles(heldRoles, studentIsAdult)
         .map((group) => ({ ...group, links: group.links.filter((link) => link.href !== "/") }))
         .filter((group) => group.links.length > 0),
-    [session, studentIsAdult],
+    [heldRoles, studentIsAdult],
   );
+  /** The brand block's area line — same roles, same source as the rail. */
+  const areaLabel = getAreaLabel(heldRoles);
   /**
    * Whether the rótulos are drawn at all.
    *
@@ -659,9 +684,11 @@ export default function AppShell({
               {/* 50%, not the spec's 42%: white at 0.42 over `coal` composites
                   to 4.10:1, under AA. At 0.50 it measures 5.36:1 and still
                   reads as the quieter second line under the club name. */}
-              <span className="mt-px block truncate text-2xs font-bold uppercase text-white/50">
-                {getAreaLabel(role)}
-              </span>
+              {areaLabel && (
+                <span className="mt-px block truncate text-2xs font-bold uppercase text-white/50">
+                  {areaLabel}
+                </span>
+              )}
             </span>
           </Link>
           <button

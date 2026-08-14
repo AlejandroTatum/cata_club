@@ -45,7 +45,17 @@ describe("SessionCard", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("'next': the countdown is the big number, and the primary action names the session by its hour", () => {
+  /*
+   * Renegotiated in the trainer sweep of the visual redesign, with the reason
+   * written: this used to assert the raw minute count as the 46px figure
+   * (`getByText("25")`). A minute count only reads as a quantity for about an
+   * hour — the panel opened at 03:20 on a Friday whose first session is at
+   * 15:00 printed "700 minutos" — so the figure is now the session's own
+   * identifier, its start hour, in BOTH states, and the wait is said in words
+   * underneath. Nothing about which session, which link or which label
+   * changed; those assertions are untouched below.
+   */
+  it("'next': the hour is the big number, the wait is said in words, and the primary action names the session by its hour", () => {
     const state: SessionCardState = {
       kind: "next",
       schedule: schedule(7, "15:00", "16:00"),
@@ -55,7 +65,11 @@ describe("SessionCard", () => {
     };
     render(<SessionCard state={state} enrolledCounts={{ 7: 12 }} />);
 
-    expect(screen.getByText("25")).toBeInTheDocument();
+    expect(screen.getByText("15:00")).toBeInTheDocument();
+    expect(screen.getByText("Próxima sesión")).toBeInTheDocument();
+    expect(screen.getByText("Empieza en 25 minutos")).toBeInTheDocument();
+    // The number that used to be here said nothing on its own.
+    expect(screen.queryByText("25")).not.toBeInTheDocument();
     expect(screen.getByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
     expect(screen.getByText(/12 estudiantes inscritos/)).toBeInTheDocument();
 
@@ -67,7 +81,7 @@ describe("SessionCard", () => {
     );
   });
 
-  it("'live': the start hour becomes the big number, and 'En curso' is written, not only colored", () => {
+  it("'live': the start hour stays the big number, and 'En curso' is written, not only colored", () => {
     const state: SessionCardState = {
       kind: "live",
       schedule: schedule(7, "15:00", "16:00"),

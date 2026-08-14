@@ -37,7 +37,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { CalendarCheck } from "lucide-react";
+import Link from "next/link";
+import { CalendarCheck, CalendarOff } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -47,9 +48,10 @@ import {
   fetchRecentAttendanceSessions,
   type RecentAttendanceSession,
 } from "@/services/api";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
+import { EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import {
   buildAttendanceStats,
+  formatDay,
   type AttendanceRecord,
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
@@ -189,13 +191,37 @@ export default function TrainerPage(): React.ReactElement {
               Two symmetric cards on desktop (`split:grid-cols-2`), sharing
               height. `SessionCard` anchors its actions to the bottom with
               `mt-auto` so the surplus of an uneven pair lands there, never in
-              the middle. On a rest day `sessionCardState` is `null`,
-              `SessionCard` renders nothing, and the grid collapses to one
-              column so the summary card takes the full row instead of
-              standing alone in half of it.
+              the middle.
+
+              On a rest day `sessionCardState` is `null` and `SessionCard`
+              renders nothing — that guard is the component's whole safety
+              rule and does not move. What changed is what stands in its slot:
+              the grid used to collapse to one column, which left the summary
+              card 1150px wide around a 260px donut and, worse, left the
+              screen saying nothing at all about a day with no sessions. This
+              is the panel DESIGN.md's "regla del estado flaco" was written
+              about, so the rest day gets the three parts D11 asks for.
             */}
-            <div className={`grid items-stretch gap-[18px] ${sessionCardState ? "split:grid-cols-2" : ""}`}>
-              <SessionCard state={sessionCardState} enrolledCounts={enrolledCounts} />
+            <div className="grid items-stretch gap-[18px] split:grid-cols-2">
+              {sessionCardState ? (
+                <SessionCard state={sessionCardState} enrolledCounts={enrolledCounts} />
+              ) : (
+                <EmptyState
+                  fill
+                  icon={<CalendarOff size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                  title="Hoy no hay entrenamientos"
+                  description={`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puede pasar la lista de otro día si quedó pendiente.`}
+                  action={
+                    // The same words the card uses for the same destination —
+                    // "Elegir otro horario" is already how this screen names
+                    // the picker, and a second name for one place is the drift
+                    // the destination registry exists to stop.
+                    <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
+                      Elegir otro horario
+                    </Link>
+                  }
+                />
+              )}
 
               <section className="card flex flex-col gap-4 p-[18px]">
                 {absenceAlert && (
@@ -209,7 +235,12 @@ export default function TrainerPage(): React.ReactElement {
                 )}
 
                 <div>
-                  <h2 className="mb-4 text-base font-bold text-ink">Distribución de asistencias</h2>
+                  {/* The card title step, in the club's display face — the
+                      role DESIGN.md gives Graduate and the one this screen
+                      had never asked for. */}
+                  <h2 className="mb-4 font-display text-lg uppercase leading-tight tracking-flat text-ink">
+                    Distribución de asistencias
+                  </h2>
                   {attendanceStats.totalStudents > 0 ? (
                     <AttendanceStatusChart stats={attendanceStats} />
                   ) : (

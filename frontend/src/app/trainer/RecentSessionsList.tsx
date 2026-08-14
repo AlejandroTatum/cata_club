@@ -25,11 +25,9 @@ import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { EmptyState, buttonClasses } from "@/components/ui";
-import { getAttendanceLabel } from "@/app/attendance/attendance-utils";
 import type { RecentAttendanceSession } from "@/services/api";
 import { formatDate } from "@/lib/format-utils";
-import { ATTENDANCE_STATUS_CHART_COLORS } from "@/app/dashboard/dashboard-utils";
-import { buildSessionBarAriaLabel, buildSessionBarSegments } from "./trainer-day-utils";
+import { SessionCompositionBar, SessionCompositionCounts } from "./SessionComposition";
 
 interface RecentSessionsListProps {
   sessions: RecentAttendanceSession[];
@@ -39,7 +37,12 @@ export default function RecentSessionsList({ sessions }: RecentSessionsListProps
   return (
     <section aria-labelledby="ultimas-listas-title" className="card overflow-hidden">
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-        <h2 id="ultimas-listas-title" className="flex-1 text-sm font-bold text-ink">
+        {/* The card title step, in the display face — see `DESIGN.md`'s
+            "regla de Graduate". */}
+        <h2
+          id="ultimas-listas-title"
+          className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink"
+        >
           Últimas listas
         </h2>
         <Link href="/trainer/attendance/history" className={buttonClasses("secondary", "sm")}>
@@ -69,9 +72,6 @@ function SessionRow({ session }: { session: RecentAttendanceSession }): React.Re
   const [hovered, setHovered] = useState(false);
   const [focusedWithin, setFocusedWithin] = useState(false);
 
-  const segments = buildSessionBarSegments(session.counts, session.total);
-  const ariaLabel = buildSessionBarAriaLabel(session.counts, session.total);
-
   // Hover alone may hide the bar; focus never does — see the module doc.
   const barHidden = hovered && !focusedWithin;
   const breakdownShown = hovered || focusedWithin;
@@ -98,34 +98,17 @@ function SessionRow({ session }: { session: RecentAttendanceSession }): React.Re
       </div>
 
       <div className="col-span-2 row-start-3 min-w-0 sm:col-span-1 sm:col-start-3 sm:row-start-1">
-        <div
-          role="img"
+        <SessionCompositionBar
+          counts={session.counts}
+          total={session.total}
           tabIndex={0}
-          aria-label={ariaLabel}
-          className={`h-2.5 gap-0.5 overflow-hidden rounded-full bg-line ${barHidden ? "hidden max-sm:flex" : "flex"}`}
-        >
-          {segments.map((segment) => (
-            <span
-              key={segment.estado}
-              style={{ width: `${segment.widthPercent}%`, backgroundColor: ATTENDANCE_STATUS_CHART_COLORS[segment.estado] }}
-            />
-          ))}
-        </div>
-        <div
-          className={`flex-wrap gap-x-3.5 gap-y-1 text-xs text-ink-2 ${breakdownShown ? "flex" : "hidden max-sm:flex"}`}
-        >
-          {segments.map((segment) => (
-            <span key={segment.estado} className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden="true"
-                className="h-2 w-2 flex-none rounded-[3px]"
-                style={{ backgroundColor: ATTENDANCE_STATUS_CHART_COLORS[segment.estado] }}
-              />
-              <b className="font-extrabold tabular-nums text-ink">{segment.count}</b>
-              {getAttendanceLabel(segment.estado)}
-            </span>
-          ))}
-        </div>
+          className={barHidden ? "hidden max-sm:flex" : "flex"}
+        />
+        <SessionCompositionCounts
+          counts={session.counts}
+          total={session.total}
+          className={breakdownShown ? "flex" : "hidden max-sm:flex"}
+        />
       </div>
 
       <div className="col-start-2 row-start-1 text-right sm:col-start-4">

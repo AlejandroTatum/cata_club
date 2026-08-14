@@ -2,13 +2,20 @@
  * The immediate-session card — the coal half of the trainer dashboard's top
  * row (issue #211, `docs/archive/prototypes/prototipos/31-entrenador-dashboard-alternativas.html`).
  *
- * The big number follows whichever question is still live: before the
- * session starts, the question is "how long until" and the countdown owns
- * the number; once it has started, that count decides nothing any more (no
- * one arrives sooner for knowing ten minutes have passed) and the question
- * becomes "which one" — a session's identifier is its start hour, so the
- * hour takes the number's place and the elapsed minutes move to the support
- * line.
+ * The big number is the session's own identifier — its start hour — in every
+ * state that has a session at all, and the elapsed or remaining time is said
+ * in words on the support line.
+ *
+ * It used to swap: the countdown owned the figure until the session started,
+ * and the hour took over afterwards. Two things were wrong with that. A
+ * minute count is only a readable quantity for about an hour, and this panel
+ * is opened at any hour — at 03:20 on a Friday whose first session is at
+ * 15:00 the 46px figure read "700 minutos", which is a number nobody
+ * converts. And the same slot meaning two different things is what
+ * DESIGN.md's "un solo formato por columna" exists to stop: the eye has to
+ * read the kicker before it can know what the figure is. The hour decides
+ * which session; the wait only qualifies it, so the wait is a line of text
+ * (`formatTimeUntilStart`, which changes unit at the hour).
  *
  * The primary action moved here from the page header (`page.tsx`) — once,
  * never twice — and names the session by its hour ("Pasar lista de las
@@ -49,6 +56,7 @@ import { formatDay } from "@/app/attendance/attendance-utils";
 import {
   formatElapsedMinutes,
   formatEnrolledCount,
+  formatTimeUntilStart,
   type SessionCardState,
 } from "./trainer-day-utils";
 
@@ -94,23 +102,26 @@ export default function SessionCard({ state, enrolledCounts }: SessionCardProps)
           aria-hidden="true"
           className={`h-1.5 w-1.5 flex-none rounded-full ${isLive ? "bg-cata-red" : "bg-ball"}`}
         />
-        {isLive ? "En curso" : "Empieza en"}
+        {isLive ? "En curso" : "Próxima sesión"}
       </p>
 
-      <span className="text-display font-extrabold leading-none tabular-nums">
-        {isLive ? state.schedule.horaInicio : state.minutesAway}
-        {!isLive && (
-          <small className="ml-2 text-lg font-semibold text-white/60">
-            {state.minutesAway === 1 ? "minuto" : "minutos"}
-          </small>
-        )}
+      {/* Graduate, like every other figure the system prints at a display step
+          (`StatCard`), and with the declared tracking that keeps a wide,
+          flat face from inheriting the step's own tightening. No weight: the
+          face ships a single 400 cut and anything else is a synthesised fake. */}
+      <span className="font-display text-display leading-none tracking-flat tabular-nums">
+        {state.schedule.horaInicio}
       </span>
 
       <p className="m-0 flex flex-wrap gap-x-3.5 gap-y-1 text-sm text-white/70">
         <span>
           {formatDay(state.schedule.diaSemana)} {state.schedule.horaInicio} — {state.schedule.horaFin}
         </span>
-        {isLive && <span>{formatElapsedMinutes(state.minutesElapsed)}</span>}
+        <span>
+          {isLive
+            ? formatElapsedMinutes(state.minutesElapsed)
+            : formatTimeUntilStart(state.minutesAway)}
+        </span>
         {enrolledLabel && <span>{enrolledLabel}</span>}
       </p>
 

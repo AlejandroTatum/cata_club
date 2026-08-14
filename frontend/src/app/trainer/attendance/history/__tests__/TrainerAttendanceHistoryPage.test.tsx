@@ -151,18 +151,44 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(within(rows[0]).getAllByRole("columnheader")).toHaveLength(3);
   });
 
+  /*
+   * Renegotiated in the trainer sweep of the visual redesign, with the reason
+   * written. What this test protects is unchanged and still asserted below:
+   * all four counts live in the row, as REAL visible text with the state
+   * named, never as a colour a reader has to memorise and never hidden in an
+   * `sr-only` span.
+   *
+   * Two things did change. The four loose colored badges became the same
+   * proportional bar "Últimas listas" already draws for the same measurement —
+   * `RecentSessionsList.tsx` retired that badge table on this screen's twin,
+   * for the reason written there, and leaving it standing here kept two
+   * vocabularies for one number. And the counts stopped being a count against
+   * a singular label: "2 Presente" is not Spanish, and `formatStateCount` is
+   * now the one place this product counts a state out loud.
+   */
   it("carries the four state counts in the row itself, with a visible state name", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
     const resultCell = within(rows[1]).getAllByRole("cell")[1];
-    // The state name has to be real, visible text — not tucked into a
-    // hidden `sr-only` span that only a screen reader ever sees.
     expect(resultCell.querySelector(".sr-only")).toBeNull();
-    expect(resultCell).toHaveTextContent("2 Presente");
-    expect(resultCell).toHaveTextContent("1 Tardanza");
-    expect(resultCell).toHaveTextContent("0 Justificado");
-    expect(resultCell).toHaveTextContent("1 Ausente");
+    expect(resultCell).toHaveTextContent("2 presentes");
+    expect(resultCell).toHaveTextContent("1 tardanza");
+    expect(resultCell).toHaveTextContent("0 justificados");
+    expect(resultCell).toHaveTextContent("1 ausente");
+  });
+
+  it("draws the session's composition as the one bar the panel already uses, named for a screen reader", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    const rows = await screen.findAllByRole("row");
+    expect(
+      within(rows[1]).getByRole("img", {
+        name: "2 presentes, 1 tardanza, 0 justificados y 1 ausente sobre 4 registros",
+      }),
+    ).toBeInTheDocument();
+    // One bar per row, and nothing left of the four-badge table it replaces.
+    expect(screen.getAllByRole("img", { name: /sobre \d+ registros/ })).toHaveLength(2);
   });
 
   it("offers a Corregir action per session", async () => {

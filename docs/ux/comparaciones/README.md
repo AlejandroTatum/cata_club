@@ -88,6 +88,29 @@ selector de estudiante detrás de «Ver ayuda»; la ficha médica y los pagos a 
 editor de ficha médica en dos columnas con un solo encabezado en vez de tres; y los dos estados
 vacíos que no tenían salida, con la suya. **Estado: pendiente de revisión.**
 
+### 7 · Fase 4 · Tanda 2 — El entrenador
+**[`entrenador.html`](entrenador.html)**
+
+Las tres pantallas del entrenador: `/trainer`, `/trainer/attendance` y `/trainer/attendance/history`.
+Veinte capturas: diez estados —tres de Mi día, cinco del asistente de lista y dos del historial—
+antes y después, con el reloj del navegador fijado por toma para que los dos lados describan el
+mismo minuto.
+
+**Es la primera tanda sin diagnóstico previo**: no hay issue que la haya medido, así que la lista de
+ocho hallazgos salió de leer las pantallas contra [`DESIGN.md`](../../../DESIGN.md) y sus nueve
+reglas con nombre. Y es la primera cuyo problema **no era el aire vertical**: Mi día, el historial
+con datos y la lista de dieciséis alumnos scrollean, así que su hueco al pie medía 0-2% antes y
+después. Lo que estaba mal era el ancho, la lectura y el vocabulario.
+
+Lo que cambió: el domingo dejó de ser una pantalla muda —el estado flaco de esta pantalla no es un
+socio nuevo, es un día sin entrenamientos—; «Empieza en 700 minutos» pasó a ser la hora de la sesión
+en Graduate con la espera dicha en palabras; las cuatro insignias de color del historial pasaron a
+ser la misma barra proporcional que «Mi día» ya usaba, con lo que la composición de una sesión dejó
+de tener cuatro dibujos y dos paletas; el asistente recuperó el ancho que `mx-auto` sobre un ítem
+flex le venía cancelando (364px → 768px); la leyenda permanente del listado se fue detrás de «Ver
+ayuda»; y el recibo quedó con **un** solo control de volver, que es la deuda que estaba anotada.
+**Estado: pendiente de revisión.**
+
 ---
 
 ## Las mediciones
@@ -117,6 +140,16 @@ ventana, a 1440×900. Es el hueco que la persona ve vacío sin scrollear.
 | Mis pagos | Jugadora adulta, un pago | 30% · 266px | **25% · 222px** |
 | Mis pagos | Representante, un pago | 23% · 206px | **18% · 162px** |
 | Mis pagos | Socio nuevo, cero pagos | 17% · 154px | **7% · 64px** |
+| Mi día | Sesión en curso (15:10) | 2% · 21px | 2% · 18px |
+| Mi día | Madrugada (03:20) | 2% · 21px | 2% · 18px |
+| Mi día | Domingo sin sesiones | 2% · 21px | 2% · 18px |
+| Pasar lista | Paso 1 · elegir horario | 26% · 234px | **24% · 214px** |
+| Pasar lista | Paso 2 · lista de 16 alumnos | 0% | 0% |
+| Pasar lista | Paso 2 · filtro sin coincidencias | 9% · 84px | **2% · 20px** |
+| Pasar lista | Paso 3 · confirmar | 23% · 208px | **22% · 201px** |
+| Pasar lista | Recibo de la sesión archivada | 17% · 156px | 18% · 161px |
+| Historial | Este mes (10 sesiones) | 0% | 0% |
+| Historial | Período vacío (junio) | 14% · 122px | 14% · 122px |
 
 El login es el primer número que no baja, y es a propósito: el hueco lo produce el centrado de la
 tarjeta sobre el eje de la página, que es lo que el dueño pidió expresamente. Bajarlo exige
@@ -127,6 +160,14 @@ se fueron 90px de una tarjeta que repetía dos veces lo que la pantalla ya decí
 —ahora en dos columnas— recuperó menos de lo que se quitó. Bajarlo pedía dejar la repetición o
 inventar un dato que el backend no guarda. Está explicado en su comparación, con el documento
 midiendo 900px antes y después.
+
+Las tres pantallas del entrenador son las primeras cuyo problema **no era el aire vertical**, y por
+eso sus números casi no se mueven: tres de sus diez estados scrollean (0-2% antes y después) y los
+otros son cortos porque preguntan poco. Lo que estaba mal ahí se mide en **ancho** —el asistente
+dibujaba una tarjeta de 364px en una columna de 1152, y el resumen del domingo se estiraba a 1148px
+alrededor de una dona de 260— y en lectura. El recibo es el tercer número que **sube**, cinco
+píxeles, porque su encabezado dejó de ser un segundo titular de 26px en una pantalla que ya tiene el
+suyo. Todo está explicado en su comparación.
 
 El paso 1 de la inscripción es el primero que **sube**, y también a propósito. El contenido es el
 mismo y el documento mide lo mismo (900px, no scrollea ni antes ni después): lo que pasó es que
@@ -152,8 +193,9 @@ el cambio son los de la tabla de arriba, porque los dos lados salieron de la mis
 minuto. La ficha médica es la única que no cierra, y es la única de las tres que es layout puro: no
 crece con datos porque no hay datos que la hagan crecer.
 
-Ya no queda nada medido sin tocar. Lo que sigue en la fase 4 son las pantallas del entrenador y las
-del admin, que todavía no tienen medición.
+Ya no queda nada medido sin tocar. Lo que sigue en la fase 4 son las pantallas del admin, que
+todavía no tienen medición. Las del entrenador tampoco la tenían: su diagnóstico se armó leyéndolas
+contra `DESIGN.md`, y está en [`entrenador.html`](entrenador.html) con su lista priorizada.
 
 ---
 
@@ -171,6 +213,11 @@ Cada una tiene la misma estructura:
 Las decisiones de producto que tuve que tomar en automático —qué dato mostrar, qué palabra usar—
 quedan **destacadas** en esa última sección, no enterradas en un párrafo.
 
+Desde la tanda del entrenador hay además un paso 0: **el diagnóstico**, priorizado por gravedad y
+con la regla de `DESIGN.md` que rompe cada hallazgo. Las pantallas anteriores lo traían hecho en una
+issue; de acá en adelante se arma leyendo la pantalla contra el sistema, y va escrito para poder
+discutirse antes de mirar una sola captura.
+
 ---
 
 ## El orden del plan
@@ -181,7 +228,7 @@ quedan **destacadas** en esa última sección, no enterradas en un párrafo.
 | F2 | La landing renovada — la trabaja Alejandro. **Espera el OK del cliente** | pendiente |
 | F3 | Tres faros: Miembros · Inscripción · Login y Perfil | ✅ 3 de 3 |
 | F4 · tanda 1 | El socio: Mi cuenta · Ficha médica · Mis pagos | ✅ |
-| F4 · tanda 2 | El entrenador | pendiente |
+| F4 · tanda 2 | El entrenador: Mi día · Pasar lista · Historial | ✅ |
 | F4 · tanda 3 | El admin | pendiente |
 
 Los faros están elegidos por contraste, no por importancia: una tabla densa, un formulario largo y

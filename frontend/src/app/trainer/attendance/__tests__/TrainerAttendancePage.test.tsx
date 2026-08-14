@@ -48,7 +48,7 @@ const mockUseAuth = vi.mocked(useAuth);
 /**
  * A trainer whose session id is a real persona id. `resolveEntrenadorId`
  * parses it with `Number(...)`, and a non-numeric id resolves to `null`, which
- * disables "Confirmar Asistencia" — so any test that files a session needs it.
+ * disables "Confirmar asistencia" — so any test that files a session needs it.
  */
 function trainerAuthWithPersonaId(id = "17"): ReturnType<typeof createAuthenticatedAuth> {
   const auth = createAuthenticatedAuth("trainer", "Coach Torres");
@@ -194,7 +194,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     const stateSelector = await screen.findByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
     fireEvent.click(within(stateSelector).getByRole("radio", { name: "Justificado" }));
     fireEvent.click(screen.getByRole("button", { name: "Siguiente" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar Asistencia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar asistencia" }));
 
     await waitFor(() => {
       expect(mockRegisterAttendance).toHaveBeenCalledWith(expect.objectContaining({
@@ -545,7 +545,12 @@ describe("TrainerAttendancePage — the present default never passes for a revie
 
     // "25 presentes" on its own would read identically whether the trainer
     // went through the roster or never scrolled past page 1.
-    expect(await screen.findByText("25 presente")).toBeInTheDocument();
+    //
+    // It reads "25 presentes" now, in the plural: this summary used to print
+    // its four counts as badges whose text was a number welded to the NAME of
+    // the state ("25 presente"), and the whole panel counts a state through
+    // `formatStateCount` since the redesign sweep.
+    expect(await screen.findByText("25 presentes")).toBeInTheDocument();
     expect(screen.getByText("15 sin revisar")).toBeInTheDocument();
     expect(
       screen.getByText(/15 de 25 alumnos siguen en "Presente" porque nadie los revisó/),
@@ -617,6 +622,28 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     expect(screen.getByText("Student 03")).toBeInTheDocument();
   });
 
+  /*
+   * D11's third part: an empty state says what is missing, why, and WHAT TO
+   * DO. This one had the first two and left the third as a sentence — "revise
+   * el filtro o bórrelo" — with nothing to press, while the unreviewed filter
+   * beside it had carried its own way out all along.
+   */
+  it("hands back the way out when the name filter matches nobody", async () => {
+    mockFetchAlumnosPorHorario.mockResolvedValue(buildAlumnoHorarios(3));
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    fireEvent.change(screen.getByLabelText("Filtrar alumnos"), { target: { value: "zzz" } });
+    expect(await screen.findByText("No se encontraron alumnos con ese nombre.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Borrar el filtro" }));
+
+    expect(await screen.findByText("Student 01")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filtrar alumnos")).toHaveValue("");
+  });
+
   it("marks every remaining student present across all pages via the bulk action", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue(buildAlumnoHorarios(25));
 
@@ -634,7 +661,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     // The button is how a trainer says "I looked, the rest are here", so it
     // has to clear the flag as well as set the state.
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
-    expect(screen.getByText("24 Presentes")).toBeInTheDocument();
+    expect(screen.getByText("24 presentes")).toBeInTheDocument();
     expect(within(first).getByRole("radio", { name: "Justificado" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("button", { name: /Siguiente/ })).toBeEnabled();
   });
@@ -652,7 +679,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
     const payload = mockRegisterAttendance.mock.calls[0][0] as {
@@ -953,7 +980,7 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
 
-    expect(await screen.findByRole("button", { name: /Confirmar Asistencia/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Confirmar asistencia/ })).toBeInTheDocument();
     expect(mockRegisterAttendance).not.toHaveBeenCalled();
   });
 
@@ -987,15 +1014,18 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     expect(bar).toHaveClass("sticky", "bottom-0");
   });
 
+  // Lowercase since the redesign sweep: the bar had its own singular/plural
+  // table ("12 Presentes"), the third one in a panel that already had one.
+  // Everything that counts a state now spells it through `formatStateCount`.
   it("carries the running totals in the commit bar", async () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
 
-    expect(screen.getByText("12 Presentes")).toBeInTheDocument();
+    expect(screen.getByText("12 presentes")).toBeInTheDocument();
     expect(screen.getByText("12 sin revisar")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    expect(screen.getByText("12 Presentes")).toBeInTheDocument();
+    expect(screen.getByText("12 presentes")).toBeInTheDocument();
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
   });
 });
@@ -1105,7 +1135,7 @@ describe("TrainerAttendancePage — draft persistence", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
     first.unmount();
 
@@ -1127,7 +1157,7 @@ describe("TrainerAttendancePage — draft persistence", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
     first.unmount();
 
@@ -1160,7 +1190,7 @@ describe("TrainerAttendancePage — partial failures name the students", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
   }
 
@@ -1220,7 +1250,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
   }
 
@@ -1260,7 +1290,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
     const justifiedRow = screen.getByText("Justificado").closest("li");
@@ -1269,15 +1299,26 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     expect(within(presentRow as HTMLElement).getByText("2")).toBeInTheDocument();
   });
 
-  // Accessibility: the bar is decorative on its own, so its accessible name
-  // has to enunciate the four values a sighted reader gets from the bar itself.
+  /*
+   * Accessibility: the bar is decorative on its own, so its accessible name
+   * has to enunciate the four values a sighted reader gets from the bar
+   * itself. That requirement is unchanged — the SENTENCE is what moved.
+   *
+   * The receipt drew its own bar, with its own palette and its own wording,
+   * while "Últimas listas" and the history drew the same measurement with the
+   * panel's shared one. Both are gone into `SessionComposition`, so the four
+   * values now reach a screen reader in the same words wherever they are
+   * drawn, and the total comes with them.
+   */
   it("gives the proportional bar an aria-label enunciating all four values", async () => {
     mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
 
     expect(
-      screen.getByRole("img", { name: "3 presentes, 0 tardanzas, 0 justificados, 0 ausentes" }),
+      screen.getByRole("img", {
+        name: "3 presentes, 0 tardanzas, 0 justificados y 0 ausentes sobre 3 registros",
+      }),
     ).toBeInTheDocument();
   });
 
@@ -1288,29 +1329,35 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
 
-    // TWO of them, and that is not new — the frame's control at the top of the
-    // screen and the receipt's own in its action row have both pointed at
-    // `backHref` since #213. What is new is that they say the same thing: they
-    // used to read "Volver al Panel del Entrenador" and "Volver al Panel", two
-    // names for one destination, which is exactly the drift the destination
-    // registry retires. The duplication itself is a separate question from this
-    // test's (whether the FRAME's control survives filing), so it is asserted
-    // here rather than quietly tolerated by a looser query.
+    /*
+     * ONE of them now, and closing that is the point of this edit.
+     *
+     * There were two: the frame's control at the top of the screen and the
+     * receipt's own in its action row, both pointing at `backHref` since #213.
+     * The duplication was masked while they wrote their own labels — "Volver
+     * al Panel del Entrenador" and "Volver al Panel", two names for one
+     * destination — and the destination registry, by making both of them say
+     * "Volver a Mi día", put it in plain sight. This test used to assert the
+     * pair as tolerated, with the note that the duplication was a separate
+     * question. It is not a question any more: the frame's control is the one
+     * every other screen in the panel keeps, it is the one this test exists to
+     * protect, and DESIGN.md puts going back at the bottom of a screen's
+     * priorities — so it does not belong in the row that says what to do next.
+     */
     const backLinks = screen.getAllByRole("link", { name: /Volver a Mi día/ });
-    expect(backLinks).toHaveLength(2);
-    // The frame's is the one carrying the page's own bottom margin; the
-    // receipt's is a full-width row action.
+    expect(backLinks).toHaveLength(1);
+    // The frame's, carrying the page's own bottom margin.
     expect(backLinks[0].className).toContain("mb-6");
     expect(backLinks[0]).toHaveAttribute("href", "/trainer");
   });
 
-  // Preserved behavior: "Registrar Otra Asistencia" still runs `handleReset`.
-  it('"Registrar Otra Asistencia" still resets the wizard back to the picker', async () => {
+  // Preserved behavior: "Registrar otra asistencia" still runs `handleReset`.
+  it('"Registrar otra asistencia" still resets the wizard back to the picker', async () => {
     mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
 
-    fireEvent.click(screen.getByRole("button", { name: "Registrar Otra Asistencia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar otra asistencia" }));
 
     expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
   });
@@ -1328,14 +1375,14 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
     const retry = screen.getByRole("button", { name: /Reintentar/ });
     fireEvent.click(retry);
 
     await screen.findByText("Student 01");
-    expect(screen.queryByRole("button", { name: /Confirmar Asistencia/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Confirmar asistencia/ })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Siguiente/ })).toBeInTheDocument();
   });
 
@@ -1353,7 +1400,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
     mockFetchAlumnosPorHorario.mockRejectedValueOnce(new Error("network down"));
@@ -1362,7 +1409,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(2));
     expect(await screen.findByText(/Asistencia registrada parcialmente/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Reintentar/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Confirmar Asistencia/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Confirmar asistencia/ })).not.toBeInTheDocument();
     expect(mockRegisterAttendance).toHaveBeenCalledTimes(1);
   });
 
@@ -1380,7 +1427,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
     mockFetchAlumnosPorHorario.mockRejectedValueOnce(new Error("network down"));
@@ -1404,7 +1451,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
     let releaseFetch: () => void = () => {};
@@ -1445,7 +1492,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
     let rejectFetch: (reason: unknown) => void = () => {};
@@ -1629,7 +1676,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    await screen.findByRole("button", { name: /Confirmar Asistencia/ });
+    await screen.findByRole("button", { name: /Confirmar asistencia/ });
   }
 
   it("gives each step its own address", async () => {
@@ -1641,7 +1688,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     expect(window.location.search).toBe("?horario=12&paso=lista");
 
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    await screen.findByRole("button", { name: /Confirmar Asistencia/ });
+    await screen.findByRole("button", { name: /Confirmar asistencia/ });
     expect(window.location.search).toBe("?horario=12&paso=confirmar");
   });
 
@@ -1770,7 +1817,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
     // The receipt's own URL carries no step: reloading it must not resurrect
     // the roll call that produced it.
@@ -1779,7 +1826,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     await pressBrowserBack();
 
     expect(screen.getByText(/Asistencia registrada/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Confirmar Asistencia/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Confirmar asistencia/ })).not.toBeInTheDocument();
   });
 });
 
@@ -2119,7 +2166,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
     // Without this the "correction" is a second session dated today, and the
@@ -2154,7 +2201,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
     expect(window.location.search).toBe("?horario=12&fecha=2026-07-13&paso=lista");
 
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    await screen.findByRole("button", { name: /Confirmar Asistencia/ });
+    await screen.findByRole("button", { name: /Confirmar asistencia/ });
     // Losing the date on Siguiente would file the batch on today after all.
     expect(window.location.search).toBe("?horario=12&fecha=2026-07-13&paso=confirmar");
 
@@ -2188,7 +2235,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Confirmar Asistencia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
     expect(mockRegisterAttendance.mock.calls[0][0]).toMatchObject({
