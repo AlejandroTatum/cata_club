@@ -36,7 +36,7 @@ import tailwindConfig from "../../../tailwind.config";
 const SISTEMA_CSS = join(
   __dirname,
   "..", "..", "..", "..",
-  "docs", "ux", "prototipos", "_sistema.css",
+  "docs", "archive", "prototypes", "prototipos", "_sistema.css",
 );
 
 /**
