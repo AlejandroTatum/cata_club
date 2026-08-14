@@ -187,7 +187,29 @@ export default function AuthShell({
      */
     <div
       data-testid="auth-composition"
-      className="auth-shell flex min-h-screen w-full flex-col bg-canvas split:flex-row"
+      /*
+       * `split:max-w-[120rem]` + `mx-auto` — the composition stops at 1920 and
+       * centres above it.
+       *
+       * Capping the coal panel alone (see its own note) fixed the ratio and
+       * moved the hole: the width the coal stopped taking went to the form
+       * side, so at 2560 a 360px card floated in 1664px of bare canvas. That
+       * is the same "empty field" defect this batch exists to close, measured
+       * on the other half of the screen — and the ratio rule cannot see it,
+       * because it only looks at the dark panel.
+       *
+       * With both caps the layout above 1920 is exactly the layout AT 1920:
+       * panel 896, form side 1024, the 1.1-to-1 proportion intact, and the
+       * leftover width parked in symmetric gutters instead of inside the
+       * composition. Below 1920 nothing changes.
+       *
+       * The cost, stated plainly: past 1920 the coal no longer bleeds to the
+       * left edge, which is the one place this file's "edge-to-edge, no
+       * artboard, no frame" rule yields. It yields to the rule it was written
+       * to serve — a composition that reads as two panels — rather than to a
+       * number.
+       */
+      className="auth-shell mx-auto flex min-h-screen w-full flex-col bg-canvas split:max-w-[120rem] split:flex-row"
     >
       {/*
        * `.auth .dark` — `flex:1.1`, i.e. WIDER than the form panel. Laid out
@@ -196,9 +218,35 @@ export default function AuthShell({
        * cluster sits in the auto row between them — on the panel's exact
        * vertical middle, which is the same axis the form card uses.
        */}
+      {/*
+       * `split:max-w-[56rem]` — the panel stops growing, the brand does not
+       * have to.
+       *
+       * The two rules this panel answers to pull in opposite directions once
+       * the viewport is wide. The motto's measure IS the cluster's from
+       * `split` up (see the note on the cluster below), and the motto collapses
+       * to ONE line at 507px — so keeping it on the two-to-three lines the
+       * brand block is built around caps the cluster under that. Meanwhile a
+       * cluster that must hold half the panel needs 668px once the panel
+       * reaches 1336px at 2560. There is no cluster width that is both.
+       *
+       * Widening the cluster was tried and measured: at `44rem` the share
+       * moved 49.6% → 50.7% and the motto fell to one line from 1920 up. It
+       * changes WHICH rule breaks, not whether one does.
+       *
+       * So the panel yields instead. Past 896px the coal stops taking width it
+       * only fills with more dark, and the ratio holds at 55.4% from 1920 up
+       * with the cluster unchanged. Below the cap nothing moves: at 1440 the
+       * panel measures 749 and never reaches it.
+       *
+       * The cost, stated: from ~1700px up the composition is no longer two
+       * panels splitting the window 1.1-to-1. The coal still bleeds to the left
+       * edge — the "no artboard, no frame" rule is intact — but the form side
+       * takes every pixel the coal stops taking.
+       */}
       <div
         data-testid="auth-panel-dark"
-        className="relative grid grid-rows-[1fr_auto_1fr] gap-8 overflow-hidden bg-coal px-6 py-8 text-center text-white split:flex-[1.1_1_0%] split:gap-10 split:px-14 split:py-12"
+        className="relative grid grid-rows-[1fr_auto_1fr] gap-8 overflow-hidden bg-coal px-6 py-8 text-center text-white split:flex-[1.1_1_0%] split:max-w-[56rem] split:gap-10 split:px-14 split:py-12"
       >
         {/*
          * The lit stage. One soft radial centred on the brand mark so the dark
