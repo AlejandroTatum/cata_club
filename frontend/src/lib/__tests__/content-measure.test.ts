@@ -88,18 +88,47 @@ const SHORT_SCREENS = SHELL_SCREENS.filter(({ code }) => /measure="short"/.test(
 );
 
 /**
- * The two screens #85 measured, and the only two without a pager.
+ * The screens whose height is a function of what EXISTS rather than of a page
+ * size, each admitted on a reading rather than on a look.
  *
  * Changing this list means changing the readings in `dead-canvas.spec.ts`
  * too — a screen joins it because it was measured, not because it looked wide.
+ *
+ * | Screen                     | Why it qualifies                          | Reading |
+ * |----------------------------|-------------------------------------------|---------|
+ * | `/discounts`               | renders the whole catalog, no pager        | #85/#96 |
+ * | `/groups`                  | a card per categoría, no pager             | #85/#96 |
+ * | `/student/medical-record`  | five controls that never grow with data    | D11b    |
+ * | `/student/payments`        | the family's own history, no pager         | D11b    |
+ *
+ * The last two are the socio redesign's (docs/ux/comparaciones/socio.html).
+ *
+ * The ficha médica is not a list at all — it is the extreme case of the same
+ * shape, a block that is the SAME height empty or full because the record it
+ * edits has no repeating part. It measured 52% dead canvas as an adult titular
+ * and 33% as a guardian at 1440x900, the worst reading in the product, on the
+ * product's WIDEST measure. Like the other two, `short` reframes that block
+ * instead of filling it: there is no history, no trend and no "última
+ * actualización" in the payload, and inventing one would break D14.
+ *
+ * `/student/payments` is the shape this rule was written for and was hiding it
+ * behind a rail: one family's payments, all of them, no pager. Once "cómo se
+ * registra un pago" moved behind "Ver ayuda" (D11c) the second column had
+ * nothing left in it, and the single column that remained inherited 1356px —
+ * a membership card with 600px of nothing to the right of its own heading.
  */
-const SHORT_MEASURE_SCREENS = ["discounts/page.tsx", "groups/page.tsx"];
+const SHORT_MEASURE_SCREENS = [
+  "discounts/page.tsx",
+  "groups/page.tsx",
+  "student/medical-record/page.tsx",
+  "student/payments/page.tsx",
+];
 
 /** A screen answering the shell's question in its own markup. */
 const CONTENT_MEASURE_CLASS = /className=[^\n]*\bmax-w-(?:5xl|8xl)\b/;
 
 describe("the content measure belongs to the shell", () => {
-  it("is short on exactly the two screens that cannot fill it", () => {
+  it("is short on exactly the screens that cannot fill it", () => {
     expect(SHORT_SCREENS.sort()).toEqual(SHORT_MEASURE_SCREENS);
   });
 

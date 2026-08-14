@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fase 4 — Tanda del socio · Cata Club</title>
+    <style>
+      /* Las tres familias del club, desde el mismo `public/fonts` que sirve el
+         producto. Rutas relativas: este archivo se abre desde el repositorio. */
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-600.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-800.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+      @font-face { font-family: "Graduate"; src: url("../../../frontend/public/fonts/graduate-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+      @font-face { font-family: "Playfair Display"; src: url("../../../frontend/public/fonts/playfair-display-600.woff2") format("woff2"); font-display: swap; }
+
+      /* Los tokens de DESIGN.md, transcritos. Ninguno inventado acá. */
+      :root {
+        --coal: #131316; --coal-2: #1c1c21; --coal-3: #26262c;
+        --red: #d92128; --red-dark: #a11d22;
+        --ball: #ffd600; --ball-ink: #6e5700;
+        --paper: #fff; --sunken: #f4f4f7; --canvas: #e8e8ee;
+        --line: #dedee6; --line-2: #cfcfda;
+        --ink: #17181c; --ink-2: #4a4a55; --ink-3: #74747f; --ink-3-strong: #63636e;
+        --ok: #137739; --ok-bg: #e7f4ec;
+        --warn: #a94d08; --warn-bg: #fbf0e2;
+        --bad: #c51b22; --bad-bg: #fbe9ea;
+        --r-card: 14px; --r-ctl: 10px;
+        --s-page: 20px; --s-section: 14px; --s-field: 7px;
+        --shadow-card: 0 1px 2px rgba(19,19,22,.06), 0 4px 10px -3px rgba(19,19,22,.08);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: Barlow, system-ui, sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+        letter-spacing: -0.01em;
+      }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 40px var(--s-page) 80px; }
+
+      /* --- Cabecera ------------------------------------------------------ */
+      header.top {
+        background: var(--coal);
+        color: var(--paper);
+        border-radius: var(--r-card);
+        padding: 28px var(--s-page);
+        margin-bottom: var(--s-page);
+      }
+      .kicker {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ball); margin: 0 0 10px;
+      }
+      h1 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 46px;
+        line-height: .95; letter-spacing: -.05em; text-transform: uppercase;
+        margin: 0 0 12px;
+      }
+      header.top p { margin: 0; color: #b9b9c1; max-width: 62ch; }
+
+      h2 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 26px;
+        line-height: 1.15; letter-spacing: -.03em; text-transform: uppercase;
+        margin: 40px 0 var(--s-section);
+      }
+      h3 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 20px;
+        line-height: 1.2; letter-spacing: -.02em; text-transform: uppercase;
+        margin: 0 0 var(--s-field);
+      }
+      p { margin: 0 0 var(--s-section); }
+      strong { font-weight: 700; }
+      /* Un identificador de código, en el sistema: sin familia monoespaciada
+         —el sistema tiene tres familias y ninguna lo es— y con el radio de
+         control, que es uno de los dos radios que existen. Barlow a 12.5px es
+         el paso `xs`, el mismo que usa el producto para metadato secundario. */
+      code {
+        font-size: 12.5px; background: var(--sunken); border: 1px solid var(--line);
+        border-radius: var(--r-ctl); padding: 1px 6px;
+      }
+
+      .card {
+        background: var(--paper); border: 1px solid var(--line);
+        border-radius: var(--r-card); box-shadow: var(--shadow-card);
+        padding: var(--s-page); margin-bottom: var(--s-section);
+      }
+      /* El hombro de caucho: lo lleva la tarjeta que pide algo, y solo esa. */
+      .card.shoulder { padding: 0; overflow: hidden; }
+      .card.shoulder > .shoulder-bar {
+        background: var(--coal); padding: 8px var(--s-page);
+        display: flex; justify-content: flex-end;
+      }
+      .card.shoulder > .shoulder-bar span {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ball);
+      }
+      .card.shoulder > .shoulder-body { padding: var(--s-page); }
+
+      /* --- Tablas -------------------------------------------------------- */
+      table { width: 100%; border-collapse: collapse; }
+      thead th {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink-3-strong);
+        text-align: left; padding: 0 10px 8px; border-bottom: 1px solid var(--line-2);
+      }
+      tbody td {
+        font-size: 13.5px; padding: 11px 10px; border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      tbody tr:last-child td { border-bottom: 0; }
+      td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .win { color: var(--ok); font-weight: 700; }
+      .flat { color: var(--ink-3-strong); }
+      .lose { color: var(--warn); font-weight: 700; }
+
+      /* --- Insignias ----------------------------------------------------- */
+      .badge {
+        display: inline-flex; align-items: center; gap: 6px; height: 26px;
+        padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+        letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+      }
+      .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .badge.ok { background: var(--ok-bg); color: var(--ok); }
+      .badge.warn { background: var(--warn-bg); color: var(--warn); }
+      .badge.bad { background: var(--bad-bg); color: var(--bad); }
+      .badge.neutral { background: #efeff2; color: var(--ink-3-strong); }
+
+      /* --- Capturas ------------------------------------------------------ */
+      .shots { display: grid; gap: var(--s-section); margin-bottom: var(--s-page); }
+      @media (min-width: 900px) { .shots { grid-template-columns: 1fr 1fr; } }
+      figure { margin: 0; }
+      figure img {
+        display: block; width: 100%; height: auto;
+        border: 1px solid var(--line-2); border-radius: var(--r-ctl);
+        background: var(--paper);
+      }
+      figcaption {
+        margin-top: var(--s-field); font-size: 12.5px; color: var(--ink-3-strong);
+      }
+      figcaption b {
+        display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink); margin-bottom: 2px;
+      }
+
+      /* --- Listas de hallazgos ------------------------------------------- */
+      ul.findings { list-style: none; margin: 0 0 var(--s-section); padding: 0; }
+      ul.findings > li {
+        border-top: 1px solid var(--line); padding: 12px 0 12px 0;
+      }
+      ul.findings > li:first-child { border-top: 0; padding-top: 0; }
+      ul.findings .what { font-weight: 700; }
+      ul.findings .why { color: var(--ink-2); font-size: 13.5px; }
+
+      /* La regla roja: separa bloques, no decora. */
+      hr.rule { border: 0; border-top: 3px solid var(--red); width: 56px; margin: 36px 0 0; }
+
+      /* Una decisión de producto tomada en automático. Destacada, no enterrada. */
+      .call {
+        border-left: 3px solid var(--red); background: var(--sunken);
+        border-radius: 0 var(--r-ctl) var(--r-ctl) 0;
+        padding: 14px 16px; margin: 0 0 var(--s-section);
+      }
+      .call .tag {
+        display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--red-dark); margin-bottom: 4px;
+      }
+      .call p:last-child { margin-bottom: 0; }
+      .note { color: var(--ink-2); font-size: 13.5px; }
+      a { color: var(--red-dark); text-underline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <p class="kicker">Fase 4 · Tanda 1 de 3 · El socio</p>
+        <h1>Mi cuenta,<br />ficha médica<br />y mis pagos</h1>
+        <p>
+          Las tres pantallas que el socio y el representante abren todos los días. Son las tres que
+          las issues #265 y #266 ya habían medido y las tres que quedaron en la cola del barrido.
+          Capturadas contra el entorno de QA con el dataset grande, a 1440×900, con el mismo guión
+          de medición que Miembros, Inscripción y Perfil. Ocho estados, dos roles, antes y después.
+        </p>
+      </header>
+
+      <p class="note">
+        El socio primero, según D13: el admin usa la herramienta porque le pagan, el socio la
+        abandona. La consigna de la fase —<strong>cambia cómo se ve, no qué hace</strong>— se cumple
+        con la suite entera en verde: <strong>3090 tests</strong>, ningún endpoint tocado, ninguna
+        regla de negocio movida.
+      </p>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>1 · Las mediciones</h2>
+
+      <p>
+        Se mide igual que siempre: la distancia entre el borde inferior del contenido más bajo y el
+        fondo de la ventana, dividida por el alto de la ventana. Es el hueco que la persona ve vacío
+        sin scrollear. Las cuentas del dataset grande son
+        <strong>Jazmin Bravo</strong> (jugadora adulta autogestionada, plan activo, horario
+        asignado, un pago, cero asistencias), <strong>Valentina Vera</strong> (representante de tres
+        hijos, con veinte asistencias registradas del hijo seleccionado) y
+        <strong>Pedro Salgado</strong>, que es el <em>socio nuevo</em> de D11b: membresía creada y
+        <strong>cero pagos</strong>.
+      </p>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Pantalla</th>
+              <th>Estado</th>
+              <th>Antes</th>
+              <th>Después</th>
+              <th>Qué lo movió</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Mi cuenta</td>
+              <td>Jugadora adulta con horario</td>
+              <td class="num">38% · 344px</td>
+              <td class="num win">5% · 49px</td>
+              <td>La cadena que ya estaba escrita, encendida.</td>
+            </tr>
+            <tr>
+              <td>Mi cuenta</td>
+              <td>Representante, hijo con datos</td>
+              <td class="num">7% · 64px</td>
+              <td class="num win">5% · 46px</td>
+              <td>Ya casi llenaba; ahora el pie de acciones queda al pie.</td>
+            </tr>
+            <tr>
+              <td>Mi cuenta</td>
+              <td>Socio nuevo, cero pagos</td>
+              <td class="num">26% · 231px</td>
+              <td class="num win">5% · 49px</td>
+              <td>Ídem, y es el estado que D11b manda diseñar primero.</td>
+            </tr>
+            <tr>
+              <td>Ficha médica</td>
+              <td>Jugadora adulta</td>
+              <td class="num">52% · 469px</td>
+              <td class="num win">45% · 409px</td>
+              <td>Medida corta y el formulario con forma de formulario.</td>
+            </tr>
+            <tr>
+              <td>Ficha médica</td>
+              <td>Representante</td>
+              <td class="num">33% · 301px</td>
+              <td class="num lose">39% · 349px</td>
+              <td><strong>Sube</strong>, y a propósito — ver abajo.</td>
+            </tr>
+            <tr>
+              <td>Mis pagos</td>
+              <td>Jugadora adulta, un pago</td>
+              <td class="num">30% · 266px</td>
+              <td class="num win">25% · 222px</td>
+              <td>El riel de altura fija fuera del flujo.</td>
+            </tr>
+            <tr>
+              <td>Mis pagos</td>
+              <td>Representante, un pago</td>
+              <td class="num">23% · 206px</td>
+              <td class="num win">18% · 162px</td>
+              <td>Ídem.</td>
+            </tr>
+            <tr>
+              <td>Mis pagos</td>
+              <td>Socio nuevo, cero pagos</td>
+              <td class="num">17% · 154px</td>
+              <td class="num win">7% · 64px</td>
+              <td>El estado vacío llena su caja y por fin ofrece una salida.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="note">
+        Las mediciones de las issues eran 57 / 42 / 38 / 33 / 27 / 34. Las de arriba son las que dio
+        este dataset hoy, con el mismo guión: coinciden exactamente en Mi cuenta como estudiante
+        (38%) y se corren unos puntos en el resto, porque el número depende de cuántos datos tenga
+        la cuenta que se mire. Las que valen para juzgar el cambio son las de esta tabla, porque el
+        antes y el después salieron de la misma cuenta, la misma base y el mismo minuto.
+      </p>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>2 · La causa raíz era una sola, y estaba a un <code>flex-1</code></h2>
+
+      <p>
+        Las tres pantallas medían mal por lo mismo. <code>AppShell</code> dibuja
+        <code>&lt;main class="flex min-w-0 flex-1 flex-col gap-page"&gt;</code> dentro de una cadena
+        <code>min-h-screen</code>/<code>flex-1</code>: <strong>main ya mide lo que la ventana</strong>.
+        Ningún hijo de primer nivel de estas tres reclamaba ese alto, así que todo lo que el
+        contenido no usaba se apilaba debajo del último bloque. No era un problema de estas
+        pantallas: era el mismo problema tres veces.
+      </p>
+
+      <div class="call">
+        <span class="tag">La trampa que ya costó una reversión</span>
+        <p>
+          <code>margin-top: auto</code> <strong>no arregla esto</strong>, y no porque el margen no
+          funcione en una columna flex —funciona— sino porque un margen automático solo puede
+          absorber espacio libre que su contenedor <em>ya tenga</em>. Con nada estirado no hay nada
+          que absorber, que es exactamente como murió el mismo intento en el PR de perfil. El alto
+          hay que <strong>reclamarlo</strong> primero. Después el margen hace su trabajo solo.
+        </p>
+      </div>
+
+      <p>
+        En <code>/student</code> eso quiere decir que había <strong>tres mecanismos ya escritos y
+        los tres inertes</strong>: el <code>flex-1</code> de <code>TrainingPanel</code>, el
+        <code>flex-1</code> de <code>TrainingRow</code> y el <code>mt-auto</code> de su pie. El
+        comentario del archivo los daba por funcionando y un test los daba por probados. Lo que
+        faltaba era el primer eslabón: la grilla de contenido reclama el sobrante
+        (<code>flex-1</code>) y la columna del riel se estira dentro de ella
+        (<code>lg:self-stretch</code>).
+      </p>
+
+      <div class="call">
+        <span class="tag">Lo que NO se estira, y por qué</span>
+        <p>
+          El carnet se queda fuera de la cadena, arriba, a su alto natural. El fix 12b ya lo estiró
+          una vez y el sobrante terminó <em>dentro</em> de la tarjeta, debajo de su grilla de datos:
+          el mismo vacío mudado de lugar, no cerrado. Un carnet tiene proporciones de carnet; un
+          panel de filas no. Los dos tests que fijan esa reversión
+          —<code>no flex-1</code> en el carnet, <code>no items-stretch</code> en la grilla— siguen
+          verdes sin tocarlos.
+        </p>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>3 · Mi cuenta — 38% a 5%</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-socio-cuenta-estudiante.png" alt="Mi cuenta como jugadora, antes" />
+          <figcaption><b>Antes · Jugadora</b>Todo termina a 556px y los 344 que faltan son lienzo a ancho completo. El panel «Esta semana» ocupa lo que ocupa y se detiene.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-socio-cuenta-estudiante.png" alt="Mi cuenta como jugadora, después" />
+          <figcaption><b>Después · Jugadora</b>El riel llega al pie, las filas reparten el sobrante hasta su techo y el pie con la asistencia queda anclado abajo.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">El techo de la fila salió de mirar la primera medición, no de la teoría.</p>
+          <p class="why">
+            Con el sobrante llegando por fin al panel, tres filas repartiéndoselo crecieron a
+            <strong>168px cada una</strong>: una fila de 56px renderizada casi al triple, su marca
+            <code>bg-sunken</code> convertida en una plancha gris y la etiqueta del día flotando en
+            el medio. Eso es el «espacios vacíos» del cliente reapareciendo <em>dentro</em> de la
+            fila que debía absorberlo. El techo es <code>max-h-[112px]</code>, y es el mayor valor
+            en el que una fila sigue leyéndose como una fila. Lo que sobra pasado ese punto se
+            detiene en el pie, que <code>mt-auto</code> ahora sí ancla de verdad.
+          </p>
+        </li>
+        <li>
+          <p class="what">El estado vacío del horario tenía dos de sus tres partes.</p>
+          <p class="why">
+            D11 pide qué falta, por qué y <strong>qué hacer</strong>. Tenía las dos primeras y la
+            tercera era una frase —«consulte en administración»— sin nada que apretar. Ahora lleva
+            <code>action</code> a <code>/ayuda</code> y <code>fill</code>, para que dentro del panel
+            estirado el enunciado se centre en su caja en vez de quedar arriba con lienzo debajo.
+          </p>
+        </li>
+      </ul>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-socio-cuenta-representante.png" alt="Mi cuenta como representante, antes" />
+          <figcaption><b>Antes · Representante</b>Ya llenaba casi toda la ventana —tres hijos y veinte asistencias registradas—, así que aquí la ganancia es chica y esperable.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-socio-cuenta-representante.png" alt="Mi cuenta como representante, después" />
+          <figcaption><b>Después · Representante</b>Las filas no crecen porque no hace falta, y los dos botones de cuenta bajan al pie del bloque que modifican, que es donde D8 los quiere.</figcaption>
+        </figure>
+      </div>
+
+      <div class="call">
+        <span class="tag">Decisión tomada en automático</span>
+        <p>
+          <strong>La etiqueta de la salida del estado vacío no se escribió a mano.</strong> D12b dice
+          que el nombre de un destino sale del mismo registro que dibuja el riel, así que el enlace
+          dice <em>Preguntas frecuentes</em>, que es como el shell nombra <code>/ayuda</code> en
+          todas partes, y no «Ayuda» ni «Consultar» ni ninguna variante nueva.
+        </p>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>4 · Ficha médica — la pantalla que no puede crecer</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-socio-ficha-estudiante.png" alt="Ficha médica como jugadora, antes" />
+          <figcaption><b>Antes · Jugadora</b>Cinco controles en exactamente dos filas de 40px, dibujados sobre <code>max-w-8xl</code>: la medida MÁS ancha del producto para su contenido más angosto.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-socio-ficha-estudiante.png" alt="Ficha médica como jugadora, después" />
+          <figcaption><b>Después · Jugadora</b>Medida corta (972px), dos columnas, cuatro filas, y un solo encabezado en toda la pantalla.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">Tres encabezados apilados nombrando lo mismo.</p>
+          <p class="why">
+            El <code>&lt;h1&gt;</code> de la página decía «Ficha médica», el editor lo repetía
+            palabra por palabra en su propio encabezado, y entre los dos había una tarjeta suelta
+            cuyo <code>&lt;h2&gt;</code> lo decía por tercera vez y cuyo <code>&lt;p&gt;</code>
+            reescribía el subtítulo de la página con otras palabras. D11c es explícito:
+            <em>«ninguna ayuda repite el subtítulo: si lo repite, sobra una de las dos»</em>. La
+            tarjeta se fue entera. Lo único que hacía de verdad —decirle a un representante cuál de
+            sus dos hijos está en pantalla— lo hace mejor el encabezado fijo del editor, que es el
+            que sobrevive al scroll.
+          </p>
+        </li>
+        <li>
+          <p class="what">El nombre dejó de ser una segunda línea y entró al título.</p>
+          <p class="why">
+            «Ficha médica» arriba y «Martín» debajo son una sola frase partida al medio. Ahora el
+            encabezado dice <strong>«Ficha médica de Martín»</strong> y sigue siendo el elemento que
+            la banda <code>sticky</code> fija. Es el único candado de test que hubo que renegociar
+            en toda la tanda, y la renegociación está escrita en el propio test con su porqué: lo que
+            ese test protege —que quien edita no pierda de vista de quién es el dato médico, y que el
+            mecanismo sea <code>position: sticky</code> de verdad— no cambió.
+          </p>
+        </li>
+        <li>
+          <p class="what">Tres columnas eran una tira de controles, no un formulario.</p>
+          <p class="why">
+            <code>sm:grid-cols-2 lg:grid-cols-3</code> metía los cinco campos en dos filas, y eran
+            las mismas dos filas con la ficha vacía o llena. Dos columnas es además la forma honesta:
+            tipo de sangre al lado de alergias —lo que el club necesita saber antes de actuar—, la
+            lista de enfermedades con el ancho completo que un valor separado por comas pide, y los
+            dos campos de emergencia juntos, porque son un solo dato escrito en dos cajas. Es el
+            editor compartido con <code>/members</code>, así que la mejora viaja también al admin.
+          </p>
+        </li>
+      </ul>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-socio-ficha-representante.png" alt="Ficha médica como representante, antes" />
+          <figcaption><b>Antes · Representante</b>La tarjeta repetida ocupa 90px entre el selector y el editor, y el número mide 33% porque esos 90px de repetición cuentan como contenido.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-socio-ficha-representante.png" alt="Ficha médica como representante, después" />
+          <figcaption><b>Después · Representante</b>39%. El número sube porque se fueron 90px que no decían nada, y el formulario recuperó menos de lo que se quitó.</figcaption>
+        </figure>
+      </div>
+
+      <div class="call">
+        <span class="tag">El número que sube, y por qué se deja subir</span>
+        <p>
+          Como representante la ficha médica pasa de 33% a 39%. Lo que se fue son 90px de una tarjeta
+          que repetía dos veces lo que la pantalla ya decía; lo que entró son unos 150px de
+          formulario con forma de formulario. La resta no da a favor <em>del número</em>, y da muy a
+          favor de la pantalla. Bajar el porcentaje pedía dejar la repetición en su lugar o inventar
+          un dato: la ficha médica no tiene historial, ni tendencia, ni fecha de última
+          actualización —el backend no las guarda— y D14 prohíbe inventar una forma. El documento
+          mide 900px antes y después: no scrollea en ninguno de los dos.
+        </p>
+      </div>
+
+      <p class="note">
+        Esta pantalla es la tercera del producto en tomar <code>measure="short"</code>, después de
+        <code>/discounts</code> y <code>/groups</code>. El registro que lo controla
+        (<code>content-measure.test.ts</code>) exige que una pantalla entre <em>por una medición</em>
+        y no por parecer ancha, y está escrito ahí con las dos lecturas que la habilitan. El propio
+        <code>AppShell</code> es honesto sobre lo que <code>short</code> hace y lo que no: no achica
+        el lienzo, cambia la proporción del bloque que está encima. 1356px de columna cargando un
+        formulario de 300px se lee como una página que se quedó sin filas; 972px cargando 450 se lee
+        como una columna con margen.
+      </p>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>5 · Mis pagos — el riel que fijaba el alto de la fila</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-socio-pagos-estudiante.png" alt="Mis pagos como jugadora, antes" />
+          <figcaption><b>Antes · Jugadora</b>«Cómo se registra un pago» ocupa la segunda columna entera con altura fija: en el estado flaco es el ítem más alto de la pantalla y por lo tanto el que fija el alto de la fila.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-socio-pagos-estudiante.png" alt="Mis pagos como jugadora, después" />
+          <figcaption><b>Después · Jugadora</b>El procedimiento detrás de «Ver ayuda», una sola columna sobre la medida corta, y el historial a su alto natural.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">Era un procedimiento, y los procedimientos van detrás de «Ver ayuda».</p>
+          <p class="why">
+            Tres pasos numerados y un preámbulo: la pieza de ayuda suelta más larga del portal del
+            socio. D11c dice que el subtítulo dice <em>qué es</em> la pantalla y todo lo que explica
+            <em>cómo funciona</em> se guarda. <code>ContextualHelp</code> ya existía y solo lo usaban
+            dos pantallas de admin. Sus tres variantes —el lector que puede pagar, el que todavía no
+            tiene membresía y el menor que no registra pagos— siguen enteras, palabra por palabra.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y era el defecto de layout, no solo de ubicación.</p>
+          <p class="why">
+            El comentario que llevaba ya admitía el síntoma —«dejaba un hueco de 170px»— y lo
+            respondía con <code>row-span-2</code>, que reparte el mismo bloque fijo sobre las dos
+            filas en vez de sacar lo que estaba fijando el alto. Detrás de la revelación cuesta una
+            línea de 20px cerrada.
+          </p>
+        </li>
+        <li>
+          <p class="what">Sin el riel, la columna única heredaba 1356px.</p>
+          <p class="why">
+            Y ahí aparecía la otra mitad de «espacios vacíos», la horizontal: la tarjeta de membresía
+            con «Pagado hasta el 02/09/2026» a la izquierda y 600px de nada a su derecha; una fila de
+            pago —un monto, una insignia y una línea de metadato— corriendo el ancho completo por la
+            misma razón. Esta pantalla califica para <code>measure="short"</code> por la regla que el
+            propio <code>AppShell</code> escribe, no por gusto: su alto es función de cuántos pagos
+            <em>existen</em> y no tiene paginador.
+          </p>
+        </li>
+        <li>
+          <p class="what">Cuatro usuarios de <code>PAGE_RAIL</code>, no cinco.</p>
+          <p class="why">
+            El riel tenía exactamente un bloque adentro. Guardar una columna de 340px por sí misma
+            es justamente el error contra el que advierte el comentario del propio token: <em>«un
+            riel NO cierra el vacío vertical»</em>. El canario del registro baja a 4 con el motivo
+            escrito, igual que bajó a 5 cuando el tablero del entrenador dejó de ser un riel.
+          </p>
+        </li>
+      </ul>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-socio-pagos-representante.png" alt="Mis pagos como representante, antes" />
+          <figcaption><b>Antes · Representante</b>El mismo riel fijo, con el nombre del hijo intercalado en los tres pasos. El historial de un pago termina a 694px.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-socio-pagos-representante.png" alt="Mis pagos como representante, después" />
+          <figcaption><b>Después · Representante</b>23% a 18%. El selector de estudiante conserva su ayuda, ahora detrás de «Ver ayuda», y la tarjeta de membresía sigue nombrando de quién es.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">El procedimiento no perdió una palabra al mudarse.</p>
+          <p class="why">
+            Las tres variantes siguen enteras: la del lector que puede pagar —los tres pasos, con el
+            nombre del hijo intercalado y el precio del plan que el formulario va a proponer—, la de
+            quien todavía no tiene <code>Membresia</code> y la del menor en su propia cuenta, que no
+            recibe los pasos sino la alternativa. Los discos numerados se quedan: D9 prohíbe numerar
+            bloques en el producto y esta es su única excepción declarada, porque acá el orden
+            <em>es</em> la información —el paso 2 no se puede hacer antes que el 1—. Lo que perdieron
+            al salir de la tarjeta es el cromo de fila: la calle de 20px y la hairline entre pasos,
+            que dentro de la hoja de ayuda se leían como una tabla.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>6 · El estado flaco — el socio nuevo</h2>
+
+      <p>
+        D11b es explícito: <em>«cada pantalla se diseña con el socio nuevo primero»</em>. Pedro
+        Salgado tiene membresía y cero pagos, que es lo que tiene cualquiera el día que entra al
+        club. Es el estado donde el <code>fill</code> del estado vacío se gana el sueldo.
+      </p>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-socio-pagos-sin-pagos.png" alt="Mis pagos sin pagos, antes" />
+          <figcaption><b>Antes · Cero pagos</b>El historial vacío se detiene a su alto natural y el riel de instrucciones es lo único que sostiene la pantalla. El estado vacío no ofrece salida: el <code>action</code> aparecía <em>solo</em> con un filtro puesto.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-socio-pagos-sin-pagos.png" alt="Mis pagos sin pagos, después" />
+          <figcaption><b>Después · Cero pagos</b>17% a 7%. El historial reclama el alto, el enunciado se centra en su caja y abajo está la puerta.</figcaption>
+        </figure>
+      </div>
+
+      <div class="call">
+        <span class="tag">Decisión tomada en automático</span>
+        <p>
+          <strong>El estado vacío del historial tenía la salida al revés.</strong> El
+          <code>action</code> aparecía únicamente cuando había un filtro puesto —que es el caso
+          recuperable, el que se arregla apretando otro chip— y la familia sin ningún pago, que es
+          el caso flaco real, se quedaba sin nada que hacer. Ahora la lista vacía sin filtro ofrece
+          <em>Registrar un pago</em>, que apunta a <code>?registrar=1</code>: la misma puerta que la
+          banda de Mi cuenta ya abría. No es un comportamiento nuevo, es una entrada más al que ya
+          existía. Y la puerta solo aparece cuando el formulario es realmente alcanzable: un menor en
+          su propia cuenta no registra pagos, una persona sin <code>Membresia</code> no tiene qué
+          renovar y un pago pendiente bloquea el segundo hasta que el club se pronuncie.
+        </p>
+      </div>
+
+      <div class="call">
+        <span class="tag">Estirar solo cuando llenar es honesto</span>
+        <p>
+          La primera versión de este pase estiraba el historial <em>siempre</em>. En jsdom se veía
+          bien y en el navegador era un defecto: con un pago en la lista, la tarjeta llegaba al pie
+          de la ventana y dibujaba <strong>200px de marco vacío debajo de una sola fila</strong>. Es
+          el mismo vacío que este rediseño viene a cerrar, mudado adentro de un borde — y una caja
+          vacía con borde se ve <em>más</em>, no menos, que el lienzo que reemplaza. Estirar rinde
+          donde <code>fill</code> puede centrar un enunciado en la caja, que es el caso vacío. Con
+          filas, la tarjeta se queda a su alto.
+        </p>
+      </div>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-socio-cuenta-sin-pagos.png" alt="Mi cuenta del socio nuevo, antes" />
+          <figcaption><b>Antes · Socio nuevo</b>26% de lienzo bajo el riel. Es el mismo defecto que la jugadora con datos, un poco más chico porque la banda de cuota sin cobertura ocupa más que la versión compacta.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-socio-cuenta-sin-pagos.png" alt="Mi cuenta del socio nuevo, después" />
+          <figcaption><b>Después · Socio nuevo</b>5%, el mismo número que los otros dos estados de esta pantalla — que es exactamente lo que se espera de un arreglo estructural y no de un ajuste por caso.</figcaption>
+        </figure>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>7 · La ayuda suelta, en las tres pantallas a la vez</h2>
+
+      <p>
+        El selector de estudiante lo dibujan las tres pantallas desde el mismo componente, y llevaba
+        una frase permanente al lado: «Se mantiene en Mi cuenta, Pagos y Asistencias hasta que usted
+        lo cambie». Es un <em>cómo funciona</em>, no un <em>qué es</em>, así que eran tres copias del
+        mismo párrafo flotante. Pasó a <code>ContextualHelp</code> con el título «Cómo funciona esta
+        elección», y de paso dice ahora la otra mitad del contrato que la frase original callaba: que
+        la elección viaja en la dirección de la página, así que un enlace compartido abre la misma
+        persona.
+      </p>
+
+      <p class="note">
+        Con esto, las tres pantallas del socio usan el mismo contrato de ayuda que el panel de admin
+        tiene desde #199, que es lo que pedía la issue #264 antes de que D11c la absorbiera.
+      </p>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>8 · Lo que no se tocó, y por qué</h2>
+
+      <ul class="findings">
+        <li>
+          <p class="what">El <code>sticky top-0</code> del editor de ficha médica.</p>
+          <p class="why">
+            El diagnóstico decía, con razón, que está pensado para un formulario que desborda y que
+            en <code>/student/medical-record</code> nunca desborda. Se queda igual: es el
+            <strong>mismo componente</strong> que el admin monta dentro de una fila de
+            <code>/members</code>, donde el cuerpo sí scrollea y donde la identidad del alumno es lo
+            único que impide editar la ficha equivocada. Un test lo fija nombrando el mecanismo. En
+            la pantalla del socio no cuesta un píxel: la banda existe igual, solo que nunca se
+            despega.
+          </p>
+        </li>
+        <li>
+          <p class="what"><code>WeekStrip</code> en «Esta semana».</p>
+          <p class="why">
+            El encaje es evidente —el panel se llama literalmente como una semana y la primitiva
+            existe sin un solo uso en producción— pero pide un mapa de día de backend
+            (<code>"LUNES"</code>) a día de frontend (<code>"lun"</code>) que hoy vive en
+            <code>lib/server/attendance-adapter.ts</code>, del lado del servidor. Traerlo al cliente
+            o duplicarlo son las dos formas de crear el segundo vocabulario que D9 prohíbe. Queda
+            para cuando se toque el adaptador, con su propia medición.
+          </p>
+        </li>
+        <li>
+          <p class="what"><code>StatCard</code> / <code>StatGrid</code> con las cifras de asistencia.</p>
+          <p class="why">
+            <code>summarizeRecentAttendance</code> y <code>breakdownAttendance</code> ya las
+            calculan y son honestas. Pero el pie de «Esta semana» ya dice la proporción en una frase
+            —«De las últimas 20 sesiones registradas de Camila asistió a 15 de 20»— y repetirla como
+            cifra sería el mismo dato dos veces en la misma tarjeta. Y en el estado que manda D11b,
+            el socio nuevo, el recap es <code>null</code>: una tarjeta de estadística ahí solo podría
+            decir 0 de 0. Vive donde ya vive, en <code>/student/attendance</code>.
+          </p>
+        </li>
+        <li>
+          <p class="what">La columna del carnet, vacía debajo de la tarjeta.</p>
+          <p class="why">
+            Con el riel estirado, la mitad izquierda de Mi cuenta queda con el carnet arriba y aire
+            debajo. Llenarla pide contenido que la cuenta no tiene: para una jugadora nueva no hay
+            asistencias, no hay historial de pagos en esta pantalla y no hay más datos de membresía
+            que los cuatro que el carnet ya imprime. Estirar el carnet para taparlo es exactamente
+            el fix 12b que ya se revirtió. Queda medido y a la vista.
+          </p>
+        </li>
+        <li>
+          <p class="what">El 45% y el 39% de la ficha médica.</p>
+          <p class="why">
+            Medidos, explicados y sin cerrar. Es la única de las tres que es layout puro: no crece
+            con datos porque no hay datos que la hagan crecer. Lo que se hizo es lo que el sistema
+            permite hacer sin mentir —medida corta, forma de formulario, un solo encabezado— y el
+            resto es el mismo tipo de número que el README ya lleva declarado para el login.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <h2>9 · Cómo verificarlo</h2>
+      <div class="card">
+        <p class="note" style="margin-bottom: 10px">
+          Suite completa, tipos y lint sobre este cambio:
+        </p>
+        <p style="margin-bottom: 10px"><code>npm test</code> — 187 archivos, 3090 tests, todo en verde (eran 3089; el neto son ocho casos nuevos y uno reemplazado).</p>
+        <p style="margin-bottom: 10px"><code>npm run type-check</code> — sin errores.</p>
+        <p style="margin-bottom: 0"><code>npm run lint</code> — sin advertencias.</p>
+      </div>
+      <p class="note">
+        Los tres candados de registro que este cambio toca se actualizaron con el motivo escrito
+        adentro, que es para lo que existen: <code>content-measure.test.ts</code> (la ficha médica y
+        los pagos entran a la medida corta, cada una con su lectura),
+        <code>page-rail-usage.test.ts</code> (los pagos dejan de ser un riel) y
+        <code>MedicalRecordEditor.test.tsx</code> (el nombre entra al encabezado). Ninguno se relajó:
+        los tres siguen fallando si alguien repite lo que venían a impedir.
+      </p>
+      <p class="note">
+        Las capturas se regeneran con el guión de medición contra QA en
+        <code>http://localhost:3000</code>, a 1440×900, entrando con
+        <code>jazminbravo56@cataclub.com</code>, <code>valentinavera0@cataclub.com</code> y
+        <code>pedro@cataclub.com</code>. El índice de todas las comparaciones está en
+        <a href="README.md">README.md</a>.
+      </p>
+    </div>
+  </body>
+</html>

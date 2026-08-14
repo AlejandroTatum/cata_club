@@ -172,9 +172,25 @@ describe("StudentMedicalRecordPage — reusing MedicalRecordEditor per represent
     render(<StudentMedicalRecordPage />);
 
     await waitFor(() => expect(mockFetchFichaMedica).toHaveBeenCalledWith(42));
-    // "Martín" also appears in the picker's own <option>; the heading is the
-    // unambiguous "whose record is this" statement.
-    expect(await screen.findByRole("heading", { name: "Ficha médica de Martín" })).toBeInTheDocument();
+    // "Martín" also appears in the picker's own <option>, so the unambiguous
+    // "whose record is this" statement is the editor's own pinned heading —
+    // the one element that stays on screen while the fields scroll under it.
+    //
+    // This used to be a THIRD heading, in a card of its own above the editor,
+    // whose <h2> repeated what the editor's header already said and whose <p>
+    // repeated the page subtitle. D11c allows one: the page's <h1> names the
+    // screen, the card's heading names the person.
+    const heading = await screen.findByRole("heading", { name: "Ficha médica de Martín" });
+    expect(heading.closest("header")).not.toBeNull();
+  });
+
+  it("does not repeat the page subtitle in a card of its own", async () => {
+    render(<StudentMedicalRecordPage />);
+
+    await screen.findByLabelText("Tipo de sangre");
+    expect(
+      screen.queryByText(/Alergias, enfermedades, tipo de sangre y contacto de emergencia/i),
+    ).toBeNull();
   });
 
   it("switches persona and refetches when the guardian picks another dependent", async () => {
@@ -239,5 +255,51 @@ describe("StudentMedicalRecordPage — no representados", () => {
       await screen.findByText(/no se encontraron estudiantes asociados a esta cuenta/i),
     ).toBeInTheDocument();
     expect(mockFetchFichaMedica).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * D11b — the ficha médica measured the worst dead air of the whole product
+ * (57% as an adult titular, 42% as a guardian, at 1440x900), and it is the one
+ * screen where that is PURE layout: five controls that never grow with data,
+ * drawn on `max-w-8xl` — the product's WIDEST measure for its narrowest
+ * content.
+ *
+ * `measure="short"` is the instrument `AppShell` already documents for exactly
+ * this ("a page whose height is a function of the records that exist, not of a
+ * page size"), and until now only `/discounts` and `/groups` used it. It does
+ * not remove the emptiness and this suite does not claim it does — it reframes
+ * a runt block on a 1356px measure as a column with a margin on 972px, which
+ * is the same trade #85 recorded and accepted.
+ */
+describe("StudentMedicalRecordPage — drawn on the short measure, not the widest one", () => {
+  it("caps the pane at the short measure the design system reserves for pages that cannot grow", async () => {
+    const { container } = render(<StudentMedicalRecordPage />);
+
+    await screen.findByLabelText("Tipo de sangre");
+    expect(container.querySelector(".max-w-5xl")).not.toBeNull();
+    expect(container.querySelector(".max-w-8xl")).toBeNull();
+  });
+});
+
+/**
+ * D11 — the empty state's third part, "what to do", plus `fill` so the
+ * statement owns the box it stands in rather than floating at the top of a
+ * page whose remaining 500px stay blank.
+ */
+describe("StudentMedicalRecordPage — the no-representados state fills its page", () => {
+  it("centres its statement in the height the page reserves for it", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: null,
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(<StudentMedicalRecordPage />);
+
+    const title = await screen.findByText(/no se encontraron estudiantes asociados a esta cuenta/i);
+    const emptyState = title.parentElement;
+    expect(emptyState?.className).toMatch(/\bflex-1\b/);
+    expect(emptyState?.className).toMatch(/justify-center/);
   });
 });

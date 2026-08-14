@@ -68,6 +68,26 @@ real del club —que el payload ya traía y la pantalla tiraba—, «Jugador» c
 misma persona, Playfair estrenándose en el lema y Graduate en los títulos de tarjeta.
 **Estado: pendiente de revisión.**
 
+### 6 · Fase 4 · Tanda 1 — El socio
+**[`socio.html`](socio.html)**
+
+Las tres pantallas que el socio abre todos los días: `/student`, `/student/medical-record` y
+`/student/payments`. Dieciséis capturas: ocho estados —tres de Mi cuenta, dos de Ficha médica y tres
+de Mis pagos— antes y después, en los dos roles y con el socio nuevo aparte, que es el estado que
+D11b manda diseñar primero.
+
+**La causa raíz de las tres era una sola.** `AppShell` estira `<main>` al alto de la ventana y
+ningún hijo de primer nivel de estas pantallas reclamaba ese alto, así que todo lo que el contenido
+no usaba se apilaba debajo del último bloque. En `/student` eso dejaba **tres mecanismos ya escritos
+y los tres inertes** —dos `flex-1` y un `mt-auto`— que un comentario daba por funcionando y un test
+por probados.
+
+Lo que cambió: la grilla reclama el sobrante y el riel se estira dentro de ella (el carnet no, que es
+la reversión del fix 12b y sigue fijada por su test); «Cómo se registra un pago» y la nota del
+selector de estudiante detrás de «Ver ayuda»; la ficha médica y los pagos a `measure="short"`; el
+editor de ficha médica en dos columnas con un solo encabezado en vez de tres; y los dos estados
+vacíos que no tenían salida, con la suya. **Estado: pendiente de revisión.**
+
 ---
 
 ## Las mediciones
@@ -89,10 +109,24 @@ ventana, a 1440×900. Es el hueco que la persona ve vacío sin scrollear.
 | Inscripción | Paso 4 · Salud | 13% · 121px | **11% · 97px** |
 | Inscripción | Paso 5 · Resumen | 0% | 0% · 1px |
 | Inscripción | Pantalla de éxito | 44% · 393px | **28% · 253px** |
+| Mi cuenta | Jugadora adulta con horario | 38% · 344px | **5% · 49px** |
+| Mi cuenta | Representante, hijo con datos | 7% · 64px | **5% · 46px** |
+| Mi cuenta | Socio nuevo, cero pagos | 26% · 231px | **5% · 49px** |
+| Ficha médica | Jugadora adulta | 52% · 469px | **45% · 409px** |
+| Ficha médica | Representante | 33% · 301px | 39% · 349px |
+| Mis pagos | Jugadora adulta, un pago | 30% · 266px | **25% · 222px** |
+| Mis pagos | Representante, un pago | 23% · 206px | **18% · 162px** |
+| Mis pagos | Socio nuevo, cero pagos | 17% · 154px | **7% · 64px** |
 
 El login es el primer número que no baja, y es a propósito: el hueco lo produce el centrado de la
 tarjeta sobre el eje de la página, que es lo que el dueño pidió expresamente. Bajarlo exige
 descentrarla o inventar contenido. Está explicado en su comparación.
+
+La ficha médica del representante es el otro número que **sube**, y por la misma clase de motivo:
+se fueron 90px de una tarjeta que repetía dos veces lo que la pantalla ya decía, y el formulario
+—ahora en dos columnas— recuperó menos de lo que se quitó. Bajarlo pedía dejar la repetición o
+inventar un dato que el backend no guarda. Está explicado en su comparación, con el documento
+midiendo 900px antes y después.
 
 El paso 1 de la inscripción es el primero que **sube**, y también a propósito. El contenido es el
 mismo y el documento mide lo mismo (900px, no scrollea ni antes ni después): lo que pasó es que
@@ -105,13 +139,21 @@ scrollean suman **294px menos** de alto de documento.
 
 De las issues #265 y #266, absorbidas por el plan y cerradas:
 
-| Pantalla | Como estudiante | Como representante |
-|---|---|---|
-| Ficha médica | **57%** | 42% |
-| Mi cuenta | 38% | 33% |
-| Mis pagos | 27% | 34% |
+| Pantalla | Como estudiante | Como representante | Estado |
+|---|---|---|---|
+| Ficha médica | 57% → **45%** | 42% → 39% | ✅ [`socio.html`](socio.html) |
+| Mi cuenta | 38% → **5%** | 33% → **5%** | ✅ [`socio.html`](socio.html) |
+| Mis pagos | 27% → **25%** | 34% → **18%** | ✅ [`socio.html`](socio.html) |
 
-Estas tres son fase 4 y están en la cola del barrido.
+**Las tres están hechas.** Los números de la izquierda son los de las issues; los de la derecha, los
+que dio el dataset de QA hoy con el mismo guión. No coinciden exactamente porque el aire muerto
+depende de cuántos datos tenga la cuenta que se mire — los pares antes/después que valen para juzgar
+el cambio son los de la tabla de arriba, porque los dos lados salieron de la misma cuenta y el mismo
+minuto. La ficha médica es la única que no cierra, y es la única de las tres que es layout puro: no
+crece con datos porque no hay datos que la hagan crecer.
+
+Ya no queda nada medido sin tocar. Lo que sigue en la fase 4 son las pantallas del entrenador y las
+del admin, que todavía no tienen medición.
 
 ---
 
@@ -138,7 +180,9 @@ quedan **destacadas** en esa última sección, no enterradas en un párrafo.
 | F1 | Fundación: tokens, tipografía, primitivas, riel | ✅ |
 | F2 | La landing renovada — la trabaja Alejandro. **Espera el OK del cliente** | pendiente |
 | F3 | Tres faros: Miembros · Inscripción · Login y Perfil | ✅ 3 de 3 |
-| F4 | El barrido de las 24 pantallas restantes | pendiente |
+| F4 · tanda 1 | El socio: Mi cuenta · Ficha médica · Mis pagos | ✅ |
+| F4 · tanda 2 | El entrenador | pendiente |
+| F4 · tanda 3 | El admin | pendiente |
 
 Los faros están elegidos por contraste, no por importancia: una tabla densa, un formulario largo y
 la cara al socio. Si el sistema aguanta esos tres, aguanta los que siguen.

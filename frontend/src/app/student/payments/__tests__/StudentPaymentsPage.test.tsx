@@ -776,3 +776,112 @@ describe("StudentPaymentsPage — the dependent selection survives navigation", 
     });
   });
 });
+
+/**
+ * D11c — "la ayuda no vive suelta".
+ *
+ * "Cómo se registra un pago" is a procedure, top to bottom: three numbered
+ * steps saying what the form will ask for and who validates it. The subtitle
+ * of the page already says WHAT this screen is; everything that explains HOW
+ * it works belongs behind "Ver ayuda", which is the contract the admin panel
+ * has honoured since #199 and the family screens never adopted.
+ *
+ * It was also the layout defect. The rail was a block of FIXED height, so in
+ * the thin state — one payment, or none — it was the tallest item on the
+ * screen and its height became the row's. The comment it carried admitted as
+ * much ("dejaba un hueco de 170px"); moving it behind the disclosure removes
+ * the item that was setting the height, rather than compensating for it.
+ */
+describe("StudentPaymentsPage — the procedure is disclosed, not a permanent rail", () => {
+  it("keeps the three steps behind 'Ver ayuda' instead of printing them beside the card", async () => {
+    render(<StudentPaymentsPage />);
+
+    await screen.findByTestId("membership-status");
+    expect(screen.queryByText(/Son tres pasos y terminan en el club/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cómo se registra un pago" }));
+
+    expect(screen.getByText(/Son tres pasos y terminan en el club/i)).toBeInTheDocument();
+    expect(screen.getByText(/hasta 5 MB/i)).toBeInTheDocument();
+  });
+
+  it("discloses the club-registers-it variant for a minor on their own account", async () => {
+    mockUseAuth.mockReturnValue(authSession("estudiante"));
+    mockFetchStudentPortal.mockResolvedValue({
+      self: { ...SELF, fechaNacimiento: MINOR_BIRTH_DATE },
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByTestId("membership-status");
+    fireEvent.click(screen.getByRole("button", { name: "Cómo se paga esta membresía" }));
+
+    expect(screen.getByText(/Acérquese a administración del club/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * D11b — the history is the block that grows with the family's real record, so
+ * it is the one that claims the height `main` already reserved. Everything
+ * else on this screen is a fixed summary.
+ *
+ * D11 — and its empty state gets the third part it was missing. The `action`
+ * used to appear ONLY when a filter was on, which is backwards: a filtered
+ * empty list is the recoverable case, and the case with no payments at all —
+ * the socio nuevo D11b says to design for FIRST — was the one left with no way
+ * out.
+ */
+describe("StudentPaymentsPage — the history claims the page's leftover height", () => {
+  /*
+   * Both directions, because the first draft of this pass got it wrong in a
+   * way only a browser showed.
+   *
+   * Stretching the history unconditionally read fine in jsdom and was measured
+   * as a defect at 1440x900: with one payment on file the card ran to the foot
+   * of the window and drew a 200px empty frame under a single row. That is the
+   * same emptiness the redesign is closing, moved inside a border — and a
+   * bordered empty box is MORE visible than the canvas it replaced, not less.
+   *
+   * Stretching earns its keep only where `EmptyState`'s `fill` can centre a
+   * statement in the box, which is the empty case — and that is also the case
+   * D11b says to design for first, because a socio nuevo has no payments.
+   */
+  it("leaves the card at its own height while there are rows to show", async () => {
+    render(<StudentPaymentsPage />);
+
+    const history = await screen.findByLabelText("Historial de pagos");
+    expect(history.className).not.toMatch(/\bflex-1\b/);
+  });
+
+  it("claims the page's leftover height only when there is nothing to list", async () => {
+    mockFetchPagosDePersona.mockResolvedValue([]);
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByText("Todavía no hay pagos registrados.");
+    expect(screen.getByLabelText("Historial de pagos").className).toMatch(/\bflex-1\b/);
+  });
+
+  it("gives a family with no payments at all somewhere to go", async () => {
+    mockFetchPagosDePersona.mockResolvedValue([]);
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText("Todavía no hay pagos registrados.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Registrar un pago/i })).toBeInTheDocument();
+  });
+
+  it("fills the stretched card rather than floating its statement at the top", async () => {
+    mockFetchPagosDePersona.mockResolvedValue([]);
+
+    const { container } = render(<StudentPaymentsPage />);
+
+    const title = await screen.findByText("Todavía no hay pagos registrados.");
+    const emptyState = title.parentElement;
+    expect(emptyState?.className).toMatch(/\bflex-1\b/);
+    expect(emptyState?.className).toMatch(/justify-center/);
+    void container;
+  });
+});

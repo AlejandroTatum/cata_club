@@ -36,6 +36,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
+import ContextualHelp from "@/components/ContextualHelp";
 import { ICON } from "@/lib/icon-size";
 import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api";
 
@@ -194,10 +195,12 @@ export interface ManagedStudentPickerProps {
  * 40px (`h-ctl`) and a 10px radius (`rounded-ctl`) like every other control in
  * the system, with the `ball` focus ring `_sistema.css:80` specifies.
  *
- * The note beside it is the fix stated out loud. A guardian who once watched
- * this choice evaporate between two screens has no way to tell from the screen
- * that it no longer does, and the whole point of the control is that she can
- * trust whose money she is about to move.
+ * The note is the fix stated out loud — a guardian who once watched this
+ * choice evaporate between two screens has no way to tell from the screen that
+ * it no longer does, and the whole point of the control is that she can trust
+ * whose money she is about to move. It is a "cómo funciona", so D11c puts it
+ * behind "Ver ayuda" rather than beside the select on all three screens at
+ * once.
  */
 export default function ManagedStudentPicker({
   id,
@@ -235,9 +238,16 @@ export default function ManagedStudentPicker({
           aria-hidden="true"
         />
       </div>
-      <p className="text-xs text-ink-3-strong">
-        Se mantiene en Mi cuenta, Pagos y Asistencias hasta que usted lo cambie.
-      </p>
+      {/* D11c — the note explains HOW the selection behaves, not what the
+          control is, so it lives behind "Ver ayuda" like every other procedure
+          note in the product. It used to be a permanent paragraph beside the
+          select, which meant three copies of the same floating sentence: this
+          component draws on `/student`, `/student/payments` and
+          `/student/medical-record` at once. */}
+      <ContextualHelp title="Cómo funciona esta elección">
+        Se mantiene en Mi cuenta, Pagos y Asistencias hasta que usted lo cambie, y viaja en la
+        dirección de la página, así que un enlace compartido abre la misma persona.
+      </ContextualHelp>
     </div>
   );
 }

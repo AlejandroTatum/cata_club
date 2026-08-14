@@ -12,12 +12,12 @@ import { toUserMessage, isNotFound } from "@/lib/error-message";
 interface MedicalRecordEditorProps {
   personaId: number;
   /**
-   * The student this record belongs to. Rendered in a header band that stays
-   * pinned (`sticky top-0`) while the fields below scroll — this is medical
-   * data, and on a narrow screen the identity above this editor (owned by
-   * the caller, e.g. `StudentEditPanel`) scrolls out of view long before the
-   * form does. Optional so a caller with no name in scope still renders; the
-   * band itself just doesn't.
+   * The student this record belongs to. Rendered INSIDE the heading of a
+   * header band that stays pinned (`sticky top-0`) while the fields below
+   * scroll — this is medical data, and on a narrow screen the identity above
+   * this editor (owned by the caller, e.g. `StudentEditPanel`) scrolls out of
+   * view long before the form does. Optional so a caller with no name in
+   * scope still renders; the heading then names the section alone.
    */
   studentName?: string;
 }
@@ -146,16 +146,36 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
       <header className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-t-2xl border-b border-line bg-paper px-3 py-2.5 sm:px-4">
         <Stethoscope size={ICON.sm} strokeWidth={1.5} className="flex-none text-state-bad" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-extrabold text-ink">Ficha médica</h3>
-          {/* Not a description of the form — the name says something the
-              title alone can't once you've scrolled past it. */}
-          {studentName && <p className="truncate text-xs text-ink-3">{studentName}</p>}
+          {/* The owner's name belongs IN the title, not on a second line under
+              it. Two lines said "Ficha médica" and then "Martín", which is one
+              statement split in half — and on `/student/medical-record` the
+              first half was already the page's own `<h1>`, so the card header
+              repeated the page title verbatim and the name arrived as an
+              orphan. One heading says the whole thing, and it is still the
+              element the sticky band pins (D11c). */}
+          <h3 className="truncate text-base font-extrabold text-ink">
+            {studentName ? `Ficha médica de ${studentName}` : "Ficha médica"}
+          </h3>
         </div>
         {state.isNew && <Badge tone="neutral">Nueva</Badge>}
       </header>
 
       <div className="p-3 sm:p-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Two columns at every width above `sm`, never three.
+       *
+       * Three across put all five controls into exactly TWO rows of 40px — a
+       * strip of controls rather than a form — and it was the same two rows
+       * whether the record was empty or full, because nothing here grows with
+       * data. On `/student/medical-record`, drawn at the page's full measure,
+       * that is a ~300px block under a 900px window: the worst dead-air
+       * reading in the product (57%, D11b).
+       *
+       * Two across is also the honest shape: the pairs mean something. Blood
+       * type sits beside allergies (what the club needs to know before it acts),
+       * the illness list gets the full width it needs for a comma-separated
+       * value, and the two emergency-contact fields are adjacent because they
+       * are one fact written in two boxes. */}
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label htmlFor={`tipo-sangre-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
             Tipo de sangre
@@ -173,7 +193,19 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
             ))}
           </select>
         </div>
-        <div className="sm:col-span-2 lg:col-span-2">
+        <div>
+          <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
+            Alergias
+          </label>
+          <input
+            id={`alergias-${personaId}`}
+            type="text"
+            value={alergias}
+            onChange={(e) => setAlergias(e.target.value)}
+            className="input-field w-full"
+          />
+        </div>
+        <div className="sm:col-span-2">
           <label htmlFor={`enfermedades-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
             Enfermedades (separadas por coma)
           </label>
@@ -188,18 +220,6 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
           <p className="mt-1 text-2xs tracking-flat text-ink-3">
             Al guardar se reemplaza la lista completa. Dejar vacío borra todas las enfermedades.
           </p>
-        </div>
-        <div>
-          <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-            Alergias
-          </label>
-          <input
-            id={`alergias-${personaId}`}
-            type="text"
-            value={alergias}
-            onChange={(e) => setAlergias(e.target.value)}
-            className="input-field w-full"
-          />
         </div>
         <div>
           <label htmlFor={`contacto-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">

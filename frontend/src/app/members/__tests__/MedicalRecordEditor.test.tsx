@@ -182,16 +182,39 @@ describe("MedicalRecordEditor header hierarchy", () => {
     expect(title.className).not.toMatch(/text-xs/);
   });
 
-  it("shows the student's name so identity survives once the fields scroll out of view", async () => {
+  /*
+   * Renegotiated by the socio redesign pass (D11c), with the reason recorded
+   * rather than the assertion quietly relaxed.
+   *
+   * What this test protects has not changed: whoever is editing must not lose
+   * sight of WHOSE medical data they are touching, and the mechanism must be
+   * real `position: sticky`, not a comment claiming it.
+   *
+   * What changed is that the name stopped being a second line under the title
+   * and moved INTO it. Two lines reading "Ficha médica" / "Jefferson Delgado
+   * Rivadeneira" are one statement split in half, and on
+   * `/student/medical-record` the first half was already the page's own `<h1>`
+   * — so the card header repeated the page title word for word and the name
+   * arrived as an orphan under it. That screen stacked THREE headings naming
+   * the same thing; D11c allows one.
+   */
+  it("names the record's owner in the heading, so identity survives the fields scrolling out of view", async () => {
     render(<MedicalRecordEditor personaId={7} studentName="Jefferson Delgado Rivadeneira" />);
 
-    await screen.findByRole("heading", { name: "Ficha médica" });
+    const heading = await screen.findByRole("heading", {
+      name: "Ficha médica de Jefferson Delgado Rivadeneira",
+    });
 
-    const identity = screen.getByText("Jefferson Delgado Rivadeneira");
     // The mechanism a real browser needs to keep it visible while the fields
     // below scroll: `position: sticky` pinned to the top of the nearest
     // scrolling ancestor (the member-edit dialog's scrollable body, or the
     // family portal's page).
-    expect(identity.closest("[class*='sticky']")).not.toBeNull();
+    expect(heading.closest("[class*='sticky']")).not.toBeNull();
+  });
+
+  it("names the section alone when the caller has no name in scope", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    expect(await screen.findByRole("heading", { name: "Ficha médica" })).toBeInTheDocument();
   });
 });
