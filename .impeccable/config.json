@@ -1,7 +1,10 @@
 {
   "detector": {
     "ignoreRules": [],
-    "ignoreFiles": [],
+    "ignoreFiles": [
+      "docs/archive/**",
+      "/tmp/**"
+    ],
     "ignoreValues": [
       {
         "rule": "broken-image",
