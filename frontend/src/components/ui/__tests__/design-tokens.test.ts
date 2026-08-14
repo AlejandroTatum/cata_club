@@ -18,6 +18,10 @@ const minHeights = (extend.minHeight ?? {}) as Record<string, string>;
 const radii = (extend.borderRadius ?? {}) as Record<string, string>;
 const spacing = (extend.spacing ?? {}) as Record<string, string>;
 const fontFamily = (extend.fontFamily ?? {}) as Record<string, string[]>;
+const fontSize = (extend.fontSize ?? {}) as Record<
+  string,
+  [string, { lineHeight: string; letterSpacing: string }]
+>;
 
 /** The number in front of a `px` value, so a step can be compared to a metric. */
 const px = (value: string): number => Number.parseInt(value, 10);
@@ -220,6 +224,31 @@ describe("design tokens — the three brand type families", () => {
 
   it("exposes Playfair as the serif voice", () => {
     expect(fontFamily.serif?.[0]).toBe("var(--font-playfair)");
+  });
+
+  /**
+   * The voice STEP, not just the voice family.
+   *
+   * `DESIGN.md`'s frontmatter has declared `typography.voice` —
+   * `clamp(20px, 2.4vw, 31px)`, line-height 1.3, tracking normal — since the
+   * system was written, and the scale never carried it, so the one phrase per
+   * screen the club speaks in first person had no size to take. That is not an
+   * oversight with no consequence: `/login`'s motto, which is exactly that
+   * phrase, sat in Barlow ExtraBold at the 46px `display` step because the
+   * display step was the only hero size on offer.
+   *
+   * A clamp rather than two breakpoint sizes because the voice is one line of
+   * copy that has to hold its proportion against a panel that grows — the same
+   * reason the brand cluster's own measure is a clamp.
+   */
+  it("carries the voice step DESIGN.md declares, so the club's own phrase has a size", () => {
+    const [size, meta] = fontSize.voice as [string, { lineHeight: string; letterSpacing: string }];
+    expect(size).toBe("clamp(20px, 2.4vw, 31px)");
+    expect(meta.lineHeight).toBe("1.3");
+    // Normal, not the tightening every other step above `base` carries:
+    // Playfair's high stroke contrast needs its own sidebearings to stay
+    // readable, and this step is read rather than scanned.
+    expect(meta.letterSpacing).toBe("normal");
   });
 
   it("keeps a system fallback behind each of the three", () => {

@@ -13,17 +13,20 @@
  *     be no max-width cap and no bounded min-height on the composition.
  *  2. The headline uses TYPOGRAPHIC DOUBLE QUOTES, never guillemets —
  *     *"esos signos de mayor y menor se ven muy mal"*.
- *  3. The headline is the largest step on desktop and one step down on phones.
- *     The prototype writes 42px/30px; the type scale has neither, so the two
- *     sizes are `display` (46px) and `2xl` (32px). It shipped at 21px — half
- *     its intended size — which is what made the screen read as broken.
+ *  3. The motto is the club's VOICE — Playfair, on the `voice` step. It first
+ *     shipped at 21px (half its intended size, which is what made the screen
+ *     read as broken), was corrected to the 46px `display` step, and was still
+ *     in the wrong FAMILY: Barlow ExtraBold is the interface face, and this
+ *     line is the club talking. Its measure is re-derived from Playfair's own
+ *     widths — see the measure block near the foot of this file.
  *  4. The coal panel is WIDER than the form panel (`flex:1.1` vs `flex:1`),
  *     not an equal half.
- *  5. The card carries the red "Panel de gestión" eyebrow, and the single
- *     figure is `yearsSinceFounding()` — a real, public, unauthenticated fact
- *     — rendered as an inline number + caption. It is NOT a student count: no
- *     endpoint an anonymous visitor can call returns one, and a fabricated
- *     figure is worse than no figure.
+ *  5. The card is headed by the "Panel de gestión" eyebrow — no longer in red,
+ *     which on this screen was one of six red elements competing with the one
+ *     that was the action — and the single figure is `yearsSinceFounding()`, a
+ *     real, public, unauthenticated fact rendered as an inline number +
+ *     caption. It is NOT a student count: no endpoint an anonymous visitor can
+ *     call returns one, and a fabricated figure is worse than no figure.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -72,42 +75,90 @@ describe("AuthShell", () => {
     expect(headline.textContent).not.toContain("»");
   });
 
-  it("renders the headline on the display step on desktop and one step down on phones", () => {
+  /**
+   * This assertion changes families, and the reason is that the old one was
+   * measuring the wrong thing correctly.
+   *
+   * It pinned the motto to `display`/`2xl` — the Graduate hero steps — because
+   * the prototype wrote 42px and the scale's nearest neighbours were 46 and
+   * 32. What nobody asked was which FACE. "Formando campeones para la vida" is
+   * the club speaking in first person, which is the one job `DESIGN.md` gives
+   * Playfair (*"la frase que el club le dice a la persona"*), and Playfair was
+   * used in exactly zero files under `src/` — a whole brand family shipped,
+   * loaded on every route, and spent nowhere. The motto was Barlow ExtraBold,
+   * i.e. the interface face shouting.
+   *
+   * `font-normal` is not an oversight either: `playfair-display-600.woff2` is
+   * a single 600 cut declared with no weight descriptor, so a CSS `600` makes
+   * the browser synthesise a bold ON TOP of one that is already there and
+   * thickens the strokes. `StatCard` learned the same lesson for Graduate.
+   *
+   * The size is now one fluid step instead of two fixed ones, which is why
+   * there is no `split:` variant left to assert.
+   */
+  it("sets the motto in the club's own voice — Playfair, on the voice step", () => {
     renderShell();
 
-    // The prototype writes 42px/30px. The scale has no 42 and no 30: the
-    // headline takes `display` (46px) on desktop and `2xl` (32px) on phones,
-    // and keeps `leading-crisp` because it wraps and has to stay one block.
     const headline = screen.getByTestId("auth-headline");
-    expect(headline.className).toContain("split:text-display");
-    expect(headline.className).toContain("text-2xl");
-    expect(headline.className).toContain("leading-crisp");
-    expect(headline.className).toContain("font-extrabold");
+    expect(headline.className).toContain("font-serif");
+    expect(headline.className).toContain("text-voice");
+    expect(headline.className).not.toContain("font-extrabold");
+    expect(headline.className).not.toContain("text-display");
     expect(headline).toHaveTextContent("Formando");
   });
 
-  it("makes the coal panel wider than the form panel, as flex:1.1 vs flex:1", () => {
+  it("spends the voice exactly once on the screen", () => {
+    // *"Playfair aparece una vez por pantalla. Una segunda frase en la misma
+    // pantalla significa que ninguna de las dos es énfasis."*
     renderShell();
 
-    expect(screen.getByTestId("auth-panel-dark").className).toContain("split:flex-[1.1_1_0%]");
+    expect(document.querySelectorAll(".font-serif")).toHaveLength(1);
   });
 
-  it("stacks the coal panel on phones instead of hiding it", () => {
-    renderShell();
-
-    // `@media (max-width:980px){ .auth{flex-direction:column} }` — the panel
-    // moves above the form, so it must never carry a `hidden` base class.
-    const dark = screen.getByTestId("auth-panel-dark");
-    expect(dark.className).not.toMatch(/(^|\s)hidden(\s|$)/);
-    expect(screen.getByTestId("auth-composition").className).toContain("split:flex-row");
-  });
-
-  it("renders the red eyebrow the form card is headed by", () => {
+  /**
+   * The eyebrow keeps its shape and loses its colour.
+   *
+   * `/login` had six red elements and exactly one of them was the action. The
+   * rule of the single red is not about how many things may be red — it is
+   * that red MEANS the action, and a screen where the eyebrow, two links, two
+   * error lines and the submit button share one colour has no way left to say
+   * which one to press. This label is a micro-label at 10.5px: it orients, it
+   * cannot be pressed, and it was the loudest thing above the title.
+   *
+   * The two navigation links keep the red, because `DESIGN.md` gives it to
+   * them by name (*"un enlace subrayado en rojo"*) — `LoginPage.test.tsx` holds
+   * them to the underline that makes them read as links and to `red-dark`, the
+   * only shade of it that passes AA as text.
+   */
+  it("heads the form card with a quiet eyebrow, not a red one competing with the action", () => {
     renderShell();
 
     const eyebrow = screen.getByText("Panel de gestión");
-    expect(eyebrow.className).toContain("text-cata-red");
     expect(eyebrow.className).toContain("uppercase");
+    expect(eyebrow.className).not.toContain("text-cata-red");
+  });
+
+  /**
+   * The same defect `PageHeader` was fixed for, one screen over: an `<h1>` in
+   * `font-extrabold` is Barlow, and Barlow is the interface face. This is the
+   * title of a card on the first screen anybody sees, and Graduate is the club.
+   *
+   * `text-lg` rather than the 26px `xl` it used to take, and that is measured:
+   * the card's content box is 236px, and "BIENVENIDO DE NUEVO" sets 241px wide
+   * in Graduate at 20px — so it wraps to two balanced lines, where at 26px
+   * (297px) it would wrap to two ragged ones. Uppercase Graduate runs ~35%
+   * wider than Barlow at the same size, which is why the step goes DOWN while
+   * the type gets louder on the page.
+   */
+  it("sets the card title in Graduate, at the card-title step", () => {
+    renderShell();
+
+    const title = screen.getByRole("heading", { name: "Bienvenido de nuevo" });
+    expect(title.className).toContain("font-display");
+    expect(title.className).toContain("text-lg");
+    expect(title.className).toContain("uppercase");
+    // One 400 cut — a weight class here asks the browser to fake a bold.
+    expect(title.className).not.toMatch(/font-(bold|semibold|extrabold)/);
   });
 
   it("renders the single figure from the founding date, with its caption", () => {
@@ -248,10 +299,18 @@ describe("AuthShell — the brand measure tracks the panel", () => {
 
     const cluster = screen.getByTestId("auth-brand-cluster");
     // The percentage is what makes it track the panel; the two bounds are the
-    // limits either side of which the composition breaks. 25rem (400px) is the
-    // 389px supporting line, which wraps to two lines below it; 44rem (704px)
-    // sits clear of the 750px width at which the motto collapses to one line.
-    expect(cluster.className).toContain("max-w-[clamp(25rem,72%,44rem)]");
+    // limits either side of which the composition breaks, and both were
+    // RE-MEASURED when the motto changed face — Playfair sets a different
+    // width per character than the Barlow ExtraBold these were calibrated
+    // against, so carrying the old numbers over would have been an estimate
+    // wearing a measurement's clothes.
+    //
+    // Measured in Chromium at 1440x900 against the shipped woff2: the motto is
+    // 507px unbroken at the clamp's 31px ceiling, its natural first line is
+    // 326px, and the supporting line under it is 350px. 22.5rem (360px) clears
+    // the supporting line by 10px; 31rem (496px) stays 11px under the width at
+    // which the motto collapses to one line.
+    expect(cluster.className).toContain("max-w-[clamp(22.5rem,72%,31rem)]");
     // The frozen cap, in either spelling.
     expect(cluster.className).not.toContain("[max-width:44ch]");
     expect(cluster.className).not.toMatch(/max-w-\[\d+(?:\.\d+)?ch\]/);
@@ -261,9 +320,13 @@ describe("AuthShell — the brand measure tracks the panel", () => {
     renderShell();
 
     const headline = screen.getByTestId("auth-headline");
-    // Phones keep the prototype's measure: at the `2xl` step `15ch` is 330px
-    // on a 342px panel, which is the wrap the stacked layout was built around.
-    expect(headline.className).toContain("max-w-[15ch]");
+    // Phones keep a measure of their own, in rem rather than in `ch`: against
+    // Playfair, `15ch` computes to ~150px and breaks the motto into four
+    // lines. Measured at the clamp's 20px floor, the motto is 328px unbroken
+    // and its first line 210px, so 16rem (256px) sets it on two inside a 342px
+    // phone panel.
+    expect(headline.className).toContain("max-w-[16rem]");
+    expect(headline.className).not.toMatch(/max-w-\[\d+(?:\.\d+)?ch\]/);
     // Desktop has exactly one measure, and it belongs to the cluster. Leaving
     // the `ch` cap in place would re-clamp the motto to 465px and undo the
     // fluid wrapper above it.

@@ -8,6 +8,7 @@ import { describe, it, expect } from "vitest";
 import {
   backendRoleForUserRole,
   canAccess,
+  getBackendRoleLabel,
   getDefaultRoute,
   getRoleLabel,
   getNavGroupsForRoles,
@@ -110,14 +111,45 @@ describe("getRoleLabel", () => {
     expect(getRoleLabel("representante")).toBe("Representante");
   });
 
-  it('returns "Estudiante" for estudiante', () => {
-    expect(getRoleLabel("estudiante")).toBe("Estudiante");
+  /**
+   * D9's vocabulary ruling, applied to the label the SESSION resolves to.
+   *
+   * The product had three words for one person — *Jugador* when enrolling,
+   * *alumno* in the role table, *estudiante* here — and `/profile` showed two
+   * of them at once: this label on the identity panel and `getBackendRoleLabel`
+   * a few rows below it. `IdentityCell`'s `MEMBER_ROLE_LABELS` already settled
+   * which word wins ("Jugador", the word the person read the day they walked
+   * into the club); these two functions are the last visible holdouts.
+   *
+   * Only the WORD moves. `UserRole` stays `"estudiante"`, `/student` stays
+   * `/student`, and `BackendTipoRol` stays `"ALUMNO"` — the route table and the
+   * backend enum are not vocabulary.
+   */
+  it('returns "Jugador" for estudiante — the one word D9 settled on', () => {
+    expect(getRoleLabel("estudiante")).toBe("Jugador");
   });
 
   it('returns a distinct, non-empty label for unsupported (not miscategorized as a real role)', () => {
     const label = getRoleLabel("unsupported");
     expect(label.length).toBeGreaterThan(0);
     expect(label).not.toBe(getRoleLabel("representante"));
+  });
+});
+
+describe("getBackendRoleLabel", () => {
+  it('names ALUMNO "Jugador", the same word getRoleLabel uses', () => {
+    // These two run side by side on `/profile`: the session's role heads the
+    // identity panel, and every assigned backend role is listed in "Información
+    // de tu rol". Two spellings of one role there is the defect D9 names.
+    expect(getBackendRoleLabel("ALUMNO")).toBe("Jugador");
+    expect(getBackendRoleLabel("ALUMNO")).toBe(getRoleLabel("estudiante"));
+  });
+
+  it("keeps the other three role words unabbreviated", () => {
+    // The rule of words: no "Rep.", no "Admin".
+    expect(getBackendRoleLabel("ADMINISTRADOR")).toBe("Administrador");
+    expect(getBackendRoleLabel("ENTRENADOR")).toBe("Entrenador");
+    expect(getBackendRoleLabel("REPRESENTANTE")).toBe("Representante");
   });
 });
 

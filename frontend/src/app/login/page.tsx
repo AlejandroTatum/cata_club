@@ -17,7 +17,7 @@
 import { type FormEvent, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -39,6 +39,34 @@ const WELCOME_HOLD_MS = 900;
 function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? "";
 }
+
+/** Written once because two fields point at it through `aria-describedby`. */
+const CREDENTIALS_ERROR_ID = "credentials-error";
+
+/**
+ * The skin of a link on this card.
+ *
+ * `DESIGN.md`, Links: *"Lo que navega no es un botón: es un enlace subrayado
+ * en rojo, con flecha cuando apunta a otra pantalla. Un enlace disfrazado de
+ * botón es lo que hace que una pantalla tenga cinco cosas iguales que se
+ * comportan distinto."* Both links here went somewhere else and neither was
+ * underlined, so the card had two red bold phrases, two red bold error lines
+ * and a red button, all wearing one colour and behaving three ways.
+ *
+ * `cata-red-dark`, not `cata-red`: the fill measures 4.10:1 on paper and fails
+ * AA as text, which is why the system reserves the dark cut for exactly this.
+ * The underline is what separates the colour's two jobs — the button is
+ * pressed, these are followed.
+ *
+ * The hit area is NOT in here, and that is deliberate: WCAG 2.2 SC 2.5.8
+ * exempts a link inline in a sentence, and "Inscríbase" is one — a 24px floor
+ * on it would open up the line it sits in. The standalone recovery link adds
+ * the floor itself, below.
+ */
+const AUTH_LINK_CLASSES =
+  "inline-flex items-center gap-1 text-xs font-semibold text-cata-red-dark " +
+  "underline decoration-cata-red-dark/40 underline-offset-[3px] transition-colors " +
+  "hover:decoration-cata-red-dark";
 
 /** Permissive client-side format check — the backend is the real source of truth for validity. */
 const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -95,6 +123,23 @@ export default function LoginPage(): React.ReactElement {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({ email: "", password: "" });
+  /**
+   * The rejected pair, held on the FORM after the toast has gone.
+   *
+   * A wrong password used to change nothing on screen: the toast announced it
+   * and faded, and what was left was a form that looked like it had never been
+   * submitted. The toast is still the announcement — `LoginPage.test.tsx` holds
+   * it to that, and it is what carries the recovery sentence — but the field
+   * state is what is still true a few seconds later. `DESIGN.md`'s input
+   * contract: *"Error: borde en el rojo de estado, con el mensaje debajo."*
+   *
+   * Separate from `fieldErrors` because it is a different KIND of wrong. Those
+   * two are per-field and local ("Ingrese su contraseña"); this one is about
+   * the combination, is only knowable after a round trip, and belongs to
+   * neither field alone — which is also why the backend never says which half
+   * missed, and why this message must not either.
+   */
+  const [credentialsRejected, setCredentialsRejected] = useState(false);
   const [welcome, setWelcome] = useState<{ route: string } | null>(null);
 
   // Redirect to role-appropriate page if already authenticated. Skipped
@@ -127,6 +172,7 @@ export default function LoginPage(): React.ReactElement {
       password: trimmedPassword ? "" : "Ingrese su contraseña.",
     };
     setFieldErrors(nextFieldErrors);
+    setCredentialsRejected(false);
     if (nextFieldErrors.email || nextFieldErrors.password) return;
     setSubmitting(true);
 
@@ -135,6 +181,11 @@ export default function LoginPage(): React.ReactElement {
     if (!result.ok) {
       const { message, description } = loginErrorFeedback(result.error);
       toast.showError(message, { description });
+      // ONLY for `invalid_credentials`. The other five kinds — a timeout, an
+      // unreachable backend, a misconfigured server — are not the person's
+      // typing, and painting their fields red would send them to re-check
+      // something that was never wrong.
+      setCredentialsRejected(result.error === "invalid_credentials");
       setSubmitting(false);
       return;
     }
@@ -168,6 +219,13 @@ export default function LoginPage(): React.ReactElement {
     );
   }
 
+  // The error skin a field wears while the pair is rejected: the state red on
+  // the border, never the action red — `cata-red` is the fill of the button
+  // right below, and as a border it would read as "this field is the thing to
+  // press". `AUTH_INPUT_CLASSES` declares `border-line-2`, so the override has
+  // to come after it in the class string.
+  const invalidFieldClasses = credentialsRejected ? " border-state-bad" : "";
+
   return (
     <AuthShell title="Bienvenido de nuevo" subtitle="Inicie sesión para continuar">
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit} noValidate>
@@ -187,17 +245,24 @@ export default function LoginPage(): React.ReactElement {
               id="email"
               name="email"
               value={email}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>): void => setEmail(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
+                setEmail(e.target.value);
+                // An error that outlives what it describes teaches people to
+                // ignore errors. Editing either half retires the pair's mark.
+                setCredentialsRejected(false);
+              }}
               placeholder="correo@ejemplo.com"
               required
-              aria-invalid={Boolean(fieldErrors.email)}
-              aria-describedby={fieldErrors.email ? "email-error" : undefined}
+              aria-invalid={Boolean(fieldErrors.email) || credentialsRejected}
+              aria-describedby={
+                fieldErrors.email ? "email-error" : credentialsRejected ? CREDENTIALS_ERROR_ID : undefined
+              }
               disabled={submitting}
-              className={`${AUTH_INPUT_CLASSES} pl-9`}
+              className={`${AUTH_INPUT_CLASSES} pl-9${invalidFieldClasses}`}
             />
           </div>
           {fieldErrors.email && (
-            <p id="email-error" role="alert" className="mt-1.5 text-xs font-semibold text-cata-red">
+            <p id="email-error" role="alert" className="mt-1.5 text-xs font-semibold text-state-bad">
               {fieldErrors.email}
             </p>
           )}
@@ -219,13 +284,22 @@ export default function LoginPage(): React.ReactElement {
               id="password"
               name="password"
               value={password}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>): void => setPassword(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
+                setPassword(e.target.value);
+                setCredentialsRejected(false);
+              }}
               placeholder="Ingrese su contraseña"
               required
-              aria-invalid={Boolean(fieldErrors.password)}
-              aria-describedby={fieldErrors.password ? "password-error" : undefined}
+              aria-invalid={Boolean(fieldErrors.password) || credentialsRejected}
+              aria-describedby={
+                fieldErrors.password
+                  ? "password-error"
+                  : credentialsRejected
+                    ? CREDENTIALS_ERROR_ID
+                    : undefined
+              }
               disabled={submitting}
-              className={`${AUTH_INPUT_CLASSES} pl-9 pr-10`}
+              className={`${AUTH_INPUT_CLASSES} pl-9 pr-10${invalidFieldClasses}`}
             />
             {/* The icon used to BE the button: no padding, so the target
                 measured 16x16 — the smallest in the product, against the 24x24
@@ -248,8 +322,27 @@ export default function LoginPage(): React.ReactElement {
             </button>
           </div>
           {fieldErrors.password && (
-            <p id="password-error" role="alert" className="mt-1.5 text-xs font-semibold text-cata-red">
+            <p id="password-error" role="alert" className="mt-1.5 text-xs font-semibold text-state-bad">
               {fieldErrors.password}
+            </p>
+          )}
+          {/*
+            One message for the pair, under the second field, and it does not
+            repeat the toast word for word: the toast names what went wrong
+            ("Credenciales incorrectas") and this names what is now true of the
+            form. It also refuses to say WHICH half was wrong — the backend
+            deliberately answers the same way for an unknown correo and a wrong
+            password, because a message that distinguishes them tells a stranger
+            which accounts exist.
+          */}
+          {credentialsRejected && !fieldErrors.password && (
+            <p
+              id={CREDENTIALS_ERROR_ID}
+              data-testid="credentials-error"
+              role="alert"
+              className="mt-1.5 text-xs font-semibold text-state-bad"
+            >
+              El correo y la contraseña no coinciden. Verifique los dos e intente nuevamente.
             </p>
           )}
         </div>
@@ -259,13 +352,14 @@ export default function LoginPage(): React.ReactElement {
          * 12.5px (prototype line 810). It is a peer of the fields, sitting
          * between the last control and the CTA, not a footnote under it.
          */}
-        <Link
-          href="/forgot-password"
-          /* `min-h-[24px]` is hit area only — SC 2.5.8 wants 24x24 and a bare
-             12.5px line measured 141.5 x 18.8. The type is untouched. */
-          className="inline-flex min-h-[24px] items-center self-end text-xs font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
-        >
+        {/* `min-h-[24px]` is hit area only — SC 2.5.8 wants 24x24 and a bare
+            12.5px line measured 141.5 x 18.8. This link stands alone between
+            the last field and the CTA, so the exemption the enrolment link
+            below relies on does not cover it. The arrow says it leaves the
+            screen. */}
+        <Link href="/forgot-password" className={`${AUTH_LINK_CLASSES} min-h-[24px] self-end`}>
           ¿Olvidó su contraseña?
+          <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>
 
         <Button type="submit" variant="primary" disabled={submitting} className="w-full">
@@ -273,14 +367,13 @@ export default function LoginPage(): React.ReactElement {
         </Button>
       </form>
 
-      {/* `.fcard` footer (line 812) — 12.5px muted, with the action in red. */}
+      {/* `.fcard` footer (line 812) — 12.5px muted, with the destination as a
+          link rather than as a second red phrase. */}
       <p className="text-center text-xs text-ink-3">
         ¿No tiene una cuenta?{" "}
-        <Link
-          href="/student/enroll"
-          className="font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
-        >
+        <Link href="/student/enroll" className={AUTH_LINK_CLASSES}>
           Inscríbase
+          <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>
       </p>
     </AuthShell>

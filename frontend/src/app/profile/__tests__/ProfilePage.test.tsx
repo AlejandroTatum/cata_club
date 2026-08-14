@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import ProfilePage from "@/app/profile/page";
 import type { PerfilPropio } from "@/types/domain";
+import type { MembershipSummary, StudentProfileSummary } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
 
 // ---------------------------------------------------------------------------
@@ -259,7 +260,9 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     // rol" (Rol principal), both real per-account facts this same page now
     // states beside the multi-role breakdown.
     const rolesRow = within(main.getByText("Roles asignados").closest("div") as HTMLElement);
-    for (const label of ["Administrador", "Entrenador", "Alumno", "Representante"]) {
+    // "Jugador" rather than "Alumno" — `getBackendRoleLabel` speaks the same
+    // word as the identity panel above it now (D9).
+    for (const label of ["Administrador", "Entrenador", "Jugador", "Representante"]) {
       expect(rolesRow.getByText(new RegExp(`^${label}`))).toBeInTheDocument();
     }
     // Which one is in use right now is still legible without colour alone.
@@ -549,9 +552,6 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
 
     const hero = await waitForStaffProfile();
     expect(within(hero).getByText("Administrador")).toBeInTheDocument();
-    // "Cuenta activa" is not membership status — it is a logically-guaranteed
-    // fact from reaching this page at all (see the module docstring).
-    expect(within(hero).getByText("Cuenta activa")).toBeInTheDocument();
     // "Información de tu rol" is now ALWAYS rendered — single-role staff
     // accounts used to get nothing here at all.
     const roleInfo = screen.getByTestId("profile-role-info");
@@ -574,7 +574,6 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
 
     const hero = await waitForStaffProfile();
     expect(within(hero).getByText("Entrenador")).toBeInTheDocument();
-    expect(within(hero).getByText("Cuenta activa")).toBeInTheDocument();
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Perfil de entrenador")).toBeInTheDocument();
     expect(within(roleInfo).getByText("Rol principal")).toBeInTheDocument();
@@ -604,8 +603,9 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
     );
 
     const hero = await screen.findByTestId("profile-hero");
-    expect(within(hero).getByText("Estudiante")).toBeInTheDocument();
-    expect(within(hero).getByText("Cuenta activa")).toBeInTheDocument();
+    // "Jugador", not "Estudiante" — D9's word, and the same one the rail's
+    // account footer prints two inches to the left of it.
+    expect(within(hero).getByText("Jugador")).toBeInTheDocument();
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Perfil estudiantil")).toBeInTheDocument();
     // `self.fechaNacimiento` and `self.representante` are real fields on
@@ -634,7 +634,6 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
 
     const hero = await screen.findByTestId("profile-hero");
     expect(within(hero).getByText("Representante")).toBeInTheDocument();
-    expect(within(hero).getByText("Cuenta activa")).toBeInTheDocument();
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Cuenta representante")).toBeInTheDocument();
     expect(within(roleInfo).getByText("Personas representadas")).toBeInTheDocument();
@@ -682,7 +681,7 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
       within(roleInfo).getByText("Roles asignados").closest("div") as HTMLElement,
     );
     expect(rolesRow.getByText(/Representante/)).toBeInTheDocument();
-    expect(rolesRow.getByText(/Alumno/)).toBeInTheDocument();
+    expect(rolesRow.getByText(/Jugador/)).toBeInTheDocument();
   });
 });
 
@@ -1300,23 +1299,41 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(within(hero).queryByText("099111222")).not.toBeInTheDocument();
   });
 
-  it("keeps the identity text off the red field, which it is not legible on", async () => {
+  /**
+   * This test used to lock the red field in place, and its subject has changed
+   * rather than disappeared.
+   *
+   * What it guarded was real: `text-ink` on `cata-red` is 3.6:1 and the grey
+   * "Miembro desde" beside it ~1.1:1, so the 100px red field needed 112px of
+   * padding above the identity block to keep any text off it. What it never
+   * asked was whether the field should exist. `DESIGN.md` answers that by
+   * name — *"Don't dibujar una barra de color al borde de una tarjeta. Es el
+   * recurso más repetido de las interfaces genéricas y es exactamente el
+   * reproche que originó este sistema"* — and this card was drawing a 100px
+   * one with a `clip-path`, i.e. the single loudest gesture on the screen was
+   * the one the system forbids. The approved signature for a card that asks
+   * for action is the coal SHOULDER: a bar with its eyebrow in yellow.
+   *
+   * So the assertion moves from "the text clears the red" to "there is no red
+   * to clear, and the shoulder is what the card wears instead". The contrast
+   * hazard is gone with the field: `ball` on `coal` measures 13.13:1, which is
+   * the pair `color-contrast.test.ts` already owns for the rail.
+   */
+  it("wears the coal shoulder, not the colour bar DESIGN.md forbids by name", async () => {
     await renderAdmin();
 
     const hero = screen.getByTestId("profile-hero");
-    const heading = within(hero).getByRole("heading", { level: 2, name: "Ana Admin" });
-    const identityRow = heading.parentElement?.parentElement;
 
-    // `text-ink` (#17181C) on `cata-red` (#D92128) is 3.6:1 — under AA — and
-    // the grey "Miembro desde" beside it is ~1.1:1. The red field is 100px
-    // tall and its polygon's deepest vertex reaches exactly 100px, so the row
-    // holding the name, the badges and that line has to start below it. This
-    // used to be `pt-8`, which put all three of them on the red.
-    expect(identityRow).toHaveClass("pt-[112px]");
-    // And aligned to the TOP: the text column is taller than the avatar, so
-    // `items-end` pinned the text back up under the field.
-    expect(identityRow).toHaveClass("items-start");
-    expect(identityRow).not.toHaveClass("items-end");
+    // No red field, and no `clip-path` polygon painting one.
+    expect(hero.querySelector(".bg-cata-red")).toBeNull();
+    expect(hero.innerHTML).not.toContain("clip-path");
+
+    // The shoulder: coal bar, eyebrow in the club's yellow, naming what the
+    // person is in the club rather than repeating the card's own title.
+    const shoulder = within(hero).getByTestId("profile-shoulder");
+    expect(shoulder.className).toContain("text-ball");
+    expect(shoulder).toHaveTextContent("Administrador");
+    expect(shoulder.closest(".bg-coal")).not.toBeNull();
   });
 
   it("shows the correo twice by design — the identity panel AND the 'Datos personales' row (issue #204's own requirement)", async () => {
@@ -1403,11 +1420,18 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(within(hero).queryByText("Roles asignados")).not.toBeInTheDocument();
   });
 
-  it("falls back to 'Miembro desde —' when fechaCreacion is falsy", async () => {
-    // `IdentityPanel.memberSince` is a required string — there is no way to
-    // simply omit the fact the way the old `{fechaCreacion && (...)}`
-    // conditional did. This proves the fallback text renders instead of an
-    // empty/undefined string reaching the panel.
+  /**
+   * The inverse of what this test used to assert, and the reason is a rule
+   * rather than a taste: *"La celda de identidad ... nunca nombra una
+   * ausencia"* (`DESIGN.md`, Identity cell). "Miembro desde —" is an absence
+   * given a line of its own, a label, and a dash to stare at.
+   *
+   * The old assertion was defending against something real — an `undefined`
+   * leaking into the panel as literal text — so that half stays: what must
+   * never appear is a line that says nothing. It just gets there by drawing
+   * no line at all instead of by drawing a dash.
+   */
+  it("says nothing at all when fechaCreacion is falsy, rather than naming the absence", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
     mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, fechaCreacion: "" });
 
@@ -1419,7 +1443,15 @@ describe("ProfilePage — the redesigned account layout", () => {
     await waitForStaffProfile();
 
     const hero = screen.getByTestId("profile-hero");
-    expect(within(hero).getByText("Miembro desde —")).toBeInTheDocument();
+    expect(within(hero).queryByText(/Miembro desde/)).not.toBeInTheDocument();
+    expect(hero.textContent).not.toContain("undefined");
+  });
+
+  it("still states 'Miembro desde' when there IS a date — the rule is against dashes, not against the fact", async () => {
+    await renderAdmin();
+
+    const hero = screen.getByTestId("profile-hero");
+    expect(within(hero).getByText("Miembro desde 10/03/2024")).toBeInTheDocument();
   });
 
   it("never shows a cédula row — no endpoint the account itself can call returns one", async () => {
@@ -1435,7 +1467,7 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(within(security).getByText("Contraseña")).toBeInTheDocument();
     expect(within(security).getByRole("button", { name: /cambiar contraseña/i })).toBeInTheDocument();
     expect(within(security).getByText(/cerrar sesión en este equipo/i)).toBeInTheDocument();
-    expect(within(security).getByRole("button", { name: /^salir$/i })).toBeInTheDocument();
+    expect(within(security).getByRole("button", { name: /^cerrar sesión$/i })).toBeInTheDocument();
     // POST /auth/sesiones/invalidar now exists (slice B4) — the third row.
     // Exact match on the row LABEL: a substring regex also matches the
     // button's own text ("Cerrar otras sesiones"), which is a second,
@@ -1460,7 +1492,7 @@ describe("ProfilePage — the redesigned account layout", () => {
     const security = screen.getByTestId("profile-column-status");
     const buttons = [
       within(security).getByRole("button", { name: /cambiar contraseña/i }),
-      within(security).getByRole("button", { name: /^salir$/i }),
+      within(security).getByRole("button", { name: /^cerrar sesión$/i }),
       within(security).getByRole("button", { name: /cerrar otras sesiones/i }),
     ];
 
@@ -1487,7 +1519,7 @@ describe("ProfilePage — the redesigned account layout", () => {
     );
     await waitForStaffProfile();
 
-    fireEvent.click(screen.getByRole("button", { name: /^salir$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^cerrar sesión$/i }));
 
     expect(auth.logout).toHaveBeenCalled();
   });
@@ -1579,15 +1611,27 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
     await waitForStaffProfile();
   }
 
-  it("shows the 'Sin foto cargada' state and a labelled 'Cambiar foto' button, reading straight off fotoUrl", async () => {
+  /**
+   * The button survives; the sentence about it does not.
+   *
+   * "Foto de perfil: Sin foto cargada" was the prototype's own string, and it
+   * is still the identity cell naming an absence — the one thing `DESIGN.md`
+   * says that cell never does. It also said it twice over: the avatar right
+   * beside it was already showing initials instead of a photograph, which is
+   * what "no photo" LOOKS like. The trigger below it is the only part that
+   * ever gave the reader something to do, and "Cambiar foto" reads the same
+   * whether or not one is loaded.
+   */
+  it("offers the labelled 'Cambiar foto' trigger without a line naming the missing photo", async () => {
     await renderAdmin();
 
     const hero = screen.getByTestId("profile-hero");
-    expect(within(hero).getByText(/Foto de perfil: Sin foto cargada/)).toBeInTheDocument();
     expect(within(hero).getByRole("button", { name: /cambiar foto/i })).toBeInTheDocument();
+    expect(within(hero).queryByText(/Sin foto cargada/)).not.toBeInTheDocument();
+    expect(within(hero).queryByText(/Foto de perfil:/)).not.toBeInTheDocument();
   });
 
-  it("shows 'Foto de perfil: Foto cargada' once fotoUrl is set", async () => {
+  it("shows the photograph itself once fotoUrl is set, still with no state sentence", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
     mockFetchMiPerfil.mockResolvedValueOnce({
       ...PERFIL_ADMIN,
@@ -1601,7 +1645,12 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
     );
 
     const hero = await waitForStaffProfile();
-    expect(within(hero).getByText(/Foto de perfil: Foto cargada/)).toBeInTheDocument();
+    // The photo IS the state. `fotoUrl` is still read, and still only read.
+    expect(within(hero).getByAltText("Foto de perfil")).toHaveAttribute(
+      "src",
+      "https://res.cloudinary.com/test/image/upload/perfil-ana.jpg",
+    );
+    expect(within(hero).queryByText(/Foto cargada/)).not.toBeInTheDocument();
   });
 
   it("triggers the same hidden file input from the 'Cambiar foto' rail button", async () => {
@@ -1616,7 +1665,24 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
     expect(clickSpy).toHaveBeenCalled();
   });
 
-  it("offers a 'Cerrar sesión' button inside the identity panel itself, distinct from the Seguridad row's 'Salir'", async () => {
+  /**
+   * One action, one place, one name — the reversal of the test that used to
+   * live here and locked in two of each.
+   *
+   * The screen shipped with the SAME `logout()` under two different words in
+   * two different places: "Cerrar sesión" in the identity panel and "Salir" in
+   * the Seguridad row. That is the defect `DESIGN.md` closes its Don'ts with —
+   * *"tres nombres para el mismo destino"* — and the duplication was justified
+   * in the module docstring only as "matching the prototype's rail-actions",
+   * i.e. by the drawing, never by a reader's need.
+   *
+   * Seguridad is the survivor rather than the panel because that is where the
+   * other two session actions already live: leaving the panel's copy would put
+   * one third of a group of three somewhere else. The word is "Cerrar sesión"
+   * because "Salir" names nothing — it is the shorter word for the same act,
+   * and the rule of words spends width on the truth.
+   */
+  it("names the logout once, in Seguridad, and calls the same logout() the panel used to", async () => {
     const auth = sessionForRole("admin");
     mockUseAuth.mockReturnValue(auth);
     mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
@@ -1627,16 +1693,19 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
     );
     await waitForStaffProfile();
 
-    const hero = screen.getByTestId("profile-hero");
-    const panelLogout = within(hero).getByRole("button", { name: /cerrar sesión/i });
-    fireEvent.click(panelLogout);
+    // Exactly one trigger on the whole screen, by any of its old names.
+    const triggers = screen.getAllByRole("button", { name: /cerrar sesión|^salir$/i });
+    expect(triggers).toHaveLength(1);
 
-    expect(auth.logout).toHaveBeenCalled();
-    // Seguridad's own "Sesión" row keeps its separate "Salir" trigger — the
-    // panel button is an addition, not a replacement.
+    const security = screen.getByTestId("profile-column-status");
+    const logoutButton = within(security).getByRole("button", { name: /cerrar sesión/i });
+    expect(within(security).queryByRole("button", { name: /^salir$/i })).not.toBeInTheDocument();
     expect(
-      within(screen.getByTestId("profile-column-status")).getByRole("button", { name: /^salir$/i }),
-    ).toBeInTheDocument();
+      within(screen.getByTestId("profile-hero")).queryByRole("button", { name: /cerrar sesión/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(logoutButton);
+    expect(auth.logout).toHaveBeenCalled();
   });
 
   it("labels each section with the prototype's own subtitle copy", async () => {
@@ -1660,5 +1729,283 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
     // Icons are `aria-hidden`; the descriptive text already carries the
     // meaning for assistive tech — this only checks the icon itself renders.
     expect(security.querySelectorAll("svg[aria-hidden='true']").length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/**
+ * The faro pass (`docs/ux/comparaciones/perfil-login.html`).
+ *
+ * The owner's word for this screen was "perfil genérico", and the diagnosis
+ * behind these tests is that the club was missing from it — not for want of
+ * data, but because the page fetched the data and threw it away.
+ * `fetchStudentPortal()` has been called here since #36 and its payload
+ * carries `membership.categoria`, `.modalidad`, `.fechaActivacion`,
+ * `.fechaFin` and `recentSessions`; the screen read `estado` and
+ * `fechaNacimiento` and dropped the rest.
+ *
+ * Every assertion below therefore reads a field that ALREADY arrives. No test
+ * here mocks a new endpoint, and none should: the change is what the screen
+ * shows, never what it asks for.
+ */
+describe("ProfilePage — the club on the screen (faro: perfil y login)", () => {
+  // Typed against the real payload shape, so the fixture cannot drift from
+  // what `/api/student` actually returns — including `representanteId`, which
+  // the older inline fixtures in this file omit.
+  // The exact membership row `/api/student` returns for a seeded player: an
+  // activation date, no `fechaFin`, and a plan whose name already contains its
+  // modalidad. Copied from the QA response, not invented.
+  const STUDENT_MEMBERSHIP: MembershipSummary = {
+    id: 4,
+    estado: "ACTIVA",
+    personaId: 8,
+    montoAplicado: "25.00",
+    categoria: "Mensual Infantil",
+    modalidad: "MENSUAL",
+    fechaActivacion: "2026-08-13T23:25:09.290557Z",
+    fechaFin: null,
+  };
+
+  const STUDENT_SELF: StudentProfileSummary = {
+    personaId: "1",
+    nombres: "Ana",
+    apellidos: "Garcia",
+    fechaNacimiento: "2010-08-13",
+    recentSessions: [],
+    membership: STUDENT_MEMBERSHIP,
+    representante: null,
+    representanteId: null,
+  };
+
+  async function renderStudent(
+    overrides: Partial<StudentProfileSummary> = {},
+  ): Promise<HTMLElement> {
+    mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: { ...STUDENT_SELF, ...overrides },
+      representados: [],
+      membershipPlans: [],
+    });
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    return screen.findByTestId("profile-hero");
+  }
+
+  it("states the plan and the joining date the portal payload already carried", async () => {
+    await renderStudent();
+
+    const membership = await screen.findByTestId("profile-membership");
+    expect(within(membership).getByText("Plan")).toBeInTheDocument();
+    expect(within(membership).getByText("Mensual Infantil")).toBeInTheDocument();
+    expect(within(membership).getByText("Socio desde")).toBeInTheDocument();
+    expect(within(membership).getByText("13/08/2026")).toBeInTheDocument();
+  });
+
+  it("asks for nothing new to do it — the same single portal call as before", async () => {
+    // D14: this pass changes how the screen looks, not what it does. If the
+    // club facts had needed a second request, they would not have been in
+    // scope at all.
+    await renderStudent();
+    await screen.findByTestId("profile-membership");
+
+    expect(mockFetchStudentPortal).toHaveBeenCalledTimes(1);
+    expect(mockFetchStudentPortal).toHaveBeenCalledWith("1");
+  });
+
+  it("keeps quiet about a fecha de fin the payload does not carry", async () => {
+    // Every membership row in the QA dataset comes back without `fechaFin`,
+    // so this is the shipped case, not a corner one. An absent end date is
+    // not "vigente hasta —": it is a row that does not exist.
+    await renderStudent();
+
+    const membership = await screen.findByTestId("profile-membership");
+    expect(within(membership).queryByText(/Vigente hasta/)).not.toBeInTheDocument();
+    expect(membership.textContent).not.toContain("—");
+  });
+
+  it("states the end of the paid period when the payload does carry one", async () => {
+    await renderStudent({
+      // Date-only, the shape the backend sends for a coverage end. A UTC
+      // midnight timestamp would render as the 30th anywhere west of Greenwich
+      // — the exact bug `parseDateStringLocal` exists to avoid.
+      membership: { ...STUDENT_MEMBERSHIP, fechaFin: "2026-12-31" },
+    });
+
+    const membership = await screen.findByTestId("profile-membership");
+    expect(within(membership).getByText("Vigente hasta")).toBeInTheDocument();
+    expect(within(membership).getByText("31/12/2026")).toBeInTheDocument();
+  });
+
+  /**
+   * `categoria` is the plan's name and `modalidad` is how it is charged, and
+   * for every plan the club actually sells the first already contains the
+   * second: "Mensual Infantil"/"MENSUAL", "Mensual Adultos"/"MENSUAL". Printing
+   * both is the same word twice under two labels — the defect this screen is
+   * being fixed for, on a smaller scale.
+   *
+   * It is dropped conditionally rather than deleted because the field can say
+   * something the plan name does not: `MembershipPlanSummary.modalidad` also
+   * admits "PERSONALIZADA", and a plan named "Escuela de verano" charged that
+   * way is a fact worth a row.
+   */
+  it("drops the modalidad when the plan name already says it", async () => {
+    await renderStudent();
+
+    const membership = await screen.findByTestId("profile-membership");
+    expect(within(membership).queryByText("Modalidad")).not.toBeInTheDocument();
+  });
+
+  it("keeps the modalidad when it adds something the plan name does not", async () => {
+    await renderStudent({
+      membership: {
+        ...STUDENT_MEMBERSHIP,
+        categoria: "Escuela de verano",
+        modalidad: "PERSONALIZADA",
+      },
+    });
+
+    const membership = await screen.findByTestId("profile-membership");
+    expect(within(membership).getByText("Modalidad")).toBeInTheDocument();
+    expect(within(membership).getByText("Personalizada")).toBeInTheDocument();
+  });
+
+  it("draws no membership card at all when the account has no membership", async () => {
+    // A representante with no alumno role of their own. The honest "No
+    // disponible" note in "Información de tu rol" already states this once;
+    // an empty card would state it a second time, as a shape.
+    await renderStudent({ membership: null });
+
+    expect(screen.queryByTestId("profile-membership")).not.toBeInTheDocument();
+  });
+
+  it("lists the recent sessions the payload carries, and draws nothing when there are none", async () => {
+    // Nobody in the QA dataset has attendance yet, so the empty branch is what
+    // the screenshots show. The populated branch is real all the same —
+    // `recentSessions` is filled by `/api/student` for anyone who has been
+    // marked present — and it is the reason this card is gated on length
+    // rather than always drawn.
+    await renderStudent();
+    await screen.findByTestId("profile-membership");
+    expect(screen.queryByTestId("profile-activity")).not.toBeInTheDocument();
+
+    screen.getByTestId("profile-hero").remove();
+    mockFetchStudentPortal.mockReset();
+    mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: {
+        ...STUDENT_SELF,
+        recentSessions: [
+          { fecha: "2026-08-10", horario: "Lunes 16:00 - 17:30", estado: "PRESENTE" },
+          { fecha: "2026-08-07", horario: "Jueves 16:00 - 17:30", estado: "AUSENTE" },
+        ],
+      },
+      representados: [],
+      membershipPlans: [],
+    });
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const activity = await screen.findByTestId("profile-activity");
+    expect(within(activity).getByText("Lunes 16:00 - 17:30")).toBeInTheDocument();
+    expect(within(activity).getByText("10/08/2026")).toBeInTheDocument();
+    expect(within(activity).getByText("Presente")).toBeInTheDocument();
+    expect(within(activity).getByText("Ausente")).toBeInTheDocument();
+  });
+
+  it("never prints the amount — money has its own screen and a bare figure decides nothing", async () => {
+    // `montoAplicado` ("25.00") is in the payload and is deliberately left
+    // out: on its own it does not say whether it is owed, paid or overdue,
+    // and "Mis pagos" answers exactly that. See the comparison's "Lo que
+    // falta".
+    await renderStudent();
+    const membership = await screen.findByTestId("profile-membership");
+
+    expect(membership.textContent).not.toContain("25");
+    expect(membership.textContent).not.toContain("$");
+  });
+});
+
+describe("ProfilePage — the type and colour rules the screen was breaking", () => {
+  async function renderAdmin(): Promise<void> {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+  }
+
+  /**
+   * Every card title on this screen was a `text-sm font-bold` — 13.5px of
+   * Barlow, the DENSE step, which is the size a table cell takes. So the
+   * title of a card and the value inside it were the same size, and the only
+   * thing separating them was a weight. `DESIGN.md`'s `title` step is Graduate
+   * at 20px, and `PageHeader` already made the same correction for the page
+   * title one level above these.
+   */
+  it("sets every card title on the Graduate title step, not at table-cell size", async () => {
+    await renderAdmin();
+
+    const titles = [
+      within(screen.getByTestId("profile-column-info")).getByText("Datos personales"),
+      within(screen.getByTestId("profile-role-info")).getByText("Información de tu rol"),
+      within(screen.getByTestId("profile-column-status")).getByText("Seguridad"),
+    ];
+
+    for (const title of titles) {
+      expect(title.tagName).toBe("H2");
+      expect(title.className).toContain("font-display");
+      expect(title.className).toContain("text-lg");
+      expect(title.className).toContain("uppercase");
+      // Graduate ships one 400 cut (`lib/fonts.ts`), so a weight class here
+      // would be a request for a bold the face cannot draw — the browser
+      // would synthesise it and smear the strokes.
+      expect(title.className).not.toMatch(/font-(bold|semibold|extrabold)/);
+      expect(title.className).not.toContain("text-sm");
+    }
+  });
+
+  /**
+   * The rule of the single red: *"nunca hay dos botones rojos en una
+   * pantalla"*. Staff editing their teléfono had two — "Guardar" in the header
+   * and "Cambiar foto" on the identity panel — which is the moment the red
+   * stops meaning "this is the action" and starts meaning "this is a button".
+   *
+   * "Guardar" is the one that keeps it: it commits the edit the whole screen
+   * is in, and the header is where `DESIGN.md` puts the primary action.
+   */
+  it("leaves exactly one red button on the screen while staff are editing", async () => {
+    await renderAdmin();
+
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
+
+    // The whole document minus the shell's own chrome. The header action sits
+    // in `PageHeader`, which is a sibling of `<main>` rather than inside it, so
+    // scoping to `main` would measure a budget the primary action is not in.
+    // The one exclusion is the skip link: a red `<a>` parked at `top:-100px`
+    // until it takes focus, which nobody sees while deciding what to press.
+    const red = [...document.querySelectorAll("button, a")].filter(
+      (el) =>
+        el.className.toString().includes("bg-cata-red") &&
+        !el.className.toString().includes("top-[-100px]"),
+    );
+    expect(red).toHaveLength(1);
+    expect(red[0]).toHaveTextContent(/guardar/i);
+  });
+
+  it("keeps 'Cambiar foto' as a secondary action on its own card", async () => {
+    await renderAdmin();
+
+    const photo = within(screen.getByTestId("profile-hero")).getByRole("button", {
+      name: /cambiar foto/i,
+    });
+    expect(photo.className).not.toContain("bg-cata-red");
   });
 });

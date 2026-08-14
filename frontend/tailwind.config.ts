@@ -405,6 +405,22 @@ const config: Config = {
         "2xl": ["32px", { lineHeight: "1.05", letterSpacing: "-0.04em" }],
         /** Hero headline. Auth panel, landing, trainer "next session". */
         display: ["46px", { lineHeight: "0.95", letterSpacing: "-0.05em" }],
+        /**
+         * The club speaking in first person — `DESIGN.md`'s `typography.voice`,
+         * transcribed. At most ONE phrase per screen, in Playfair.
+         *
+         * It is the ninth step and the only fluid one, and both facts have the
+         * same cause: the voice is a single line of copy that has to hold its
+         * proportion against a panel that grows, so a frozen px value would
+         * read as a hero on a phone and as a caption at 2560. The brand
+         * cluster's own measure is a clamp for the same reason.
+         *
+         * `letterSpacing: normal` contradicts every step above `base`, which
+         * all tighten: those are Barlow and Graduate, drawn to be scanned.
+         * Playfair's stroke contrast needs its own sidebearings, and this is
+         * the one step meant to be READ.
+         */
+        voice: ["clamp(20px, 2.4vw, 31px)", { lineHeight: "1.3", letterSpacing: "normal" }],
       },
       // Four tracking steps for the cases where a value has to CONTRADICT the
       // default its size step carries — an uppercase run at body size, or a

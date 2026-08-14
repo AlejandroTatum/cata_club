@@ -6,19 +6,18 @@
  *
  * Two regions, not four stacked blocks:
  *
- *   1. `IdentityPanel` — a COMPACT ~292px white panel, clearly its own
- *      surface (never a second coal mass beside the sidebar): the coal
- *      avatar, the name/role/estado "quick recognition" block, the photo
- *      state + "Cambiar foto"/"Cerrar sesión" rail actions, and — in its
- *      own full-width row — "Correo de acceso". The institutional-red field
- *      across the top and the yellow dot inside it are the one brand
- *      gesture; the avatar sits astride the red/white boundary.
+ *   1. The identity COLUMN, 292px: `IdentityPanel` — a white panel with a
+ *      coal shoulder (D7), the avatar astride its lower edge, the name, the
+ *      membership badge when there is one, the "Cambiar foto" trigger and, in
+ *      its own full-width row, "Correo de acceso" — plus, for anyone who has
+ *      one, `MembershipCard` below it.
  *   2. The workspace — "Datos personales" (one datum per `DetailRow`,
  *      including "Correo de cuenta" and "Rol" — deliberately repeated from
  *      the identity panel, see below), "Información de tu rol" (ALWAYS
  *      rendered — every one of the four role variants has something real to
- *      state there), "Estudiantes a mi cargo" (representante only, including
- *      the no-representados state), and "Seguridad".
+ *      state there), "Últimas asistencias" (only when there are any),
+ *      "Estudiantes a mi cargo" (representante only, including the
+ *      no-representados state), and "Seguridad".
  *
  * Below `split` (980px) the panel collapses to a horizontal band above the
  * workspace; both stack to one column on a phone. Nothing here truncates —
@@ -41,6 +40,12 @@
  *   the identity fields the portal payload does not carry (teléfono, fecha
  *   de creación, foto).
  *
+ *   The faro pass added no call. What it added is the rest of the payload
+ *   that call was already returning: `membership.categoria`, `.modalidad`,
+ *   `.fechaActivacion`, `.fechaFin` and `recentSessions` were all arriving
+ *   and being dropped, which is the whole of the owner's "perfil genérico" —
+ *   discarded data, not missing data.
+ *
  * ## Reversed since the #204 first pass
  *
  * The first implementation of this issue read "if the prototype shows a
@@ -52,22 +57,27 @@
  * - **Correo / Rol inside "Datos personales"** — deliberately repeated from
  *   the identity panel now (they were NOT, by design, in the first pass).
  *   The owner named this exact duplication as a requirement, not a defect.
- * - **"Cuenta activa"** — real, not invented. `UsuarioMeResponseDTO` carries
- *   no `activo` flag, but `GestorAutenticacion.sesion_vigente` (the gate
- *   EVERY authenticated request passes through, including the one that loads
- *   this page) is `usuario.activo and epoch_valido(...)` — an inactive
- *   account's token is rejected before any handler runs. Reaching this page
- *   at all is proof the account is active, for all four role variants alike
- *   (the gate has no role branch). The badge and the "Estado" role-fact are
- *   therefore a logically-guaranteed fact, not a fabricated always-on value.
- * - **Foto de perfil (state) + "Cambiar foto"** — `fotoUrl` was already
- *   fetched; only the explicit state row and the labelled button were
- *   missing (the trigger used to be an icon-only overlay on the avatar).
- * - **"Cerrar sesión" in the identity panel** — same `logout()` the
- *   Seguridad "Sesión" row already calls; added as a second, panel-local
- *   trigger to match the prototype's rail-actions.
+ * - **Foto de perfil ("Cambiar foto")** — `fotoUrl` was already fetched; the
+ *   labelled button was what was missing (the trigger used to be an icon-only
+ *   overlay on the avatar).
  * - **Security row icons** — decorative only; the descriptive text next to
  *   them already existed.
+ *
+ * ## Reversed AGAIN by the faro pass, and why
+ *
+ * Three of that pass's additions were arguments for showing something rather
+ * than for a reader needing it, and each is now argued the other way in place:
+ *
+ * - **"Cuenta activa"** was defended here as a logically-guaranteed fact —
+ *   reaching this page proves `sesion_vigente`, which is true. It is also
+ *   unfalsifiable: no reader has ever seen it absent and none ever will, and a
+ *   badge that cannot vary is a decoration shaped like a status. Retired; see
+ *   the note in the quick-recognition block.
+ * - **The photo-state line** ("Foto de perfil: Sin foto cargada") named an
+ *   absence in the identity cell, which `DESIGN.md` forbids there, and named
+ *   it beside an avatar already showing initials instead of a face.
+ * - **The panel's own "Cerrar sesión"** was one `logout()` under two words in
+ *   two places. Seguridad kept it, under the word that names the act.
  *
  * ## Fields deliberately excluded (still, and for a different reason each)
  *
@@ -104,6 +114,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import type {
   StudentPortalSummary,
   StudentProfileSummary,
+  StudentSessionSummary,
   MembershipSummary,
 } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
@@ -331,7 +342,24 @@ function CardSection({
   return (
     <section data-testid={testId} className="card overflow-hidden">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-field border-b border-line px-5 py-4">
-        <h2 className="flex-1 text-sm font-bold text-ink">{title}</h2>
+        {/*
+          `DESIGN.md`'s `title` step: Graduate, 20px, uppercase, weight 400.
+
+          Every one of these was `text-sm font-bold` — 13.5px of Barlow, which
+          is the DENSE step, the size a table cell takes. So the title of a
+          card and the values inside it were set at the same size and told
+          apart by a weight alone, and the screen had no typographic step
+          between "this is a section" and "this is a datum". `PageHeader` made
+          exactly this correction one level up.
+
+          No weight class: Graduate ships a single 400 cut (`lib/fonts.ts`), so
+          asking for bold makes the browser synthesise one and smear the
+          strokes. `tracking-flat` cancels the -0.02em `text-lg` carries for
+          Barlow, which on a wide flat face reads as letters running together.
+        */}
+        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
+          {title}
+        </h2>
         {subtitle && <p className="text-xs text-ink-3">{subtitle}</p>}
         {action}
       </div>
@@ -361,14 +389,13 @@ interface IdentityPanelProps {
   roleLabel: string;
   /** Rendered ONLY when there is a real status to report — see the module docstring. */
   statusBadge: { label: string; tone: BadgeTone } | null;
-  /** Pre-formatted, e.g. "Miembro desde 10/03/2024" or the "—" fallback. */
-  memberSince: string;
+  /** Pre-formatted ("Miembro desde 10/03/2024"), or `null` when there is no date. */
+  memberSince: string | null;
   correo: string;
   uploadingFoto: boolean;
   fotoError: string | null;
   fotoInputRef: React.RefObject<HTMLInputElement>;
   onFotoChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onLogout: () => void;
 }
 
 function IdentityPanel({
@@ -383,46 +410,67 @@ function IdentityPanel({
   fotoError,
   fotoInputRef,
   onFotoChange,
-  onLogout,
 }: IdentityPanelProps): React.ReactElement {
-  // "Sin foto cargada" is the prototype's own string for the empty state;
-  // "Foto cargada" is the honest counterpart — both read straight off
-  // `fotoUrl`, never invented.
-  const photoStateLabel = fotoUrl ? "Foto cargada" : "Sin foto cargada";
+  // The 292px width belongs to the COLUMN this card sits in (see the layout
+  // note in `ProfileLayout`), not to the card: the membership card below it
+  // has to measure the same, and one number written in two places drifts.
   return (
     <section
       data-testid="profile-hero"
       aria-label={`Identidad de la cuenta de ${name}`}
-      className="card relative flex-none overflow-hidden split:w-[292px]"
+      className="card flex flex-col overflow-hidden"
     >
-      {/* The one club gesture: an asymmetric red field bridging into the
-          white body, with the yellow dot as the only secondary mark. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-[100px] bg-cata-red [clip-path:polygon(0_0,100%_0,100%_68%,72%_100%,0_86%)]"
-      />
-      <span
-        aria-hidden="true"
-        className="absolute right-6 top-[62px] h-4 w-4 rounded-full border-[3px] border-cata-red bg-cata-yellow"
-      />
+      {/*
+        THE SHOULDER (D7), and it replaces a 100px red field this card used to
+        wear across its top edge.
+
+        That field was the single loudest gesture on the screen, and
+        `DESIGN.md` forbids it by name: *"Don't dibujar una barra de color al
+        borde de una tarjeta. Es el recurso más repetido de las interfaces
+        genéricas y es exactamente el reproche que originó este sistema."* It
+        was also spending the red — the token reserved for the action and the
+        destructive intent — on 100px of decoration, next to a "Cambiar foto"
+        button that was red for a real reason and could no longer be told apart
+        from it.
+
+        The approved signature for a card that asks somebody to do something is
+        the coal shoulder: a bar with its eyebrow in yellow. This card asks —
+        it holds the photo trigger — and it is the only card on the screen that
+        wears one, which is the other half of the rule (*"como mucho una por
+        fila: si lo llevan las cuatro, no marca nada"*).
+
+        The eyebrow says what the person IS at the club rather than repeating
+        the card's own name. That both gives the shoulder a job and retires a
+        badge: the role used to be a grey chip in the quick-recognition block,
+        one of three chips where one of them ("Cuenta activa") said nothing.
+
+        Contrast comes free: `ball` on `coal` is 13.13:1, the pair the rail
+        already spends and `color-contrast.test.ts` already owns. The field it
+        replaces held `text-ink` at 3.6:1 and grey at ~1.1:1, and needed 112px
+        of padding to keep any text off it.
+      */}
+      {/* `justify-end`: the avatar bridges this bar at its LEFT edge, so an
+          eyebrow starting there renders behind it — measured at 1440x900 on
+          the first build of this change, where "JUGADOR" came out two thirds
+          covered. The bar has two occupants and they take an end each. */}
+      <div className="flex items-center justify-end bg-coal px-5 py-2">
+        <p
+          data-testid="profile-shoulder"
+          className="text-2xs font-bold uppercase tracking-caps-wide text-ball"
+        >
+          {roleLabel}
+        </p>
+      </div>
 
       {/*
-        The identity block clears the red field entirely — `pt-[112px]` against
-        a 100px field whose deepest point (the polygon's 72% vertex) is exactly
-        100px down. It has to: `text-ink` (#17181C) on `cata-red` (#D92128) is
-        3.6:1, under AA, and at `pt-8` the name, the badges and "Miembro desde"
-        all rendered ON the red — the last one straddling its edge, grey on red
-        at ~1.1:1. Text belongs on the white body; the red is a field, not a
-        backdrop for copy.
-
-        `items-start`, not `items-end`: the text column is taller than the
-        avatar, so bottom-aligning pinned the text to the top of the row and put
-        it back under the red. Aligned to the top, the avatar's `-mt-9` lifts it
-        (72px tall, spanning 76px–148px) across the red/white boundary, which
-        at its own x sits at 87–92px — the "avatar carbón puenteando" the issue
-        asks for, now the only thing crossing that edge.
+        `items-start` still, and the avatar still bridges an edge — the coal one
+        now. At 72px with `-mt-9` (36px) it crosses the shoulder's lower half,
+        separated from it by its own 4px paper ring, so the "avatar carbón
+        puenteando" the redesign asked for survives the change of what it
+        bridges. `pt-4` replaces `pt-[112px]`: with no colour field below the
+        shoulder, the identity block starts where a card's content starts.
       */}
-      <div className="relative flex items-start gap-4 px-5 pb-4 pt-[112px]">
+      <div className="relative flex items-start gap-4 px-5 pb-4 pt-4">
         <div className="relative -mt-9 flex-none">
           <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border-4 border-paper bg-coal text-xl font-extrabold text-ball shadow-elevated">
             {fotoUrl ? (
@@ -438,11 +486,21 @@ function IdentityPanel({
           </div>
         </div>
 
-        {/* The "quick recognition" block: name, role, and — only when there
-            is a real one — the membership estado. "Cuenta activa" is a
-            SEPARATE fact from membership: reaching this page at all proves
-            the account passed `sesion_vigente` (usuario.activo), for every
-            role alike — see the module docstring. */}
+        {/*
+          The "quick recognition" block: the name, and — only when there is a
+          real one — the membership estado.
+
+          Two things left it in this pass, and both were absences wearing the
+          clothes of facts. "Cuenta activa" was argued for at length in this
+          file's own docstring: reaching the page proves `sesion_vigente`, so
+          the badge is TRUE. It is also unfalsifiable — no reader has ever seen
+          it absent and none ever will — and a badge that cannot vary is not a
+          status, it is a decoration that looks like one. The role chip moved
+          up into the shoulder rather than being deleted.
+
+          What is left is one badge that can actually say something else
+          tomorrow.
+        */}
         <div className="min-w-0 flex-1 pb-1">
           {/* DESIGN.md's `title` step: Graduate at 20px, uppercase, weight 400
               — this is the title of the identity card. `break-words` stays and
@@ -453,16 +511,24 @@ function IdentityPanel({
           <h2 className="break-words font-display text-lg uppercase leading-tight tracking-flat text-ink">
             {name}
           </h2>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <Badge tone="neutral">{roleLabel}</Badge>
-            <Badge tone="ok">Cuenta activa</Badge>
-            {statusBadge && <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
-          </div>
-          {/* Account metadata, not personal data — "Miembro desde" lives HERE
-              only. "Foto de perfil" is the prototype's own explicit state
-              line — read straight off `fotoUrl`, see `photoStateLabel`. */}
-          <p className="mt-2 text-xs text-ink-3">{memberSince}</p>
-          <p className="mt-1 text-xs text-ink-3">Foto de perfil: {photoStateLabel}</p>
+          {statusBadge && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+            </div>
+          )}
+          {/*
+            Account metadata, not personal data — "Miembro desde" lives HERE
+            only, and only when there is a date to state. It used to fall back
+            to "Miembro desde —", which is `DESIGN.md`'s Identity cell rule
+            broken in four characters: *"Nunca nombra una ausencia."*
+
+            The photo-state line that sat under it is gone for the same reason.
+            "Foto de perfil: Sin foto cargada" was a sentence explaining what
+            the avatar 12px to its left was already showing — initials instead
+            of a face is what "no photo" looks like — and the only actionable
+            half of it, the trigger, is the button below.
+          */}
+          {memberSince && <p className="mt-2 text-xs text-ink-3">{memberSince}</p>}
         </div>
       </div>
 
@@ -472,15 +538,29 @@ function IdentityPanel({
         </p>
       )}
 
-      {/* Rail actions — photo upload trigger (now a labelled button, not an
-          icon-only overlay on the avatar) and the panel-local "Cerrar
-          sesión", both from the prototype's identity rail. */}
-      <div className="flex flex-col gap-2 px-5 pb-4 sm:flex-row">
+      {/*
+        ONE rail action, and it is secondary.
+
+        There were two, and between them they broke both halves of the rule of
+        the red. "Cambiar foto" was `primary`, so a staff account mid-edit had
+        two red buttons on screen at once — this one and "Guardar" in the
+        header — and the red stopped meaning "this is THE action". It is
+        secondary now: the header owns the primary, and this is a card-local
+        trigger for the surface it sits on.
+
+        "Cerrar sesión" left the panel entirely. It called the same `logout()`
+        as the Seguridad row 400px below, under a different word ("Salir"), so
+        the screen had one action with two names in two places — the last of
+        the three defects `DESIGN.md`'s Don'ts close on. Seguridad kept it
+        because the other two session actions already live there, and a group
+        of three with one member somewhere else is not a group.
+      */}
+      <div className="flex flex-col gap-2 px-5 pb-4">
         <button
           type="button"
           onClick={() => fotoInputRef.current?.click()}
           disabled={uploadingFoto}
-          className={buttonClasses("primary", "sm", "flex-1 justify-center")}
+          className={buttonClasses("secondary", "sm", "justify-center")}
         >
           {uploadingFoto ? (
             <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
@@ -488,14 +568,6 @@ function IdentityPanel({
             <Camera size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           )}
           {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
-        </button>
-        <button
-          type="button"
-          onClick={onLogout}
-          className={buttonClasses("secondary", "sm", "flex-1 justify-center")}
-        >
-          <LogOut size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Cerrar sesión
         </button>
         <input
           ref={fotoInputRef}
@@ -517,6 +589,9 @@ function IdentityPanel({
           this small. `ink-3-strong` is the AA companion the ramp defines for
           exactly this case at 5.40:1, and it is already what the identical
           `bg-sunken` footnote further down this file uses. */}
+      {/* The one full-width row at the foot of the panel — never squeezed
+          beside anything else, so the full correo always has the panel's whole
+          width to wrap into. */}
       <div className="border-t border-line bg-sunken px-5 py-3">
         <p className="text-2xs font-bold uppercase tracking-wide text-ink-3-strong">Correo de acceso</p>
         <p className="mt-1 break-words text-sm font-semibold text-ink">{correo}</p>
@@ -525,6 +600,146 @@ function IdentityPanel({
     </section>
   );
 }
+
+/**
+ * One fact in the narrow left column: label above value, not beside it.
+ *
+ * `DetailRow` cannot go here and the reason is arithmetic. Its label column is
+ * `sm:w-[150px]` and its value column has a `min-w-[9rem]` (144px) floor, so
+ * one row needs 294px + gutters before it can lay out — and this column is
+ * 292px wide. Tailwind's `sm:` is a VIEWPORT query, not a container one, so on
+ * a 1440px desktop those two floors apply inside a 292px box and the row
+ * overflows its own card.
+ *
+ * Stacking is not a second vocabulary for the same thing either: it is the
+ * `field` spacing step doing exactly what the layout section defines it for —
+ * *"entre una etiqueta y lo que etiqueta"*.
+ */
+function PanelFact({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
+  return (
+    <div className="border-b border-line px-5 py-3 last:border-b-0">
+      <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">{label}</p>
+      <p className="mt-field break-words text-sm font-semibold text-ink">{children}</p>
+    </div>
+  );
+}
+
+/**
+ * The club's side of the relationship, assembled from `self.membership` —
+ * which this page has been fetching since #36 and reading two fields of.
+ *
+ * `fetchStudentPortal()` returns `categoria`, `modalidad`, `fechaActivacion`,
+ * `fechaFin` and `montoAplicado` on every membership row, and the screen used
+ * `estado` for a badge and dropped the rest. That is the whole of "perfil
+ * genérico": not missing data, discarded data. Nothing here is a new request —
+ * see the module docstring's data-sources note, which is unchanged.
+ *
+ * Three of the five are drawn, and the two that are not each have a reason:
+ *
+ * - **`montoAplicado`** is money. On its own a figure does not say whether it
+ *   is owed, paid or overdue, and "Mis pagos" exists to answer precisely that.
+ *   A number that decides nothing is the grid rule's own example.
+ * - **`modalidad`** is drawn only when the plan name does not already contain
+ *   it. Every plan the club sells today is named for how it is charged
+ *   ("Mensual Infantil" / "MENSUAL"), so the honest row for those is no row.
+ *   `PERSONALIZADA` against a plan named for its season is the case that keeps
+ *   the field alive.
+ */
+function MembershipCard({ membership }: { membership: MembershipSummary }): React.ReactElement {
+  const plan = membership.categoria?.trim();
+  const modalidad = membership.modalidad?.trim();
+  const modalidadLabel = modalidad
+    ? modalidad.charAt(0).toUpperCase() + modalidad.slice(1).toLowerCase()
+    : "";
+  // Case-insensitive: the backend spells the modalidad in caps and the plan
+  // name in title case, so a literal comparison would never match and every
+  // row would print the same word twice.
+  const modalidadIsRedundant =
+    !modalidad || (plan?.toLowerCase().includes(modalidad.toLowerCase()) ?? false);
+  const desde = membership.fechaActivacion ? formatDate(membership.fechaActivacion) : "";
+  const hasta = membership.fechaFin ? formatDate(membership.fechaFin) : "";
+
+  return (
+    <section data-testid="profile-membership" className="card flex flex-none flex-col overflow-hidden">
+      <div className="border-b border-line px-5 py-4">
+        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
+          Tu membresía
+        </h2>
+      </div>
+      {plan && <PanelFact label="Plan">{plan}</PanelFact>}
+      {!modalidadIsRedundant && <PanelFact label="Modalidad">{modalidadLabel}</PanelFact>}
+      {desde && <PanelFact label="Socio desde">{desde}</PanelFact>}
+      {hasta && <PanelFact label="Vigente hasta">{hasta}</PanelFact>}
+    </section>
+  );
+}
+
+/**
+ * The last few times the person was on a table, from `self.recentSessions` —
+ * the other field the payload carried and the screen threw away.
+ *
+ * Gated on `length > 0` rather than given an empty state, and that is a
+ * finding rather than a shortcut: attendance already owns two screens of its
+ * own (`/student` and `/student/attendance`), each with a real empty state
+ * that explains what to do about it. A third one here would be a third
+ * vocabulary for the same nothing. When there ARE sessions the card is worth
+ * its space, because it answers "am I actually going?" without leaving the
+ * page.
+ *
+ * Not `ActivityList`: that primitive's row opens with an actor's initials, and
+ * the actor of every row here is the person reading it. Their own initials
+ * repeated down a column identify nobody.
+ */
+function RecentSessionsCard({
+  sessions,
+}: {
+  sessions: readonly StudentSessionSummary[];
+}): React.ReactElement {
+  return (
+    <section data-testid="profile-activity" className="card overflow-hidden">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-field border-b border-line px-5 py-4">
+        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
+          Últimas asistencias
+        </h2>
+        <p className="text-xs text-ink-3">Lo que registró el club</p>
+      </div>
+      <ul className="divide-y divide-line">
+        {sessions.map((session) => {
+          const estado = ATTENDANCE_STATE[session.estado] ?? null;
+          return (
+            <li
+              key={`${session.fecha}-${session.horario}`}
+              className="flex flex-wrap items-center gap-x-4 gap-y-field px-5 py-3"
+            >
+              {/* Tabular figures: a column of dates is only comparable when
+                  the digits sit on the same rails. */}
+              <span className="w-[86px] flex-none text-xs tabular-nums text-ink-3">
+                {formatDate(session.fecha)}
+              </span>
+              <span className="min-w-0 flex-1 text-sm font-semibold text-ink">
+                {session.horario}
+              </span>
+              {estado && <Badge tone={estado.tone}>{estado.label}</Badge>}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * The four `EstadoAsistencia` values as the badge vocabulary, and nothing
+ * else: an unknown estado draws NO badge rather than a fifth tone invented on
+ * the spot. `Record` would force this file to guess at values the backend may
+ * add; the lookup is deliberately partial and the caller handles the miss.
+ */
+const ATTENDANCE_STATE: Record<string, { label: string; tone: BadgeTone }> = {
+  PRESENTE: { label: "Presente", tone: "ok" },
+  AUSENTE: { label: "Ausente", tone: "bad" },
+  JUSTIFICADO: { label: "Justificado", tone: "warn" },
+  TARDE: { label: "Tarde", tone: "warn" },
+};
 
 // ---------------------------------------------------------------------------
 // The page body — one tree, whose content branches by `kind`.
@@ -742,9 +957,15 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     props.kind === "staff" ? props.perfil.telefono : (props.perfil?.telefono ?? "");
   const fechaCreacion =
     props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
-  const memberSince = fechaCreacion
-    ? `Miembro desde ${formatDate(fechaCreacion)}`
-    : "Miembro desde —";
+  // `null`, not "Miembro desde —": the identity cell never names an absence,
+  // so a missing `fechaCreacion` draws no line rather than a labelled dash.
+  const memberSince = fechaCreacion ? `Miembro desde ${formatDate(fechaCreacion)}` : null;
+
+  // The two payload fields this screen used to fetch and discard. Both are
+  // read straight off `self` — no second request, and no default when the
+  // field is absent (see `MembershipCard` / `RecentSessionsCard`).
+  const selfMembership = self?.membership ?? null;
+  const recentSessions = self?.recentSessions ?? [];
 
   // The quick-recognition badge in the identity panel — only when there IS a
   // real membership status to report. When `self` exists but has no
@@ -792,27 +1013,53 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 
   return (
     <ProfileShell actions={headerAction} subtitle={roleCopy.lede}>
-      {/* The compact ~292px panel beside the wide workspace — a `split`
-          (980px) breakpoint, not `lg`: below it the panel collapses to a
-          horizontal band above the workspace, and both stack to one column
-          on a phone. Not `PAGE_RAIL` — that token is the opposite shape (a
-          fluid main column plus a fixed-width RIGHT rail); this is a
-          fixed-width LEFT panel plus a fluid workspace. */}
+      {/*
+        The compact ~292px panel beside the wide workspace — a `split` (980px)
+        breakpoint, not `lg`: below it the panel collapses to a horizontal band
+        above the workspace, and both stack to one column on a phone. Not
+        `PAGE_RAIL` — that token is the opposite shape (a fluid main column
+        plus a fixed-width RIGHT rail); this is a fixed-width LEFT panel plus a
+        fluid workspace.
+
+        The left side is a COLUMN now rather than a single card, and it holds
+        who the person is to the club: the identity panel and, for anyone with
+        a membership, the club's own side of it. It used to hold one short card
+        above ~300px of bare canvas — the screen's own copy of the empty space
+        the owner complained about, in the first place a reader looks.
+
+        The fix is CONTENT, not a stretch, and that distinction is worth
+        stating because the rule of air reads like it offers the other one.
+        `items-start` stays: a flex column stretches its children across the
+        cross axis, not along the main one, so removing it would stretch this
+        wrapper to the workspace's height and leave the cards inside exactly
+        where they already are. `margin-top: auto` on a card's footer only
+        earns its keep when something actually stretches THE CARD — a row of
+        equal-height siblings — and writing it here would have been a comment
+        describing a mechanism that never fires.
+
+        What is left over is measured rather than hidden: with the membership
+        card the student's column runs to ~660px against the workspace's
+        ~810px, and a staff account, which has no membership card, keeps a
+        taller gap. Both numbers are in the comparison's "Lo que falta".
+      */}
       <div className="flex flex-col gap-5 split:flex-row split:items-start split:gap-6">
-        <IdentityPanel
-          name={fullName}
-          initials={initials}
-          fotoUrl={currentFotoUrl}
-          roleLabel={panelRoleLabel}
-          statusBadge={statusBadge}
-          memberSince={memberSince}
-          correo={correoDisplay}
-          uploadingFoto={uploadingFoto}
-          fotoError={fotoError}
-          fotoInputRef={fotoInputRef}
-          onFotoChange={(e) => void handleFotoChange(e)}
-          onLogout={() => void logout()}
-        />
+        <div className="flex flex-col gap-5 split:w-[292px] split:flex-none">
+          <IdentityPanel
+            name={fullName}
+            initials={initials}
+            fotoUrl={currentFotoUrl}
+            roleLabel={panelRoleLabel}
+            statusBadge={statusBadge}
+            memberSince={memberSince}
+            correo={correoDisplay}
+            uploadingFoto={uploadingFoto}
+            fotoError={fotoError}
+            fotoInputRef={fotoInputRef}
+            onFotoChange={(e) => void handleFotoChange(e)}
+          />
+
+          {selfMembership && <MembershipCard membership={selfMembership} />}
+        </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-5">
           {/* Datos personales — one datum per row. Correo and Rol are
@@ -934,6 +1181,12 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
           </CardSection>
 
+          {/* The other field the payload always carried and the screen never
+              drew. It goes in the wide column because a row of it is a date, a
+              schedule and a state on one line — three things the 292px column
+              could not hold without wrapping every row differently. */}
+          {recentSessions.length > 0 && <RecentSessionsCard sessions={recentSessions} />}
+
           {/* Estudiantes a mi cargo — representante only, ALWAYS present for
               that role (even with zero representados: an explicit empty
               state, not a silently missing section), because for a
@@ -985,12 +1238,16 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                   Le enviamos un enlace de cambio a su correo
                 </span>
               </DetailRow>
+              {/* "Cerrar sesión", not "Salir". This row and the identity
+                  panel's retired button called the same `logout()` under two
+                  different words; the surviving one takes the word that names
+                  the act. */}
               <DetailRow
                 label="Sesión"
                 icon={<LogOut size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
                 action={
                   <Button size="sm" onClick={() => void logout()}>
-                    Salir
+                    Cerrar sesión
                   </Button>
                 }
               >

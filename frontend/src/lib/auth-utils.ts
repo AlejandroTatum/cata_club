@@ -290,7 +290,21 @@ export function getDefaultRoute(role: UserRole): string {
 }
 
 /**
- * Human-readable label for a role, in Spanish (matching existing UI).
+ * Human-readable label for a role, in Spanish.
+ *
+ * "estudiante" reads **Jugador**, and that is D9's vocabulary ruling rather
+ * than a preference: the product had three words for the same person —
+ * *Jugador* on the enrolment form, *alumno* in the members table, *estudiante*
+ * in the role — and `/profile` printed two of them within 60px of each other,
+ * this label on the identity panel and `getBackendRoleLabel`'s "Alumno" in the
+ * rows below. `IdentityCell.MEMBER_ROLE_LABELS` already picked the winner
+ * ("Jugador", the word the person read the day they walked into the club);
+ * these two functions were the last visible holdouts, and now all three agree.
+ *
+ * Only the WORD moves. The `UserRole` union still says `"estudiante"`, the
+ * route is still `/student`, and the backend enum is still `"ALUMNO"` — a
+ * route table and a database enum are not vocabulary, and renaming them would
+ * be a behaviour change wearing a copy edit's clothes.
  */
 export function getRoleLabel(role: UserRole): string {
   switch (role) {
@@ -301,7 +315,7 @@ export function getRoleLabel(role: UserRole): string {
     case "representante":
       return "Representante";
     case "estudiante":
-      return "Estudiante";
+      return "Jugador";
     case "unsupported":
       return "Rol no soportado";
   }
@@ -325,8 +339,10 @@ export function getBackendRoleLabel(rol: BackendTipoRol): string {
       return "Entrenador";
     case "REPRESENTANTE":
       return "Representante";
+    // "Jugador", not "Alumno" — same ruling, same word as `getRoleLabel`
+    // above. These two labels appear on `/profile` at the same time.
     case "ALUMNO":
-      return "Alumno";
+      return "Jugador";
   }
 }
 

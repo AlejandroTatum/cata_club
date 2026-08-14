@@ -39,6 +39,18 @@ aplicar Graduate a los títulos— que están en marcha.
 
 Capturas sueltas en [`capturas/`](capturas/), por si el enlace no está a mano.
 
+### 4 · Faro 3 — Perfil y Login
+**[`perfil-login.html`](perfil-login.html)**
+
+La cara al socio. Cuatro capturas: el perfil de un jugador y el login, antes y después. Es la
+primera comparación que vive en el repositorio en vez de en un enlace, construida con los mismos
+tokens de [`DESIGN.md`](../../../DESIGN.md) que revisa.
+
+Lo que cambió: el hombro de caucho en lugar de la banda roja que el sistema prohíbe, la membresía
+real del club —que el payload ya traía y la pantalla tiraba—, «Jugador» como única palabra para la
+misma persona, Playfair estrenándose en el lema y Graduate en los títulos de tarjeta.
+**Estado: pendiente de revisión.**
+
 ---
 
 ## Las mediciones
@@ -52,6 +64,12 @@ ventana, a 1440×900. Es el hueco que la persona ve vacío sin scrollear.
 |---|---|---|---|
 | Miembros | Con datos (45 filas) | 0% | 0% |
 | Miembros | Sin resultados | 25% · 227px | **15% · 139px** |
+| Perfil | Jugador con membresía | 12% · 105px | **10% · 91px** |
+| Login | Formulario en reposo | 23% · 205px | 23% · 208px |
+
+El login es el primer número que no baja, y es a propósito: el hueco lo produce el centrado de la
+tarjeta sobre el eje de la página, que es lo que el dueño pidió expresamente. Bajarlo exige
+descentrarla o inventar contenido. Está explicado en su comparación.
 
 ### Lo ya medido que todavía no se tocó
 
@@ -63,7 +81,7 @@ De las issues #265 y #266, absorbidas por el plan y cerradas:
 | Mi cuenta | 38% | 33% |
 | Mis pagos | 27% | 34% |
 
-Estas tres son fase 4 y no se escriben hasta después de la demo al cliente.
+Estas tres son fase 4 y están en la cola del barrido.
 
 ---
 
@@ -89,7 +107,7 @@ quedan **destacadas** en esa última sección, no enterradas en un párrafo.
 |---|---|---|
 | F1 | Fundación: tokens, tipografía, primitivas, riel | ✅ |
 | F2 | La landing renovada — la trabaja Alejandro. **Espera el OK del cliente** | pendiente |
-| F3 | Tres faros: Miembros · Inscripción · Login y Perfil | 1 de 3 |
+| F3 | Tres faros: Miembros · Inscripción · Login y Perfil | 2 de 3 |
 | F4 | El barrido de las 24 pantallas restantes | pendiente |
 
 Los faros están elegidos por contraste, no por importancia: una tabla densa, un formulario largo y
