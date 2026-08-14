@@ -122,6 +122,71 @@ describe("the surface ladder — canvas, sunken, paper", () => {
   });
 });
 
+describe("the tertiary button — a third level made of fill, not of absence", () => {
+  // D5 of the visual redesign gives the third button level a surface of its
+  // own: `sunken` at rest, `line` on hover, border transparent throughout. It
+  // replaces `ghost`, which was `bg-transparent border-transparent` — a
+  // control with no surface at all, rejected in as many words ("no me gustan
+  // los botones vacíos o sin box").
+  //
+  // Dropping the transparency is what makes these measurements possible. A
+  // ghost button's real background was whichever of the three surfaces it
+  // happened to land on, so its label had to be measured against all of them
+  // and hope; a filled button carries its own backdrop and this block can
+  // assert the pair.
+  const RESTING_FILL = SUNKEN;
+  const HOVER_FILL = line.DEFAULT;
+
+  it("meets AA for the resting label on the resting fill", () => {
+    const ratio = contrastRatio(ink["2"], RESTING_FILL);
+    expect(ratio, `ink-2 on sunken measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the resting label on the HOVER fill, which it crosses mid-transition", () => {
+    // `Button`'s `BASE` transitions colours over 150ms, and background and
+    // text are two separate properties: for that whole window the still-`ink-2`
+    // label is already sitting on the arriving `line` fill. The intermediate
+    // frame is a real state a reader can stop on, so it is measured like one.
+    const ratio = contrastRatio(ink["2"], HOVER_FILL);
+    expect(ratio, `ink-2 on line measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the settled hover pair", () => {
+    const ratio = contrastRatio(ink.DEFAULT, HOVER_FILL);
+    expect(ratio, `ink on line measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  // The fill is the whole control — there is no border to fall back on, so a
+  // fill that vanishes into the surface underneath is a button that vanishes.
+  // A tertiary button stands on a card (`paper`) on /profile and /payments and
+  // on an inset commit bar on /trainer/attendance, so BOTH neighbours count.
+  //
+  // The threshold is the ladder's own, not a new one: `sunken` earns its rung
+  // by clearing 1.09:1 against `paper`, which is the line the retired #FAFAFB
+  // head fill failed at 1.043:1 (see "the surface ladder" above).
+  const SURFACE_STEP = 1.09;
+
+  it.each([
+    ["paper", PAPER],
+    ["canvas", CANVAS],
+  ])("keeps the resting fill visible against %s", (_name, surface) => {
+    const ratio = contrastRatio(RESTING_FILL, surface);
+    expect(ratio, `sunken on ${_name} measures ${ratio.toFixed(3)}:1, under ${SURFACE_STEP}:1`)
+      .toBeGreaterThanOrEqual(SURFACE_STEP);
+  });
+
+  it("confirms the ghost fill it replaces could not have cleared that on any of them", () => {
+    // `bg-transparent` is the surface it sits on, by definition: 1:1 against
+    // every one of the three. This is the number the rejection was about.
+    for (const surface of [PAPER, SUNKEN, CANVAS]) {
+      expect(contrastRatio(surface, surface)).toBeLessThan(SURFACE_STEP);
+    }
+  });
+});
+
 describe("every foreground that lands on the deepened canvas", () => {
   // Deepening the page field costs contrast on the page field. This is the
   // list of tokens that pay for it, and the reason the canvas stops where it

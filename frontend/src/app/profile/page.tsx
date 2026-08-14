@@ -765,7 +765,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       </Link>
     ) : editing ? (
       <>
-        <Button variant="ghost" onClick={cancelEditing} disabled={saving}>
+        <Button variant="tertiary" onClick={cancelEditing} disabled={saving}>
           <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Cancelar
         </Button>

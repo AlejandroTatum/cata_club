@@ -30,7 +30,7 @@ describe("Button — committed dimensions", () => {
   });
 
   it("holds its height for every variant", () => {
-    for (const variant of ["primary", "secondary", "dark", "ghost"] as const) {
+    for (const variant of ["primary", "secondary", "dark", "tertiary"] as const) {
       const { unmount } = render(<Button variant={variant}>Acción</Button>);
       expect(committedHeight(screen.getByRole("button"))).toBe("40px");
       unmount();
@@ -60,7 +60,7 @@ describe("Button — variants", () => {
   it("reserves red for primary alone", () => {
     // Red means "the one CTA" or "this is destructive". Any other variant
     // wearing it would dilute both meanings.
-    for (const variant of ["secondary", "dark", "ghost"] as const) {
+    for (const variant of ["secondary", "dark", "tertiary"] as const) {
       expect(buttonClasses(variant)).not.toContain("bg-cata-red");
     }
     expect(buttonClasses("primary")).toContain("bg-cata-red");

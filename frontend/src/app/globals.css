@@ -113,18 +113,17 @@
     @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:bg-cata-bg disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  /*
-   * `text-ink-2` / `hover:text-ink`, not `text-cata-text/65`. A ghost button
-   * has no surface of its own, so it wears whatever is behind it — and behind
-   * it is usually the page field, where 65% of #1F2937 measures 4.34:1 on the
-   * deepened canvas (it was 4.58:1 on the old near-white one, which is how it
-   * shipped). Solid ink at 7.16:1 on canvas and 8.74:1 on paper does not
-   * depend on the surface at all. Matches the `ghost` variant of the `Button`
-   * primitive, which is where new code should go.
-   */
-  .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-ink-2 transition-colors duration-200 hover:bg-coal/[0.06] hover:text-ink disabled:cursor-not-allowed disabled:opacity-50;
-  }
+  /* `.btn-ghost` used to live here — a control with no fill and no border,
+     wearing whatever surface was behind it. The client and the product owner
+     rejected exactly that ("no me gustan los botones vacíos o sin box"), so
+     D5 of the visual redesign replaced the level with a FILLED one: the
+     `tertiary` variant of the `Button` primitive, `sunken` at rest.
+
+     It had no consumers left even before that: every third-level button in
+     the product already went through the primitive. Deleted rather than
+     deprecated, for the same reason the `.badge` family below was — a
+     deprecated CSS class is an invitation, and this one had already outlived
+     the component that replaced it once. */
 
   /*
    * Height and radius come from the design-system tokens (h-ctl 40px,

@@ -472,7 +472,7 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
       <div className="mt-8 flex items-start justify-between gap-3">
         <div>
           {!props.isFirst && (
-            <Button variant="ghost" onClick={props.onBack} disabled={props.submitting}>
+            <Button variant="tertiary" onClick={props.onBack} disabled={props.submitting}>
               <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Atrás
             </Button>

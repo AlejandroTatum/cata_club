@@ -899,7 +899,7 @@ export default function PaymentsPage(): React.ReactElement {
               </Button>
             )}
             {batch.targets.length > 0 && (
-              <Button size="sm" variant="ghost" disabled={batch.running} onClick={batch.clearSelection}>
+              <Button size="sm" variant="tertiary" disabled={batch.running} onClick={batch.clearSelection}>
                 Limpiar selección
               </Button>
             )}
@@ -1322,7 +1322,7 @@ export default function PaymentsPage(): React.ReactElement {
                           decisions this screen exists for, so they keep the
                           weight; parking for later is the less-common path. */}
                       <Button
-                        variant="ghost"
+                        variant="tertiary"
                         disabled={!checklistComplete || actionLoading !== null}
                         onClick={handleMarkReviewed}
                       >

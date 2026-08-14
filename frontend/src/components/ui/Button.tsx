@@ -18,7 +18,7 @@ import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactElement } from "react";
 import { cn } from "./cn";
 
-export type ButtonVariant = "primary" | "secondary" | "dark" | "ghost" | "onCoal";
+export type ButtonVariant = "primary" | "secondary" | "dark" | "tertiary" | "onCoal";
 export type ButtonSize = "md" | "sm";
 
 /** `.btn` base — shape, typography and focus ring, without any color. */
@@ -47,10 +47,25 @@ const VARIANT: Record<ButtonVariant, string> = {
   secondary: "bg-paper border-line-2 text-ink hover:bg-sunken",
   // `.btn.dark` — coal. Secondary-but-emphatic actions ("+ Nuevo miembro").
   dark: "bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2",
-  // `.btn.ghost` — no chrome at all. A translucent ink wash rather than a
-  // fixed grey, because a ghost button is the one control that has no surface
-  // of its own and can therefore sit on any of the three.
-  ghost: "bg-transparent border-transparent text-ink-2 hover:bg-coal/[0.06] hover:text-ink",
+  // The third level (D5). It replaces `ghost`, which was `bg-transparent
+  // border-transparent` — "no chrome at all" — and was rejected for exactly
+  // that: "no me gustan los botones vacíos o sin box".
+  //
+  // So the third level is distinguished by FILL rather than by absence. The
+  // border stays transparent on purpose: three levels that each add a line
+  // would differ only in how dark that line is, whereas fill against no fill
+  // is a difference you read without comparing. `BASE` declares `border`
+  // unconditionally, so a colour has to be named here or the control inherits
+  // `currentColor` and grows the outline the fill exists to replace.
+  //
+  // Hover goes one rung UP the ladder to `line` rather than reaching for a
+  // wash: a fixed step is a state you can measure, and it is measured —
+  // `color-contrast.test.ts` puts ink-2 at 7.97:1 on `sunken`, 6.54:1 on
+  // `line` (the frame mid-transition, where the old label is already over the
+  // arriving fill) and ink at 13.26:1 once settled. The fill itself clears the
+  // ladder's own 1.09:1 rung on both neighbours it can stand on: 1.098:1 on
+  // `paper`, 1.112:1 on `canvas`.
+  tertiary: "bg-sunken border-transparent text-ink-2 hover:bg-line hover:text-ink",
   // `.btn.oncoal` (prototype 31) — the secondary action INSIDE a coal card
   // (the trainer dashboard's immediate-session card). `secondary`'s white
   // fill would read as a second block competing with the coal surface it

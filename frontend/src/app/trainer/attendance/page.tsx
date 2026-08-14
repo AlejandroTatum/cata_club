@@ -995,7 +995,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   </Button>
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="tertiary"
                     onClick={() =>
                       setPendingConfirmation({
                         kind: "discard-draft",
@@ -1482,7 +1482,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
               >
                 {unreviewedCount === 1 ? "Revisar a ese alumno" : `Revisar a esos ${unreviewedCount}`}
               </Button>
-              <Button type="button" variant="ghost" onClick={handleMarkRemainingPresent}>
+              <Button type="button" variant="tertiary" onClick={handleMarkRemainingPresent}>
                 <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                 Confirmar que están presentes
               </Button>
@@ -1804,7 +1804,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                     {step !== "select-session" && (
                       <div className="sticky bottom-0 -mx-5 mt-5 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-5 py-3.5 backdrop-blur sm:-mx-6 sm:px-6">
                         {!isFirst && (
-                          <Button type="button" variant="ghost" onClick={handleBack} disabled={submitting}>
+                          <Button type="button" variant="tertiary" onClick={handleBack} disabled={submitting}>
                             <ChevronLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                             Atrás
                           </Button>
@@ -1822,7 +1822,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                         {step === "mark-attendance" && (
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="tertiary"
                             onClick={handleUndo}
                             disabled={lastUndoable === null || submitting}
                             aria-label={

@@ -768,7 +768,7 @@ function RenewPaymentForm({
               )}
               {loading ? "Registrando…" : "Confirmar y registrar"}
             </Button>
-            <Button variant="ghost" onClick={handleBackToForm} disabled={loading}>
+            <Button variant="tertiary" onClick={handleBackToForm} disabled={loading}>
               Volver a corregir
             </Button>
           </div>
@@ -784,7 +784,7 @@ function RenewPaymentForm({
             <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             Registrar pago
           </Button>
-          <Button variant="ghost" onClick={handleCancel}>
+          <Button variant="tertiary" onClick={handleCancel}>
             Cancelar
           </Button>
         </div>
