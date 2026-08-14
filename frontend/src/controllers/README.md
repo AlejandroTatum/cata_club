@@ -1,33 +1,40 @@
-# `src/controllers/` — Placeholder (Future Orchestration Layer)
+# `src/controllers/` — reservado, y vacío
 
-> **Status: PLACEHOLDER** — This directory is reserved for page-level
-> orchestration logic that doesn't belong inside a component or a service.
-> Currently unused. No controllers exist yet.
+> **Estado: VACÍO.** Este directorio no contiene un solo controlador. Solo este
+> archivo. Verificable con `fd -t f . src/controllers`.
 
-When page files (e.g. `src/app/products/page.tsx`) grow complex, extract
-orchestration here:
+Está reservado para orquestación a nivel de página: lo que no es ni una llamada
+de datos ni un componente, y que empieza a estorbar dentro de un `page.tsx`
+cuando crece.
 
-| Concern | Where it goes |
-|---------|---------------|
-| API calls, data fetching | `src/services/` |
-| UI state, rendering | `src/components/` or `src/app/` pages |
-| Page-level orchestration, formatters, transformers | `src/controllers/` |
-| Business logic shared across pages | `src/controllers/` |
+## A dónde va cada cosa hoy
 
-### Convention (when implemented)
+| Preocupación | Dónde vive |
+|---|---|
+| Llamadas al backend, obtención de datos | `src/services/` |
+| Acceso al backend desde el servidor | `src/lib/server/` |
+| Estado de interfaz, renderizado | `src/components/` y las páginas de `src/app/` |
+| Utilidades puras y reglas compartidas | `src/lib/` |
+| Orquestación de una página, formateadores, transformadores | acá, cuando exista |
 
-File name matches the page it serves, e.g. `productsController.ts` for the
-products page.
+## Por qué sigue vacío
 
-### Future Example
+Porque `src/lib/` absorbió lo que este directorio iba a recibir, y esa decisión
+funcionó: las reglas compartidas del producto —el registro de destinos, la
+rampa de tinta, la escala de iconos— viven ahí con sus candados de test al
+lado.
 
-```ts
-// controllers/productsController.ts
-import { fetchProducts } from "@/services/api";
-import type { Product } from "@/services/api";
+**Si vas a crear el primer controlador, la pregunta previa es si no pertenece a
+`src/lib/`.** Un directorio reservado durante meses suele estarlo porque la
+necesidad que lo justificaba se resolvió en otro lado.
 
-export async function getProductList(): Promise<Product[]> {
-  const products = await fetchProducts();
-  return products.filter((p) => p.stock > 0);
-}
-```
+Convención si se implementa: el nombre del archivo sigue al de la página que
+sirve, por ejemplo `membersController.ts` para `/members`.
+
+---
+
+*Nota: la versión anterior de este archivo traía un ejemplo con
+`productsController.ts`, `fetchProducts()` y un filtro por `p.stock > 0` —
+plantilla de comercio electrónico, de un dominio que este sistema no tiene. Se
+retiró: un ejemplo que no puede existir en el proyecto no enseña dónde poner
+las cosas, enseña a desconfiar del documento.*
