@@ -129,7 +129,9 @@ describe("AuthShell", () => {
 
     expect(screen.getByText(/Formando/)).toBeInTheDocument();
     expect(screen.getByText("campeones")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /volver al sitio/i }).length).toBeGreaterThan(0);
+    // "Volver al sitio" was this screen's own name for a place the rail calls
+    // "Inicio". D12b took the naming off the screen (see lib/destinations.ts).
+    expect(screen.getAllByRole("link", { name: /volver al inicio/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Bienvenido de nuevo" })).toBeInTheDocument();
     expect(screen.getByText("Inicie sesión para continuar")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Iniciar sesión" })).toBeInTheDocument();
@@ -181,13 +183,28 @@ describe("AuthShell — the two halves share one vertical axis", () => {
 
   // WCAG 2.2 SC 2.5.8 — measured at 390x844 this escape hatch was
   // 101.8 x 19.5, i.e. a bare 13px line of type with no hit area of its own.
-  it("gives the escape back to the public site a 24px-tall target", () => {
+  // It was padded out to a 24px minimum, and D12b then replaced the bare link
+  // with the system's own back control: 32px, which is the product's compact
+  // control height and clears 2.5.8 by 8px rather than by nothing.
+  it("gives the escape back to the public site the system's control height", () => {
     renderShell();
 
-    const back = screen.getByRole("link", { name: /volver al sitio/i });
-    expect(back.className).toContain("min-h-[24px]");
-    // Hit area only: the type and the 14px arrow are untouched.
-    expect(back.className).toContain("text-sm");
+    const back = screen.getByRole("link", { name: /volver al inicio/i });
+    expect(back.className).toContain("h-ctl-sm");
+    // The old floor is gone because it is no longer the binding number, not
+    // because the target shrank.
+    expect(back.className).not.toContain("min-h-[24px]");
+  });
+
+  it("dresses that escape in the coal skin rather than a second bare link", () => {
+    // The defect D12b names: this screen carried the product's SECOND back
+    // control — grey, boxless, under the system's control height — because the
+    // light skin is unreadable on coal. One control, two tones.
+    renderShell();
+
+    const back = screen.getByRole("link", { name: /volver al inicio/i });
+    expect(back).toHaveClass("bg-white/10", "text-white");
+    expect(back).not.toHaveClass("bg-sunken");
   });
 
   it("does not restate a focus ring the system rule already outranks", () => {

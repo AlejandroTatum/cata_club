@@ -1537,7 +1537,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
       */}
       <BackLink
         href={backHref}
-        label={session?.user?.role === "admin" ? "Volver a Asistencias" : "Volver al Panel del Entrenador"}
         // Walking out of a started roll call is the one navigation on this
         // screen that costs something, so it is the one that asks.
         onClick={handleLeaveWizard}
@@ -1764,7 +1763,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 </Link>
               </>
             )}
-            <BackLink href={backHref} label="Volver al Panel" className="w-full justify-center sm:w-auto" />
+            <BackLink href={backHref} className="w-full justify-center sm:w-auto" />
           </div>
         </div>
       ) : (

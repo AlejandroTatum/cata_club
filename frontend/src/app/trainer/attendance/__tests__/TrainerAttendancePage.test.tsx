@@ -1288,9 +1288,20 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
 
-    expect(
-      screen.getByRole("link", { name: /Volver al Panel del Entrenador/ }),
-    ).toBeInTheDocument();
+    // TWO of them, and that is not new — the frame's control at the top of the
+    // screen and the receipt's own in its action row have both pointed at
+    // `backHref` since #213. What is new is that they say the same thing: they
+    // used to read "Volver al Panel del Entrenador" and "Volver al Panel", two
+    // names for one destination, which is exactly the drift the destination
+    // registry retires. The duplication itself is a separate question from this
+    // test's (whether the FRAME's control survives filing), so it is asserted
+    // here rather than quietly tolerated by a looser query.
+    const backLinks = screen.getAllByRole("link", { name: /Volver a Mi día/ });
+    expect(backLinks).toHaveLength(2);
+    // The frame's is the one carrying the page's own bottom margin; the
+    // receipt's is a full-width row action.
+    expect(backLinks[0].className).toContain("mb-6");
+    expect(backLinks[0]).toHaveAttribute("href", "/trainer");
   });
 
   // Preserved behavior: "Registrar Otra Asistencia" still runs `handleReset`.
@@ -1793,7 +1804,7 @@ describe("TrainerAttendancePage — leaving asks first", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("link", { name: /Volver al Panel del Entrenador/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Volver a Mi día/ }));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("¿Salir sin registrar la asistencia?")).toBeInTheDocument();
@@ -1806,7 +1817,7 @@ describe("TrainerAttendancePage — leaving asks first", () => {
     expect(mockPush).not.toHaveBeenCalled();
     expect(screen.getByText("Student 01")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("link", { name: /Volver al Panel del Entrenador/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Volver a Mi día/ }));
     fireEvent.click(
       within(await screen.findByRole("dialog")).getByRole("button", { name: "Salir sin registrar" }),
     );
@@ -1821,7 +1832,7 @@ describe("TrainerAttendancePage — leaving asks first", () => {
 
     // An untouched roster is not unsaved work — the roster defaults to
     // "present", and asking about it would be asking about nothing.
-    fireEvent.click(screen.getByRole("link", { name: /Volver al Panel del Entrenador/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Volver a Mi día/ }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

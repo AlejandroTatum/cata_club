@@ -173,7 +173,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
           </Link>
         }
       >
-        <BackLink href="/trainer" label="Volver a Mi día" className="mb-6" />
+        <BackLink href="/trainer" className="mb-6" />
 
         <AttendanceFilters filters={filters} schedules={schedules} />
 

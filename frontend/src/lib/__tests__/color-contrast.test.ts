@@ -187,6 +187,76 @@ describe("the tertiary button — a third level made of fill, not of absence", (
   });
 });
 
+describe("the back control — the same third level, on both fields it stands on", () => {
+  // D12b retires the red-outlined back pill and dresses `BackLink` in the
+  // `tertiary` skin measured above, so on the light surfaces there is nothing
+  // new to measure — the block above already owns `ink-2` on `sunken`, `ink-2`
+  // on `line` mid-transition, and `ink` on `line` once settled, and `BackLink`
+  // takes those exact classes from `buttonSkin("tertiary")` rather than
+  // restating them.
+  //
+  // What IS new is the second skin. The auth screens' coal panel had its own
+  // back control — a bare grey link with no box — precisely because the light
+  // fill is invisible there, and absorbing it into the one control means the
+  // one control now has to work on a dark field too. `coal` is not on the
+  // surface ladder (that ramp is defined for light fields only), so these pairs
+  // have no home in the block above.
+  const COAL = coal.DEFAULT;
+
+  /** `bg-white/10` at rest, `bg-white/[0.18]` on hover, both over `coal`. */
+  const RESTING_FILL = compositeOver("#FFFFFF", COAL, 0.1);
+  const HOVER_FILL = compositeOver("#FFFFFF", COAL, 0.18);
+
+  it("meets AA for the white label on the resting fill", () => {
+    const ratio = contrastRatio("#FFFFFF", RESTING_FILL);
+    expect(ratio, `white on white/10 over coal measures ${ratio.toFixed(2)}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the white label on the hover fill", () => {
+    // Same reasoning as the tertiary block's mid-transition case: the fill
+    // arrives over 150ms and the label is already sitting on it. Here the label
+    // does not change colour at all, so the hover fill is simply the darker
+    // half of the pair — a lighter fill under white is the direction that can
+    // fail, and 18% is where it lands.
+    const ratio = contrastRatio("#FFFFFF", HOVER_FILL);
+    expect(ratio, `white on white/18 over coal measures ${ratio.toFixed(2)}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("keeps both fills visible as a BOX against the coal behind them", () => {
+    // The point of #202 that survives D12b: the control has an edge you can
+    // see without hovering. On coal that edge is the fill, so the fill has to
+    // clear the surface step the ladder asks of `sunken` on `paper` — the
+    // threshold is borrowed rather than invented, for the same reason.
+    for (const [name, fill] of [["resting", RESTING_FILL], ["hover", HOVER_FILL]] as const) {
+      const ratio = contrastRatio(fill, COAL);
+      expect(ratio, `the ${name} fill measures ${ratio.toFixed(3)}:1 on coal`)
+        .toBeGreaterThanOrEqual(1.09);
+    }
+  });
+
+  it("draws a hover border that clears the non-text threshold", () => {
+    // `hover:border-white/30` composites over the hover fill it outlines, and
+    // it is a boundary rather than text, so 1.4.11's 3:1 is the bar.
+    const border = compositeOver("#FFFFFF", HOVER_FILL, 0.3);
+    const ratio = contrastRatio(border, COAL);
+    expect(ratio, `the hover border measures ${ratio.toFixed(2)}:1 on coal`)
+      .toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it("confirms the bare link it replaces was the dimmer of the two", () => {
+    // `ON_COAL_MUTED` in `AuthShell` — #8B8B93, the colour "Volver al sitio"
+    // was set in. It passes AA on its own (5.49:1) and was never the defect;
+    // the defect was that it had no box and stood 24px tall, under the system's
+    // own control height. White on the resting fill is the brighter label, and
+    // now it is a control rather than a line of text.
+    expect(contrastRatio("#8B8B93", COAL)).toBeLessThan(
+      contrastRatio("#FFFFFF", RESTING_FILL),
+    );
+  });
+});
+
 describe("every foreground that lands on the deepened canvas", () => {
   // Deepening the page field costs contrast on the page field. This is the
   // list of tokens that pay for it, and the reason the canvas stops where it

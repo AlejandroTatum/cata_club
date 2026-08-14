@@ -156,7 +156,7 @@ describe("ResetPasswordPage", () => {
     // template — if the screen stopped inheriting it, these disappear.
     expect(screen.getByText(/Formando/)).toBeInTheDocument();
     expect(screen.getByText("campeones")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /volver al sitio/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /volver al inicio/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByAltText("Cata Club").length).toBeGreaterThan(0);
   });
 

@@ -785,7 +785,7 @@ function CrearCuentaContent(): React.ReactElement {
         </div>
       ) : (
         <>
-          <BackLink href="/members" label="Volver a Miembros" className="mb-6" />
+          <BackLink href="/members" className="mb-6" />
 
           {/* Progress bar */}
           <div>

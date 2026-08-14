@@ -72,7 +72,7 @@ export default function AyudaPage(): React.ReactElement {
       title="Preguntas frecuentes"
       subtitle="Cómo funciona la app del club, sección por sección."
     >
-      <BackLink href="/" label="Volver al inicio" />
+      <BackLink href="/" />
 
       {/*
        * The schedule first, and as a table rather than prose. It is the most

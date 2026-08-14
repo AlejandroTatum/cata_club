@@ -98,9 +98,7 @@
  */
 
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { ICON } from "@/lib/icon-size";
+import { BackLink } from "@/components/ui";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { yearsSinceFounding } from "@/app/landing/landing-config";
 
@@ -185,29 +183,40 @@ export default function AuthShell({
          *
          * Contrast, measured rather than assumed: the gradient fades out at 68%
          * of its 340px radius, i.e. ~231px from centre, and every muted line on
-         * this panel sits outside that — the exit link ~475px away, the figure
-         * caption ~310px, the copyright ~384px — so they keep `ON_COAL_MUTED`'s
-         * full 5.49:1 on bare coal. `ON_COAL_SUPPORT`, which IS inside the lit
-         * area, measures 7.85:1 there. Even the impossible case (muted text at
-         * the exact centre, where the logo is) holds 4.53:1, so the effect
-         * cannot push anything below AA.
+         * this panel sits outside that — the figure caption ~310px, the
+         * copyright ~384px — so they keep `ON_COAL_MUTED`'s full 5.49:1 on bare
+         * coal. `ON_COAL_SUPPORT`, which IS inside the lit area, measures
+         * 7.85:1 there. Even the impossible case (muted text at the exact
+         * centre, where the logo is) holds 4.53:1, so the effect cannot push
+         * anything below AA.
+         *
+         * The exit link used to be on that list, ~475px away in `ON_COAL_MUTED`.
+         * It is `BackLink`'s coal tone now — white on its own translucent fill,
+         * 14.13:1 at rest — so it no longer depends on where the radial ends;
+         * `lib/__tests__/color-contrast.test.ts` owns those numbers.
          */}
         <span
           aria-hidden="true"
           className="pointer-events-none absolute left-1/2 top-1/2 hidden h-[680px] w-[680px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.075),rgba(255,255,255,0)_68%)] split:block"
         />
 
-        <Link
-          href="/"
-          /* `min-h-[24px]` is hit area, not type: WCAG 2.2 SC 2.5.8 asks for
-             24x24 CSS px and this link measured 101.8 x 19.5 on a 390px
-             viewport. The 13px text and the 14px arrow are unchanged; the
-             extra 4.5px is split around them by `items-center`. */
-          className={`relative z-[1] inline-flex min-h-[24px] items-center gap-1.5 self-start justify-self-start text-sm transition-colors hover:text-white ${ON_COAL_MUTED}`}
-        >
-          <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          Volver al sitio
-        </Link>
+        {/*
+         * The way out, and it is the SYSTEM's back control now (D12b).
+         *
+         * It used to be a bare link — muted grey on coal, 24px tall, no box —
+         * which made this the product's SECOND back control, in contradiction
+         * of the very decision (#202) that gave the other one a visible border.
+         * The reason was never a design intent: the light skin was unreadable
+         * on coal, so this screen wrote its own. `BackLink`'s `coal` tone is
+         * what removes the excuse, and with it the control comes up to the
+         * system's 32px and stops naming its destination by hand — "Volver al
+         * sitio" was a fifth name for a place the rail already calls "Inicio".
+         *
+         * `min-h-[24px]` retired with it: the control is 32px now, which clears
+         * WCAG 2.2 SC 2.5.8's 24×24 target the old link only just reached
+         * (measured 101.8 × 19.5 before the hit area was padded out).
+         */}
+        <BackLink href="/" tone="coal" className="relative z-[1] justify-self-start" />
 
         {/*
          * The centred cluster — `gap:22px`, and a measure that TRACKS THE

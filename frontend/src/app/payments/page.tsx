@@ -1107,7 +1107,6 @@ export default function PaymentsPage(): React.ReactElement {
               queue⇄detail round trip to actually leave the page. */}
           <BackLink
             href="/payments"
-            label="Volver a la cola"
             onClick={(e) => {
               e.preventDefault();
               setSelectedId(null);

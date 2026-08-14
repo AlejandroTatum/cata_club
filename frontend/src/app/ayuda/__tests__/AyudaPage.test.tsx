@@ -30,10 +30,12 @@ vi.mock("next/link", () => ({
 }));
 
 describe("AyudaPage", () => {
-  it("renders exactly one 'Volver al inicio' link, not one at each end (DSH-3)", () => {
+  it("renders exactly one 'Volver al Inicio' link, not one at each end (DSH-3)", () => {
     render(<AyudaPage />);
 
-    expect(screen.getAllByText("Volver al inicio")).toHaveLength(1);
+    // The capital is the registry\'s: `/` is called "Inicio" wherever it is
+    // named, and a back control never re-cases the destination (D12b).
+    expect(screen.getAllByText("Volver al Inicio")).toHaveLength(1);
   });
 
   it("points that one link at the site root with the canonical back skin", () => {
@@ -41,7 +43,10 @@ describe("AyudaPage", () => {
 
     const link = screen.getByRole("link", { name: /volver al inicio/i });
     expect(link).toHaveAttribute("href", "/");
-    expect(link).toHaveClass("border-cata-red", "bg-transparent", "text-cata-red-dark");
+    // The canonical skin is the system\'s tertiary level now, not a red
+    // outline: back is the least important control on the screen.
+    expect(link).toHaveClass("bg-sunken", "border-transparent", "text-ink-2");
+    expect(link.className).not.toMatch(/cata-red/);
   });
 });
 

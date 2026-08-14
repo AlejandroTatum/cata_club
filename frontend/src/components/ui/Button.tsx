@@ -76,6 +76,25 @@ const VARIANT: Record<ButtonVariant, string> = {
 };
 
 /**
+ * The COLOURS of a level, without its shape.
+ *
+ * `buttonClasses` below is the usual door and hands out shape and colour
+ * together. This one exists for the control that wants the system's colour
+ * recipe on a shape of its own: `BackLink` is a 32px pill at the 10px control
+ * radius (D12b), which is neither `md` nor `sm`, but it is the `tertiary`
+ * LEVEL and its fill, its label ink and its hover step have to be that level's
+ * — not a second set of values that happen to match today.
+ *
+ * `cn` is a plain joiner with no class-merging, so composing the full
+ * `buttonClasses` string and overriding the shape afterwards would ship both
+ * heights and let stylesheet order pick one. Taking the colours alone is the
+ * honest way to reuse a skin here.
+ */
+export function buttonSkin(variant: ButtonVariant): string {
+  return VARIANT[variant];
+}
+
+/**
  * The class string for a given variant/size, exported so anchors and
  * `next/link` can wear the button skin without cloning the values.
  */

@@ -127,7 +127,9 @@ describe("getNavLinksForRole", () => {
     const links = getNavLinksForRole(null);
     expect(links).toHaveLength(2);
     expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/login", label: "Iniciar Sesión" });
+    // Sentence case since D12b: `lib/destinations.ts` owns the name now, and
+    // every other multi-word row in the product capitalises only the first word.
+    expect(links[1]).toEqual({ href: "/login", label: "Iniciar sesión" });
   });
 
   it("returns admin links including /groups, /members and /attendance", () => {

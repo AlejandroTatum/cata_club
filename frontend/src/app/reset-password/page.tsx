@@ -252,7 +252,7 @@ function ResetPasswordContent(): React.ReactElement {
 
       {/* `.fcard .aux` — 12.5px line with the action in red/600. */}
       <p className="text-center text-xs text-ink-3">
-        <BackLink href="/login" label="Volver a Iniciar Sesión" />
+        <BackLink href="/login" />
       </p>
     </AuthShell>
   );

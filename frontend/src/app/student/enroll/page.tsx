@@ -900,7 +900,6 @@ function EnrollWizard(): React.ReactElement {
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <BackLink
               href={isAuthenticated ? "/student" : "/"}
-              label={isAuthenticated ? "Volver a Mi Cuenta" : "Volver al inicio"}
               className="mb-6"
             />
             {/* Carries `mb-6` so that when the row wraps on a phone the help

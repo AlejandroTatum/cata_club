@@ -7,6 +7,7 @@
  */
 
 import type { BackendTipoRol, UserRole } from "@/types/domain";
+import { destinationLabel } from "@/lib/destinations";
 
 // ---------------------------------------------------------------------------
 // Pure navigation link data (no icon components — use at UI layer)
@@ -19,6 +20,22 @@ import type { BackendTipoRol, UserRole } from "@/types/domain";
 export interface NavLinkDef {
   href: string;
   label: string;
+}
+
+/**
+ * A rail row, named by the registry rather than here.
+ *
+ * The labels used to be written out beside each href in the lists below, which
+ * is how `/trainer` came to be "Mi día" in this file and "Panel del Entrenador"
+ * on the back control of the screen it points at. `lib/destinations.ts` owns
+ * every destination's name now, so the rail and the back control cannot drift
+ * apart — see D12b of `docs/ux/rediseno-visual-2026-08.md`.
+ *
+ * What stays here is the only question this file was ever the right place for:
+ * WHICH destinations a given role is offered.
+ */
+function row(href: string): NavLinkDef {
+  return { href, label: destinationLabel(href) };
 }
 
 /**
@@ -39,65 +56,60 @@ export function getNavLinksForRole(
   studentIsAdult = false,
 ): NavLinkDef[] {
   if (!role) {
-    return [
-      { href: "/", label: "Inicio" },
-      { href: "/login", label: "Iniciar Sesión" },
-    ];
+    return [row("/"), row("/login")];
   }
 
-  const links: NavLinkDef[] = [{ href: "/", label: "Inicio" }];
+  const links: NavLinkDef[] = [row("/")];
 
   switch (role) {
-    // Every label below is the destination's own page title, so the nav
-    // never promises a name the screen does not use. The admin set is
-    // transcribed from `docs/archive/prototypes/prototipos/_nav-admin.html`.
+    // Every name the rows below carry is the destination's own, read off
+    // `lib/destinations.ts`, so the nav never promises a name the screen does
+    // not use — and neither does anything else that points at these hrefs. The
+    // admin set is transcribed from
+    // `docs/archive/prototypes/prototipos/_nav-admin.html`.
     case "admin":
       links.push(
-        { href: "/dashboard", label: "Panel de Control" },
-        { href: "/members", label: "Miembros" },
-        { href: "/groups", label: "Horarios" },
-        { href: "/payments", label: "Membresías y Pagos" },
-        { href: "/discounts", label: "Descuentos" },
-        { href: "/attendance", label: "Asistencias" },
-        { href: "/reports", label: "Reportes" },
+        row("/dashboard"),
+        row("/members"),
+        row("/groups"),
+        row("/payments"),
+        row("/discounts"),
+        row("/attendance"),
+        row("/reports"),
       );
       break;
     case "trainer":
       links.push(
-        { href: "/trainer", label: "Mi día" },
+        row("/trainer"),
         // Named after the action, not "Asistencia": the admin section called
         // "Asistencias" is the record list, this one is the act of taking it.
         // One word apart, they used to read as the same destination.
-        { href: "/trainer/attendance", label: "Pasar lista" },
+        row("/trainer/attendance"),
         // Its own section, not a detail of "Pasar lista": without this entry
         // the only way into /trainer/attendance/history was a secondary button
         // on the panel, and `resolveActiveHref` attributed the screen to
         // "Pasar lista" (longest-prefix wins, and this href is the longer one
         // as soon as it exists).
-        { href: "/trainer/attendance/history", label: "Historial" },
+        row("/trainer/attendance/history"),
       );
       break;
     case "representante":
       links.push(
-        { href: "/student", label: "Mi cuenta" },
-        { href: "/student/payments", label: "Pagos" },
+        row("/student"),
+        row("/student/payments"),
         // The two things a student actually opens the portal to do. Without
         // this entry /student/attendance is reachable only from a panel on the
         // home screen.
-        { href: "/student/attendance", label: "Asistencias" },
+        row("/student/attendance"),
         // Only a representante manages a representado's medical record — the
         // backend's `incluir_titular=False` on `/fichas-medicas/*` still
         // excludes the titular's own, so "estudiante" (below) never gets this
         // entry: it would point a self-managed student at a screen that 403s.
-        { href: "/student/medical-record", label: "Ficha médica" },
+        row("/student/medical-record"),
       );
       break;
     case "estudiante":
-      links.push(
-        { href: "/student", label: "Mi cuenta" },
-        { href: "/student/payments", label: "Pagos" },
-        { href: "/student/attendance", label: "Asistencias" },
-      );
+      links.push(row("/student"), row("/student/payments"), row("/student/attendance"));
       // Ficha médica, ESTUDIANTE-only and age-gated: the backend's
       // `incluir_titular` on GET/PATCH /fichas-medicas/persona/{id} only
       // admits the titular when they're 18+
@@ -111,7 +123,7 @@ export function getNavLinksForRole(
       // branch). Once merged, this `case` needs both entries pushed under
       // their own conditions instead of one shared block.
       if (role === "estudiante" && studentIsAdult) {
-        links.push({ href: "/student/medical-record", label: "Ficha médica" });
+        links.push(row("/student/medical-record"));
       }
       break;
     case "unsupported":

@@ -442,9 +442,9 @@ describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
   it("returns focus to the row action it came from", async () => {
     renderPage();
     await openRequest("Juan Pérez");
-    await screen.findByRole("link", { name: /volver a la cola/i });
+    await screen.findByRole("link", { name: /volver a membresías y pagos/i });
 
-    fireEvent.click(screen.getByRole("link", { name: /volver a la cola/i }));
+    fireEvent.click(screen.getByRole("link", { name: /volver a membresías y pagos/i }));
 
     await screen.findByTestId("payments-table");
     const action = within(queueTable()).getByRole("button", {
@@ -456,7 +456,7 @@ describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
   it("does not pretend to be a modal", async () => {
     renderPage();
     await openRequest("Juan Pérez");
-    await screen.findByRole("link", { name: /volver a la cola/i });
+    await screen.findByRole("link", { name: /volver a membresías y pagos/i });
 
     // An in-page view swap, not a dialog: no `role="dialog"`, no `aria-modal`,
     // no focus trap. Calling it a dialog would promise a background that is
@@ -955,7 +955,7 @@ describe("PaymentsPage — batch approval", () => {
     // Parking Juan auto-advances to Sofia's detail — back to the queue, then
     // reopen Juan's own detail to see how a parked payment reads there.
     await reviewForBatch("Juan Pérez");
-    fireEvent.click(await screen.findByRole("link", { name: /volver a la cola/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /volver a membresías y pagos/i }));
     await openRequest("Juan Pérez");
 
     await screen.findByRole("heading", { name: /detalle de la solicitud/i });
@@ -1042,7 +1042,7 @@ describe("PaymentsPage — batch approval", () => {
 
     await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1));
     // The approval auto-advances back to Juan's detail; return to the queue.
-    fireEvent.click(await screen.findByRole("link", { name: /volver a la cola/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /volver a membresías y pagos/i }));
 
     // Juan is the only one left in the batch; the resolved payment left it.
     const bar = await screen.findByRole("group", { name: /aprobación por lote/i });
