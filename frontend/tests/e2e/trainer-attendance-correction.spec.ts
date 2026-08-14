@@ -145,8 +145,11 @@ test("Corregir opens that session's roll call and files the fix on its own date"
   // Correct it, and file.
   await stateGroup.getByRole("radio", { name: "Presente", exact: true }).click();
   await page.getByRole("button", { name: /Siguiente/ }).click();
-  await page.getByRole("button", { name: /Confirmar Asistencia/ }).click();
-  await expect(page.getByText("Asistencia Registrada")).toBeVisible();
+  // Sentence case, not Title Case: the redesign normalised the product's copy
+  // and these two strings came along. Written case-insensitively so the next
+  // copy pass moves the words without moving the test.
+  await page.getByRole("button", { name: /confirmar asistencia/i }).click();
+  await expect(page.getByText(/asistencia registrada/i).first()).toBeVisible();
 
   expect(runtime.postedBatches).toHaveLength(1);
   expect(runtime.postedBatches[0]).toMatchObject({

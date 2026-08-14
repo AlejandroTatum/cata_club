@@ -135,7 +135,15 @@ test("the dependent selection survives Mi cuenta → Pagos → Asistencias", asy
   // The third section named by the acceptance criterion.
   await sidebarLink(page, "Asistencias").click();
   await expect(page).toHaveURL(/\/student\/attendance/);
-  await expect(page.getByText("Asistencia de Martín", { exact: true })).toBeVisible();
+  // The name is asserted on the RECORD's own heading, not on the recap's
+  // kicker. This fixture gives Martín no sessions, and at zero sessions the
+  // redesign drops `AttendanceRecap` — the rail exists to hold a count, and
+  // there is nothing counted. The kicker went with it, so a test pinned there
+  // was pinned to the one element whose presence depends on having data.
+  //
+  // `SessionList` renders in BOTH branches and names its subject in both, which
+  // is what this test is actually about: whose attendance is on screen.
+  await expect(page.getByRole("heading", { name: "Sesiones registradas de Martín" })).toBeVisible();
   await expect(page.getByLabel("Estudiante")).toHaveValue("42");
 
   // And back, because a selection that only survives forwards is not kept.
