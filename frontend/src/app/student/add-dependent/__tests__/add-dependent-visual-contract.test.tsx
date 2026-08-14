@@ -268,3 +268,27 @@ describe("the card title is in the club's face", () => {
     expect(heading.className).not.toMatch(/\bfont-(?:bold|semibold|extrabold)\b/);
   });
 });
+
+describe("the kicker clears AA on the surface it actually lands on", () => {
+  /**
+   * `ink-3` is not the defect and darkening it is not the fix. The token
+   * measures 4.62:1 on `paper` and passes; it slips to 3.78:1 only once the
+   * page `canvas` is underneath, which is where this kicker sits. That is the
+   * case `tailwind.config.ts` declares `ink-3-strong` for, in as many words —
+   * "the page kicker, the page subtitle, the table header" — and the public
+   * enrolment wizard already writes the same string that way.
+   *
+   * A class-level assertion can only make this claim because the surface is
+   * fixed by construction: the kicker is a page-level element, never inside a
+   * card. Where the surface depends on ancestors, only a rendered check knows.
+   */
+  it("puts the canvas kicker on the AA-safe step of the ramp", () => {
+    render(<AddDependentPage />);
+
+    const kicker = screen.getByText(/^Paso 1 de \d+$/);
+    expect(kicker).toHaveClass("text-ink-3-strong");
+    // `\btext-ink-3\b` would match INSIDE `text-ink-3-strong` — a hyphen is a
+    // word boundary — so the guard has to exclude the longer token by hand.
+    expect(kicker.className).not.toMatch(/\btext-ink-3(?![\w-])/);
+  });
+});

@@ -911,7 +911,7 @@ function CrearCuentaContent(): React.ReactElement {
            * for one job, and the one that carried less information was also
            * the one spending the action colour on a decoration.
            */}
-          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3">
+          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
             Paso {currentIndex + 1} de {CREAR_CUENTA_STEP_ORDER.length}
           </p>
 

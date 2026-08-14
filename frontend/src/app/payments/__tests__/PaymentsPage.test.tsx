@@ -894,6 +894,14 @@ describe("PaymentsPage — batch approval", () => {
     expect(within(row).queryByText(reason)).not.toBeInTheDocument();
     expect(checkbox).toHaveAccessibleName(`Juan Pérez ${reason}`);
     expect(screen.queryByRole("group", { name: /aprobación por lote/i })).not.toBeInTheDocument();
+
+    // It renders once, above the list, on the page canvas rather than inside a
+    // card — and `ink-3` only clears AA on `paper`. Measured against the QA
+    // stack this line came out 3.78:1 at 12.5px, under the 4.5:1 floor, which
+    // made the sentence explaining WHY every batch checkbox is disabled the
+    // least legible string on the screen. `ink-3-strong` is the step the ramp
+    // declares for this surface.
+    expect(screen.getByText(reason)).toHaveClass("text-ink-3-strong");
   });
 
   it("requires the payment's own checklist before it can be parked for a batch", async () => {

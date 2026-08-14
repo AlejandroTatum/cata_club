@@ -701,8 +701,13 @@ export default function PaymentsPage(): React.ReactElement {
       (r) => r.validationStatus === "pendiente" && !batch.reviewed[r.id],
     );
     if (!hasUnreviewedPending) return null;
+    /* `ink-3-strong`, not `ink-3`: this line renders above the list on the page
+       canvas, and the shared muted step only clears AA on `paper` (4.62:1
+       there, 3.78:1 here). It is the sentence that explains why every
+       unreviewed checkbox is disabled, so it is the last string on the screen
+       that should be the hardest to read. */
     return (
-      <p id={BATCH_REVIEW_REASON_ID} className="mb-2 text-xs text-ink-3">
+      <p id={BATCH_REVIEW_REASON_ID} className="mb-2 text-xs text-ink-3-strong">
         {BATCH_REVIEW_REASON_TEXT}
       </p>
     );

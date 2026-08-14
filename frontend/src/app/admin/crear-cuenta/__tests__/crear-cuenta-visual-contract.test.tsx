@@ -220,6 +220,25 @@ describe("the surfaces come from the system's own ladder", () => {
     expect(container.querySelectorAll(".rounded-xl")).toHaveLength(0);
     expect(container.querySelectorAll(".rounded-lg")).toHaveLength(0);
   });
+
+  /**
+   * The kicker sits on the page canvas, not on a card, and that is the whole
+   * difference: `ink-3` measures 4.62:1 on `paper` and passes, then slips to
+   * 3.78:1 once `canvas` is underneath — under AA's 4.5:1 for a 10.5px label.
+   * `tailwind.config.ts` names this exact case when it declares `ink-3-strong`
+   * ("the page kicker, the page subtitle, the table header"), and the public
+   * enrolment wizard already spells it that way for the same string. This
+   * screen and `/student/add-dependent` were the two that did not.
+   */
+  it("puts the canvas kicker on the AA-safe step of the ramp", () => {
+    render(<CrearCuentaPage />);
+
+    const kicker = screen.getByText(/^Paso 1 de \d+$/);
+    expect(kicker).toHaveClass("text-ink-3-strong");
+    // `\btext-ink-3\b` would match INSIDE `text-ink-3-strong` — a hyphen is a
+    // word boundary — so the guard has to exclude the longer token by hand.
+    expect(kicker.className).not.toMatch(/\btext-ink-3(?![\w-])/);
+  });
 });
 
 describe("one vocabulary for an example", () => {

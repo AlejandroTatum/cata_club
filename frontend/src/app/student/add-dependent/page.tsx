@@ -655,7 +655,7 @@ function AddDependentContent(): React.ReactElement {
       {/* Named stepper — the same contract as the other two wizards. The
           counter's wrapper `<div>` is gone: it carried nothing and made the
           `gap-page` column count a block where there was only a line. */}
-      <p className="text-2xs font-bold uppercase tracking-caps text-ink-3">
+      <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
         Paso {currentIndex + 1} de {ADD_DEPENDENT_STEP_ORDER.length}
       </p>
 
