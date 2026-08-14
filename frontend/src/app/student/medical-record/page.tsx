@@ -34,7 +34,7 @@
  *
  * ## Defense in depth against a minor `estudiante` typing the URL directly
  *
- * The nav entry (`getNavLinksForRole` in `src/lib/auth-utils.ts`) already
+ * The nav entry (`getNavGroupsForRoles` in `src/lib/auth-utils.ts`) already
  * hides this destination from a minor `estudiante` session. A minor who
  * reaches the URL anyway is redirected to `/student` the moment the portal
  * fetch resolves — the backend would 403 the ficha médica call regardless

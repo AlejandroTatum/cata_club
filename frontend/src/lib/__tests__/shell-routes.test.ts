@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import { resolveShellKind, hidesTopHeader } from "@/lib/shell-routes";
-import { getNavLinksForRole } from "@/lib/auth-utils";
+import { getNavGroupsForRoles } from "@/lib/auth-utils";
 import type { UserRole } from "@/types/domain";
 
 /**
@@ -43,7 +43,8 @@ const ROLE_COVERAGE: Record<UserRole, true> = {
 const ROLES = Object.keys(ROLE_COVERAGE) as UserRole[];
 
 /**
- * The landing. Every role's list opens with it (`auth-utils.ts:40`), and it is
+ * The landing. It opens the one group that carries no heading — the rows that
+ * name no section of the product — for every role, and it is
  * genuinely public chrome — `AppShell` drops it from the sidebar and spends it
  * on the brand link instead. The one destination that is a nav entry and not a
  * shell route, named here so the rule below stays "all of them".
@@ -51,7 +52,11 @@ const ROLES = Object.keys(ROLE_COVERAGE) as UserRole[];
 const PUBLIC_NAV_DESTINATIONS = new Set(["/"]);
 
 const NAV_DESTINATIONS = [
-  ...new Set(ROLES.flatMap((role) => getNavLinksForRole(role).map((link) => link.href))),
+  ...new Set(
+    ROLES.flatMap((role) =>
+      getNavGroupsForRoles([role]).flatMap((group) => group.links.map((link) => link.href)),
+    ),
+  ),
 ].filter((href) => !PUBLIC_NAV_DESTINATIONS.has(href));
 
 describe("resolveShellKind", () => {

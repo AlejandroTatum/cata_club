@@ -90,8 +90,8 @@ vi.mock("@/services/api", () => ({
 }));
 
 import { useAuth } from "@/contexts/AuthContext";
-import { getNavLinksForRole } from "@/lib/auth-utils";
-import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
+import { getNavGroupsForRoles } from "@/lib/auth-utils";
+import { createAuthenticatedAuth, createMultiRoleAuth } from "@/components/__tests__/test-utils";
 import {
   OPEN_HELP_CHAT_EVENT,
   resetHelpChatForTests,
@@ -792,12 +792,14 @@ describe("resolveActiveHref", (): void => {
 // The same resolver, fed the REAL trainer navigation instead of a local
 // fixture. The block above describes the rule; this one describes what the
 // sidebar actually highlights for an entrenador — if the "Historial" entry
-// disappears from `getNavLinksForRole`, the first case here goes red even
+// disappears from `getNavGroupsForRoles`, the first case here goes red even
 // though the resolver never changed.
 // ---------------------------------------------------------------------------
 
 describe("resolveActiveHref — real trainer navigation", (): void => {
-  const trainerNav = getNavLinksForRole("trainer");
+  // Flattened the way the rail flattens it: `resolveActiveHref` answers about
+  // the whole rail, not about one group of it.
+  const trainerNav = getNavGroupsForRoles(["trainer"]).flatMap((group) => group.links);
 
   it("marks Historial, not Pasar lista, on the history screen", (): void => {
     expect(resolveActiveHref(trainerNav, "/trainer/attendance/history")).toBe(
@@ -968,5 +970,155 @@ describe("AppShell — command palette selection is announced", (): void => {
     expect(screen.getByRole("combobox", { name: "Ir a una sección" })).not.toHaveAttribute(
       "aria-activedescendant",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// More than one role — D12d.
+//
+// The rail is the UNION of the person's sections, one titled group per role,
+// and there is no selector: a selector would turn her roles into modes. The
+// session still collapses to a single `user.role` for guards and redirects
+// (`pickPrimaryRole`, untouched) — what changes here is only what gets drawn.
+// ---------------------------------------------------------------------------
+
+describe("AppShell — the rail of a person with several roles", (): void => {
+  beforeEach((): void => {
+    stubViewport(true);
+    mockPush.mockReset();
+    mockUseAuth.mockReset();
+    vi.stubGlobal("localStorage", createMemoryStorage());
+  });
+
+  /**
+   * The rail itself, never the tab bar or the palette. The return type is
+   * inferred: `within`'s queries are generic in a way `ReturnType` flattens
+   * into `any`, which would silently un-type every assertion below it.
+   */
+  const rail = () => within(screen.getByRole("navigation", { name: "Navegación principal" }));
+
+  it("draws no heading when the person holds a single role", (): void => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
+
+    render(<AppShell title="Mi día">{null}</AppShell>);
+
+    // One group names the whole rail, and the brand block right above it
+    // already does that ("Panel de gestión" / "Mi cuenta", `getAreaLabel`).
+    expect(rail().queryAllByRole("group")).toHaveLength(0);
+    expect(rail().queryByText("Entrenar")).not.toBeInTheDocument();
+    expect(rail().getByRole("link", { name: "Mi día" })).toBeInTheDocument();
+  });
+
+  it("keeps the 18 alumno+representante accounts on one Mi cuenta, unnamed", (): void => {
+    mockUseAuth.mockReturnValue(
+      createMultiRoleAuth(["REPRESENTANTE", "ALUMNO"], "representante", "Marta Vera"),
+    );
+
+    render(<AppShell title="Mi cuenta">{null}</AppShell>);
+
+    // Both roles name the same section, so there is still ONE group — and a
+    // lone group draws no heading. Asserted on the group wrapper rather than
+    // on the words: "Mi cuenta" is ALSO the registered name of `/student`
+    // (`lib/destinations.ts`), so a text query cannot tell a rótulo that is
+    // absent from the row that is present.
+    expect(rail().queryAllByRole("group")).toHaveLength(0);
+    expect(rail().getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/student",
+      "/student/payments",
+      "/student/attendance",
+      "/student/medical-record",
+    ]);
+  });
+
+  it("gives a trainer who also plays both sections, each under its own heading", (): void => {
+    mockUseAuth.mockReturnValue(
+      createMultiRoleAuth(["ENTRENADOR", "ALUMNO"], "trainer", "Carlos Entrenador"),
+    );
+
+    render(<AppShell title="Mi día">{null}</AppShell>);
+
+    // The case the product could not express: his own fees and his own
+    // attendance did not exist for him.
+    expect(rail().getByText("Entrenar")).toBeInTheDocument();
+    // The rótulo, not the row: `/student` is registered as "Mi cuenta" too, so
+    // the heading and the destination under it say the same two words. The
+    // registry owns the row's name (D12b) and D12d chose the heading — the
+    // group holds a guardian who does not play, so "Jugar" would be a lie for
+    // the 18 accounts that share it.
+    expect(rail().getByText("Mi cuenta", { selector: "p" })).toBeInTheDocument();
+    expect(rail().getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/trainer",
+      "/trainer/attendance",
+      "/trainer/attendance/history",
+      "/student",
+      "/student/payments",
+      "/student/attendance",
+    ]);
+  });
+
+  it("names each group for the assistive technology that cannot see the rótulo", (): void => {
+    mockUseAuth.mockReturnValue(
+      createMultiRoleAuth(["ENTRENADOR", "ALUMNO"], "trainer", "Carlos Entrenador"),
+    );
+
+    render(<AppShell title="Mi día">{null}</AppShell>);
+
+    const groups = rail().getAllByRole("group");
+    expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual([
+      "Entrenar",
+      "Mi cuenta",
+    ]);
+    expect(within(groups[1]).getByRole("link", { name: "Pagos" })).toBeInTheDocument();
+  });
+
+  // The tab bar is a fixed four slots — three destinations plus "Más" — and it
+  // is admin-only. It is deliberately NOT re-picked per role combination: see
+  // the comment on `MOBILE_TABS`. What must hold is that it never becomes the
+  // only way out, so everything the tab bar leaves behind stays in the drawer.
+  it("leaves every section of a multi-role admin reachable from the drawer", (): void => {
+    mockUseAuth.mockReturnValue(
+      createMultiRoleAuth(["ADMINISTRADOR", "ENTRENADOR"], "admin", "Ana Admin"),
+    );
+
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    const tabBar = within(screen.getByRole("navigation", { name: /móvil/i }));
+    expect(tabBar.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/dashboard",
+      "/members",
+      "/payments",
+    ]);
+    expect(tabBar.getByRole("button", { name: "Más secciones" })).toBeInTheDocument();
+    // "Más" opens this same rail, and the trainer section it does not fit is in it.
+    expect(rail().getByRole("link", { name: "Mi día" })).toBeInTheDocument();
+    expect(rail().getByText("Administrar")).toBeInTheDocument();
+  });
+
+  it("highlights the current row whichever group it belongs to", (): void => {
+    mockUseAuth.mockReturnValue(
+      createMultiRoleAuth(["ENTRENADOR", "ALUMNO"], "trainer", "Carlos Entrenador"),
+    );
+
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    // `usePathname` is mocked to /dashboard for this file, so no row matches —
+    // what this pins is that grouping did not break `resolveActiveHref`, which
+    // now reads a flattened rail instead of a flat one.
+    expect(rail().queryByRole("link", { current: "page" })).not.toBeInTheDocument();
+  });
+
+  it("searches across every group from the command palette", (): void => {
+    mockUseAuth.mockReturnValue(
+      createMultiRoleAuth(["ENTRENADOR", "ALUMNO"], "trainer", "Carlos Entrenador"),
+    );
+
+    render(<AppShell title="Mi día">{null}</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
+
+    // "Asistencias" is a row of the account group; "Pasar lista" is the
+    // trainer's. Both must be findable, or the palette would search only the
+    // section the person happens to be standing in.
+    expect(screen.getByRole("option", { name: "Asistencias" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Pasar lista" })).toBeInTheDocument();
   });
 });

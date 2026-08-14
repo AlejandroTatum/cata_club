@@ -35,7 +35,7 @@ import { describe, it, expect, vi } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { DESTINATIONS, backLabel, destinationLabel } from "../destinations";
-import { getNavLinksForRole } from "../auth-utils";
+import { getNavGroupsForRoles, type NavLinkDef } from "../auth-utils";
 import type { UserRole } from "@/types/domain";
 
 const SRC = join(__dirname, "..", "..");
@@ -144,42 +144,50 @@ describe("backLabel refuses a destination it cannot name", () => {
 // 2. One destination, one name — the rail reads the same registry
 // ---------------------------------------------------------------------------
 
-const ROLES: (UserRole | null)[] = [
+const ROLE_SETS: (UserRole[] | null)[] = [
   null,
-  "admin",
-  "trainer",
-  "representante",
-  "estudiante",
-  "unsupported",
+  ["admin"],
+  ["trainer"],
+  ["representante"],
+  ["estudiante"],
+  ["unsupported"],
+  // A merged group is still made of rows, and a row that only ever appears for
+  // someone with two roles can drift from the registry like any other.
+  ["trainer", "estudiante"],
+  ["representante", "estudiante"],
 ];
+
+/**
+ * Every row the rail can draw, for every role set, flattened out of its groups.
+ *
+ * `true` so the age-gated student row is drawn too — a destination that only
+ * appears for adults is still a destination that can drift.
+ */
+function railRows(): NavLinkDef[] {
+  return ROLE_SETS.flatMap((roles) =>
+    getNavGroupsForRoles(roles, true).flatMap((group) => group.links),
+  );
+}
 
 describe("no destination in the registry answers to two names", () => {
   it("draws every rail row from the registry, so the rail cannot disagree with it", () => {
-    const disagreements = ROLES.flatMap((role) =>
-      // `true` so the age-gated student row is drawn too — a destination that
-      // only appears for adults is still a destination that can drift.
-      getNavLinksForRole(role, true)
-        // An unregistered href is the NEXT test's failure, not this one's —
-        // `destinationLabel` throws on one, which would replace this list of
-        // disagreements with a stack trace naming a different defect.
-        .filter((link) => link.href in DESTINATIONS)
-        .flatMap((link) =>
-          link.label === destinationLabel(link.href)
-            ? []
-            : [
-                `${link.href}: rail says "${link.label}", registry says "${destinationLabel(link.href)}"`,
-              ],
-        ),
+    const disagreements = railRows().flatMap((link) =>
+      // An unregistered href is the NEXT test's failure, not this one's —
+      // `destinationLabel` throws on one, which would replace this list of
+      // disagreements with a stack trace naming a different defect.
+      !(link.href in DESTINATIONS) || link.label === destinationLabel(link.href)
+        ? []
+        : [
+            `${link.href}: rail says "${link.label}", registry says "${destinationLabel(link.href)}"`,
+          ],
     );
     expect(disagreements).toEqual([]);
   });
 
   it("has a registry entry for every row the rail can draw", () => {
-    const unregistered = ROLES.flatMap((role) =>
-      getNavLinksForRole(role, true)
-        .map((link) => link.href)
-        .filter((href) => !(href in DESTINATIONS)),
-    );
+    const unregistered = railRows()
+      .map((link) => link.href)
+      .filter((href) => !(href in DESTINATIONS));
     expect(unregistered).toEqual([]);
   });
 });

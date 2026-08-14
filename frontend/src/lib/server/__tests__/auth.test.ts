@@ -647,7 +647,7 @@ describe("buildSession", () => {
     expect(session.user).toMatchObject({ role: "estudiante", activo: true });
   });
 
-  // getNavLinksForRole (src/lib/auth-utils.ts) needs the estudiante's own
+  // getNavGroupsForRoles (src/lib/auth-utils.ts) needs the estudiante's own
   // birth date to decide whether the Ficha médica nav entry belongs — this
   // is the field that carries it from /auth/me's `fechaNacimiento` through
   // to the client session.

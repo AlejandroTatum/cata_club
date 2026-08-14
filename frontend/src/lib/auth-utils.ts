@@ -39,27 +39,66 @@ function row(href: string): NavLinkDef {
 }
 
 /**
- * Role-aware navigation links for the main app header.
+ * A titled block of rail rows — one section of the product, named.
  *
- * Pure function — no React, no browser APIs. Returns the list of nav links
- * that should be visible for a given role (or unauthenticated state).
- *
- * @param role — The current user's role, or null if unauthenticated.
- * @param studentIsAdult — Only meaningful for `"estudiante"`: true when that
- * self-managed student is 18+. Ignored for every other role — in particular
- * a `"representante"` account gets no Ficha médica entry from this flag,
- * because that access (a guardian correcting a DEPENDENT's record) is a
- * separate, role-only grant unrelated to the caller's own age.
+ * The rail draws one of these per role the person holds, because a role is a
+ * SECTION and not a mode: see `getNavGroupsForRoles` below.
  */
-export function getNavLinksForRole(
-  role: UserRole | null,
-  studentIsAdult = false,
-): NavLinkDef[] {
-  if (!role) {
-    return [row("/"), row("/login")];
-  }
+export interface NavGroup {
+  /**
+   * The rótulo above the block — "Entrenar", "Mi cuenta", "Administrar".
+   *
+   * `null` for the rows that name no section of the product (Inicio, and
+   * Iniciar sesión while signed out). They are not a group with a heading
+   * nobody wrote; a heading invented for them would start being drawn the
+   * moment a second group appeared beside it.
+   */
+  heading: string | null;
+  links: NavLinkDef[];
+}
 
-  const links: NavLinkDef[] = [row("/")];
+/**
+ * The rail's groups, in render order — and the same order is the tie-break
+ * when two roles grant the same destination.
+ *
+ * ## Why the account comes last
+ *
+ * A trainer who also plays opens the app to train; his own fees are the
+ * monthly errand, not the daily one. So the sections he is here to WORK in
+ * come first and the section that is his own comes last, which is also where
+ * the rail already keeps everything personal — the user card sits at its foot.
+ *
+ * This deliberately does NOT reuse `ROLE_PRECEDENCE` (src/lib/server/auth.ts),
+ * which orders representante above trainer: that list answers "which single
+ * role does the session collapse to", a question this file no longer asks.
+ * Nor does it reuse `IdentityCell`'s `ROLE_ORDER`, which runs the other way
+ * round on purpose — it NAMES a person, from what they are on the field to
+ * what they are in the system, and the first line of a name is the one that
+ * gets read.
+ *
+ * ## Why representante and estudiante share one group
+ *
+ * They are not two sections; they are the same section reached by two grants.
+ * 18 accounts hold ALUMNO and REPRESENTANTE at once, and drawing "Mi cuenta"
+ * twice for them would be exactly the kind of duplicate the union is supposed
+ * to remove. Within the group the roles are listed in dedup precedence:
+ * representante's rows are the superset.
+ */
+const RAIL_GROUPS: readonly { heading: string; roles: readonly UserRole[] }[] = [
+  { heading: "Administrar", roles: ["admin"] },
+  { heading: "Entrenar", roles: ["trainer"] },
+  { heading: "Mi cuenta", roles: ["representante", "estudiante"] },
+];
+
+/**
+ * The destinations ONE role grants, in the order the rail draws them.
+ *
+ * Not exported: a caller holding a single role is exactly the collapse D12d
+ * removed, so the only supported question is the one `getNavGroupsForRoles`
+ * asks — what does this PERSON, with all her roles, get.
+ */
+function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] {
+  const links: NavLinkDef[] = [];
 
   switch (role) {
     // Every name the rows below carry is the destination's own, read off
@@ -134,6 +173,77 @@ export function getNavLinksForRole(
   }
 
   return links;
+}
+
+/**
+ * The rail a PERSON gets: the union of the sections her roles grant, grouped
+ * and titled, with no destination offered twice.
+ *
+ * ## Why the whole array, and why no selector
+ *
+ * The backend has always authorised against the complete role array of the
+ * token (`backend/app/seguridad/gestor_permisos.py`), and `RolServicio` can
+ * assign any combination — alumno + entrenador is creatable today. The
+ * frontend was the half that never finished: the session collapses the array
+ * to one role by precedence (`pickPrimaryRole`, still untouched — it is what
+ * route guards and redirects gate on), and the rail drew only that one. A
+ * trainer who also plays therefore had no fees and no attendance of his own.
+ *
+ * The rail is the UNION, not a mode. There is no role selector on purpose: a
+ * selector turns roles into modes and makes the person remember which one she
+ * is standing in, when what she actually wants is one more section in the same
+ * list. D12d of `docs/ux/rediseno-visual-2026-08.md` is the approved decision,
+ * and it is about the SHAPE only — nothing here changes what any screen or
+ * guard will let anybody do.
+ *
+ * ## What the caller draws
+ *
+ * A person with one role gets one group; `AppShell` draws no heading in that
+ * case, because a single heading names the whole rail — which the brand block
+ * right above it already does (`getAreaLabel`). Two or more groups is what
+ * makes the rótulos worth their vertical space.
+ *
+ * @param roles — Every role the person holds, in any order. `null` means
+ * unauthenticated (Inicio + Iniciar sesión); an empty array means an
+ * authenticated account whose roles the frontend does not recognise, which
+ * gets Inicio and nothing else — the same rail `"unsupported"` has always had.
+ * @param studentIsAdult — Only meaningful for `"estudiante"`: true when that
+ * self-managed student is 18+. Ignored for every other role — in particular a
+ * `"representante"` gets no Ficha médica row from this flag, because that
+ * access (a guardian correcting a DEPENDENT's record) is a separate, role-only
+ * grant unrelated to the caller's own age.
+ */
+export function getNavGroupsForRoles(
+  roles: readonly UserRole[] | null,
+  studentIsAdult = false,
+): NavGroup[] {
+  if (roles === null) {
+    return [{ heading: null, links: [row("/"), row("/login")] }];
+  }
+
+  const held = new Set(roles);
+  const groups: NavGroup[] = [{ heading: null, links: [row("/")] }];
+  // Every href already placed. This is what makes the rail a union rather than
+  // a concatenation: two roles that grant the same destination spend one row on
+  // it, in the earlier group of the two.
+  const placed = new Set<string>();
+
+  for (const group of RAIL_GROUPS) {
+    const links: NavLinkDef[] = [];
+    for (const role of group.roles) {
+      if (!held.has(role)) continue;
+      for (const link of sectionsForRole(role, studentIsAdult)) {
+        if (placed.has(link.href)) continue;
+        placed.add(link.href);
+        links.push(link);
+      }
+    }
+    // A group with no rows is not drawn empty — it is not drawn at all, which
+    // is also what keeps a single-role person at exactly one group.
+    if (links.length > 0) groups.push({ heading: group.heading, links });
+  }
+
+  return groups;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +348,34 @@ export function backendRoleForUserRole(role: UserRole): BackendTipoRol | null {
     case "unsupported":
       return null;
   }
+}
+
+/**
+ * Read a session's backend role array into the frontend's own vocabulary.
+ *
+ * The inverse of `backendRoleForUserRole` above, and the client-side half of
+ * what `mapBackendRoleToUserRole` (src/lib/server/auth.ts) does on the server
+ * — with the collapse left out. That module is server-only by construction
+ * (it reads `BACKEND_API_URL` and handles raw tokens, and says so at the top),
+ * so nothing in it may be imported from a client component; this table is the
+ * same four rows, in the module a component may import.
+ *
+ * `AuthSession.roles` is typed `string[]`, not `BackendTipoRol[]`, because it
+ * is whatever `/auth/me` sent. A role the backend adds tomorrow arrives here
+ * as an unrecognised string and is dropped: an unknown role grants no section,
+ * which is the same answer `mapBackendRoleToUserRole` gives it.
+ */
+const USER_ROLE_BY_BACKEND_ROLE: Record<BackendTipoRol, UserRole> = {
+  ADMINISTRADOR: "admin",
+  ENTRENADOR: "trainer",
+  REPRESENTANTE: "representante",
+  ALUMNO: "estudiante",
+};
+
+export function userRolesFromBackendRoles(roles: readonly string[]): UserRole[] {
+  return roles
+    .map((rol) => USER_ROLE_BY_BACKEND_ROLE[rol as BackendTipoRol])
+    .filter((role): role is UserRole => role !== undefined);
 }
 
 /**

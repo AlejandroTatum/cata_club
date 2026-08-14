@@ -6,8 +6,9 @@
  */
 
 import type { AuthSession } from "@/services/auth";
-import type { UserRole, Usuario } from "@/types/domain";
+import type { BackendTipoRol, UserRole, Usuario } from "@/types/domain";
 import type { AuthContextValue } from "@/contexts/AuthContext";
+import { backendRoleForUserRole } from "@/lib/auth-utils";
 import { vi } from "vitest";
 
 // ---------------------------------------------------------------------------
@@ -84,8 +85,18 @@ export function createAuthenticatedAuth(
   name = "Test User",
   overrides?: Partial<AuthContextValue>,
 ): AuthContextValue {
+  // `roles` is DERIVED, never left at the factory's admin default: a session
+  // whose `user.role` is "trainer" while `roles` still says ADMINISTRADOR is a
+  // session `buildSession` (src/lib/server/auth.ts) cannot produce — it reads
+  // the primary role OFF that array. The rail now reads the array too, so a
+  // fixture that disagreed with itself would have made every non-admin role
+  // render the admin sections.
+  const backendRole = backendRoleForUserRole(role);
   const session = createMockSession({
     user: buildUser(role, `user-${role}-1`, name, `${role}@cataclub.com`),
+    // "unsupported" maps from no backend role at all — an account whose roles
+    // the frontend does not recognise. An empty array is exactly that state.
+    roles: backendRole === null ? [] : [backendRole],
   });
 
   return {
@@ -98,6 +109,39 @@ export function createAuthenticatedAuth(
     hydrationOutage: false,
     retryHydration: vi.fn(),
     ...overrides,
+  };
+}
+
+/**
+ * Build an AuthContextValue for an account that holds SEVERAL backend roles —
+ * a representante who also plays (18 of them exist), a trainer who also plays.
+ *
+ * `primary` is stated rather than derived on purpose. The collapse lives in
+ * `pickPrimaryRole` (src/lib/server/auth.ts), which is server-only and which
+ * this change does not touch; a fixture that re-implemented its precedence
+ * would be a second copy of a rule with one owner. Stating it also keeps the
+ * two halves of the session visible side by side: `user.role` is what guards
+ * and redirects still gate on, `roles` is what the rail draws.
+ */
+export function createMultiRoleAuth(
+  backendRoles: readonly BackendTipoRol[],
+  primary: UserRole,
+  name = "Test User",
+): AuthContextValue {
+  const session = createMockSession({
+    user: buildUser(primary, `user-${primary}-multi`, name, `${primary}@cataclub.com`),
+    roles: [...backendRoles],
+  });
+
+  return {
+    session,
+    isAuthenticated: true,
+    isLoading: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshSession: vi.fn(),
+    hydrationOutage: false,
+    retryHydration: vi.fn(),
   };
 }
 

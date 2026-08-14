@@ -11,7 +11,7 @@
  * product had, four spellings of the same idea shipped: "Volver a Iniciar
  * Sesión", "Volver a Mi Cuenta", "Volver a la cola", "Volver al inicio".
  *
- * So the name moves to the data. `getNavLinksForRole` builds the rail's rows
+ * So the name moves to the data. `getNavGroupsForRoles` builds the rail's rows
  * from this table and `backLabel` builds the back control's sentence from the
  * same row, which makes "the rail and the back control agree" a property of the
  * registry rather than something eleven files have to keep remembering. D12b of

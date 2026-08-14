@@ -1263,7 +1263,7 @@ function PaymentsPageContent(): React.ReactElement {
   return (
     <AppShell
       // "Pagos", not "Mis pagos": the codebase's own rule is that a nav label
-      // IS the destination's page title (see `getNavLinksForRole`), and the
+      // IS the destination's page title (see `lib/destinations.ts`), and the
       // sidebar row has always said "Pagos". "Mis" was also a lie to the
       // reader this screen most often serves — a representante paying for a
       // dependent, who has no membership of her own.
