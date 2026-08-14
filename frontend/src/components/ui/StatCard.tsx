@@ -228,9 +228,18 @@ export default function StatCard({
       >
         {value}
         {unit ? (
+          /* `font-sans` is not decoration here, it is a RESET. This `<small>`
+             is nested inside the figure's `font-display` span, so Graduate
+             reaches it by inheritance whether or not anyone asks — and at
+             `text-sm` (13.5px) that lands under the 15px floor the "regla de
+             Graduate" draws. Dropping `font-display` from this tag never did
+             anything, because the tag never carried it. The unit is a word
+             ("de 44"), not a scoreboard figure, so it belongs in Barlow; and
+             Barlow is also the only one of the two faces that has a real
+             semibold to give, Graduate shipping a single 400 cut. */
           <small
             className={cn(
-              "ml-[3px] text-sm font-semibold",
+              "ml-[3px] font-sans text-sm font-semibold",
               hot ? "text-white/60" : "text-ink-3",
             )}
           >

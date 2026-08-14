@@ -82,8 +82,10 @@ describe("StatCard — the number is never a color", () => {
  * ships a single 400 cut (`lib/fonts.ts`), so the `font-extrabold` this tile
  * used to carry would have been a browser-synthesised bold over it.
  *
- * The `unit` beside it stays Barlow on purpose: it is `text-sm` (13.5px), below
- * Graduate's 15px floor, and it is a word ("de 44") rather than a figure.
+ * The `unit` beside it is Barlow on purpose: it is `text-sm` (13.5px), below
+ * Graduate's 15px floor, and it is a word ("de 44") rather than a figure. It
+ * gets there by DECLARING `font-sans`, not by omitting `font-display` — it
+ * renders inside the figure's span, so omission left it in Graduate.
  */
 describe("StatCard — the figure is the display face", () => {
   it("sets the number in the display family", () => {
@@ -106,11 +108,24 @@ describe("StatCard — the figure is the display face", () => {
     expect(screen.getByText("86")).toHaveClass("tracking-flat");
   });
 
-  it("leaves the trailing unit in the interface face, below Graduate's floor", () => {
+  /**
+   * This assertion used to read `not.toMatch(/font-display/)`, and it never
+   * guaranteed the thing its name claimed.
+   *
+   * The unit renders INSIDE the figure's `font-display` span, so the face
+   * arrives by inheritance and an absent class does not stop it. Measured in a
+   * browser against the QA stack, "de 84" and "%" on `/dashboard` came out in
+   * Graduate at 13.5px — under the 15px floor DESIGN.md's "regla de Graduate"
+   * draws. The doc comment above this block asserted the opposite in prose for
+   * as long as the test asserted it in a way that could not fail.
+   *
+   * Under inheritance, absence proves nothing: the reset has to be DECLARED.
+   */
+  it("declares the interface face on the trailing unit instead of inheriting Graduate", () => {
     render(<StatCard label="Miembros" value={17} unit="de 44" />);
     const unit = screen.getByText("de 44");
     expect(unit).toHaveClass("text-sm");
-    expect(unit.className).not.toMatch(/\bfont-display\b/);
+    expect(unit).toHaveClass("font-sans");
   });
 });
 
