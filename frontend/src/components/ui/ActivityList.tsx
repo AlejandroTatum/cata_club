@@ -89,7 +89,13 @@ export function ActivityListHeader({
 }): ReactElement {
   return (
     <div className={cn("flex items-center gap-3 border-b border-line py-4", GUTTER)}>
-      <h2 className="flex-1 text-base font-bold text-ink">{title}</h2>
+      {/* La regla de Graduate: a card title is the 20px display step. This
+          was 15px Barlow bold, which is the BODY step — the same weight the
+          rows underneath it use for a person's name, so the header did not
+          outrank its own list. */}
+      <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
+        {title}
+      </h2>
       {action}
     </div>
   );

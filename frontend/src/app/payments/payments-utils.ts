@@ -13,6 +13,19 @@ import { MONTH_ABBR } from "@/lib/format-utils";
 export const PAYMENTS_PAGE_SIZE = 10;
 
 /**
+ * Maximum number of requests the queue fetch brings back in one call, mirroring
+ * the `limit=200` the BFF sends upstream (`app/api/payments/route.ts`).
+ *
+ * It is declared here for the same reason `MEMBERS_AGGREGATE_LIMIT` is declared
+ * in `members-utils.ts`: the four pill counts on the screen are computed over
+ * whatever this call returned, so they read as the club's totals while actually
+ * being totals of the first page. The screen now says so out loud, and a number
+ * a screen states in words should not be a literal typed a second time in the
+ * sentence that states it.
+ */
+export const PAYMENTS_FETCH_LIMIT = 200;
+
+/**
  * Slice a (possibly already filtered) payment requests list to a single page.
  *
  * `page` is 1-indexed. Returns an empty array when `page` is beyond the

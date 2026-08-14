@@ -94,6 +94,82 @@ export function StatTrack({ value, total, className }: StatTrackProps): ReactEle
   );
 }
 
+export interface StatSparkProps {
+  /** One figure per period, oldest first. */
+  values: readonly number[];
+  className?: string;
+}
+
+/**
+ * StatSpark — a series drawn as a series.
+ *
+ * `StatTrack`'s sibling, and the other half of D7's rule of shape: "una
+ * proporción lleva barra, una serie lleva tendencia". The bar answers "how much
+ * of the whole"; this answers "which way is it going", and a single aggregate
+ * answers neither.
+ *
+ * It exists because `/dashboard` was already computing one.
+ * `buildFourWeekAttendance` returns four windows, each with its own total,
+ * present count and rate — and the screen rendered only the pooled percentage
+ * and dropped `bars` on the floor. So 52% could be four flat weeks or a
+ * collapse from 70 to 30, and the tile read identically either way. Nothing is
+ * invented here: every bar is a window the page already holds.
+ *
+ * ## Why it scales against the tallest period and not against 100
+ *
+ * The figures this draws are attendance rates that live in a band — 48 to 70,
+ * not 5 to 95. Against a fixed 100 ceiling those four become four bars of
+ * nearly equal height, which is a trend drawn so faithfully that it is
+ * unreadable. Scaling to the series' own maximum is what makes the shape carry
+ * the comparison, and the tile still prints the absolute figure above it, so
+ * the number nobody can misread is the one stated in words.
+ *
+ * ## Why a zero period is a stub and not an absent bar
+ *
+ * A week with no sessions and a week that is missing are different facts. Drop
+ * the bar and the reader counts three periods; draw 2px and they count four,
+ * one of which is empty. The same argument `StatTrack` makes for an empty rail
+ * over `NaN%`.
+ *
+ * ## Why an empty series renders nothing
+ *
+ * "Don't inventar un dato para completar una forma." No periods means there is
+ * no trend to draw, and an empty rail is a shape claiming to hold one. The
+ * caller gets `null` and its tile stays quiet.
+ *
+ * Phrasing content and `aria-hidden`, for the two reasons `StatTrack` states.
+ */
+export function StatSpark({ values, className }: StatSparkProps): ReactElement | null {
+  if (values.length === 0) return null;
+
+  const ceiling = Math.max(...values, 0);
+  const last = values.length - 1;
+
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="stat-spark"
+      className={cn("flex h-4 w-full items-end gap-[3px]", className)}
+    >
+      {values.map((value, index) => {
+        const share = ceiling > 0 ? Math.max(0, value) / ceiling : 0;
+        return (
+          <i
+            key={index}
+            className={cn(
+              "block flex-1 rounded-[2px]",
+              // The newest period is the one the figure above reports; the
+              // earlier ones are the context it is being read against.
+              index === last ? "bg-coal" : "bg-line-2",
+            )}
+            style={{ height: share > 0 ? `${Math.round(share * 1000) / 10}%` : "2px" }}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
 export type StatCardVariant = "default" | "hot";
 
 export interface StatCardProps {

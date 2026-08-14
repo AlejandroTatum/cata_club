@@ -78,6 +78,27 @@ const ACTIVE = "bg-cata-red text-white";
  */
 const IDLE = "bg-sunken text-ink-3-strong";
 
+/**
+ * A día the caller is ALLOWED to use and does not.
+ *
+ * Only reachable by passing `permitidos`, and it exists because `/groups` had
+ * the fact and no way to say it: a categoría has a track of días — five for
+ * most, six for Competitivo — and the row must show both which ones it meets
+ * and which ones it could. That screen drew it as a variable-length row of
+ * 3-letter pills, which is the column of four different lengths this strip was
+ * built to end, so the choice was to fold the third state in here or to delete
+ * a fact an admin uses to decide.
+ *
+ * It is drawn as an OUTLINE on the idle fill rather than a fourth colour: the
+ * strip's message is "which boxes are lit", and a third fill would compete with
+ * the lit ones for that reading. A dashed border says "available, not taken"
+ * without entering the lit/unlit comparison at all — and it is the same dashed
+ * treatment the screen already used for the same fact, kept rather than
+ * reinvented. `line-2` on `sunken` measures 1.408:1, which is why the letter,
+ * not the border, is still what makes the box perceivable.
+ */
+const AVAILABLE = "bg-sunken text-ink-3-strong border border-dashed border-line-2";
+
 /** Nothing lit. In words, because the strip's label is what a reader receives. */
 const NO_SCHEDULE = "Sin horario";
 
@@ -107,27 +128,53 @@ export interface WeekStripProps {
    * strip does not grow a second one.
    */
   dias: readonly DiaSemana[];
+  /**
+   * The días the caller is ALLOWED to run, when that is a different set from
+   * the ones it does. Omit it and the strip is exactly two-state.
+   *
+   * It never changes the spoken label: the sentence answers "when does this
+   * meet", and a track is an option, not a session.
+   */
+  permitidos?: readonly DiaSemana[];
   className?: string;
 }
 
-export default function WeekStrip({ dias, className }: WeekStripProps): ReactElement {
+/** `activo` beats `disponible` beats `inactivo` — a día that runs is never merely available. */
+function dayState(
+  day: DiaSemana,
+  dias: readonly DiaSemana[],
+  permitidos?: readonly DiaSemana[],
+): "activo" | "disponible" | "inactivo" {
+  if (dias.includes(day)) return "activo";
+  if (permitidos?.includes(day)) return "disponible";
+  return "inactivo";
+}
+
+const TONE = { activo: ACTIVE, disponible: AVAILABLE, inactivo: IDLE } as const;
+
+export default function WeekStrip({ dias, permitidos, className }: WeekStripProps): ReactElement {
   return (
     <span
       role="img"
+      data-testid="week-strip"
       aria-label={scheduleLabel(dias)}
       className={cn("inline-flex items-center gap-0.5", className)}
     >
-      {WEEK.map((day) => (
-        <span
-          key={day}
-          data-day={day}
-          title={DIA_SEMANA_LABELS[day]}
-          aria-hidden="true"
-          className={cn(BOX, dias.includes(day) ? ACTIVE : IDLE)}
-        >
-          {DIA_SEMANA_LABELS[day].charAt(0)}
-        </span>
-      ))}
+      {WEEK.map((day) => {
+        const state = dayState(day, dias, permitidos);
+        return (
+          <span
+            key={day}
+            data-day={day}
+            data-state={state}
+            title={DIA_SEMANA_LABELS[day]}
+            aria-hidden="true"
+            className={cn(BOX, TONE[state])}
+          >
+            {DIA_SEMANA_LABELS[day].charAt(0)}
+          </span>
+        );
+      })}
     </span>
   );
 }

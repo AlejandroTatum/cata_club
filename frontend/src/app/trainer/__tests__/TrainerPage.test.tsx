@@ -381,7 +381,19 @@ describe("TrainerPage — Mi día", () => {
       screen.getByRole("img", { name: /Distribución de asistencias/ }),
     ).toBeInTheDocument();
     // The donut's center number needs a label — "7" alone says nothing.
-    expect(screen.getByText("REGISTROS")).toBeInTheDocument();
+    //
+    // The label is now written as the WORD "Registros" and shouted by CSS,
+    // where it used to be typed in literal capitals inside the SVG. Same rule
+    // the rest of the product follows for a micro-label, and it keeps the
+    // accessible name a word rather than an acronym-shaped string. The
+    // assertion still fails if the label disappears, which is what it guards.
+    //
+    // Scoped to the donut, because the legend table beneath it has a
+    // "Registros" column header — the two used to differ only because the
+    // centre label was typed in literal capitals, which is not a distinction
+    // worth keeping a shouted string for.
+    const donut = screen.getByRole("img", { name: /Distribución de asistencias/ });
+    expect(within(donut).getByText("Registros")).toBeInTheDocument();
   });
 
   it("names the student piling up absences, without a button to act on it", async () => {

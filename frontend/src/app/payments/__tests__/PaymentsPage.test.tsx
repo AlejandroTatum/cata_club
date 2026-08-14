@@ -1273,3 +1273,64 @@ describe("PaymentsPage — the hold is visible while it lasts", () => {
 // them exactly as a single payment is.
 // ---------------------------------------------------------------------------
 
+
+// ---------------------------------------------------------------------------
+// La regla del rojo único
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — el rojo es una acción, no una columna", () => {
+  it("does not paint the row action red on the pending queue", async () => {
+    // "Nunca hay dos botones rojos en una pantalla." The pending tab is the
+    // default, so this drew one red button per pending row — ten down a single
+    // column on a full page. At ten, red stops meaning "the one thing to
+    // press" and becomes the colour of the column, which also leaves the real
+    // decision ("Aprobar pago", in the detail) wearing the same red as every
+    // link that leads to it.
+    renderPage();
+    await screen.findAllByText("Juan Pérez");
+
+    for (const action of screen.getAllByRole("button", { name: /revisar el pago de/i })) {
+      expect(action.className).not.toContain("bg-cata-red");
+    }
+  });
+
+  it("keeps at most one red control in the queue at a time", async () => {
+    renderPage();
+    await screen.findAllByText("Juan Pérez");
+
+    const red = screen
+      .getAllByRole("button")
+      .filter((node) => node.className.includes("bg-cata-red"));
+    expect(red.length).toBeLessThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D11c and the empty state's third part
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — la ayuda y la salida", () => {
+  it("discloses the queue's fetch ceiling in the block that filters", async () => {
+    // The four pill counts read as club totals and are counts of what this
+    // page fetched. `/members` already discloses the same cap in the same slot.
+    renderPage();
+    await screen.findAllByText("Juan Pérez");
+
+    const toggle = screen.getByRole("button", { name: /alcance de la cola/i });
+    const panel = screen.getByRole("region", { name: /filtros de pagos/i });
+    expect(panel.contains(toggle)).toBe(true);
+  });
+
+  it("gives the truly-empty queue a way out instead of a dead end", async () => {
+    // The `all` filter with no query was the one branch that shipped with no
+    // action at all — the dead end the shared component's own doc warns about.
+    mockFetchPaymentValidations.mockResolvedValue([]);
+    renderPage();
+    // The queue opens on "Pendientes"; the branch under test is the "Todas"
+    // one, which is the only state that means "the club has no requests".
+    fireEvent.click(await screen.findByRole("button", { name: /^Todas/ }));
+    await screen.findByText(/aún no hay solicitudes/i);
+
+    expect(screen.getByRole("link", { name: /ir a miembros/i })).toBeInTheDocument();
+  });
+});

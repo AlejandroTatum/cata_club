@@ -726,7 +726,12 @@ const RAW_PALETTE = new RegExp(
  */
 const RAW_PALETTE_DEBT: readonly string[] = [
   "app/attendance/attendance-utils.ts",
-  "app/groups/page.tsx",
+  // `app/groups/page.tsx` was here and is PAID OFF. Its one entry was
+  // `hover:bg-red-50` on the roster's "Desasignar" control — a raw Tailwind
+  // red where the system has `state-bad-bg` — and the admin batch replaced it.
+  // The list shrinks rather than keeping a clean file on it, which is what the
+  // test below exists to force: a debt entry nobody removes is a file that
+  // reads as still owing.
   "app/student/add-dependent/page.tsx",
   "app/student/proof-utils.ts",
 ];

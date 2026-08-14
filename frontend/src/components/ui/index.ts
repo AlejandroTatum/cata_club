@@ -33,7 +33,7 @@ export { default as ErrorState } from "./ErrorState";
 export type { ErrorStateProps } from "./ErrorState";
 
 export { FilterGroup, FilterPanel, FILTER_LABEL } from "./FilterPanel";
-export type { FilterGroupProps, FilterPanelProps } from "./FilterPanel";
+export type { FilterGroupProps, FilterPanelLayout, FilterPanelProps } from "./FilterPanel";
 
 export { default as FilterPill } from "./FilterPill";
 export type { FilterPillProps } from "./FilterPill";
@@ -56,10 +56,10 @@ export { default as SearchInput } from "./SearchInput";
 export type { SearchInputProps } from "./SearchInput";
 
 export { default as StatCard } from "./StatCard";
-export { STAT_GRID, StatTrack } from "./StatCard";
+export { STAT_GRID, StatSpark, StatTrack } from "./StatCard";
 export { ActivityList, ActivityListHeader, ActivityItem } from "./ActivityList";
 export type { ActivityItemProps } from "./ActivityList";
-export type { StatCardProps, StatCardVariant, StatTrackProps } from "./StatCard";
+export type { StatCardProps, StatCardVariant, StatSparkProps, StatTrackProps } from "./StatCard";
 
 export { default as StatGrid } from "./StatGrid";
 export type { StatGridItem, StatGridProps } from "./StatGrid";

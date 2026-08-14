@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fase 4 — Tanda del admin · Cata Club</title>
+    <style>
+      /* Las tres familias del club, desde el mismo `public/fonts` que sirve el
+         producto. Rutas relativas: este archivo se abre desde el repositorio. */
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-600.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-800.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+      @font-face { font-family: "Graduate"; src: url("../../../frontend/public/fonts/graduate-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+      @font-face { font-family: "Playfair Display"; src: url("../../../frontend/public/fonts/playfair-display-600.woff2") format("woff2"); font-display: swap; }
+
+      /* Los tokens de DESIGN.md, transcritos. Ninguno inventado acá. */
+      :root {
+        --coal: #131316; --coal-2: #1c1c21; --coal-3: #26262c;
+        --red: #d92128; --red-dark: #a11d22;
+        --ball: #ffd600; --ball-ink: #6e5700;
+        --paper: #fff; --sunken: #f4f4f7; --canvas: #e8e8ee;
+        --line: #dedee6; --line-2: #cfcfda;
+        --ink: #17181c; --ink-2: #4a4a55; --ink-3: #74747f; --ink-3-strong: #63636e;
+        --ok: #137739; --ok-bg: #e7f4ec;
+        --warn: #a94d08; --warn-bg: #fbf0e2;
+        --bad: #c51b22; --bad-bg: #fbe9ea;
+        --r-card: 14px; --r-ctl: 10px;
+        --s-page: 20px; --s-section: 14px; --s-field: 7px;
+        --shadow-card: 0 1px 2px rgba(19,19,22,.06), 0 4px 10px -3px rgba(19,19,22,.08);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: Barlow, system-ui, sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+        letter-spacing: -0.01em;
+      }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 40px var(--s-page) 80px; }
+
+      /* --- Cabecera ------------------------------------------------------ */
+      header.top {
+        background: var(--coal);
+        color: var(--paper);
+        border-radius: var(--r-card);
+        padding: 28px var(--s-page);
+        margin-bottom: var(--s-page);
+      }
+      .kicker {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ball); margin: 0 0 10px;
+      }
+      h1 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 46px;
+        line-height: .95; letter-spacing: -.05em; text-transform: uppercase;
+        margin: 0 0 12px;
+      }
+      header.top p { margin: 0; color: #b9b9c1; max-width: 62ch; }
+
+      h2 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 26px;
+        line-height: 1.15; letter-spacing: -.03em; text-transform: uppercase;
+        margin: 40px 0 var(--s-section);
+      }
+      h3 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 20px;
+        line-height: 1.2; letter-spacing: -.02em; text-transform: uppercase;
+        margin: 0 0 var(--s-field);
+      }
+      p { margin: 0 0 var(--s-section); }
+      strong { font-weight: 700; }
+      /* Un identificador de código, en el sistema: sin familia monoespaciada
+         —el sistema tiene tres familias y ninguna lo es— y con el radio de
+         control, que es uno de los dos radios que existen. Barlow a 12.5px es
+         el paso `xs`, el mismo que usa el producto para metadato secundario. */
+      code {
+        font-size: 12.5px; background: var(--sunken); border: 1px solid var(--line);
+        border-radius: var(--r-ctl); padding: 1px 6px;
+      }
+
+      .card {
+        background: var(--paper); border: 1px solid var(--line);
+        border-radius: var(--r-card); box-shadow: var(--shadow-card);
+        padding: var(--s-page); margin-bottom: var(--s-section);
+      }
+      /* El hombro de caucho: lo lleva la tarjeta que pide algo, y solo esa. */
+      .card.shoulder { padding: 0; overflow: hidden; }
+      .card.shoulder > .shoulder-bar {
+        background: var(--coal); padding: 8px var(--s-page);
+        display: flex; justify-content: flex-end;
+      }
+      .card.shoulder > .shoulder-bar span {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ball);
+      }
+      .card.shoulder > .shoulder-body { padding: var(--s-page); }
+
+      /* --- Tablas -------------------------------------------------------- */
+      table { width: 100%; border-collapse: collapse; }
+      thead th {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink-3-strong);
+        text-align: left; padding: 0 10px 8px; border-bottom: 1px solid var(--line-2);
+      }
+      tbody td {
+        font-size: 13.5px; padding: 11px 10px; border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      tbody tr:last-child td { border-bottom: 0; }
+      td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .win { color: var(--ok); font-weight: 700; }
+      .flat { color: var(--ink-3-strong); }
+      .lose { color: var(--warn); font-weight: 700; }
+
+      /* --- Insignias ----------------------------------------------------- */
+      .badge {
+        display: inline-flex; align-items: center; gap: 6px; height: 26px;
+        padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+        letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+      }
+      .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .badge.ok { background: var(--ok-bg); color: var(--ok); }
+      .badge.warn { background: var(--warn-bg); color: var(--warn); }
+      .badge.bad { background: var(--bad-bg); color: var(--bad); }
+      .badge.neutral { background: #efeff2; color: var(--ink-3-strong); }
+
+      /* --- Capturas ------------------------------------------------------ */
+      .shots { display: grid; gap: var(--s-section); margin-bottom: var(--s-page); }
+      @media (min-width: 900px) { .shots { grid-template-columns: 1fr 1fr; } }
+      figure { margin: 0; }
+      figure img {
+        display: block; width: 100%; height: auto;
+        border: 1px solid var(--line-2); border-radius: var(--r-ctl);
+        background: var(--paper);
+      }
+      figcaption {
+        margin-top: var(--s-field); font-size: 12.5px; color: var(--ink-3-strong);
+      }
+      figcaption b {
+        display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink); margin-bottom: 2px;
+      }
+
+      /* --- Listas de hallazgos ------------------------------------------- */
+      ul.findings { list-style: none; margin: 0 0 var(--s-section); padding: 0; }
+      ul.findings > li {
+        border-top: 1px solid var(--line); padding: 12px 0 12px 0;
+      }
+      ul.findings > li:first-child { border-top: 0; padding-top: 0; }
+      ul.findings .what { font-weight: 700; }
+      ul.findings .why { color: var(--ink-2); font-size: 13.5px; }
+
+      /* El diagnóstico priorizado: una fila por hallazgo, con su gravedad. */
+      ol.diagnosis { list-style: none; margin: 0 0 var(--s-section); padding: 0; counter-reset: hallazgo; }
+      ol.diagnosis > li {
+        display: grid; grid-template-columns: 34px 1fr; gap: 0 12px;
+        border-top: 1px solid var(--line); padding: 12px 0;
+      }
+      ol.diagnosis > li:first-child { border-top: 0; padding-top: 0; }
+      ol.diagnosis > li::before {
+        counter-increment: hallazgo; content: counter(hallazgo, decimal-leading-zero);
+        font-family: Graduate, serif; font-size: 20px; line-height: 1.2;
+        letter-spacing: -.02em; color: var(--ink-3);
+      }
+      ol.diagnosis .what { font-weight: 700; margin: 0 0 2px; }
+      ol.diagnosis .why { color: var(--ink-2); font-size: 13.5px; margin: 0; }
+      ol.diagnosis .rule {
+        display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink-3-strong); margin-top: 4px;
+      }
+
+      /* La regla roja: separa bloques, no decora. */
+      hr.rule { border: 0; border-top: 3px solid var(--red); width: 56px; margin: 36px 0 0; }
+
+      /* Una decisión de producto tomada en automático. Destacada, no enterrada. */
+      .call {
+        border-left: 3px solid var(--red); background: var(--sunken);
+        border-radius: 0 var(--r-ctl) var(--r-ctl) 0;
+        padding: 14px 16px; margin: 0 0 var(--s-section);
+      }
+      .call .tag {
+        display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--red-dark); margin-bottom: 4px;
+      }
+      .call p:last-child { margin-bottom: 0; }
+      .note { color: var(--ink-2); font-size: 13.5px; }
+      a { color: var(--red-dark); text-underline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <p class="kicker">Fase 4 · Tanda 3 de 3 · El admin</p>
+        <h1>El panel<br />de gestión,<br />las seis</h1>
+        <p>
+          Las seis pantallas con las que se administra el club, capturadas contra el entorno de QA
+          con el dataset grande, a 1440×900, con el mismo guión de medición que las nueve anteriores.
+          Ocho estados, antes y después. El diagnóstico salió de leer las seis contra
+          <a href="../../../DESIGN.md">DESIGN.md</a> y sus reglas con nombre, como en la tanda del
+          entrenador: no había issue que las midiera.
+        </p>
+      </header>
+
+      <p class="note">
+        La consigna de la fase —<strong>cambia cómo se ve, no qué hace</strong>— se cumple con la
+        suite entera en verde: <strong>3133 tests</strong> en 187 archivos, ningún endpoint tocado,
+        ninguna regla de negocio movida. Vale doble en esta tanda porque
+        <strong><code>/payments</code> mueve dinero real</strong>: el checkpoint de aprobación en
+        lote —que un pago sólo entra a un lote desde su propio detalle, con su checklist completa—
+        está exactamente como estaba, y lo único que cambió en esa pantalla es de qué color son los
+        botones, dónde vive la ayuda y en qué tipografía están los títulos.
+      </p>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>1 · El diagnóstico, por gravedad</h2>
+
+      <p>
+        Doce hallazgos, ordenados por lo que le cuestan a la persona que usa la pantalla y no por lo
+        que cuestan de arreglar. Los once primeros se arreglaron; el duodécimo es documentación y
+        también. Cada uno nombra la regla de <code>DESIGN.md</code> que rompe.
+      </p>
+
+      <div class="card">
+        <ol class="diagnosis">
+          <li>
+            <div>
+              <p class="what">Quince botones rojos en la pantalla que mueve dinero.</p>
+              <p class="why">
+                La cola de validación abre en «Pendientes», y cada fila pendiente dibujaba su
+                «Revisar» con <code>variant="primary"</code>: <strong>diez botones rojos en una
+                columna</strong> por página, quince en la insignia del riel. A los diez, el rojo dejó
+                de significar «esto es lo único que hay que apretar» y pasó a ser el color de la
+                columna — y de paso dejó a la decisión de verdad, «Aprobar pago» adentro del
+                detalle, vestida igual que los diez enlaces que llevan hasta ella. Estaba escrito dos
+                veces porque la tabla y el listado angosto son JSX separados.
+              </p>
+              <span class="rule">La regla del rojo único</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">62% de aire muerto, y el «Ver ayuda» que quedó flotando.</p>
+              <p class="why">
+                <code>/discounts</code> con el catálogo vacío es el número más grande de todo el
+                rediseño: <strong>555px de lienzo desnudo</strong> bajo un enunciado de 265, con una
+                tarjeta de 610px de ancho arriba a la izquierda y un riel de 340px reservado al lado
+                para nada. Y encima, el pendiente que la tanda de miembros dejó anotado: el «Ver
+                ayuda» era hijo directo del shell —sin envoltorio, sin clase, un control subrayado de
+                16px solo en una banda de 20— porque perdió el <code>mt-3</code> con el que se
+                sostenía cuando <code>ContextualHelp</code> dejó de llevar margen propio, y nadie lo
+                atajó.
+              </p>
+              <span class="rule">La regla del aire · D11c</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Los días eran píldoras de largo variable con la palabra cortada.</p>
+              <p class="why">
+                <code>/groups</code> dibujaba un <code>DiaTrack</code> propio: una cápsula por día
+                <em>del track</em> de la categoría, rotulada con <code>DIA_LABELS[dia].slice(0, 3)</code>.
+                Cinco cápsulas para cuatro categorías y seis para Competitivo, así que la columna
+                tenía filas de dos anchos distintos cuyas casillas no se alineaban — comparar dos
+                categorías obligaba a leer las dos. Es exactamente el problema que
+                <code>WeekStrip</code> existe para cerrar, y <code>WeekStrip</code> estaba escrito,
+                testeado y <strong>con cero consumidores</strong>. La abreviatura además llegaba al
+                diálogo de borrado, donde no está <code>aria-hidden</code> y es el único enunciado de
+                qué días se destruyen.
+              </p>
+              <span class="rule">La regla del formato · La regla de las palabras</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Dos proporciones y una serie, las tres dibujadas como frases.</p>
+              <p class="why">
+                «Membresías activas · 21 de 85 · 25% del total» y «Presentes · 118 · 54% del total»
+                son proporciones en un producto que exporta <code>StatTrack</code> para eso y lo
+                gasta en <code>/members</code>. Peor la cuarta tarjeta del panel:
+                <code>buildFourWeekAttendance</code> devuelve <strong>cuatro ventanas</strong>, cada
+                una con su total, sus presentes y su tasa, y la pantalla renderizaba el porcentaje
+                agrupado y tiraba <code>bars</code> a la basura. 52% podía ser cuatro semanas planas
+                o un derrumbe de 70 a 30, y la tarjeta se leía igual.
+              </p>
+              <span class="rule">La regla de la forma · D7</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Ningún título de tarjeta usaba Graduate, en ninguna de las seis.</p>
+              <p class="why">
+                Cero <code>font-display</code> en <code>/payments</code>, <code>/groups</code>,
+                <code>/reports</code> y <code>/discounts</code>, y tres tratamientos distintos para
+                el mismo trabajo: <code>text-base font-bold</code> en el panel,
+                <code>text-sm font-bold</code> en horarios y reportes,
+                <code>text-sm font-semibold</code> en descuentos. Los de 13,5px además pasaban el
+                candado de tipografía por estar <em>debajo</em> del piso de Graduate, no por
+                cumplirlo.
+              </p>
+              <span class="rule">La regla de Graduate</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">254px de panel de filtros con la mitad derecha vacía.</p>
+              <p class="why">
+                <code>FilterPanel</code> es una columna, y para un riel está bien. Para una página no:
+                <code>/attendance</code> apilaba tres controles en los 320px de la izquierda de una
+                tarjeta que ocupa todo el ancho, con la mitad derecha entera en blanco. Es la deuda
+                que la tanda del entrenador dejó explícitamente acá, porque el mismo componente se
+                dibuja en el tercio izquierdo del historial del entrenador, donde apilar es lo único
+                que entra.
+              </p>
+              <span class="rule">La regla del aire · dos consumidores</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Cinco estados vacíos sin salida, y uno que no existía.</p>
+              <p class="why">
+                Los cuatro de <code>/reports</code> nombran el próximo paso en prosa —«pruebe con un
+                rango más amplio», «quite el filtro de horario», «elija otro estado»— y ninguno lo
+                ofrecía como control, aunque los tres son una llamada que la página ya tiene. El
+                quinto es la rama <code>all</code> sin búsqueda de <code>/payments</code>. Y el que
+                no existía: el panel de alumnos de <code>/groups</code> era
+                <code>roster.alumnos.length > 0 &amp;&amp; (…)</code>, así que una categoría sin
+                inscriptos renderizaba <strong>literalmente nada</strong> debajo del selector.
+              </p>
+              <span class="rule">D11 · las tres partes</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Dos botones rojos al mismo destino, con la misma palabra.</p>
+              <p class="why">
+                El encabezado de <code>/attendance</code> dibuja «Tomar asistencia» en rojo, y su
+                estado vacío dibujaba <em>otro</em> «Tomar asistencia» en rojo apuntando al mismo
+                lugar. Los dos visibles a la vez, en la misma pantalla — el «un botón por acá y otro
+                por allá» del cliente en su forma más literal.
+              </p>
+              <span class="rule">La regla de la acción · La regla del rojo único</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Un tercer radio, en el botón compacto de todo el producto.</p>
+              <p class="why">
+                <code>Button</code> declaraba <code>sm: "h-ctl-sm rounded-lg …"</code> — 8px, el
+                único radio de <code>ui/</code> que <code>DESIGN.md</code> no tiene, y ningún test lo
+                medía. Cada acción dentro de una fila del producto —las de horarios, descuentos y
+                pagos— se dibujaba a 8px al lado de controles de 10. Salió a la luz al cerrar la
+                deuda anotada: <code>Button.test.tsx</code> escribía sus listas de variantes a mano.
+              </p>
+              <span class="rule">Dos radios y nada más · Deuda anotada</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">La paleta retirada, viva en el formulario de descuentos.</p>
+              <p class="why">
+                Los tres campos eran <code>rounded-lg</code> sobre
+                <code>cata-border</code>/<code>cata-surface</code>/<code>cata-text</code> con
+                <code>px-2.5 py-1.5</code>: ni el radio, ni la paleta, ni ninguna de las dos alturas
+                de control del sistema. El panel abierto de <code>ContextualHelp</code>, otro
+                <code>rounded-lg</code> sobre <code>cata-bg</code> — y eso lo abren
+                <strong>siete pantallas</strong>. Más el aviso de horarios a <code>rounded-xl</code>
+                (12px) y un <code>hover:bg-red-50</code> crudo de Tailwind.
+              </p>
+              <span class="rule">Dos radios y nada más · La regla del par medido</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Dos abreviaturas que contradicen al CSV de su propia columna.</p>
+              <p class="why">
+                <code>/reports</code> encabezaba «Fecha Nac.» y «Responsable de Pago» mientras el CSV
+                que genera la misma pantalla escribe «Fecha de nacimiento» y «Responsable de pago».
+                Una abreviatura y unas Mayúsculas De Título, las dos discrepando con el archivo que
+                sale del botón de al lado.
+              </p>
+              <span class="rule">La regla de las palabras</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">La paleta de gráfico seguía sin estar en <code>DESIGN.md</code>.</p>
+              <p class="why">
+                La deuda que la tanda del entrenador dejó anotada con su motivo: una quinta lista de
+                colores viviendo en <code>dashboard-utils.ts</code>, alimentando ya tres pantallas.
+                Acá vive la dona del admin y su validador, así que acá se reconcilia.
+              </p>
+              <span class="rule">La regla del par medido</span>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>2 · Las mediciones</h2>
+
+      <p>
+        Se mide igual que siempre: la distancia entre el borde inferior del contenido más bajo y el
+        fondo de la ventana, dividida por el alto de la ventana, a 1440×900, entrando con
+        <code>admin@cataclub.com</code>. Las dos rondas leen la misma base de QA.
+      </p>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Pantalla</th>
+              <th>Estado</th>
+              <th>Antes</th>
+              <th>Después</th>
+              <th>Qué lo movió</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Panel de Control</td>
+              <td>Con datos</td>
+              <td class="num">14% · 122px</td>
+              <td class="num win">12% · 107px</td>
+              <td>La barra y la tendencia dentro de las tarjetas.</td>
+            </tr>
+            <tr>
+              <td>Membresías y Pagos</td>
+              <td>Cola pendiente · 15</td>
+              <td class="num">0%</td>
+              <td class="num flat">0%</td>
+              <td>Scrollea: 1078px → 1094px de documento.</td>
+            </tr>
+            <tr>
+              <td>Membresías y Pagos</td>
+              <td>Búsqueda sin coincidencias</td>
+              <td class="num">44% · 397px</td>
+              <td class="num win">25% · 229px</td>
+              <td>El enunciado se estira dentro de la tarjeta.</td>
+            </tr>
+            <tr>
+              <td>Horarios</td>
+              <td>Cinco categorías</td>
+              <td class="num">34% · 308px</td>
+              <td class="num lose">35% · 316px</td>
+              <td><strong>Sube</strong>: la franja mide menos que las píldoras.</td>
+            </tr>
+            <tr>
+              <td>Asistencias</td>
+              <td>Este mes · 218 registros</td>
+              <td class="num">0%</td>
+              <td class="num flat">0%</td>
+              <td>Scrollea, y el documento baja <strong>69px</strong>.</td>
+            </tr>
+            <tr>
+              <td>Descuentos</td>
+              <td>Catálogo vacío</td>
+              <td class="num">62% · 555px</td>
+              <td class="num win">38% · 340px</td>
+              <td>El riel se va y el enunciado se centra — ver abajo.</td>
+            </tr>
+            <tr>
+              <td>Reportes</td>
+              <td>Este mes · 87 personas</td>
+              <td class="num">0%</td>
+              <td class="num flat">0%</td>
+              <td>Scrollea: 1199px → 1201px de documento.</td>
+            </tr>
+            <tr>
+              <td>Reportes</td>
+              <td>Rango sin datos · enero 2019</td>
+              <td class="num">22% · 194px</td>
+              <td class="num win">15% · 137px</td>
+              <td>Entró la salida que las cuatro no tenían.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="call">
+        <span class="tag">Descuentos: el 38% no es el hueco que se ve</span>
+        <p>
+          El guión mide la última <strong>hoja</strong> del árbol, y con la tarjeta estirada el
+          enunciado queda centrado <em>adentro</em> de ella, así que la hoja más baja cae a mitad de
+          camino. Medido sobre el borde inferior de la última <strong>superficie</strong> —que es
+          donde termina visualmente la página— el lienzo desnudo pasa de
+          <strong>455px (51%) a 32px (4%)</strong>: la tarjeta llega ahora hasta los 868px de una
+          ventana de 900. Los dos números están acá porque el primero es el que la tabla viene
+          publicando desde la primera tanda y el segundo es el que describe esta pantalla; cambiar la
+          definición a mitad de la fase haría incomparables las nueve anteriores.
+        </p>
+      </div>
+
+      <p class="note">
+        Horarios <strong>sube</strong> ocho píxeles, y es la misma clase de número que el recibo del
+        entrenador: lo que se fue fue alto. Las cápsulas de día medían 26px de insignia y la franja
+        mide 20px de casilla, así que las cinco filas terminan más arriba y el hueco de abajo mide
+        más. Bajarlo pedía dejar las píldoras puestas. Lo que esta pantalla ganó no se mide en el eje
+        vertical: se mide en que sus cinco filas por fin se pueden comparar de un vistazo.
+      </p>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>3 · Membresías y Pagos — quince rojos y una decisión</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-admin-payments.png" alt="La cola de pagos, antes" />
+          <figcaption><b>Antes · Cola pendiente</b>Diez «Revisar» rojos en una columna. El rojo dejó de ser «lo único que hay que apretar» y pasó a ser el color de la columna, y la decisión real —«Aprobar pago», adentro del detalle— viste igual que los diez enlaces que llevan hasta ella.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-admin-payments.png" alt="La cola de pagos, después" />
+          <figcaption><b>Después · Cola pendiente</b>Los diez pasan a secundaria. En este estado la pantalla no tiene ningún control rojo, y eso es correcto: el rojo aparece cuando hay algo que aprobar —la barra de lote— o cuando se entra al detalle a decidir.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">Lo que <strong>no</strong> se tocó, y es la mitad del trabajo.</p>
+          <p class="why">
+            Ninguna regla de negocio, ningún endpoint, ninguna validación. El checkpoint de
+            aprobación en lote está intacto: un pago sigue entrando al lote sólo desde su propio
+            detalle y con su checklist completa, <code>markReviewed</code> sigue guardando el período
+            exacto que el admin vio, las casillas de la fila siguen renderizadas-pero-deshabilitadas
+            con su motivo citado por <code>aria-labelledby</code>, y <code>batch.run()</code> sigue
+            siendo N llamadas secuenciales con su recuperación parcial. Los 101 tests de la pantalla
+            pasan sin que se renegociara uno solo.
+          </p>
+        </li>
+        <li>
+          <p class="what">El techo de la cola, dicho en voz alta.</p>
+          <p class="why">
+            Las cuatro píldoras cuentan «Pendientes 15 · Validados 33 · Rechazados 14 · Todas 62», y
+            se leen como los totales del club. Son los totales de <em>lo que esta página trajo</em>,
+            que el BFF pide con <code>limit=200</code>. <code>/members</code> ya declara el mismo
+            techo en la misma ranura —la cuarta de <code>FilterPanel</code>, que esta pantalla dejaba
+            vacía—, y acá vale más porque el número es una cola que alguien está vaciando.
+          </p>
+        </li>
+      </ul>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-admin-payments-sin-coincidencias.png" alt="Búsqueda sin coincidencias, antes" />
+          <figcaption><b>Antes · Sin coincidencias</b>44% · 397px. Tres renglones cortos conservan su alto y el resto de la columna se queda en lienzo desnudo.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-admin-payments-sin-coincidencias.png" alt="Búsqueda sin coincidencias, después" />
+          <figcaption><b>Después · Sin coincidencias</b>25% · 229px. El sobrante entra a la superficie en lugar de quedar debajo — el mismo movimiento que <code>/members</code> ya midió sobre este componente.</figcaption>
+        </figure>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>4 · Descuentos — el 62%</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-admin-discounts.png" alt="Descuentos con el catálogo vacío, antes" />
+          <figcaption><b>Antes · Catálogo vacío</b>El número más grande del rediseño. Una tarjeta de 610px arriba a la izquierda, 340px de riel reservado al lado para nada, 555px de lienzo debajo — y el «Ver ayuda» suelto entre el título y la grilla.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-admin-discounts.png" alt="Descuentos con el catálogo vacío, después" />
+          <figcaption><b>Después · Catálogo vacío</b>Un bloque «Catálogo de descuentos» en Graduate con su «Ver ayuda» anclado al lado, ocupando el ancho, con el enunciado centrado adentro. La superficie llega a 868px de 900.</figcaption>
+        </figure>
+      </div>
+
+      <div class="call">
+        <span class="tag">Decisión tomada en automático</span>
+        <p>
+          <strong>El riel deja de reservarse cuando no hay ninguna fila que sostener.</strong> El
+          argumento del riel está escrito en el archivo y es bueno: la fila que se está editando no
+          se tiene que mover, así que la grilla mantiene sus dos columnas haya formulario o no. Ese
+          argumento cubre todos los estados <em>que tienen filas</em> y no dice nada del catálogo
+          vacío, donde no hay fila que proteger y los 340px eran una columna en blanco al lado de una
+          tarjeta cuyo mensaje entero es que no hay nada. Con una fila, o con el formulario abierto,
+          la grilla vuelve y es incondicional otra vez — hay un test para cada una de las dos mitades.
+        </p>
+      </div>
+
+      <div class="call">
+        <span class="tag">Dónde va la ayuda, y por qué ahí</span>
+        <p>
+          D11c dice que la ayuda vive en el bloque que explica. Las tres reglas que abre —un descuento
+          se desactiva y no se elimina, editarlo nunca reescribe el historial, y aplicarlo pasa en
+          otra pantalla— son las tres sobre el <strong>catálogo</strong>, así que su bloque es la
+          tarjeta del catálogo, en la tira de encabezado al lado del título. Es la misma ranura que
+          <code>/members</code> le da a su propio aviso: la última del bloque que lo posee. Y sigue
+          estando cuando el catálogo está vacío, que es el estado que más necesita las reglas.
+        </p>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>5 · Horarios — la franja que estaba escrita y nadie llamaba</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-admin-groups.png" alt="Horarios, antes" />
+          <figcaption><b>Antes</b>«Lun Mar Mié Jue Vie» — cinco cápsulas para cuatro categorías y seis para Competitivo. Dos anchos de fila cuyas casillas no se alinean, y la palabra del día cortada a tres letras.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-admin-groups.png" alt="Horarios, después" />
+          <figcaption><b>Después</b>Siete casillas fijas, siempre las siete, de lunes a domingo. Las cinco filas se comparan mirando: el sábado de Competitivo salta a la vista porque las otras cuatro tienen esa casilla apagada en la misma posición.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">El componente existía, con su porqué escrito, y tenía cero consumidores.</p>
+          <p class="why">
+            <code>ui/WeekStrip</code> estaba construido y testeado —incluida la excepción declarada a
+            la regla de las palabras, que las letras son <em>posiciones de una escala</em> y no
+            palabras abreviadas, con el nombre completo del día para el lector de pantalla— y no lo
+            llamaba nadie. <code>/groups</code> es su primer consumidor.
+          </p>
+        </li>
+        <li>
+          <p class="what">El tercer estado no se perdió: se mudó adentro de la franja.</p>
+          <p class="why">
+            La pieza local codificaba tres cosas —el día que la categoría dicta, el día que
+            <em>podría</em> dictar y no dicta, y el día fuera de su track— y eso es información con la
+            que un admin decide, no decoración. La franja gana un <code>permitidos</code> opcional: el
+            día disponible y sin usar es un contorno punteado sobre el relleno apagado, que es
+            exactamente el tratamiento que la pantalla ya usaba para ese hecho. Quien no pasa
+            <code>permitidos</code> obtiene la franja de dos estados de siempre.
+          </p>
+        </li>
+        <li>
+          <p class="what">Las dos tablas de días se unen por la palabra, no por la posición.</p>
+          <p class="why">
+            <code>/groups</code> lee un endpoint que no pasa por la traducción del BFF, así que
+            sostiene <code>"LUNES"</code> mientras la franja habla <code>"lun"</code>. Emparejarlas
+            por índice funcionaría hoy —las dos son lunes-primero y de siete— y se rompería en
+            silencio el día que alguna se reordene, con la falla apareciendo como una casilla
+            encendida en el lugar equivocado. Se emparejan por la etiqueta que las dos imprimen, que
+            es el hecho que genuinamente comparten, y un desajuste devuelve <code>null</code> en vez
+            de una respuesta plausible y equivocada.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y la abreviatura salió de donde más dolía.</p>
+          <p class="why">
+            Adentro de la fila estaba <code>aria-hidden</code>, con la frase de horario diciendo los
+            mismos días en palabras justo encima. En el diálogo de borrado era el
+            <strong>único</strong> enunciado de qué días se van a destruir: «todos sus días: Lun, Mar,
+            Mié…», en una confirmación que desasigna alumnos. Ahora lista con
+            <code>joinWithY</code>, que es la misma función con la que la franja arma su etiqueta
+            accesible, así que el diálogo y la franja nombran una semana igual.
+          </p>
+        </li>
+      </ul>
+
+      <div class="call">
+        <span class="tag">Lo que quedó sin foto</span>
+        <p>
+          El estado vacío que este panel <strong>no tenía</strong> —una categoría sin alumnos
+          inscriptos, que renderizaba literalmente nada debajo del selector— existe ahora y no se
+          pudo capturar: las cinco categorías del club tienen entre 12 y 16 alumnos, y vaciar una de
+          verdad para sacar la foto es mover datos reales, que es lo que D14 prohíbe. Está cubierto
+          por su test, no por una captura.
+        </p>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>6 · Panel de Control — la serie que se calculaba y se tiraba</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-admin-dashboard.png" alt="Panel de control, antes" />
+          <figcaption><b>Antes</b>Cuatro tarjetas planas. «21 de 85 · 25% del total» es una proporción escrita como frase, y «52%» es el promedio de cuatro semanas que la página tiene una por una y no dibuja. La cifra de 46px está en Barlow: el paso <code>display</code> sin la familia <code>display</code>.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-admin-dashboard.png" alt="Panel de control, después" />
+          <figcaption><b>Después</b>La proporción lleva barra y la serie lleva tendencia, con la semana más nueva en caucho y las tres anteriores en la hairline. La cifra del hombro, en Graduate. Los dos títulos de tarjeta, también.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">No se inventó un dato: la serie ya estaba en la página.</p>
+          <p class="why">
+            <code>buildFourWeekAttendance</code> devuelve <code>bars</code> —cuatro ventanas de siete
+            días, cada una con su total, sus presentes y su tasa— y la tarjeta renderizaba sólo el
+            porcentaje agrupado. La llamada que las alimenta pagina el rango <em>completo</em> en el
+            BFF, así que las cuatro ventanas están enteras y no son el primer tramo de un listado
+            truncado; si lo fueran, dibujar una tendencia sería dibujar una caída falsa. Cuando no hay
+            registros la serie viene vacía y <code>StatSpark</code> no renderiza nada, así que una
+            tarjeta callada se queda callada en vez de dibujar cuatro barras de cero.
+          </p>
+        </li>
+        <li>
+          <p class="what">La barra se escala contra la semana más alta, no contra 100.</p>
+          <p class="why">
+            Las tasas de asistencia viven en una banda —48 a 70, no 5 a 95— y contra un techo fijo de
+            100 esas cuatro salen casi iguales: una tendencia dibujada con tanta fidelidad que no se
+            puede leer. El máximo de la serie es el riel. La cifra absoluta sigue impresa encima, así
+            que el número que nadie puede malinterpretar es el que está dicho en palabras.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y el hombro se quedó donde estaba, con tres arreglos invisibles.</p>
+          <p class="why">
+            La tarjeta de caucho de «15 pagos esperan tu validación» era la única cifra estadística
+            del producto que no estaba en Graduate: llevaba <code>text-display</code> —el
+            <em>tamaño</em>— sin <code>font-display</code>, y encima <code>font-extrabold</code>, un
+            peso que esa fuente no dibuja porque tiene un solo corte de 400. Es el mismo pedido que
+            <code>StatCard</code> ya tiene anotado haber sacado de su propia cifra. Su relleno de 24px
+            pasó al escalón de página.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>7 · Asistencias y Reportes</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-admin-attendance.png" alt="Asistencias, antes" />
+          <figcaption><b>Antes · Asistencias</b>Tres controles apilados en los 320px de la izquierda de una tarjeta de ancho completo: 254px de alto con la mitad derecha entera vacía. «Presentes 118 54%» es una proporción sin barra, y «Ausencias / tardanzas · combinadas» gasta su renglón en avisar que hay dos cosas adentro del número.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-admin-attendance.png" alt="Asistencias, después" />
+          <figcaption><b>Después · Asistencias</b>Los tres grupos fluyen a lo ancho, la proporción lleva su barra, y el renglón de la cuarta tarjeta dice el desglose en vez de anunciar que existe. El documento baja 69px.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">El eje es del que llama; el orden no.</p>
+          <p class="why">
+            <code>FilterPanel</code> gana un <code>layout</code>, y sólo eso. La
+            <strong>secuencia</strong> de ranuras —buscador, píldoras, campos, y la advertencia al
+            final— es idéntica en los dos ejes, porque «una pantalla no puede expresar el orden
+            equivocado» es la razón entera por la que el componente existe, y una escotilla que
+            además reordenara devolvería exactamente lo que se había sacado. El historial del
+            entrenador sigue apilado, que es lo único que entra en su tercio.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y el segundo botón rojo se fue.</p>
+          <p class="why">
+            El estado vacío ofrecía «Tomar asistencia» en rojo apuntando al mismo lugar que el rojo
+            del encabezado, con los dos visibles a la vez. Ahora es secundario: la salida sigue
+            estando, la pantalla vuelve a tener una sola acción primaria.
+          </p>
+        </li>
+      </ul>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-admin-reports-sin-datos.png" alt="Reportes sin datos, antes" />
+          <figcaption><b>Antes · Rango sin datos</b>«Pruebe con un rango de fechas más amplio», sin nada que apretar. Los cuatro estados vacíos de esta pantalla nombraban el próximo paso y ninguno lo ofrecía, aunque los tres son una llamada que la página ya tiene.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-admin-reports-sin-datos.png" alt="Reportes sin datos, después" />
+          <figcaption><b>Después · Rango sin datos</b>«Ver el histórico completo» es la salida, y es real: ese preset resuelve a la fecha de fundación del club, no a una promesa. En asistencia y pagos, si hay un filtro puesto, la salida es quitar <em>ese</em> filtro, que es el que está reteniendo el resultado en cero.</figcaption>
+        </figure>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>8 · La deuda anotada, y la paleta</h2>
+
+      <ul class="findings">
+        <li>
+          <p class="what"><code>Button.test.tsx</code> nunca midió <code>onCoal</code> — cerrado.</p>
+          <p class="why">
+            Sus dos barridos escribían la lista de variantes a mano
+            (<code>["primary", "secondary", "dark", "tertiary"]</code>), los dos se escribieron antes
+            de que <code>onCoal</code> existiera y ninguno creció con él. Así que el barrido que
+            prueba que <em>toda</em> variante mide 40px y el que prueba que ninguna otra es roja
+            estaban salteando en silencio un quinto del sistema. Ahora
+            <code>BUTTON_VARIANTS</code> es un valor y el tipo se deriva de él: una sexta variante
+            entra a los dos barridos el día que existe, o no compila. El guardián que leía la unión
+            por texto lee el arreglo, que es la misma declaración un nivel antes.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y cerrarla destapó un radio que nadie medía.</p>
+          <p class="why">
+            <code>SIZE.sm</code> era <code>rounded-lg</code>: 8px, el único tercer radio de
+            <code>ui/</code>, sin un solo test encima. La forma decía «esto es una categoría un poco
+            distinta de cosa», que es justo lo que los dos radios existen para decir y justo lo que no
+            es verdad acá. Un botón compacto es un botón.
+          </p>
+        </li>
+        <li>
+          <p class="what">La paleta de gráfico, declarada.</p>
+          <p class="why">
+            Entra a <a href="../../../DESIGN.md">DESIGN.md</a> y a su sidecar
+            <code>.impeccable/design.json</code> con sus cuatro valores, su orden —que es parte de la
+            medición y no una preferencia— y el motivo por el que no es la rampa de estados: los
+            tokens de insignia fallan los chequeos de pares adyacentes cuando se ponen lado a lado en
+            una figura, y eso es exactamente lo que es un segmento contra sus tres vecinos. Una
+            insignia es una píldora sola y se queda con la rampa. La deuda venía anotada de la tanda
+            del entrenador con ese porqué escrito; se cierra donde vive la dona.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>9 · Lo que no se tocó, y por qué</h2>
+
+      <ul class="findings">
+        <li>
+          <p class="what">La cédula de la vista previa de reportes.</p>
+          <p class="why">
+            «Don't poner un dato en una grilla si no sirve para decidir o para encontrar» retiró la
+            cédula de la tabla de miembros. Acá <strong>se queda</strong>, y la diferencia no es de
+            gusto: esta grilla no es un listado, es la <em>previsualización de un documento</em>. La
+            vista previa y el PDF se piden con parámetros idénticos, así que sacarle una columna a la
+            vista la haría mentir sobre lo que el botón de al lado va a descargar. Cambiar el
+            documento es comportamiento.
+          </p>
+        </li>
+        <li>
+          <p class="what">Los 35% de Horarios.</p>
+          <p class="why">
+            Medidos y sin cerrar. Cinco filas de categoría es todo lo que esta pantalla tiene, y no
+            crece: el club dicta cinco categorías. Estirar la tarjeta al alto de la ventana mueve el
+            hueco adentro de un borde, que es la reversión que la tanda del socio ya midió con 200px
+            de marco vacío bajo una sola fila. Lo único que llenaría la fila con contenido real
+            —cuántos alumnos tiene cada día, no cada categoría— exige una llamada nueva.
+          </p>
+        </li>
+        <li>
+          <p class="what">La columna «Horarios» de <code>/attendance</code>, que no filtra.</p>
+          <p class="why">
+            «Horarios · 26 · sesiones semanales» es un conteo global sentado en una fila de tarjetas
+            que sí responden al filtro: cambiar el rango mueve las otras tres y esa se queda quieta.
+            Es correcto —son las sesiones semanales del club, no del rango— y es confuso. Arreglarlo
+            pide decidir si la tarjeta cuenta horarios <em>con registros en el rango</em>, que es otro
+            número y otra consulta. Queda anotado.
+          </p>
+        </li>
+        <li>
+          <p class="what">El cero silencioso del panel.</p>
+          <p class="why">
+            Si <code>fetchAttendanceRecords</code> falla, el panel deja <code>records = []</code> por
+            diseño —una tarjeta secundaria caída no debe tumbar el tablero— y la cuarta tarjeta lee
+            «0% · 0 de 0 presentes», que es indistinguible de «el club no tuvo asistencias». La
+            tendencia nueva no empeora eso: con la serie vacía no dibuja nada. Distinguir «no hay» de
+            «no se pudo leer» pide un estado de error por tarjeta, que es comportamiento, y es la
+            misma distinción que <code>/members</code> ya resolvió con una raya en lugar de un cero.
+          </p>
+        </li>
+        <li>
+          <p class="what">La columna «Edad» de reportes, que ningún endpoint devuelve.</p>
+          <p class="why">
+            Se calcula en el navegador contra <code>new Date()</code>, así que un reporte de un
+            período pasado muestra la edad de <em>hoy</em>, y el cruce de <code>YYYY-MM-DD</code> como
+            UTC contra un mes y día locales corre el límite del cumpleaños un día en Guayaquil. Es un
+            defecto real y es de datos, no de forma: va como issue con su test, no como un cambio de
+            estilo en una fase que promete no tocar comportamiento.
+          </p>
+        </li>
+        <li>
+          <p class="what">El aviso propio de Horarios, que corre en paralelo al toast.</p>
+          <p class="why">
+            La pantalla dibuja su propia tira de éxito/error <em>y</em> llama al toast global en el
+            mismo manejador, así que una creación exitosa se anuncia dos veces. Se le corrigió el
+            radio (12px → radio de tarjeta) porque eso es forma; unificar los dos avisos es sacar un
+            mecanismo de notificación, y eso se ve pero no lo es.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <h2>10 · Cómo verificarlo</h2>
+      <div class="card">
+        <p class="note" style="margin-bottom: 10px">
+          Suite completa, tipos y lint sobre este cambio:
+        </p>
+        <p style="margin-bottom: 10px"><code>npm test</code> — 187 archivos, 3133 tests, todo en verde (eran 3101; el neto son treinta y dos casos nuevos y seis renegociados).</p>
+        <p style="margin-bottom: 10px"><code>npm run type-check</code> — sin errores.</p>
+        <p style="margin-bottom: 0"><code>npm run lint</code> — sin advertencias.</p>
+      </div>
+      <p class="note">
+        Los seis renegociados llevan el motivo escrito adentro, que es la única forma en que un
+        candado se puede aflojar, y <strong>cinco de los seis quedaron más estrictos que antes</strong>:
+        los cuatro de los marcadores de día ahora asertan <em>siete casillas fijas</em> donde antes
+        asertaban la lista de largo variable que rompía la regla, y el guardián del botón lee el
+        arreglo del que se deriva el tipo en vez de la unión. El sexto es el rótulo del centro de la
+        dona, que pasó de <code>REGISTROS</code> a la palabra «Registros» y se acotó al SVG porque la
+        tabla de la leyenda tiene una columna con ese nombre. Y dos candados fallaron <em>a favor</em>,
+        cada uno respondido donde correspondía: el de la paleta cruda pedía un cambio en el
+        <strong>test</strong> —<code>/groups</code> pagó su única deuda y la lista congelada tiene
+        que encoger, que es literalmente lo que ese caso existe para forzar—, y el de la cara display
+        pedía un cambio en el <strong>código</strong>: la cifra del centro de la dona pasó a Graduate
+        sin declarar su tracking, y el guardián no la dejó pasar hasta que lo declaró.
+      </p>
+      <p class="note">
+        Las capturas se regeneran con el guión de medición contra QA en
+        <code>http://localhost:3000</code>, a 1440×900, entrando con
+        <code>admin@cataclub.com</code>. El índice de todas las comparaciones está en
+        <a href="README.md">README.md</a>.
+      </p>
+    </div>
+  </body>
+</html>

@@ -4,52 +4,195 @@
   "title": "Design System: Cata Club",
   "extensions": {
     "colorMeta": {
-      "red": { "role": "primary", "displayName": "Rojo institucional", "canonical": "#D92128" },
-      "red-dark": { "role": "primary", "displayName": "Rojo de tinta", "canonical": "#A11D22" },
+      "red": {
+        "role": "primary",
+        "displayName": "Rojo institucional",
+        "canonical": "#D92128"
+      },
+      "red-dark": {
+        "role": "primary",
+        "displayName": "Rojo de tinta",
+        "canonical": "#A11D22"
+      },
       "coal": {
         "role": "secondary",
         "displayName": "Caucho",
         "canonical": "#131316",
-        "tonalRamp": ["#131316", "#26262C", "#3A3A42", "#4E4E58", "#62626E", "#7C7C88", "#9A9AA4", "#B8B8C0", "#D3D3D9", "#DCDCE4"]
+        "tonalRamp": [
+          "#131316",
+          "#26262C",
+          "#3A3A42",
+          "#4E4E58",
+          "#62626E",
+          "#7C7C88",
+          "#9A9AA4",
+          "#B8B8C0",
+          "#D3D3D9",
+          "#DCDCE4"
+        ]
       },
-      "ball": { "role": "tertiary", "displayName": "La pelota", "canonical": "#FFD600" },
-      "ball-ink": { "role": "tertiary", "displayName": "Tinta sobre la pelota", "canonical": "#6E5700" },
-      "fuchsia": { "role": "tertiary", "displayName": "Fucsia de landing", "canonical": "#E5397D" },
-      "canvas": { "role": "neutral", "displayName": "El campo de la página", "canonical": "#E8E8EE" },
-      "sunken": { "role": "neutral", "displayName": "Hundido", "canonical": "#F4F4F7" },
-      "paper": { "role": "neutral", "displayName": "Papel", "canonical": "#FFFFFF" },
-      "line": { "role": "neutral", "displayName": "Hairline de divisor", "canonical": "#DEDEE6" },
-      "line-2": { "role": "neutral", "displayName": "Hairline de control", "canonical": "#CFCFDA" },
-      "ink": { "role": "neutral", "displayName": "Tinta principal", "canonical": "#17181C" },
-      "ink-3-strong": { "role": "neutral", "displayName": "Apagado sobre canvas", "canonical": "#63636E" }
+      "ball": {
+        "role": "tertiary",
+        "displayName": "La pelota",
+        "canonical": "#FFD600"
+      },
+      "ball-ink": {
+        "role": "tertiary",
+        "displayName": "Tinta sobre la pelota",
+        "canonical": "#6E5700"
+      },
+      "fuchsia": {
+        "role": "tertiary",
+        "displayName": "Fucsia de landing",
+        "canonical": "#E5397D"
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "El campo de la página",
+        "canonical": "#E8E8EE"
+      },
+      "sunken": {
+        "role": "neutral",
+        "displayName": "Hundido",
+        "canonical": "#F4F4F7"
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Papel",
+        "canonical": "#FFFFFF"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline de divisor",
+        "canonical": "#DEDEE6"
+      },
+      "line-2": {
+        "role": "neutral",
+        "displayName": "Hairline de control",
+        "canonical": "#CFCFDA"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta principal",
+        "canonical": "#17181C"
+      },
+      "ink-3-strong": {
+        "role": "neutral",
+        "displayName": "Apagado sobre canvas",
+        "canonical": "#63636E"
+      },
+      "chart-present": {
+        "role": "chart",
+        "displayName": "Gráfico · presente",
+        "canonical": "#008300"
+      },
+      "chart-late": {
+        "role": "chart",
+        "displayName": "Gráfico · tardanza",
+        "canonical": "#EDA100"
+      },
+      "chart-justified": {
+        "role": "chart",
+        "displayName": "Gráfico · justificado",
+        "canonical": "#2A78D6"
+      },
+      "chart-absent": {
+        "role": "chart",
+        "displayName": "Gráfico · ausente",
+        "canonical": "#E34948"
+      }
     },
     "note": "Las rampas tonales se incluyen SOLO donde el proyecto ya define una escala real (la rampa l1..l10 del caucho). Para el resto se omiten a propósito: sintetizarlas produciría valores que nadie midió y que con el tiempo se leen como tokens.",
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "Titular de bienvenida o hero. Una por pantalla." },
-      "headline": { "displayName": "Headline", "purpose": "El título de página." },
-      "stat": { "displayName": "Stat", "purpose": "La cifra de una tarjeta, en cifras tabulares." },
-      "title": { "displayName": "Title", "purpose": "Título de tarjeta o de diálogo." },
-      "body": { "displayName": "Body", "purpose": "La lectura por defecto del producto." },
-      "dense": { "displayName": "Dense", "purpose": "Celda de tabla, etiqueta de formulario, fila." },
-      "label": { "displayName": "Label", "purpose": "Micro-etiqueta en mayúsculas: columna, antetítulo, insignia." },
-      "voice": { "displayName": "Voice", "purpose": "La frase que el club dice en primera persona. Una por pantalla." }
+      "display": {
+        "displayName": "Display",
+        "purpose": "Titular de bienvenida o hero. Una por pantalla."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "El título de página."
+      },
+      "stat": {
+        "displayName": "Stat",
+        "purpose": "La cifra de una tarjeta, en cifras tabulares."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Título de tarjeta o de diálogo."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "La lectura por defecto del producto."
+      },
+      "dense": {
+        "displayName": "Dense",
+        "purpose": "Celda de tabla, etiqueta de formulario, fila."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Micro-etiqueta en mayúsculas: columna, antetítulo, insignia."
+      },
+      "voice": {
+        "displayName": "Voice",
+        "purpose": "La frase que el club dice en primera persona. Una por pantalla."
+      }
     },
     "shadows": [
-      { "name": "soft", "value": "0 1px 2px rgba(19,19,22,0.04), 0 2px 8px -2px rgba(19,19,22,0.05)", "purpose": "El apoyo más leve." },
-      { "name": "card", "value": "0 1px 2px rgba(19,19,22,0.06), 0 4px 10px -3px rgba(19,19,22,0.08)", "purpose": "Automática para toda superficie de papel con radio de tarjeta." },
-      { "name": "elevated", "value": "0 2px 6px -1px rgba(19,19,22,0.08), 0 14px 32px -8px rgba(19,19,22,0.16)", "purpose": "Lo que flota sobre la página: modales, popovers, arrastre." },
-      { "name": "hero", "value": "0 8px 34px rgba(19,19,22,0.07)", "purpose": "Una tarjeta sola sobre el canvas, sin cromo alrededor. Hay exactamente dos en el producto." },
-      { "name": "focus-ring", "value": "outline: 2px solid #131316; outline-offset: 2px; box-shadow: 0 0 0 2px #FFD600", "purpose": "Dos bandas concéntricas. Una sola no puede: el amarillo mide 1.41:1 sobre papel y el caucho 18.54:1." }
+      {
+        "name": "soft",
+        "value": "0 1px 2px rgba(19,19,22,0.04), 0 2px 8px -2px rgba(19,19,22,0.05)",
+        "purpose": "El apoyo más leve."
+      },
+      {
+        "name": "card",
+        "value": "0 1px 2px rgba(19,19,22,0.06), 0 4px 10px -3px rgba(19,19,22,0.08)",
+        "purpose": "Automática para toda superficie de papel con radio de tarjeta."
+      },
+      {
+        "name": "elevated",
+        "value": "0 2px 6px -1px rgba(19,19,22,0.08), 0 14px 32px -8px rgba(19,19,22,0.16)",
+        "purpose": "Lo que flota sobre la página: modales, popovers, arrastre."
+      },
+      {
+        "name": "hero",
+        "value": "0 8px 34px rgba(19,19,22,0.07)",
+        "purpose": "Una tarjeta sola sobre el canvas, sin cromo alrededor. Hay exactamente dos en el producto."
+      },
+      {
+        "name": "focus-ring",
+        "value": "outline: 2px solid #131316; outline-offset: 2px; box-shadow: 0 0 0 2px #FFD600",
+        "purpose": "Dos bandas concéntricas. Una sola no puede: el amarillo mide 1.41:1 sobre papel y el caucho 18.54:1."
+      }
     ],
     "motion": [
-      { "name": "control", "value": "150ms", "purpose": "Cambio de color de un control: botón, enlace, celda." },
-      { "name": "surface", "value": "200ms", "purpose": "Cambio de una superficie: tarjeta, panel, riel." }
+      {
+        "name": "control",
+        "value": "150ms",
+        "purpose": "Cambio de color de un control: botón, enlace, celda."
+      },
+      {
+        "name": "surface",
+        "value": "200ms",
+        "purpose": "Cambio de una superficie: tarjeta, panel, riel."
+      }
     ],
     "breakpoints": [
-      { "name": "sm", "value": "640px" },
-      { "name": "md", "value": "768px" },
-      { "name": "lg", "value": "1024px" },
-      { "name": "xl", "value": "1280px" }
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
     ]
   },
   "components": [
@@ -121,15 +264,56 @@
       "La interfaz no abrevia nunca."
     ],
     "rules": [
-      { "name": "La regla del rojo único", "body": "El rojo es la acción primaria y el estado destructivo. Nunca es un estado seleccionado, nunca es decoración, y nunca hay dos botones rojos en una pantalla.", "section": "colors" },
-      { "name": "La regla del par medido", "body": "Ningún color entra al sistema sin su medición de contraste contra todas las superficies donde puede caer. El número que fija la escalera entera es state-warn sobre canvas: 4.59:1.", "section": "colors" },
-      { "name": "La regla de Graduate", "body": "Es display en mayúsculas: nunca por debajo de 15px y nunca dentro de un párrafo.", "section": "typography" },
-      { "name": "La regla de la voz", "body": "Playfair aparece una vez por pantalla. Una segunda frase significa que ninguna de las dos es énfasis.", "section": "typography" },
-      { "name": "La regla de las palabras", "body": "La interfaz no abrevia. Si algo no entra, entra menos información, nunca una palabra cortada. Y ninguna etiqueta que se deduzca de otra.", "section": "typography" },
-      { "name": "La regla de la acción", "body": "Una acción primaria por pantalla, en el encabezado. Como mucho una secundaria al lado. Todo lo demás vive al pie del bloque que modifica.", "section": "layout" },
-      { "name": "La regla del aire", "body": "Una tarjeta estirada empuja su acción al pie con margin-top auto. El aire muerto se mide antes y después de cada pantalla, y el número entra al PR.", "section": "layout" },
-      { "name": "La regla del estado flaco", "body": "Cada pantalla se diseña primero con el socio nuevo — cero pagos, cero asistencias, un plan — y después con datos abundantes.", "section": "layout" },
-      { "name": "La regla de la tarjeta", "body": "Radio de tarjeta más superficie de papel ES una tarjeta, y la sombra llega sola desde la capa compartida.", "section": "elevation" }
+      {
+        "name": "La regla del rojo único",
+        "body": "El rojo es la acción primaria y el estado destructivo. Nunca es un estado seleccionado, nunca es decoración, y nunca hay dos botones rojos en una pantalla.",
+        "section": "colors"
+      },
+      {
+        "name": "La regla del par medido",
+        "body": "Ningún color entra al sistema sin su medición de contraste contra todas las superficies donde puede caer. El número que fija la escalera entera es state-warn sobre canvas: 4.59:1.",
+        "section": "colors"
+      },
+      {
+        "name": "La regla de Graduate",
+        "body": "Es display en mayúsculas: nunca por debajo de 15px y nunca dentro de un párrafo.",
+        "section": "typography"
+      },
+      {
+        "name": "La regla de la voz",
+        "body": "Playfair aparece una vez por pantalla. Una segunda frase significa que ninguna de las dos es énfasis.",
+        "section": "typography"
+      },
+      {
+        "name": "La regla de las palabras",
+        "body": "La interfaz no abrevia. Si algo no entra, entra menos información, nunca una palabra cortada. Y ninguna etiqueta que se deduzca de otra.",
+        "section": "typography"
+      },
+      {
+        "name": "La regla de la acción",
+        "body": "Una acción primaria por pantalla, en el encabezado. Como mucho una secundaria al lado. Todo lo demás vive al pie del bloque que modifica.",
+        "section": "layout"
+      },
+      {
+        "name": "La regla del aire",
+        "body": "Una tarjeta estirada empuja su acción al pie con margin-top auto. El aire muerto se mide antes y después de cada pantalla, y el número entra al PR.",
+        "section": "layout"
+      },
+      {
+        "name": "La regla del estado flaco",
+        "body": "Cada pantalla se diseña primero con el socio nuevo — cero pagos, cero asistencias, un plan — y después con datos abundantes.",
+        "section": "layout"
+      },
+      {
+        "name": "La regla de la tarjeta",
+        "body": "Radio de tarjeta más superficie de papel ES una tarjeta, y la sombra llega sola desde la capa compartida.",
+        "section": "elevation"
+      },
+      {
+        "name": "La regla de la paleta de gráfico",
+        "body": "Una figura de segmentos adyacentes —dona, barra proporcional— usa la paleta de gráfico validada (presente, tardanza, justificado, ausente, en ese orden), no la rampa de estados: los tokens de insignia fallan los chequeos de pares adyacentes para daltonismo y visión normal cuando se ponen lado a lado. El orden es parte de la medición y reordenarlo la invalida. Una insignia es una píldora sola y se queda con la rampa de estados.",
+        "section": "colors"
+      }
     ],
     "dos": [
       "Do medir todo par de color nuevo contra las tres superficies antes de escribirlo.",

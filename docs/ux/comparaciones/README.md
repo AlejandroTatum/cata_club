@@ -111,6 +111,33 @@ flex le venía cancelando (364px → 768px); la leyenda permanente del listado s
 ayuda»; y el recibo quedó con **un** solo control de volver, que es la deuda que estaba anotada.
 **Estado: pendiente de revisión.**
 
+### 8 · Fase 4 · Tanda 3 — El admin
+**[`admin.html`](admin.html)**
+
+Las seis pantallas del panel de gestión: `/dashboard`, `/payments`, `/groups`, `/attendance`,
+`/discounts` y `/reports`. Catorce capturas: ocho estados antes y después.
+
+**Es la tanda que cierra el barrido**, y la que más cuidado pedía: `/payments` mueve dinero real, así
+que el checkpoint de aprobación en lote, los endpoints y las validaciones quedaron intactos y lo
+único que cambió ahí es color, tipografía y dónde vive la ayuda. El diagnóstico se armó leyendo las
+seis contra [`DESIGN.md`](../../../DESIGN.md), como el del entrenador.
+
+Lo que cambió: los **quince botones rojos** de la cola de pagos pasaron a secundaria —diez en una
+columna dejan de decir «esto es lo único que hay que apretar»—; `/discounts` bajó su **62% de aire
+muerto**, el peor número del rediseño, soltando el riel que reservaba 340px al lado de un catálogo
+vacío y anclando el «Ver ayuda» que la tanda de miembros había dejado flotando; los días de
+`/groups` pasaron de cápsulas de largo variable con la palabra cortada a la **franja de siete
+casillas**, que estaba escrita, testeada y sin un solo consumidor; las dos proporciones y la serie
+del panel tomaron la forma de lo que miden —y la serie ya estaba calculada y se tiraba—; el panel de
+filtros de `/attendance` dejó de gastar 254px en una columna con la mitad derecha vacía; los cuatro
+estados vacíos de `/reports` recibieron la salida que nombraban en prosa; y ningún título de tarjeta
+seguía fuera de Graduate. **Estado: pendiente de revisión.**
+
+Cierra además la deuda anotada de `Button.test.tsx` —que nunca midió la variante `onCoal` porque sus
+listas estaban escritas a mano— y con ella un tercer radio de 8px que vivía en el botón compacto de
+todo el producto; y declara la **paleta de gráfico** en `DESIGN.md` y su sidecar, que era la deuda
+que la tanda del entrenador dejó apuntada para acá.
+
 ---
 
 ## Las mediciones
@@ -150,6 +177,14 @@ ventana, a 1440×900. Es el hueco que la persona ve vacío sin scrollear.
 | Pasar lista | Recibo de la sesión archivada | 17% · 156px | 18% · 161px |
 | Historial | Este mes (10 sesiones) | 0% | 0% |
 | Historial | Período vacío (junio) | 14% · 122px | 14% · 122px |
+| Panel de Control | Con datos | 14% · 122px | **12% · 107px** |
+| Membresías y Pagos | Cola pendiente (15) | 0% | 0% |
+| Membresías y Pagos | Búsqueda sin coincidencias | 44% · 397px | **25% · 229px** |
+| Horarios | Cinco categorías | 34% · 308px | 35% · 316px |
+| Asistencias | Este mes (218 registros) | 0% | 0% |
+| Descuentos | Catálogo vacío | 62% · 555px | **38% · 340px** |
+| Reportes | Este mes (87 personas) | 0% | 0% |
+| Reportes | Rango sin datos (enero 2019) | 22% · 194px | **15% · 137px** |
 
 El login es el primer número que no baja, y es a propósito: el hueco lo produce el centrado de la
 tarjeta sobre el eje de la página, que es lo que el dueño pidió expresamente. Bajarlo exige
@@ -193,9 +228,22 @@ el cambio son los de la tabla de arriba, porque los dos lados salieron de la mis
 minuto. La ficha médica es la única que no cierra, y es la única de las tres que es layout puro: no
 crece con datos porque no hay datos que la hagan crecer.
 
-Ya no queda nada medido sin tocar. Lo que sigue en la fase 4 son las pantallas del admin, que
-todavía no tienen medición. Las del entrenador tampoco la tenían: su diagnóstico se armó leyéndolas
-contra `DESIGN.md`, y está en [`entrenador.html`](entrenador.html) con su lista priorizada.
+Ya no queda nada medido sin tocar, y con la tanda del admin **ya no queda nada sin medir**: las seis
+pantallas del panel de gestión tampoco tenían issue que las cuantificara, así que su diagnóstico se
+armó leyéndolas contra `DESIGN.md`, igual que el del entrenador, y está en
+[`admin.html`](admin.html) con su lista priorizada de doce hallazgos.
+
+Descuentos es el **62%** con el que arrancó esta tanda y el número más grande de todo el rediseño.
+El 38% de la derecha subestima la mejora: el guión mide la última **hoja** del árbol, y con la
+tarjeta estirada el enunciado queda centrado adentro de ella. Medido sobre el borde inferior de la
+última **superficie** —donde termina visualmente la página— el lienzo desnudo va de **455px (51%) a
+32px (4%)**. Los dos números están publicados en su comparación; la definición del guión no se
+cambió a mitad de la fase porque haría incomparables las nueve pantallas anteriores.
+
+Horarios es el cuarto número que **sube**, ocho píxeles, y por la misma razón que el recibo del
+entrenador: lo que se fue fue alto. Las cápsulas de día medían 26px de insignia y la franja de siete
+casillas mide 20px, así que las cinco filas terminan más arriba. Lo que esa pantalla ganó no se mide
+en el eje vertical, sino en que sus cinco filas por fin se comparan de un vistazo.
 
 ---
 
@@ -229,7 +277,7 @@ discutirse antes de mirar una sola captura.
 | F3 | Tres faros: Miembros · Inscripción · Login y Perfil | ✅ 3 de 3 |
 | F4 · tanda 1 | El socio: Mi cuenta · Ficha médica · Mis pagos | ✅ |
 | F4 · tanda 2 | El entrenador: Mi día · Pasar lista · Historial | ✅ |
-| F4 · tanda 3 | El admin | pendiente |
+| F4 · tanda 3 | El admin: Panel · Pagos · Horarios · Asistencias · Descuentos · Reportes | ✅ |
 
 Los faros están elegidos por contraste, no por importancia: una tabla densa, un formulario largo y
 la cara al socio. Si el sistema aguanta esos tres, aguanta los que siguen.

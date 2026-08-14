@@ -45,7 +45,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
   );
 
   return (
-    <div className="flex flex-col items-center gap-5">
+    <div className="flex flex-col items-center gap-page">
       <svg
         width={SIZE}
         height={SIZE}
@@ -103,7 +103,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
             y={SIZE / 2 - 8}
             textAnchor="middle"
             dominantBaseline="middle"
-            className="fill-ink text-xl font-bold"
+            className="fill-ink font-display text-xl tracking-flat"
           >
             {stats.totalStudents}
           </text>
@@ -112,19 +112,19 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
             y={SIZE / 2 + 14}
             textAnchor="middle"
             dominantBaseline="middle"
-            className="fill-ink-3-strong text-2xs font-bold tracking-caps-wide"
+            className="fill-ink-3-strong text-2xs font-bold uppercase tracking-caps-wide"
           >
-            REGISTROS
+            Registros
           </text>
         </g>
       </svg>
 
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-line text-xs font-semibold uppercase tracking-wider text-ink-3-strong">
-            <th className="py-2 font-semibold">Estado</th>
-            <th className="py-2 text-right font-semibold">Registros</th>
-            <th className="py-2 text-right font-semibold">Porcentaje</th>
+          <tr className="border-b border-line text-2xs font-bold uppercase tracking-caps-wide text-ink-3-strong">
+            <th className="py-2 font-bold">Estado</th>
+            <th className="py-2 text-right font-bold">Registros</th>
+            <th className="py-2 text-right font-bold">Porcentaje</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line">

@@ -29,6 +29,10 @@ colors:
   state-bad-bg: "#FBE9EA"
   state-neutral: "#63636E"
   state-neutral-bg: "#EFEFF2"
+  chart-present: "#008300"
+  chart-late: "#EDA100"
+  chart-justified: "#2A78D6"
+  chart-absent: "#E34948"
 typography:
   display:
     fontFamily: "Graduate, serif"
@@ -205,6 +209,28 @@ este rojo se ve sucio, así que el neutro está elegido, no heredado.
 - **La rampa de estados**: cuatro pares —correcto, advertencia, neutro, malo—, cada uno con su tinte
   de fondo. La tinta está definida para leerse sobre su propio tinte **y** sobre el canvas, porque
   una insignia a veces cae fuera de una tarjeta.
+
+### La paleta de gráfico
+
+Cuatro colores que **no** salen de la rampa de estados, y la excepción está medida: los tokens de
+insignia fallan los chequeos de pares adyacentes para daltonismo y visión normal cuando se ponen
+lado a lado en una figura, que es exactamente lo que es un segmento contra sus tres vecinos. Una
+insignia es una píldora sola y puede quedarse con la rampa; una dona y una barra proporcional no.
+
+- **Presente** (`{colors.chart-present}`) · **Tardanza** (`{colors.chart-late}`) ·
+  **Justificado** (`{colors.chart-justified}`) · **Ausente** (`{colors.chart-absent}`).
+
+El **orden es parte de la paleta**, no una preferencia de quien dibuja: los pares se validaron en
+esa secuencia y reordenarlos invalida la medición. Vive en
+`app/dashboard/dashboard-utils.ts` como `ATTENDANCE_STATUS_CHART_COLORS`, y hoy la usan la dona del
+panel de administración, la barra de composición del entrenador y su asistente de lista — tres
+pantallas, una lista de colores. Se valida con el guión de la skill de dataviz:
+`node validate_palette.js "#008300,#eda100,#2a78d6,#e34948" --mode light --surface "#FFFFFF"`,
+con `--pairs all`.
+
+Estaba fuera de este documento hasta la tanda del admin: era una quinta lista de colores viviendo en
+un archivo de utilidades, y la tanda del entrenador la dejó anotada como deuda porque reconciliarla
+tocaba la dona del admin. Queda declarada acá, que es donde se busca un color antes de escribirlo.
 
 ### Named Rules
 

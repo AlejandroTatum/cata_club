@@ -43,4 +43,29 @@ describe("ContextualHelp — the container owns the rhythm", () => {
     fireEvent.click(toggle);
     expect(screen.getByRole("region", { name: "Ayuda sobre límite de resultados" })).toBeInTheDocument();
   });
+
+  /**
+   * The open panel is a SUNKEN AREA INSIDE the block that opened it, so it
+   * takes the sunken surface and the control radius — the two the system has
+   * for exactly that. It shipped as `rounded-lg` (8px, a radius DESIGN.md does
+   * not declare) filled with the legacy `cata-bg`/`cata-border` pair, which is
+   * the pre-redesign palette the foundation replaced. Seven screens open this
+   * panel, so the drift was seven screens wide.
+   */
+  it("opens onto the system's sunken surface at the control radius", () => {
+    render(
+      <ContextualHelp title="Ayuda sobre límite de resultados">
+        <p>Hasta 200 registros.</p>
+      </ContextualHelp>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Ayuda sobre límite de resultados" }));
+    const panel = screen.getByRole("region", { name: "Ayuda sobre límite de resultados" });
+
+    expect(panel).toHaveClass("rounded-ctl");
+    expect(panel).toHaveClass("bg-sunken");
+    expect(panel).toHaveClass("border-line");
+    expect(panel.className).not.toMatch(/\bcata-(bg|border)\b/);
+    expect(panel.className).not.toMatch(/\brounded-lg\b/);
+  });
 });

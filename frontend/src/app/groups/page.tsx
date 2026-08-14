@@ -94,7 +94,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Button, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination } from "@/components/ui";
+import { Button, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination, WeekStrip } from "@/components/ui";
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import { useGroupRoster } from "./useGroupRoster";
 import {
@@ -122,19 +122,36 @@ import {
   buildDiaTrack,
   DIA_ORDER,
   DIA_LABELS,
+  toStripDias,
   type CategoriaCard,
   type PersonasPorHorario,
 } from "./groups-page-utils";
 import { toUserMessage } from "@/lib/error-message";
+import { joinWithY } from "@/lib/format-utils";
 
 function formatTime(timeStr: string): string {
   const [h, m] = timeStr.split(":");
   return `${h}:${m}`;
 }
 
-/** Short (3-letter) día label, e.g. "Lun", "Mié", "Vie". Used in confirmations. */
-function shortDiaLabel(dia: string): string {
-  return (DIA_LABELS[dia] ?? dia).slice(0, 3);
+/**
+ * The días of a destructive confirmation, in whole words.
+ *
+ * This was `shortDiaLabel` — `DIA_LABELS[dia].slice(0, 3)` — and the dialog is
+ * where that hurt most. Inside the row's strip the abbreviation was at least
+ * `aria-hidden`, with the schedule sentence stating the same days in prose
+ * right above it. Here it was the ONLY statement of which días are about to be
+ * destroyed: "Se eliminará la categoría completa (todos sus días: Lun, Mar,
+ * Mié…)". "La interfaz no abrevia. Si algo no entra, entra menos información,
+ * nunca una palabra cortada" — and in a dialog that unassigns students, the
+ * word that does not fit is not the one to cut.
+ *
+ * `joinWithY` is the product's one way of listing things in a sentence, the
+ * same one `WeekStrip` uses for its accessible label, so the dialog and the
+ * strip name a week identically.
+ */
+function diaListLabel(dias: readonly string[]): string {
+  return joinWithY(dias.map((dia) => DIA_LABELS[dia] ?? dia));
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -190,39 +207,31 @@ function CellLabel({ children }: { children: React.ReactNode }): React.ReactElem
 }
 
 /**
- * The categoría's week, as one marker per día.
+ * The categoría's week — now the product's one week strip.
  *
- * Coal fill means the group meets that día; the outlined ones are días it is
- * allowed to meet on but does not. That is what the extra width buys: the
- * Saturday `COMPETITIVO` row and a categoría that skips a weekday both become
- * visible at a glance instead of only in the sentence above.
+ * This used to be a local `DiaTrack`: a `<ul>` of capsules, one per día of the
+ * categoría's TRACK, labelled with a 3-letter slice of the day's name. Two
+ * rules of the system were broken at once.
  *
- * `aria-hidden` on purpose — the schedule line right above states the same day
- * set in words ("Lunes a viernes + sábado"), so a screen reader gets the fact
- * once as prose instead of six unlabeled chips. These are read-only markers,
- * never selectable filters, so they carry no ball dot.
+ * The first is the RULE OF FORMAT — "los días son siempre siete casillas fijas
+ * en el mismo orden". The track is 5 días for four of the club's categorías and
+ * 6 for Competitivo, so the column held rows of two different widths whose
+ * boxes did not line up: comparing two categorías meant reading both, which is
+ * exactly the free-text problem `WeekStrip` was built to end. It was built, and
+ * then never called — this screen is its first consumer.
+ *
+ * The second is the RULE OF WORDS. "Lun", "Mié", "Sáb" are abbreviations, and
+ * the one declared exception covers letters read as POSITIONS ON A SCALE, which
+ * these were not: they were the day's name, cut.
+ *
+ * The three-state fact survives the move — a día the categoría runs, a día it
+ * is allowed to run and does not, and a día outside its track — because that is
+ * information an admin decides with, not decoration. It is `permitidos` on the
+ * strip now.
  */
 function DiaTrack({ track, dias }: { track: string[]; dias: string[] }): React.ReactElement {
-  const activos = new Set(dias);
   return (
-    <ul className="flex flex-wrap gap-1" aria-hidden="true">
-      {track.map((dia) => {
-        const activo = activos.has(dia);
-        return (
-          <li
-            key={dia}
-            data-testid="dia-marker"
-            data-dia={dia}
-            data-active={activo ? "true" : "false"}
-            className={`h-badge inline-flex min-w-[38px] items-center justify-center rounded-full px-2 text-2xs tracking-flat font-bold ${
-              activo ? "bg-coal text-white" : "border border-dashed border-line-2 text-ink-3"
-            }`}
-          >
-            {shortDiaLabel(dia)}
-          </li>
-        );
-      })}
-    </ul>
+    <WeekStrip dias={toStripDias(dias)} permitidos={toStripDias(track)} />
   );
 }
 
@@ -679,7 +688,7 @@ export default function GroupsPage(): React.ReactElement {
   function renderHorarioForm(): React.ReactElement {
     return (
       <>
-        <h3 className="mb-4 text-sm font-bold text-ink">
+        <h3 className="mb-4 font-display text-lg uppercase leading-tight tracking-flat text-ink">
           {editingGroup !== null ? "Editar categoría" : "Nueva categoría"}
         </h3>
         {formError && (
@@ -799,7 +808,7 @@ export default function GroupsPage(): React.ReactElement {
       return (
         <>
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <h3 className="flex-1 text-sm font-bold text-ink">
+            <h3 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
               Editar {categoriaLabel(card.categoria)}
             </h3>
             <Button size="sm" onClick={closeExpanded}>
@@ -871,7 +880,7 @@ export default function GroupsPage(): React.ReactElement {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <UserPlus size={ICON.sm} strokeWidth={1.5} className="text-state-bad" aria-hidden="true" />
-            <h3 className="text-sm font-bold text-ink">
+            <h3 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
               Alumnos de {categoriaLabel(card.categoria)}
             </h3>
           </div>
@@ -902,11 +911,17 @@ export default function GroupsPage(): React.ReactElement {
                 ))}
             </select>
           </div>
-          <button
-            type="button"
+          {/* `ui/Button`, not a raw `.btn-primary`. The global class carries
+              a 12px radius and its own padding — a third shape and a fourth
+              height — on a screen that imports the primitive twenty lines
+              above. `dark` rather than `primary` because this panel opens
+              inside a row and the screen's red belongs to the destructive
+              dialog. */}
+          <Button
+            variant="dark"
+            size="sm"
             onClick={() => void roster.assign(rows)}
             disabled={!roster.selectedId || roster.assigning}
-            className="btn-primary inline-flex items-center gap-1.5 text-xs"
           >
             {roster.assigning ? (
               <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
@@ -914,11 +929,32 @@ export default function GroupsPage(): React.ReactElement {
               <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             )}
             Asignar
-          </button>
+          </Button>
         </div>
 
         {roster.loading ? (
           <LoadingState label="Cargando alumnos…" />
+        ) : roster.alumnos.length === 0 ? (
+          /*
+           * The hole this panel shipped with. The branch below was
+           * `roster.alumnos.length > 0 && (…)`, so a categoría with nobody
+           * enrolled rendered LITERALLY NOTHING under the assign picker — no
+           * statement, no explanation, just the card ending. D11's three parts
+           * were zero of three, and the state is reachable the moment the club
+           * opens a categoría before filling it.
+           *
+           * `inset`, because this is the body of a panel the row already
+           * opened. The way out is the picker directly above, so the statement
+           * points at it rather than growing a second copy of the control.
+           */
+          <div className="border-t border-line pt-4">
+            <EmptyState
+              surface="inset"
+              icon={<UserPlus size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+              title="Esta categoría todavía no tiene alumnos"
+              description="Elija un alumno en el selector de arriba y presione «Asignar» para inscribirlo en todos los días de la categoría."
+            />
+          </div>
         ) : (
           roster.alumnos.length > 0 && (
             <div className="border-t border-line pt-4">
@@ -935,7 +971,7 @@ export default function GroupsPage(): React.ReactElement {
                       <button
                         type="button"
                         onClick={() => void roster.unassign(rows, a.personaId)}
-                        className="rounded-lg border border-line-2 p-1 text-ink-3 transition-colors hover:bg-red-50 hover:text-state-bad"
+                        className="rounded-ctl border border-line-2 p-1 text-ink-3 transition-colors hover:bg-state-bad-bg hover:text-state-bad"
                         title="Desasignar alumno"
                       >
                         <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
@@ -994,7 +1030,7 @@ export default function GroupsPage(): React.ReactElement {
 
         {notification && (
           <div
-            className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${
+            className={`flex items-center gap-2 rounded-card px-4 py-3 text-sm ${
               notification.type === "success"
                 ? "border border-state-ok/30 bg-state-ok-bg text-state-ok"
                 : "border border-state-bad/30 bg-state-bad-bg text-state-bad"
@@ -1182,12 +1218,12 @@ export default function GroupsPage(): React.ReactElement {
           message={
             pendingDeletions
               ? pendingDeletionScope === "group"
-                ? `Se eliminará la categoría completa (todos sus días: ${pendingDeletions
-                    .map((p) => shortDiaLabel(p.diaSemana))
-                    .join(", ")}) y ${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados. Esta acción no se puede deshacer.`
-                : `${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados de: ${pendingDeletions
-                    .map((p) => shortDiaLabel(p.diaSemana))
-                    .join(", ")}. ¿Confirma guardar la categoría con esos días quitados?`
+                ? `Se eliminará la categoría completa (todos sus días: ${diaListLabel(
+                    pendingDeletions.map((p) => p.diaSemana),
+                  )}) y ${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados. Esta acción no se puede deshacer.`
+                : `${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados de: ${diaListLabel(
+                    pendingDeletions.map((p) => p.diaSemana),
+                  )}. ¿Confirma guardar la categoría con esos días quitados?`
               : ""
           }
           onConfirm={() => void handleConfirmPendingDeletions()}

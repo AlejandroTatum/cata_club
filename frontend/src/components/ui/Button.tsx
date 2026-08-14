@@ -18,8 +18,24 @@ import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactElement } from "react";
 import { cn } from "./cn";
 
-export type ButtonVariant = "primary" | "secondary" | "dark" | "tertiary" | "onCoal";
-export type ButtonSize = "md" | "sm";
+/**
+ * The levels and the sizes, as VALUES — and the types are derived from them,
+ * not the other way round.
+ *
+ * A union type has no runtime members, so anything that needs to walk "every
+ * variant" has to retype the list, and `Button.test.tsx` did exactly that in
+ * two places. Both lists were written before `onCoal` existed and neither grew
+ * with it, so the sweep asserting that every variant holds 40px and the sweep
+ * asserting that no other variant is red were both silently skipping a fifth
+ * of the system. Declaring the array first and reading the type off it makes
+ * that drift impossible: a sixth level is in every sweep the moment it is
+ * added, or it does not compile.
+ */
+export const BUTTON_VARIANTS = ["primary", "secondary", "dark", "tertiary", "onCoal"] as const;
+export const BUTTON_SIZES = ["md", "sm"] as const;
+
+export type ButtonVariant = (typeof BUTTON_VARIANTS)[number];
+export type ButtonSize = (typeof BUTTON_SIZES)[number];
 
 /** `.btn` base — shape, typography and focus ring, without any color. */
 // The focus ring is NOT declared here. `_sistema.css:80` specifies the ball at
@@ -33,9 +49,16 @@ const BASE =
   // `.btn[disabled], .btn.off` (:176)
   "disabled:cursor-not-allowed disabled:opacity-45";
 
+// Both sizes wear the CONTROL radius. `sm` used to carry `rounded-lg` — 8px —
+// which was the only third radius in `ui/` and the one DESIGN.md's "dos radios
+// y nada más" does not have. Nothing measured it, so every compact in-table
+// action in the product sat at 8px beside 10px controls: the shape said "this
+// is a slightly different category of thing", which is exactly what the two
+// radii exist to say and exactly what is not true here. A compact button is a
+// button.
 const SIZE: Record<ButtonSize, string> = {
   md: "h-ctl rounded-ctl px-4 text-sm",
-  sm: "h-ctl-sm rounded-lg px-3 text-xs",
+  sm: "h-ctl-sm rounded-ctl px-3 text-xs",
 };
 
 const VARIANT: Record<ButtonVariant, string> = {

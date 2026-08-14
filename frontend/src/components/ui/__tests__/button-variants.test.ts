@@ -42,13 +42,21 @@ const BUTTON = join(SRC, "components", "ui", "Button.tsx");
 
 describe("ButtonVariant offers a filled third level and no ghost", () => {
   // Read off the declaration rather than inferred from the runtime map: the
-  // union is what a call site autocompletes against, and it is the only part
-  // of the primitive a screen can see before it compiles.
-  const declaration = /export type ButtonVariant =([^;]+);/.exec(
+  // vocabulary is what a call site autocompletes against, and it is the only
+  // part of the primitive a screen can see before it compiles.
+  //
+  // It used to be scraped from `export type ButtonVariant = "primary" | …`.
+  // That alias is now DERIVED from `BUTTON_VARIANTS`, so this reads the array
+  // instead — the same declaration, one level earlier, and now the single one
+  // that both the type and every runtime sweep come from. The guard is not
+  // loosened by the move: it still fails if the vocabulary regrows `ghost` or
+  // loses `tertiary`, and it now reads the list that `Button.test.tsx` walks,
+  // so the two can no longer disagree about what "every variant" means.
+  const declaration = /export const BUTTON_VARIANTS = \[([^\]]+)\]/.exec(
     readFileSync(BUTTON, "utf8"),
   )?.[1];
 
-  it("declares the union this file can actually read", () => {
+  it("declares the vocabulary this file can actually read", () => {
     expect(declaration).toBeDefined();
   });
 

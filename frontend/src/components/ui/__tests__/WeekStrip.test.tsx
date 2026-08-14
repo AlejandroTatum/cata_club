@@ -156,3 +156,46 @@ describe("WeekStrip — what a screen reader receives", () => {
     );
   });
 });
+
+/**
+ * `/groups` is the strip's first caller, and it carries a THIRD day state the
+ * two-tone strip has no word for: a categoría has a track of días it is allowed
+ * to meet on, and it may not use all of them. The screen drew that as its own
+ * `DiaTrack` — a variable-length row of 3-letter pills, five wide for most
+ * categorías and six for Competitivo — which is exactly the column of four
+ * different lengths the strip was built to end.
+ *
+ * Folding it in as an optional third tone keeps the format rule (seven boxes,
+ * always) without deleting a fact the admin uses to decide. Callers that do not
+ * pass `permitidos` get precisely today's two-state strip.
+ */
+describe("WeekStrip — the días a caller is allowed to use", () => {
+  function box(day: string): HTMLElement {
+    return document.querySelector(`[data-day="${day}"]`) as HTMLElement;
+  }
+
+  it("still draws two tones when no track is given", () => {
+    render(<WeekStrip dias={["lun", "mie"]} />);
+    expect(box("lun")).toHaveAttribute("data-state", "activo");
+    expect(box("mar")).toHaveAttribute("data-state", "inactivo");
+  });
+
+  it("marks a día inside the track that the group does not use", () => {
+    render(<WeekStrip dias={["lun", "mie"]} permitidos={["lun", "mar", "mie"]} />);
+    expect(box("lun")).toHaveAttribute("data-state", "activo");
+    expect(box("mar")).toHaveAttribute("data-state", "disponible");
+    expect(box("jue")).toHaveAttribute("data-state", "inactivo");
+  });
+
+  it("keeps the spoken sentence about the días that RUN, never the track", () => {
+    // The label answers "when does this group meet". A track is an option, and
+    // reading options out as if they were sessions is a different sentence.
+    render(<WeekStrip dias={["lun", "mie"]} permitidos={["lun", "mar", "mie", "jue", "vie"]} />);
+    expect(screen.getByRole("img")).toHaveAttribute("aria-label", "Lunes y miércoles");
+  });
+
+  it("never lets a track day outrank a day that actually runs", () => {
+    render(<WeekStrip dias={["sab"]} permitidos={["lun"]} />);
+    expect(box("sab")).toHaveAttribute("data-state", "activo");
+  });
+});

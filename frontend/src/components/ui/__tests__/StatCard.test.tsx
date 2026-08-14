@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import StatCard, { STAT_GRID, StatTrack } from "@/components/ui/StatCard";
+import StatCard, { STAT_GRID, StatSpark, StatTrack } from "@/components/ui/StatCard";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { committedHeight, committedRadius } from "./ui-test-utils";
@@ -191,6 +191,76 @@ describe("StatTrack — a proportion drawn as a proportion", () => {
       <StatCard label="Miembros" value={21} hint={<StatTrack value={21} total={69} />} />,
     );
     expect(screen.getByTestId("stat-track")).toBeInTheDocument();
+    expect(committedHeight(card())).toBe("116px");
+  });
+});
+
+describe("StatSpark — a series drawn as a series", () => {
+  function spark(): HTMLElement {
+    return screen.getByTestId("stat-spark");
+  }
+
+  function bars(): HTMLElement[] {
+    return Array.from(spark().children) as HTMLElement[];
+  }
+
+  it("draws one bar per period, in the order it was handed", () => {
+    render(<StatSpark values={[52, 61, 48, 70]} />);
+    expect(bars()).toHaveLength(4);
+  });
+
+  it("scales every bar against the tallest, so the shape is the comparison", () => {
+    // A series read against a fixed 100 ceiling flattens four attendance rates
+    // that live between 48% and 70% into four near-identical bars — the figure
+    // would be drawn and still say nothing. The tallest period is the rail.
+    render(<StatSpark values={[35, 70]} />);
+    expect(bars()[1].style.height).toBe("100%");
+    expect(bars()[0].style.height).toBe("50%");
+  });
+
+  it("gives a zero period a visible stub rather than nothing at all", () => {
+    // A missing bar and a bar of zero are different facts, and a series with a
+    // gap in it reads as three periods instead of four.
+    render(<StatSpark values={[0, 70]} />);
+    expect(bars()[0].style.height).toBe("2px");
+  });
+
+  it("draws an empty rail rather than dividing by zero", () => {
+    render(<StatSpark values={[0, 0, 0, 0]} />);
+    for (const bar of bars()) expect(bar.style.height).toBe("2px");
+  });
+
+  it("marks the newest period in coal and the rest in the hairline", () => {
+    // The last bar is the one the figure above it reports; the earlier ones
+    // are context. Same two inks `StatTrack` spends, for the same reason.
+    render(<StatSpark values={[52, 61, 48, 70]} />);
+    expect(bars()[3]).toHaveClass("bg-coal");
+    expect(bars()[0]).toHaveClass("bg-line-2");
+  });
+
+  it("stays out of the accessibility tree, because the tile already says the figure", () => {
+    render(<StatSpark values={[52, 61, 48, 70]} />);
+    expect(spark()).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("is phrasing content, so it can live inside the tile's own hint span", () => {
+    render(<StatSpark values={[52, 61, 48, 70]} />);
+    expect(spark().tagName).toBe("SPAN");
+    expect(bars()[0].tagName).toBe("I");
+  });
+
+  it("renders nothing at all when there is no series to draw", () => {
+    // "Don't inventar un dato para completar una forma": no periods means no
+    // trend, and a rail with no bars is a shape pretending to hold one.
+    const { container } = render(<StatSpark values={[]} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("rides in the hint slot without changing the tile's height", () => {
+    render(
+      <StatCard label="Miembros" value={52} unit="%" hint={<StatSpark values={[52, 61, 48, 70]} />} />,
+    );
+    expect(screen.getByTestId("stat-spark")).toBeInTheDocument();
     expect(committedHeight(card())).toBe("116px");
   });
 });
