@@ -47,7 +47,29 @@ export default function PageHeader({
       )}
     >
       <div className="min-w-0 flex-1">
-        <h1 className="text-xl font-extrabold text-ink">{title}</h1>
+        {/* DESIGN.md's `headline` step: Graduate at 26px, uppercase, weight
+            400. Three things are deliberate and none of them is decoration.
+
+            · `font-display` has to be ASKED for. The foundation made Barlow the
+              default `sans`, so every other string on the screen changed family
+              on its own — this one resolved to Barlow and kept resolving to it,
+              which is how the product came to contradict its own system in the
+              one element that names each screen.
+            · `uppercase` is a `text-transform`, never a rewritten `title`.
+              Graduate has no lowercase design (`lib/fonts.ts`), so the case is
+              part of the face; putting it in the STRING would take the sentence
+              away from the code and from the screen reader that announces this
+              heading.
+            · No weight utility. Graduate ships a single 400 cut, so the
+              `font-extrabold` this line used to carry could only have produced a
+              synthesised bold — thickened by the browser, not drawn.
+
+            `tracking-flat` contradicts the -0.03em `text-xl` carries: that value
+            is calibrated for Barlow's lowercase, and uppercase Graduate is wide
+            and flat enough that tightening it closes the counters. The leading
+            stays at the step's own 1.15 (DESIGN.md `headline`) — the face has
+            almost no vertical range, so a wrapped title needs no extra room. */}
+        <h1 className="font-display text-xl uppercase tracking-flat text-ink">{title}</h1>
         {/* `ink-3-strong`, not `ink-3`: 13px/400 `ink-3` on the `canvas` grey
             the shell paints behind the header is 4.24:1, and the subtitle is
             normal-size text, so AA asks for the full 4.5:1 here. */}

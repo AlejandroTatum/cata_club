@@ -28,6 +28,43 @@ describe("PageHeader — the title", () => {
     // so the class changed name without the title changing size.
     expect(screen.getByRole("heading", { level: 1 })).toHaveClass("text-xl", "text-ink");
   });
+
+  /**
+   * DESIGN.md's `headline` step is Graduate at 26px, and this is the component
+   * that owns every page title in the product. The foundation loaded the three
+   * families and made Barlow the default `sans`, so all interface text changed
+   * on its own — but `display` is a utility that has to be ASKED for, and for a
+   * while nobody asked: this `<h1>` was `text-xl font-extrabold`, which resolves
+   * to Barlow. The product contradicted its own design system in the one place
+   * that names each screen.
+   */
+  it("sets the page title in the display family", () => {
+    render(<PageHeader title="Membresías y Pagos" />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveClass("font-display");
+  });
+
+  it("uppercases the title through CSS, leaving the words themselves alone", () => {
+    render(<PageHeader title="Membresías y Pagos" />);
+    const heading = screen.getByRole("heading", { level: 1 });
+    // Graduate has no lowercase design, so a headline in it is uppercase. The
+    // CASE is a `text-transform`, never a rewritten string: the accessible name
+    // a screen reader announces stays the sentence the screen was named with.
+    expect(heading).toHaveClass("uppercase");
+    expect(heading).toHaveTextContent("Membresías y Pagos");
+  });
+
+  it("cancels the tracking its size step carries, and asks for no weight it lacks", () => {
+    render(<PageHeader title="Miembros" />);
+    const heading = screen.getByRole("heading", { level: 1 });
+    // `text-xl` ships -0.03em, calibrated for Barlow's lowercase at 26px.
+    // Uppercase Graduate is wide and flat and needs its sidebearings back, so
+    // the heading takes the declared step that contradicts its size —
+    // `tracking-flat` (`tailwind.config.ts`) — rather than a loose value.
+    expect(heading).toHaveClass("tracking-flat");
+    // Graduate ships ONE weight (`lib/fonts.ts`). A bold utility here does not
+    // reach a bolder cut, it asks the browser to synthesise one.
+    expect(heading.className).not.toMatch(/\bfont-(semibold|bold|extrabold|black)\b/);
+  });
 });
 
 describe("PageHeader — optional parts", () => {

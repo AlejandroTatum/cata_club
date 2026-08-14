@@ -136,9 +136,17 @@ export default function StatCard({
         {label}
       </span>
 
+      {/* DESIGN.md's `stat` step: Graduate at 32px, in tabular figures. Case
+          never arises — digits have one — so the display family buys the
+          scoreboard figure the system is named after and costs nothing in
+          legibility. It does cost the weight: Graduate ships a single 400 cut
+          (`lib/fonts.ts`), so the `font-extrabold` this line used to carry was a
+          request for a bold the face cannot draw. `tracking-flat` cancels the
+          -0.04em `text-2xl` carries for Barlow; Graduate's digits are already
+          wide and flat, and tightening them runs them together. */}
       <span
         className={cn(
-          "text-2xl font-extrabold leading-none tabular-nums",
+          "font-display text-2xl leading-none tabular-nums tracking-flat",
           hot ? "text-white" : "text-ink",
         )}
       >

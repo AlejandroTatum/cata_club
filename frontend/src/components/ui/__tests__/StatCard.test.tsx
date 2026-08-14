@@ -74,6 +74,46 @@ describe("StatCard — the number is never a color", () => {
   });
 });
 
+/**
+ * DESIGN.md's `stat` step is Graduate at 32px "en cifras tabulares", and this
+ * tile is the only place the product spends it. Case does not arise — digits
+ * have one — so what the display family buys here is the collegiate scoreboard
+ * figure the system was named for, and what it costs is the weight: Graduate
+ * ships a single 400 cut (`lib/fonts.ts`), so the `font-extrabold` this tile
+ * used to carry would have been a browser-synthesised bold over it.
+ *
+ * The `unit` beside it stays Barlow on purpose: it is `text-sm` (13.5px), below
+ * Graduate's 15px floor, and it is a word ("de 44") rather than a figure.
+ */
+describe("StatCard — the figure is the display face", () => {
+  it("sets the number in the display family", () => {
+    render(<StatCard label="Miembros" value={86} />);
+    expect(screen.getByText("86")).toHaveClass("font-display");
+  });
+
+  it("keeps the figures tabular and asks for no weight the face lacks", () => {
+    render(<StatCard label="Miembros" value={86} />);
+    const figure = screen.getByText("86");
+    expect(figure).toHaveClass("tabular-nums");
+    expect(figure.className).not.toMatch(/\bfont-(semibold|bold|extrabold|black)\b/);
+  });
+
+  it("cancels the -0.04em its size step carries", () => {
+    // `text-2xl`'s tracking is calibrated for Barlow. Graduate's digits are wide
+    // and flat, and tightening them is what turns a scoreboard figure into a
+    // block — so the tile takes the declared `tracking-flat` step.
+    render(<StatCard label="Miembros" value={86} />);
+    expect(screen.getByText("86")).toHaveClass("tracking-flat");
+  });
+
+  it("leaves the trailing unit in the interface face, below Graduate's floor", () => {
+    render(<StatCard label="Miembros" value={17} unit="de 44" />);
+    const unit = screen.getByText("de 44");
+    expect(unit).toHaveClass("text-sm");
+    expect(unit.className).not.toMatch(/\bfont-display\b/);
+  });
+});
+
 describe("StatCard — hot variant dot", () => {
   it("carries the ball dot on its hint line", () => {
     render(

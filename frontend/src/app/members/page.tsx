@@ -340,6 +340,10 @@ const ROLE_ICONS: Record<BackendTipoRol, typeof ShieldCheck> = {
  * above `sm` and as a card below it. Two call sites deriving the same sentence
  * are two call sites that can disagree about who an account is, and the
  * disagreement only shows up when somebody resizes a window.
+ *
+ * Frequently EMPTY, and that is the normal case rather than a failure: an
+ * account whose dependants are unknown has nothing provable to say about who
+ * its holder is, so both renderings say nothing. See `getAccountIdentity`.
  */
 function accountRoleLabels(account: MemberAccount): string[] {
   const { roles, represents } = getAccountIdentity(account);
@@ -384,9 +388,16 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
   return (
     <TableRow>
       {/* D9's shared identity cell, not a second drawing of the same layout.
-          What it says about the person comes from `getAccountIdentity`, which
-          is explicit about the one thing this row cannot know: the account's
-          real roles never reach it (see that function's doc). */}
+          What it says comes from `getAccountIdentity`, and what it does NOT say
+          is the point: this row shows NO ROLE. `account.role` is not one —
+          `lib/server/members-adapter.ts:173` stamps `role: "representante" as
+          const` on every root account because the DTO carries no roles and the
+          only role endpoints mutate, so the field says the same word about a
+          representative, a lone player and a member who also coaches. Boxed in
+          the cell it read as information. It comes back when the backend can be
+          asked; until then the real roles are read one account at a time, in the
+          edit dialog. The companion line survives only where `estudiantes`
+          proves a relationship — see `getAccountIdentity`'s own doc. */}
       <TableCell>
         <IdentityCell
           name={`${account.nombres} ${account.apellidos}`}
@@ -525,9 +536,24 @@ function MemberEditDialog({
                   {getUserInitials(`${account.nombres} ${account.apellidos}`)}
                 </div>
                 <div className="min-w-0">
+                  {/* DESIGN.md's `title` step — Graduate at 20px, uppercase,
+                      weight 400 — because this IS the dialog's title: the
+                      element `aria-labelledby` points at. The case is a
+                      `text-transform`, so the accessible name stays the person's
+                      name as written. `tracking-flat` cancels the -0.02em
+                      `text-lg` carries for Barlow's lowercase.
+
+                      Measured cost, since the line truncates: at 20px the face
+                      runs ~35% wider than Barlow-800 — "María González" is
+                      177.2px against 131.6px, and a full four-part name 391.7px
+                      against 295.5px. The dialog gives this block ~450px at
+                      `max-w-2xl`, so nothing is cut on a desktop; below ~420px
+                      viewport width a two-part name starts to ellipsize where
+                      Barlow just fit. The full name is never lost — it is in the
+                      row behind and in the identity fields below. */}
                   <h2
                     id={`edit-member-title-${account.id}`}
-                    className="truncate text-lg font-bold leading-tight text-ink"
+                    className="truncate font-display text-lg uppercase leading-tight tracking-flat text-ink"
                   >
                     {account.nombres} {account.apellidos}
                   </h2>

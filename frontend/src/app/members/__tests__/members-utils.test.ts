@@ -622,11 +622,26 @@ describe("getAccountIdentity", () => {
     };
   }
 
-  it("reads the payer type the row declares, in the club's own role vocabulary", () => {
-    expect(getAccountIdentity(account({ role: "representante" })).roles).toEqual([
+  it("reads no role out of `account.role`, whichever way it is spelled", () => {
+    // `lib/server/members-adapter.ts:173` writes `role: "representante" as const`
+    // on every root persona, so the field is a constant and not an observation.
+    // Both spellings therefore describe the same absence of knowledge, and
+    // neither may reach the cell as a role.
+    expect(getAccountIdentity(account({ role: "representante" })).roles).toEqual([]);
+    expect(getAccountIdentity(account({ role: "estudiante" })).roles).toEqual([]);
+  });
+
+  it("says REPRESENTANTE only when a dependant proves it", () => {
+    // The proof is `estudiantes`: those personas point at this account through
+    // `representanteId`, which is what representing someone IS in the backend.
+    // It holds whichever way `account.role` happens to be stamped.
+    const holding = { estudiantes: [student("stu-1", "Ana", "Pérez")] };
+    expect(getAccountIdentity(account({ role: "representante", ...holding })).roles).toEqual([
       "REPRESENTANTE",
     ]);
-    expect(getAccountIdentity(account({ role: "estudiante" })).roles).toEqual(["ALUMNO"]);
+    expect(getAccountIdentity(account({ role: "estudiante", ...holding })).roles).toEqual([
+      "REPRESENTANTE",
+    ]);
   });
 
   it("names every player the account holds, because a representative holds several", () => {
@@ -651,11 +666,18 @@ describe("getAccountIdentity", () => {
       account({ id: "42", estudiantes: [student("42", "Marta", "Salas")] }),
     );
     expect(identity.represents).toEqual([]);
+    // And with the self-reference dropped there is no dependant left to prove
+    // the relationship, so the role goes with it.
+    expect(identity.roles).toEqual([]);
   });
 
-  it("degrades to the role alone rather than inventing a name for it", () => {
+  it("says nothing rather than degrading to a role it cannot prove", () => {
+    // This used to answer `["REPRESENTANTE"]` with an empty `represents`, which
+    // `IdentityCell` draws as a boxed "Representante" — the stamped literal,
+    // given the visual weight of a fact. An empty roles list draws no companion
+    // line at all, which is the honest shape of "not known here".
     const identity = getAccountIdentity(account({ estudiantes: [] }));
-    expect(identity.roles).toEqual(["REPRESENTANTE"]);
+    expect(identity.roles).toEqual([]);
     expect(identity.represents).toEqual([]);
   });
 

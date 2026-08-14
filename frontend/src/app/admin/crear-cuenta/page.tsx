@@ -811,7 +811,14 @@ function CrearCuentaContent(): React.ReactElement {
               {step === "health" && <Heart size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
               {step === "credentials" && <Lock size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
               {step === "summary" && <FileText size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              <h2 className="text-lg font-semibold text-cata-text">
+              {/* DESIGN.md's `title` step: Graduate at 20px, uppercase, weight
+                  400 — the title of the wizard's form card. The step labels are
+                  short ("Datos personales" measures 195.8px uppercase, the
+                  longest of the five 264.5px), the card is `max-w-2xl`, and the
+                  heading never truncates, so the extra width this face costs
+                  wraps at phone widths instead of overflowing. `tracking-flat`
+                  cancels the -0.02em the size step carries for Barlow. */}
+              <h2 className="font-display text-lg uppercase tracking-flat text-cata-text">
                 {CREAR_CUENTA_STEP_LABELS[step]}
               </h2>
             </div>

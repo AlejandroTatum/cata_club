@@ -1714,7 +1714,7 @@ describe("MembersPage — the identity cell (D9)", () => {
     expect(within(row).getByText("Representante de Sofía González")).toBeInTheDocument();
   });
 
-  it("says the role alone for an account that holds nobody but itself", async () => {
+  it("says nothing about the role of an account that holds nobody but itself", async () => {
     // The adapter hands a childless root persona ITSELF as its only student.
     mockFetchMembers.mockReset().mockResolvedValue({
       accounts: [
@@ -1733,8 +1733,14 @@ describe("MembersPage — the identity cell (D9)", () => {
     );
     const row = await findAccountRow();
 
-    expect(within(row).getByText("Representante")).toBeInTheDocument();
-    expect(within(row).queryByText(/Representante de/)).not.toBeInTheDocument();
+    // It used to read a boxed "Representante" here, and the word was a
+    // constant: `lib/server/members-adapter.ts:173` stamps
+    // `role: "representante" as const` on every root account. With no dependant
+    // to prove the relationship the row has nothing left to say about who this
+    // person is, so the cell draws the name and stops. The account's real roles
+    // are read one account at a time, in the edit dialog.
+    expect(within(row).getByText("María González")).toBeInTheDocument();
+    expect(within(row).queryByText(/Representante/)).not.toBeInTheDocument();
   });
 
   it("says the same thing on the phone rendering as in the table", async () => {

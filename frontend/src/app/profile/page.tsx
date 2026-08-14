@@ -444,7 +444,15 @@ function IdentityPanel({
             the account passed `sesion_vigente` (usuario.activo), for every
             role alike — see the module docstring. */}
         <div className="min-w-0 flex-1 pb-1">
-          <h2 className="break-words text-lg font-extrabold leading-tight text-ink">{name}</h2>
+          {/* DESIGN.md's `title` step: Graduate at 20px, uppercase, weight 400
+              — this is the title of the identity card. `break-words` stays and
+              does the work the face makes heavier: uppercase Graduate runs ~35%
+              wider than Barlow-800 at 20px, and this line never truncates, so a
+              long name wraps rather than being cut. `tracking-flat` cancels the
+              -0.02em the size step carries for Barlow. */}
+          <h2 className="break-words font-display text-lg uppercase leading-tight tracking-flat text-ink">
+            {name}
+          </h2>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <Badge tone="neutral">{roleLabel}</Badge>
             <Badge tone="ok">Cuenta activa</Badge>

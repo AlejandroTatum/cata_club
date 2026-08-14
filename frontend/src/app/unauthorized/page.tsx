@@ -63,7 +63,13 @@ function UnauthorizedContent(): React.ReactElement {
           />
         </span>
 
-        <h1 className="m-0 text-balance text-lg font-bold text-ink">
+        {/* DESIGN.md's `title` step: Graduate at 20px, uppercase, weight 400 —
+            the title of the one card this screen is. `text-balance` stays and
+            matters more now: uppercase Graduate measures 343px for this sentence
+            against Barlow-800's 241.9px, so it wraps sooner and the balance is
+            what keeps the two lines even instead of leaving one word alone.
+            `tracking-flat` cancels the -0.02em the size step carries. */}
+        <h1 className="m-0 text-balance font-display text-lg uppercase tracking-flat text-ink">
           Tu cuenta todavía no tiene rol
         </h1>
 
