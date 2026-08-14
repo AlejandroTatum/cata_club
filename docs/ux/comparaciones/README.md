@@ -39,7 +39,24 @@ aplicar Graduate a los títulos— que están en marcha.
 
 Capturas sueltas en [`capturas/`](capturas/), por si el enlace no está a mano.
 
-### 4 · Faro 3 — Perfil y Login
+### 4 · Faro 2 — Inscripción
+**[`inscripcion.html`](inscripcion.html)**
+
+El formulario largo. Doce capturas: los cinco pasos del asistente público y la pantalla de éxito,
+antes y después, recorriendo el flujo de representante que es el más largo de los dos.
+
+Lo que cambió: Graduate en los dos títulos que no lo tenían, los siete asteriscos rojos por paso
+reemplazados por «(opcional)» en la minoría que sí lo es, el error en `state-bad` sin el halo
+translúcido, el enum de tipo de sangre escrito en palabras, la escalera de superficies desinvertida,
+cinco radios reducidos a dos, el ritmo a los tres escalones declarados, y una pantalla de éxito que
+por fin dice qué sigue en lugar de reservar 75vh para no llenarlos.
+
+Y lo que lo hacía posible: **el id de cada campo dejó de derivarse del texto de su etiqueta**. Eran
+145 llamadas del E2E atadas a la copia visible; renombrar una etiqueta las movía en silencio. Con
+los ids declarados en `ENROLL_FIELD_TOKEN`, se renombraron once etiquetas y los 81 casos siguen
+pasando. **Estado: pendiente de revisión.**
+
+### 5 · Faro 3 — Perfil y Login
 **[`perfil-login.html`](perfil-login.html)**
 
 La cara al socio. Cuatro capturas: el perfil de un jugador y el login, antes y después. Es la
@@ -66,10 +83,23 @@ ventana, a 1440×900. Es el hueco que la persona ve vacío sin scrollear.
 | Miembros | Sin resultados | 25% · 227px | **15% · 139px** |
 | Perfil | Jugador con membresía | 12% · 105px | **10% · 91px** |
 | Login | Formulario en reposo | 23% · 205px | 23% · 208px |
+| Inscripción | Paso 1 · Tipo | 21% · 193px | 27% · 244px |
+| Inscripción | Paso 2 · Estudiante | 0% | 0% |
+| Inscripción | Paso 3 · Representante | 11% · 99px | **7% · 59px** |
+| Inscripción | Paso 4 · Salud | 13% · 121px | **11% · 97px** |
+| Inscripción | Paso 5 · Resumen | 0% | 0% · 1px |
+| Inscripción | Pantalla de éxito | 44% · 393px | **28% · 253px** |
 
 El login es el primer número que no baja, y es a propósito: el hueco lo produce el centrado de la
 tarjeta sobre el eje de la página, que es lo que el dueño pidió expresamente. Bajarlo exige
 descentrarla o inventar contenido. Está explicado en su comparación.
+
+El paso 1 de la inscripción es el primero que **sube**, y también a propósito. El contenido es el
+mismo y el documento mide lo mismo (900px, no scrollea ni antes ni después): lo que pasó es que
+ocupa 51px menos, porque la tarjeta bajó de 32px de relleno a los 20px del sistema y las tres
+separaciones escritas a mano pasaron al escalón de página. Bajar el porcentaje pedía dejar el
+relleno inflado o inventar un dato en un paso que hace una sola pregunta. Los otros cuatro pasos que
+scrollean suman **294px menos** de alto de documento.
 
 ### Lo ya medido que todavía no se tocó
 
@@ -107,7 +137,7 @@ quedan **destacadas** en esa última sección, no enterradas en un párrafo.
 |---|---|---|
 | F1 | Fundación: tokens, tipografía, primitivas, riel | ✅ |
 | F2 | La landing renovada — la trabaja Alejandro. **Espera el OK del cliente** | pendiente |
-| F3 | Tres faros: Miembros · Inscripción · Login y Perfil | 2 de 3 |
+| F3 | Tres faros: Miembros · Inscripción · Login y Perfil | ✅ 3 de 3 |
 | F4 | El barrido de las 24 pantallas restantes | pendiente |
 
 Los faros están elegidos por contraste, no por importancia: una tabla densa, un formulario largo y

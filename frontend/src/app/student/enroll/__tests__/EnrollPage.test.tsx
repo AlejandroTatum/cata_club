@@ -326,7 +326,13 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     // The flag lives OUTSIDE the alert, on the summary row itself, right
     // next to the pre-existing "Corregir" button — no new navigation, no
     // field name inside the alert.
-    const cedulaRow = screen.getByText("Cédula").closest("div");
+    //
+    // `closest("li")` and not `closest("div")`: the summary rows are the items
+    // of a `DataRowList` now, so the nearest `div` is the container that holds
+    // EVERY row — which would make this assertion (and, worse, the unrelated-row
+    // one below) pass on any row in the list. The element is the same one it
+    // always was; only the tag it is asked for changed.
+    const cedulaRow = screen.getByText("Cédula").closest("li");
     expect(cedulaRow).not.toBeNull();
     expect(within(cedulaRow as HTMLElement).getByText(/revisar/i)).toBeInTheDocument();
     expect(within(cedulaRow as HTMLElement).getByRole("button", { name: /corregir/i })).toBeVisible();
@@ -360,7 +366,7 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     fillValidSelfEnrollment();
     await submitAndFailWithDuplicate();
 
-    const telefonoRow = screen.getByText("Teléfono").closest("div");
+    const telefonoRow = screen.getByText("Teléfono").closest("li");
     expect(within(telefonoRow as HTMLElement).queryByText(/revisar/i)).not.toBeInTheDocument();
   });
 });

@@ -74,13 +74,20 @@ export const STEP_ORDER: WizardStep[] = [
   "summary",
 ];
 
-/** Human-readable labels for each step, in Spanish. */
+/**
+ * Human-readable labels for each step, in Spanish.
+ *
+ * Sentence case, like every other label on the screen. The wizard used to run
+ * two capitalisation criteria at once — "Tipo de Inscripción" beside "Correo
+ * electrónico" — which is the same defect as two words for one thing, spelled
+ * in caps.
+ */
 export const STEP_LABELS: Record<WizardStep, string> = {
-  type: "Tipo de Inscripción",
-  personal: "Datos del Estudiante",
-  representative: "Datos del Representante",
-  health: "Salud y Emergencia",
-  summary: "Resumen y Confirmación",
+  type: "Tipo de inscripción",
+  personal: "Datos del estudiante",
+  representative: "Datos del representante",
+  health: "Salud y emergencia",
+  summary: "Resumen y confirmación",
 };
 
 /**
@@ -270,6 +277,61 @@ export function buildEnrollmentRequest(data: EnrollFormData): EnrollmentRequest 
 /** A form field the wizard can point an error at. */
 export type EnrollField = keyof EnrollFormData;
 
+/**
+ * The DOM id of each field, declared once and derived from the field NAME —
+ * never from the label the visitor reads.
+ *
+ * `WizardInput` used to build its id by slugifying the label text
+ * (`slugifyLabel`), and `tests/e2e/enroll-qa.spec.ts` reproduced that same
+ * function to address roughly forty cases. The two together made the visible
+ * copy a test selector: renaming "Nombres del Representante" to "Nombres" —
+ * which the rule of the words asks for, since the card is already titled
+ * "Datos del representante" — silently moved `#enroll-nombres-del-representante`
+ * out from under every case that pointed at it.
+ *
+ * So the id is declared here instead, beside the field it belongs to. Copy is
+ * free to change; the id only changes when the FIELD does, which is a change
+ * the tests should notice.
+ *
+ * Two of the entries name no input on purpose and exist so this table stays a
+ * total function of `EnrollField`: `enrollmentType` is the pair of choice
+ * cards on the first step, and `institucionId` is a `<select>` the page
+ * renders itself. A new form field cannot be added without answering "what is
+ * its id" here first.
+ */
+export const ENROLL_FIELD_TOKEN: Record<EnrollField, string> = {
+  enrollmentType: "tipo",
+  nombres: "nombres",
+  apellidos: "apellidos",
+  fechaNacimiento: "fecha-nacimiento",
+  cedula: "cedula",
+  telefono: "telefono",
+  correo: "correo",
+  contrasenia: "contrasenia",
+  institucionId: "institucion",
+  nombreRepresentante: "nombres-representante",
+  apellidosRepresentante: "apellidos-representante",
+  cedulaRepresentante: "cedula-representante",
+  fechaNacimientoRepresentante: "fecha-nacimiento-representante",
+  telefonoRepresentante: "telefono-representante",
+  correoRepresentante: "correo-representante",
+  contraseniaRepresentante: "contrasenia-representante",
+  tipoSangre: "tipo-sangre",
+  condicionesSalud: "condiciones-salud",
+  alergias: "alergias",
+  contactoEmergencia: "contacto-emergencia",
+  telefonoEmergencia: "telefono-emergencia",
+  observaciones: "observaciones",
+};
+
+/** The id prefix every field on this wizard shares. */
+export const ENROLL_ID_PREFIX = "enroll";
+
+/** The full DOM id of a field — what a test, a `<label for>` and a deep link all address. */
+export function enrollFieldId(field: EnrollField): string {
+  return `${ENROLL_ID_PREFIX}-${ENROLL_FIELD_TOKEN[field]}`;
+}
+
 /** Field → its first unmet rule. A field with no entry is currently valid. */
 export type EnrollFieldErrors = Partial<Record<EnrollField, string>>;
 
@@ -302,7 +364,11 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   cedulaRepresentante: (d) => cedulaRule(d.cedulaRepresentante, "La cédula del representante"),
   fechaNacimientoRepresentante: (d) => {
     if (!isValidCalendarDate(d.fechaNacimientoRepresentante)) {
-      return "El representante debe ser mayor de edad (18+).";
+      // "(18+)" was an abbreviation of the sentence it sat inside — the rule of
+      // the words: the interface never shortens, and never says twice what one
+      // phrase already says. The lower bound is stated in full by the very next
+      // branch, which is the one that can actually name a number.
+      return "El representante debe ser mayor de edad.";
     }
     const edad = calculatePersonAge(d.fechaNacimientoRepresentante);
     return edad >= EDAD_MAYORIA_EDAD && edad <= EDAD_MAXIMA_ALUMNO

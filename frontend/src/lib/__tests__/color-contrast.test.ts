@@ -714,6 +714,12 @@ const RAW_PALETTE = new RegExp(
  * measured debt. The list only ever shrinks, and `admin/crear-cuenta` is the
  * first entry off it.
  *
+ * `app/student/enroll/page.tsx` is the second. It carried two: `text-blue-700`
+ * on the second line of an AMBER notice — a raw blue inside a warn box, which
+ * is a colour the palette does not have making a statement the box contradicts
+ * — and `text-amber-700` on the development quick-fill icon. Both are `state-*`
+ * tokens now.
+ *
  * Entries are never added. A new one is exactly what this guard exists to
  * prevent — an unavoidable new hue gets a name in `tailwind.config.ts` first,
  * and stops being Tailwind's.
@@ -722,7 +728,6 @@ const RAW_PALETTE_DEBT: readonly string[] = [
   "app/attendance/attendance-utils.ts",
   "app/groups/page.tsx",
   "app/student/add-dependent/page.tsx",
-  "app/student/enroll/page.tsx",
   "app/student/proof-utils.ts",
 ];
 
