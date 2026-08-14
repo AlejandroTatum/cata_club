@@ -19,7 +19,10 @@ directamente en esa tabla, el filtro de horarios la rechazaba con un
 error 422, crear un horario para ella reventaba, y ni siquiera aparecía
 como opción al crear un horario nuevo desde la pantalla de Horarios.
 
-![antes](img/23-categoria-tabla-manda-antes.png)
+> *La captura del «antes» que este dossier citaba
+> (`img/23-categoria-tabla-manda-antes.png`) nunca llegó a versionarse. La
+> referencia se deja anotada en vez de rota: el resto de `fixes/` conserva sus
+> 95 imágenes, así que el faltante es de este dossier, no de la carpeta.*
 
 ## Qué se hizo
 
@@ -71,7 +74,10 @@ tests/test_horario_categoria.py::test_categoria_seedeada_fuera_del_enum_funciona
 
 ## La prueba
 
-![después](img/23-categoria-tabla-manda-despues.png)
+> *Misma situación que arriba: la captura del «después»
+> (`img/23-categoria-tabla-manda-despues.png`) no se versionó. La verificación
+> manual que se describe a continuación sí quedó escrita, y es la prueba que
+> este dossier conserva.*
 
 Verificación manual sobre stack propio (Postgres + backend en puertos
 libres, sin tocar el QA compartido): sembré `BEGINNERS`/"Principiantes"

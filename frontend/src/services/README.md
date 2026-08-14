@@ -1,29 +1,34 @@
-# `src/services/` — API Client & External Integrations
+# `src/services/` — el cliente HTTP
 
-Centralised layer for all external communication.
+Capa central de comunicación con el exterior. Tres archivos hoy —`api.ts`,
+`auth.ts`, `categorias.ts`—, y la lista viva sale de `eza src/services`; la
+versión anterior de este README nombraba uno solo.
 
-| File | Purpose |
-|------|---------|
-| `api.ts` | HTTP client — every call goes same-origin to a Next.js Route Handler under `/api/*` |
+## Reglas
 
-### Rules
+- **Nada de UI acá.** Devuelven datos planos, nunca JSX.
+- **Ningún `fetch()` fuera de este directorio.**
+- **El manejo de errores vive acá**: envuelve `fetch` y devuelve errores
+  tipados. Una pantalla no debería tener que interpretar un status HTTP.
 
-- **No UI logic** in services — return plain data, never JSX.
-- **No direct `fetch()` calls** outside this directory.
-- **Error handling** happens here (wraps fetch, returns typed errors).
+## La convención de rutas
 
-### API Path Convention
+El cliente siempre llama a `apiEndpoint(recurso)`, que resuelve a `/api` +
+recurso, **al mismo origen**: `"/payments"` → `/api/payments`.
 
-The client always calls `apiEndpoint(resource)` -> `/api` + resource, same-origin
-(e.g. `"/payments"` -> `/api/payments`). There is no cross-origin "direct backend"
-mode anymore — the access/refresh tokens live in HttpOnly cookies invisible to
-browser JS, so only a server-side Route Handler can attach `Authorization: Bearer`
-(see `src/lib/server/backend-client.ts`). Each resource's Route Handler
-independently decides whether it still serves mock data or already proxies to
-the real FastAPI backend; `NEXT_PUBLIC_USE_MOCKS` only controls the `x-mock-role`
-header sent to handlers that are still mock-backed.
+No existe un modo «backend directo». Los tokens de acceso y refresco viven en
+cookies HttpOnly, invisibles para el JavaScript del navegador, así que solo un
+route handler del lado del servidor puede adjuntar `Authorization: Bearer` (ver
+`src/lib/server/backend-client.ts`).
 
-### Key Types
+Cada route handler decide por su cuenta si ya proxea al backend real o todavía
+sirve datos de mentira. `NEXT_PUBLIC_USE_MOCKS` solo controla la cabecera
+`x-mock-role` que se manda a los que siguen siendo mocks — es un resto de la
+etapa anterior, no el modo de trabajo. La cabecera refleja la sesión real y
+vigente, no un rol elegido a mano (ver `contexts/AuthContext.tsx`).
 
-- `PaymentValidationRequest` — membership payment proof awaiting admin validation
-- `UpdatePaymentValidationDTO` — approve or reject with optional rejection reason
+## Dónde mirar primero
+
+`api.ts` es largo y su comentario de cabecera explica el porqué de
+`getBaseUrl`/`apiEndpoint`. Leelo antes de agregar una llamada: la mayoría de
+las preguntas sobre por qué algo va al mismo origen están contestadas ahí.

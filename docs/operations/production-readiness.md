@@ -14,7 +14,20 @@ históricos.
 >
 > **Audiencia:** operación, desarrollo y producto
 >
-> **Última verificación:** 2026-08-13 · **Verificado contra commit:** `fd9f7be`
+> **Última verificación:** 2026-08-14 · **Verificado contra commit:** `6c56741`
+>
+> **Qué se re-derivó en esa verificación:** la fila de *rate limiting de tráfico
+> anónimo* decía **Blocked** y remitía a una rama local sin mergear. El fix se
+> mergeó el 13-ago a las 16:45 UTC —PR [#249](https://github.com/AlejandroTatum/cata_club/pull/249),
+> `ddd4e0a`, con nueve tests en `backend/tests/test_rate_limit_por_visitante.py`—,
+> es decir **horas después** de la verificación anterior. La fila se borró según
+> la primera regla de mantenimiento de abajo. Las filas de *monitoring* y
+> *X-Request-ID* se re-derivaron con sus propios comandos y siguen valiendo.
+>
+> Es exactamente el caso que la última regla de esta sección anticipa: el
+> documento no se equivocó, se venció. Vale la pena leerlo como aviso de que
+> **una fecha de verificación no es un sello de calidad, es una fecha de
+> vencimiento.**
 >
 > **Revisión recomendada:** con cada cambio de Compose/CI/Makefile y antes de cada despliegue
 
@@ -60,7 +73,6 @@ del repo.
 | Rollback a imagen previa | Needs evidence | Infraestructura (nominal pendiente) | Runbook [`rollback.md`](rollback.md) | Mecanismo Ready (SHA inmutables); no hay evidencia de un rollback ejecutado. |
 | Backup y restore de Postgres | Not evaluated | Infraestructura (nominal pendiente) | [`backup-restore.md`](backup-restore.md) | **No existe mecanismo de backup automatizado ni restore probado.** Decisión pendiente; ver runbook. Crítico por datos de menores y pagos. |
 | Monitoring: métricas y trazas | Blocked | Infraestructura (nominal pendiente) | `rg -ln "prometheus|opentelemetry|statsd" backend/ frontend/src` → vacío | Solo existe correlación (`X-Request-ID`). El plan de lanzamiento lo trató como bloqueante: sin métricas, una caída se descubre porque avisa un socio. |
-| Rate limiting de tráfico anónimo | Blocked | Backend | `backend/app/soporte_transversal/rate_limit.py` + informe de inscripción (`docs/archive/audits/2026-08-12/README.md`, sección "Límite de intentos") | El cubo es global para tráfico anónimo: en la topología de producción (BFF server-side) **todos los visitantes comparten un cubo** — 11 pedidos/min dejan el club sin poder inscribir. Fix en rama local sin mergear (`fix/rate-limit-por-visitante`); no re-implementar, revisar y mergear. |
 | Inventario de variables de entorno | Ready (con gap) | Desarrollo | [`reference/configuration.md`](../reference/configuration.md) + ver ítem A-2 abajo | Este PR crea el inventario canónico; los `.env.example` siguen sin documentar `IMAGE_TAG`, `FRONTEND_URL` y los `SMTP_*` (ítem A-2). |
 
 ## Hallazgos abiertos

@@ -63,7 +63,9 @@ docs/
 │   ├── concepto-alcance-modelo.md / .pdf  #   Referencia del MVP (vigente)
 │   ├── decisiones-de-negocio-2026-08-11.md#   Decisiones que gobiernan reglas
 │   ├── acuerdo-de-servicio.md             #   Contrato con el club (vigente)
-│   └── propuesta-de-servicio.md           #   Derivación del precio (USO INTERNO)
+│   ├── propuesta-de-servicio.md           #   Derivación del precio (USO INTERNO)
+│   └── entregables-cliente/               #   Capturas y PDF de la landing en revisión
+│                                          #   (vigente: espera el OK del cliente)
 ├── operations/                            # Operación (activa)
 │   ├── production-readiness.md            #   ÚNICA lista viva de readiness
 │   ├── deployment.md                      #   Runbook de despliegue
@@ -91,9 +93,15 @@ docs/
     │   ├── 2026-08-11/                    #     Re-verificación de la auditoría
     │   └── 2026-08-12/                    #     QA de inscripción (81 casos)
     ├── fixes/                             #   Dossiers de fixes (24) + integraciones
-    ├── plans/                             #   Pendientes y plan de lanzamiento (superados)
+    ├── plans/                             #   Pendientes, plan de lanzamiento e
+    │                                      #   integración de auth (superados)
     ├── sessions/2026-08-11/               #   Cierre de sesión
+    ├── openspec/                          #   Propuestas y reportes SDD. Citan rutas
+    │                                      #   pre-reorganización a propósito: son
+    │                                      #   fotos de proceso, no documentación viva
     └── prototypes/                        #   Prototipos HTML, evaluación, capturas
+        └── mockups-v1/                    #     Los doce mockups de la primera pasada,
+                                           #     superados por DESIGN.md
 ```
 
 ## Tres clases de documento
