@@ -2,10 +2,10 @@
  * AppShell — the single authenticated shell: coal sidebar + utility topbar +
  * a real, visible page header.
  *
- * Transcribed from `docs/ux/prototipos/_sistema.css` (`.side` 236px, `.disc`
+ * Transcribed from `docs/archive/prototypes/prototipos/_sistema.css` (`.side` 236px, `.disc`
  * 36px white logo disc, `.nav-i` 40px rows with the active red left bar and
  * the yellow ball dot, `.cnt` count badge, `.topbar` 56px, `.canvas`) and
- * from `docs/ux/prototipos/_nav-admin.html` (brand → nav → foot-nav with
+ * from `docs/archive/prototypes/prototipos/_nav-admin.html` (brand → nav → foot-nav with
  * "Ayuda y soporte" above the user card).
  *
  * Which routes get this shell is decided in ONE place — `lib/shell-routes.ts`
@@ -200,7 +200,7 @@ const COUNT_BADGE_HREF = "/payments";
 const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
 
 /**
- * The bottom tab bar for admin on a phone (`docs/ux/prototipos/27-movil.html`).
+ * The bottom tab bar for admin on a phone (`docs/archive/prototypes/prototipos/27-movil.html`).
  *
  * Four destinations within thumb reach; everything else lives behind "Más",
  * which opens the SAME drawer the hamburger used to open — this is a layer

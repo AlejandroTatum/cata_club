@@ -4,7 +4,7 @@
  * NAMING (three names, one thing — read this before renaming anything):
  *   - USER-FACING name: **Horarios**. That is what the nav says
  *     (`lib/auth-utils.ts`), what the page title says, and what the approved
- *     prototype says (`docs/ux/prototipos/14-horarios.html`). It is the only
+ *     prototype says (`docs/archive/prototypes/prototipos/14-horarios.html`). It is the only
  *     name a user ever sees.
  *   - ROUTE: `/groups`, kept because it is linked from bookmarks, tests and
  *     the middleware route table.
@@ -60,7 +60,7 @@
  * student can no longer be enrolled in only SOME of a categoría's días, and
  * the footnote that used to flag that state is gone with the state itself.
  *
- * v6 (ABM de categorías, docs/fixes/24-abm-categorias.md): the owner's
+ * v6 (ABM de categorías, docs/archive/fixes/24-abm-categorias.md): the owner's
  * request, verbatim — "quisiera que se cree directo el horario y categoría,
  * no diferentes". "Nuevo Horario" is gone as a loose concept: it could not
  * create anything (the five categorías already had every día) and only ever
@@ -226,7 +226,7 @@ function DiaTrack({ track, dias }: { track: string[]; dias: string[] }): React.R
   );
 }
 
-/** The categoría's own editable fields (v6, docs/fixes/24-abm-categorias.md)
+/** The categoría's own editable fields (v6, docs/archive/fixes/24-abm-categorias.md)
  *  — `nombre`/`horaInicio`/`horaFin` are typed input now, not a `<select>`
  *  locked to an existing catalog entry. `dias` lives separately in
  *  `selectedDias` (a `Set`, shared with the checkbox toggling logic). */
@@ -559,7 +559,7 @@ export default function GroupsPage(): React.ReactElement {
    * is the one place that has to warn about it up front. A día with real
    * `Asistencia` history is a different, harder case: the backend refuses
    * the whole edit for that (no history is ever deleted, see
-   * docs/fixes/24-abm-categorias.md), surfaced as `formError` like any other
+   * docs/archive/fixes/24-abm-categorias.md), surfaced as `formError` like any other
    * validation failure.
    */
   async function handleSubmit(e: React.FormEvent): Promise<void> {
@@ -670,7 +670,7 @@ export default function GroupsPage(): React.ReactElement {
    * edited or, for "Nueva categoría", in its own top-of-list card (no
    * existing card to nest a brand-new one under).
    *
-   * v6 (docs/fixes/24-abm-categorias.md): nombre/franja/días are typed
+   * v6 (docs/archive/fixes/24-abm-categorias.md): nombre/franja/días are typed
    * input now, not a `<select>` locked to an existing catalog entry — this
    * form is what CREATES the categoría, so there is no catalog entry to pick
    * from yet on that path. `código` is never asked for: the server derives
@@ -758,7 +758,7 @@ export default function GroupsPage(): React.ReactElement {
             the edit form, not on the card. Deleting removes the categoría
             entera — every día row — so it must not hang off a card that
             names one single day. Blocked server-side (400) when any día has
-            real Asistencia history; see docs/fixes/24-abm-categorias.md. */}
+            real Asistencia history; see docs/archive/fixes/24-abm-categorias.md. */}
         {editingGroup !== null && (
           <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
             <div className="min-w-[220px] flex-1">

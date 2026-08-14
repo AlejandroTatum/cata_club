@@ -1,6 +1,6 @@
 /**
  * /profile — the account screen, rebuilt for issue #204 from
- * `docs/ux/prototipos/30-perfil-rediseño.html` (visual reference for
+ * `docs/archive/prototypes/prototipos/30-perfil-rediseño.html` (visual reference for
  * structure and copy; every field below still traces back to a real API
  * response — see "Data sources" and "Fields deliberately excluded" below).
  *
@@ -148,7 +148,7 @@ const NO_MEMBERSHIP_FALLBACK = "No disponible — consulte con administración";
 
 /**
  * Per-role copy for the workspace lede and "Información de tu rol" —
- * `docs/ux/prototipos/30-perfil-rediseño.html`'s four review variants,
+ * `docs/archive/prototypes/prototipos/30-perfil-rediseño.html`'s four review variants,
  * keyed by the same `UserRole` this page already branches on.
  *
  * `roleText` for "estudiante"/"representante" is NOT copied verbatim: the

@@ -2,7 +2,7 @@
  * AuthShell — the template all four public auth screens inherit.
  *
  * The authority for these screens is the login stage of
- * `docs/ux/prototipo-rediseno.html`, NOT the smaller `docs/ux/prototipos/`
+ * `docs/archive/prototypes/prototipo-rediseno.html`, NOT the smaller `docs/archive/prototypes/prototipos/`
  * login — EXCEPT for the two things the product owner overruled after seeing
  * the built screen. These tests pin both the overrides and the prototype
  * details that must survive them:

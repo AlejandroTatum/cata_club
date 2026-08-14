@@ -15,7 +15,7 @@
  * size of the text it accompanies, scaled by whatever ratio makes the icon read
  * as the same weight as the words.
  *
- * `docs/ux/prototipos/_sistema.css` already answers what that ratio is, three
+ * `docs/archive/prototypes/prototipos/_sistema.css` already answers what that ratio is, three
  * times over, because it declares both the icon and the text of the same
  * component:
  *

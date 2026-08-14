@@ -1,7 +1,7 @@
 /**
  * Quick replies for the help assistant.
  *
- * `docs/ux/prototipos/28-chat.html` asks, in its note, to *verify whether the
+ * `docs/archive/prototypes/prototipos/28-chat.html` asks, in its note, to *verify whether the
  * quick replies are served by `ChatbotServicio` or written in the client*.
  * They are written in the client: the backend contract is
  * `ChatbotRespuestaDTO { respuesta: str }`

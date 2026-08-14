@@ -80,7 +80,7 @@ mirado**.
 ## Las ocho decisiones de negocio
 
 Están completas en
-[`decisiones-de-negocio-2026-08-11.md`](./decisiones-de-negocio-2026-08-11.md),
+[`decisiones-de-negocio-2026-08-11.md`](../../../product/decisiones-de-negocio-2026-08-11.md),
 con su porqué. En resumen:
 
 | | Decisión |

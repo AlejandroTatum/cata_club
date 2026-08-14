@@ -173,7 +173,7 @@ RUTAS_SOLO_AUTENTICADAS = {
 # visible en el diff.
 RUTAS_ROLES_REQUERIDOS = {
     ("DELETE", "/asistencias/desasignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
-    # ABM de categorías (docs/fixes/24-abm-categorias.md): alta/edición/baja
+    # ABM de categorías (docs/archive/fixes/24-abm-categorias.md): alta/edición/baja
     # atómica de la categoria + sus días + sus horarios. Mismo tier que
     # PUT/DELETE de `/horarios` (ADMIN-only), no el más permisivo POST
     # /horarios (que además admite ENTRENADOR) -- crear una categoria
@@ -239,7 +239,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
-    # INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): mismo par de roles
+    # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): mismo par de roles
     # que su hermano `representados` -- un representante vincula su propio
     # representado ya existente, un administrador puede hacerlo por cualquiera.
     ("POST", "/personas/{persona_id}/vincular-representado"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),

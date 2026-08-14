@@ -32,9 +32,9 @@ lugar donde se busca**, no cambiar el criterio.
 
 Son tres razones y ninguna es estética.
 
-1. **Está firmado.** El prototipo lo declara en `docs/ux/prototipos/_sistema.css:58`
+1. **Está firmado.** El prototipo lo declara en `docs/archive/prototypes/prototipos/_sistema.css:58`
    (`--h-ctl: 40px`) y el plan de implementación lo transcribe en
-   `docs/ux/plan-implementacion-rediseno.md:27`.
+   `docs/archive/prototypes/plan-implementacion-rediseno.md:27`.
 2. **Tiene tokens derivados.** `gap-page` son 20px porque son `h-ctl / 2`
    (`frontend/tailwind.config.ts`, y el argumento completo en `docs/ux/ritmo-vertical.md`).
    Subir el control a 44 mueve el ritmo vertical de **todas** las pantallas, no solo la altura

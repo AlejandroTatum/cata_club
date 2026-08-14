@@ -8,7 +8,7 @@ el conflicto solo existe al MERGEAR ambas, y hasta este test nada lo
 detectaba antes de que alguien corriera `alembic upgrade head` contra una
 base real y Alembic reventara con dos cabezas. Este repo ya acumuló tres
 migraciones de fusión y 31 revisiones por este patrón exacto (ver
-`docs/auditoria-qa/README.md`); `pendientes.md` sugería este candado y
+`docs/archive/audits/2026-08-10/README.md`); `pendientes.md` sugería este candado y
 nunca se escribió.
 
 Corre FUERA de la suite de `backend/tests/` a propósito, igual que

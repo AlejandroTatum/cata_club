@@ -132,7 +132,7 @@ async function waitForHorarios(): Promise<void> {
   });
 }
 
-describe("GroupsPage — categoría form is typed input, not a locked catalog select (v6, docs/fixes/24-abm-categorias.md)", () => {
+describe("GroupsPage — categoría form is typed input, not a locked catalog select (v6, docs/archive/fixes/24-abm-categorias.md)", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
     mockFetchHorarios.mockReset();
@@ -574,7 +574,7 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
   });
 });
 
-describe("GroupsPage — atomic categoría save (v6, docs/fixes/24-abm-categorias.md)", () => {
+describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-categorias.md)", () => {
   const GROUP_ROWS = [
     { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
     { id: 303, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
@@ -1124,7 +1124,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   });
 });
 
-describe("GroupsPage — deleting removes the categoría entera atomically (docs/fixes/24-abm-categorias.md)", () => {
+describe("GroupsPage — deleting removes the categoría entera atomically (docs/archive/fixes/24-abm-categorias.md)", () => {
   /** The delete action lives inside the edit panel (`15-horario-editar.html`),
    *  not on the card, because it removes every weekday of the categoría. */
   async function openDeleteFromEditPanel(): Promise<void> {

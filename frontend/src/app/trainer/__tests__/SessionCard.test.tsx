@@ -1,6 +1,6 @@
 /**
  * Component tests for the trainer dashboard's immediate-session card
- * (issue #211, `docs/ux/prototipos/31-entrenador-dashboard-alternativas.html`).
+ * (issue #211, `docs/archive/prototypes/prototipos/31-entrenador-dashboard-alternativas.html`).
  *
  * The safety rule this file exists to lock down: of the four states, THREE
  * carry no session to point at (done, and — one level up — rest day and

@@ -55,7 +55,7 @@ class RepresentadoCreateDTO(BaseModel):
 # --- Vinculación de representado ya existente (INS-2) -----------------------
 class VincularRepresentadoDTO(BaseModel):
     """Payload de `POST /personas/{representante_id}/vincular-representado`
-    (INS-2, docs/decisiones-de-negocio-2026-08-11.md §1): vincula una Persona
+    (INS-2, docs/product/decisiones-de-negocio-2026-08-11.md §1): vincula una Persona
     YA EXISTENTE en el club a la cuenta del representante que hace la
     solicitud, identificándola únicamente por cédula. A diferencia de
     `RepresentadoCreateDTO`, no crea nada -- solo reasigna

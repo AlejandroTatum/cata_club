@@ -5,7 +5,7 @@
 > quedó superado.
 >
 > La **única lista viva** de preparación para producción es
-> [`operations/production-readiness.md`](operations/production-readiness.md),
+> [`operations/production-readiness.md`](../../operations/production-readiness.md),
 > verificada contra `fd9f7be` el 2026-08-13. No copiar ítems de este
 > archivo sin re-verificarlos contra el código y la lista viva.
 
@@ -48,7 +48,7 @@
   comando que la reproduce y el test que lo cerraría; y una sola tabla de lo
   cerrado, cada fila sostenida por un candado ejecutable. Cómo se llegó a
   estos cierres —el método, no los defectos— está en
-  [`docs/como-trabajamos.md`](./como-trabajamos.md).
+  [`docs/como-trabajamos.md`](../../reference/como-trabajamos.md).
 
 Este documento ya mintió tres veces: dos que él mismo documentaba, y una
 tercera detectada el 5 de agosto — nueve ítems figuraban abiertos estando

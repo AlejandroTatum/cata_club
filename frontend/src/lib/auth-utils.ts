@@ -50,7 +50,7 @@ export function getNavLinksForRole(
   switch (role) {
     // Every label below is the destination's own page title, so the nav
     // never promises a name the screen does not use. The admin set is
-    // transcribed from `docs/ux/prototipos/_nav-admin.html`.
+    // transcribed from `docs/archive/prototypes/prototipos/_nav-admin.html`.
     case "admin":
       links.push(
         { href: "/dashboard", label: "Panel de Control" },

@@ -1,7 +1,7 @@
 # Decisiones de negocio — 11 de agosto de 2026
 
 Tomadas por el dueño del club sobre los hallazgos de la auditoría
-(`docs/auditoria-qa/README.md`). Cada una define cómo se implementa su fix.
+(`docs/archive/audits/2026-08-10/README.md`). Cada una define cómo se implementa su fix.
 
 Lo que está acá **no se re-discute al implementar**. Si algo no cierra durante
 el trabajo, se vuelve a este documento y se cambia la decisión con su fecha, no

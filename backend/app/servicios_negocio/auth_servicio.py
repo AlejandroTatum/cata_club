@@ -34,7 +34,7 @@ _TECHO_RETRASO_SEGUNDOS = 60
 
 
 def _calcular_retraso_login(intentos_fallidos: int) -> int:
-    """Decisión de negocio (docs/decisiones-de-negocio-2026-08-11.md, sección
+    """Decisión de negocio (docs/product/decisiones-de-negocio-2026-08-11.md, sección
     3): sin retraso antes del 3er intento fallido; 1s al 3ro, duplicando en
     cada intento siguiente, con techo de 60s. Nunca bloqueo duro -- eso
     regala un ataque nuevo (dejar a un socio afuera sin saber ninguna

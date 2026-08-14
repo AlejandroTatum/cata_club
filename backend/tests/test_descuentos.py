@@ -1,7 +1,7 @@
 """
 Pruebas del catálogo de descuentos y su aplicación a pagos (issue #11).
 
-Modelo firmado (docs/concepto-alcance-modelo.md §4), colapsado a columnas de
+Modelo firmado (docs/product/concepto-alcance-modelo.md §4), colapsado a columnas de
 `Pago`: el dueño confirmó que un pago lleva UN solo descuento, así que
 `descuento_aplicado` como tabla 1:N no tenía cardinalidad que la justificara.
 - `Descuento`: catálogo vivo administrado por el club (CRUD solo admin);

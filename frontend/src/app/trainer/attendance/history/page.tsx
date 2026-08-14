@@ -1,6 +1,6 @@
 /**
  * Trainer — "Historial de asistencias"
- * (`docs/ux/prototipos/21-entrenador-historial.html`).
+ * (`docs/archive/prototypes/prototipos/21-entrenador-historial.html`).
  *
  * This route used to be a `redirect("/trainer")`: the history had been merged
  * into the trainer dashboard, which is what left that screen with two

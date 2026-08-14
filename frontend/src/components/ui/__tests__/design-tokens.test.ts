@@ -1,5 +1,5 @@
 /**
- * The design tokens are a transcription of `docs/ux/prototipos/_sistema.css`,
+ * The design tokens are a transcription of `docs/archive/prototypes/prototipos/_sistema.css`,
  * so these tests assert the transcription rather than any rendered output.
  * Every expected value below is quoted from that file with its line number.
  *

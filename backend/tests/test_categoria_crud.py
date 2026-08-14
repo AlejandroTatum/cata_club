@@ -1,4 +1,4 @@
-"""ABM de categorías (docs/fixes/24-abm-categorias.md): el dueño pidió que
+"""ABM de categorías (docs/archive/fixes/24-abm-categorias.md): el dueño pidió que
 crear una categoría cree, en la MISMA operación, la fila de
 `categoria_horario` y un `horario_entrenamiento` por cada día marcado --
 "quisiera que se cree directo el horario y categoría, no diferentes". Este

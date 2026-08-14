@@ -55,7 +55,7 @@ def listar_categorias(db: Session = Depends(obtener_sesion)):
     return AsistenciaServicio(db).listar_categorias()
 
 
-# ABM de categorías (docs/fixes/24-abm-categorias.md): alta/edición/baja
+# ABM de categorías (docs/archive/fixes/24-abm-categorias.md): alta/edición/baja
 # atómica de la categoria + sus días + sus horarios, en una sola operación
 # (pedido del dueño). ADMIN-only, como el resto de la escritura sobre
 # `/horarios` que muta el catálogo (PUT/DELETE), no el tier más permisivo

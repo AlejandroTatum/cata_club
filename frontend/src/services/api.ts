@@ -459,7 +459,7 @@ export interface AttendanceStudentMark {
 
 /** Request body for `POST /api/attendance/records` — registers real attendance
  * for a session. No `entrenadorId`: attendance does not record who taught the
- * session (issue #13, docs/concepto-alcance-modelo.md §4). */
+ * session (issue #13, docs/product/concepto-alcance-modelo.md §4). */
 export interface RegisterAttendanceRequest {
   horarioId: number;
   /** ISO "YYYY-MM-DD"; defaults to today (server clock) when omitted. */
@@ -621,7 +621,7 @@ export async function eliminarHorario(id: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Categorías (docs/fixes/24-abm-categorias.md) — atomic ABM
+// Categorías (docs/archive/fixes/24-abm-categorias.md) — atomic ABM
 // ---------------------------------------------------------------------------
 
 /**
@@ -1193,7 +1193,7 @@ export async function fetchPagosDePersona(personaId: string): Promise<PagoPerson
  *  backend derives the coverage period from `monto` and the membership's
  *  monthly price -- the old contract let the caller hand it any range
  *  regardless of `monto`, which is exactly the hole this fix closes (see
- *  docs/fixes/06-periodo-de-cobertura.md). Callers can still PREVIEW the
+ *  docs/archive/fixes/06-periodo-de-cobertura.md). Callers can still PREVIEW the
  *  period client-side (`wholeMonthsFor` / `addMonthsIso`) to show the
  *  reader what they're about to pay for, but nothing here is sent. */
 export interface RegistrarPagoInput {
@@ -1438,7 +1438,7 @@ export async function crearRepresentado(
 }
 
 /**
- * INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): representante-only
+ * INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): representante-only
  * self-service, links a person ALREADY registered in the club (typically by
  * another representante) to `personaId`'s account by cédula alone — no
  * approval from anyone. See `POST /personas/{persona_id}/vincular-representado`.

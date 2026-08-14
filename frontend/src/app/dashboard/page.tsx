@@ -1,7 +1,7 @@
 /**
  * Panel de Control — the admin's "jornada", redesigned for Fase 3.
  *
- * Source of truth: `docs/ux/prototipos/06-panel.html`.
+ * Source of truth: `docs/archive/prototypes/prototipos/06-panel.html`.
  *
  * The audit's verdict on the previous version was that the page was a table of
  * contents for the sidebar next to it: four "Acciones Rápidas" cards, of which

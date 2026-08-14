@@ -195,7 +195,7 @@ async def reporte_nuevos_por_periodo_pdf(
 
 # `GET /entrenadores` (selector de entrenador para el formulario de horarios)
 # se eliminó con la relación entrenador–horario (issue #13,
-# docs/concepto-alcance-modelo.md §4): sin titular que elegir, la ruta no
+# docs/product/concepto-alcance-modelo.md §4): sin titular que elegir, la ruta no
 # tenía consumidor. `test_personas.py` deja una guardia estructural.
 
 
@@ -368,7 +368,7 @@ async def crear_representado(
 
 
 # --- Vincular un representado ya existente (INS-2) --------------------------
-# docs/decisiones-de-negocio-2026-08-11.md §1: "un representante puede
+# docs/product/decisiones-de-negocio-2026-08-11.md §1: "un representante puede
 # vincular a su cuenta un chico ya registrado, escribiendo su cédula, sin que
 # nadie apruebe". Mismo patrón de ownership que `crear_representado` (línea
 # ~342): la identidad del representante sale EXCLUSIVAMENTE del token, nunca

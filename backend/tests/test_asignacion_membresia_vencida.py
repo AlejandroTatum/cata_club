@@ -3,7 +3,7 @@ bloquearse -- decisión de negocio #4 (2026-08-11): "La cuota vencida no
 impide entrenar". El chico entrena y la cuota se regulariza aparte; lo único
 que cambia es que el admin ve un aviso NO BLOQUEANTE al asignarlo.
 
-Alcance deliberadamente excluido (ver INS-6b en `docs/auditoria-qa/README.md`):
+Alcance deliberadamente excluido (ver INS-6b en `docs/archive/audits/2026-08-10/README.md`):
 ninguna validación de edad-vs-categoria -- `rango_edad` es copy de
 orientación en este proyecto, no una regla."""
 from datetime import date, datetime, timezone

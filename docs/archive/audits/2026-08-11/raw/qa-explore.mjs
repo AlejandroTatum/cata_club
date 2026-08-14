@@ -8,7 +8,7 @@
  *   node --experimental-vm-modules docs/auditoria-qa/raw-2026-08-11/qa-explore.mjs
  *   (resuelve @playwright/test desde frontend/node_modules via NODE_PATH)
  */
-import { chromium } from "/home/alejo/devwork/.projects/apps/cata_club/frontend/node_modules/@playwright/test/index.mjs";
+import { chromium } from "../../../../../frontend/node_modules/@playwright/test/index.mjs";
 import { mkdirSync, appendFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -335,13 +335,7 @@ async function check_dashboard_mobile_focus(ctx) {
 }
 
 // ---------- main ----------
-(async () => {
-  for (const a of Object.keys(creds)) mkdirSync(`${SHOTS}/${a}`, { recursive: true });
-
-  const browser = await chromium.launch({ headless: true });
-  const desktop = { width: 1440, height: 900, slug: "desktop" };
-  const mobile = { width: 390, height: 844, slug: "mobile" };
-
+async function actorPass(browser, desktop, mobile) {
   // Recorrido limpio: por actor, login ÚNICO y reusar contexto para todas sus rutas.
   for (const actor of Object.keys(creds)) {
     const ctx = await browser.newContext({ viewport: { width: desktop.width, height: desktop.height }, reducedMotion: "reduce" });
@@ -388,7 +382,9 @@ async function check_dashboard_mobile_focus(ctx) {
     await ctx.close().catch(() => {});
     emit("actor-done", { actor });
   }
+}
 
+async function focusedPass(browser) {
   // Pass 2: hallazgos puntuales (un contexto por actor para autenticar).
   {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
@@ -418,6 +414,17 @@ async function check_dashboard_mobile_focus(ctx) {
     await check_add_dependent_fecha(ctx);
     await ctx.close().catch(() => {});
   }
+}
+
+(async () => {
+  for (const a of Object.keys(creds)) mkdirSync(`${SHOTS}/${a}`, { recursive: true });
+
+  const browser = await chromium.launch({ headless: true });
+  const desktop = { width: 1440, height: 900, slug: "desktop" };
+  const mobile = { width: 390, height: 844, slug: "mobile" };
+
+  await actorPass(browser, desktop, mobile);
+  await focusedPass(browser);
 
   await browser.close();
   emit("done", {});

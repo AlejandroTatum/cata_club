@@ -73,7 +73,7 @@ type HorariosState =
 // "Miembro nº", "Desde" and "Renueva" are NOT rendered — see the block comment
 // above `resolveCoverageEnd` in student-utils.ts for where each one dies.
 //
-// ## "El carnet manda" (docs/fixes/12-mi-cuenta-carnet.md)
+// ## "El carnet manda" (docs/archive/fixes/12-mi-cuenta-carnet.md)
 //
 // The redesign folds the payment situation into the carnet as a status band,
 // in the position the chosen maquette draws it — over the card, not beside
@@ -106,7 +106,7 @@ type HorariosState =
  * 21:15") used to be one plain string in a 172px-wide grid cell, so the
  * browser wrapped wherever it found a space — including inside a single
  * window, splitting "20:00 —" from "21:15" (fix 12b,
- * docs/fixes/12-mi-cuenta-carnet.md). Each window is wrapped in its own
+ * docs/archive/fixes/12-mi-cuenta-carnet.md). Each window is wrapped in its own
  * `whitespace-nowrap` span so the ONLY point where a line can break is the
  * " · " between them, which stays a normal (breakable) text node — never
  * inside a window, always between two.
@@ -769,7 +769,7 @@ function ActivePortalView({
           description="Inscríbase como jugador o agregue un hijo o dependiente para empezar."
         />
       ) : (
-        // "El carnet manda" (docs/fixes/12-mi-cuenta-carnet.md, Propuesta 2):
+        // "El carnet manda" (docs/archive/fixes/12-mi-cuenta-carnet.md, Propuesta 2):
         // the identity card carries its own payment band; the rail stacks the
         // "Cuota" detail card over "Esta semana". `PAGE_RAIL` is the
         // product's one two-column split (see layout.ts) — kept for its

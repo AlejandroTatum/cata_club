@@ -490,7 +490,7 @@ describe("describePaymentSituation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The carnet's status band ("El carnet manda" — docs/fixes/12-mi-cuenta-carnet.md)
+// The carnet's status band ("El carnet manda" — docs/archive/fixes/12-mi-cuenta-carnet.md)
 // ---------------------------------------------------------------------------
 
 describe("paymentBandTone", () => {

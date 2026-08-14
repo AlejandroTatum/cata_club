@@ -133,7 +133,7 @@ class AsistenciaServicio:
         return codigo
 
     def crear_categoria(self, datos: CategoriaCreateDTO) -> CategoriaResponseDTO:
-        """Alta atómica (docs/fixes/24-abm-categorias.md, pedido del dueño):
+        """Alta atómica (docs/archive/fixes/24-abm-categorias.md, pedido del dueño):
         una sola operación crea la categoria, sus días permitidos y un
         `horario_entrenamiento` por cada día marcado."""
         nombre = datos.nombre.strip()
@@ -167,7 +167,7 @@ class AsistenciaServicio:
 
     def actualizar_categoria(self, codigo: str, datos: CategoriaUpdateDTO) -> CategoriaResponseDTO:
         """Edición atómica de nombre/franja/días -- ver
-        docs/fixes/24-abm-categorias.md para las cuatro decisiones que
+        docs/archive/fixes/24-abm-categorias.md para las cuatro decisiones que
         gobiernan este método:
 
         1. Cambiar la franja RE-DERIVA las horas de los horarios que
@@ -338,7 +338,7 @@ class AsistenciaServicio:
     def registrar_asistencia(self, datos: AsistenciaCreateDTO) -> Asistencia:
         """No se registra quién dictó la sesión: cualquier entrenador opera
         cualquier horario y el dato no tiene consumidor (issue #13,
-        docs/concepto-alcance-modelo.md §4).
+        docs/product/concepto-alcance-modelo.md §4).
 
         Upsert por (persona_id, horario_id, fecha_entrenamiento): re-tomar
         asistencia para una sesión ya registrada (ej. reabrir el wizard

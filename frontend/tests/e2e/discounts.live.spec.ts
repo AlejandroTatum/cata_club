@@ -7,7 +7,7 @@
  * que prueban el render del cliente contra respuestas inventadas y nada de lo
  * que ocurre DESPUÉS de un envío queda cubierto: el toast de éxito, el estado
  * "Guardando…" y la persistencia real nunca se ejercitan. Ese es exactamente
- * el hueco que documenta `docs/ux/evaluacion-usabilidad-rediseno.md`.
+ * el hueco que documenta `docs/archive/prototypes/evaluacion-usabilidad-rediseno.md`.
  *
  * Este spec no llama a `page.route` ni una vez. Se autentica con las
  * credenciales que siembra `backend/scripts/seed_dev_base.py`, crea un

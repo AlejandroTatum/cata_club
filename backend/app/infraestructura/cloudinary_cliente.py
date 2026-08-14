@@ -306,7 +306,7 @@ def generar_url_firmada(
     con `sign_url=True` (nadie sin el `api_secret` puede construir un link
     que Cloudinary acepte) pero sin vencer -- cierra la enumeración pública,
     no la reutilización indefinida de un link ya firmado que se filtre.
-    Ver docs/fixes/16-voucher-no-enumerable.md para el residual documentado.
+    Ver docs/archive/fixes/16-voucher-no-enumerable.md para el residual documentado.
     """
     _configurar_cliente()
 
@@ -346,7 +346,7 @@ def resolver_url_entrega(
     (`urlparse(...).scheme in ("http", "https")`, no un prefijo de string) y
     se devuelven sin cambios en vez de romperlas en silencio -- siguen
     siendo públicas, riesgo residual documentado en
-    docs/fixes/16-voucher-no-enumerable.md junto con la migración pendiente.
+    docs/archive/fixes/16-voucher-no-enumerable.md junto con la migración pendiente.
     `urlparse` normaliza el esquema a minúsculas, así que un valor heredado
     con `HTTPS://` en mayúsculas también se detecta como URL (diferencia
     deliberada frente a un `startswith` literal: en la práctica no ocurre,

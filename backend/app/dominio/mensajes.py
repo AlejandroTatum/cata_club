@@ -27,7 +27,7 @@ implementación de un servicio en particular.
 # (`tests/test_mensajes_identidad_duplicada.py`).
 MENSAJE_IDENTIDAD_DUPLICADA = "Ya existe una cuenta registrada con los datos ingresados."
 
-# INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1, guardarraíl 3): respuesta
+# INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1, guardarraíl 3): respuesta
 # única para "esta cédula no se puede vincular a su cuenta", sin importar el
 # motivo real -- que no exista ninguna Persona con esa cédula, que exista pero
 # sea mayor de edad, que ya esté vinculada a este mismo representante, o que

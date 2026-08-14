@@ -20,7 +20,7 @@
  * ## No chrome, on purpose
  *
  * `resolveShellKind("/unauthorized")` returns "standalone", and the note on
- * `docs/ux/prototipos/26-sin-rol.html` says why: an account with no role has
+ * `docs/archive/prototypes/prototipos/26-sin-rol.html` says why: an account with no role has
  * nowhere to navigate, and offering it an empty menu is worse than offering
  * nothing. The usability evaluation scores this screen as the MODEL for error
  * recovery — it says what happened AND what to do — so it carries the pattern

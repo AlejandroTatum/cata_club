@@ -19,7 +19,7 @@ class HorarioCreateDTO(BaseModel):
 
     Sin `entrenador_id`: el club no asigna entrenadores a horarios -- la
     clase la da el entrenador disponible (issue #13,
-    docs/concepto-alcance-modelo.md §4)."""
+    docs/product/concepto-alcance-modelo.md §4)."""
     categoria: str
     dia_semana: DiaSemana
 
@@ -46,7 +46,7 @@ class CategoriaResponseDTO(ResponseBase, BaseModel):
 
 
 class CategoriaCreateDTO(BaseModel):
-    """Alta atómica (docs/fixes/24-abm-categorias.md, pedido del dueño:
+    """Alta atómica (docs/archive/fixes/24-abm-categorias.md, pedido del dueño:
     "quisiera que se cree directo el horario y categoría, no diferentes"):
     una sola operación crea la fila `categoria_horario`, sus
     `categoria_horario_dia` y un `horario_entrenamiento` por cada día

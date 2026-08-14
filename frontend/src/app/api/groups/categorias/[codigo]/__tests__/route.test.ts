@@ -1,7 +1,7 @@
 /**
  * Route Handler Tests — PUT/DELETE /api/groups/categorias/[codigo]
  *
- * docs/fixes/24-abm-categorias.md: PUT speaks the categoria-edit contract
+ * docs/archive/fixes/24-abm-categorias.md: PUT speaks the categoria-edit contract
  * (`nombre`/`hora_inicio`/`hora_fin`/`dias`, all optional, applied with
  * `exclude_unset`); DELETE removes the categoria and every one of its
  * horarios, blocked server-side (400) when any has real Asistencia history.

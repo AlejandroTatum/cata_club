@@ -53,7 +53,7 @@ const config: Config = {
         // -------------------------------------------------------------------
         // "La Paleta" design system — the brand values (coal, red, ball) and
         // the type/metric scale are transcribed from
-        // `docs/ux/prototipos/_sistema.css` (the approved, executable spec).
+        // `docs/archive/prototypes/prototipos/_sistema.css` (the approved, executable spec).
         // Do not tune those by eye; change the spec first.
         //
         // The SURFACE relationship (canvas / sunken / paper / line) is the one

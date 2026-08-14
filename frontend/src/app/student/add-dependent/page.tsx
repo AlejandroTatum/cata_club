@@ -215,7 +215,7 @@ function AddDependentContent(): React.ReactElement {
   }
 
   /**
-   * INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): the "Vincular a mi
+   * INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): the "Vincular a mi
    * cuenta" action next to the duplicate-identity alert. Reuses the cédula
    * the visitor already typed in the "child" step — no extra field, no extra
    * page, no extra click beyond the one that reveals this button. The

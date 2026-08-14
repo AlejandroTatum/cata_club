@@ -12,7 +12,7 @@
  * variable-width sentence, and a timestamp. There are no columns to align — the
  * middle is a sentence that wraps — so a `<thead>` would name nothing and a
  * fixed column track would only stop the sentence from using the width it has.
- * `docs/ux/prototipos/_sistema.css` already draws it as its own thing (`.feed
+ * `docs/archive/prototypes/prototipos/_sistema.css` already draws it as its own thing (`.feed
  * .it`, :269), separate from `.tbl`.
  *
  * What it was NOT allowed to keep is being loose markup: the dashboard hand-

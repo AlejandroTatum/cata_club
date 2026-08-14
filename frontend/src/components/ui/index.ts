@@ -1,7 +1,7 @@
 /**
  * "La Paleta" UI primitives.
  *
- * Every dimension in here is transcribed from `docs/ux/prototipos/_sistema.css`,
+ * Every dimension in here is transcribed from `docs/archive/prototypes/prototipos/_sistema.css`,
  * the approved design-system spec, and surfaced through the `h-ctl` / `h-badge`
  * / `h-stat` / `rounded-card` tokens in `tailwind.config.ts`. Use these instead
  * of hand-rolling a control: the whole point is that 40px is the default, not

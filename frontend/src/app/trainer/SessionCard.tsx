@@ -1,6 +1,6 @@
 /**
  * The immediate-session card — the coal half of the trainer dashboard's top
- * row (issue #211, `docs/ux/prototipos/31-entrenador-dashboard-alternativas.html`).
+ * row (issue #211, `docs/archive/prototypes/prototipos/31-entrenador-dashboard-alternativas.html`).
  *
  * The big number follows whichever question is still live: before the
  * session starts, the question is "how long until" and the countdown owns

@@ -87,7 +87,7 @@ export const STEP_LABELS: Record<WizardStep, string> = {
  * One-word names for the stepper pills — the visitor must see what the five
  * steps ARE from step one, not "Paso 2 de 5".
  *
- * The approved prototype (`docs/ux/prototipos/05-inscripcion.html`) names the
+ * The approved prototype (`docs/archive/prototypes/prototipos/05-inscripcion.html`) names the
  * fourth step "Membresía". This wizard's fourth step is NOT membership: the
  * public `POST /enrollment` contract takes `alumno`, `fichaMedica` and either
  * `credencialesAlumno` or `representante` — no plan, no amount. Creating a

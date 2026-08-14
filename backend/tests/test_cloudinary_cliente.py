@@ -346,7 +346,7 @@ def test_resolver_url_entrega_de_una_fila_previa_al_fix_no_se_toca():
     un recurso `type="upload"` (pública). No hay forma de repararlas sin
     volver a subir el archivo con las credenciales reales de Cloudinary
     (ausentes en este entorno) -- se devuelven sin cambios en vez de
-    romperlas en silencio; ver docs/fixes/16-voucher-no-enumerable.md."""
+    romperlas en silencio; ver docs/archive/fixes/16-voucher-no-enumerable.md."""
     url_heredada = "https://res.cloudinary.com/cataclub/image/upload/voucher-pago-00000003.jpg"
 
     resultado = cc.resolver_url_entrega(url_heredada, resource_type="image")

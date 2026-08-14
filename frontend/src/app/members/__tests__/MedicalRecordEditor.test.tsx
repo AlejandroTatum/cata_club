@@ -157,7 +157,7 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
  * the wrong student's record because you lost sight of whose it was.
  *
  * jsdom does not lay out or scroll, so "stays on screen while scrolling"
- * itself is checked by screenshot (see docs/fixes/14-header-ficha-medica.md),
+ * itself is checked by screenshot (see docs/archive/fixes/14-header-ficha-medica.md),
  * not here. What IS locked here: the title carries weight a field label
  * doesn't, the student's name is rendered at all when the caller supplies
  * it, and the element meant to persist is wired with `sticky` positioning —

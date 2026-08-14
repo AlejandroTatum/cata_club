@@ -12,7 +12,7 @@
  *    a second time — send them to sign in or recover their password.
  *  - `representative` (adding a dependent): the dependent already exists,
  *    possibly under another guardian. INS-2
- *    (docs/decisiones-de-negocio-2026-08-11.md §1): the representante can
+ *    (docs/product/decisiones-de-negocio-2026-08-11.md §1): the representante can
  *    link that person to their own account directly, no club approval
  *    needed — the actual action lives next to this hint, rendered by the
  *    wizard's `WizardNavigation` (`onLinkExisting`), because doing it here

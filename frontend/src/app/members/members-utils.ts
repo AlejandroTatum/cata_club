@@ -356,7 +356,7 @@ export function getAccountStatusBadge(account: MemberAccount): {
     return { label: "Cuenta suspendida", tone: "bad" };
   }
   // Neutral, never `bad`. Red is reserved for the primary CTA and for
-  // errors/destructive states (`docs/ux/plan-implementacion-rediseno.md`,
+  // errors/destructive states (`docs/archive/prototypes/plan-implementacion-rediseno.md`,
   // "Concepto y reglas duras" §3 and §5). "Sin membresía" is the state every
   // freshly registered account is in; a red badge told 29 of 44 accounts they
   // were broken when nothing had gone wrong.

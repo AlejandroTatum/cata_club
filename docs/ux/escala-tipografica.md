@@ -267,7 +267,7 @@ El plan de implementación proponía quedarse con `normal` / `semibold` / `bold`
 `medium → semibold` y `extrabold → bold`. La primera mitad se cumplió; la segunda no, y la razón
 está en la autoridad visual.
 
-`docs/ux/prototipos/_sistema.css` declara `font-weight` 51 veces sobre cinco valores, y el reparto
+`docs/archive/prototypes/prototipos/_sistema.css` declara `font-weight` 51 veces sobre cinco valores, y el reparto
 no es parejo: **700 treinta y dos veces, 600 veinte, 800 dieciséis — y 500 y 400 exactamente una
 vez cada uno.**
 

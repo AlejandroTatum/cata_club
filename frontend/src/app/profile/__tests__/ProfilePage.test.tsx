@@ -1278,7 +1278,7 @@ describe("ProfilePage — the redesigned account layout", () => {
   it("does not repeat a back link the shell's own sidebar already provides", async () => {
     await renderAdmin();
 
-    // `docs/ux/prototipos/25-perfil.html` draws no back link: the sidebar is
+    // `docs/archive/prototypes/prototipos/25-perfil.html` draws no back link: the sidebar is
     // the way back, and the extra row only cost vertical space above the fold.
     expect(screen.queryByRole("link", { name: /volver al panel/i })).not.toBeInTheDocument();
   });

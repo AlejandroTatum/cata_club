@@ -4,7 +4,7 @@ TRA-4 (issue #111): freno progresivo por cuenta contra fuerza bruta de login.
 Antes, el único tope era el rate limiter genérico (60/minuto por IP,
 `auth_router.py:21`), que no protege a una cuenta puntual: reparte el ataque
 entre varias IPs, o simplemente entra dentro del cupo por minuto. La decisión
-de negocio (docs/decisiones-de-negocio-2026-08-11.md, sección 3) descarta un
+de negocio (docs/product/decisiones-de-negocio-2026-08-11.md, sección 3) descarta un
 bloqueo duro -- eso regala un ataque nuevo, dejar a un socio afuera sin saber
 ninguna contraseña -- y elige un retraso creciente por CUENTA: 1s al tercer
 intento fallido, 2s al cuarto, 4s al quinto, duplicando, techo de 60s. Un

@@ -2,7 +2,7 @@
  * Login Page — real backend authentication via the BFF (/api/auth/login).
  *
  * Layout is `AuthShell`, transcribed from the login stage of
- * `docs/ux/prototipo-rediseno.html` (the approved 14-view prototype, which is
+ * `docs/archive/prototypes/prototipo-rediseno.html` (the approved 14-view prototype, which is
  * the authority for the auth screens). This screen owns none of its own
  * composition: coal panel, card and red eyebrow all come from the shared
  * template.

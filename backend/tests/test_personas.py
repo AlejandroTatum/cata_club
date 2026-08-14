@@ -107,7 +107,7 @@ def test_actualizar_persona(client):
 
 
 # --- GET /personas/entrenadores: murió con la relación entrenador–horario ---
-# (issue #13, docs/concepto-alcance-modelo.md §4). El selector de entrenador
+# (issue #13, docs/product/concepto-alcance-modelo.md §4). El selector de entrenador
 # del formulario de horarios era su único consumidor; sin titular en el
 # horario la ruta no tiene a quién alimentar. Guardia estructural (misma
 # técnica que `test_orden_rutas.py`) para que no reaparezca.

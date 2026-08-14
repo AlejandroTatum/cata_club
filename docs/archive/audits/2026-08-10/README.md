@@ -619,6 +619,6 @@ POST /auth/sesiones/invalidar → version\_sesion 2→3, y ahi si access\_token 
 
 - **Lectores de pantalla reales** (solo WCAG por inspección manual).
 
-[https://design.penpot.app/mcp/stream?userToken=eyJhbGciOiJBMjU2S1ciLCJlbmMiOiJBMjU2R0NNIn0.n4eGiXNUZ9MNlPwIu4YiGU04a1hWoSdlcgHH7EwU-QWbMyXNpwZShw.S3OOk0o23IBPiJrj.gkOUtZU7HaJkKn3UfUv\_TSMRaLNFwY2PiSs5K4ObebmEzsPuy5nMUxXzsiOTZVdWRfYWkFIoO-w\_IqJfEWmJruoSo2ACtEaFAElhY70XIbZ2cwxHkGqbEj\_px76XfZwDPqm\_HLeYc9CpTt\_MtOB5YS3oJwBuQlKP30xwK2hY6CUH\_BBhV3FAU6s5qPiMqVoxKda4Fzri0uSa.snEHdXqMEWvpFXDJez-pGg](https://design.penpot.app/mcp/stream?userToken=eyJhbGciOiJBMjU2S1ciLCJlbmMiOiJBMjU2R0NNIn0.n4eGiXNUZ9MNlPwIu4YiGU04a1hWoSdlcgHH7EwU-QWbMyXNpwZShw.S3OOk0o23IBPiJrj.gkOUtZU7HaJkKn3UfUv_TSMRaLNFwY2PiSs5K4ObebmEzsPuy5nMUxXzsiOTZVdWRfYWkFIoO-w_IqJfEWmJruoSo2ACtEaFAElhY70XIbZ2cwxHkGqbEj_px76XfZwDPqm_HLeYc9CpTt_MtOB5YS3oJwBuQlKP30xwK2hY6CUH_BBhV3FAU6s5qPiMqVoxKda4Fzri0uSa.snEHdXqMEWvpFXDJez-pGg)
+[https://design.penpot.app/mcp/stream?userToken=[REDACTED-REVOKE-TOKEN]](https://design.penpot.app/mcp/stream?userToken=[REDACTED-REVOKE-TOKEN])
 
 
