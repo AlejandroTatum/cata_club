@@ -123,7 +123,7 @@ export function nextAttendanceState(
 
 /**
  * The order tapping a student's row walks through
- * (`docs/ux/prototipos/20-tomar-lista.html`):
+ * (`docs/archive/prototypes/prototipos/20-tomar-lista.html`):
  *
  *   Sin marcar → Presente → Tardanza → Justificado → Ausente → Presente → …
  *

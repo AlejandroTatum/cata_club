@@ -1,5 +1,5 @@
 /**
- * The lock on `docs/ux/prototipos/_sistema.css`.
+ * The lock on `docs/archive/prototypes/prototipos/_sistema.css`.
  *
  * That file is the visual authority for the 32 prototypes: values get copied
  * OUT of it when a screen is implemented. So when the app moved its surfaces

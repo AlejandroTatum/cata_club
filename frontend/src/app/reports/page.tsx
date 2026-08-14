@@ -7,7 +7,7 @@
  * whole canvas below was empty. Three date pairs also meant the range you had
  * just typed was thrown away the moment you switched report.
  *
- * `docs/ux/prototipos/18-reportes.html` collapses that: three preset cards at
+ * `docs/archive/prototypes/prototipos/18-reportes.html` collapses that: three preset cards at
  * even height (selection = coal + the yellow ball dot, never red), ONE
  * dd/mm/yyyy range shared by every preset, a "Generar PDF" button, and a
  * preview area that fills the canvas. The preview loads from picking the

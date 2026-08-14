@@ -1,7 +1,7 @@
 /**
  * Route Handler Tests — POST /api/groups/categorias
  *
- * docs/fixes/24-abm-categorias.md: creates a categoria and one horario per
+ * docs/archive/fixes/24-abm-categorias.md: creates a categoria and one horario per
  * día marked, atomically. The backend's `CategoriaCreateDTO` accepts
  * exactly `nombre`, `hora_inicio`, `hora_fin`, `dias` — `codigo` is server-
  * derived, never client input.

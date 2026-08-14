@@ -133,7 +133,7 @@ describe("POST /api/personas/[id]/vincular-representado", () => {
     expect(response.status).toBe(403);
   });
 
-  // Anti-enumeration (guardarraíl 3, docs/decisiones-de-negocio-2026-08-11.md
+  // Anti-enumeration (guardarraíl 3, docs/product/decisiones-de-negocio-2026-08-11.md
   // §1): the BFF must relay the backend's generic 400 VERBATIM, for a
   // nonexistent cédula and for an ineligible-but-existing one alike — it
   // must not rewrite, summarize, or otherwise touch that message.

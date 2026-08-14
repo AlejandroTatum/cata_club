@@ -25,7 +25,7 @@
  * over the login form, the landing's WhatsApp block or the trainer's
  * attendance controls the way the old FAB did.
  *
- * Visual contract from `docs/ux/prototipos/28-chat.html` + `_sistema.css`
+ * Visual contract from `docs/archive/prototypes/prototipos/28-chat.html` + `_sistema.css`
  * (`.chat`, `.bub`, `.typing`, `.quicks`, `.sendb`): 340px panel, coal header
  * with the logo disc and "Responde en segundos", GREY bot bubbles and COAL
  * user bubbles (the user's turn used to be red — red is reserved for the

@@ -364,7 +364,7 @@ export type TipoNotificacion =
   | "PAGO_APROBADO"
   | "PAGO_RECHAZADO"
   | "NUEVA_INSCRIPCION"
-  // INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): notice to the
+  // INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): notice to the
   // PREVIOUS guardian when a dependent gets linked to another account.
   | "VINCULACION_REPRESENTANTE";
 

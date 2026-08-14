@@ -69,7 +69,7 @@ import {
 
 // ---------------------------------------------------------------------------
 // Step 1 — the two ways into the club. Transcribed from
-// `docs/ux/prototipos/05-inscripcion.html:57-67`.
+// `docs/archive/prototypes/prototipos/05-inscripcion.html:57-67`.
 // ---------------------------------------------------------------------------
 
 const ENROLLMENT_CHOICES: { value: EnrollmentType; title: string; description: string }[] = [

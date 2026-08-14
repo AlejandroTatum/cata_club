@@ -43,7 +43,7 @@ de cómo esté escrito el cliente de hoy. Que ambos coincidan es la señal de qu
 los dos entendieron lo mismo, no un acoplamiento.
 
 Los mensajes de 404/401/403 tienen el mismo problema de vocabulario y están
-anotados en `docs/pendientes.md`. Quedan fuera de esta guarda porque hoy no
+anotados en `docs/archive/plans/pendientes.md`. Quedan fuera de esta guarda porque hoy no
 son legibles por nadie; el día que un status se remapee en `_MAPA_EXCEPCIONES`
 entran solos, porque el alcance se deriva de ese mapa y no de una lista.
 

@@ -1,6 +1,6 @@
 /**
  * Component tests for the trainer's attendance history
- * (`docs/ux/prototipos/21-entrenador-historial.html`).
+ * (`docs/archive/prototypes/prototipos/21-entrenador-historial.html`).
  *
  * The route used to be a bare `redirect("/trainer")`. It is a real screen
  * again, and the thing worth pinning down is the grouping: one row per

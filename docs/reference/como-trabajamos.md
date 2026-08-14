@@ -2,13 +2,13 @@
 
 Este documento no es una lista de buenas intenciones. Es el método que
 sostuvo la sesión que cerró los doce ítems y abrió los ocho de
-`docs/pendientes.md` — escrito para alguien que retoma el proyecto sin haber
+`docs/archive/plans/pendientes.md` — escrito para alguien que retoma el proyecto sin haber
 estado. Cada criterio es accionable, no aspiracional: si no podés decidir con
 él en la mano, no está bien escrito.
 
 > Nota (2026-08-13): las listas de pendientes citadas abajo quedaron
 > históricas. La única lista viva de preparación para producción es
-> [`operations/production-readiness.md`](operations/production-readiness.md).
+> [`../operations/production-readiness.md`](../operations/production-readiness.md).
 
 ## Los doce criterios
 
@@ -111,6 +111,6 @@ Errores concretos de esta sesión, para no repetirlos:
 ## Documento hermano
 
 Los defectos y la deuda técnica que dejó esa sesión están en el histórico
-[`docs/pendientes.md`](./pendientes.md), no acá — este documento es el
+[`docs/archive/plans/pendientes.md`](../archive/plans/pendientes.md), no acá — este documento es el
 método, no un pendiente. Para el estado vigente de preparación para
-producción, ver [`operations/production-readiness.md`](operations/production-readiness.md).
+producción, ver [`../operations/production-readiness.md`](../operations/production-readiness.md).

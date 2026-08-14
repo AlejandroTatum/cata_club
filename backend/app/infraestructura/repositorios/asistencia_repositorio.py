@@ -25,7 +25,7 @@ class HorarioRepositorio:
         `AsistenciaServicio.actualizar_categoria`/`eliminar_categoria` para
         bloquear -- ANTES de tocar nada -- quitar un día o borrar una
         categoria entera cuando hay historial: "no se borra historial" es
-        la decisión (docs/fixes/24-abm-categorias.md), y chequear antes
+        la decisión (docs/archive/fixes/24-abm-categorias.md), y chequear antes
         evita depender de parsear un `IntegrityError` de un DELETE en lote
         para saber CUÁL día bloqueó."""
         stmt = select(Asistencia.id).where(Asistencia.horario_id == horario_id)

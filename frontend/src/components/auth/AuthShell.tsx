@@ -3,8 +3,8 @@
  *
  * ## Which prototype is the authority
  *
- * `docs/ux/prototipo-rediseno.html` — the approved 14-view prototype, login
- * section at `<section class="stage" id="stage-login">`. `docs/ux/prototipos/`
+ * `docs/archive/prototypes/prototipo-rediseno.html` — the approved 14-view prototype, login
+ * section at `<section class="stage" id="stage-login">`. `docs/archive/prototypes/prototipos/`
  * supersedes it for the ADMIN shell, but NOT for these four screens: the small
  * `prototipos/01-login.html` composition is a different, reduced design, and
  * building against it is what produced the broken screen this file replaces.

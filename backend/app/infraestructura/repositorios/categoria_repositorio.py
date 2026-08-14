@@ -13,7 +13,7 @@ class CategoriaRepositorio:
     la única fuente de la que `hora_inicio`/`hora_fin`/días permitidos se
     derivan.
 
-    ABM del admin (docs/fixes/24-abm-categorias.md): `crear_con_horarios`,
+    ABM del admin (docs/archive/fixes/24-abm-categorias.md): `crear_con_horarios`,
     `guardar_edicion` y `eliminar_con_horarios` son operaciones COMPUESTAS
     a propósito -- cada una hace UN solo `commit()` para la categoria y
     todo lo que cambia junto con ella (sus `categoria_horario_dia`, los

@@ -37,7 +37,7 @@ divisiones sobre dos métricas comprometidas, no cuatro números elegidos de a u
 
 ## Qué dicen los prototipos
 
-`docs/ux/prototipos/_sistema.css` declara `gap` **88 veces**. Esa es la autoridad, y contestó las
+`docs/archive/prototypes/prototipos/_sistema.css` declara `gap` **88 veces**. Esa es la autoridad, y contestó las
 tres preguntas sin ambigüedad.
 
 **El ritmo de página es 20px, y lo dice una sola regla porque solo hay un contenedor de página:**

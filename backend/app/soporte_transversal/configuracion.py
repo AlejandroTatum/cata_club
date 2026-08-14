@@ -438,7 +438,7 @@ class Settings(BaseSettings):
     # Security), DISTINTA de cloudinary_api_secret. Habilita el vencimiento
     # real de las URLs firmadas de comprobantes/vouchers (ver
     # `cloudinary_cliente.generar_url_firmada`); sin ella, la URL queda
-    # firmada pero sin vencimiento -- ver docs/fixes/16-voucher-no-enumerable.md.
+    # firmada pero sin vencimiento -- ver docs/archive/fixes/16-voucher-no-enumerable.md.
     cloudinary_auth_token_key: str = ""
 
     # --- Correo / SMTP (envío transaccional) ---

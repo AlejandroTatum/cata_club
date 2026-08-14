@@ -53,7 +53,7 @@ describe("NotificationBell", () => {
     expect(screen.getByText("Membresía próxima a vencer")).toBeInTheDocument();
   });
 
-  // INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): the guardian's
+  // INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): the guardian's
   // linking notice is about a minor's custody — it must read at least as
   // clearly as a payment notice, not fall back to a blank title because the
   // frontend's type map never learned about it.

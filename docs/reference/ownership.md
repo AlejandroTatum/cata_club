@@ -26,7 +26,7 @@ crear el `CODEOWNERS`.
 | **Infraestructura / operación** | `docker-compose*.yml`, `Caddyfile`, `.github/workflows/ci.yml`, `Makefile` | Despliegue, rollback, backups, monitoreo, incidentes |
 | **Seguridad** | transversal | Claves, cookies, headers, superficie de ataque, privacidad |
 | **Producto / dominio** | decisiones de negocio | Reglas de negocio, prioridades, criterios de aceptación |
-| **QA / evidencia** | `docs/auditoria-qa/`, `docs/fixes/` | Auditorías, verificación, capturas, trazabilidad |
+| **QA / evidencia** | `docs/archive/audits/`, `docs/archive/fixes/` | Auditorías, verificación, capturas, trazabilidad |
 | **Documentación viva** | `docs/` (activas), READMEs | Verdad documental, lista viva, runbooks, inventarios |
 | **Privacidad / datos** | transversal | Clasificación, retención, borrado, tratamiento de menores |
 

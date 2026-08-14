@@ -6,7 +6,7 @@
  * as the central finding: three date formats and two currency formats meant an
  * admin cross-checking `/payments` against `/reports` was normalising values by
  * hand. On an Operate surface format IS meaning, so there is exactly one date
- * grammar (`dd/mm/yyyy`, per `docs/ux/plan-implementacion-rediseno.md:24`) and
+ * grammar (`dd/mm/yyyy`, per `docs/archive/prototypes/plan-implementacion-rediseno.md:24`) and
  * exactly one currency grammar (`$24,00`, es-EC).
  *
  * Do not hand-roll `toLocaleDateString`, `.toFixed(2)` or a `$${amount}`

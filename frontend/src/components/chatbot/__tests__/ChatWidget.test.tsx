@@ -179,7 +179,7 @@ describe("ChatWidget — error copy per failure class", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The redesign onto "La Paleta" (`docs/ux/prototipos/28-chat.html`).
+// The redesign onto "La Paleta" (`docs/archive/prototypes/prototipos/28-chat.html`).
 // ---------------------------------------------------------------------------
 
 describe("ChatWidget — design system", () => {

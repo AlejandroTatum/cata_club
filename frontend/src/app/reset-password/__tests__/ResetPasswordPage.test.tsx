@@ -4,7 +4,7 @@
  * Covers:
  *   - the screen now inheriting `AuthShell` — this was the ONE auth screen
  *     that drew its own composition, which is why it broke the layout
- *     (`docs/ux/prototipos/04-restablecer-contrasenia.html`). `AuthShell` is
+ *     (`docs/archive/prototypes/prototipos/04-restablecer-contrasenia.html`). `AuthShell` is
  *     rendered for real here (not mocked) precisely so that regression is
  *     caught by a test rather than by eye.
  *   - the live password checklist: rules visible BEFORE anything is typed,

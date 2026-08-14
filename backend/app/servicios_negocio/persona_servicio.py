@@ -49,7 +49,7 @@ def _calcular_edad(fecha_nacimiento: date, referencia: date | None = None) -> in
 
 # --- INS-2: freno progresivo de intentos de vinculación ---------------------
 # Mismo patrón que `AuthServicio._INTENTOS_FALLIDOS_LOGIN` (TRA-4,
-# docs/decisiones-de-negocio-2026-08-11.md §3): un dict a nivel de módulo,
+# docs/product/decisiones-de-negocio-2026-08-11.md §3): un dict a nivel de módulo,
 # simplificación aceptada para el alcance del proyecto (no sobrevive un
 # reinicio del proceso ni se comparte entre réplicas). Acá la clave es el
 # `representante_id` (el actor autenticado), no un correo -- el guardarraíl
@@ -170,7 +170,7 @@ class PersonaServicio:
         return representado
 
     # --- INS-2: vincular un representado ya existente ------------------------
-    # docs/decisiones-de-negocio-2026-08-11.md §1: "Un chico tiene un solo
+    # docs/product/decisiones-de-negocio-2026-08-11.md §1: "Un chico tiene un solo
     # representante, y el representante lo vincula solo". Antes no existía
     # ninguna vía (ni endpoint ni pantalla) para pasar una Persona ya
     # registrada de un representante a otro, pese a que el mensaje de cédula

@@ -1,5 +1,5 @@
 """
-INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): "Un chico tiene un solo
+INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): "Un chico tiene un solo
 representante, y el representante lo vincula solo".
 
 Antes no existía ninguna vía (ni endpoint ni pantalla) para pasar una

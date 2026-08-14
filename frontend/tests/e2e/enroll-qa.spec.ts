@@ -30,14 +30,14 @@
  *
  * ## Capturas
  *
- * Cada caso escribe `docs/auditoria-qa/img-inscripcion-2026-08-12/<ID>-*.png`.
+ * Cada caso escribe `docs/archive/audits/2026-08-12/img/<ID>-*.png`.
  * Los ids (T1, P07, R03…) son los mismos que usa el informe en
- * `docs/auditoria-qa/README-inscripcion-2026-08-12.md`.
+ * `docs/archive/audits/2026-08-12/README.md`.
  */
 
 import { test, expect, type Locator, type Page, type Route } from "@playwright/test";
 
-const SHOT_DIR = "../docs/auditoria-qa/img-inscripcion-2026-08-12";
+const SHOT_DIR = "../docs/archive/audits/2026-08-12/img";
 
 /** Captura de página completa nombrada por el id del caso del informe. */
 async function shot(page: Page, caseId: string, slug: string): Promise<void> {

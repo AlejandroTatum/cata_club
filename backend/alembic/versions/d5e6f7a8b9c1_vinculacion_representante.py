@@ -4,7 +4,7 @@ Revision ID: d5e6f7a8b9c1
 Revises: c6b3e8f2a5d9
 Create Date: 2026-08-11 00:00:00.000000
 
-INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): un representante puede
+INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): un representante puede
 vincular a su cuenta un representado ya existente escribiendo su cédula, sin
 que nadie apruebe. Esta migración agrega:
 

@@ -4,7 +4,7 @@ Revision ID: b8d4a7e1f3c2
 Revises: c3d9f2b7a1e5
 Create Date: 2026-07-31 00:00:00.000000
 
-Modelo de descuentos firmado (docs/concepto-alcance-modelo.md §4, issue #11):
+Modelo de descuentos firmado (docs/product/concepto-alcance-modelo.md §4, issue #11):
 
   - `descuento`: catálogo VIVO administrado por el club. Porcentaje O monto
     fijo (XOR, respaldado por CHECK), nombre único, baja suave vía `activo`.

@@ -1,7 +1,7 @@
 # Readiness de producción — lista viva
 
 **ÚNICA lista viva de preparación para producción.** Reemplaza a
-`docs/pendientes-2026-08-11.md` y a `docs/plan-de-lanzamiento.md` como
+`docs/archive/plans/pendientes-2026-08-11.md` y a `docs/archive/plans/plan-de-lanzamiento.md` como
 fuente de verdad sobre qué falta para producir: esos dos son históricos y
 pueden contener afirmaciones que ya no son ciertas. Si un ítem de acá no
 reproduce contra el código actual, se actualiza este documento — no los
@@ -60,15 +60,15 @@ del repo.
 | Rollback a imagen previa | Needs evidence | Infraestructura (nominal pendiente) | Runbook [`rollback.md`](rollback.md) | Mecanismo Ready (SHA inmutables); no hay evidencia de un rollback ejecutado. |
 | Backup y restore de Postgres | Not evaluated | Infraestructura (nominal pendiente) | [`backup-restore.md`](backup-restore.md) | **No existe mecanismo de backup automatizado ni restore probado.** Decisión pendiente; ver runbook. Crítico por datos de menores y pagos. |
 | Monitoring: métricas y trazas | Blocked | Infraestructura (nominal pendiente) | `rg -ln "prometheus|opentelemetry|statsd" backend/ frontend/src` → vacío | Solo existe correlación (`X-Request-ID`). El plan de lanzamiento lo trató como bloqueante: sin métricas, una caída se descubre porque avisa un socio. |
-| Rate limiting de tráfico anónimo | Blocked | Backend | `backend/app/soporte_transversal/rate_limit.py` + informe de inscripción (`docs/auditoria-qa/README-inscripcion-2026-08-12.md`, sección "Límite de intentos") | El cubo es global para tráfico anónimo: en la topología de producción (BFF server-side) **todos los visitantes comparten un cubo** — 11 pedidos/min dejan el club sin poder inscribir. Fix en rama local sin mergear (`fix/rate-limit-por-visitante`); no re-implementar, revisar y mergear. |
+| Rate limiting de tráfico anónimo | Blocked | Backend | `backend/app/soporte_transversal/rate_limit.py` + informe de inscripción (`docs/archive/audits/2026-08-12/README.md`, sección "Límite de intentos") | El cubo es global para tráfico anónimo: en la topología de producción (BFF server-side) **todos los visitantes comparten un cubo** — 11 pedidos/min dejan el club sin poder inscribir. Fix en rama local sin mergear (`fix/rate-limit-por-visitante`); no re-implementar, revisar y mergear. |
 | Inventario de variables de entorno | Ready (con gap) | Desarrollo | [`reference/configuration.md`](../reference/configuration.md) + ver ítem A-2 abajo | Este PR crea el inventario canónico; los `.env.example` siguen sin documentar `IMAGE_TAG`, `FRONTEND_URL` y los `SMTP_*` (ítem A-2). |
 
 ## Hallazgos abiertos
 
 Solo hallazgos verificables y vigentes, con su evidencia. Para el detalle
-completo: [`docs/auditoria-qa/README-inscripcion-2026-08-12.md`](../auditoria-qa/README-inscripcion-2026-08-12.md)
+completo: [`docs/archive/audits/2026-08-12/README.md`](../archive/audits/2026-08-12/README.md)
 (auditoría de inscripción del 12-ago), los históricos referenciados al pie y
-los `docs/fixes/`.
+los `docs/archive/fixes/`.
 
 ### De la auditoría de inscripción (12-ago-2026)
 
@@ -95,8 +95,8 @@ contra el backend real está en el informe (la suite congela "hoy" en
 | A-3 | El 422 de Pydantic llega como arreglo en inglés | `rg -n "RequestValidationError" backend/` → sin handler global | Abierto (backend) — el BFF traduce algunos casos (ver S05 del informe de inscripción) |
 | A-4 | `Asistencia` no guarda quién tomó la lista (`registrado_por`) | `rg -n "registrado_por" backend/app/dominio/modelos.py` → ausente | Abierto (trazabilidad) |
 | A-5 | Quinto cálculo de edad sin unificar | `frontend/src/app/student/student-utils.ts` (`isMinor`) | Abierto (refactor) — los techos de `admin_cuenta_servicio.py` ya están resueltos (verificado) |
-| A-6 | Capturas del fix 23 faltantes | `docs/fixes/img/23*` no existe | Abierto (evidencia visual) |
-| A-7 | Comprobantes legacy con URL pública en Cloudinary | No verificable sin credenciales reales | Abierto — requiere credenciales y migración de datos; ver `docs/fixes/16-voucher-no-enumerable.md` |
+| A-6 | Capturas del fix 23 faltantes | `docs/archive/fixes/img/23*` no existe | Abierto (evidencia visual) |
+| A-7 | Comprobantes legacy con URL pública en Cloudinary | No verificable sin credenciales reales | Abierto — requiere credenciales y migración de datos; ver `docs/archive/fixes/16-voucher-no-enumerable.md` |
 | A-8 | Correo no ejercitable en QA (workers fuera de `QA_SERVICIOS`) | `Makefile` (`QA_SERVICIOS = db redis mailpit backend frontend`) | Abierto (señalizado en la salida de `make qa-up`) — en producción los workers sí están |
 
 ### Ítems del rastro previo que **ya no aplican** (no copiar de los históricos)
@@ -122,11 +122,11 @@ contra el backend real está en el informe (la suite congela "hoy" en
 
 | Tema | Lugar |
 |---|---|
-| Detalle de hallazgos de inscripción y evidencia | [`docs/auditoria-qa/README-inscripcion-2026-08-12.md`](../auditoria-qa/README-inscripcion-2026-08-12.md) |
-| Auditoría de producto (10-ago) | [`docs/auditoria-qa/README.md`](../auditoria-qa/README.md) |
-| Auditoría de readiness (27-jul) | [`docs/auditoria-production-readiness-main-2026-07-27.md`](../auditoria-production-readiness-main-2026-07-27.md) |
-| Arreglos verificados: 24 dossiers (`01`–`24`) + 2 integraciones (`00-*`) | [`docs/fixes/`](../fixes/BRIEF.md) |
-| Histórico de pendientes (8-ago, superado) | [`docs/pendientes.md`](../pendientes.md) |
-| Histórico de pendientes (11-ago, superado) | [`docs/pendientes-2026-08-11.md`](../pendientes-2026-08-11.md) |
-| Plan de lanzamiento (10-ago, superado) | [`docs/plan-de-lanzamiento.md`](../plan-de-lanzamiento.md) |
-| Método de trabajo | [`docs/como-trabajamos.md`](../como-trabajamos.md) |
+| Detalle de hallazgos de inscripción y evidencia | [`docs/archive/audits/2026-08-12/README.md`](../archive/audits/2026-08-12/README.md) |
+| Auditoría de producto (10-ago) | [`docs/archive/audits/2026-08-10/README.md`](../archive/audits/2026-08-10/README.md) |
+| Auditoría de readiness (27-jul) | [`docs/archive/audits/2026-07-27/auditoria-production-readiness.md`](../archive/audits/2026-07-27/auditoria-production-readiness.md) |
+| Arreglos verificados: 24 dossiers (`01`–`24`) + 2 integraciones (`00-*`) | [`docs/archive/fixes/`](../archive/fixes/BRIEF.md) |
+| Histórico de pendientes (8-ago, superado) | [`docs/archive/plans/pendientes.md`](../archive/plans/pendientes.md) |
+| Histórico de pendientes (11-ago, superado) | [`docs/archive/plans/pendientes-2026-08-11.md`](../archive/plans/pendientes-2026-08-11.md) |
+| Plan de lanzamiento (10-ago, superado) | [`docs/archive/plans/plan-de-lanzamiento.md`](../archive/plans/plan-de-lanzamiento.md) |
+| Método de trabajo | [`reference/como-trabajamos.md`](../reference/como-trabajamos.md) |

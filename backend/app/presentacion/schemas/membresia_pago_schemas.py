@@ -55,7 +55,7 @@ class PagoCreateDTO(BaseModel):
     # `fecha_inicio`/`fecha_fin` NO se aceptan del cliente (fix período de
     # cobertura, PAG-5): el endpoint permitía mandar CUALQUIER rango -- un
     # pago de un mes con un año de cobertura, reproducido en vivo contra QA
-    # (ver docs/fixes/06-periodo-de-cobertura.md). El período ahora lo
+    # (ver docs/archive/fixes/06-periodo-de-cobertura.md). El período ahora lo
     # deriva `PagoServicio.registrar_pago` del monto base y la cuota; un
     # campo que el cliente mande y el backend descarte en silencio es la
     # próxima confusión, así que se quita del contrato en vez de ignorarse.

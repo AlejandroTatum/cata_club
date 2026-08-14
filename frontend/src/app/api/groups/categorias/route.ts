@@ -2,7 +2,7 @@
  * BFF proxy — POST /api/groups/categorias
  *
  * Creates a categoria and one horario per día marked, atomically
- * (docs/fixes/24-abm-categorias.md — the owner's own words: "quisiera que
+ * (docs/archive/fixes/24-abm-categorias.md — the owner's own words: "quisiera que
  * se cree directo el horario y categoría, no diferentes"). Proxies to
  * FastAPI's POST /asistencias/categorias, whose `CategoriaCreateDTO` accepts
  * `nombre`, `hora_inicio`, `hora_fin`, `dias` — `codigo` is NOT input, the

@@ -337,7 +337,7 @@ class PagoServicio:
         # llegaban del cliente y el servicio solo confiaba en que una fuera
         # anterior a la otra -- un pago de UN mes podía pedir DOCE de
         # cobertura y el 201 lo aceptaba (agujero reproducido en vivo, ver
-        # docs/fixes/06-periodo-de-cobertura.md). Ahora el backend deriva el
+        # docs/archive/fixes/06-periodo-de-cobertura.md). Ahora el backend deriva el
         # período: arranca donde termina la del último pago APROBADO (o hoy
         # si no hay ninguno, igual que antes leía el frontend) y avanza
         # tantos meses completos como el monto compre.
@@ -397,7 +397,7 @@ class PagoServicio:
         (`persona_id_solicitante`) y lo asigna directo a la columna, sin
         necesidad de un tercer valor de retorno.
 
-        Invariantes firmados (docs/concepto-alcance-modelo.md §4, colapsado a
+        Invariantes firmados (docs/product/concepto-alcance-modelo.md §4, colapsado a
         columnas de `Pago` -- el dueño confirmó que un pago lleva UN solo
         descuento):
         - Valor congelado: se copia el valor calculado HOY (y el porcentaje

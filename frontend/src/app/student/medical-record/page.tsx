@@ -18,7 +18,7 @@
  * REPRESENTADO (`representante_id`) has nothing to do with a titular's own
  * age (`ficha_medica_router.py::_es_titular_mayor_de_edad`) — so merging
  * them is purely a routing concern: one path, one component, branching on
- * role. See `docs/fixes/15-ficha-medica-propia.md`'s "Conflicto con
+ * role. See `docs/archive/fixes/15-ficha-medica-propia.md`'s "Conflicto con
  * feat/ficha-medica-representante" section for the resolution this file
  * carries out.
  *

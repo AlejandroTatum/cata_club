@@ -103,7 +103,7 @@ describe("WizardNavigation — already-registered escape hatch", () => {
   });
 });
 
-// --- INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): "Vincular a mi
+// --- INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): "Vincular a mi
 // cuenta" action next to the alert. Same-click as the escape hatch above —
 // no extra page, no extra step beyond the one that already reveals the
 // duplicate-identity error. ---------------------------------------------

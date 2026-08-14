@@ -346,7 +346,7 @@ describe("AppShell", (): void => {
 
   // -------------------------------------------------------------------------
   // Mobile navigation entry point. It differs by role on purpose: admin gets
-  // the bottom tab bar from `docs/ux/prototipos/27-movil.html` (four
+  // the bottom tab bar from `docs/archive/prototypes/prototipos/27-movil.html` (four
   // destinations at thumb height, the rest behind "Más"); every other role
   // keeps the hamburger, because a 4-up bar with two empty slots is worse
   // than a menu.

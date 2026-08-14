@@ -1,6 +1,6 @@
 /**
  * Pure helpers for the trainer's "Mi día" screen
- * (`docs/ux/prototipos/19-entrenador.html`).
+ * (`docs/archive/prototypes/prototipos/19-entrenador.html`).
  *
  * The screen has ONE job: get the trainer to the next roll call. Everything
  * here exists to answer four questions from data the backend actually

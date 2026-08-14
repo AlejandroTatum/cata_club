@@ -1,7 +1,7 @@
 /**
  * "Últimas listas" — the club's recent attendance sessions as dense,
  * full-width rows (issue #211,
- * `docs/ux/prototipos/31-entrenador-dashboard-alternativas.html`).
+ * `docs/archive/prototypes/prototipos/31-entrenador-dashboard-alternativas.html`).
  *
  * Replaces the old table of four loose colored `Badge`s per row: the system
  * reserves color for badges and pills, and four tones per row competed with

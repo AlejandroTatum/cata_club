@@ -107,7 +107,7 @@ def test_main_inscribe_a_cada_alumno_en_el_horario_donde_le_registra_asistencia(
 def test_main_no_inventa_justificativo_ni_estado_justificativo():
     """`justificativo` / `estado_justificativo` los escribe la app, nunca el seed.
 
-    Decisión del 11 de agosto (docs/decisiones-de-negocio-2026-08-11.md,
+    Decisión del 11 de agosto (docs/product/decisiones-de-negocio-2026-08-11.md,
     sección 2): "Justificado" es una marca sin motivo -- no hay flujo que pida
     ni muestre un motivo. Antes de este fix el seed llenaba ~82 filas con
     "Cita médica" inventada, y eso confundió a un auditor que reportó como

@@ -19,7 +19,7 @@ export interface PasswordRule {
  * asserted directly, and so "what the user sees" and "what blocks submit"
  * cannot drift: the page's submit gate is exactly `rules.every(r => r.met)`.
  *
- * `docs/ux/prototipos/04-restablecer-contrasenia.html` lists a third rule,
+ * `docs/archive/prototypes/prototipos/04-restablecer-contrasenia.html` lists a third rule,
  * "Una mayúscula y un número". It is deliberately NOT enforced: the backend's
  * only constraint is
  * `nueva_contrasenia: str = Field(..., min_length=8)`

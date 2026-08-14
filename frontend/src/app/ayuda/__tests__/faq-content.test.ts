@@ -84,7 +84,7 @@ describe("FAQ_SECTIONS", () => {
     // FIC-4: the backend already authorized a representante to read/correct a
     // representado's ficha médica, and `/student/medical-record` now mounts
     // the screen — this entry used to flatly say "No", which became a lie the
-    // moment the screen shipped. See `docs/fixes/13-ficha-medica-representante.md`.
+    // moment the screen shipped. See `docs/archive/fixes/13-ficha-medica-representante.md`.
     const entry = FAQ_SECTIONS.flatMap((s) => s.entries).find(
       (e) => e.question === "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
     );

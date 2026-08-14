@@ -6,7 +6,7 @@
  * This was the ONE auth screen that did not use `AuthShell`, and it broke the
  * layout outright. It now inherits the template without exception, so all four
  * public auth screens are the same composition — the login stage of
- * `docs/ux/prototipo-rediseno.html`, which is the authority for these screens.
+ * `docs/archive/prototypes/prototipo-rediseno.html`, which is the authority for these screens.
  *
  * Two behaviors the prototype asks for and this screen now implements:
  *   - The password rules are shown BEFORE anything is typed and tick over

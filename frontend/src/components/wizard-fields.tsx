@@ -409,7 +409,7 @@ interface WizardNavigationProps {
    */
   duplicateIdentityAudience?: DuplicateIdentityAudience;
   /**
-   * INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): when the caller can
+   * INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): when the caller can
    * actually link the already-registered person (today, only
    * `/student/add-dependent`, `audience="representative"`), passing this
    * renders a same-click "Vincular a mi cuenta" action next to the

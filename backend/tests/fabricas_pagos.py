@@ -147,7 +147,7 @@ def registrar_pago_api(
 
     Sin `fecha_inicio`/`fecha_fin` en el payload (fix período de cobertura,
     PAG-5): el backend las calcula y ya no las acepta del cliente -- ver
-    `PagoServicio.registrar_pago` y docs/fixes/06-periodo-de-cobertura.md."""
+    `PagoServicio.registrar_pago` y docs/archive/fixes/06-periodo-de-cobertura.md."""
     payload = {
         "monto": monto, "tipo_pago": tipo_pago,
         "persona_id": persona_id, "membresia_id": membresia_id,

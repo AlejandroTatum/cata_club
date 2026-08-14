@@ -1,6 +1,6 @@
 /**
  * Component tests for the trainer's "Mi día" (issue #211,
- * `docs/ux/prototipos/31-entrenador-dashboard-alternativas.html`).
+ * `docs/archive/prototypes/prototipos/31-entrenador-dashboard-alternativas.html`).
  *
  * The screen was compacted around two symmetric top cards — the immediate
  * session (`SessionCard`) and the attendance summary — plus dense

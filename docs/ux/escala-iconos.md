@@ -39,7 +39,7 @@ Un icono casi nunca aparece solo: va al lado de una etiqueta, dentro de un botó
 una fila. Su tamaño no es una decisión independiente — es el tamaño del texto que acompaña,
 multiplicado por la razón que hace que el icono pese lo mismo que las palabras.
 
-`docs/ux/prototipos/_sistema.css` ya contesta cuál es esa razón, tres veces, porque declara el
+`docs/archive/prototypes/prototipos/_sistema.css` ya contesta cuál es esa razón, tres veces, porque declara el
 icono y el texto del mismo componente:
 
 | Regla | Texto | Icono | Razón |

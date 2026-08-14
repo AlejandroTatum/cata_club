@@ -388,7 +388,7 @@ class Pago(Base):
     # `PagoServicio.pago_a_response_dto` / `cloudinary_cliente.resolver_url_entrega`.
     # Filas creadas ANTES del fix siguen con la URL pública completa de un
     # recurso `type="upload"` (se detecta por el prefijo `http`); ver el
-    # residual documentado en docs/fixes/16-voucher-no-enumerable.md.
+    # residual documentado en docs/archive/fixes/16-voucher-no-enumerable.md.
     voucher_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     voucher_formato: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     voucher_fecha_carga: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -416,7 +416,7 @@ class Pago(Base):
 
 
 # ---------------------------------------------------------------------------
-# Descuento (issue #11, modelo firmado docs/concepto-alcance-modelo.md §4)
+# Descuento (issue #11, modelo firmado docs/product/concepto-alcance-modelo.md §4)
 #
 # Catálogo VIVO administrado por el club (CRUD del admin). Sin motor de
 # reglas: el sistema no calcula elegibilidad, el admin decide. La aplicación
@@ -485,7 +485,7 @@ class CategoriaHorario(Base):
     `AsistenciaServicio._validar_dia_y_derivar_horas`) -- la garantía que ya
     existía con el enum no cambia, solo cambia de dónde se lee.
 
-    ABM del admin (docs/fixes/24-abm-categorias.md): `AsistenciaServicio.
+    ABM del admin (docs/archive/fixes/24-abm-categorias.md): `AsistenciaServicio.
     crear_categoria`/`actualizar_categoria`/`eliminar_categoria` son el
     único camino de escritura -- alta atómica de la fila + sus
     `categoria_horario_dia` + un `horario_entrenamiento` por día marcado,
@@ -531,7 +531,7 @@ class CategoriaHorarioDia(Base):
 class HorarioEntrenamiento(Base):
     """
     Sin entrenador titular: el club no asigna entrenadores a horarios -- la
-    clase la da el entrenador disponible (docs/concepto-alcance-modelo.md §4).
+    clase la da el entrenador disponible (docs/product/concepto-alcance-modelo.md §4).
     """
     __tablename__ = "horario_entrenamiento"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -574,7 +574,7 @@ class HorarioEntrenamiento(Base):
 class Asistencia(Base):
     """
     No registra quién dictó la sesión: los entrenadores cobran un mensual
-    fijo y el dato no tiene consumidor (docs/concepto-alcance-modelo.md §4).
+    fijo y el dato no tiene consumidor (docs/product/concepto-alcance-modelo.md §4).
     """
     __tablename__ = "asistencia"
     __table_args__ = (
@@ -722,7 +722,7 @@ class Notificacion(Base):
 
 
 # ---------------------------------------------------------------------------
-# INS-2 (docs/decisiones-de-negocio-2026-08-11.md §1): un representante puede
+# INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): un representante puede
 # vincular a su cuenta un representado YA EXISTENTE escribiendo su cédula,
 # sin que nadie apruebe. El guardarraíl de auditoría de esa decisión ("queda
 # registrado quién vinculó a quién y cuándo") es esta tabla: una fila por

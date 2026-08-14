@@ -1,6 +1,6 @@
 /**
  * Asistencias — the admin's read-only view of training records, redesigned
- * for Fase 3. Source of truth: `docs/ux/prototipos/12-asistencias.html`.
+ * for Fase 3. Source of truth: `docs/archive/prototypes/prototipos/12-asistencias.html`.
  *
  * What changed:
  *   · "Tomar asistencia" was a full-width banner card sitting above the data.

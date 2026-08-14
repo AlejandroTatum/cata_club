@@ -5,7 +5,7 @@
  *
  * Auditoría 2026-08-10 / fix 19: `VINCULACION_REPRESENTANTE` existed on the
  * backend — emitted from `persona_servicio.py`, migrated into the Postgres
- * enum — for a whole feature (INS-2, docs/decisiones-de-negocio-2026-08-11.md
+ * enum — for a whole feature (INS-2, docs/product/decisiones-de-negocio-2026-08-11.md
  * §1) before the frontend's union ever heard of it. `NotificationBell.tsx`'s
  * `Record<TipoNotificacion, string>` DOES catch a missing label once a type
  * is IN the union — TypeScript refuses to compile a partial `Record`. What it

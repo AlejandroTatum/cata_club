@@ -1,6 +1,6 @@
 /**
  * CuotaCard — the family portal's "Cuota" card (Propuesta 2, "El carnet
- * manda" — docs/fixes/12-mi-cuenta-carnet.md).
+ * manda" — docs/archive/fixes/12-mi-cuenta-carnet.md).
  *
  * This used to be `PaymentBand`, a full-width coal band leading the page (see
  * git history for that shape). The redesign moves the one-glance verdict onto

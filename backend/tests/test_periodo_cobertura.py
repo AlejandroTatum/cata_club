@@ -1,5 +1,5 @@
 """
-Fix período de cobertura (PAG-5, docs/fixes/06-periodo-de-cobertura.md).
+Fix período de cobertura (PAG-5, docs/archive/fixes/06-periodo-de-cobertura.md).
 
 El agujero: `POST /membresias/pagos` aceptaba `fecha_inicio`/`fecha_fin` del
 cliente y solo validaba que una fuera anterior a la otra -- reproducido en

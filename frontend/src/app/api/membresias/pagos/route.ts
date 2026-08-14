@@ -15,7 +15,7 @@
  * period itself from `monto` and the membership's monthly price — the old
  * contract let the client hand it ANY range regardless of `monto` (a
  * one-month payment could ask for a year of coverage; reproduced live
- * against QA, see docs/fixes/06-periodo-de-cobertura.md). Forwarding a
+ * against QA, see docs/archive/fixes/06-periodo-de-cobertura.md). Forwarding a
  * field the backend now ignores would just be the next confusion.
  */
 import { NextRequest, NextResponse } from "next/server";

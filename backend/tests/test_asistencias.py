@@ -17,7 +17,7 @@ def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
 
 # --- Issue #13: sin relación entrenador–horario -----------------------------
 # El club no asigna entrenadores a horarios: la clase la da quien está
-# disponible (docs/concepto-alcance-modelo.md §4). El horario se crea solo con
+# disponible (docs/product/concepto-alcance-modelo.md §4). El horario se crea solo con
 # categoría y día, y la asistencia no registra quién dictó la sesión.
 def test_crear_horario_sin_entrenador(client):
     resp = client.post(

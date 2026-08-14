@@ -5,7 +5,7 @@ Revises: b8d4a7e1f3c2
 Create Date: 2026-07-31 00:00:00.000000
 
 Elimina `entrenador_id` de `horario_entrenamiento` y de `asistencia`
-(issue #13, docs/concepto-alcance-modelo.md §4): el club no asigna
+(issue #13, docs/product/concepto-alcance-modelo.md §4): el club no asigna
 entrenadores a horarios -- la clase la da el entrenador disponible -- y
 tampoco registra quién dictó cada sesión, porque los entrenadores cobran
 un mensual fijo y el dato no tiene consumidor.

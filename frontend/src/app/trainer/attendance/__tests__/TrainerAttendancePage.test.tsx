@@ -774,7 +774,7 @@ describe("TrainerAttendancePage — attendance state selector affordances", () =
 
 // ---------------------------------------------------------------------------
 // FASE 4 item 3 — the redesign, layered ON TOP of the guarantees above.
-// Prototype: `docs/ux/prototipos/20-tomar-lista.html`.
+// Prototype: `docs/archive/prototypes/prototipos/20-tomar-lista.html`.
 // ---------------------------------------------------------------------------
 
 describe("TrainerAttendancePage — named stepper", () => {

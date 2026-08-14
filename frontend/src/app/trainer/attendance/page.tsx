@@ -1,6 +1,6 @@
 /**
  * Trainer Attendance — "Pasar lista"
- * (`docs/ux/prototipos/20-tomar-lista.html`).
+ * (`docs/archive/prototypes/prototipos/20-tomar-lista.html`).
  *
  * Three steps, backed by real data end to end:
  *   - Horario selection from `GET /api/attendance/schedules`, with the roster

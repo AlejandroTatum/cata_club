@@ -27,7 +27,7 @@ pendiente y está señalizada como tal.
 | Documentos | Comprobantes PDF oficiales y vouchers subidos por el cliente | Cloudinary (`cataclub/comprobantes`, `cataclub/vouchers`) | Alta |
 | Fotos | Fotos de perfil self-service | Cloudinary (`cataclub/fotos_perfil`) | Media |
 | Identidad | Cédula, correo, teléfono, nombres | `Persona`, `Usuario` | Alta (identificación) |
-| Evidencia QA | Capturas e informes de auditorías | `docs/auditoria-qa/`, `docs/fixes/img/` | Media: contienen datos **sembrados** (entorno QA), no datos reales de socios |
+| Evidencia QA | Capturas e informes de auditorías | `docs/archive/audits/`, `docs/archive/fixes/img/` | Media: contienen datos **sembrados** (entorno QA), no datos reales de socios |
 
 ## Política propuesta (NO implementada — requiere decisión)
 
@@ -47,11 +47,11 @@ conformidad legal debe validarse con asesoramiento (pendiente).
 
 | Protección | Detalle | Evidencia |
 |---|---|---|
-| Tokens solo en cookies `HttpOnly` | El BFF devuelve exactamente `{enrolled: true}`; ningún token llega al JS del navegador | Contrato del BFF documentado en `docs/auditoria-qa/README-inscripcion-2026-08-12.md`; `frontend/src/lib/auth-cookies.ts` |
+| Tokens solo en cookies `HttpOnly` | El BFF devuelve exactamente `{enrolled: true}`; ningún token llega al JS del navegador | Contrato del BFF documentado en `docs/archive/audits/2026-08-12/README.md`; `frontend/src/lib/auth-cookies.ts` |
 | `/docs` apagado en producción | `docs_url/redoc_url/openapi_url` nulos con `AMBIENTE=production` | `backend/app/soporte_transversal/configuracion.py` |
 | Headers de seguridad | HSTS, `nosniff`, `X-Frame-Options: DENY`, Referrer-Policy en Caddy; CSP `default-src 'none'` en la API | `Caddyfile`, `backend/main.py` |
 | Errores sin filtrar internos | Traducción de 500/422/429 a mensajes legibles sin detalles internos (tracebacks, jerga de slowapi) | Informe de inscripción (S04, S05, X04) |
-| URLs firmadas para comprobantes/vouchers nuevos | Subida como `authenticated`; URL firmada al leerla; vencimiento opcional con `CLOUDINARY_AUTH_TOKEN_KEY` | `docs/fixes/16-voucher-no-enumerable.md`; ítem A-7 abierto para filas legacy |
+| URLs firmadas para comprobantes/vouchers nuevos | Subida como `authenticated`; URL firmada al leerla; vencimiento opcional con `CLOUDINARY_AUTH_TOKEN_KEY` | `docs/archive/fixes/16-voucher-no-enumerable.md`; ítem A-7 abierto para filas legacy |
 | Identidad duplicada sin oráculo | El 400 de identidad ya registrada devuelve el mismo texto para cédula/correo | Informe de inscripción (S03) |
 | Rate limiting | Límites por endpoint; hallazgo abierto: cubo global del tráfico anónimo | `backend/app/soporte_transversal/rate_limit.py`; lista viva |
 
@@ -70,5 +70,5 @@ conformidad legal debe validarse con asesoramiento (pendiente).
 
 - Lista viva y hallazgos: [`../operations/production-readiness.md`](../operations/production-readiness.md)
 - Decisiones de negocio pendientes (borrado de Persona): histórico
-  [`../pendientes-2026-08-11.md`](../pendientes-2026-08-11.md)
-- Evidencia de comprobantes: [`../fixes/16-voucher-no-enumerable.md`](../fixes/16-voucher-no-enumerable.md)
+  [`../archive/plans/pendientes-2026-08-11.md`](../archive/plans/pendientes-2026-08-11.md)
+- Evidencia de comprobantes: [`../archive/fixes/16-voucher-no-enumerable.md`](../archive/fixes/16-voucher-no-enumerable.md)

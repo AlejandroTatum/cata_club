@@ -1,11 +1,11 @@
 /**
  * Membresías y Pagos — the validation queue (CU012), redesigned for Fase 3.
  *
- * Sources of truth: `docs/ux/prototipos/09-pagos-cola.html` (queue),
+ * Sources of truth: `docs/archive/prototypes/prototipos/09-pagos-cola.html` (queue),
  * `10-pago-validar.html` (detail) and `11-pago-rechazar.html` (rejection).
  *
  * What changed, and why — every item below was a measured defect, not a taste
- * call (see `docs/ux/plan-implementacion-rediseno.md`, Fase 3 item 2):
+ * call (see `docs/archive/prototypes/plan-implementacion-rediseno.md`, Fase 3 item 2):
  *
  *   · The filter opened on "Todas". Nobody comes to this screen to browse a
  *     history, so clearing the queue began with a click. It opens on

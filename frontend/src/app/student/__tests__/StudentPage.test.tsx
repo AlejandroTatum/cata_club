@@ -459,7 +459,7 @@ describe("StudentPage — the carnet's franja agrees with the assigned schedule"
     expect(within(carnet).queryByText("15:00 — 21:15")).not.toBeInTheDocument();
   });
 
-  // Fix 12b (docs/fixes/12-mi-cuenta-carnet.md): the joined string used to
+  // Fix 12b (docs/archive/fixes/12-mi-cuenta-carnet.md): the joined string used to
   // wrap wherever the browser found a space, which could split a single
   // window's own closing time from its dash ("20:00 —" / "21:15"). Each
   // window must be its own unbreakable run, so the ONLY place a wrap is
@@ -643,7 +643,7 @@ describe("StudentPage — próximos entrenamientos", () => {
     expect(screen.getByTestId("student-cuota-card")).toBeInTheDocument();
   });
 
-  // Fix 12c (docs/fixes/12-mi-cuenta-carnet.md): the chosen maquette (Propuesta
+  // Fix 12c (docs/archive/fixes/12-mi-cuenta-carnet.md): the chosen maquette (Propuesta
   // 2, "El carnet manda") marks the closest upcoming session with a distinct
   // row background (`.row.next`), not with a badge that only fires when that
   // session happens to land on today's date. Real system time on purpose,
@@ -873,7 +873,7 @@ describe("StudentPage — the Cuota card and the carnet's status band", () => {
 
 /**
  * The candado for the redesign's own stated risk ("pesa mucho cuando no hay
- * nada que resolver", docs/fixes/12-mi-cuenta-carnet.md): an overdue family
+ * nada que resolver", docs/archive/fixes/12-mi-cuenta-carnet.md): an overdue family
  * and an up-to-date one must not render the same amount of carnet.
  */
 describe("StudentPage — the carnet earns its space when the cuota is up to date", () => {
@@ -942,7 +942,7 @@ describe("StudentPage — the carnet earns its space when the cuota is up to dat
 });
 
 /**
- * Fix 12b (docs/fixes/12-mi-cuenta-carnet.md): stretching the carnet to match
+ * Fix 12b (docs/archive/fixes/12-mi-cuenta-carnet.md): stretching the carnet to match
  * the rail's height ("lg:!items-stretch" + the carnet's own `flex-1`) left the
  * card with its OWN empty canvas underneath its fact grid whenever the rail
  * (Cuota + Esta semana) was taller than the carnet's real content — the exact
@@ -965,7 +965,7 @@ describe("StudentPage — the carnet keeps its own proportions instead of stretc
 });
 
 /**
- * Fix 12c (docs/fixes/12-mi-cuenta-carnet.md): the owner's own read of the
+ * Fix 12c (docs/archive/fixes/12-mi-cuenta-carnet.md): the owner's own read of the
  * screen against the maquette — "si decido eso, pues debería verse igual".
  * The chosen maquette (Propuesta 2) draws its desktop split as
  * `grid-template-columns: 1fr 1fr`. Reusing `PAGE_RAIL`'s own 340px rail

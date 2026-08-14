@@ -2,7 +2,7 @@
  * POST /api/personas/[id]/vincular-representado — a representante links an
  * ALREADY REGISTERED person (typically added by another representante) to
  * their own account by typing that person's cédula. No approval from the
- * previous representante (INS-2, docs/decisiones-de-negocio-2026-08-11.md
+ * previous representante (INS-2, docs/product/decisiones-de-negocio-2026-08-11.md
  * §1) — the four guardrails (audit, after-the-fact notice, no PII before
  * confirming, attempt throttling) all live backend-side.
  *

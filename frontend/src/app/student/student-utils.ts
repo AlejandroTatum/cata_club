@@ -67,7 +67,7 @@ import type { BadgeTone } from "@/components/ui/Badge";
 // Carnet — the membership card
 //
 // Every field the club card shows must come from the portal payload. Three
-// fields the approved prototype (`docs/ux/prototipos/22-alumno-cuenta.html`)
+// fields the approved prototype (`docs/archive/prototypes/prototipos/22-alumno-cuenta.html`)
 // draws have no source and are therefore NOT rendered:
 //
 //   - "Miembro nº" — no member-number concept exists anywhere in the backend
@@ -731,7 +731,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
 }
 
 // ---------------------------------------------------------------------------
-// The carnet's status band ("El carnet manda" — docs/fixes/12-mi-cuenta-carnet.md)
+// The carnet's status band ("El carnet manda" — docs/archive/fixes/12-mi-cuenta-carnet.md)
 //
 // The redesigned `/student` carnet carries the payment situation as a band
 // over the card itself, rather than a separate `Membresia.estado` badge next

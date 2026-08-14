@@ -1,6 +1,6 @@
 /**
  * Trainer — "Mi día" (issue #211,
- * `docs/ux/prototipos/31-entrenador-dashboard-alternativas.html`).
+ * `docs/archive/prototypes/prototipos/31-entrenador-dashboard-alternativas.html`).
  *
  * Compacted from the Fix 8 / DSH-2 layout it replaces: two symmetric cards up
  * top — coal `SessionCard` for the immediate session, white
