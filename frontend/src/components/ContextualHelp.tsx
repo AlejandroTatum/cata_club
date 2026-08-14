@@ -11,8 +11,14 @@ export default function ContextualHelp({ title, children }: ContextualHelpProps)
   const [isOpen, setIsOpen] = useState(false);
   const panelId = `contextual-help-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
+  // No margin of its own. `docs/ux/ritmo-vertical.md` is explicit that no rule
+  // in the system separates two blocks with a margin — the distance is a `gap`
+  // on the column that holds them. The `mt-3` this used to carry was a fourth
+  // distance nobody declared: under the shell's `gap-page` column it simply
+  // added 12px on top of the 20px step, and inside a panel it fought that
+  // panel's own gap. `FilterPanel` states the same rule for itself.
   return (
-    <div className="mt-3">
+    <div>
       <button
         type="button"
         onClick={(): void => setIsOpen((open) => !open)}

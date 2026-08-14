@@ -28,6 +28,27 @@
  * already opened a card with its own header ("Actividad reciente", "Sesiones"),
  * and the empty state is the BODY of that card rather than a second one nested
  * inside it.
+ *
+ * ## The dead air under it, and why the statement is centred rather than split
+ *
+ * D11b made dead air a measured number that goes into the PR. `/members`
+ * reports 25% — 227px — the moment a search finds nobody: three short lines
+ * keep their own height and the rest of the column stays bare canvas
+ * underneath. `fill` stretches the card to the column, so the surplus lands
+ * inside the surface instead of under it.
+ *
+ * The obvious next move is to pin the action to the foot with `mt-auto`, and
+ * this repo has already measured that one. `SessionCard.tsx:26-29` records QA
+ * rejecting it in as many words — "`mt-auto` on the actions left the surplus
+ * stranded as dead air in the middle instead of respiro under them" — on a
+ * card whose body did not grow to meet the actions. The fix there was real
+ * content (the rest of the day's sessions). An empty state has none by
+ * definition: it is the state of having nothing to show, so it can never grow
+ * into the gap, and `mt-auto` would move the hole from below the card to
+ * between the description and its button.
+ *
+ * So the surplus is split above and below the statement. Half the air at each
+ * end reads as margin; all of it at one end reads as a mistake.
  */
 
 import type { ReactElement, ReactNode } from "react";
@@ -48,6 +69,15 @@ export interface EmptyStateProps {
    * card is a border and a shadow the design never asks for.
    */
   surface?: "card" | "inset";
+  /**
+   * Stretch to the column this stands in, and centre the statement inside the
+   * stretched surface. See the note on dead air above.
+   *
+   * Off by default: the twenty-two existing call sites sit in columns that are
+   * not full-height, and a `flex-1` there would stretch the card against
+   * whatever happens to be beside it.
+   */
+  fill?: boolean;
   className?: string;
 }
 
@@ -57,12 +87,14 @@ export default function EmptyState({
   description,
   action,
   surface = "card",
+  fill = false,
   className,
 }: EmptyStateProps): ReactElement {
   return (
     <div
       className={cn(
         "flex flex-col items-center gap-2.5 px-6 py-11 text-center",
+        fill && "flex-1 justify-center",
         surface === "card" && "card",
         className,
       )}

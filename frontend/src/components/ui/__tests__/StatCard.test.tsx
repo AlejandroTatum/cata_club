@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import StatCard, { STAT_GRID } from "@/components/ui/StatCard";
+import StatCard, { STAT_GRID, StatTrack } from "@/components/ui/StatCard";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { committedHeight, committedRadius } from "./ui-test-utils";
@@ -85,6 +85,73 @@ describe("StatCard — hot variant dot", () => {
   it("does not show the dot on the default variant", () => {
     render(<StatCard label="Miembros" value={86} hint="en 44 cuentas" />);
     expect(screen.queryByTestId("statcard-ball-dot")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * D7's rule of shape: "la figura toma la forma de lo que mide: una proporción
+ * lleva barra". `_sistema.css` `.track` (:319-320) is the bar the approved
+ * system already declares, and `06-panel.html:86` is the tile that uses it —
+ * label, figure, and the bar underneath, on the very stat this screen draws
+ * ("Membresías activas 17 de 44").
+ *
+ * The bar is the whole point: a proportion drawn as a bare count makes the
+ * reader do the division. It is the FIGURE that changes shape, not the data.
+ */
+describe("StatTrack — a proportion drawn as a proportion", () => {
+  function track(): HTMLElement {
+    return screen.getByTestId("stat-track");
+  }
+
+  function fill(): HTMLElement {
+    return track().firstElementChild as HTMLElement;
+  }
+
+  it("fills the share the two figures actually measure", () => {
+    // The screen's own numbers: 21 students with an active membership out of
+    // the 69 the club has registered.
+    render(<StatTrack value={21} total={69} />);
+    expect(fill().style.width).toBe("30.4%");
+  });
+
+  it("draws an empty rail rather than dividing by zero", () => {
+    render(<StatTrack value={0} total={0} />);
+    expect(fill().style.width).toBe("0%");
+  });
+
+  it("never overflows its rail when the numerator exceeds the whole", () => {
+    render(<StatTrack value={80} total={69} />);
+    expect(fill().style.width).toBe("100%");
+  });
+
+  it("transcribes `.track`: a 6px `line` rail carrying a `coal` fill", () => {
+    render(<StatTrack value={21} total={69} />);
+    expect(track()).toHaveClass("h-1.5", "rounded-full", "bg-line", "overflow-hidden");
+    expect(fill()).toHaveClass("rounded-full", "bg-coal");
+  });
+
+  it("stays out of the accessibility tree, because the tile already says the figures", () => {
+    // A screen reader that announces both the count and a redundant meter
+    // reads the same fact twice — the same reason `IdentityCell` hides its
+    // initials.
+    render(<StatTrack value={21} total={69} />);
+    expect(track()).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("is phrasing content, so it can live inside the tile's own hint span", () => {
+    // `StatCard` wraps `hint` in a `<span>`. A `<div>` in there is invalid
+    // markup the parser silently repairs by breaking the tile apart.
+    render(<StatTrack value={21} total={69} />);
+    expect(track().tagName).toBe("SPAN");
+    expect(fill().tagName).toBe("I");
+  });
+
+  it("rides in the hint slot without a colour of its own on the coal tile", () => {
+    render(
+      <StatCard label="Miembros" value={21} hint={<StatTrack value={21} total={69} />} />,
+    );
+    expect(screen.getByTestId("stat-track")).toBeInTheDocument();
+    expect(committedHeight(card())).toBe("116px");
   });
 });
 

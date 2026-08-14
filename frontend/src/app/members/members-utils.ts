@@ -6,6 +6,7 @@
  */
 
 import type {
+  BackendTipoRol,
   TipoMembresia,
   EstadoMembresia,
 } from "@/types/domain";
@@ -231,6 +232,58 @@ export function formatMembershipPeriod(
  */
 export function getPayerTypeLabel(role: PayerType): string {
   return PAYER_TYPE_LABELS[role];
+}
+
+/**
+ * The payer type this row declares, said in the club's own role vocabulary —
+ * the one `IdentityCell` speaks. `PAYER_TYPE_LABELS` says the same two things
+ * in words; this says them as roles, so the shared cell can draw them.
+ */
+const MEMBER_ROLE_BY_PAYER_TYPE: Record<PayerType, BackendTipoRol> = {
+  representante: "REPRESENTANTE",
+  estudiante: "ALUMNO",
+};
+
+/** What `IdentityCell` needs to draw one account row. */
+export interface AccountIdentity {
+  roles: BackendTipoRol[];
+  represents: string[];
+}
+
+/**
+ * What this row can honestly say about who the account holder IS.
+ *
+ * D9 makes the identity cell a shared piece — initial, name above, roles below
+ * — and `IdentityCell` takes the roles a person holds plus the players they
+ * represent. This row carries neither, and the reason is worth stating rather
+ * than papering over:
+ *
+ *  - There is no roles array here. `PersonaResponseDTO` has no `roles` field
+ *    and no bulk "roles by persona" endpoint exists — only `POST`/`DELETE
+ *    /personas/{id}/roles`, which mutate (gap #1 in
+ *    `lib/server/members-adapter.ts`). So the adapter stamps every root
+ *    account `role: "representante"` as a hardcoded literal, and the roles the
+ *    backend really holds are read ONE account at a time, by
+ *    `useAccountRolesAndStatus`, inside the edit dialog. A row cannot know
+ *    that a member is also a coach, and this function does not pretend it can.
+ *  - What the row DOES carry is the dependants, by name. That is not a guess:
+ *    `estudiantes` is the set of personas whose `representanteId` points at
+ *    this account, which is precisely what "represents" means in the backend.
+ *
+ * The one correction it makes is the self-reference. A root persona with no
+ * dependants comes back holding ITSELF as its only `estudiantes` entry
+ * (`estudiantesSource = children.length > 0 ? children : [root]`), so passing
+ * the list through untouched would print "Representante de Marta Salas" on
+ * Marta Salas' own row. Dropped, and the label degrades to the role alone —
+ * `IdentityCell` already treats a nameless representative as a representative.
+ */
+export function getAccountIdentity(account: MemberAccount): AccountIdentity {
+  return {
+    roles: [MEMBER_ROLE_BY_PAYER_TYPE[account.role]],
+    represents: account.estudiantes
+      .filter((estudiante) => estudiante.id !== account.id)
+      .map((estudiante) => `${estudiante.nombres} ${estudiante.apellidos}`),
+  };
 }
 
 /**

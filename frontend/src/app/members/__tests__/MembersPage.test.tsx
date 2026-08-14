@@ -1553,3 +1553,367 @@ describe("MembersPage — defers /api/members until the role resolves", () => {
     expect((await screen.findAllByText("María González")).length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// D7 — four tiles that were four different things wearing one shape.
+//
+// "Regla del hombro: el hombro de caucho marca lo que pide acción, y por eso lo
+// lleva como mucho una tarjeta por fila. Si lo llevan las cuatro, no marca
+// nada." And: "Regla de la forma: la figura toma la forma de lo que mide."
+//
+// The screen holds one queue of work (payments waiting to be validated) and one
+// proportion (students with an active membership, out of the students). The
+// other two are counts, and this screen has no creation date on any account or
+// student — `MemberAccount` carries id/role/name/phone/students and nothing
+// dated — so there is no trend to draw and no card may pretend otherwise.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — four tiles, four shapes (D7)", () => {
+  /** Accounts whose single student does or does not hold an active membership. */
+  function withMembership(id: string, activa: boolean): MemberAccount {
+    return {
+      ...ACCOUNT,
+      id,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          id: `${id}-e`,
+          membresia: activa
+            ? {
+                tipo: "Mensual",
+                estado: "activa",
+                fechaInicio: "2026-07-01",
+                fechaFin: "2026-07-31",
+                monto: 50,
+                id: Number(id),
+              }
+            : null,
+        },
+      ],
+    };
+  }
+
+  /**
+   * The tile carrying a given label.
+   *
+   * Looked up through `h-stat` — the 116px height token that IS a stat tile —
+   * rather than through `getByText`, because two of these labels also name a
+   * table column ("Estudiantes") and a plain text query cannot tell the tile
+   * from the column header.
+   */
+  function tileOf(label: string): HTMLElement {
+    const tiles = Array.from(document.querySelectorAll<HTMLElement>(".h-stat"));
+    const tile = tiles.find((candidate) => candidate.firstElementChild?.textContent === label);
+    expect(tile, `no stat tile labelled "${label}"`).toBeDefined();
+    return tile as HTMLElement;
+  }
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [withMembership("1", true), withMembership("2", false), withMembership("3", false)],
+    });
+  });
+
+  it("gives the coal shoulder to the queue of work, and to nothing else", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await screen.findByText("Pagos pendientes");
+
+    // Pending payments is the only tile that names a pile of things somebody
+    // has to come and do; the other three report a state of the world.
+    expect(tileOf("Pagos pendientes")).toHaveClass("bg-coal");
+    for (const quiet of ["Cuentas", "Estudiantes", "Con membresía activa"]) {
+      expect(tileOf(quiet)).not.toHaveClass("bg-coal");
+    }
+  });
+
+  it("draws the membership share as a share, at the ratio the figures measure", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await screen.findByText("Con membresía activa");
+
+    // One of the three students holds an active membership.
+    const track = within(tileOf("Con membresía activa")).getByTestId("stat-track");
+    expect((track.firstElementChild as HTMLElement).style.width).toBe("33.3%");
+  });
+
+  it("draws no bar on the tiles that measure a count, because no trend reaches this screen", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await screen.findByText("Cuentas");
+
+    expect(screen.getAllByTestId("stat-track")).toHaveLength(1);
+    for (const counted of ["Cuentas", "Estudiantes", "Pagos pendientes"]) {
+      expect(within(tileOf(counted)).queryByTestId("stat-track")).not.toBeInTheDocument();
+    }
+  });
+
+  it("draws no bar at all when the share cannot be read upstream", async () => {
+    // An unreadable numerator is not a numerator of zero, and a bar at 0% is
+    // exactly the lie the em dash exists to avoid.
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [withMembership("1", false)],
+      membresiasDegraded: true,
+    });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await screen.findByText("Con membresía activa");
+
+    expect(within(tileOf("Con membresía activa")).getByText("—")).toBeInTheDocument();
+    expect(screen.queryByTestId("stat-track")).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D9 — the identity cell is a shared piece, and it says only what the row has.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — the identity cell (D9)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+  });
+
+  it("opens the row with the shared cell — the initials beside the name", async () => {
+    const row = await (async () => {
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      return findAccountRow();
+    })();
+
+    const initials = within(row).getByText("MG");
+    expect(initials).toHaveAttribute("aria-hidden", "true");
+    expect(within(row).getByText("María González")).toBeInTheDocument();
+  });
+
+  it("names the players the account actually holds", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    // The row carries the dependants by name, so the cell spends the width on
+    // saying WHO instead of repeating the payer type on all 45 rows.
+    expect(within(row).getByText("Representante de Sofía González")).toBeInTheDocument();
+  });
+
+  it("says the role alone for an account that holds nobody but itself", async () => {
+    // The adapter hands a childless root persona ITSELF as its only student.
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [
+        {
+          ...ACCOUNT,
+          id: "7",
+          estudiantes: [{ ...ACCOUNT.estudiantes[0], id: "7", nombres: "María", apellidos: "González" }],
+        },
+      ],
+    });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    expect(within(row).getByText("Representante")).toBeInTheDocument();
+    expect(within(row).queryByText(/Representante de/)).not.toBeInTheDocument();
+  });
+
+  it("says the same thing on the phone rendering as in the table", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const card = await findAccountCard();
+
+    // Two renderings of one account that disagree about who that account is
+    // are two bugs waiting for someone to resize a window.
+    expect(within(card).getByText("Representante de Sofía González")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D9 — a column is named for what it holds, never for the button inside it.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — the trailing column is not named after its button", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+  });
+
+  it("names the column for what it contains, and keeps the name off the screen", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const table = row.closest("table") as HTMLElement;
+    const headers = within(table).getAllByRole("columnheader");
+    const trailing = headers[headers.length - 1];
+
+    expect(trailing.textContent?.trim()).toBe("Acciones");
+    // Visually hidden: over a column of 32px triggers that already say what
+    // they do, a printed heading is one more word to skip past.
+    expect(trailing.querySelector(".sr-only")).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D5 — three levels, and a row action is the third one.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — the repeated row trigger is tertiary (D5)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+  });
+
+  it("fills the row trigger instead of outlining it once per row", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const trigger = getEditButton(row);
+
+    // `secondary` is `bg-paper border-line-2` — on a paper table that is a
+    // visible box drawn once per row, forty-five of them down the page, all
+    // claiming the weight D8 reserves for the one action beside the primary.
+    expect(trigger).toHaveClass("bg-sunken", "border-transparent");
+    expect(trigger).not.toHaveClass("bg-paper");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D11c — the help does not live loose.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — the help is anchored (D11c)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+  });
+
+  it("says what the screen IS in its subtitle, in one line", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    expect(
+      await screen.findByText("Las cuentas que pagan y los jugadores que tienen a cargo."),
+    ).toBeInTheDocument();
+  });
+
+  it("lives inside the block it qualifies, not in a band of canvas of its own", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    const panel = screen.getByRole("region", { name: "Filtros de miembros" });
+    expect(
+      within(panel).getByRole("button", { name: "Ayuda sobre límite de resultados" }),
+    ).toBeInTheDocument();
+  });
+
+  it("stays on screen when the search finds nobody, which is when the cap matters most", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    fireEvent.change(screen.getByLabelText("Buscar miembros"), {
+      target: { value: "nadie con este nombre" },
+    });
+
+    await screen.findByText("No se encontraron miembros");
+    const panel = screen.getByRole("region", { name: "Filtros de miembros" });
+    expect(
+      within(panel).getByRole("button", { name: "Ayuda sobre límite de resultados" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not repeat the subtitle it sits under", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ayuda sobre límite de resultados" }));
+    const help = screen.getByRole("region", { name: "Ayuda sobre límite de resultados" });
+    expect(help.textContent).not.toContain("Las cuentas que pagan");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D11b — the 227px under the empty state.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — the empty state leaves no hole under it (D11b)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+  });
+
+  it("stretches the empty-state card to the column instead of leaving canvas under it", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    fireEvent.change(screen.getByLabelText("Buscar miembros"), {
+      target: { value: "nadie con este nombre" },
+    });
+
+    const title = await screen.findByText("No se encontraron miembros");
+    const card = title.closest("div") as HTMLElement;
+    expect(card).toHaveClass("flex-1", "justify-center", "card");
+  });
+
+  it("keeps the three parts D11 requires — what is missing, why, and the way out", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    fireEvent.change(screen.getByLabelText("Buscar miembros"), {
+      target: { value: "nadie con este nombre" },
+    });
+
+    expect(await screen.findByText("No se encontraron miembros")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ningún miembro coincide con la búsqueda y los filtros activos."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Limpiar búsqueda" })).toBeInTheDocument();
+  });
+});

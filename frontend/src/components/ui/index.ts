@@ -56,10 +56,10 @@ export { default as SearchInput } from "./SearchInput";
 export type { SearchInputProps } from "./SearchInput";
 
 export { default as StatCard } from "./StatCard";
-export { STAT_GRID } from "./StatCard";
+export { STAT_GRID, StatTrack } from "./StatCard";
 export { ActivityList, ActivityListHeader, ActivityItem } from "./ActivityList";
 export type { ActivityItemProps } from "./ActivityList";
-export type { StatCardProps, StatCardVariant } from "./StatCard";
+export type { StatCardProps, StatCardVariant, StatTrackProps } from "./StatCard";
 
 export { default as StatGrid } from "./StatGrid";
 export type { StatGridItem, StatGridProps } from "./StatGrid";

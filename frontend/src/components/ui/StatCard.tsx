@@ -35,6 +35,65 @@ import { cn } from "./cn";
  */
 export const STAT_GRID = "grid gap-section sm:grid-cols-2 lg:grid-cols-4";
 
+export interface StatTrackProps {
+  /** The part. */
+  value: number;
+  /** The whole it is measured against. */
+  total: number;
+  className?: string;
+}
+
+/**
+ * StatTrack — a proportion drawn as a proportion.
+ *
+ * D7's second rule: "la figura toma la forma de lo que mide: una proporción
+ * lleva barra". `_sistema.css` `.track` (:319-320) already declares that bar —
+ * a 6px rail at the pill radius in `--line`, carrying an `<i>` fill in
+ * `--coal` — and `06-panel.html:86` is the tile that spends it, on this very
+ * statistic: `<span class="v">17<small>de 44</small></span><span class="track">
+ * <i style="width:39%"></i></span>`.
+ *
+ * ## Why it takes two numbers and not a percentage
+ *
+ * The share is arithmetic on figures the screen already holds, and doing that
+ * arithmetic at each call site is how a bar comes to disagree with the count
+ * printed above it. Handing it the part and the whole also lets the ONE honest
+ * answer for `total === 0` live here: an empty rail, not `NaN%` and not a full
+ * one. The clamp is the same argument — a numerator larger than its whole is a
+ * data problem, and a bar drawn past its own rail turns it into a rendering
+ * problem as well.
+ *
+ * ## Why it says nothing to a screen reader
+ *
+ * The tile states both figures in text right above it. A `role="meter"` here
+ * would make the same fact arrive twice, the second time as a number nobody
+ * asked for — the same reason `IdentityCell` hides the initials that repeat the
+ * name beside them.
+ *
+ * ## Why every element is phrasing content
+ *
+ * `StatCard` wraps its `hint` in a `<span>`. A `<div>` in there is invalid
+ * markup that the parser repairs by splitting the surrounding span, which
+ * takes the tile's layout with it. `<span>` and `<i>` — the spec's own
+ * element — nest legally.
+ */
+export function StatTrack({ value, total, className }: StatTrackProps): ReactElement {
+  const share = total > 0 ? Math.min(1, Math.max(0, value / total)) : 0;
+  // One decimal: enough that 21/69 and 22/69 are visibly different bars,
+  // short enough that the emitted style stays readable in a diff.
+  const percent = Math.round(share * 1000) / 10;
+
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="stat-track"
+      className={cn("block h-1.5 w-full overflow-hidden rounded-full bg-line", className)}
+    >
+      <i className="block h-full rounded-full bg-coal" style={{ width: `${percent}%` }} />
+    </span>
+  );
+}
+
 export type StatCardVariant = "default" | "hot";
 
 export interface StatCardProps {

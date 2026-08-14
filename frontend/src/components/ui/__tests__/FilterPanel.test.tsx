@@ -78,6 +78,40 @@ describe("FilterPanel", () => {
   });
 });
 
+/**
+ * D11c — "la ayuda no vive suelta". `/members` shipped its "Ver ayuda"
+ * disclosure as a bare child of the canvas, in a band of its own between the
+ * filters and the table, held there by an `mt-3` nobody else in the column
+ * speaks. The note it opens is a caveat about what the search can reach ("this
+ * listing may include up to 200 records"), so the block it belongs to is the
+ * one that searches.
+ *
+ * It is the LAST slot on purpose: a caveat is read after the controls it
+ * qualifies, and the panel's whole reason for existing is that a caller cannot
+ * express the wrong order.
+ */
+describe("FilterPanel — the help slot (D11c)", () => {
+  it("renders the help after the search, the chips and the fields", () => {
+    render(
+      <FilterPanel
+        label="Filtros"
+        help={<button type="button">ayuda</button>}
+        fields={<button type="button">campo</button>}
+        chips={<button type="button">chip</button>}
+        search={<button type="button">busqueda</button>}
+      />,
+    );
+
+    const order = screen.getAllByRole("button").map((node) => node.textContent);
+    expect(order).toEqual(["busqueda", "chip", "campo", "ayuda"]);
+  });
+
+  it("omits the slot entirely when no help was given", () => {
+    render(<FilterPanel label="Sin ayuda" chips={<span>chip</span>} />);
+    expect(panelOf("Sin ayuda").children).toHaveLength(1);
+  });
+});
+
 describe("FilterGroup", () => {
   it("captions its block in the panel's small-caps label", () => {
     render(<FilterGroup label="Rango de fechas">contenido</FilterGroup>);
