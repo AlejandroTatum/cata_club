@@ -4,17 +4,49 @@ Sistema integral de administración para el Club de Tenis de Mesa — gestión d
 
 Proyecto de la materia **Diseño de Software** — Universidad Nacional de Loja (UNL).
 
-## Arquitectura
+## Mapa del repositorio
+
+Si es tu primera vez acá, leé esta sección y nada más. El repositorio tiene
+**cuatro carpetas y tres archivos** que importan; todo lo demás cuelga de ahí.
 
 ```
 cata_club/
-├── backend/          # Python 3.13 · FastAPI · SQLAlchemy 2 · PostgreSQL · Celery
-├── frontend/         # Next.js 14 · React 18 · TypeScript · Tailwind CSS
-├── docs/             # Documentación: portal en docs/README.md
-├── docker-compose.yml
-├── Makefile
-└── README.md
+├── backend/     El servidor. Guarda los datos y decide qué puede hacer cada persona.
+├── frontend/    Las pantallas. Todo lo que un socio, un entrenador o un admin ve y toca.
+├── docs/        Todo lo escrito: decisiones, manuales de operación, historia.
+├── tests/       Pruebas que no son ni del servidor ni de las pantallas, sino del armado.
+├── DESIGN.md    Las reglas visuales: colores, tipografías, medidas. Manda sobre el código.
+├── Makefile     Los atajos. `make help` los lista todos.
+└── CLAUDE.md    Cómo se trabaja en este repo: ramas, commits, pull requests.
 ```
+
+### ¿Qué estás buscando?
+
+| Si buscás… | Andá a |
+|---|---|
+| Levantar el sistema en tu máquina | [Inicio Rápido](#inicio-rápido), más abajo |
+| Un entorno de prueba con datos de mentira | [Entorno de QA](#entorno-de-qa) — un comando, `make qa-up` |
+| Cómo se ve cada pantalla, antes y después del rediseño | [`docs/ux/comparaciones/`](docs/ux/comparaciones/README.md) |
+| Por qué una pantalla usa ese color o esa letra | [`DESIGN.md`](DESIGN.md) |
+| Qué se le prometió al club y por cuánto | [`docs/product/`](docs/product/) |
+| Poner el sistema en producción | [`docs/operations/deployment.md`](docs/operations/deployment.md) |
+| Qué falta antes de lanzar | [`docs/operations/production-readiness.md`](docs/operations/production-readiness.md) |
+| Qué significa cada variable de entorno | [`docs/reference/configuration.md`](docs/reference/configuration.md) |
+| Quién aprueba qué | [`docs/reference/ownership.md`](docs/reference/ownership.md) |
+| Qué datos personales guardamos y por cuánto tiempo | [`docs/security/privacy-retention.md`](docs/security/privacy-retention.md) |
+| Algo que se hizo antes y ya no está vigente | [`docs/archive/`](docs/archive/README.md) |
+| El índice completo de la documentación | [`docs/README.md`](docs/README.md) |
+
+### Dónde NO buscar
+
+- **`node_modules/`, `coverage/`, `test-results/`, `.next/`** — los genera la
+  máquina y no se versionan. Si los ves, ignoralos.
+- **`docs/archive/`** — es un registro congelado. Sirve para entender por qué
+  algo es como es, nunca para saber cómo está hoy.
+- **`.claude/`, `.impeccable/`** — estado local de herramientas. Aparecen en tu
+  disco, no en el repositorio.
+
+### El stack, para quien lo necesite
 
 | Capa | Stack |
 |------|-------|
@@ -22,6 +54,10 @@ cata_club/
 | Backend | Python 3.13, FastAPI, Pydantic v2, SQLAlchemy 2, Alembic, Celery + Redis |
 | Base de datos | PostgreSQL 16 |
 | Infraestructura | Docker, Docker Compose |
+
+El detalle de cada lado está más abajo, en [Estructura del
+Backend](#estructura-del-backend) y [Estructura del
+Frontend](#estructura-del-frontend).
 
 ## Requisitos Previos
 
@@ -223,8 +259,19 @@ de despliegue, rollback y backup vive en
 
 ## Documentación
 
-El índice completo de la documentación (operación, configuración, ownership,
-privacidad y evidencia) está en [`docs/README.md`](docs/README.md).
+El índice completo (operación, configuración, ownership, privacidad y
+evidencia) está en [`docs/README.md`](docs/README.md). Si no sabés por dónde
+empezar, el [mapa del repositorio](#mapa-del-repositorio) al principio de este
+archivo tiene una tabla de «si buscás X, andá a Y».
+
+Tres reglas que evitan buscar en el lugar equivocado:
+
+1. **Lo vigente vive en la raíz de `docs/`**; lo superado, en
+   [`docs/archive/`](docs/archive/README.md). El archivo no se actualiza nunca.
+2. **`DESIGN.md` manda sobre el código visual**, no al revés. Si una pantalla
+   contradice a `DESIGN.md`, la pantalla está mal.
+3. **Un comentario no es documentación.** El estado real se deriva corriendo un
+   comando; la prosa dentro de un archivo puede haber quedado vieja.
 
 ## Licencia
 

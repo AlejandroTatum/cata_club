@@ -30,14 +30,24 @@
  *
  * ## Capturas
  *
- * Cada caso escribe `docs/archive/audits/2026-08-12/img/<ID>-*.png`.
- * Los ids (T1, P07, R03…) son los mismos que usa el informe en
- * `docs/archive/audits/2026-08-12/README.md`.
+ * Cada caso escribe `frontend/test-results/enroll-qa/<ID>-*.png`, que está
+ * ignorado por git. Los ids (T1, P07, R03…) son los mismos que usa el informe
+ * en `docs/archive/audits/2026-08-12/README.md`.
+ *
+ * Antes escribía DENTRO de `docs/archive/audits/2026-08-12/img/`, y eso hacía
+ * que correr la suite reescribiera 84 archivos versionados de un audit
+ * archivado. Un archivo es un registro congelado: son las capturas de la
+ * corrida de ese día, no de la de hoy. El árbol quedaba sucio en cada corrida
+ * y esas 84 modificaciones estaban a un `git add -A` de entrar al índice sin
+ * que nadie las hubiera mirado.
+ *
+ * Para refrescar la evidencia de un audit hay que pedirlo explícitamente:
+ *   ENROLL_QA_SHOT_DIR=../docs/archive/audits/2026-08-12/img pnpm exec playwright test enroll-qa
  */
 
 import { test, expect, type Locator, type Page, type Route } from "@playwright/test";
 
-const SHOT_DIR = "../docs/archive/audits/2026-08-12/img";
+const SHOT_DIR = process.env.ENROLL_QA_SHOT_DIR ?? "test-results/enroll-qa";
 
 /** Captura de página completa nombrada por el id del caso del informe. */
 async function shot(page: Page, caseId: string, slug: string): Promise<void> {

@@ -69,3 +69,21 @@ playwright-report/
 .claude/*
 !.claude/settings.local.json
 !.claude/skills/
+
+# The same state, everywhere else it lands.
+#
+# A pattern containing a slash is anchored to the directory holding this file,
+# so the rule above only ever covered `/.claude/`. The tooling writes a scratch
+# directory into every folder it edits in, and thirteen of them had accumulated
+# — `frontend/.claude/`, `backend/.claude/`, `frontend/src/services/.claude/`,
+# `frontend/public/fonts/.impeccable/` and so on. None were ignored, all were
+# one `git add -A` away from the index, and none of them mean anything to a
+# fresh clone.
+#
+# `**/` matches zero or more leading directories, so each rule below covers
+# both `frontend/.claude/` and `frontend/src/.../.claude/`.
+frontend/**/.claude/
+backend/**/.claude/
+docs/**/.claude/
+tests/**/.claude/
+**/.impeccable/

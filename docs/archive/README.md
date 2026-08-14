@@ -54,18 +54,24 @@ El detalle origen → destino de cada archivo, con commit/fecha de creación,
 sensibilidad y delete-candidates está en [`MANIFIESTO.md`](MANIFIESTO.md).
 Leelo antes de tocar cualquier archivo de este árbol.
 
-## Follow-ups registrados (fuera del alcance de esta reorganización)
+## Follow-ups registrados — cerrados
 
-Documentación técnica que vive fuera de `docs/` y que este PR no movió, para
-decidir en un PR aparte:
+Documentación técnica que vivía fuera de `docs/`. La reorganización original la
+dejó anotada para un PR aparte; ese PR ya pasó y estos son sus destinos:
 
-- `frontend/openspec/` — propuestas y reportes SDD/openspec que citan
-  `docs/ux/`, `docs/auditoria-qa/` y `docs/fixes/` con rutas pre-reorganización
-  (10 archivos). Son snapshots de proceso; se dejan intactos y sus citas se
-  leen como historia.
-- `frontend/design/`, `client-deliverables/`, `.impeccable/`, `.claude/` —
-  material de diseño/entregables no movido por pedido explícito de mantener el
-  alcance en `docs/`.
+- `frontend/openspec/` → [`openspec/`](openspec/). Propuestas y reportes
+  SDD/openspec que citan `docs/ux/`, `docs/auditoria-qa/` y `docs/fixes/` con
+  rutas pre-reorganización. Son snapshots de proceso: se movieron enteros, sin
+  reescribir una sola cita, y esas rutas se leen como historia.
+- `frontend/design/` → [`prototypes/mockups-v1/`](prototypes/mockups-v1/). Los
+  doce mockups HTML de la primera pasada, con su guía de implementación.
+  Superados por el sistema visual que vive en `DESIGN.md`.
+- `frontend/docs/real-authentication-integration-plan.md` →
+  [`plans/`](plans/). El plan de reemplazo del auth mock por JWT real, ya
+  ejecutado.
+- `frontend/client-deliverables/` → `docs/product/entregables-cliente/`. NO
+  entra al archivo: la landing que documenta sigue esperando el OK del cliente,
+  así que es material vigente y vive con el resto de lo activo.
 - `docs/ux/` — conserva solo normas activas (objetivo táctil, escalas de
   iconos/tipografía, ritmo vertical, candado de valores arbitrarios); la
   evaluación, el plan de implementación y los prototipos viven en
