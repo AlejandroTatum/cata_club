@@ -17,6 +17,7 @@ const heights = (extend.height ?? {}) as Record<string, string>;
 const minHeights = (extend.minHeight ?? {}) as Record<string, string>;
 const radii = (extend.borderRadius ?? {}) as Record<string, string>;
 const spacing = (extend.spacing ?? {}) as Record<string, string>;
+const fontFamily = (extend.fontFamily ?? {}) as Record<string, string[]>;
 
 /** The number in front of a `px` value, so a step can be compared to a metric. */
 const px = (value: string): number => Number.parseInt(value, 10);
@@ -34,7 +35,13 @@ describe("design tokens — rubber and ball (_sistema.css:20-26)", () => {
   });
 
   it("carries the ball and its text-weight companion", () => {
-    expect(nested("ball")).toMatchObject({ DEFAULT: "#FFD600", ink: "#8A6D00" });
+    // The companion is the one value in this block that is NOT the sheet's
+    // #8A6D00 any more. That transcription failed AA on both surfaces it
+    // reaches — 3.48:1 printed on the ball, 4.03:1 on `canvas` — so it took
+    // the #6E5700 the sheet had already grown locally as `--ball-ink-strong`
+    // and kept to itself. The ratios are asserted in
+    // lib/__tests__/color-contrast.test.ts; the sheet now mirrors this value.
+    expect(nested("ball")).toMatchObject({ DEFAULT: "#FFD600", ink: "#6E5700" });
   });
 });
 
@@ -185,6 +192,53 @@ describe("design tokens — vertical rhythm (_sistema.css:152, 222, 104)", () =>
       "30": "7.5rem",
       "88": "22rem",
     });
+  });
+});
+
+describe("design tokens — the three brand type families", () => {
+  /**
+   * The product shipped on Inter, loaded as four `@fontsource/inter` stylesheets
+   * in the root layout, while the three families the brand actually owns —
+   * Barlow, Graduate, Playfair Display — were self-hosted `.woff2` files that
+   * only `app/page.tsx` declared, i.e. only the public landing ever rendered
+   * them. One product, two typographic systems, and the one the club paid for
+   * was the one 32 authenticated screens never saw.
+   *
+   * The families now come from `lib/fonts.ts` and reach every route through
+   * the CSS variables the root layout puts on `<html>`. These assertions read
+   * the variable NAMES rather than a resolved family string on purpose:
+   * `next/font/local` generates the actual family name at build time, so the
+   * variable is the only stable thing to hold a config to.
+   */
+  it("makes Barlow the interface text, at the head of the fallback chain", () => {
+    expect(fontFamily.sans?.[0]).toBe("var(--font-barlow)");
+  });
+
+  it("exposes Graduate as the display face", () => {
+    expect(fontFamily.display?.[0]).toBe("var(--font-graduate)");
+  });
+
+  it("exposes Playfair as the serif voice", () => {
+    expect(fontFamily.serif?.[0]).toBe("var(--font-playfair)");
+  });
+
+  it("keeps a system fallback behind each of the three", () => {
+    // A `var()` that never resolves — a font file that 404s, a variable the
+    // layout forgot to mount — falls through to nothing and the browser picks
+    // its own default. Each stack has to name what it degrades TO.
+    for (const key of ["sans", "display", "serif"]) {
+      expect(fontFamily[key]?.length, `${key} has no fallback behind the variable`)
+        .toBeGreaterThan(1);
+    }
+  });
+
+  it("no longer names Inter in any of the three stacks", () => {
+    // The value being retired. Inter sat at the head of `sans` and was the
+    // reason every admin screen rendered in a face the brand does not use.
+    const named = Object.entries(fontFamily).flatMap(([key, stack]) =>
+      stack.filter((entry) => /inter/i.test(entry)).map((entry) => `${key}: ${entry}`),
+    );
+    expect(named).toEqual([]);
   });
 });
 

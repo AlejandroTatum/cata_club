@@ -408,6 +408,52 @@ describe("sidebar rail — the two sub-labels on coal", () => {
   });
 });
 
+describe("ball-ink — the two surfaces ink lands on next to the yellow", () => {
+  // `ball-ink` is the text-weight companion to the ball, the same job
+  // `fuchsia-ink` does for the pink below. It shipped at #8A6D00 and failed
+  // BOTH of the surfaces it can reach, which is why this block asserts two
+  // pairs and not one:
+  //
+  //   · on `ball` itself ... 3.48:1 — a label printed ON the yellow, which is
+  //     what a companion ink is FOR. `_sistema.css`'s `.note .mine` pill is
+  //     the shape of it.
+  //   · on `canvas` ....... 4.03:1 — the yellow-coloured word sitting on the
+  //     page field, which is where every muted foreground in this file has to
+  //     be measured since the canvas was deepened to #E8E8EE.
+  //
+  // On `paper` it was already fine (4.92:1), so the token never looked broken
+  // on a card — that is exactly how two failures survived unmeasured.
+  const BALL = (colors.ball as Record<string, string>).DEFAULT;
+  const BALL_INK = (colors.ball as Record<string, string>).ink;
+
+  it("meets AA for ball-ink ON the yellow, the pair the token exists for", () => {
+    const ratio = contrastRatio(BALL_INK, BALL);
+    expect(ratio, `ball-ink on ball measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for ball-ink on the canvas, where the same word lands off-card", () => {
+    const ratio = contrastRatio(BALL_INK, CANVAS);
+    expect(ratio, `ball-ink on canvas measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("keeps it readable on paper too, which is the surface it never failed", () => {
+    const ratio = contrastRatio(BALL_INK, PAPER);
+    expect(ratio, `ball-ink on paper measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  // Why the ball itself is not darkened instead: it is a FILL, and the focus
+  // ring above depends on its exact luminance against the coal rail
+  // (`contrastRatio(BALL, coal-3) ≥ 3`). Moving the yellow to rescue the ink
+  // would break the indicator this same file locks four assertions around.
+  it("confirms the retired #8A6D00 failed both surfaces, so the ink had to move", () => {
+    expect(contrastRatio("#8A6D00", BALL)).toBeLessThan(AA_NORMAL_TEXT);
+    expect(contrastRatio("#8A6D00", CANVAS)).toBeLessThan(AA_NORMAL_TEXT);
+  });
+});
+
 describe("/trainer — fuchsia quick-action cards", () => {
   // The cards are `bg-cata-fuchsia/10` over the page background, so the real
   // backdrop is the composited tint, not the bare page. Measured against the

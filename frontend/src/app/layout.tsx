@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/500.css";
-import "@fontsource/inter/600.css";
-import "@fontsource/inter/700.css";
+import { fontVariables } from "@/lib/fonts";
 import Header from "@/components/Header";
 import AuthProviderWrapper from "@/components/AuthProviderWrapper";
 import { ToastProvider } from "@/contexts/ToastContext";
@@ -31,8 +28,26 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: RootLayoutProps): React.ReactElement {
+  /*
+   * The three brand families are mounted on `<html>` below, on the element
+   * every route in the product inherits from, and not in the shells or pages.
+   *
+   * They used to arrive as four `@fontsource/inter` stylesheet imports on this
+   * same file, which is why every authenticated screen rendered in Inter while
+   * the landing rendered in the faces the club actually chose. Swapping those
+   * imports for these variables is the whole migration: `font-sans` on `<body>`
+   * already resolves through `tailwind.config.ts`, so the entire product
+   * changes face without a single component being touched.
+   *
+   * `<html>` rather than `<body>`: a CSS custom property is only visible to the
+   * subtree it is declared on, and anything Next renders outside `<body>` would
+   * lose them one level down.
+   *
+   * `lib/fonts.ts` explains why the landing still declares its own
+   * `--font-landing-*` copies of these same three files.
+   */
   return (
-    <html lang="es">
+    <html lang="es" className={fontVariables}>
       <body className="min-h-screen bg-cata-bg font-sans text-cata-text antialiased">
         <ToastProvider>
           <ToastContainer />

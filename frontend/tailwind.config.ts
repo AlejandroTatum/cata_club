@@ -67,10 +67,34 @@ const config: Config = {
           "2": "#1C1C21",
           "3": "#26262C",
         },
-        /** The ball — attention accent. `ball-ink` is its text-weight companion. */
+        /**
+         * The ball — attention accent. `ball-ink` is its text-weight companion,
+         * the same job `cata.fuchsia-ink` does for the pink.
+         *
+         * `ink` shipped at #8A6D00, transcribed from `_sistema.css:26`, and it
+         * failed WCAG AA (1.4.3) on BOTH surfaces it can reach: 3.48:1 printed
+         * ON the yellow — the pair a companion ink exists for — and 4.03:1 on
+         * the deepened `canvas`. It only ever measured well on `paper`
+         * (4.92:1), which is how two failures sat unnoticed on the one token
+         * whose entire job is being legible.
+         *
+         * #6E5700 is not a fresh pick. It is the `--ball-ink-strong` that
+         * `_sistema.css` had already grown for exactly this reason — the
+         * prototype sheet needed a darker yellow ink for its `.note .mine`
+         * pill and invented one locally rather than moving the shared value.
+         * That left the prototypes with better contrast than the product,
+         * which is the drift `prototipos-sistema-tokens.test.ts` exists to
+         * catch. Promoting it here retires the local token: same hue, ~20%
+         * darker, 4.91:1 on `ball`, 5.69:1 on `canvas`, 6.94:1 on `paper`.
+         *
+         * The ball itself is NOT darkened to rescue the ink: `DEFAULT` is a
+         * FILL whose luminance the focus ring depends on (it is the band that
+         * carries the 3:1 against the coal rail), so moving it to fix a text
+         * pair would break the indicator `color-contrast.test.ts` locks.
+         */
         ball: {
           DEFAULT: "#FFD600",
-          ink: "#8A6D00",
+          ink: "#6E5700",
         },
         /** Text ink ramp. `--ink` is the only color a stat number may ever be. */
         ink: {
@@ -290,9 +314,41 @@ const config: Config = {
           "state-ok": "#15803D",
         },
       },
+      // ---------------------------------------------------------------------
+      // Three families, three jobs. Declared in `lib/fonts.ts` and mounted as
+      // CSS variables on `<html>` by the root layout, which is why each stack
+      // starts with a `var()` and not with a family name: `next/font/local`
+      // generates the real family name at build time, so the variable is the
+      // only name that survives a rebuild.
+      //
+      // `sans` used to start with "Inter", loaded from `@fontsource/inter`.
+      // That dependency is gone: it dressed every authenticated screen in a
+      // face the brand does not own, while the three files the club actually
+      // uses sat in `public/fonts/` being loaded by the landing alone.
+      //
+      // THE THREE RULES, and they are not stylistic preferences:
+      //
+      //   · `display` (Graduate) is DISPLAY, uppercase, and never smaller than
+      //     15px. It is a collegiate face with no lowercase design intent and
+      //     almost no vertical range, so it reads as texture rather than as
+      //     words the moment it drops into a sentence. It never enters a
+      //     paragraph — a Graduate <p> is a bug, not a bold choice.
+      //   · `sans` (Barlow) carries ALL interface text: every label, cell,
+      //     button, field, helper line and paragraph. If a screen has to ask
+      //     which family a string takes, the answer is this one.
+      //   · `serif` (Playfair) is the voice, and it is rationed: at most ONE
+      //     phrase per screen — a pull quote, a motto, the single line meant to
+      //     be read rather than scanned. A second one on the same screen means
+      //     neither is emphasis any more.
+      //
+      // The tail of each stack is what the user actually sees while the woff2
+      // is in flight (`display: "swap"`), so each one degrades to a face with
+      // comparable proportions rather than to whatever the browser defaults to.
+      // `sans` keeps exactly the fallback chain Inter shipped with.
+      // ---------------------------------------------------------------------
       fontFamily: {
         sans: [
-          "Inter",
+          "var(--font-barlow)",
           "system-ui",
           "-apple-system",
           "Segoe UI",
@@ -301,6 +357,8 @@ const config: Config = {
           "Arial",
           "sans-serif",
         ],
+        display: ["var(--font-graduate)", "serif"],
+        serif: ["var(--font-playfair)", "Georgia", "serif"],
       },
       // ---------------------------------------------------------------------
       // The type scale. Eight steps, in Tailwind's tuple form
