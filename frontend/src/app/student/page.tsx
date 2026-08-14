@@ -374,11 +374,22 @@ function SituationLink({ href, children }: { href: string; children: React.React
 function TrainingRow({ session, first }: { session: UpcomingTraining; first: boolean }): React.ReactElement {
   return (
     /*
-     * `flex-1` with `min-h-drow` as the floor: the card is stretched to its
-     * neighbour's height, and with at most three sessions all the slack used to
-     * pool into one dead band between the last row and the footer. The rows
-     * share it instead. `items-center` already had the content centred, so a
-     * taller row just breathes more.
+     * `flex-1` between `min-h-drow` and a ceiling: the card is stretched to
+     * the height the page now claims, and with at most three sessions all the
+     * slack used to pool into one dead band between the last row and the
+     * footer. The rows share it instead. `items-center` already had the
+     * content centred, so a taller row just breathes more.
+     *
+     * The ceiling is the correction that came out of measuring this pass. With
+     * the page's leftover finally reaching the panel (see the grid in
+     * `ActivePortalView`), three rows dividing it grew to 168px each at
+     * 1440x900 — a 56px row rendered nearly triple, its `bg-sunken` marker a
+     * grey slab, and the label floating in the middle of it. That is the
+     * client's own "espacios vacíos" reappearing inside the row that was
+     * supposed to absorb them. 112px is the largest a row reads as a row here:
+     * it holds the day, the date and the badge with real air and still stacks
+     * three of them into a panel. Whatever is left over past that stops at the
+     * footer, which `mt-auto` now genuinely pins to the bottom.
      *
      * `first && "bg-sunken"` (fix 12c): the chosen maquette (Propuesta 2,
      * `.row.next`) marks the closest upcoming session with a distinct row
@@ -388,7 +399,7 @@ function TrainingRow({ session, first }: { session: UpcomingTraining; first: boo
      */
     <li
       className={cn(
-        "flex min-h-drow flex-1 flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-3 last:border-b-0",
+        "flex min-h-drow max-h-[112px] flex-1 flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-3 last:border-b-0",
         first && "bg-sunken",
       )}
     >
@@ -501,15 +512,34 @@ function TrainingPanel({
             ))}
           </ul>
         ) : (
-          <div className="flex-1 border-t border-line">
-            <EmptyState surface="inset"
+          <div className="flex flex-1 flex-col border-t border-line">
+            {/* D11 — an empty state has three parts, and this one had two:
+                what is missing, and why. The third, "qué hacer", was a
+                sentence telling the reader to "consulte en administración"
+                with nothing to click. `/ayuda` is where the club answers that
+                question, and the label is the destination's registered name
+                (D12b), not a phrase invented here.
+
+                `fill` because the panel around it is stretched now: without
+                it the statement would sit at the top of a tall card with
+                canvas below it, which is the defect this pass exists to
+                close, moved inside the card. */}
+            <EmptyState
+              surface="inset"
+              fill
               icon={<CalendarDays size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title={
                 viewingOwnProfile
                   ? "Todavía no tiene un horario asignado"
                   : `${studentName} todavía no tiene un horario asignado`
               }
-              description="El club asigna los días y las horas de entrenamiento. Consulte en administración para que le asignen uno."
+              description="El club asigna los días y las horas de entrenamiento. Escriba a administración para que le asignen uno."
+              action={
+                <Link href="/ayuda" className={buttonClasses("secondary", "sm")}>
+                  Preguntas frecuentes
+                  <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                </Link>
+              }
             />
           </div>
         ))}
@@ -796,7 +826,26 @@ function ActivePortalView({
         // slack landed INSIDE the card, below its fact grid. A carnet has a
         // carnet's proportions, not a column's, so it still sits at its
         // natural height, top-aligned with the rail (`lg:items-start`).
-        <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,1fr)_minmax(0,1fr)]")}>
+        //
+        // D11b, and the root cause the three socio screens share: `AppShell`'s
+        // `<main>` is `flex flex-1 flex-col` inside a `min-h-screen` chain, so
+        // it is ALREADY the height of the window. Nothing on this screen
+        // claimed that height, so every pixel the content did not use piled up
+        // under the last block — 38% of the viewport for a self-managed adult.
+        //
+        // `flex-1` here is what claims it. It is not a cosmetic addition: it
+        // is the missing first link of a chain this file already wrote and
+        // then could not switch on. `TrainingPanel` carries `flex-1`,
+        // `TrainingRow` carries `flex-1`, and the panel's footer carries
+        // `mt-auto` — all three were inert, because `PAGE_RAIL`'s
+        // `lg:items-start` sizes each column to its own content and no
+        // container in the chain had any free space for them to divide.
+        //
+        // `mt-auto` could never have fixed this on its own. An auto margin
+        // absorbs free space its container ALREADY has; with nothing stretched
+        // it has nothing to absorb, which is exactly how the same attempt died
+        // on the profile screen.
+        <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,1fr)_minmax(0,1fr)]", "flex-1")}>
           <div className="flex flex-col gap-5">
             <Carnet
               profile={selectedProfile}
@@ -829,8 +878,17 @@ function ActivePortalView({
           {/* Below `lg` this is the SECOND stacked block (see `PAGE_RAIL`'s
               doc comment: no explicit columns below `lg` means DOM order is
               reading order), so a phone gets exactly the brief's order —
-              carnet, then the payment action, then "Esta semana". */}
-          <div className="flex flex-col gap-5">
+              carnet, then the payment action, then "Esta semana".
+
+              `lg:self-stretch` is the second link of the chain described on
+              the grid above: it opts THIS column, and only this column, out of
+              `PAGE_RAIL`'s `lg:items-start`, so the row's full height reaches
+              `TrainingPanel`. The carnet column deliberately stays opted in —
+              fix 12b stretched it once and the slack landed inside the card,
+              under its fact grid, which is the same emptiness moved rather
+              than closed. A carnet has a carnet's proportions; a panel of
+              rows does not. */}
+          <div className="flex flex-col gap-5 lg:self-stretch">
             <CuotaCard
               situation={paymentSituation}
               coverageEnd={coverageEnd}

@@ -322,6 +322,30 @@ export function formatElapsedMinutes(minutes: number): string {
 }
 
 /**
+ * The wait until a session starts, said the way a person says it.
+ *
+ * The card used to hand the raw minute count to its 46px figure, and a minute
+ * count only reads as a quantity for about an hour: the panel opened at 03:20
+ * on a Friday whose first session is at 15:00 answered "700 minutos" — a
+ * number nobody converts, in the largest type on the screen. Over the hour the
+ * unit changes, which is what DESIGN.md's "regla de la forma" asks of every
+ * figure: it takes the shape of what it measures.
+ *
+ * Zero or less never reaches here from a "next" card (`buildSessionCardState`
+ * turns that into "live"), but it is answered anyway rather than counting
+ * down past zero.
+ */
+export function formatTimeUntilStart(minutes: number): string {
+  if (minutes <= 0) return "Empieza ahora";
+  if (minutes < 60) return `Empieza en ${minutes} ${minutes === 1 ? "minuto" : "minutos"}`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  const hourPart = `${hours} ${hours === 1 ? "hora" : "horas"}`;
+  if (rest === 0) return `Empieza en ${hourPart}`;
+  return `Empieza en ${hourPart} y ${rest} ${rest === 1 ? "minuto" : "minutos"}`;
+}
+
+/**
  * Enrolled-count-by-horario map for TODAY's schedules, built from the club's
  * one-call roster (`fetchRosterDeTodosLosHorarios`) instead of one
  * `fetchAlumnosPorHorario` per card — the same N+1-avoiding move `/groups`
@@ -386,6 +410,22 @@ const BAR_STATE_NOUNS: Record<EstadoAsistencia, [singular: string, plural: strin
 
 function pluralizedCount(count: number, [singular, plural]: [string, string]): string {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/**
+ * "9 presentes", "1 tardanza", "0 justificados" — the ONE way this product
+ * counts a state out loud.
+ *
+ * The nouns above were private and spent only on the bar's accessible name,
+ * so every surface that had to print the same four counts wrote its own
+ * version — and both of them wrote it as a count against a SINGULAR label
+ * ("9 Presente", "0 Tardanza"), because `getAttendanceLabel` returns the name
+ * of the state and not a phrase about how many are in it. DESIGN.md's "regla
+ * de las palabras" is about exactly this: the interface does not produce a
+ * second wording for something that already has one.
+ */
+export function formatStateCount(estado: EstadoAsistencia, count: number): string {
+  return pluralizedCount(count, BAR_STATE_NOUNS[estado]);
 }
 
 /**

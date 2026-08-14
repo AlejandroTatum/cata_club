@@ -29,11 +29,13 @@
 
 import { useCallback, useMemo, useState } from "react";
 import StudentSearch from "@/components/StudentSearch";
+import ContextualHelp from "@/components/ContextualHelp";
 import {
   FILTER_LABEL,
   FilterGroup,
   FilterPanel,
   FilterPill,
+  type FilterPanelLayout,
 } from "@/components/ui";
 import { formatDay, type TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DateRangePreset } from "@/lib/club-date";
@@ -111,6 +113,14 @@ export interface AttendanceFiltersProps {
   filters: AttendanceFiltersController;
   /** Populates the horario select. Pass `[]` while they are still loading. */
   schedules: TrainingSchedule[];
+  /**
+   * Forwarded to `FilterPanel`. Two screens draw this component at two very
+   * different widths — `/attendance` gives it the whole page, the trainer's
+   * history gives it the left third — and the axis has to follow the column it
+   * is standing in, not a default chosen for one of them. Stacked stays the
+   * default because the narrow case is the one that breaks if it guesses wrong.
+   */
+  layout?: FilterPanelLayout;
   className?: string;
 }
 
@@ -120,11 +130,13 @@ const FIELD_CONTROL =
 export default function AttendanceFilters({
   filters,
   schedules,
+  layout = "column",
   className,
 }: AttendanceFiltersProps): React.ReactElement {
   return (
     <FilterPanel
       label="Filtros de registros"
+      layout={layout}
       className={className}
       search={
         <FilterGroup label="Alumno">
@@ -149,8 +161,8 @@ export default function AttendanceFilters({
           </div>
 
           {filters.preset === "custom" && (
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-end gap-section">
+              <label className="flex flex-col gap-field">
                 <span className={FILTER_LABEL}>Fecha de inicio</span>
                 <input
                   type="date"
@@ -160,7 +172,7 @@ export default function AttendanceFilters({
                   className={FIELD_CONTROL}
                 />
               </label>
-              <label className="flex flex-col gap-1.5">
+              <label className="flex flex-col gap-field">
                 <span className={FILTER_LABEL}>Fecha límite</span>
                 <input
                   type="date"
@@ -174,14 +186,14 @@ export default function AttendanceFilters({
           )}
 
           {filters.rangeError && (
-            <p role="alert" className="text-xs text-cata-red">
+            <p role="alert" className="text-xs text-state-bad">
               {filters.rangeError}
             </p>
           )}
         </FilterGroup>
       }
       fields={
-        <label className="flex max-w-xs flex-col gap-1.5">
+        <label className="flex flex-col gap-field">
           <span className={FILTER_LABEL}>Horario</span>
           <select
             aria-label="Filtrar por horario"
@@ -197,6 +209,27 @@ export default function AttendanceFilters({
             ))}
           </select>
         </label>
+      }
+      // D11c — the caveat about what these controls reach, in the block that
+      // holds them. An incomplete custom range makes the page render its empty
+      // state ("no hay registros en este rango"), which is a claim about the
+      // club rather than about the form: the query is simply not built yet.
+      // The panel shows its own `role="alert"` about the range, but only once
+      // both fields disagree; the half-filled case says nothing anywhere.
+      help={
+        <ContextualHelp title="Cómo funciona el filtro de registros">
+          <ul className="flex flex-col gap-field">
+            <li>
+              Un rango personalizado necesita las dos fechas. Con una sola cargada el listado se
+              muestra vacío porque todavía no hay rango que consultar, no porque el club no tenga
+              registros.
+            </li>
+            <li>
+              Los filtros se combinan: alumno, rango y horario se aplican a la vez, y el listado
+              responde a los tres.
+            </li>
+          </ul>
+        </ContextualHelp>
       }
     />
   );

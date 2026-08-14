@@ -42,13 +42,34 @@ export type CrearCuentaStep = "type" | "personal" | "health" | "credentials" | "
 /** Step order used by the wizard. */
 export const CREAR_CUENTA_STEP_ORDER: CrearCuentaStep[] = ["type", "personal", "health", "credentials", "summary"];
 
-/** Human-readable labels for each step, in Spanish. */
+/**
+ * Human-readable labels for each step, in Spanish and in SENTENCE case.
+ *
+ * They were Title Case, on a screen whose fields are labelled "Correo
+ * electrónico" and "Nombre del contacto" — so the same page wrote the same
+ * kind of string two ways. `STEP_LABELS` on the public wizard
+ * (`enroll-utils.ts`) and `ADD_DEPENDENT_STEP_LABELS` on its sibling both
+ * write sentence case; this was the odd one of the three.
+ *
+ * `health` also takes the words the other two use for the same four
+ * questions. "Ficha médica" is the name of the RECORD; the step asks about
+ * health and about who to call, which is what "Salud y emergencia" says.
+ */
 export const CREAR_CUENTA_STEP_LABELS: Record<CrearCuentaStep, string> = {
-  type: "Tipo de Cuenta",
-  personal: "Datos Personales",
-  health: "Ficha Médica",
-  credentials: "Credenciales de Acceso",
-  summary: "Resumen y Confirmación",
+  type: "Tipo de cuenta",
+  personal: "Datos personales",
+  health: "Salud y emergencia",
+  credentials: "Credenciales de acceso",
+  summary: "Resumen y confirmación",
+};
+
+/** One-word names for the stepper pills — the same contract the two student wizards use. */
+export const CREAR_CUENTA_SHORT_LABELS: Record<CrearCuentaStep, string> = {
+  type: "Tipo",
+  personal: "Datos",
+  health: "Salud",
+  credentials: "Acceso",
+  summary: "Confirmar",
 };
 
 /** Blood type options matching the backend TipoSangre enum. */
@@ -95,6 +116,64 @@ export const initialCrearCuentaFormData: CrearCuentaFormData = {
   contactoEmergencia: "",
   telefonoEmergencia: "",
 };
+
+/** A form field this wizard can address. */
+export type CrearCuentaField = keyof CrearCuentaFormData;
+
+/**
+ * The DOM id of each field, declared once and derived from the field NAME —
+ * never from the label the visitor reads.
+ *
+ * The third and last copy of `ENROLL_FIELD_TOKEN`'s contract (enroll-utils.ts,
+ * then add-dependent-utils.ts). This wizard passed no `field` to a single one
+ * of its seven `WizardInput`s, so `slugifyLabel` built every id out of the
+ * visible copy: "Fecha de Nacimiento" made `#crear-cuenta-fecha-de-nacimiento`
+ * while the identical field on both student wizards is `-fecha-nacimiento`,
+ * and "Contraseña" made `-contrasena` against their `-contrasenia`. Two of the
+ * renames this batch makes for the rule of the words — Title Case out,
+ * accents in — would each have moved an id.
+ *
+ * The tokens are the SAME strings the other two wizards use. Three screens
+ * collect the same person; a field that means the same thing is addressed the
+ * same way.
+ *
+ * `accountType` and `representanteId` name no `<input>` on purpose — the first
+ * is the row of choice cards, the second is filled by a search — and they stay
+ * here so this remains a total function of `CrearCuentaField`: a new form
+ * field cannot be added without answering "what is its id".
+ */
+export const CREAR_CUENTA_FIELD_TOKEN: Record<CrearCuentaField, string> = {
+  accountType: "tipo",
+  nombres: "nombres",
+  apellidos: "apellidos",
+  cedula: "cedula",
+  fechaNacimiento: "fecha-nacimiento",
+  telefono: "telefono",
+  correo: "correo",
+  contrasenia: "contrasenia",
+  representanteId: "representante",
+  institucionId: "institucion",
+  tipoSangre: "tipo-sangre",
+  condicionesSalud: "condiciones-salud",
+  alergias: "alergias",
+  contactoEmergencia: "contacto-emergencia",
+  telefonoEmergencia: "telefono-emergencia",
+};
+
+/** The id prefix every field on this wizard shares. */
+export const CREAR_CUENTA_ID_PREFIX = "crear-cuenta";
+
+/** The full DOM id of a field — what a test, a `<label for>` and a deep link all address. */
+export function crearCuentaFieldId(field: CrearCuentaField): string {
+  return `${CREAR_CUENTA_ID_PREFIX}-${CREAR_CUENTA_FIELD_TOKEN[field]}`;
+}
+
+/**
+ * The id of the school-TYPE filter — outside the table for the same reason its
+ * twin is on `/student/add-dependent`: it narrows the institution catalogue
+ * and never reaches the payload.
+ */
+export const CREAR_CUENTA_SCHOOL_TYPE_ID = `${CREAR_CUENTA_ID_PREFIX}-tipo-escuela`;
 
 // ---------------------------------------------------------------------------
 // Validation

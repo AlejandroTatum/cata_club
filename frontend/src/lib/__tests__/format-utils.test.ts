@@ -10,6 +10,7 @@ import {
   formatDateShort,
   formatDateTime,
   formatDateRange,
+  joinWithY,
 } from "../format-utils";
 
 // ---------------------------------------------------------------------------
@@ -144,5 +145,33 @@ describe("formatDateRange", () => {
   it("returns an empty string when neither side is a date", () => {
     expect(formatDateRange("", "")).toBe("");
     expect(formatDateRange("nope", "nope")).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// joinWithY
+// ---------------------------------------------------------------------------
+
+describe("joinWithY", () => {
+  it("returns the single item untouched", () => {
+    expect(joinWithY(["Ana Pérez"])).toBe("Ana Pérez");
+  });
+
+  it("joins two items with y, and no comma", () => {
+    expect(joinWithY(["Ana Pérez", "Luis Pérez"])).toBe("Ana Pérez y Luis Pérez");
+  });
+
+  it("commas every item but the last, which takes the y", () => {
+    expect(joinWithY(["Lunes", "miércoles", "viernes"])).toBe("Lunes, miércoles y viernes");
+  });
+
+  it("returns an empty string for an empty list, so a caller can test for it", () => {
+    // The alternative — a stray "y" or a lone comma — is the shape this
+    // function exists to make impossible.
+    expect(joinWithY([])).toBe("");
+  });
+
+  it("drops blank entries instead of rendering a gap around them", () => {
+    expect(joinWithY(["Ana Pérez", "", "Luis Pérez"])).toBe("Ana Pérez y Luis Pérez");
   });
 });

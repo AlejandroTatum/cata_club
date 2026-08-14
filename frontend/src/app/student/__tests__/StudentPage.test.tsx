@@ -1042,3 +1042,124 @@ describe("StudentPage — the carnet's band reads the payment situation, not Mem
     expect(within(carnet).getByText(/no tiene ningún pago aprobado/i)).toBeInTheDocument();
   });
 });
+
+/**
+ * D11b, the shared root cause of the three socio screens' dead air.
+ *
+ * `AppShell`'s `<main>` is `flex flex-1 flex-col` inside a `min-h-screen`
+ * chain, so it is ALREADY stretched to the viewport. Nothing on this screen
+ * claimed that height, so every pixel the content did not use piled up under
+ * the last block — 38% of the window for a self-managed adult at 1440x900.
+ *
+ * The fix is not a margin. `margin-top: auto` was tried on the profile screen
+ * and did nothing, because a margin can only absorb free space that its
+ * container actually has, and no container here had any. The height has to be
+ * CLAIMED first: the content grid takes the leftover, and the rail column
+ * stretches inside it — which is what finally switches on the three mechanisms
+ * this file already believed in (`TrainingPanel`'s `flex-1`, `TrainingRow`'s
+ * `flex-1`, and the panel footer's `mt-auto`).
+ *
+ * The carnet is deliberately NOT part of that chain — see the fix 12b block
+ * above, which reverted exactly that.
+ */
+describe("StudentPage — the page's leftover height is claimed, not abandoned", () => {
+  it("lets the content grid take the height `main` already reserved", async () => {
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const grid = carnet.parentElement?.parentElement;
+    expect(grid?.className).toMatch(/\bflex-1\b/);
+  });
+
+  it("stretches the rail column so the panel's own flex-1 and mt-auto can bite", async () => {
+    render(<StudentPage />);
+
+    const panel = await screen.findByTestId("student-situation");
+    const railColumn = panel.parentElement;
+    expect(railColumn?.className).toMatch(/lg:self-stretch/);
+  });
+
+  it("still leaves the carnet at its natural height inside the stretched grid", async () => {
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    // Fix 12b again: the grid grows, the carnet does not.
+    expect(carnet.className).not.toMatch(/\bflex-1\b/);
+    expect(carnet.parentElement?.className).not.toMatch(/self-stretch/);
+  });
+});
+
+/**
+ * D11c — "la ayuda no vive suelta".
+ *
+ * The switcher used to carry a permanent sentence explaining how the selection
+ * behaves across the three family screens. It is a "cómo funciona", not a
+ * "qué es", so it belongs behind "Ver ayuda" like every other procedure note
+ * in the product (`/discounts`, `/members`, `/student/enroll`). It rode along
+ * on all three socio screens at once, which is three copies of the same
+ * floating paragraph.
+ */
+describe("StudentPage — the switcher's procedure note is disclosed, not permanent", () => {
+  const GUARDIAN_PORTAL: StudentPortalSummary = {
+    self: null,
+    representados: [
+      { ...PORTAL.self!, personaId: "41", nombres: "Sofía", apellidos: "Vera" },
+      { ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera" },
+    ],
+    membershipPlans: [],
+  };
+
+  beforeEach(() => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(GUARDIAN_PORTAL);
+  });
+
+  it("keeps the note behind 'Ver ayuda' instead of printing it beside the select", async () => {
+    render(<StudentPage />);
+
+    await screen.findByLabelText("Estudiante");
+    expect(screen.queryByText(/Se mantiene en Mi cuenta, Pagos y Asistencias/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cómo funciona esta elección" }));
+
+    expect(
+      screen.getByText(/Se mantiene en Mi cuenta, Pagos y Asistencias/i),
+    ).toBeInTheDocument();
+  });
+});
+
+/**
+ * D11 — an empty state has three parts: what is missing, why, and WHAT TO DO.
+ * This one had the first two and no way out, and it did not fill the box it
+ * stands in, so the stretched panel would have shown a centred statement with
+ * canvas above and below it.
+ */
+describe("StudentPage — the no-schedule state fills its box and offers a way out", () => {
+  it("gives the reader somewhere to go when the club has assigned no schedule", async () => {
+    mockFetchHorariosPorAlumno.mockResolvedValue([]);
+
+    render(<StudentPage />);
+
+    const panel = await screen.findByTestId("student-situation");
+    await waitFor(() => {
+      expect(within(panel).getByText(/todavía no tiene un horario asignado/i)).toBeInTheDocument();
+    });
+
+    // The label is the destination's registered name (D12b), not a hand-written
+    // phrase: `/ayuda` is "Preguntas frecuentes" everywhere else in the shell.
+    const action = within(panel).getByRole("link", { name: /Preguntas frecuentes/i });
+    expect(action).toHaveAttribute("href", "/ayuda");
+  });
+
+  it("fills the stretched panel instead of leaving canvas above and below", async () => {
+    mockFetchHorariosPorAlumno.mockResolvedValue([]);
+
+    render(<StudentPage />);
+
+    const panel = await screen.findByTestId("student-situation");
+    const title = await within(panel).findByText(/todavía no tiene un horario asignado/i);
+    // `EmptyState`'s `fill` — `flex-1 justify-center` on the statement's own box.
+    const emptyState = title.parentElement;
+    expect(emptyState?.className).toMatch(/\bflex-1\b/);
+    expect(emptyState?.className).toMatch(/justify-center/);
+  });
+});

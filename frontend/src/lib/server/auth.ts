@@ -186,7 +186,7 @@ export interface BackendMeResponse {
   // `fechaCreacion` / `fotoUrl` — this interface only names the subset of
   // `/auth/me`'s real response the client actually reads. `buildSession`
   // uses this to populate `UsuarioEstudiante.fechaNacimiento` (see
-  // src/types/domain.ts), which `getNavLinksForRole` needs to decide whether
+  // src/types/domain.ts), which `getNavGroupsForRoles` needs to decide whether
   // a self-managed student is an adult.
   fechaNacimiento?: string;
 }

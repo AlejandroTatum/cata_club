@@ -129,6 +129,13 @@ import {
   getTotalPages,
 } from "@/app/attendance/attendance-utils";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ContextualHelp from "@/components/ContextualHelp";
+import {
+  SessionCompositionBar,
+  SessionCompositionCounts,
+} from "@/app/trainer/SessionComposition";
+import { formatStateCount } from "@/app/trainer/trainer-day-utils";
+import { ATTENDANCE_STATUS_CHART_COLORS } from "@/app/dashboard/dashboard-utils";
 import {
   Badge,
   BackLink,
@@ -201,28 +208,34 @@ const ATTENDANCE_ICONS: Record<EstadoAsistencia, React.ReactNode> = {
   justified: <FileText size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
 };
 
-/** Plural labels for the save bar's running totals. */
-const TOTAL_LABELS: Record<EstadoAsistencia, [singular: string, plural: string]> = {
-  present: ["Presente", "Presentes"],
-  late: ["Tardanza", "Tardanzas"],
-  justified: ["Justificado", "Justificados"],
-  absent: ["Ausente", "Ausentes"],
-};
+/*
+ * `TOTAL_LABELS` used to live here — a third singular/plural table for the
+ * four states, spent on the save bar's running totals and on the receipt
+ * bar's accessible name. Both read `formatStateCount` now, which is the one
+ * the panel already had.
+ */
 
 /** Best news first — the same order every attendance surface reads in. */
 const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
 
-/**
- * Solid fill for the receipt's proportional bar and its per-row dot — the
- * system's state colors (issue #213): presente verde, tardanza ámbar,
- * justificado gris neutro, ausente rojo.
+/*
+ * `RECEIPT_TONE_CLASS` used to live here: the state ramp (ok / warn / neutral
+ * / bad), painting the receipt's proportional bar and its per-row dots.
+ *
+ * It was the wrong ramp for a bar, and the reason is written down one folder
+ * over. `dashboard-utils.ts` says in as many words that the badge/state tokens
+ * "fail the dataviz adjacent-pair CVD/normal-vision checks when placed side by
+ * side in a chart", which is why the donut has its own validated palette —
+ * and a proportional bar is precisely four fills placed side by side. Worse,
+ * the two ramps disagreed on the same session within two clicks: "justificado"
+ * was grey on the receipt and blue in "Últimas listas" and the history, for
+ * the list the trainer had just filed.
+ *
+ * The bar and its dots now come from `SessionComposition` /
+ * `ATTENDANCE_STATUS_CHART_COLORS`, like every other adjacent-segment figure
+ * in the panel. Badges keep the state ramp: a badge is a pill on its own, not
+ * a segment against three neighbours.
  */
-const RECEIPT_TONE_CLASS: Record<EstadoAsistencia, string> = {
-  present: "bg-state-ok",
-  late: "bg-state-warn",
-  justified: "bg-state-neutral",
-  absent: "bg-state-bad",
-};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -830,6 +843,21 @@ export default function TrainerAttendancePage(): React.ReactElement {
   // "0 sin revisar" while a whole second page of students was about to be
   // filed present sight unseen — the exact silent-data-loss path this counter
   // exists to close.
+  /**
+   * The four states as one record, so the confirmation step can preview the
+   * session with the same figure the receipt archives it with. The whole
+   * roster is the denominator, not the sum of the four: a row still carrying
+   * the `UNMARKED` sentinel belongs to none of them, and the bar showing rail
+   * where that row is, is the honest drawing of that.
+   */
+  const confirmCounts = useMemo(
+    () =>
+      TOTAL_ORDER.reduce(
+        (counts, state) => ({ ...counts, [state]: countByState(students, state) }),
+        {} as Record<EstadoAsistencia, number>,
+      ),
+    [students],
+  );
   const unreviewedCount = useMemo(() => countUnreviewed(students), [students]);
   const unmarkedCount = useMemo(() => countUnmarked(students), [students]);
   const presentCount = useMemo(() => countByState(students, "present"), [students]);
@@ -863,16 +891,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
     if (failedCount === 1) return "Reintentar con ese alumno";
     return `Reintentar con esos ${failedCount} alumnos`;
   })();
-  /**
-   * The bar's accessible name (issue #213 a11y requirement): it is decorative
-   * on its own, so this has to say out loud the four values a sighted reader
-   * gets from the bar's proportions and the row list beside it.
+  /*
+   * The receipt bar's accessible name (issue #213's a11y requirement) is built
+   * by `SessionCompositionBar` now — the bar is decorative on its own, so it
+   * still says out loud the four values a sighted reader gets from its
+   * proportions, in the same sentence every other copy of that bar uses, and
+   * with the total this one used to leave out.
    */
-  const receiptBarAriaLabel = TOTAL_ORDER.map((state) => {
-    const count = receiptCounts[state];
-    const [singular, plural] = TOTAL_LABELS[state];
-    return `${count} ${(count === 1 ? singular : plural).toLowerCase()}`;
-  }).join(", ");
 
   /**
    * The one exit the app cannot re-enter: `sessionStorage` dies with the tab,
@@ -995,7 +1020,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   </Button>
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="tertiary"
                     onClick={() =>
                       setPendingConfirmation({
                         kind: "discard-draft",
@@ -1113,22 +1138,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
           )}
         </div>
 
+        {/* Still directly above the control it blocks — that control is now
+            the commit bar's "Continuar", which is the last thing on the card. */}
         {rosterError && (
           <div className="alert-error" role="alert">
             {rosterError}
           </div>
         )}
-
-        <Button
-          type="button"
-          variant="primary"
-          onClick={handleContinueToRoster}
-          disabled={!selectedScheduleId || rosterLoading}
-          className="w-full"
-        >
-          {rosterLoading ? "Cargando estudiantes…" : "Continuar"}
-          <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-        </Button>
       </div>
     );
   }
@@ -1199,17 +1215,35 @@ export default function TrainerAttendancePage(): React.ReactElement {
           />
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-2">
-              {TOTAL_ORDER.map((state) => (
-                <Badge key={state} tone={getAttendanceBadgeTone(state)}>
-                  {ATTENDANCE_LABELS[state]}
-                </Badge>
-              ))}
-              <span className="h-badge inline-flex items-center rounded-full border border-dashed border-line-2 px-[11px] text-2xs tracking-flat font-bold text-ink-3">
-                Sin revisar
-              </span>
-              <span className="text-xs text-ink-3">Toque la ficha para confirmar o cambiar</span>
-            </div>
+            {/*
+              D11c: the subtitle says WHAT this is, and everything that
+              explains HOW it works goes behind "Ver ayuda". This strip was a
+              legend of five chips plus a sentence, permanently occupying a
+              row above the roster to explain a mechanic the trainer learns on
+              the first tap — and each fiche already prints its own state as a
+              labelled chip, so the legend was mostly repeating what was
+              already on screen underneath it.
+            */}
+            <ContextualHelp title="Cómo funciona pasar lista">
+              <p className="mb-2">
+                Toque la ficha de un alumno para confirmar o cambiar su estado, o use los cuatro
+                botones de la derecha para elegirlo directamente. Los cuatro estados son:
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {TOTAL_ORDER.map((state) => (
+                  <Badge key={state} tone={getAttendanceBadgeTone(state)}>
+                    {ATTENDANCE_LABELS[state]}
+                  </Badge>
+                ))}
+              </div>
+              <p className="mt-2">
+                Una ficha con borde punteado y el estado{" "}
+                <span className="h-badge inline-flex items-center rounded-full border border-dashed border-line-2 px-[11px] text-2xs tracking-flat font-bold text-ink-3">
+                  Sin revisar
+                </span>{" "}
+                sigue en el valor por defecto porque todavía nadie la miró.
+              </p>
+            </ContextualHelp>
 
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -1257,12 +1291,21 @@ export default function TrainerAttendancePage(): React.ReactElement {
                     ? "Quite el filtro para volver a ver la lista completa antes de continuar."
                     : "Revise el filtro o bórrelo para volver a ver la lista completa."
                 }
+                /* Both filters hand back their own way out. The name filter
+                   used to end at "revise el filtro o bórrelo", which is D11's
+                   third part written as a sentence instead of as something to
+                   press — on the one screen where the trainer is standing up
+                   with a phone in one hand. */
                 action={
                   onlyUnreviewed ? (
                     <Button type="button" onClick={() => setOnlyUnreviewed(false)}>
                       Ver la lista completa
                     </Button>
-                  ) : undefined
+                  ) : (
+                    <Button type="button" onClick={() => setSearchFilter("")}>
+                      Borrar el filtro
+                    </Button>
+                  )
                 }
               />
             ) : (
@@ -1413,10 +1456,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-ink-3">
-          Revise el resumen antes de confirmar el registro de asistencia:
-        </p>
-
+        {/* The lead-in line that used to open this step said "Revise el
+            resumen antes de confirmar el registro de asistencia" — which is
+            what the step is CALLED, one line above, plus the verb the button
+            at the foot already carries. D11c: if the help repeats the title,
+            one of the two is spare. */}
         <dl className="overflow-hidden rounded-ctl border border-line">
           <div className="flex h-drow items-center gap-4 border-b border-line px-5">
             <dt className="w-[160px] flex-none text-2xs font-bold uppercase text-ink-3">
@@ -1431,16 +1475,29 @@ export default function TrainerAttendancePage(): React.ReactElement {
             <dt className="w-[160px] flex-none text-2xs font-bold uppercase text-ink-3">
               Resultado
             </dt>
-            <dd className="flex flex-1 flex-wrap gap-2">
-              {TOTAL_ORDER.map((state) => (
-                <Badge key={state} tone={getAttendanceBadgeTone(state)}>
-                  {countByState(students, state)} {ATTENDANCE_LABELS[state].toLowerCase()}
-                </Badge>
-              ))}
+            <dd className="flex flex-1 flex-col gap-2">
+              {/*
+                The same figure the receipt will archive this session as, and
+                the same one "Últimas listas" and the history draw it with
+                afterwards — see `SessionComposition`. It used to be four loose
+                colored badges here, a fifth drawing of one measurement, and
+                each of them read as a count welded to a singular label ("25
+                presente").
+              */}
+              <SessionCompositionBar
+                counts={confirmCounts}
+                total={students.length}
+                className="max-w-md"
+              />
+              <SessionCompositionCounts counts={confirmCounts} total={students.length} />
               {/* Without this, "45 presentes" reads the same whether the
-                  trainer went through the roster or never looked at it. */}
+                  trainer went through the roster or never looked at it. This
+                  one stays a badge: it is not part of the composition, it is
+                  the warning that the composition may not have been decided. */}
               {unreviewedCount > 0 && (
-                <Badge tone="warn">{unreviewedCount} sin revisar</Badge>
+                <Badge tone="warn" className="self-start">
+                  {unreviewedCount} sin revisar
+                </Badge>
               )}
             </dd>
           </div>
@@ -1482,7 +1539,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
               >
                 {unreviewedCount === 1 ? "Revisar a ese alumno" : `Revisar a esos ${unreviewedCount}`}
               </Button>
-              <Button type="button" variant="ghost" onClick={handleMarkRemainingPresent}>
+              <Button type="button" variant="tertiary" onClick={handleMarkRemainingPresent}>
                 <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                 Confirmar que están presentes
               </Button>
@@ -1498,25 +1555,26 @@ export default function TrainerAttendancePage(): React.ReactElement {
     );
   }
 
-  /** Running totals for the save bar — the same numbers, one glance. */
+  /**
+   * Running totals for the save bar — the same numbers, one glance.
+   *
+   * `whitespace-nowrap` per item because the strip used to break INSIDE a
+   * phrase: at this width it printed "16 sin / revisar" across two lines,
+   * which is the "cosas desalineadas" reproach in miniature. The strip still
+   * wraps — between items, which is where a wrap says something.
+   */
   function renderTotals(): React.ReactElement {
     return (
-      <span className="min-w-[250px] flex-1 text-xs text-ink-3">
-        {TOTAL_ORDER.map((state, index) => {
-          const count = countByState(students, state);
-          const [singular, plural] = TOTAL_LABELS[state];
-          return (
-            <span key={state}>
-              {index > 0 ? " · " : ""}
-              <span>{`${count} ${count === 1 ? singular : plural}`}</span>
-            </span>
-          );
-        })}
+      <span className="flex min-w-[250px] flex-1 flex-wrap gap-x-3 gap-y-field text-xs text-ink-3">
+        {TOTAL_ORDER.map((state) => (
+          <span key={state} className="whitespace-nowrap">
+            {formatStateCount(state, countByState(students, state))}
+          </span>
+        ))}
         {unreviewedCount > 0 && (
-          <>
-            {" · "}
-            <span className="font-bold text-state-warn">{`${unreviewedCount} sin revisar`}</span>
-          </>
+          <span className="whitespace-nowrap font-bold text-state-warn">
+            {`${unreviewedCount} sin revisar`}
+          </span>
         )}
       </span>
     );
@@ -1537,7 +1595,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
       */}
       <BackLink
         href={backHref}
-        label={session?.user?.role === "admin" ? "Volver a Asistencias" : "Volver al Panel del Entrenador"}
         // Walking out of a started roll call is the one navigation on this
         // screen that costs something, so it is the one that asks.
         onClick={handleLeaveWizard}
@@ -1579,10 +1636,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 `[tabindex="-1"]` (see `globals.css`), so the ring is redrawn
                 by hand here — the same pattern `payments/page.tsx` uses for
                 its own programmatically-focused detail heading. */}
+            {/* The card-title step in the display face, not a second 26px
+                headline: the page already has one, drawn by `PageHeader` in
+                the same face, and two headlines on one screen is a hierarchy
+                that names nothing. */}
             <h2
               ref={confirmationHeadingRef}
               tabIndex={-1}
-              className="text-xl font-extrabold tracking-tight text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball focus-visible:shadow-focus-band"
+              className="font-display text-lg uppercase leading-tight tracking-flat text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball focus-visible:shadow-focus-band"
             >
               {selectedSchedule
                 ? `${formatDay(selectedSchedule.diaSemana)} ${selectedSchedule.horaInicio} — ${selectedSchedule.horaFin}`
@@ -1650,20 +1711,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 : "Cómo quedó la sesión"}
             </p>
 
-            <div
-              role="img"
-              aria-label={receiptBarAriaLabel}
-              className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-line"
-            >
-              {TOTAL_ORDER.filter((state) => receiptCounts[state] > 0).map((state) => (
-                <span
-                  key={state}
-                  aria-hidden="true"
-                  className={`h-full ${RECEIPT_TONE_CLASS[state]}`}
-                  style={{ width: `${(receiptCounts[state] / Math.max(receiptTotal, 1)) * 100}%` }}
-                />
-              ))}
-            </div>
+            <SessionCompositionBar counts={receiptCounts} total={receiptTotal} className="w-full" />
 
             <ul className="flex flex-col">
               {TOTAL_ORDER.map((state) => {
@@ -1675,9 +1723,18 @@ export default function TrainerAttendancePage(): React.ReactElement {
                     key={state}
                     className="grid grid-cols-[10px_1fr_auto_auto] items-center gap-x-3 border-t border-line py-2.5 first:border-t-0"
                   >
+                    {/* The dot repeats the bar's own segment, so it has to be
+                        the bar's own colour — see `RECEIPT_TONE_CLASS`'s
+                        removal note above the imports. A zero has no segment
+                        up there, so it wears the hairline instead. */}
                     <span
                       aria-hidden="true"
-                      className={`h-2.5 w-2.5 rounded-[3px] ${isZero ? "bg-line-2" : RECEIPT_TONE_CLASS[state]}`}
+                      className={`h-2.5 w-2.5 rounded-[3px] ${isZero ? "bg-line-2" : ""}`}
+                      style={
+                        isZero
+                          ? undefined
+                          : { backgroundColor: ATTENDANCE_STATUS_CHART_COLORS[state] }
+                      }
                     />
                     {/* The state name is real text, not just the dot's
                         color — no row here is distinguishable by color
@@ -1709,6 +1766,20 @@ export default function TrainerAttendancePage(): React.ReactElement {
             </div>
           )}
 
+          {/*
+            One way back, not two. This row used to end in a second `BackLink`
+            to `backHref` — the same destination the frame's own control at the
+            top of the screen already points at. It was masked while the two
+            controls wrote their own labels ("Volver al Panel del Entrenador"
+            and "Volver al Panel", two names for one place); once the
+            destination registry made both of them say "Volver a Mi día", the
+            duplication was in plain sight, and a test asserted it as
+            tolerated. The frame's is the one that stays: it is where every
+            other screen in the panel keeps its way back, it survives the
+            receipt appearing and disappearing, and DESIGN.md is explicit that
+            going back is the least important control on a screen — so it does
+            not belong in the row that carries what to do NEXT.
+          */}
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             {hasFailedRecords ? (
               <>
@@ -1743,7 +1814,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   onClick={handleReset}
                   className="w-full justify-center sm:w-auto"
                 >
-                  Registrar Otra Asistencia
+                  Registrar otra asistencia
                 </Button>
               </>
             ) : (
@@ -1754,7 +1825,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   onClick={handleReset}
                   className="w-full justify-center sm:w-auto"
                 >
-                  Registrar Otra Asistencia
+                  Registrar otra asistencia
                 </Button>
                 <Link
                   href={attendanceHistoryHref}
@@ -1764,7 +1835,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 </Link>
               </>
             )}
-            <BackLink href={backHref} label="Volver al Panel" className="w-full justify-center sm:w-auto" />
           </div>
         </div>
       ) : (
@@ -1786,9 +1856,26 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 label="Pasos para tomar asistencia"
               />
 
-              <div className="mx-auto max-w-3xl">
+              {/*
+                `w-full` is load-bearing, and its absence is why this screen
+                measured 364px wide in a 1152px column.
+                `<main>` is a flex column, so its children are flex items —
+                and an auto margin on the cross axis (`mx-auto`) cancels the
+                stretch that would otherwise give this div its full width,
+                leaving it shrink-to-fit with `max-w-3xl` capping a width it
+                never reached. The picker's five hour buttons were laid out in
+                two columns inside 364px while 788px of canvas sat beside
+                them. Same family as the `margin-top: auto` trap the socio
+                sweep measured: a rule that behaves one way in a block
+                container and another inside a flex one.
+              */}
+              <div className="mx-auto w-full max-w-3xl">
                 <div className="card p-5 sm:p-6">
-                  <h2 className="mb-4 text-sm font-bold text-ink">{STEP_LABELS[step]}</h2>
+                  {/* The card title step, in the display face — `DESIGN.md`'s
+                      "regla de Graduate". */}
+                  <h2 className="mb-4 font-display text-lg uppercase leading-tight tracking-flat text-ink">
+                    {STEP_LABELS[step]}
+                  </h2>
 
                   <form onSubmit={handleConfirm}>
                     {step === "select-session" && renderSessionSelection()}
@@ -1800,11 +1887,19 @@ export default function TrainerAttendancePage(): React.ReactElement {
                      * scrolls the whole card to reach Siguiente — the audit
                      * found exactly that, on the screen where the commit
                      * matters most.
+                     *
+                     * All THREE steps now commit from it. Step 1 used to keep
+                     * its "Continuar" inside the step's own content, as a
+                     * full-width red bar — a second place for the same kind of
+                     * decision, and a shape the system does not have (a
+                     * primary is 40px tall with 16px of side padding, not a
+                     * 100%-wide slab). One bar, one position, one size, from
+                     * the first question to the last.
                      */}
-                    {step !== "select-session" && (
+                    {(
                       <div className="sticky bottom-0 -mx-5 mt-5 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-5 py-3.5 backdrop-blur sm:-mx-6 sm:px-6">
                         {!isFirst && (
-                          <Button type="button" variant="ghost" onClick={handleBack} disabled={submitting}>
+                          <Button type="button" variant="tertiary" onClick={handleBack} disabled={submitting}>
                             <ChevronLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                             Atrás
                           </Button>
@@ -1822,7 +1917,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                         {step === "mark-attendance" && (
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="tertiary"
                             onClick={handleUndo}
                             disabled={lastUndoable === null || submitting}
                             aria-label={
@@ -1871,7 +1966,22 @@ export default function TrainerAttendancePage(): React.ReactElement {
                            * the confirmation step entirely. Distinct keys make
                            * React replace the node instead of mutating it.
                            */}
-                          {!isLast ? (
+                          {isFirst ? (
+                            /* Step 1 commits by LOADING the roster, not by
+                               advancing a step, so it keeps its own handler
+                               and its own key — see the note above for why
+                               two branches must never share a node. */
+                            <Button
+                              key="open-roster"
+                              type="button"
+                              variant="primary"
+                              onClick={handleContinueToRoster}
+                              disabled={!selectedScheduleId || rosterLoading}
+                            >
+                              {rosterLoading ? "Cargando estudiantes…" : "Continuar"}
+                              <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                            </Button>
+                          ) : !isLast ? (
                             <Button
                               key="advance"
                               type="button"
@@ -1900,7 +2010,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               ) : (
                                 <>
                                   <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                                  Confirmar Asistencia
+                                  Confirmar asistencia
                                 </>
                               )}
                             </Button>

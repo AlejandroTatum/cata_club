@@ -67,9 +67,10 @@ import {
   FilterPanel,
   FilterPill,
   LoadingState,
-  PAGE_RAIL,
   buttonClasses,
+  cn,
 } from "@/components/ui";
+import ContextualHelp from "@/components/ContextualHelp";
 import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
 import { calendarIsoDate, clubToday } from "@/lib/club-date";
 import {
@@ -79,7 +80,10 @@ import {
   isMinor,
   resolveCoverageEnd,
 } from "../student-utils";
-import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
+import ManagedStudentPicker, {
+  useManagedProfiles,
+  withSelectedStudent,
+} from "../ManagedStudentPicker";
 import {
   filterPagosByStatus,
   sortPagosByDate,
@@ -218,7 +222,7 @@ function MembershipCard({
 }
 
 // ---------------------------------------------------------------------------
-// "Cómo se registra un pago" — the procedure, stated where the reader is
+// "Cómo se registra un pago" — the procedure, behind "Ver ayuda"
 //
 // The complaint this answers is literal: "hasta ahora ni yo sé cómo probar ese
 // flujo porque nunca se muestra". The upload has always existed — it is the
@@ -226,14 +230,29 @@ function MembershipCard({
 // said the form existed, what it would ask for, or that the comprobante is
 // what the club validates. A reader who could pay saw one button; a reader who
 // could NOT pay (a minor on their own account) saw a sentence that ended the
-// conversation.
+// conversation. Every step describes something on THIS screen or something the
+// club demonstrably does — an ADMINISTRADOR can register a payment for a
+// persona (`membresia_pago_servicio.registrar_pago` authorizes owner,
+// representative or admin, and `/members` is where the club does it).
 //
-// So the rail says the procedure out loud, in the order the form asks for it,
-// and for a reader who cannot self-register it says what to do instead. Every
-// step describes something on THIS screen or something the club demonstrably
-// does — an ADMINISTRADOR can register a payment for a persona
-// (`membresia_pago_servicio.registrar_pago` authorizes owner, representative
-// or admin, and `/members` is where the club does it).
+// ## Why it stopped being a rail (D11c, and D11b)
+//
+// It was a permanent card in the second column, and it was wrong on both
+// counts the redesign names.
+//
+// D11c: the page subtitle says WHAT this screen is in one line; everything
+// that explains HOW it works goes behind "Ver ayuda". This was three numbered
+// steps and a preamble — a procedure, top to bottom, and the longest piece of
+// loose help in the family portal.
+//
+// D11b: it was also the layout defect. Its height is FIXED — the same three
+// steps whether the family has forty payments or none — so in the thin state
+// it was the tallest item on the screen and its height became the grid row's.
+// The comment it used to carry admitted the symptom ("dejaba un hueco de
+// 170px") and answered it with `row-span-2`, which spread the same fixed block
+// over both rows instead of removing the thing that was setting the height.
+// Behind a disclosure it costs one 20px line closed, and the block that grows
+// with the family's real record — the history — is free to claim the page.
 // ---------------------------------------------------------------------------
 
 function HowToPay({
@@ -254,20 +273,13 @@ function HowToPay({
 
   if (blocked) {
     return (
-      <section className="card overflow-hidden" aria-labelledby="how-to-pay-title">
-        <div className="px-5 py-[18px]">
-          <h2 id="how-to-pay-title" className="text-base font-bold tracking-tight text-ink">
-            Cómo se paga esta membresía
-          </h2>
-          {/* The card on the left already names WHO registers the payment,
-              from `describePaymentSituation`. Repeating that sentence here
-              printed it twice on one screen; this rail answers the next
-              question instead — what the reader actually does. */}
-          <p className="mt-2 text-sm leading-relaxed text-ink-2">
-            Su cuenta no registra pagos, pero el pago sí se puede hacer. Estos son los pasos:
-          </p>
-        </div>
-        <ol className="flex flex-col border-t border-line">
+      <ContextualHelp title="Cómo se paga esta membresía">
+        {/* The card above already names WHO registers the payment, from
+            `describePaymentSituation`. Repeating that sentence here printed it
+            twice on one screen; this answers the next question instead — what
+            the reader actually does. */}
+        <p>Su cuenta no registra pagos, pero el pago sí se puede hacer. Estos son los pasos:</p>
+        <ol className="mt-2.5 flex flex-col gap-2.5">
           <HowToPayStep index={1}>
             Acérquese a administración del club con el valor del plan
             {monthlyPrice ? ` (${formatCurrency(monthlyPrice)} al mes)` : ""}. También puede pagar
@@ -281,38 +293,26 @@ function HowToPay({
             estado.
           </HowToPayStep>
         </ol>
-      </section>
+      </ContextualHelp>
     );
   }
 
   if (!hasMembership) {
     return (
-      <section className="card overflow-hidden" aria-labelledby="how-to-pay-title">
-        <div className="px-5 py-[18px]">
-          <h2 id="how-to-pay-title" className="text-base font-bold tracking-tight text-ink">
-            Cómo se registra un pago
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-ink-2">
-            El club crea la membresía al registrar el primer pago, así que ese primero se hace en
-            administración. Desde el segundo, la renovación se registra aquí: monto, forma de pago
-            y —si es transferencia— el comprobante.
-          </p>
-        </div>
-      </section>
+      <ContextualHelp title="Cómo se registra un pago">
+        <p>
+          El club crea la membresía al registrar el primer pago, así que ese primero se hace en
+          administración. Desde el segundo, la renovación se registra aquí: monto, forma de pago y
+          —si es transferencia— el comprobante.
+        </p>
+      </ContextualHelp>
     );
   }
 
   return (
-    <section className="card overflow-hidden" aria-labelledby="how-to-pay-title">
-      <div className="px-5 py-[18px]">
-        <h2 id="how-to-pay-title" className="text-base font-bold tracking-tight text-ink">
-          Cómo se registra un pago
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-ink-2">
-          Son tres pasos y terminan en el club, no en usted: lo último lo hace quien valida.
-        </p>
-      </div>
-      <ol className="flex flex-col border-t border-line">
+    <ContextualHelp title="Cómo se registra un pago">
+      <p>Son tres pasos y terminan en el club, no en usted: lo último lo hace quien valida.</p>
+      <ol className="mt-2.5 flex flex-col gap-2.5">
         <HowToPayStep index={1}>
           Abra <b className="font-semibold text-ink">Registrar un pago</b> y escriba el monto{" "}
           {subject === "suyo" ? "" : `${subject} `}y la forma de pago.
@@ -334,7 +334,7 @@ function HowToPay({
           que el club lo apruebe o lo rechace. Si lo rechaza, el motivo aparece en la misma fila.
         </HowToPayStep>
       </ol>
-    </section>
+    </ContextualHelp>
   );
 }
 
@@ -344,6 +344,10 @@ function HowToPay({
  * Numbered because the order is the information — this is the only numbered
  * sequence in the product, and it is one because doing step 2 before step 1 is
  * not possible.
+ *
+ * The disc keeps its coal fill and its tabular figure; what it lost with the
+ * card is the row chrome (the 20px gutter and the hairline between steps),
+ * which belonged to a panel and reads as a table inside the help sheet.
  */
 function HowToPayStep({
   index,
@@ -353,14 +357,14 @@ function HowToPayStep({
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <li className="flex gap-3 border-b border-line px-5 py-3.5 last:border-b-0">
+    <li className="flex gap-2.5">
       <span
         aria-hidden="true"
-        className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-coal text-2xs tracking-flat font-bold tabular-nums text-white"
+        className="mt-px flex h-[20px] w-[20px] flex-none items-center justify-center rounded-full bg-coal text-2xs tracking-flat font-bold tabular-nums text-white"
       >
         {index}
       </span>
-      <p className="text-sm leading-relaxed text-ink-2">{children}</p>
+      <span className="min-w-0 flex-1">{children}</span>
     </li>
   );
 }
@@ -768,7 +772,7 @@ function RenewPaymentForm({
               )}
               {loading ? "Registrando…" : "Confirmar y registrar"}
             </Button>
-            <Button variant="ghost" onClick={handleBackToForm} disabled={loading}>
+            <Button variant="tertiary" onClick={handleBackToForm} disabled={loading}>
               Volver a corregir
             </Button>
           </div>
@@ -784,7 +788,7 @@ function RenewPaymentForm({
             <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             Registrar pago
           </Button>
-          <Button variant="ghost" onClick={handleCancel}>
+          <Button variant="tertiary" onClick={handleCancel}>
             Cancelar
           </Button>
         </div>
@@ -992,6 +996,17 @@ function PaymentsContent({
     pendingCount: pagos.filter((pago) => pago.estadoPago === "PENDIENTE_VALIDACION").length,
   });
 
+  /**
+   * Whether the form above is actually reachable for this reader — the only
+   * condition under which the empty history may offer "Registrar un pago" as
+   * its way out (D11). It restates the three gates `RenewPaymentForm` already
+   * applies, in the order it applies them: a minor on their own account never
+   * registers, a persona with no `Membresia` has nothing to renew, and a
+   * pending payment blocks a second one until the club rules on it.
+   */
+  const canRegisterHere =
+    !blockedAsMinor && selectedProfile?.membership != null && !hasPendingPago;
+
   function handleSelectFile(pagoId: number): void {
     setUploadError(null);
     setPendingUploadPagoId(pagoId);
@@ -1053,157 +1068,187 @@ function PaymentsContent({
         }}
       />
 
-      {/* Three grid items, placed explicitly, so DOM order and reading order
-          agree at BOTH widths. Stacked on a phone the reader gets the
-          membership, then HOW a payment is made, then the history — the
-          instructions can't sit below the history there, which is the position
-          a plain rail would have put them in. Above `lg` the rail spans both
-          rows on the right and the history returns under the card. */}
-      <div className={PAGE_RAIL}>
-        <div className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-1">
-          <MembershipCard
+      {/* One column, not a rail.
+       *
+       * The rail existed to hold "Cómo se registra un pago", and that block is
+       * behind "Ver ayuda" now (D11c — see the note above `HowToPay`). With it
+       * gone there is no second column: the membership summary, the filters
+       * and the history are one reading order, top to bottom, and it is the
+       * same order a phone already got. A 340px column kept for its own sake
+       * would be the "rail does not close vertical emptiness" mistake
+       * `PAGE_RAIL`'s own doc comment warns about.
+       *
+       * The disclosure sits directly under the card whose form it explains,
+       * not at the top of the page: the question it answers is the one the
+       * reader has while looking at "Registrar un pago". */}
+      <MembershipCard
+        membership={selectedProfile.membership}
+        coverageEnd={coverageEnd}
+        studentName={studentName}
+      >
+        {blockedAsMinor ? (
+          <p className="text-sm text-ink-2">
+            {/* The old copy sent EVERY minor to "su representante" — including
+                the ones whose `representanteId` is null, who were being pointed
+                at a person the backend does not have. `describePaymentSituation`
+                resolves that from the payload. */}
+            {situation.detail}
+          </p>
+        ) : selectedProfile.membership ? (
+          <RenewPaymentForm
             membership={selectedProfile.membership}
+            personaId={selectedProfile.personaId}
             coverageEnd={coverageEnd}
+            hasPendingPago={hasPendingPago}
+            autoOpen={wantsRegisterForm && pagosState.status === "ready"}
             studentName={studentName}
-          >
-            {blockedAsMinor ? (
-              <p className="text-sm text-ink-2">
-                {/* The old copy sent EVERY minor to "su representante" — including
-                    the ones whose `representanteId` is null, who were being pointed
-                    at a person the backend does not have. `describePaymentSituation`
-                    resolves that from the payload. */}
-                {situation.detail}
-              </p>
-            ) : selectedProfile.membership ? (
-              <RenewPaymentForm
-                membership={selectedProfile.membership}
-                personaId={selectedProfile.personaId}
-                coverageEnd={coverageEnd}
-                hasPendingPago={hasPendingPago}
-                autoOpen={wantsRegisterForm && pagosState.status === "ready"}
-                studentName={studentName}
-                onRegistered={handleRegistered}
+            onRegistered={handleRegistered}
+          />
+        ) : (
+          <p className="text-sm text-ink-2">
+            El club crea la membresía al registrar el primer pago. Acérquese a administración para
+            activarla y después podrá renovarla desde aquí.
+          </p>
+        )}
+      </MembershipCard>
+
+      <HowToPay
+        studentName={studentName}
+        blocked={blockedAsMinor}
+        hasMembership={selectedProfile.membership != null}
+        monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
+      />
+
+      {/* Selection is coal plus the ball dot — `FilterPill` owns that rule.
+          The chips used to sit loose on the canvas here too; the portal
+          filters through the same panel the admin screens do. */}
+      <FilterPanel
+        label="Filtros de pagos"
+        chips={
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar pagos por estado">
+            {FILTERS.map((option) => (
+              <FilterPill
+                key={option}
+                label={PAGO_FILTER_LABELS[option]}
+                count={counts[option]}
+                active={filter === option}
+                onClick={() => setFilter(option)}
               />
-            ) : (
-              <p className="text-sm text-ink-2">
-                El club crea la membresía al registrar el primer pago. Acérquese a administración
-                para activarla y después podrá renovarla desde aquí.
-              </p>
+            ))}
+          </div>
+        }
+      />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,application/pdf"
+        className="hidden"
+        data-testid="pago-voucher-input"
+        onChange={(e) => {
+          void handleFileChange(e);
+        }}
+      />
+
+      {uploadError && (
+        <p role="alert" className="text-sm font-semibold text-state-bad">
+          {uploadError}
+        </p>
+      )}
+
+      {pagosState.status === "loading" && (
+        <div className="card">
+          <LoadingState label="Cargando sus pagos…" />
+        </div>
+      )}
+      {pagosState.status === "error" && (
+        <ErrorState message={pagosState.message} onRetry={() => setReloadToken((n) => n + 1)} />
+      )}
+      {pagosState.status === "ready" && (
+        // `flex-1` when — and only when — the list is empty (D11b).
+        //
+        // Everything above this is a fixed summary; the history is the only
+        // block whose height is a function of the family's real record, so it
+        // is the one that may claim the height `AppShell`'s `<main>` already
+        // reserved. But claiming it unconditionally was measured and rejected:
+        // with one payment on file the card stretched to the foot of the
+        // window and drew a 200px empty frame under a single row, which is the
+        // same emptiness the redesign is closing, moved inside a border and
+        // made MORE visible than the canvas it replaced.
+        //
+        // Empty is the case where stretching earns its keep, because
+        // `EmptyState`'s `fill` centres the statement in the box instead of
+        // pinning it to the top — the shape `/members` already uses for its
+        // own no-results state. It is also the case D11b says to design for
+        // first: a socio nuevo has no payments at all.
+        <section
+          className={cn("card flex flex-col overflow-hidden", filteredPagos.length === 0 && "flex-1")}
+          aria-labelledby="pagos-title"
+        >
+          <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+            <h2 id="pagos-title" className="flex-1 text-sm font-bold text-ink">
+              Historial de pagos
+            </h2>
+            {filteredPagos.length > 0 && (
+              <span className="text-xs font-semibold tabular-nums text-ink-3">
+                {filteredPagos.length}
+              </span>
             )}
-          </MembershipCard>
-        </div>
-
-        {/* `row-span-2`, not just `col-start-2`: without it the rail is the
-            tallest item in row 1 and its height becomes the row's, which left
-            a 170px hole between the membership card and the filters below it. */}
-        <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          <HowToPay
-            studentName={studentName}
-            blocked={blockedAsMinor}
-            hasMembership={selectedProfile.membership != null}
-            monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
-          />
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-5 lg:col-start-1 lg:row-start-2">
-          {/* Selection is coal plus the ball dot — `FilterPill` owns that rule.
-              The chips used to sit loose on the canvas here too; the portal
-              filters through the same panel the admin screens do. */}
-          <FilterPanel
-            label="Filtros de pagos"
-            chips={
-              <div
-                className="flex flex-wrap gap-2"
-                role="group"
-                aria-label="Filtrar pagos por estado"
-              >
-                {FILTERS.map((option) => (
-                  <FilterPill
-                    key={option}
-                    label={PAGO_FILTER_LABELS[option]}
-                    count={counts[option]}
-                    active={filter === option}
-                    onClick={() => setFilter(option)}
-                  />
-                ))}
-              </div>
-            }
-          />
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,application/pdf"
-            className="hidden"
-            data-testid="pago-voucher-input"
-            onChange={(e) => {
-              void handleFileChange(e);
-            }}
-          />
-
-          {uploadError && (
-            <p role="alert" className="text-sm font-semibold text-state-bad">
-              {uploadError}
-            </p>
-          )}
-
-          {pagosState.status === "loading" && (
-            <div className="card">
-              <LoadingState label="Cargando sus pagos…" />
-            </div>
-          )}
-          {pagosState.status === "error" && (
-            <ErrorState message={pagosState.message} onRetry={() => setReloadToken((n) => n + 1)} />
-          )}
-          {pagosState.status === "ready" && (
-            <section className="card overflow-hidden" aria-labelledby="pagos-title">
-              <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-                <h2 id="pagos-title" className="flex-1 text-sm font-bold text-ink">
-                  Historial de pagos
-                </h2>
-                {filteredPagos.length > 0 && (
-                  <span className="text-xs font-semibold tabular-nums text-ink-3">
-                    {filteredPagos.length}
-                  </span>
-                )}
-              </div>
-              {filteredPagos.length === 0 ? (
-                <EmptyState surface="inset"
-                  icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                  title={getEmptyStateMessage(filter)}
-                  description={
-                    filter !== "TODOS"
-                      ? "Pruebe con otro estado para ver el resto de su historial."
-                      : blockedAsMinor
-                        ? // "Cuando registre un pago" is an instruction this
-                          // reader cannot follow — the club registers it.
-                          "Cuando el club registre un pago suyo aparecerá aquí, con el período que cubre."
-                        : "Cuando registre un pago aparecerá aquí, junto con el resultado de su validación."
-                  }
-                  action={
-                    filter === "TODOS" ? undefined : (
-                      <Button size="sm" onClick={() => setFilter("TODOS")}>
-                        Ver todos los pagos
-                      </Button>
-                    )
-                  }
+          </div>
+          {filteredPagos.length === 0 ? (
+            <EmptyState
+              surface="inset"
+              fill
+              icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+              title={getEmptyStateMessage(filter)}
+              description={
+                filter !== "TODOS"
+                  ? "Pruebe con otro estado para ver el resto de su historial."
+                  : blockedAsMinor
+                    ? // "Cuando registre un pago" is an instruction this
+                      // reader cannot follow — the club registers it.
+                      "Cuando el club registre un pago suyo aparecerá aquí, con el período que cubre."
+                    : "Cuando registre un pago aparecerá aquí, junto con el resultado de su validación."
+              }
+              // D11's third part. The action used to appear ONLY when a filter
+              // was on, which is backwards: a filtered empty list is the
+              // recoverable case, and the family with no payments at all — the
+              // socio nuevo D11b says to design for FIRST — was the one left
+              // with nothing to do. `?registrar=1` is the same door the home
+              // screen's band already opens, so this adds a way in, not a
+              // behaviour.
+              action={
+                filter !== "TODOS" ? (
+                  <Button size="sm" onClick={() => setFilter("TODOS")}>
+                    Ver todos los pagos
+                  </Button>
+                ) : canRegisterHere ? (
+                  <Link
+                    href={withSelectedStudent(
+                      "/student/payments?registrar=1",
+                      selectedProfile.personaId,
+                    )}
+                    className={buttonClasses("secondary", "sm")}
+                  >
+                    Registrar un pago
+                  </Link>
+                ) : undefined
+              }
+            />
+          ) : (
+            <ul className="flex flex-col">
+              {filteredPagos.map((pago) => (
+                <PagoRow
+                  key={pago.id}
+                  pago={pago}
+                  onUploadFile={handleSelectFile}
+                  uploadingId={uploadingId}
                 />
-              ) : (
-                <ul className="flex flex-col">
-                  {filteredPagos.map((pago) => (
-                    <PagoRow
-                      key={pago.id}
-                      pago={pago}
-                      onUploadFile={handleSelectFile}
-                      uploadingId={uploadingId}
-                    />
-                  ))}
-                </ul>
-              )}
-            </section>
+              ))}
+            </ul>
           )}
-        </div>
-      </div>
+        </section>
+      )}
 
       {/* No "← Volver a mi cuenta" here. The sidebar's "Mi cuenta" row is one
           click away and is highlighted the whole time — the admin screens
@@ -1263,11 +1308,24 @@ function PaymentsPageContent(): React.ReactElement {
   return (
     <AppShell
       // "Pagos", not "Mis pagos": the codebase's own rule is that a nav label
-      // IS the destination's page title (see `getNavLinksForRole`), and the
+      // IS the destination's page title (see `lib/destinations.ts`), and the
       // sidebar row has always said "Pagos". "Mis" was also a lie to the
       // reader this screen most often serves — a representante paying for a
       // dependent, who has no membership of her own.
       title="Pagos"
+      // `measure="short"` (D11b). With the "cómo se registra un pago" rail
+      // behind "Ver ayuda" this screen is one column, and one column on the
+      // product's WIDEST measure is what the rail was hiding: at 1356px the
+      // membership card carried "Pagado hasta el 02/09/2026" on the left and
+      // 600px of nothing on its right, and a payment row — an amount, a badge
+      // and one meta line — ran the full width for the same reason. The
+      // horizontal half of "espacios vacíos" is the same complaint as the
+      // vertical one.
+      //
+      // It qualifies on the rule `AppShell`'s `CONTENT_MEASURE` note states,
+      // not on taste: this page's height is a function of how many payments
+      // EXIST, and it has no pager.
+      measure="short"
       // A minor with no dependants of their own cannot register anything from
       // here — the gate below is deliberate and stays. Telling them to
       // "registre un pago" in the page's own subtitle was an instruction the

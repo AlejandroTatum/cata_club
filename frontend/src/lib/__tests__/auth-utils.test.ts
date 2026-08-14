@@ -6,11 +6,15 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  backendRoleForUserRole,
   canAccess,
+  getBackendRoleLabel,
   getDefaultRoute,
   getRoleLabel,
-  getNavLinksForRole,
+  getNavGroupsForRoles,
   getUserInitials,
+  userRolesFromBackendRoles,
+  type NavGroup,
 } from "../auth-utils";
 import type { UserRole } from "@/types/domain";
 
@@ -107,8 +111,22 @@ describe("getRoleLabel", () => {
     expect(getRoleLabel("representante")).toBe("Representante");
   });
 
-  it('returns "Estudiante" for estudiante', () => {
-    expect(getRoleLabel("estudiante")).toBe("Estudiante");
+  /**
+   * D9's vocabulary ruling, applied to the label the SESSION resolves to.
+   *
+   * The product had three words for one person — *Jugador* when enrolling,
+   * *alumno* in the role table, *estudiante* here — and `/profile` showed two
+   * of them at once: this label on the identity panel and `getBackendRoleLabel`
+   * a few rows below it. `IdentityCell`'s `MEMBER_ROLE_LABELS` already settled
+   * which word wins ("Jugador", the word the person read the day they walked
+   * into the club); these two functions are the last visible holdouts.
+   *
+   * Only the WORD moves. `UserRole` stays `"estudiante"`, `/student` stays
+   * `/student`, and `BackendTipoRol` stays `"ALUMNO"` — the route table and the
+   * backend enum are not vocabulary.
+   */
+  it('returns "Jugador" for estudiante — the one word D9 settled on', () => {
+    expect(getRoleLabel("estudiante")).toBe("Jugador");
   });
 
   it('returns a distinct, non-empty label for unsupported (not miscategorized as a real role)', () => {
@@ -118,144 +136,311 @@ describe("getRoleLabel", () => {
   });
 });
 
+describe("getBackendRoleLabel", () => {
+  it('names ALUMNO "Jugador", the same word getRoleLabel uses', () => {
+    // These two run side by side on `/profile`: the session's role heads the
+    // identity panel, and every assigned backend role is listed in "Información
+    // de tu rol". Two spellings of one role there is the defect D9 names.
+    expect(getBackendRoleLabel("ALUMNO")).toBe("Jugador");
+    expect(getBackendRoleLabel("ALUMNO")).toBe(getRoleLabel("estudiante"));
+  });
+
+  it("keeps the other three role words unabbreviated", () => {
+    // The rule of words: no "Rep.", no "Admin".
+    expect(getBackendRoleLabel("ADMINISTRADOR")).toBe("Administrador");
+    expect(getBackendRoleLabel("ENTRENADOR")).toBe("Entrenador");
+    expect(getBackendRoleLabel("REPRESENTANTE")).toBe("Representante");
+  });
+});
+
 // ---------------------------------------------------------------------------
-// getNavLinksForRole (RBAC nav contract — pure function, no React)
+// getNavGroupsForRoles (the rail's contract — pure function, no React)
+//
+// The rail is the UNION of the sections a person holds, drawn as one group per
+// role with a heading of its own — D12d of `docs/ux/rediseno-visual-2026-08.md`.
+// What these assertions guard, past the wording of each row, is that the union
+// is never re-collapsed into a single "primary" role: the backend has always
+// authorised against the whole role array
+// (`backend/app/seguridad/gestor_permisos.py`), and 18 accounts already hold
+// ALUMNO and REPRESENTANTE at the same time.
 // ---------------------------------------------------------------------------
 
-describe("getNavLinksForRole", () => {
-  it("returns unauthenticated links when role is null", () => {
-    const links = getNavLinksForRole(null);
-    expect(links).toHaveLength(2);
-    expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/login", label: "Iniciar Sesión" });
-  });
+/** Every href the ROLE groups offer, in render order. The public rows are excluded. */
+function sectionHrefs(groups: NavGroup[]): string[] {
+  return groups
+    .filter((group) => group.heading !== null)
+    .flatMap((group) => group.links.map((link) => link.href));
+}
 
-  it("returns admin links including /groups, /members and /attendance", () => {
-    const links = getNavLinksForRole("admin");
-    expect(links).toHaveLength(8);
-    expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/dashboard", label: "Panel de Control" });
-    expect(links[2]).toEqual({ href: "/members", label: "Miembros" });
-    expect(links[3]).toEqual({ href: "/groups", label: "Horarios" });
-    expect(links[4]).toEqual({ href: "/payments", label: "Membresías y Pagos" });
-    expect(links[5]).toEqual({ href: "/discounts", label: "Descuentos" });
-    expect(links[6]).toEqual({ href: "/attendance", label: "Asistencias" });
-    expect(links[7]).toEqual({ href: "/reports", label: "Reportes" });
-  });
+/** The headings actually drawn, in order — the shape of the rail in one line. */
+function headings(groups: NavGroup[]): (string | null)[] {
+  return groups.filter((group) => group.heading !== null).map((group) => group.heading);
+}
 
-  // Labels are Spanish and name the destination. The old set said "Dashboard"
-  // and "Asistencia".
-  it("returns trainer links named after their destinations, in Spanish", () => {
-    const links = getNavLinksForRole("trainer");
-    expect(links).toHaveLength(4);
-    expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/trainer", label: "Mi día" });
-    expect(links[2]).toEqual({ href: "/trainer/attendance", label: "Pasar lista" });
-    // The history screen is a section of its own. Asserted as the whole list
-    // (not `.some(...)`) so dropping it, renaming it, or reordering it against
-    // "Pasar lista" all fail here — the order is what `resolveActiveHref` and
-    // the sidebar render.
-    expect(links[3]).toEqual({ href: "/trainer/attendance/history", label: "Historial" });
-  });
+/** The four roles that grant sections. `"unsupported"` grants none, by definition. */
+const ROLES_WITH_SECTIONS = ["admin", "trainer", "representante", "estudiante"] as const;
 
-  // The three trainer destinations, in the exact order the sidebar shows them.
-  // The assertion above pins each index; this one pins that there is no fourth
-  // destination and no gap between them.
-  it("gives trainer exactly Mi día, Pasar lista and Historial, in that order", () => {
-    const links = getNavLinksForRole("trainer");
-    expect(links.filter((link) => link.href !== "/")).toEqual([
-      { href: "/trainer", label: "Mi día" },
-      { href: "/trainer/attendance", label: "Pasar lista" },
-      { href: "/trainer/attendance/history", label: "Historial" },
+/**
+ * Every non-empty combination of `ROLES_WITH_SECTIONS`, as bit patterns — the
+ * fifteen role sets an account can actually hold. Enumerated rather than
+ * hand-listed so a fifth role cannot be added to the product with its
+ * combinations silently untested.
+ */
+function everyRoleCombination(): UserRole[][] {
+  const combinations: UserRole[][] = [];
+  for (let mask = 1; mask < 1 << ROLES_WITH_SECTIONS.length; mask += 1) {
+    combinations.push(ROLES_WITH_SECTIONS.filter((_, index) => (mask & (1 << index)) !== 0));
+  }
+  return combinations;
+}
+
+describe("getNavGroupsForRoles", () => {
+  it("returns the unauthenticated rows, under no heading, when roles is null", () => {
+    const groups = getNavGroupsForRoles(null);
+    expect(groups).toHaveLength(1);
+    // `null`, not "Inicio": these two rows name no section of the product, and
+    // a heading invented for them would be drawn the moment a second group
+    // appeared beside it.
+    expect(groups[0].heading).toBeNull();
+    expect(groups[0].links).toEqual([
+      { href: "/", label: "Inicio" },
+      // Sentence case since D12b: `lib/destinations.ts` owns the name now, and
+      // every other multi-word row in the product capitalises only the first word.
+      { href: "/login", label: "Iniciar sesión" },
     ]);
   });
 
-  it("uses no English labels in any role's navigation", () => {
-    for (const role of ["admin", "trainer", "representante", "estudiante"] as const) {
-      for (const link of getNavLinksForRole(role)) {
-        expect(link.label).not.toMatch(/dashboard/i);
-      }
-    }
+  it("puts every admin destination under Administrar", () => {
+    const groups = getNavGroupsForRoles(["admin"]);
+    expect(groups[0].links).toEqual([{ href: "/", label: "Inicio" }]);
+    expect(groups[1]).toEqual({
+      heading: "Administrar",
+      links: [
+        { href: "/dashboard", label: "Panel de Control" },
+        { href: "/members", label: "Miembros" },
+        { href: "/groups", label: "Horarios" },
+        { href: "/payments", label: "Membresías y Pagos" },
+        { href: "/discounts", label: "Descuentos" },
+        { href: "/attendance", label: "Asistencias" },
+        { href: "/reports", label: "Reportes" },
+      ],
+    });
+    expect(groups).toHaveLength(2);
   });
 
-  it("returns only Inicio for unsupported (no role-specific nav)", () => {
-    const links = getNavLinksForRole("unsupported");
-    expect(links).toEqual([{ href: "/", label: "Inicio" }]);
+  // The three trainer destinations, in the exact order the sidebar shows them.
+  // Asserted as the whole group (not `.some(...)`) so dropping one, renaming
+  // it, or reordering "Historial" against "Pasar lista" all fail here — the
+  // order is what `resolveActiveHref` and the sidebar render.
+  it("gives trainer exactly Mi día, Pasar lista and Historial under Entrenar", () => {
+    const groups = getNavGroupsForRoles(["trainer"]);
+    expect(groups[1]).toEqual({
+      heading: "Entrenar",
+      links: [
+        { href: "/trainer", label: "Mi día" },
+        { href: "/trainer/attendance", label: "Pasar lista" },
+        { href: "/trainer/attendance/history", label: "Historial" },
+      ],
+    });
+    expect(groups).toHaveLength(2);
   });
 
-  it("returns representante links to Mi cuenta, Pagos, Asistencias and Ficha médica", () => {
-    const links = getNavLinksForRole("representante");
-    expect(links).toHaveLength(5);
-    expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/student", label: "Mi cuenta" });
-    expect(links[2]).toEqual({ href: "/student/payments", label: "Pagos" });
-    expect(links[3]).toEqual({ href: "/student/attendance", label: "Asistencias" });
-    // Only a representante has a representado whose medical record they can
-    // manage — see `PoliticaAccesoPersona`'s `incluir_titular=False` on
-    // `/fichas-medicas/*`, which still excludes a self-managed titular. An
-    // "estudiante" nav (below) never gets this entry, so it never points a
-    // self-managed student at a screen the backend will 403 them out of.
-    expect(links[4]).toEqual({ href: "/student/medical-record", label: "Ficha médica" });
+  it("gives representante Mi cuenta, Pagos, Asistencias and Ficha médica", () => {
+    const groups = getNavGroupsForRoles(["representante"]);
+    expect(groups[1]).toEqual({
+      heading: "Mi cuenta",
+      links: [
+        { href: "/student", label: "Mi cuenta" },
+        { href: "/student/payments", label: "Pagos" },
+        { href: "/student/attendance", label: "Asistencias" },
+        // Only a representante has a representado whose medical record they can
+        // manage — see `PoliticaAccesoPersona`'s `incluir_titular=False` on
+        // `/fichas-medicas/*`, which still excludes a self-managed titular. An
+        // "estudiante" nav (below) never gets this entry, so it never points a
+        // self-managed student at a screen the backend will 403 them out of.
+        { href: "/student/medical-record", label: "Ficha médica" },
+      ],
+    });
   });
 
-  it("returns estudiante links to Mi cuenta, Pagos and Asistencias — no Ficha médica", () => {
-    const links = getNavLinksForRole("estudiante");
-    expect(links).toHaveLength(4);
-    expect(links[0]).toEqual({ href: "/", label: "Inicio" });
-    expect(links[1]).toEqual({ href: "/student", label: "Mi cuenta" });
-    expect(links[2]).toEqual({ href: "/student/payments", label: "Pagos" });
-    // Paying and checking attendance are the two things a student opens the
-    // portal to do, so both are reachable from the nav, not only from a panel.
-    expect(links[3]).toEqual({ href: "/student/attendance", label: "Asistencias" });
-    // A self-managed alumno has no representado and the backend still
-    // excludes the titular from their own medical record (out of scope of
-    // this change) — the nav must not offer a destination that 403s.
-    expect(links.some((link) => link.href === "/student/medical-record")).toBe(false);
+  it("gives estudiante Mi cuenta, Pagos and Asistencias — no Ficha médica", () => {
+    const groups = getNavGroupsForRoles(["estudiante"]);
+    expect(groups[1]).toEqual({
+      heading: "Mi cuenta",
+      links: [
+        { href: "/student", label: "Mi cuenta" },
+        { href: "/student/payments", label: "Pagos" },
+        // Paying and checking attendance are the two things a student opens the
+        // portal to do, so both are reachable from the nav, not only from a panel.
+        { href: "/student/attendance", label: "Asistencias" },
+      ],
+    });
+    // A self-managed alumno has no representado and the backend still excludes
+    // the titular from their own medical record (out of scope of this change)
+    // — the nav must not offer a destination that 403s.
+    expect(sectionHrefs(groups)).not.toContain("/student/medical-record");
   });
 
   // A minor with their own "estudiante" account still gets no Ficha médica
   // entry: incluir_titular on GET/PATCH /fichas-medicas/persona/{id} is
   // age-gated backend-side (ficha_medica_router.py::_es_titular_mayor_de_edad).
   // Offering the destination anyway would only hand a minor a 403.
-  it("does not add a Ficha médica link for a minor estudiante", () => {
-    const links = getNavLinksForRole("estudiante", false);
-    expect(links).toHaveLength(4);
-    expect(links.some((link) => link.href === "/student/medical-record")).toBe(false);
+  it("does not add a Ficha médica row for a minor estudiante", () => {
+    expect(sectionHrefs(getNavGroupsForRoles(["estudiante"], false))).not.toContain(
+      "/student/medical-record",
+    );
   });
 
-  it("adds a Ficha médica link for an adult estudiante", () => {
-    const links = getNavLinksForRole("estudiante", true);
-    expect(links).toHaveLength(5);
-    expect(links[4]).toEqual({ href: "/student/medical-record", label: "Ficha médica" });
+  it("adds a Ficha médica row for an adult estudiante", () => {
+    const groups = getNavGroupsForRoles(["estudiante"], true);
+    expect(groups[1].links.at(-1)).toEqual({
+      href: "/student/medical-record",
+      label: "Ficha médica",
+    });
   });
 
-  // The age flag is scoped to "estudiante" only. "representante" already
-  // gets the Ficha médica link unconditionally (that access — a guardian
-  // managing a DEPENDENT's record — is a separate, unrelated grant), so
-  // toggling `studentIsAdult` must not change its result either way.
+  // The age flag is scoped to "estudiante" only. "representante" already gets
+  // the Ficha médica row unconditionally (that access — a guardian managing a
+  // DEPENDENT's record — is a separate, unrelated grant), so toggling
+  // `studentIsAdult` must not change its result either way.
   it("ignores the adult flag for representante", () => {
-    const withFlag = getNavLinksForRole("representante", true);
-    const withoutFlag = getNavLinksForRole("representante", false);
-    expect(withFlag).toEqual(withoutFlag);
-    expect(withFlag.some((link) => link.href === "/student/medical-record")).toBe(true);
+    expect(getNavGroupsForRoles(["representante"], true)).toEqual(
+      getNavGroupsForRoles(["representante"], false),
+    );
   });
 
-  it("every recognized role gets Inicio as first link and at least one role-specific link", () => {
-    const rolesWithNav = ALL_ROLES.filter((role) => role !== "unsupported");
-    for (const role of rolesWithNav) {
-      const links = getNavLinksForRole(role);
-      expect(links.length).toBeGreaterThanOrEqual(2);
-      expect(links[0].href).toBe("/");
-      expect(links[0].label).toBe("Inicio");
+  it("returns only the public row for unsupported, and for no recognised role at all", () => {
+    const publicOnly = [{ heading: null, links: [{ href: "/", label: "Inicio" }] }];
+    expect(getNavGroupsForRoles(["unsupported"])).toEqual(publicOnly);
+    expect(getNavGroupsForRoles([])).toEqual(publicOnly);
+  });
+
+  it("uses no English labels in any role's navigation", () => {
+    for (const role of ROLES_WITH_SECTIONS) {
+      for (const group of getNavGroupsForRoles([role])) {
+        for (const link of group.links) {
+          expect(link.label).not.toMatch(/dashboard/i);
+        }
+      }
     }
   });
 
-  it("every role (including unsupported) at least gets Inicio as first link", () => {
-    for (const role of ALL_ROLES) {
-      const links = getNavLinksForRole(role);
-      expect(links.length).toBeGreaterThanOrEqual(1);
-      expect(links[0].href).toBe("/");
-      expect(links[0].label).toBe("Inicio");
+  // -------------------------------------------------------------------------
+  // The four cases D12d decides. Read together they are the decision itself:
+  // the rail is the union of the person's sections, and no selector switches
+  // between them.
+  // -------------------------------------------------------------------------
+
+  it("draws one group for someone who only plays", () => {
+    expect(headings(getNavGroupsForRoles(["estudiante"]))).toEqual(["Mi cuenta"]);
+  });
+
+  it("draws one group for someone who administers", () => {
+    expect(headings(getNavGroupsForRoles(["admin"]))).toEqual(["Administrar"]);
+  });
+
+  // The 18 accounts that already exist. Both roles name the same section of the
+  // product, so the answer is ONE group holding the union of their rows — not
+  // two groups called "Mi cuenta" side by side.
+  it("draws a single Mi cuenta for someone who plays and represents", () => {
+    const groups = getNavGroupsForRoles(["representante", "estudiante"]);
+    expect(headings(groups)).toEqual(["Mi cuenta"]);
+    expect(sectionHrefs(groups)).toEqual([
+      "/student",
+      "/student/payments",
+      "/student/attendance",
+      "/student/medical-record",
+    ]);
+  });
+
+  // The case the product cannot express today: a trainer who also plays saw
+  // only the trainer's panel, so his own fees and his own attendance did not
+  // exist for him.
+  it("draws Entrenar and Mi cuenta for someone who trains and plays", () => {
+    const groups = getNavGroupsForRoles(["trainer", "estudiante"]);
+    expect(headings(groups)).toEqual(["Entrenar", "Mi cuenta"]);
+    expect(sectionHrefs(groups)).toEqual([
+      "/trainer",
+      "/trainer/attendance",
+      "/trainer/attendance/history",
+      "/student",
+      "/student/payments",
+      "/student/attendance",
+    ]);
+  });
+
+  // -------------------------------------------------------------------------
+  // The locks. These are the two properties a future "simplification" would
+  // have to break in order to collapse the rail back to one role.
+  // -------------------------------------------------------------------------
+
+  it("never offers the same destination twice, for any combination of roles", () => {
+    for (const roles of everyRoleCombination()) {
+      for (const studentIsAdult of [false, true]) {
+        const hrefs = sectionHrefs(getNavGroupsForRoles(roles, studentIsAdult));
+        expect(new Set(hrefs).size).toBe(hrefs.length);
+      }
+    }
+  });
+
+  it("offers exactly the union of what each role offers on its own", () => {
+    for (const roles of everyRoleCombination()) {
+      for (const studentIsAdult of [false, true]) {
+        const combined = new Set(sectionHrefs(getNavGroupsForRoles(roles, studentIsAdult)));
+        const union = new Set(
+          roles.flatMap((role) => sectionHrefs(getNavGroupsForRoles([role], studentIsAdult))),
+        );
+        expect([...combined].sort()).toEqual([...union].sort());
+      }
+    }
+  });
+
+  it("orders the groups the same way whatever order the roles arrive in", () => {
+    const expected = ["Administrar", "Entrenar", "Mi cuenta"];
+    expect(headings(getNavGroupsForRoles(["admin", "trainer", "estudiante"]))).toEqual(expected);
+    expect(headings(getNavGroupsForRoles(["estudiante", "trainer", "admin"]))).toEqual(expected);
+    expect(headings(getNavGroupsForRoles(["trainer", "admin", "representante"]))).toEqual(expected);
+  });
+
+  it("collapses a role listed twice into one group", () => {
+    expect(getNavGroupsForRoles(["admin", "admin"])).toEqual(getNavGroupsForRoles(["admin"]));
+  });
+
+  it("keeps Inicio first, under no heading, for every combination of roles", () => {
+    for (const roles of [null, [], ...everyRoleCombination()]) {
+      const groups = getNavGroupsForRoles(roles);
+      expect(groups[0].heading).toBeNull();
+      expect(groups[0].links[0]).toEqual({ href: "/", label: "Inicio" });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// userRolesFromBackendRoles
+// ---------------------------------------------------------------------------
+
+describe("userRolesFromBackendRoles", () => {
+  it("maps every backend role the session can carry", () => {
+    expect(userRolesFromBackendRoles(["ADMINISTRADOR", "ENTRENADOR", "REPRESENTANTE", "ALUMNO"]))
+      .toEqual(["admin", "trainer", "representante", "estudiante"]);
+  });
+
+  // `AuthSession.roles` is typed `string[]`, not `BackendTipoRol[]` — a role
+  // the backend adds tomorrow arrives here as an unknown string, and an
+  // unknown role grants no section rather than crashing the rail.
+  it("drops a role the frontend does not recognise", () => {
+    expect(userRolesFromBackendRoles(["ALUMNO", "TESORERO"])).toEqual(["estudiante"]);
+    expect(userRolesFromBackendRoles([])).toEqual([]);
+  });
+
+  // The inverse of `backendRoleForUserRole`, and the two must stay inverses:
+  // one names the backend role behind a UserRole, the other reads the session's
+  // role array back into UserRoles.
+  it("round-trips with backendRoleForUserRole for every real role", () => {
+    for (const role of ROLES_WITH_SECTIONS) {
+      const backendRole = backendRoleForUserRole(role);
+      expect(backendRole).not.toBeNull();
+      expect(userRolesFromBackendRoles([backendRole as string])).toEqual([role]);
     }
   });
 });

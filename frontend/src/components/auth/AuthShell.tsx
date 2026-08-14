@@ -98,9 +98,7 @@
  */
 
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { ICON } from "@/lib/icon-size";
+import { BackLink } from "@/components/ui";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { yearsSinceFounding } from "@/app/landing/landing-config";
 
@@ -123,6 +121,30 @@ export const AUTH_INPUT_CLASSES =
 
 /** `.field label` (line 239) — 12.5px/600, 6px below the control. */
 export const AUTH_LABEL_CLASSES = "mb-1.5 block text-xs font-semibold text-ink";
+
+/**
+ * The ONE link skin the four auth screens share.
+ *
+ * It lived in `login/page.tsx` as a file-local constant, which is why
+ * `/reset-password` could write a second one — `font-semibold text-cata-red`,
+ * no underline — and nothing noticed. Two screens inheriting one shell had two
+ * answers for "what does a link look like here".
+ *
+ * `cata-red-dark`, not `cata-red`: the fill measures 4.10:1 on the canvas the
+ * note below the card stands on, and 5.00:1 on the paper inside it, so it is
+ * under AA exactly where the small print is. The dark cut reads 6.34:1 and
+ * 7.74:1. The underline is what separates the colour's two jobs — the button
+ * is pressed, these are followed.
+ *
+ * The hit area is deliberately NOT in here: WCAG 2.2 SC 2.5.8 exempts a link
+ * inline in a sentence, and every use of this string so far is one. A link
+ * that stands alone adds `min-h-[24px]` itself, the way `/login`'s recovery
+ * link does.
+ */
+export const AUTH_LINK_CLASSES =
+  "inline-flex items-center gap-1 text-xs font-semibold text-cata-red-dark " +
+  "underline decoration-cata-red-dark/40 underline-offset-[3px] transition-colors " +
+  "hover:decoration-cata-red-dark";
 
 /**
  * The muted ink used on coal (`#8B8B93`) and the brighter supporting line
@@ -165,7 +187,29 @@ export default function AuthShell({
      */
     <div
       data-testid="auth-composition"
-      className="auth-shell flex min-h-screen w-full flex-col bg-canvas split:flex-row"
+      /*
+       * `split:max-w-[120rem]` + `mx-auto` — the composition stops at 1920 and
+       * centres above it.
+       *
+       * Capping the coal panel alone (see its own note) fixed the ratio and
+       * moved the hole: the width the coal stopped taking went to the form
+       * side, so at 2560 a 360px card floated in 1664px of bare canvas. That
+       * is the same "empty field" defect this batch exists to close, measured
+       * on the other half of the screen — and the ratio rule cannot see it,
+       * because it only looks at the dark panel.
+       *
+       * With both caps the layout above 1920 is exactly the layout AT 1920:
+       * panel 896, form side 1024, the 1.1-to-1 proportion intact, and the
+       * leftover width parked in symmetric gutters instead of inside the
+       * composition. Below 1920 nothing changes.
+       *
+       * The cost, stated plainly: past 1920 the coal no longer bleeds to the
+       * left edge, which is the one place this file's "edge-to-edge, no
+       * artboard, no frame" rule yields. It yields to the rule it was written
+       * to serve — a composition that reads as two panels — rather than to a
+       * number.
+       */
+      className="auth-shell mx-auto flex min-h-screen w-full flex-col bg-canvas split:max-w-[120rem] split:flex-row"
     >
       {/*
        * `.auth .dark` — `flex:1.1`, i.e. WIDER than the form panel. Laid out
@@ -174,9 +218,35 @@ export default function AuthShell({
        * cluster sits in the auto row between them — on the panel's exact
        * vertical middle, which is the same axis the form card uses.
        */}
+      {/*
+       * `split:max-w-[56rem]` — the panel stops growing, the brand does not
+       * have to.
+       *
+       * The two rules this panel answers to pull in opposite directions once
+       * the viewport is wide. The motto's measure IS the cluster's from
+       * `split` up (see the note on the cluster below), and the motto collapses
+       * to ONE line at 507px — so keeping it on the two-to-three lines the
+       * brand block is built around caps the cluster under that. Meanwhile a
+       * cluster that must hold half the panel needs 668px once the panel
+       * reaches 1336px at 2560. There is no cluster width that is both.
+       *
+       * Widening the cluster was tried and measured: at `44rem` the share
+       * moved 49.6% → 50.7% and the motto fell to one line from 1920 up. It
+       * changes WHICH rule breaks, not whether one does.
+       *
+       * So the panel yields instead. Past 896px the coal stops taking width it
+       * only fills with more dark, and the ratio holds at 55.4% from 1920 up
+       * with the cluster unchanged. Below the cap nothing moves: at 1440 the
+       * panel measures 749 and never reaches it.
+       *
+       * The cost, stated: from ~1700px up the composition is no longer two
+       * panels splitting the window 1.1-to-1. The coal still bleeds to the left
+       * edge — the "no artboard, no frame" rule is intact — but the form side
+       * takes every pixel the coal stops taking.
+       */}
       <div
         data-testid="auth-panel-dark"
-        className="relative grid grid-rows-[1fr_auto_1fr] gap-8 overflow-hidden bg-coal px-6 py-8 text-center text-white split:flex-[1.1_1_0%] split:gap-10 split:px-14 split:py-12"
+        className="relative grid grid-rows-[1fr_auto_1fr] gap-8 overflow-hidden bg-coal px-6 py-8 text-center text-white split:flex-[1.1_1_0%] split:max-w-[56rem] split:gap-10 split:px-14 split:py-12"
       >
         {/*
          * The lit stage. One soft radial centred on the brand mark so the dark
@@ -185,33 +255,66 @@ export default function AuthShell({
          *
          * Contrast, measured rather than assumed: the gradient fades out at 68%
          * of its 340px radius, i.e. ~231px from centre, and every muted line on
-         * this panel sits outside that — the exit link ~475px away, the figure
-         * caption ~310px, the copyright ~384px — so they keep `ON_COAL_MUTED`'s
-         * full 5.49:1 on bare coal. `ON_COAL_SUPPORT`, which IS inside the lit
-         * area, measures 7.85:1 there. Even the impossible case (muted text at
-         * the exact centre, where the logo is) holds 4.53:1, so the effect
-         * cannot push anything below AA.
+         * this panel sits outside that — the figure caption ~310px, the
+         * copyright ~384px — so they keep `ON_COAL_MUTED`'s full 5.49:1 on bare
+         * coal. `ON_COAL_SUPPORT`, which IS inside the lit area, measures
+         * 7.85:1 there. Even the impossible case (muted text at the exact
+         * centre, where the logo is) holds 4.53:1, so the effect cannot push
+         * anything below AA.
+         *
+         * The exit link used to be on that list, ~475px away in `ON_COAL_MUTED`.
+         * It is `BackLink`'s coal tone now — white on its own translucent fill,
+         * 14.13:1 at rest — so it no longer depends on where the radial ends;
+         * `lib/__tests__/color-contrast.test.ts` owns those numbers.
          */}
         <span
           aria-hidden="true"
           className="pointer-events-none absolute left-1/2 top-1/2 hidden h-[680px] w-[680px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.075),rgba(255,255,255,0)_68%)] split:block"
         />
 
-        <Link
-          href="/"
-          /* `min-h-[24px]` is hit area, not type: WCAG 2.2 SC 2.5.8 asks for
-             24x24 CSS px and this link measured 101.8 x 19.5 on a 390px
-             viewport. The 13px text and the 14px arrow are unchanged; the
-             extra 4.5px is split around them by `items-center`. */
-          className={`relative z-[1] inline-flex min-h-[24px] items-center gap-1.5 self-start justify-self-start text-sm transition-colors hover:text-white ${ON_COAL_MUTED}`}
-        >
-          <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          Volver al sitio
-        </Link>
+        {/*
+         * The way out, and it is the SYSTEM's back control now (D12b).
+         *
+         * It used to be a bare link — muted grey on coal, 24px tall, no box —
+         * which made this the product's SECOND back control, in contradiction
+         * of the very decision (#202) that gave the other one a visible border.
+         * The reason was never a design intent: the light skin was unreadable
+         * on coal, so this screen wrote its own. `BackLink`'s `coal` tone is
+         * what removes the excuse, and with it the control comes up to the
+         * system's 32px and stops naming its destination by hand — "Volver al
+         * sitio" was a fifth name for a place the rail already calls "Inicio".
+         *
+         * `min-h-[24px]` retired with it: the control is 32px now, which clears
+         * WCAG 2.2 SC 2.5.8's 24×24 target the old link only just reached
+         * (measured 101.8 × 19.5 before the hit area was padded out).
+         */}
+        <BackLink href="/" tone="coal" className="relative z-[1] justify-self-start" />
 
         {/*
          * The centred cluster — `gap:22px`, and a measure that TRACKS THE
          * PANEL instead of freezing.
+         *
+         * RE-DERIVED for Playfair. The bounds below were calibrated against
+         * Barlow ExtraBold at the 46px `display` step; the motto is Playfair
+         * at the voice step now, and a face's measure does not survive being
+         * handed to another face. Every number here was measured in Chromium
+         * at 1440x900 against the shipped woff2, not estimated:
+         *
+         *   · 507px — the motto unbroken at the clamp's 31px ceiling. A
+         *     measure at or above that collapses it to ONE line, which is the
+         *     same cliff the old ceiling was written to avoid.
+         *   · 326px — its natural first line, "“Formando campeones". Under
+         *     that the motto breaks into three.
+         *   · 350px — the supporting line below it, unbroken. It must not wrap.
+         *
+         * `clamp(22.5rem, 72%, 31rem)` is 360px…496px: 10px clear of the
+         * supporting line at the floor, 11px clear of the one-line cliff at
+         * the ceiling. The percentage still tracks the panel, so the measure
+         * still grows with it. What changes is that the motto now sets on two
+         * lines at EVERY viewport from `split` up — at 980px the panel gives
+         * 360px against a 384px motto, at 1440 it gives 459px against 507px,
+         * and from 1920 up the ceiling holds it at 496px — where the old
+         * calibration drifted 3 lines → 2 → 1 across the same range.
          *
          * The prototype writes `max-width:44ch` (line 792) on this wrapper.
          * `ch` resolves against the element's OWN font-size, and this wrapper
@@ -253,7 +356,7 @@ export default function AuthShell({
          */}
         <div
           data-testid="auth-brand-cluster"
-          className="relative z-[1] flex flex-col items-center justify-center gap-[22px] self-center justify-self-center max-w-[clamp(25rem,72%,44rem)]"
+          className="relative z-[1] flex flex-col items-center justify-center gap-[22px] self-center justify-self-center max-w-[clamp(22.5rem,72%,31rem)]"
         >
           {/*
            * 104px, `border:4px solid rgba(255,255,255,.12)`. The 50%-black
@@ -276,39 +379,49 @@ export default function AuthShell({
           </span>
 
           {/*
-           * `.headline` — the prototype writes 42px/800/-1.5px, 30px on
-           * phones. The scale has neither size, so this takes `display`
-           * (46px) and `2xl` (32px), and keeps `leading-crisp` because the
-           * motto wraps across three lines and has to read as one block
-           * rather than as three. `leading-crisp` is repeated at the
-           * breakpoint on purpose: `split:text-display` is emitted
-           * inside a media query, so it outranks an unmediated `leading-*`
-           * and the desktop headline would silently take the step's own
-           * 0.95. Kept as a <p>: the page's single <h1> is
-           * the form title, and the motto is brand copy, not the heading of
-           * a section a user navigates to.
+           * THE VOICE, and this is the one line in the product that is it.
            *
-           * `max-w-[15ch]` is the prototype's own measure (line 228) and it
-           * survives ONLY on phones, where at the `2xl` step it computes to
-           * 330px on a 342px panel. From `split` up it is cancelled, because
-           * `ch` freezes the same way the wrapper's `44ch` did: at the
-           * `display` step it computes to a flat 465px, which is 25px LOOSER
-           * than the 440px the wrapper already imposed — so it never bound
-           * anything on desktop, and leaving it in place would now clamp the
-           * motto back to 465px and undo the wrapper's fluid measure. The
-           * desktop measure is the cluster's, and only the cluster's.
+           * "Formando campeones para la vida" is the club talking to the
+           * person in first person, which is the single job `DESIGN.md` gives
+           * Playfair: *"Playfair aparece una vez por pantalla, cuando el club
+           * habla en primera persona."* It shipped in Barlow ExtraBold at the
+           * 46px Graduate hero step — the interface face, shouting — and
+           * `font-serif` had zero call sites anywhere under `src/`: a family
+           * loaded on every route and spent on nothing. This is where it goes,
+           * and per the rule of the voice, nowhere else on this screen.
+           *
+           * NO WEIGHT CLASS. `playfair-display-600.woff2` is a single 600 cut
+           * declared with no `font-weight` descriptor (`lib/fonts.ts`), so a
+           * CSS 600 or 800 here asks the browser to synthesise a bold on top
+           * of a face that already is one, and it thickens the strokes into
+           * mud at hero size. `StatCard` carries the same note for Graduate.
+           *
+           * ONE fluid step instead of two fixed ones: `text-voice` is
+           * `clamp(20px, 2.4vw, 31px)`, so the phone size and the desktop size
+           * are the same declaration and there is no breakpoint left for a
+           * media query to outrank. That also retires the `leading-crisp`
+           * repetition the old two-step version needed — the step carries its
+           * own 1.3, which is the leading a line meant to be READ takes.
+           *
+           * `max-w-[16rem]` (256px) replaces the prototype's `15ch`, and only
+           * on phones. Measured: at the clamp's 20px floor the motto is 328px
+           * unbroken and its first line "“Formando campeones" is 210px, so
+           * 256px sets it on two lines inside a 342px phone panel. `15ch`
+           * against Playfair computes to ~150px, which would break it into
+           * four. From `split` up the cap is cancelled and the measure is the
+           * cluster's, exactly as before.
            *
            * The quotation marks are the typographic pair the 14-view
            * prototype uses (line 794). Guillemets shipped here by mistake,
            * copied from the reduced `prototipos/01-login.html`, and the
            * product owner rejected them outright: *"esos signos de mayor y
-           * menor se ven muy mal"*. They stack badly against a centred,
-           * balanced headline — the wedge points sit on the optical margin
-           * and pull the first and last lines out of alignment.
+           * menor se ven muy mal"*. Kept as a <p>: the page's single <h1> is
+           * the form title, and the motto is brand copy, not the heading of a
+           * section a user navigates to.
            */}
           <p
             data-testid="auth-headline"
-            className="my-5 max-w-[15ch] text-2xl font-extrabold leading-crisp [text-wrap:balance] split:my-0 split:max-w-none split:text-display split:leading-crisp"
+            className="my-5 max-w-[16rem] font-serif text-voice [text-wrap:balance] split:my-0 split:max-w-none"
           >
             “Formando <em className="not-italic text-ball">campeones</em> para la vida”
           </p>
@@ -377,11 +490,40 @@ export default function AuthShell({
           data-testid="auth-card"
           className={`row-start-2 mx-auto flex w-full flex-col gap-3.5 rounded-[18px] border border-line bg-paper px-7 py-[30px] shadow-hero ${CARD_WIDTH}`}
         >
-          {/* The red eyebrow — 10px/700, `letter-spacing:2px`, uppercase. */}
-          <p className="text-2xs font-bold uppercase tracking-caps-wide text-cata-red">
+          {/*
+           * The eyebrow — 10px/700, `letter-spacing:2px`, uppercase, and no
+           * longer red.
+           *
+           * This screen had six red elements and one of them was the action.
+           * The rule of the single red is not a quota: red MEANS "this is the
+           * thing to press", and when the eyebrow, both links, both error
+           * lines and the submit button all wear it, nothing on the card says
+           * which one that is. A 10.5px micro-label that orients and cannot be
+           * pressed is the first one to give it up.
+           *
+           * `ink-3` measures 4.62:1 on paper — AA for this size — where the
+           * red it replaces measures 4.10:1 and never did.
+           */}
+          <p className="text-2xs font-bold uppercase tracking-caps-wide text-ink-3">
             Panel de gestión
           </p>
-          <h1 className="text-xl font-extrabold text-ink">{title}</h1>
+          {/*
+           * Graduate, and the same correction `PageHeader` already made one
+           * screen over: `font-extrabold` is Barlow, Barlow is the interface
+           * face, and this is the title of the card on the first screen anyone
+           * sees. `text-lg` (20px) rather than the 26px it used to take —
+           * measured, because uppercase Graduate runs ~35% wider than Barlow:
+           * the card's content box is 236px and "BIENVENIDO DE NUEVO" sets
+           * 241px at 20px (two balanced lines) against 297px at 26px (two
+           * ragged ones). `[text-wrap:balance]` splits the longer titles the
+           * other three auth screens pass — "Elija una contraseña nueva" is
+           * 323px — evenly instead of leaving one word alone on line two.
+           *
+           * No weight class: one 400 cut, see the motto's note above.
+           */}
+          <h1 className="font-display text-lg uppercase leading-tight tracking-flat text-ink [text-wrap:balance]">
+            {title}
+          </h1>
           {subtitle && <p className="-mt-2 text-sm text-ink-3">{subtitle}</p>}
           {children}
         </div>

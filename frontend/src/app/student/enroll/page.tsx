@@ -29,11 +29,21 @@ import {
   PersonIdentityFields,
   EmergencyContactFields,
   WizardNavigation,
+  example,
   CEDULA_HINT,
   PHONE_HINT,
 } from "@/components/wizard-fields";
-import { BackLink, Stepper, buttonClasses } from "@/components/ui";
-import { BLOOD_TYPES } from "@/types/enrollment";
+import {
+  Badge,
+  BackLink,
+  Button,
+  DataRowList,
+  PageHeader,
+  Stepper,
+  buttonClasses,
+} from "@/components/ui";
+import ContextualHelp from "@/components/ContextualHelp";
+import { BLOOD_TYPES, BLOOD_TYPE_LABELS } from "@/types/enrollment";
 import {
   UserPlus,
   Heart,
@@ -56,6 +66,8 @@ import {
   validateEnrollFields,
   validateEnrollStep,
   validateEnrollment,
+  ENROLL_ID_PREFIX,
+  ENROLL_FIELD_TOKEN,
   STEP_ORDER,
   isStepComplete,
   STEP_LABELS,
@@ -87,6 +99,26 @@ const ENROLLMENT_CHOICES: { value: EnrollmentType; title: string; description: s
   },
 ];
 
+/**
+ * What each `tipoEscuela` is CALLED, as opposed to how it is stored.
+ *
+ * The institution list printed the raw enum in the option text —
+ * "Unidad Educativa Anexa · (FISCOMISIONAL)" — which is the backend's spelling
+ * shouted at a family filling in a form. The filter right above it already
+ * spelled the same four values properly; this is that list, reused instead of
+ * re-derived.
+ */
+const SCHOOL_TYPES: { value: string; label: string }[] = [
+  { value: "PARTICULAR", label: "Particular" },
+  { value: "FISCAL", label: "Fiscal" },
+  { value: "FISCOMISIONAL", label: "Fiscomisional" },
+  { value: "MUNICIPAL", label: "Municipal" },
+];
+
+function schoolTypeLabel(value: string): string {
+  return SCHOOL_TYPES.find((type) => type.value === value)?.label ?? value;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -101,6 +133,14 @@ function EnrollWizard(): React.ReactElement {
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [touched, setTouched] = useState<Set<EnrollField>>(new Set());
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
+  /**
+   * The school catalogue is optional data, but its ABSENCE was not being
+   * distinguished from its failure: `fetchInstituciones().catch(() => {})` left
+   * the list empty, and the two selects — which only render when the list has
+   * entries — vanished without a word. A visitor who came to pick their child's
+   * school saw a step that simply never offered it.
+   */
+  const [institucionesFailed, setInstitucionesFailed] = useState(false);
   const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
   const queryAppliedRef = useRef(false);
 
@@ -159,7 +199,9 @@ function EnrollWizard(): React.ReactElement {
   }, []);
 
   useEffect(() => {
-    fetchInstituciones().then(setInstituciones).catch(() => {});
+    fetchInstituciones()
+      .then(setInstituciones)
+      .catch(() => setInstitucionesFailed(true));
   }, []);
 
   // ---- Helpers ----
@@ -317,7 +359,11 @@ function EnrollWizard(): React.ReactElement {
   ): React.ReactElement {
     return (
       <WizardInput
-        idPrefix="enroll"
+        idPrefix={ENROLL_ID_PREFIX}
+        // The id is the FIELD's, not the label's — see `ENROLL_FIELD_TOKEN`.
+        // This is what lets the seven "… del Representante" labels lose those
+        // two words without moving forty end-to-end selectors underneath them.
+        field={ENROLL_FIELD_TOKEN[field]}
         {...opts}
         disabled={submitting}
         error={shownError(field)}
@@ -326,7 +372,7 @@ function EnrollWizard(): React.ReactElement {
     );
   }
 
-  function renderTextarea(opts: {
+  function renderTextarea(field: EnrollField, opts: {
     label: string;
     value: string;
     onChange: (v: string) => void;
@@ -335,15 +381,22 @@ function EnrollWizard(): React.ReactElement {
     icon?: React.ReactNode;
     rows?: number;
   }): React.ReactElement {
-    return <WizardTextarea idPrefix="enroll" disabled={submitting} {...opts} />;
+    return (
+      <WizardTextarea
+        idPrefix={ENROLL_ID_PREFIX}
+        field={ENROLL_FIELD_TOKEN[field]}
+        disabled={submitting}
+        {...opts}
+      />
+    );
   }
 
   // ---- Step renderers ----
 
   function renderTypeStep(): React.ReactElement {
     return (
-      <div className="space-y-4">
-        <p className="text-sm leading-relaxed text-cata-text/65">
+      <div className="space-y-section">
+        <p className="text-sm text-ink-2">
           Seleccione el tipo de inscripción que desea realizar:
         </p>
 
@@ -351,7 +404,7 @@ function EnrollWizard(): React.ReactElement {
             `h-full`, so the two cards never step on each other. Selection is
             coal plus the yellow ball dot — NEVER red: red belongs to the
             primary CTA and to destructive actions only. */}
-        <div className="grid items-stretch gap-4 sm:grid-cols-2">
+        <div className="grid items-stretch gap-section sm:grid-cols-2">
           {ENROLLMENT_CHOICES.map((choice) => {
             const selected = formData.enrollmentType === choice.value;
             return (
@@ -360,16 +413,21 @@ function EnrollWizard(): React.ReactElement {
                 type="button"
                 aria-pressed={selected}
                 onClick={() => updateField("enrollmentType", choice.value)}
-                className={`flex h-full flex-col gap-[7px] rounded-card border p-[17px_18px] text-left transition-colors duration-150 ${
+                className={`flex h-full flex-col gap-field rounded-card border p-page text-left transition-colors duration-150 ${
                   selected
                     ? "border-coal bg-paper ring-1 ring-coal"
-                    : "border-line-2 bg-paper hover:bg-canvas"
+                    : "border-line-2 bg-paper hover:bg-sunken"
                 }`}
               >
                 <b className="text-base font-bold text-ink">{choice.title}</b>
-                <p className="text-sm leading-relaxed text-ink-3">{choice.description}</p>
+                <p className="text-sm text-ink-2">{choice.description}</p>
+                {/* Coal fill plus the yellow ball dot — the system's ONE way of
+                    drawing a selected state, the same one `FilterPill` draws.
+                    Not a `Badge`: the four badge tones are STATUSES, and a
+                    fifth "coal" tone would be the parallel vocabulary
+                    `DESIGN.md` closes the badge section by forbidding. */}
                 {selected && (
-                  <span className="h-badge mt-1 inline-flex items-center gap-1.5 self-start rounded-full bg-coal px-[11px] text-2xs tracking-flat font-bold text-white">
+                  <span className="h-badge mt-field inline-flex items-center gap-1.5 self-start rounded-full bg-coal px-[11px] text-2xs tracking-flat font-bold text-white">
                     <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
                     Seleccionado
                   </span>
@@ -379,13 +437,17 @@ function EnrollWizard(): React.ReactElement {
           })}
         </div>
 
-        <div className="card p-4">
+        {/* The consequence of the choice, on the recessed surface rather than
+            on a second card: a card inside a card is a border and a shadow the
+            system never asks for, and this block is a footnote to the two
+            above it, not a sibling of them. */}
+        <div className="rounded-ctl bg-sunken p-page">
           <p className="text-sm font-bold text-ink">
             {formData.enrollmentType === "self"
               ? "Inscripción como jugador"
               : "Inscripción de dependiente"}
           </p>
-          <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
+          <p className="mt-field text-sm text-ink-3-strong">
             {formData.enrollmentType === "self"
               ? "Usted será el estudiante titular de la cuenta. No se requieren datos de representante."
               : "Usted será el responsable de pago de este estudiante. Los datos del estudiante se registran por separado de su cuenta."}
@@ -399,7 +461,7 @@ function EnrollWizard(): React.ReactElement {
     const isSelf = formData.enrollmentType === ENROLLMENT_TYPES.SELF;
     return (
       <div className="space-y-1">
-        <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
+        <p className="mb-page text-sm text-ink-2">
           {isSelf
             ? "Ingrese sus datos personales y credenciales de acceso:"
             : "Ingrese los datos personales del estudiante a inscribir:"}
@@ -435,11 +497,23 @@ function EnrollWizard(): React.ReactElement {
           }
         />
 
-        {/* School selector — only for minors (child enrollment) */}
+        {/* The school block — child enrolment only.
+            It used to render on exactly one condition (`instituciones.length >
+            0`) and therefore had exactly one failure mode: silence. A catalogue
+            that could not be fetched and a club with no schools on file looked
+            identical, and both looked like a step that simply does not ask. */}
+        {!isSelf && institucionesFailed && (
+          <div className="mt-page rounded-ctl bg-sunken p-page text-sm text-ink-3-strong">
+            No pudimos cargar la lista de escuelas. Puede continuar sin
+            seleccionarla: la institución es opcional y el club la registra
+            después.
+          </div>
+        )}
         {!isSelf && instituciones.length > 0 && (
-          <div className="mt-4">
-            <label htmlFor="enroll-tipo-escuela" className="mb-1.5 block text-sm font-semibold text-cata-text">
-              Tipo de Escuela
+          <div className="mt-page">
+            <label htmlFor="enroll-tipo-escuela" className="mb-field block text-sm font-semibold text-ink">
+              Tipo de escuela
+              <span className="ml-1 font-normal text-ink-3">(opcional)</span>
             </label>
             <select
               id="enroll-tipo-escuela"
@@ -452,18 +526,21 @@ function EnrollWizard(): React.ReactElement {
               className="input-field"
             >
               <option value="">Todos los tipos</option>
-              <option value="PARTICULAR">Particular</option>
-              <option value="FISCAL">Fiscal</option>
-              <option value="FISCOMISIONAL">Fiscomisional</option>
-              <option value="MUNICIPAL">Municipal</option>
+              {SCHOOL_TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
             </select>
 
-            <label htmlFor="enroll-institucion" className="mb-1.5 mt-3 block text-sm font-semibold text-cata-text">
-              Escuela / Institución
+            {/* The paragraph that used to sit here — "Seleccione la institución
+                educativa del estudiante (opcional)" — said the label's own
+                words back plus the marker the label now carries. D11c: no help
+                repeats the thing it explains. */}
+            <label htmlFor="enroll-institucion" className="mb-field mt-section block text-sm font-semibold text-ink">
+              Escuela o institución
+              <span className="ml-1 font-normal text-ink-3">(opcional)</span>
             </label>
-            <p className="mb-2 text-xs text-cata-text/50">
-              Seleccione la institución educativa del estudiante (opcional).
-            </p>
             <select
               id="enroll-institucion"
               value={formData.institucionId}
@@ -476,7 +553,7 @@ function EnrollWizard(): React.ReactElement {
                 .filter((inst) => !tipoEscuelaFilter || inst.tipoEscuela === tipoEscuelaFilter)
                 .map((inst) => (
                   <option key={inst.id} value={String(inst.id)}>
-                    {inst.nombre} ({inst.tipoEscuela})
+                    {inst.nombre} · {schoolTypeLabel(inst.tipoEscuela)}
                   </option>
                 ))}
             </select>
@@ -484,36 +561,46 @@ function EnrollWizard(): React.ReactElement {
         )}
 
         {/* Student credentials */}
-        <div className="my-4 h-px bg-cata-border" />
+        <div className="my-page h-px bg-line" />
         <div>
-          <div className="mb-4 flex items-center gap-2">
-            <Mail size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-sm font-semibold text-cata-text">
-              {isSelf ? "Credenciales de Acceso" : "Cuenta del Estudiante (Opcional)"}
+          {/* The icon lost its red. A decorative glyph beside a section heading
+              is not the primary action and not a destructive one, which are the
+              only two jobs the red has. */}
+          <div className="mb-section flex items-center gap-2">
+            <Mail size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+            <h3 className="text-2xs font-bold uppercase text-ink-3">
+              {isSelf ? "Credenciales de acceso" : "Cuenta del estudiante"}
             </h3>
           </div>
+          {/* "(Opcional)" used to live in this heading AND in both placeholders
+              below. It is stated once now, by the two labels themselves. What
+              is left here is the part that explains HOW it works, which D11c
+              puts behind "Ver ayuda". */}
           {!isSelf && (
-            <p className="mb-3 text-xs leading-relaxed text-cata-text/65">
-              Si desea que el menor tenga su propia cuenta de acceso, ingrese
-              las credenciales. Deje vacío si no requiere cuenta para el estudiante.
-            </p>
+            <div className="mb-section">
+              <ContextualHelp title="Cuenta del estudiante">
+                El menor puede tener su propio acceso, o no tenerlo. Si ingresa
+                un correo y una contraseña, creamos también su cuenta; si deja
+                los dos campos vacíos, la inscripción se completa igual y usted
+                gestiona todo desde la suya.
+              </ContextualHelp>
+            </div>
           )}
           {renderField("correo", {
-            label: isSelf ? "Correo electrónico" : "Correo electrónico del Estudiante",
+            label: "Correo electrónico",
             value: formData.correo,
             onChange: (v) => updateField("correo", v),
             type: "email",
             required: isSelf,
-            placeholder: isSelf ? undefined : "Opcional: correo@ejemplo.com",
+            placeholder: example("correo@ejemplo.com"),
           })}
           {renderField("contrasenia", {
-            label: isSelf ? "Contraseña" : "Contraseña del Estudiante",
+            label: "Contraseña",
             value: formData.contrasenia,
             onChange: (v) => updateField("contrasenia", v),
             type: "password",
             required: isSelf,
-            placeholder: isSelf ? undefined : "Opcional: mínimo 8 caracteres",
-            hint: isSelf ? "Al menos 8 caracteres." : undefined,
+            hint: "Al menos 8 caracteres.",
           })}
         </div>
       </div>
@@ -522,31 +609,39 @@ function EnrollWizard(): React.ReactElement {
 
   function renderRepresentativeStep(): React.ReactElement {
     return (
+      // Seven labels used to end in "del Representante" INSIDE a card titled
+      // "Datos del representante" — the rule of the words again: *"ninguna
+      // etiqueta que se deduzca de otra"*. The card says whose data this is;
+      // the fields say which datum. What made the repetition load-bearing was
+      // that the ids were slugged from those labels, which is the coupling
+      // `ENROLL_FIELD_TOKEN` breaks.
       <div className="space-y-1">
-        <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
+        <p className="mb-page text-sm text-ink-2">
           Complete los datos del representante legal y sus credenciales de acceso:
         </p>
         {renderField("nombreRepresentante", {
-          label: "Nombres del Representante",
+          label: "Nombres",
           value: formData.nombreRepresentante,
           onChange: (v) => updateField("nombreRepresentante", v),
-          placeholder: "p. ej. María Fernanda",
+          placeholder: example("María Fernanda"),
           required: true,
           icon: <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
         {renderField("apellidosRepresentante", {
-          label: "Apellidos del Representante",
+          label: "Apellidos",
           value: formData.apellidosRepresentante,
           onChange: (v) => updateField("apellidosRepresentante", v),
+          placeholder: example("Mora Salas"),
           required: true,
+          icon: <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
         {renderField("cedulaRepresentante", {
-          label: "Cédula del Representante",
+          label: "Cédula de identidad",
           value: formData.cedulaRepresentante,
           onChange: (v) => updateField("cedulaRepresentante", v),
-          placeholder: "p. ej. 1712345678",
+          placeholder: example("1712345678"),
           required: true,
           icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           pattern: "[0-9]{10}",
@@ -556,7 +651,7 @@ function EnrollWizard(): React.ReactElement {
         })}
 
         {renderField("fechaNacimientoRepresentante", {
-          label: "Fecha de Nacimiento del Representante",
+          label: "Fecha de nacimiento",
           value: formData.fechaNacimientoRepresentante,
           onChange: (v) => updateField("fechaNacimientoRepresentante", v),
           type: "date",
@@ -564,27 +659,29 @@ function EnrollWizard(): React.ReactElement {
         })}
 
         {renderField("telefonoRepresentante", {
-          label: "Teléfono del Representante",
+          label: "Teléfono",
           value: formData.telefonoRepresentante,
           onChange: (v) => updateField("telefonoRepresentante", v),
+          placeholder: example("0991234567"),
           inputMode: "tel",
           numericMode: "phone",
           required: true,
           hint: PHONE_HINT,
         })}
 
-        <div className="my-4 h-px bg-line" />
+        <div className="my-page h-px bg-line" />
 
         {renderField("correoRepresentante", {
-          label: "Correo electrónico del Representante",
+          label: "Correo electrónico",
           value: formData.correoRepresentante,
           onChange: (v) => updateField("correoRepresentante", v),
           type: "email",
+          placeholder: example("correo@ejemplo.com"),
           required: true,
         })}
 
         {renderField("contraseniaRepresentante", {
-          label: "Contraseña del Representante",
+          label: "Contraseña",
           value: formData.contraseniaRepresentante,
           onChange: (v) => updateField("contraseniaRepresentante", v),
           type: "password",
@@ -592,12 +689,12 @@ function EnrollWizard(): React.ReactElement {
           hint: "Al menos 8 caracteres.",
         })}
 
-        <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
+        <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-page text-xs text-state-warn">
           <p className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Representante mayor de edad
           </p>
-          <p className="mt-1">
+          <p className="mt-field">
             El representante debe tener entre 18 y 74 años. Al inscribir a un
             dependiente, usted confirma que es legalmente responsable del menor.
           </p>
@@ -609,51 +706,56 @@ function EnrollWizard(): React.ReactElement {
   function renderHealthStep(): React.ReactElement {
     return (
       <div className="space-y-1">
-        <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
+        <p className="mb-page text-sm text-ink-2">
           Información que el club necesita conocer para la seguridad del estudiante:
         </p>
 
         <div className="mb-4">
-          <label htmlFor="enroll-tipo-de-sangre" className="mb-1.5 block text-sm font-semibold text-cata-text">
-            Tipo de Sangre <span className="ml-0.5 text-cata-red">*</span>
+          <label htmlFor="enroll-tipo-sangre" className="mb-field block text-sm font-semibold text-ink">
+            Tipo de sangre
           </label>
           <select
-            id="enroll-tipo-de-sangre"
+            id="enroll-tipo-sangre"
             value={formData.tipoSangre}
             onChange={(e) => updateField("tipoSangre", e.target.value as EnrollFormData["tipoSangre"])}
             onBlur={() => markTouched("tipoSangre")}
             required
             disabled={submitting}
             aria-invalid={shownError("tipoSangre") ? true : undefined}
-            className={`input-field ${shownError("tipoSangre") ? "border-cata-red ring-[3px] ring-cata-red/10" : ""}`}
+            className={`input-field ${shownError("tipoSangre") ? "border-state-bad" : ""}`}
           >
             <option value="">Seleccione una opción</option>
-            {Object.values(BLOOD_TYPES).map((bloodType) => <option key={bloodType} value={bloodType}>{bloodType.replace("_", " ")}</option>)}
+            {/* The enum with its underscore swapped for a space produced "O
+                POSITIVO" here and again in the summary. `BLOOD_TYPE_LABELS` is
+                the only spelling a person reads now. */}
+            {Object.values(BLOOD_TYPES).map((bloodType) => (
+              <option key={bloodType} value={bloodType}>
+                {BLOOD_TYPE_LABELS[bloodType]}
+              </option>
+            ))}
           </select>
           {shownError("tipoSangre") && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
+            <p className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-bad">
               <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
               {shownError("tipoSangre")}
             </p>
           )}
         </div>
 
-        {renderTextarea({
-          label: "Condiciones de Salud",
+        {renderTextarea("condicionesSalud", {
+          label: "Condiciones de salud",
           value: formData.condicionesSalud,
           onChange: (v) => updateField("condicionesSalud", v),
-          placeholder:
-            "p. ej. Asma, diabetes, problemas cardíacos, lesiones previas…",
+          placeholder: example("asma, diabetes, lesiones previas"),
           icon: <Heart size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
 
-        {renderTextarea({
+        {renderTextarea("alergias", {
           label: "Alergias",
           value: formData.alergias,
           onChange: (v) => updateField("alergias", v),
-          placeholder:
-            "p. ej. Alergia al polvo, al látex, a picaduras de insectos…",
+          placeholder: example("polvo, látex, picaduras de insectos"),
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
@@ -671,22 +773,27 @@ function EnrollWizard(): React.ReactElement {
           onTelefonoBlur={() => markTouched("telefonoEmergencia")}
         />
 
-        {renderTextarea({
-          label: "Observaciones Adicionales",
+        {renderTextarea("observaciones", {
+          label: "Observaciones adicionales",
           value: formData.observaciones,
           onChange: (v) => updateField("observaciones", v),
           placeholder:
-            "Cualquier otra información relevante que el club deba conocer…",
+            "Cualquier otra información relevante que el club deba conocer",
           icon: <FileText size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
 
-        <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
+        {/* `rounded-xl` (12px) was a third radius on a screen that already had
+            two, and the second line was `text-blue-700` — a raw Tailwind blue,
+            a colour that exists nowhere in the palette, inside an amber box.
+            One tone, one radius: this is a `warn` notice and it says so all the
+            way through. */}
+        <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-page text-xs text-state-warn">
           <p className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
           </p>
-          <p className="mt-1 text-blue-700">
+          <p className="mt-field">
             Esta información se maneja de forma segura conforme a la normativa
             de protección de datos.
           </p>
@@ -718,27 +825,23 @@ function EnrollWizard(): React.ReactElement {
   ): React.ReactElement {
     const flagged = Boolean(opts.duplicateCandidate) && formErrors.some(isDuplicateIdentityError);
     return (
-      <div
+      <li
         key={label}
-        className={`flex min-h-drow items-center gap-4 border-b border-line px-5 py-2 last:border-b-0 ${
+        className={`flex min-h-drow flex-wrap items-center gap-x-4 gap-y-field px-4 py-2 ${
           flagged ? "bg-state-warn-bg" : ""
         }`}
       >
         <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">
           {label}
         </span>
-        <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
-        {flagged && (
-          <span className="flex-none text-2xs font-bold uppercase text-state-warn">Revisar</span>
-        )}
-        <button
-          type="button"
-          onClick={() => goToStep(correctStep)}
-          className={buttonClasses("secondary", "sm", "flex-none")}
-        >
+        <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{value}</span>
+        {/* The flag is a STATUS, so it is the badge the system already has —
+            not a second uppercase micro-label invented for this one row. */}
+        {flagged && <Badge tone="warn">Revisar</Badge>}
+        <Button variant="secondary" size="sm" className="flex-none" onClick={() => goToStep(correctStep)}>
           Corregir
-        </button>
-      </div>
+        </Button>
+      </li>
     );
   }
 
@@ -747,14 +850,20 @@ function EnrollWizard(): React.ReactElement {
     const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
     const isChild = formData.enrollmentType === ENROLLMENT_TYPES.CHILD;
     return (
-      <div className="space-y-4">
-        <p className="text-sm leading-relaxed text-cata-text/65">
+      <div className="space-y-section">
+        <p className="text-sm text-ink-2">
           Esto es lo que vamos a crear. Corrija cualquier bloque antes de confirmar:
         </p>
 
         {/* One list of 56px rows, one datum per row — replaces four cramped
-            two-column grids. Each row links back to the step that owns it. */}
-        <div className="overflow-hidden rounded-card border border-line">
+            two-column grids. Each row links back to the step that owns it.
+            The frame is `DataRowList`, which is where the border, the radius
+            and the hairlines between rows already live; this screen used to
+            redraw all three by hand. The ROW is still local: `DataRow` leads
+            with a `flex-1` name and this list leads with a fixed 150px label
+            column, so it is a different row, not the same row spelled twice —
+            see the note in the comparison. */}
+        <DataRowList>
           {summaryRow(
             "Tipo",
             isChild ? "Representante — inscribe a un dependiente" : "Jugador — titular de su propia cuenta",
@@ -791,7 +900,11 @@ function EnrollWizard(): React.ReactElement {
           {isChild && formData.correo.trim()
             ? summaryRow("Cuenta del estudiante", formData.correo, "personal")
             : null}
-          {summaryRow("Tipo de sangre", formData.tipoSangre.replace("_", " ") || "—", "health")}
+          {summaryRow(
+            "Tipo de sangre",
+            formData.tipoSangre ? BLOOD_TYPE_LABELS[formData.tipoSangre] : "—",
+            "health",
+          )}
           {summaryRow(
             "Contacto de emergencia",
             `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
@@ -802,15 +915,18 @@ function EnrollWizard(): React.ReactElement {
           {formData.observaciones
             ? summaryRow("Observaciones", formData.observaciones, "health")
             : null}
-        </div>
+        </DataRowList>
 
-        <p className="text-sm leading-relaxed text-ink-3">
+        <p className="text-sm text-ink-2">
           Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"}.
           Después podrá subir el comprobante:{" "}
           <b className="font-semibold text-ink">el club lo valida y recién ahí se activa la membresía</b>.
         </p>
 
-        <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-canvas p-4 text-sm text-ink-2">
+        {/* `sunken`, not `canvas` — the same inverted ladder as the age well:
+            this box is recessed INSIDE the paper card, and `canvas` is the
+            surface the page itself stands on. */}
+        <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-sunken p-page text-sm text-ink-2">
           <input
             type="checkbox"
             checked={summaryReviewed}
@@ -824,12 +940,12 @@ function EnrollWizard(): React.ReactElement {
                by the system indicator in `globals.css`. */
             className="mt-0.5 h-4 w-4 rounded border-line-2 text-coal"
           />
-          <span>
-            Revisé el resumen y confirmo que la información está correcta.
-            <span className="mt-1 block text-xs text-ink-3">
-              Esto evita finalizar la inscripción por accidente al llegar al último paso.
-            </span>
-          </span>
+          {/* The second line under this one — "Esto evita finalizar la
+              inscripción por accidente al llegar al último paso" — was the
+              product explaining its own defensive design to the person using
+              it. The sentence above already says what to do and what it means;
+              D11c's rule is that no help repeats the thing it explains. */}
+          <span>Revisé el resumen y confirmo que la información está correcta.</span>
         </label>
       </div>
     );
@@ -844,40 +960,122 @@ function EnrollWizard(): React.ReactElement {
     // the root layout's, which is the wrapper that stopped being one.
     <main>
       {confirmed ? (
-        <div className="flex min-h-[75vh] items-center justify-center py-12">
-          <div className="w-full max-w-lg text-center">
-            <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-cata-state-ok/10">
-              <CheckCircle size={ICON.lg} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
+        /* The confirmation used to declare its own emptiness: `min-h-[75vh]`
+           reserved for a ~300px box, and the box was pinned to the TOP of that
+           reservation — 44% dead air at 1440×900, the worst number on the
+           wizard and more than half the window under the last button.
+           Two things changed, and only one of them is layout.
+           · The surplus is SPLIT, not dumped at the bottom. That is the answer
+             `EmptyState` already wrote down for itself: *"half the air at each
+             end reads as margin; all of it at one end reads as a mistake."*
+             A block centred on the page is the same shape the login settled on
+             for the same reason.
+           · The screen says what happens next. It used to end at "ha sido
+             registrado" plus two buttons, which is a confirmation that answers
+             none of the three questions an end state owes (D11: what happened,
+             why, what to do). The three lines below are the club's real
+             process — the summary step already promises them in writing — and
+             not one of them invents a datum: no plan, no amount, no date.
+           A `<h1>` and not `EmptyState`'s `<b>`: this is the page's title, two
+           end-to-end cases pin it as a heading, and a confirmation is not an
+           empty state — see "Lo que falta" in the comparison. */
+        /* `100vh` minus the 5rem that `app-main` (`src/app/layout.tsx`) puts
+           above and below every route as `py-10`. `min-h-screen` here measured
+           right but overflowed the window by exactly those 80px, which turned
+           a confirmation into a page that scrolls to show nothing. */
+        <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center px-4">
+          <div className="card w-full max-w-[560px] overflow-hidden">
+            {/* The coal shoulder (D7): the one card on this screen that asks
+                for something, and the only one — the rule caps it at one per
+                row, and here there is one card. It is also the only moment in
+                the wizard where the club gets to speak in its own colours. */}
+            <div className="flex justify-end bg-coal px-page py-2">
+              <span className="text-2xs font-bold uppercase text-ball">
+                Bienvenido al club
+              </span>
             </div>
-            <h1 className="mb-3 text-xl font-bold tracking-tight text-cata-text">
-              Inscripción Completada
-            </h1>
-            <p className="mb-2 text-sm leading-relaxed text-cata-text/65">
-              <strong className="text-cata-text">
-                {formData.nombres} {formData.apellidos}
-              </strong>{" "}
-              ha sido registrado como estudiante de Cata Club.
-            </p>
-            <p className="mb-8 text-xs leading-relaxed text-cata-text/40">
-              {formData.enrollmentType === "self" &&
-                "Usted es el titular de la cuenta y el estudiante."}
-              {formData.enrollmentType === "child" &&
-                "Usted es el representante / responsable de pago de este estudiante."}{" "}
-               Sus credenciales fueron creadas de forma segura.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <Link href="/student" className="btn-primary">
-                Ir a Mi Cuenta
-              </Link>
-              <button type="button" onClick={handleReset} className="btn-secondary">
-                Nueva Inscripción
-              </button>
+
+            {/* One alignment for the whole card. A centred statement above a
+                left-aligned list is two axes in one box — literally the
+                "cosas desalineadas" the client named — and the list is the
+                part that has to be read, so the axis is the list's. */}
+            <div className="flex flex-col gap-page p-page">
+              <div className="flex flex-col items-start gap-section">
+                <span
+                  aria-hidden="true"
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg"
+                >
+                  <CheckCircle size={ICON.lg} className="text-state-ok" strokeWidth={1.5} />
+                </span>
+                {/* Graduate at the headline step, with no weight class: the
+                    face ships a single 400 cut, so the `font-bold` this line
+                    used to carry could only ask the browser to fake one. And
+                    `state-ok`, not `cata-state-ok` (#15803D) — the ramp's green
+                    is #137739, and the disc was tinted at 10% opacity where the
+                    ramp already has an opaque `state-ok-bg`. */}
+                <h1 className="font-display text-xl uppercase tracking-flat text-ink">
+                  Inscripción completada
+                </h1>
+                <p className="max-w-[44ch] text-sm text-ink-2">
+                  <b className="font-semibold text-ink">
+                    {formData.nombres} {formData.apellidos}
+                  </b>{" "}
+                  ha sido registrado como estudiante de Cata Club.{" "}
+                  {formData.enrollmentType === "self"
+                    ? "Usted es el titular de la cuenta y el estudiante."
+                    : "Usted es el representante y responsable de pago de este estudiante."}
+                </p>
+              </div>
+
+              <div>
+                <p className="mb-section text-2xs font-bold uppercase text-ink-3">
+                  Qué sigue
+                </p>
+                {/* No `01/02/03`: the sequence is real, but the numbering is
+                    the landing's device and `DESIGN.md` keeps it out of the
+                    product. The dot marks the item; the order does the rest.
+                    It is `ink-3` and not red: red is the action and this is a
+                    bullet, which is the exact substitution — decoration
+                    wearing the one colour that means "press me" — that this
+                    screen spent seven asterisks on. */}
+                <ol className="space-y-section">
+                  {[
+                    "Su cuenta ya está creada y la sesión, iniciada.",
+                    "Registre el pago y suba el comprobante desde Mis pagos.",
+                    "El club lo valida y ahí se activa la membresía.",
+                  ].map((linea) => (
+                    <li key={linea} className="flex items-start gap-3 text-sm text-ink-2">
+                      <span
+                        aria-hidden="true"
+                        className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-ink-3"
+                      />
+                      {linea}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Link href="/student" className={buttonClasses("primary")}>
+                  Ir a mi cuenta
+                </Link>
+                <Button variant="secondary" onClick={handleReset}>
+                  Nueva inscripción
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       ) : (
 
-        <div className="mx-auto w-full max-w-[760px] px-4 py-8">
+        /* One column, three levels of rhythm and no fourth. The page step is a
+           `gap` on this column instead of an `mb-*` written seven times by
+           hand — the wizard had seven first-level distances (24px, 24px, 32px,
+           24px, 16px…) and separated the same kind of work with 16px on one
+           step and 32px on the next. This screen renders no `AppShell`, so the
+           rhythm lock in `page-rhythm-wrapper.test.ts` never looked at it; the
+           doctrine still applies. */
+        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-page px-4 py-page">
           {/* One back-navigation rule: a sub-page carries a `BackLink` at the
               TOP, where back navigation lives everywhere else in the product.
               This used to be a centred text link at the very bottom of a
@@ -893,52 +1091,52 @@ function EnrollWizard(): React.ReactElement {
               reaches for when a five-step form stops making sense. The
               assistant is public (`POST /chatbot` needs no session), which is
               the point: most people filling this in have no account yet. */}
-          {/* `items-baseline`, not `items-center`: the back link carries its
-              own `mb-6` (via `className`), so centring the two margin boxes
-              dropped the help link half a line below the back link it sits
-              beside. */}
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <BackLink
-              href={isAuthenticated ? "/student" : "/"}
-              label={isAuthenticated ? "Volver a Mi Cuenta" : "Volver al inicio"}
-              className="mb-6"
-            />
-            {/* Carries `mb-6` so that when the row wraps on a phone the help
-                link keeps its distance from the step eyebrow below, instead
-                of sitting on top of it. */}
+          {/* The two elements no longer carry margins of their own: the column
+              above puts the page step between blocks, which is the whole point
+              of the doctrine — a distance belongs to the container, not to
+              each thing inside it. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <BackLink href={isAuthenticated ? "/student" : "/"} />
             <HelpChatLauncher
               variant="quiet"
               label="¿Tiene dudas? Pregunte al asistente"
-              className="mb-6"
             />
           </div>
 
           {/* Step header + the NAMED stepper. The five steps are named from
-              step one: "Paso 2 de 5" anticipates nothing, "Contacto" does. */}
-          <div className="mb-6">
+              step one: "Paso 2 de 5" anticipates nothing, "Contacto" does.
+
+              The title is `PageHeader`'s now, and that is the point: the `<h1>`
+              was `text-xl font-extrabold`, which resolves to Barlow — the same
+              defect `PageHeader` was fixed for one level up, drawn by hand
+              here so the fix never reached it. `PageHeader` owns the face
+              (Graduate), the case, the flat tracking and the absent weight
+              class; this screen owns only the eyebrow above it, which the
+              primitive has no slot for. */}
+          <div>
             {/* `ink-3-strong`, not `ink-3`: this block sits on the PAGE
                 surface (#F4F4F7, the body fill), not inside a card, and
                 `ink-3` only clears AA on `paper` — it measures 4.21:1 here.
                 Same reason `PageHeader` uses the companion token. */}
-            <p className="text-2xs font-bold uppercase text-ink-3-strong">
+            <p className="mb-field text-2xs font-bold uppercase text-ink-3-strong">
               Paso {currentIndex + 1} de {effectiveSteps.length}
             </p>
-            <h1 className="mt-1 text-xl font-extrabold text-ink">
-              Inscripción de estudiante
-            </h1>
             {/* The count is read from `effectiveSteps`, not written out: this
                 copy said "Cinco pasos" while the line directly above it said
                 "Paso 1 de 4", because arriving from the landing with
                 `?type=self` already answers the first step and drops it. */}
-            <p className="mt-1.5 text-sm leading-relaxed text-ink-3-strong">
-              {effectiveSteps.length} pasos y queda dentro del club.
-              {formData.enrollmentType === "self" && " Se inscribe usted como jugador."}
-              {formData.enrollmentType === "child" && " Usted actúa como representante."}
-            </p>
+            <PageHeader
+              title="Inscripción de estudiante"
+              subtitle={
+                `${effectiveSteps.length} pasos y queda dentro del club.` +
+                (formData.enrollmentType === "self"
+                  ? " Se inscribe usted como jugador."
+                  : " Usted actúa como representante.")
+              }
+            />
           </div>
 
           <Stepper
-            className="mb-8"
             label="Pasos de la inscripción"
             current={currentIndex + 1}
             steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
@@ -949,9 +1147,9 @@ function EnrollWizard(): React.ReactElement {
               reaching real visitors; `isDemoQuickFillEnabled` is the actual
               guard. See its doc comment for why it reads NODE_ENV. */}
           {demoQuickFillEnabled && (
-            <div className="mb-6 rounded-xl border border-dashed border-cata-border bg-cata-bg p-3">
-              <div className="mb-2 flex items-center gap-2">
-                <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="text-amber-700" aria-hidden="true" />
+            <div className="rounded-card border border-dashed border-line-2 bg-sunken p-page">
+              <div className="mb-field flex items-center gap-2">
+                <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="text-state-warn" aria-hidden="true" />
                 {/* Both lines were translucent ink over the `sunken` panel:
                     `/45` composited to #9499A1 (2.61:1) and `/40` to #9FA3AA
                     (2.31:1), the two worst pairs in the product. The panel is
@@ -962,31 +1160,35 @@ function EnrollWizard(): React.ReactElement {
                   Rellenar datos de prueba (solo desarrollo)
                 </p>
               </div>
-              <p className="mb-2 text-2xs tracking-flat leading-relaxed text-ink-3-strong">
+              <p className="mb-section text-2xs tracking-flat leading-relaxed text-ink-3-strong">
                 Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno.
               </p>
+              {/* Two hand-rolled buttons with their own border, their own
+                  radius and their own hover became the `secondary` skin at the
+                  compact size — the same control the "Corregir" rows use. */}
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => fillDemoData("self")}
-                  className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-semibold text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
-                >
+                <Button variant="secondary" size="sm" onClick={() => fillDemoData("self")}>
                   Jugador
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillDemoData("child")}
-                  className="rounded-lg border border-cata-border bg-cata-surface px-3 py-1.5 text-xs font-semibold text-cata-text transition-all hover:border-cata-red/20 hover:shadow-soft"
-                >
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => fillDemoData("child")}>
                   Representante
-                </button>
+                </Button>
               </div>
             </div>
           )}
 
           {/* Form card */}
-          <div className="card p-6 sm:p-8">
-            <h2 className="mb-6 text-sm font-bold text-ink">{STEP_LABELS[step]}</h2>
+          <div className="card p-page">
+            {/* The card title was `text-sm font-bold` — 13.5px of Barlow, the
+                DENSE step, which is the size of a table cell. It was smaller
+                than the labels of the fields inside it, so the title of the
+                block and the contents of the block were told apart by weight
+                alone. It takes the `title` step now: Graduate, 20px, uppercase,
+                flat tracking, and no weight class — the face has a single 400
+                cut. Same correction `PageHeader` and `StatCard` already had. */}
+            <h2 className="mb-page font-display text-lg uppercase tracking-flat text-ink">
+              {STEP_LABELS[step]}
+            </h2>
 
             <form onSubmit={handleConfirm}>
               {/* Step content */}
@@ -1007,10 +1209,11 @@ function EnrollWizard(): React.ReactElement {
                 nextDisabled={!stepComplete}
                 nextBlockedReason={blockedReason ?? undefined}
                 submitButton={
-                  <button
+                  <Button
                     type="submit"
+                    variant="primary"
                     disabled={submitting || !summaryReviewed}
-                    className={buttonClasses("primary", "md", "disabled:cursor-not-allowed")}
+                    className="disabled:cursor-not-allowed"
                   >
                     {submitting ? (
                       "Inscribiendo…"
@@ -1020,7 +1223,7 @@ function EnrollWizard(): React.ReactElement {
                         Confirmar inscripción
                       </>
                     )}
-                  </button>
+                  </Button>
                 }
               />
             </form>

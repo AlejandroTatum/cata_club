@@ -70,7 +70,7 @@ vi.mock("@/lib/auth-utils", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth-utils")>();
   return {
     ...actual,
-    getNavLinksForRole: vi.fn(actual.getNavLinksForRole),
+    getNavGroupsForRoles: vi.fn(actual.getNavGroupsForRoles),
   };
 });
 
@@ -89,15 +89,16 @@ vi.mock("@/services/api", () => ({
 // ---------------------------------------------------------------------------
 
 import { useAuth } from "@/contexts/AuthContext";
-import { getNavLinksForRole } from "@/lib/auth-utils";
+import { getNavGroupsForRoles } from "@/lib/auth-utils";
 import {
   createUnauthenticatedAuth,
   createAuthenticatedAuth,
   createLoadingAuth,
+  createMultiRoleAuth,
 } from "./test-utils";
 
 const mockUseAuth = vi.mocked(useAuth);
-const mockGetNavLinksForRole = vi.mocked(getNavLinksForRole);
+const mockGetNavGroupsForRoles = vi.mocked(getNavGroupsForRoles);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -335,17 +336,44 @@ describe("Header", (): void => {
     expect(screen.getByText("Carlos Martinez")).toBeInTheDocument();
   });
 
+  // --- Authenticated — more than one role ---
+
+  // The top bar is a horizontal strip on the public routes, so it draws the
+  // rótulos of D12d nowhere — but it must still offer the same DESTINATIONS
+  // the rail does. A trainer who also plays reaching `/ayuda` cannot be shown
+  // a narrower product than the one he has inside the shell.
+  it("shows every section of an account that holds more than one role", (): void => {
+    mockUseAuth.mockReturnValue(
+      createMultiRoleAuth(["ENTRENADOR", "ALUMNO"], "trainer", "Carlos Entrenador"),
+    );
+
+    render(<Header />);
+
+    expect(screen.getByRole("link", { name: "Mi día" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pagos" })).toBeInTheDocument();
+    // "Mi cuenta" is the name of `/student`; there is no group heading up here
+    // to collide with it.
+    expect(screen.getByRole("link", { name: "Mi cuenta" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Panel de Control" })).not.toBeInTheDocument();
+  });
+
   // --- Active link highlighting ---
 
   // Every admin/trainer/student nav destination is now an app-shell route
   // (hidden header, see the describe block above), so no real business
   // route keeps a multi-link nav on the top Header. These tests decouple
   // the aria-current logic from the route table by stubbing
-  // `getNavLinksForRole` with a synthetic link list on a neutral route.
+  // `getNavGroupsForRoles` with a synthetic one-group list on a neutral route.
   it("marks the active link with aria-current=\"page\"", (): void => {
-    mockGetNavLinksForRole.mockReturnValueOnce([
-      { href: "/contacto", label: "Inicio" },
-      { href: "/somewhere-else", label: "Otro" },
+    mockGetNavGroupsForRoles.mockReturnValueOnce([
+      {
+        heading: null,
+        links: [
+          { href: "/contacto", label: "Inicio" },
+          { href: "/somewhere-else", label: "Otro" },
+        ],
+      },
     ]);
     mockPathname.mockReturnValue("/contacto");
     mockUseAuth.mockReturnValue(
@@ -359,9 +387,14 @@ describe("Header", (): void => {
   });
 
   it("does not apply aria-current to non-current route links", (): void => {
-    mockGetNavLinksForRole.mockReturnValueOnce([
-      { href: "/contacto", label: "Inicio" },
-      { href: "/somewhere-else", label: "Otro" },
+    mockGetNavGroupsForRoles.mockReturnValueOnce([
+      {
+        heading: null,
+        links: [
+          { href: "/contacto", label: "Inicio" },
+          { href: "/somewhere-else", label: "Otro" },
+        ],
+      },
     ]);
     mockPathname.mockReturnValue("/contacto");
     mockUseAuth.mockReturnValue(
@@ -506,7 +539,7 @@ describe("Header", (): void => {
 // ---------------------------------------------------------------------------
 // Icon coverage.
 //
-// Adding a navigation entry is TWO edits — the link in `getNavLinksForRole`
+// Adding a navigation entry is TWO edits — the link in `getNavGroupsForRoles`
 // and its glyph in `NAV_ICON_MAP` — and forgetting the second one is silent:
 // every call site falls back instead of failing (`House` here at Header.tsx,
 // `User` in the sidebar and the mobile tab bar at AppShell.tsx). The item just
@@ -515,27 +548,33 @@ describe("Header", (): void => {
 // ---------------------------------------------------------------------------
 
 describe("NAV_ICON_MAP", (): void => {
-  it("has an icon for every href getNavLinksForRole can return, for every role", async (): Promise<void> => {
+  it("has an icon for every href getNavGroupsForRoles can return, for every role", async (): Promise<void> => {
     // The real helper, not the `vi.fn` wrapper installed above: this asserts
     // the icon map against the navigation the app actually ships.
-    const { getNavLinksForRole: realGetNavLinksForRole } =
+    const { getNavGroupsForRoles: realGetNavGroupsForRoles } =
       await vi.importActual<typeof import("@/lib/auth-utils")>("@/lib/auth-utils");
 
-    const roles: (UserRole | null)[] = [
+    const roleSets: (UserRole[] | null)[] = [
       null,
-      "admin",
-      "trainer",
-      "representante",
-      "estudiante",
-      "unsupported",
+      ["admin"],
+      ["trainer"],
+      ["representante"],
+      ["estudiante"],
+      ["unsupported"],
+      // The combination too: a group merged out of two roles must not be able
+      // to surface a destination whose glyph nobody added.
+      ["trainer", "estudiante"],
+      ["representante", "estudiante"],
     ];
     const hrefs = new Set<string>();
-    for (const role of roles) {
+    for (const roles of roleSets) {
       // Both sides of the age gate — an adult "estudiante" reaches one route a
       // minor never sees, and it needs an icon too.
       for (const studentIsAdult of [false, true]) {
-        for (const link of realGetNavLinksForRole(role, studentIsAdult)) {
-          hrefs.add(link.href);
+        for (const group of realGetNavGroupsForRoles(roles, studentIsAdult)) {
+          for (const link of group.links) {
+            hrefs.add(link.href);
+          }
         }
       }
     }

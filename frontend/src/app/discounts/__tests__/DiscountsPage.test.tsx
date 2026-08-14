@@ -394,3 +394,105 @@ describe("DiscountsPage — el formulario de alta/edición", () => {
     expect(nombreInput.className).toMatch(/w-full/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// D11c — the help stops floating, and the empty catalog stops reserving a rail
+// ---------------------------------------------------------------------------
+
+describe("DiscountsPage — la ayuda vive en el bloque que explica", () => {
+  it("anchors the Ver ayuda toggle inside the catalog block, not loose on the canvas", async () => {
+    // It shipped as a bare child of the shell: no wrapper, no className, a
+    // 16px underlined control alone in a 20px band between the error slot and
+    // the grid. It got there by losing the `mt-3` it used to hold itself up
+    // with, and nothing caught it. Its three rules are all about the catalog,
+    // so the catalog card is the block that owns it.
+    renderPage();
+    await screen.findByText("Beca municipal");
+
+    const toggle = screen.getByRole("button", { name: /cómo funciona el catálogo/i });
+    const block = screen.getByRole("table").closest("section");
+
+    expect(block).not.toBeNull();
+    expect(block?.contains(toggle)).toBe(true);
+  });
+
+  it("keeps the help beside the catalog title even when there is no catalog yet", async () => {
+    // The state that needs the rules most is the one with nothing to look at.
+    mockFetchDescuentos.mockResolvedValue([]);
+    renderPage();
+    await screen.findByText(/sin descuentos en el catálogo/i);
+
+    expect(
+      screen.getByRole("button", { name: /cómo funciona el catálogo/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Catálogo de descuentos")).toBeInTheDocument();
+  });
+});
+
+describe("DiscountsPage — el catálogo vacío no reserva un riel", () => {
+  it("drops the 340px track when there is no row to hold still and no form open", async () => {
+    // The rail exists so the row being edited does not move. With zero rows
+    // that argument has nothing to protect, and the reserved track was 340 of
+    // the ~470 horizontal pixels this screen was leaving blank beside a card
+    // that says there is nothing here.
+    mockFetchDescuentos.mockResolvedValue([]);
+    renderPage();
+    await screen.findByText(/sin descuentos en el catálogo/i);
+
+    expect(screen.getByTestId("discounts-split").className).not.toBe(PAGE_RAIL);
+    expect(screen.queryByTestId("discounts-rail")).not.toBeInTheDocument();
+  });
+
+  it("brings the split straight back the moment a form opens over an empty catalog", async () => {
+    mockFetchDescuentos.mockResolvedValue([]);
+    renderPage();
+    await screen.findByText(/sin descuentos en el catálogo/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /crear primer descuento/i }));
+
+    expect(screen.getByTestId("discounts-split").className).toBe(PAGE_RAIL);
+    expect(screen.getByTestId("discounts-rail")).toBeInTheDocument();
+  });
+
+  it("stretches the empty statement into the card instead of leaving canvas under it", async () => {
+    // 62% — 555px — was the largest dead-air figure of the whole redesign.
+    mockFetchDescuentos.mockResolvedValue([]);
+    renderPage();
+    const title = await screen.findByText(/sin descuentos en el catálogo/i);
+
+    const statement = title.parentElement as HTMLElement;
+    expect(statement.className).toContain("flex-1");
+    // `inset`, because the catalog card is already open around it — a card
+    // inside a card is a border and a shadow the design never asks for.
+    expect(statement.className).not.toContain("card");
+  });
+});
+
+describe("DiscountsPage — el formulario habla el idioma del sistema", () => {
+  it("dresses its fields in the control radius, not the retired 8px one", async () => {
+    renderPage();
+    await screen.findByText("Beca municipal");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
+    for (const field of [
+      screen.getByLabelText(/nombre/i),
+      screen.getByLabelText(/tipo/i),
+      screen.getByLabelText(/valor/i),
+    ]) {
+      expect(field.className).toContain("rounded-ctl");
+      expect(field.className).toContain("h-ctl");
+      expect(field.className).not.toMatch(/\brounded-lg\b/);
+      expect(field.className).not.toMatch(/\bcata-(border|surface|text)\b/);
+    }
+  });
+
+  it("titles its card in the display face, like every other card title", async () => {
+    renderPage();
+    await screen.findByText("Beca municipal");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
+    expect(screen.getByRole("heading", { name: /nuevo descuento/i }).className).toContain(
+      "font-display",
+    );
+  });
+});

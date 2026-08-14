@@ -28,7 +28,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal, crearRepresentado, vincularRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
 import { calculatePersonAge } from "@/lib/identity-validation";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
-import { WizardTextarea, WizardInput, PersonIdentityFields, EmergencyContactFields, WizardNavigation } from "@/components/wizard-fields";
+import { WizardTextarea, WizardInput, PersonIdentityFields, EmergencyContactFields, WizardNavigation, example } from "@/components/wizard-fields";
 import { BackLink, Stepper, buttonClasses } from "@/components/ui";
 import { BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
@@ -41,7 +41,11 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import {
+  ADD_DEPENDENT_FIELD_TOKEN,
+  ADD_DEPENDENT_ID_PREFIX,
+  ADD_DEPENDENT_SCHOOL_TYPE_ID,
   ADD_DEPENDENT_STEP_ORDER,
+  addDependentFieldId,
   isAddDependentStepComplete,
   ADD_DEPENDENT_STEP_LABELS,
   ADD_DEPENDENT_SHORT_LABELS,
@@ -246,7 +250,16 @@ function AddDependentContent(): React.ReactElement {
 
   // ---- Render helpers ----
 
+  /**
+   * `field` is required here, not optional.
+   *
+   * `WizardTextarea` falls back to slugifying the label when it is omitted,
+   * and both call sites omitted it — so "Enfermedades" and "Alergias" WERE
+   * the ids. Making the token a required argument of this local helper is
+   * what stops the next textarea from being added the old way.
+   */
   function renderTextarea(opts: {
+    field: keyof typeof ADD_DEPENDENT_FIELD_TOKEN;
     label: string;
     value: string;
     onChange: (v: string) => void;
@@ -255,7 +268,16 @@ function AddDependentContent(): React.ReactElement {
     icon?: React.ReactNode;
     rows?: number;
   }): React.ReactElement {
-    return <WizardTextarea idPrefix="add-dependent" disabled={submitting} {...opts} rows={opts.rows ?? 2} />;
+    const { field, ...rest } = opts;
+    return (
+      <WizardTextarea
+        idPrefix={ADD_DEPENDENT_ID_PREFIX}
+        field={ADD_DEPENDENT_FIELD_TOKEN[field]}
+        disabled={submitting}
+        {...rest}
+        rows={opts.rows ?? 2}
+      />
+    );
   }
 
   // ---- Step renderers ----
@@ -263,7 +285,7 @@ function AddDependentContent(): React.ReactElement {
   function renderChildStep(): React.ReactElement {
     return (
       <div className="space-y-field">
-        <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
+        <p className="mb-4 text-sm leading-relaxed text-ink-2">
           Ingrese los datos personales del hijo/dependiente a agregar:
         </p>
 
@@ -293,11 +315,17 @@ function AddDependentContent(): React.ReactElement {
         {/* School selector */}
         {instituciones.length > 0 && (
           <div className="mt-4">
-            <label htmlFor="add-dependent-tipo-escuela" className="mb-1.5 block text-sm font-semibold text-cata-text">
-              Tipo de Escuela
+            {/* Sentence case, like every other label on this wizard. The
+                interface writes "Nombre del contacto", not "Nombre Del
+                Contacto"; three labels on this screen were the exception. */}
+            <label
+              htmlFor={ADD_DEPENDENT_SCHOOL_TYPE_ID}
+              className="mb-1.5 block text-sm font-semibold text-ink"
+            >
+              Tipo de escuela
             </label>
             <select
-              id="add-dependent-tipo-escuela"
+              id={ADD_DEPENDENT_SCHOOL_TYPE_ID}
               value={tipoEscuelaFilter}
               onChange={(e) => {
                 setTipoEscuelaFilter(e.target.value);
@@ -313,14 +341,17 @@ function AddDependentContent(): React.ReactElement {
               <option value="MUNICIPAL">Municipal</option>
             </select>
 
-            <label htmlFor="add-dependent-institucion" className="mb-1.5 mt-3 block text-sm font-semibold text-cata-text">
-              Escuela / Institución
+            <label
+              htmlFor={addDependentFieldId("institucionId")}
+              className="mb-1.5 mt-3 block text-sm font-semibold text-ink"
+            >
+              Escuela o institución
             </label>
-            <p className="mb-2 text-xs text-cata-text/50">
+            <p className="mb-2 text-xs text-ink-3">
               Seleccione la institución educativa del estudiante (opcional).
             </p>
             <select
-              id="add-dependent-institucion"
+              id={addDependentFieldId("institucionId")}
               value={formData.institucionId}
               onChange={(e) => updateField("institucionId", e.target.value)}
               disabled={submitting}
@@ -344,7 +375,7 @@ function AddDependentContent(): React.ReactElement {
   function renderCredentialsStep(): React.ReactElement {
     return (
       <div className="space-y-section">
-        <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
+        <p className="mb-4 text-sm leading-relaxed text-ink-2">
           Si desea que el dependiente tenga su propia cuenta de acceso, ingrese
           las credenciales. Deje estos campos vacíos si no requiere cuenta para el menor.
         </p>
@@ -380,7 +411,10 @@ function AddDependentContent(): React.ReactElement {
             <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Cuenta de acceso del menor
           </p>
-          <p className="mt-1 text-blue-700/80">
+          {/* `ink-2`, not `blue-700/80`: that was Tailwind's default palette
+              at 3.84:1 on this surface, and blue carries no meaning in a
+              system whose accents are red, coal and the ball. */}
+          <p className="mt-1">
             Si crea estas credenciales, el menor podrá iniciar sesión de forma
             independiente. Si las deja vacías, solo el representante tendrá acceso
             a la cuenta.
@@ -393,23 +427,41 @@ function AddDependentContent(): React.ReactElement {
   function renderHealthStep(): React.ReactElement {
     return (
       <div className="space-y-field">
-        <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
+        <p className="mb-4 text-sm leading-relaxed text-ink-2">
           Información que el club necesita conocer para la seguridad del dependiente:
         </p>
 
         <div className="mb-4">
-          <label htmlFor="add-dependent-tipo-de-sangre" className="mb-1.5 block text-sm font-semibold text-cata-text">
-            Tipo de Sangre <span className="ml-0.5 text-cata-red">*</span>
+          {/*
+           * NO asterisk. `wizard-fields.tsx` retired the red required-marker
+           * with its reason written down — it spent the system's one action
+           * colour on decoration and it marked the MAJORITY, which is a
+           * texture rather than information — and replaced it with "(opcional)"
+           * on the minority. This select kept the asterisk, so the step marked
+           * its required field one way and its optional fields the other, in
+           * the same eighty pixels. `required` stays on the control, which is
+           * the attribute assistive technology actually reads.
+           */}
+          <label
+            htmlFor={addDependentFieldId("tipoSangre")}
+            className="mb-1.5 block text-sm font-semibold text-ink"
+          >
+            Tipo de sangre
           </label>
           <select
-            id="add-dependent-tipo-de-sangre"
+            id={addDependentFieldId("tipoSangre")}
             value={formData.tipoSangre}
             onChange={(e) => updateField("tipoSangre", e.target.value as TipoSangre)}
             onBlur={() => markTouched("tipoSangre")}
             required
             disabled={submitting}
             aria-invalid={shownError("tipoSangre") ? true : undefined}
-            className={`input-field ${shownError("tipoSangre") ? "border-cata-red ring-[3px] ring-cata-red/10" : ""}`}
+            /* `state-bad` is the error ink; `cata-red` is the ACTION colour and
+               as a border it says "press me" on the field the visitor got
+               wrong. The 3px halo went with it — a translucent red composites
+               to 1.27–1.96:1, decoration rather than an indicator. Both moves
+               are `WizardInput`'s, made one batch earlier. */
+            className={`input-field ${shownError("tipoSangre") ? "border-state-bad" : ""}`}
           >
             <option value="">Seleccione una opción</option>
             {Object.values(BLOOD_TYPES).map((bloodType) => (
@@ -419,26 +471,31 @@ function AddDependentContent(): React.ReactElement {
             ))}
           </select>
           {shownError("tipoSangre") && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-state-bad">
               <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
               {shownError("tipoSangre")}
             </p>
           )}
         </div>
 
+        {/* `example()`, not "p. ej." — the abbreviation is the one thing "la
+            regla de las palabras" forbids outright, and the two fields eighty
+            pixels below already said "Por ejemplo:". */}
         {renderTextarea({
+          field: "enfermedades",
           label: "Enfermedades",
           value: formData.enfermedades,
           onChange: (v) => updateField("enfermedades", v),
-          placeholder: "p. ej. Asma, diabetes (separadas por comas)",
+          placeholder: example("Asma, diabetes (separadas por comas)"),
           icon: <Heart size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
         {renderTextarea({
+          field: "alergias",
           label: "Alergias",
           value: formData.alergias,
           onChange: (v) => updateField("alergias", v),
-          placeholder: "p. ej. Alergia al polvo, al látex, a picaduras de insectos…",
+          placeholder: example("Alergia al polvo, al látex, a picaduras de insectos"),
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
@@ -455,12 +512,16 @@ function AddDependentContent(): React.ReactElement {
           onTelefonoBlur={() => markTouched("telefonoEmergencia")}
         />
 
-        <div className="rounded-xl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
+        {/* `rounded-ctl`, and the ramp's own ink instead of `amber-700/80` —
+            which is Tailwind's default palette, and measures 3.25:1 on this
+            tint. `state-warn` on `state-warn-bg` is the pair the system
+            measured for exactly this box. */}
+        <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3 text-xs text-state-warn">
           <p className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
           </p>
-          <p className="mt-1 text-amber-700/80">
+          <p className="mt-1">
             Esta información se maneja de forma segura conforme a la normativa
             de protección de datos.
           </p>
@@ -518,7 +579,7 @@ function AddDependentContent(): React.ReactElement {
     const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
     return (
       <div className="space-y-section">
-        <p className="text-sm leading-relaxed text-cata-text/65">
+        <p className="text-sm leading-relaxed text-ink-2">
           Esto es lo que vamos a crear. Corrija cualquier bloque antes de confirmar:
         </p>
 
@@ -589,14 +650,14 @@ function AddDependentContent(): React.ReactElement {
       subtitle="Complete los pasos para agregar un nuevo dependiente a su cuenta de representante."
     >
       <div className="flex w-full max-w-[760px] flex-col gap-page">
-      <BackLink href="/student" label="Volver a Mi Cuenta" />
+      <BackLink href="/student" />
 
-      {/* Named stepper — the same contract as the public wizard. */}
-      <div>
-        <p className="text-2xs font-bold uppercase text-ink-3">
-          Paso {currentIndex + 1} de {ADD_DEPENDENT_STEP_ORDER.length}
-        </p>
-      </div>
+      {/* Named stepper — the same contract as the other two wizards. The
+          counter's wrapper `<div>` is gone: it carried nothing and made the
+          `gap-page` column count a block where there was only a line. */}
+      <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
+        Paso {currentIndex + 1} de {ADD_DEPENDENT_STEP_ORDER.length}
+      </p>
 
       <Stepper
         label="Pasos para agregar un dependiente"
@@ -606,7 +667,12 @@ function AddDependentContent(): React.ReactElement {
 
       {/* Form card */}
       <div className="card p-6 sm:p-8">
-        <h2 className="mb-6 text-sm font-bold text-ink">
+        {/* The `title` step: 20px Graduate, uppercase, weight 400. It used to
+            be `text-sm font-bold` — 13.5px, the DENSE step, SMALLER than the
+            14px labels of the fields inside the card it names. No weight
+            class: Graduate has one 400 cut, and a CSS bold on top of it asks
+            the browser to synthesise a stroke the face cannot draw. */}
+        <h2 className="mb-6 font-display text-lg uppercase leading-tight tracking-flat text-ink">
           {ADD_DEPENDENT_STEP_LABELS[step]}
         </h2>
 

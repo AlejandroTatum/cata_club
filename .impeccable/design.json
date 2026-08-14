@@ -1,0 +1,334 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-13T00:00:00Z",
+  "title": "Design System: Cata Club",
+  "extensions": {
+    "colorMeta": {
+      "red": {
+        "role": "primary",
+        "displayName": "Rojo institucional",
+        "canonical": "#D92128"
+      },
+      "red-dark": {
+        "role": "primary",
+        "displayName": "Rojo de tinta",
+        "canonical": "#A11D22"
+      },
+      "coal": {
+        "role": "secondary",
+        "displayName": "Caucho",
+        "canonical": "#131316",
+        "tonalRamp": [
+          "#131316",
+          "#26262C",
+          "#3A3A42",
+          "#4E4E58",
+          "#62626E",
+          "#7C7C88",
+          "#9A9AA4",
+          "#B8B8C0",
+          "#D3D3D9",
+          "#DCDCE4"
+        ]
+      },
+      "ball": {
+        "role": "tertiary",
+        "displayName": "La pelota",
+        "canonical": "#FFD600"
+      },
+      "ball-ink": {
+        "role": "tertiary",
+        "displayName": "Tinta sobre la pelota",
+        "canonical": "#6E5700"
+      },
+      "fuchsia": {
+        "role": "tertiary",
+        "displayName": "Fucsia de landing",
+        "canonical": "#E5397D"
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "El campo de la página",
+        "canonical": "#E8E8EE"
+      },
+      "sunken": {
+        "role": "neutral",
+        "displayName": "Hundido",
+        "canonical": "#F4F4F7"
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Papel",
+        "canonical": "#FFFFFF"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline de divisor",
+        "canonical": "#DEDEE6"
+      },
+      "line-2": {
+        "role": "neutral",
+        "displayName": "Hairline de control",
+        "canonical": "#CFCFDA"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta principal",
+        "canonical": "#17181C"
+      },
+      "ink-3-strong": {
+        "role": "neutral",
+        "displayName": "Apagado sobre canvas",
+        "canonical": "#63636E"
+      },
+      "chart-present": {
+        "role": "chart",
+        "displayName": "Gráfico · presente",
+        "canonical": "#008300"
+      },
+      "chart-late": {
+        "role": "chart",
+        "displayName": "Gráfico · tardanza",
+        "canonical": "#EDA100"
+      },
+      "chart-justified": {
+        "role": "chart",
+        "displayName": "Gráfico · justificado",
+        "canonical": "#2A78D6"
+      },
+      "chart-absent": {
+        "role": "chart",
+        "displayName": "Gráfico · ausente",
+        "canonical": "#E34948"
+      }
+    },
+    "note": "Las rampas tonales se incluyen SOLO donde el proyecto ya define una escala real (la rampa l1..l10 del caucho). Para el resto se omiten a propósito: sintetizarlas produciría valores que nadie midió y que con el tiempo se leen como tokens.",
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Titular de bienvenida o hero. Una por pantalla."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "El título de página."
+      },
+      "stat": {
+        "displayName": "Stat",
+        "purpose": "La cifra de una tarjeta, en cifras tabulares."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Título de tarjeta o de diálogo."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "La lectura por defecto del producto."
+      },
+      "dense": {
+        "displayName": "Dense",
+        "purpose": "Celda de tabla, etiqueta de formulario, fila."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Micro-etiqueta en mayúsculas: columna, antetítulo, insignia."
+      },
+      "voice": {
+        "displayName": "Voice",
+        "purpose": "La frase que el club dice en primera persona. Una por pantalla."
+      }
+    },
+    "shadows": [
+      {
+        "name": "soft",
+        "value": "0 1px 2px rgba(19,19,22,0.04), 0 2px 8px -2px rgba(19,19,22,0.05)",
+        "purpose": "El apoyo más leve."
+      },
+      {
+        "name": "card",
+        "value": "0 1px 2px rgba(19,19,22,0.06), 0 4px 10px -3px rgba(19,19,22,0.08)",
+        "purpose": "Automática para toda superficie de papel con radio de tarjeta."
+      },
+      {
+        "name": "elevated",
+        "value": "0 2px 6px -1px rgba(19,19,22,0.08), 0 14px 32px -8px rgba(19,19,22,0.16)",
+        "purpose": "Lo que flota sobre la página: modales, popovers, arrastre."
+      },
+      {
+        "name": "hero",
+        "value": "0 8px 34px rgba(19,19,22,0.07)",
+        "purpose": "Una tarjeta sola sobre el canvas, sin cromo alrededor. Hay exactamente dos en el producto."
+      },
+      {
+        "name": "focus-ring",
+        "value": "outline: 2px solid #131316; outline-offset: 2px; box-shadow: 0 0 0 2px #FFD600",
+        "purpose": "Dos bandas concéntricas. Una sola no puede: el amarillo mide 1.41:1 sobre papel y el caucho 18.54:1."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control",
+        "value": "150ms",
+        "purpose": "Cambio de color de un control: botón, enlace, celda."
+      },
+      {
+        "name": "surface",
+        "value": "200ms",
+        "purpose": "Cambio de una superficie: tarjeta, panel, riel."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón primario",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "La acción de la pantalla. Una sola, y siempre en el encabezado.",
+      "html": "<button class=\"ds-btn-primary\">Registrar pago</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid #D92128; border-radius: 10px; background: #D92128; color: #fff; font-family: Barlow, system-ui, sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background-color 150ms, border-color 150ms; } .ds-btn-primary:hover { background: #A11D22; border-color: #A11D22; } .ds-btn-primary:focus-visible { outline: 2px solid #131316; outline-offset: 2px; box-shadow: 0 0 0 2px #FFD600; }"
+    },
+    {
+      "name": "Botón secundario",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Papel con borde de control. Acompaña a la primaria.",
+      "html": "<button class=\"ds-btn-secondary\">Cancelar</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid #CFCFDA; border-radius: 10px; background: #fff; color: #17181C; font-family: Barlow, system-ui, sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background-color 150ms; } .ds-btn-secondary:hover { background: #F4F4F7; } .ds-btn-secondary:focus-visible { outline: 2px solid #131316; outline-offset: 2px; box-shadow: 0 0 0 2px #FFD600; }"
+    },
+    {
+      "name": "Botón terciario",
+      "kind": "button",
+      "refersTo": "button-tertiary",
+      "description": "El tercer nivel se distingue por RELLENO, no por ausencia. Reemplazó al botón fantasma, que fue retirado del sistema.",
+      "html": "<button class=\"ds-btn-tertiary\">Aprobar en lote</button>",
+      "css": ".ds-btn-tertiary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid transparent; border-radius: 10px; background: #F4F4F7; color: #4A4A55; font-family: Barlow, system-ui, sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background-color 150ms, color 150ms; } .ds-btn-tertiary:hover { background: #DEDEE6; color: #17181C; } .ds-btn-tertiary:focus-visible { outline: 2px solid #131316; outline-offset: 2px; box-shadow: 0 0 0 2px #FFD600; }"
+    },
+    {
+      "name": "Tarjeta con hombro",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "La tarjeta que PIDE ACCIÓN lleva hombro de caucho con su antetítulo en amarillo. Como mucho una por fila.",
+      "html": "<div class=\"ds-card-shoulder\"><div class=\"ds-card-top\"><b>Cobranzas</b><em>Agosto</em></div><div class=\"ds-card-meat\"><span class=\"ds-stat\">12</span><h4>Por validar</h4></div><div class=\"ds-card-foot\"><i></i>USD 420 sin cobrar</div></div>",
+      "css": ".ds-card-shoulder { display: flex; flex-direction: column; width: 220px; border: 1px solid #DEDEE6; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 1px 2px rgba(19,19,22,.06), 0 4px 10px -3px rgba(19,19,22,.08); font-family: Barlow, system-ui, sans-serif; } .ds-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; background: #131316; } .ds-card-top b { font-size: 10.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: #FFD600; } .ds-card-top em { font-style: normal; font-family: Graduate, serif; font-size: 11px; letter-spacing: 1.4px; color: rgba(255,255,255,.55); } .ds-card-meat { display: flex; flex-direction: column; gap: 7px; padding: 18px 16px 16px; } .ds-stat { font-family: Graduate, serif; font-size: 32px; line-height: 1; color: #17181C; font-variant-numeric: tabular-nums; } .ds-card-meat h4 { margin: 0; font-family: Graduate, serif; font-size: 15px; letter-spacing: 1px; text-transform: uppercase; color: #17181C; } .ds-card-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 11px 16px; border-top: 1px solid #DEDEE6; background: #F4F4F7; font-size: 12.5px; color: #4A4A55; } .ds-card-foot i { width: 7px; height: 7px; border-radius: 50%; background: #C51B22; }"
+    },
+    {
+      "name": "Campo de formulario",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Al enfocarse el borde se oscurece al rojo — el campo reaccionando — y el anillo del sistema hace el resto.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"099 123 4567\" />",
+      "css": ".ds-input { width: 220px; height: 40px; padding: 0 16px; border: 1px solid #CFCFDA; border-radius: 10px; background: #fff; color: #17181C; font-family: Barlow, system-ui, sans-serif; font-size: 14px; transition: border-color 150ms; } .ds-input::placeholder { color: rgba(23,24,28,.35); } .ds-input:focus { border-color: #D92128; outline: 2px solid #131316; outline-offset: 2px; box-shadow: 0 0 0 2px #FFD600; }"
+    },
+    {
+      "name": "Insignia de estado",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Cuatro estados y ningún vocabulario paralelo. La tinta se lee sobre su propio tinte Y sobre el canvas.",
+      "html": "<span class=\"ds-badge ds-badge-ok\"><i></i>Al día</span><span class=\"ds-badge ds-badge-bad\"><i></i>Vencida</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; margin-right: 8px; border-radius: 999px; font-family: Barlow, system-ui, sans-serif; font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; } .ds-badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; } .ds-badge-ok { background: #E7F4EC; color: #137739; } .ds-badge-bad { background: #FBE9EA; color: #C51B22; }"
+    },
+    {
+      "name": "Control de volver",
+      "kind": "nav",
+      "refersTo": "button-tertiary",
+      "description": "Un solo control de regreso en todo el producto. Tiene caja siempre, y la etiqueta sale del registro de destinos, no se escribe a mano.",
+      "html": "<a class=\"ds-back\" href=\"#\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 12H5M11 18l-6-6 6-6\"/></svg>Volver a Miembros</a>",
+      "css": ".ds-back { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: 10px; background: #F4F4F7; color: #4A4A55; font-family: Barlow, system-ui, sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; transition: background-color 150ms, color 150ms; } .ds-back svg { width: 14px; height: 14px; } .ds-back:hover { background: #DEDEE6; color: #17181C; } .ds-back:focus-visible { outline: 2px solid #131316; outline-offset: 2px; box-shadow: 0 0 0 2px #FFD600; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "La mesa y la red",
+    "overview": "El sistema se nombra por los dos objetos que definen el deporte del club. La mesa es la superficie de trabajo: plana, ordenada, con líneas que separan sin adornar. La red es lo único que corta esa superficie, y por eso es el recurso que organiza — la regla roja, el hombro de la tarjeta, el filo de estado de una fila.\n\nDe ahí salen dos cosas que en otros sistemas serían arbitrarias. Primero, el caucho es el neutro: el negro del club no es un acento, es el material del que están hechas la raqueta y el suelo, así que puede cargar la identidad ocho horas por día sin fatigar a nadie — lo que el rojo no puede. Segundo, una tabla densa no es un mal necesario: es la mesa haciendo su trabajo.\n\nLa marca viaja a todo el producto, pero con la densidad bajada donde hay datos. La landing habla fuerte porque tiene que convencer; una pantalla de asistencias habla bajo porque tiene que servir. Es el mismo sistema en dos intensidades, no dos sistemas.",
+    "keyCharacteristics": [
+      "Mundo claro y bloqueado: el producto no tiene modo oscuro, y es una decisión, no un pendiente.",
+      "Cada color del sistema pasó por una medición de contraste antes de entrar.",
+      "Tres familias tipográficas con tres trabajos que no se cruzan.",
+      "El acento rojo se raciona; el caucho es el que carga la marca.",
+      "La interfaz no abrevia nunca."
+    ],
+    "rules": [
+      {
+        "name": "La regla del rojo único",
+        "body": "El rojo es la acción primaria y el estado destructivo. Nunca es un estado seleccionado, nunca es decoración, y nunca hay dos botones rojos en una pantalla.",
+        "section": "colors"
+      },
+      {
+        "name": "La regla del par medido",
+        "body": "Ningún color entra al sistema sin su medición de contraste contra todas las superficies donde puede caer. El número que fija la escalera entera es state-warn sobre canvas: 4.59:1.",
+        "section": "colors"
+      },
+      {
+        "name": "La regla de Graduate",
+        "body": "Es display en mayúsculas: nunca por debajo de 15px y nunca dentro de un párrafo.",
+        "section": "typography"
+      },
+      {
+        "name": "La regla de la voz",
+        "body": "Playfair aparece una vez por pantalla. Una segunda frase significa que ninguna de las dos es énfasis.",
+        "section": "typography"
+      },
+      {
+        "name": "La regla de las palabras",
+        "body": "La interfaz no abrevia. Si algo no entra, entra menos información, nunca una palabra cortada. Y ninguna etiqueta que se deduzca de otra.",
+        "section": "typography"
+      },
+      {
+        "name": "La regla de la acción",
+        "body": "Una acción primaria por pantalla, en el encabezado. Como mucho una secundaria al lado. Todo lo demás vive al pie del bloque que modifica.",
+        "section": "layout"
+      },
+      {
+        "name": "La regla del aire",
+        "body": "Una tarjeta estirada empuja su acción al pie con margin-top auto. El aire muerto se mide antes y después de cada pantalla, y el número entra al PR.",
+        "section": "layout"
+      },
+      {
+        "name": "La regla del estado flaco",
+        "body": "Cada pantalla se diseña primero con el socio nuevo — cero pagos, cero asistencias, un plan — y después con datos abundantes.",
+        "section": "layout"
+      },
+      {
+        "name": "La regla de la tarjeta",
+        "body": "Radio de tarjeta más superficie de papel ES una tarjeta, y la sombra llega sola desde la capa compartida.",
+        "section": "elevation"
+      },
+      {
+        "name": "La regla de la paleta de gráfico",
+        "body": "Una figura de segmentos adyacentes —dona, barra proporcional— usa la paleta de gráfico validada (presente, tardanza, justificado, ausente, en ese orden), no la rampa de estados: los tokens de insignia fallan los chequeos de pares adyacentes para daltonismo y visión normal cuando se ponen lado a lado. El orden es parte de la medición y reordenarlo la invalida. Una insignia es una píldora sola y se queda con la rampa de estados.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do medir todo par de color nuevo contra las tres superficies antes de escribirlo.",
+      "Do darle a cada figura la forma de lo que mide: una proporción lleva barra, una serie lleva tendencia, una agenda se dibuja como lista.",
+      "Do usar un solo formato por columna. Los días son siempre siete casillas, las horas siempre cifras tabulares, y el vacío es siempre una raya.",
+      "Do poner la ayuda larga detrás de «Ver ayuda». El subtítulo dice qué es; todo lo que explique cómo funciona se guarda.",
+      "Do diseñar el estado vacío con sus tres partes: qué falta, por qué, y qué hacer."
+    ],
+    "donts": [
+      "Don't dibujar una barra de color al borde de una tarjeta. La excepción es el filo de estado de una fila, que codifica estado en forma además de en color.",
+      "Don't poner un dato en una grilla si no sirve para decidir o para encontrar.",
+      "Don't inventar un dato para completar una forma. Si el endpoint no trae histórico, la tarjeta se queda callada.",
+      "Don't numerar bloques 01/02/03 en el producto.",
+      "Don't poner la trama halftone detrás de datos.",
+      "Don't agregar un cuarto vocabulario para algo que ya tiene uno."
+    ]
+  }
+}

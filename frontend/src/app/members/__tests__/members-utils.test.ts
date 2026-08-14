@@ -10,6 +10,7 @@ import { MOCK_MEMBER_ACCOUNTS } from "@/mocks/members";
 import {
   buildMemberStats,
   formatMembershipPeriod,
+  getAccountIdentity,
   getPayerTypeLabel,
   countActiveStudents,
   filterAccounts,
@@ -579,5 +580,114 @@ describe("getTotalPages", () => {
     expect(getTotalPages(11, MEMBERS_PAGE_SIZE)).toBe(2);
     expect(getTotalPages(10, MEMBERS_PAGE_SIZE)).toBe(1);
     expect(getTotalPages(0, MEMBERS_PAGE_SIZE)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getAccountIdentity
+//
+// D9 makes the identity cell a shared piece, and `IdentityCell` takes the roles
+// a person holds plus the players they represent. This row does not carry the
+// roles array: `PersonaResponseDTO` has no `roles` field and no bulk "roles by
+// persona" endpoint exists (gap #1 in `lib/server/members-adapter.ts`), so the
+// adapter labels every root `role: "representante"` as a hardcoded literal and
+// the real roles are only read one account at a time, inside the edit dialog.
+//
+// So this function draws what the row HAS and nothing more: the payer type it
+// declares, and the names of the dependants it actually holds. It never
+// promotes a hunch to a role, and it never lets an account represent itself.
+// ---------------------------------------------------------------------------
+
+describe("getAccountIdentity", () => {
+  function account(overrides: Partial<MemberAccount> = {}): MemberAccount {
+    return {
+      id: "rp-1",
+      role: "representante",
+      nombres: "Marta",
+      apellidos: "Salas",
+      telefono: "0999999999",
+      estudiantes: [],
+      ...overrides,
+    };
+  }
+
+  function student(id: string, nombres: string, apellidos: string) {
+    return {
+      id,
+      nombres,
+      apellidos,
+      activo: true,
+      membresia: null,
+      ultimoPago: null,
+    };
+  }
+
+  it("reads no role out of `account.role`, whichever way it is spelled", () => {
+    // `lib/server/members-adapter.ts:173` writes `role: "representante" as const`
+    // on every root persona, so the field is a constant and not an observation.
+    // Both spellings therefore describe the same absence of knowledge, and
+    // neither may reach the cell as a role.
+    expect(getAccountIdentity(account({ role: "representante" })).roles).toEqual([]);
+    expect(getAccountIdentity(account({ role: "estudiante" })).roles).toEqual([]);
+  });
+
+  it("says REPRESENTANTE only when a dependant proves it", () => {
+    // The proof is `estudiantes`: those personas point at this account through
+    // `representanteId`, which is what representing someone IS in the backend.
+    // It holds whichever way `account.role` happens to be stamped.
+    const holding = { estudiantes: [student("stu-1", "Ana", "Pérez")] };
+    expect(getAccountIdentity(account({ role: "representante", ...holding })).roles).toEqual([
+      "REPRESENTANTE",
+    ]);
+    expect(getAccountIdentity(account({ role: "estudiante", ...holding })).roles).toEqual([
+      "REPRESENTANTE",
+    ]);
+  });
+
+  it("names every player the account holds, because a representative holds several", () => {
+    const identity = getAccountIdentity(
+      account({
+        estudiantes: [
+          student("stu-1", "Ana", "Pérez"),
+          student("stu-2", "Luis", "Pérez"),
+          student("stu-3", "Sofía", "Pérez"),
+        ],
+      }),
+    );
+    expect(identity.represents).toEqual(["Ana Pérez", "Luis Pérez", "Sofía Pérez"]);
+  });
+
+  it("never lets an account represent itself", () => {
+    // A root persona with no dependants comes back from the adapter holding
+    // ITSELF as its only "estudiante" (`estudiantesSource = children.length > 0
+    // ? children : [root]`). Passing that straight through would print
+    // "Representante de Marta Salas" on Marta Salas' own row.
+    const identity = getAccountIdentity(
+      account({ id: "42", estudiantes: [student("42", "Marta", "Salas")] }),
+    );
+    expect(identity.represents).toEqual([]);
+    // And with the self-reference dropped there is no dependant left to prove
+    // the relationship, so the role goes with it.
+    expect(identity.roles).toEqual([]);
+  });
+
+  it("says nothing rather than degrading to a role it cannot prove", () => {
+    // This used to answer `["REPRESENTANTE"]` with an empty `represents`, which
+    // `IdentityCell` draws as a boxed "Representante" — the stamped literal,
+    // given the visual weight of a fact. An empty roles list draws no companion
+    // line at all, which is the honest shape of "not known here".
+    const identity = getAccountIdentity(account({ estudiantes: [] }));
+    expect(identity.roles).toEqual([]);
+    expect(identity.represents).toEqual([]);
+  });
+
+  it("keeps the other dependants when one of them is the account itself", () => {
+    const identity = getAccountIdentity(
+      account({
+        id: "42",
+        estudiantes: [student("42", "Marta", "Salas"), student("7", "Ana", "Pérez")],
+      }),
+    );
+    expect(identity.represents).toEqual(["Ana Pérez"]);
   });
 });

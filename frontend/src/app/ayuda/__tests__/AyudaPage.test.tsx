@@ -30,10 +30,12 @@ vi.mock("next/link", () => ({
 }));
 
 describe("AyudaPage", () => {
-  it("renders exactly one 'Volver al inicio' link, not one at each end (DSH-3)", () => {
+  it("renders exactly one 'Volver al Inicio' link, not one at each end (DSH-3)", () => {
     render(<AyudaPage />);
 
-    expect(screen.getAllByText("Volver al inicio")).toHaveLength(1);
+    // The capital is the registry\'s: `/` is called "Inicio" wherever it is
+    // named, and a back control never re-cases the destination (D12b).
+    expect(screen.getAllByText("Volver al Inicio")).toHaveLength(1);
   });
 
   it("points that one link at the site root with the canonical back skin", () => {
@@ -41,7 +43,58 @@ describe("AyudaPage", () => {
 
     const link = screen.getByRole("link", { name: /volver al inicio/i });
     expect(link).toHaveAttribute("href", "/");
-    expect(link).toHaveClass("border-cata-red", "bg-transparent", "text-cata-red-dark");
+    // The canonical skin is the system\'s tertiary level now, not a red
+    // outline: back is the least important control on the screen.
+    expect(link).toHaveClass("bg-sunken", "border-transparent", "text-ink-2");
+    expect(link.className).not.toMatch(/cata-red/);
+  });
+});
+
+/**
+ * The card titles wear the club's face, like every other screen on this shell.
+ *
+ * `/ayuda` came out of its own rework (commit eace106) aligned in structure —
+ * one column, the same back control, 2% dead air — and still spelling its card
+ * titles `text-base font-extrabold`, which is Barlow, the interface face. That
+ * is what every screen in the panel looked like before the admin batch: the
+ * `title` step is 20px Graduate, and the guard in
+ * `lib/__tests__/display-face-usage.test.ts` only fires once the heading is AT
+ * that step, so a title left one step below it passes by being too small
+ * rather than by being right.
+ *
+ * The closing "¿No encontró lo que buscaba?" panel is deliberately not in this
+ * set: it is a sunken inset, not a card, and its heading is a question put to
+ * the reader rather than the name of a block. "Si dudás, es Barlow."
+ */
+describe("AyudaPage — the club's face on its card titles", () => {
+  it("draws the schedule table's title at the title step, in Graduate", () => {
+    render(<AyudaPage />);
+
+    const heading = screen.getByRole("heading", { name: "Horarios de entrenamiento" });
+    expect(heading.className).toMatch(/\bfont-display\b/);
+    expect(heading.className).toMatch(/\btext-lg\b/);
+    expect(heading.className).toMatch(/\btracking-flat\b/);
+  });
+
+  it("draws every audience section's title the same way", () => {
+    render(<AyudaPage />);
+
+    for (const section of FAQ_SECTIONS) {
+      const heading = screen.getByRole("heading", { name: section.title });
+      expect(heading.className).toMatch(/\bfont-display\b/);
+      expect(heading.className).toMatch(/\btext-lg\b/);
+    }
+  });
+
+  /**
+   * Two radii and nothing else. The audience chips were `rounded-xl` — 12px,
+   * a third radius with no step in `DESIGN.md` — which is the same drift the
+   * admin batch pulled out of the discounts form and the help panel.
+   */
+  it("keeps the audience chips on one of the system's two radii", () => {
+    const { container } = render(<AyudaPage />);
+
+    expect(container.querySelectorAll(".rounded-xl")).toHaveLength(0);
   });
 });
 

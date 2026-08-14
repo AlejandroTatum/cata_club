@@ -128,12 +128,16 @@ const SHARED: Record<string, string> = {
  *     around the mockup, not product surface, and they are the only tokens in
  *     the sheet that follow the system light/dark scheme. The product ships no
  *     equivalent because the product has no review frame.
- *   · `ball-ink-strong` is a prototype-only companion: `.note .mine` is the
- *     one place in either codebase where ink lands ON the yellow, and the
- *     shared `ball-ink` measures 3.48:1 there. It is NOT mirrored into the app
- *     on purpose — mirroring it would give the prototype better contrast than
- *     the product, which is the exact drift this file exists to prevent. The
- *     app's own yellow pair carries the same 3.48:1 and needs its own fix.
+ *
+ * `ball-ink-strong` used to be listed here, and it was the clearest case of
+ * the drift this file measures: the sheet had grown a private #6E5700 because
+ * the shared `ball-ink` measured 3.48:1 under `.note .mine`, so the prototype
+ * printed yellow ink at AA while the product printed the same word at 3.48:1
+ * on the ball and 4.03:1 on the canvas. A local token was never the fix — the
+ * app took that exact value (`tailwind.config.ts`, `ball.ink`), the sheet
+ * mirrored it back like every other shared colour, and the private one is
+ * gone. `--ball-ink` is now a SHARED token measured at 4.91:1, and it appears
+ * in the pair list below under its own name.
  *
  * The reverse direction is not asserted: the app legitimately carries tokens
  * the prototypes never needed (`cuenta-*` for the account-type screen,
@@ -145,7 +149,6 @@ const PROTOTYPE_ONLY = new Set([
   "chrome-mute",
   "chrome-line",
   "chrome-surf",
-  "ball-ink-strong",
 ]);
 
 describe("_sistema.css replicates the app's token contract", () => {
@@ -224,8 +227,10 @@ describe("the text pairs _sistema.css documents meet AA", () => {
     ["--neutral on --canvas", "neutral", "canvas"],
     ["--bad on --canvas", "bad", "canvas"],
     // `.note .mine` — the 10.5px/700 pill of the review frame, the only ink
-    // that falls ON the yellow.
-    ["--ball-ink-strong on --ball (.note .mine)", "ball-ink-strong", "ball"],
+    // that falls ON the yellow. It used to draw with a sheet-private
+    // `--ball-ink-strong` because the shared token measured 3.48:1 here; the
+    // shared token now IS that value, so this measures the shared one.
+    ["--ball-ink on --ball (.note .mine)", "ball-ink", "ball"],
     // `.muted`, `.hint`, `.statelabel` and `.crumb .sep` default to the review
     // frame's own muted ink, because outside `.app` they sit on --chrome-bg.
     ["--chrome-mute on --chrome-bg", "chrome-mute", "chrome-bg"],

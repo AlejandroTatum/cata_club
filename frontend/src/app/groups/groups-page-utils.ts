@@ -5,8 +5,10 @@
  * Pure functions for business logic, config maps for UI constants.
  */
 
+import { DIA_SEMANA_LABELS } from "@/app/attendance/attendance-utils";
 import type { HorarioGroup, HorarioGroupRow } from "@/lib/groups-utils";
 import type { AlumnoHorario } from "@/services/api";
+import type { DiaSemana } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
 // Delete-confirmation student count
@@ -56,6 +58,37 @@ export const DIA_LABELS: Record<string, string> = {
   SABADO: "Sábado",
   DOMINGO: "Domingo",
 };
+
+/**
+ * The backend weekday key, as the shared `WeekStrip` spells it.
+ *
+ * This screen holds the backend's `"LUNES"…"DOMINGO"`; `ui/WeekStrip` speaks the
+ * frontend's `"lun"…"dom"`, which is what the rest of the product carries
+ * because the BFF translates at its boundary. `/groups` reads an endpoint that
+ * does not pass through that translation, so the two vocabularies meet here.
+ *
+ * They are joined by the WORD THEY BOTH PRINT rather than by position. Position
+ * would work today — both tables are Monday-first and seven long — and would
+ * break silently the day either one is reordered or grows an entry, with the
+ * failure showing up as a strip lighting the wrong box. The label is the fact
+ * the two tables genuinely share: `DIA_LABELS.LUNES` and
+ * `DIA_SEMANA_LABELS.lun` are both "Lunes" because they name the same day, and
+ * a mismatch returns `null` instead of a plausible wrong answer.
+ */
+const STRIP_DIA_BY_LABEL = new Map(
+  Object.entries(DIA_SEMANA_LABELS).map(([key, label]) => [label, key as DiaSemana]),
+);
+
+/** Translate one backend weekday key for the shared strip. `null` if unknown. */
+export function toStripDia(dia: string): DiaSemana | null {
+  const label = DIA_LABELS[dia];
+  return label ? (STRIP_DIA_BY_LABEL.get(label) ?? null) : null;
+}
+
+/** Translate a list of backend weekday keys, dropping any the strip cannot name. */
+export function toStripDias(dias: readonly string[]): DiaSemana[] {
+  return dias.map(toStripDia).filter((dia): dia is DiaSemana => dia !== null);
+}
 
 /** The Monday–Friday block the club's five business categorías are built on. */
 const WEEKDAYS: readonly string[] = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"];

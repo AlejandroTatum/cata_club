@@ -92,7 +92,7 @@ export default function NotificationBell({
           className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-cata-border bg-cata-surface p-2 shadow-elevated"
         >
           <div className="flex items-center justify-between px-2 py-1.5">
-            <p className="text-xs font-bold uppercase tracking-wider text-cata-text/45">Notificaciones</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-ink-3">Notificaciones</p>
             {unreadCount > 0 && (
               <span className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-red">
                 <CheckCheck size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
@@ -102,13 +102,13 @@ export default function NotificationBell({
           </div>
 
           {loadError && notificaciones.length === 0 && (
-            <p className="px-2 py-4 text-center text-xs text-cata-text/50">
+            <p className="px-2 py-4 text-center text-xs text-ink-3">
               No se pudieron cargar las notificaciones.
             </p>
           )}
 
           {!loadError && notificaciones.length === 0 && (
-            <p className="px-2 py-4 text-center text-xs text-cata-text/50">No hay notificaciones.</p>
+            <p className="px-2 py-4 text-center text-xs text-ink-3">No hay notificaciones.</p>
           )}
 
           {notificaciones.length > 0 && (
@@ -129,7 +129,7 @@ export default function NotificationBell({
                       <p className="text-xs font-semibold text-cata-text">{TIPO_LABELS[n.tipo]}</p>
                     </div>
                     <p className="mt-0.5 text-xs text-cata-text/65">{n.mensaje}</p>
-                    <p className="mt-1 text-2xs tracking-flat text-cata-text/40">{formatDateTime(n.fechaCreacion)}</p>
+                    <p className="mt-1 text-2xs tracking-flat text-ink-3">{formatDateTime(n.fechaCreacion)}</p>
                   </button>
                 </li>
               ))}

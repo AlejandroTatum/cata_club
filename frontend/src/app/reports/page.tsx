@@ -106,6 +106,7 @@ import {
   Badge,
   Button,
   EmptyState,
+  FILTER_LABEL,
   FilterGroup,
   FilterPanel,
   FilterPill,
@@ -317,6 +318,19 @@ function ReportsContent(): React.ReactElement {
         ? attendanceResults.length
         : pagosResults.length;
 
+  /**
+   * The way out every empty state on this screen described and none offered.
+   *
+   * "Histórico completo" is the widest range the screen has, and it is not
+   * unbounded — it resolves to the club's founding date — so it is a real
+   * answer to "pruebe con un rango más amplio" rather than a promise. It is
+   * `secondary`: "Generar PDF" in the header is this screen's one red control.
+   */
+  const widenRangeAction =
+    rangePreset === "full_history" ? undefined : (
+      <Button onClick={() => selectRangePreset("full_history")}>Ver el histórico completo</Button>
+    );
+
   const totalPages = useMemo(() => {
     if (preset === "periodo") return getPersonaReportTotalPages(personaResults.length);
     if (preset === "asistencia") return getAsistenciaReportTotalPages(attendanceResults.length);
@@ -478,7 +492,7 @@ function ReportsContent(): React.ReactElement {
               aria-checked={selected}
               onClick={() => setPreset(item.key)}
               className={cn(
-                "flex h-full flex-col items-start gap-[7px] rounded-card border bg-paper p-[17px_18px] text-left",
+                "flex h-full flex-col items-start gap-field rounded-card border bg-paper p-[18px] text-left",
                 selected ? "border-coal ring-1 ring-coal" : "border-line-2 hover:bg-canvas",
               )}
             >
@@ -519,8 +533,8 @@ function ReportsContent(): React.ReactElement {
 
             {rangePreset === "custom" && (
               <div className="flex flex-wrap items-end gap-section">
-                <div className="flex min-w-[150px] flex-col gap-1.5">
-                  <label htmlFor="fechaInicio" className="text-2xs font-bold uppercase text-ink-3">
+                <div className="flex min-w-[150px] flex-col gap-field">
+                  <label htmlFor="fechaInicio" className={FILTER_LABEL}>
                     Desde
                   </label>
                   <input
@@ -531,8 +545,8 @@ function ReportsContent(): React.ReactElement {
                     className="input-field h-ctl"
                   />
                 </div>
-                <div className="flex min-w-[150px] flex-col gap-1.5">
-                  <label htmlFor="fechaFin" className="text-2xs font-bold uppercase text-ink-3">
+                <div className="flex min-w-[150px] flex-col gap-field">
+                  <label htmlFor="fechaFin" className={FILTER_LABEL}>
                     Hasta
                   </label>
                   <input
@@ -551,8 +565,8 @@ function ReportsContent(): React.ReactElement {
           <div className="flex flex-wrap items-end gap-section">
             {preset === "asistencia" && (
               <>
-                <div className="flex min-w-[150px] flex-col gap-1.5">
-                  <label htmlFor="horarioId" className="text-2xs font-bold uppercase text-ink-3">
+                <div className="flex min-w-[150px] flex-col gap-field">
+                  <label htmlFor="horarioId" className={FILTER_LABEL}>
                     Horario
                   </label>
                   <select
@@ -570,8 +584,8 @@ function ReportsContent(): React.ReactElement {
                   </select>
                 </div>
 
-                <div className="flex min-w-[220px] flex-col gap-1.5">
-                  <span className="text-2xs font-bold uppercase text-ink-3">Alumno</span>
+                <div className="flex min-w-[220px] flex-col gap-field">
+                  <span className={FILTER_LABEL}>Alumno</span>
                   <StudentSearch
                     onSelect={setStudent}
                     onClear={clearStudent}
@@ -582,8 +596,8 @@ function ReportsContent(): React.ReactElement {
             )}
 
             {preset === "pagos" && (
-              <div className="flex min-w-[150px] flex-col gap-1.5">
-                <label htmlFor="pagosEstado" className="text-2xs font-bold uppercase text-ink-3">
+              <div className="flex min-w-[150px] flex-col gap-field">
+                <label htmlFor="pagosEstado" className={FILTER_LABEL}>
                   Estado
                 </label>
                 <select
@@ -622,7 +636,7 @@ function ReportsContent(): React.ReactElement {
       {/* Preview — the canvas that used to sit empty until you pressed Buscar. */}
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-[15px]">
-          <h2 className="flex-1 text-sm font-bold text-ink">
+          <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
             Vista previa — {activePreset.title}
           </h2>
           {canQuery && !loading && (
@@ -646,14 +660,39 @@ function ReportsContent(): React.ReactElement {
         ) : loading ? (
           <LoadingState label="Generando la vista previa…" />
         ) : preset === "periodo" ? (
-          <PersonaPreview results={paginatePersonaResults(personaResults, page)} total={personaResults.length} />
+          <PersonaPreview
+            results={paginatePersonaResults(personaResults, page)}
+            total={personaResults.length}
+            action={widenRangeAction}
+          />
         ) : preset === "asistencia" ? (
           <AsistenciaPreview
             results={paginateAsistenciaResults(attendanceResults, page)}
             total={attendanceResults.length}
+            // The filter that is actually narrowing gets priority: if a horario
+            // is selected, clearing it is a smaller and more likely fix than
+            // widening the range, and offering the range first would send the
+            // reader past the control that is holding the result at zero.
+            action={
+              horarioId ? (
+                <Button onClick={() => setHorarioId("")}>Quitar el filtro de horario</Button>
+              ) : (
+                widenRangeAction
+              )
+            }
           />
         ) : (
-          <PagosPreview results={paginatePagosResults(pagosResults, page)} total={pagosResults.length} />
+          <PagosPreview
+            results={paginatePagosResults(pagosResults, page)}
+            total={pagosResults.length}
+            action={
+              pagosEstado ? (
+                <Button onClick={() => setPagosEstado("")}>Ver todos los estados</Button>
+              ) : (
+                widenRangeAction
+              )
+            }
+          />
         )}
 
         {canQuery && !loading && resultCount > 0 && totalPages > 1 && (
@@ -688,16 +727,29 @@ function calcAge(fechaNacimiento: string): number {
 function PersonaPreview({
   results,
   total,
+  action,
 }: {
   results: PersonaReporte[];
   total: number;
+  /**
+   * The way out, supplied by the page because only the page holds the
+   * handlers. All four empty states on this screen named a next move in prose
+   * — "pruebe con un rango más amplio", "quite el filtro de horario", "elija
+   * otro estado" — and none of them offered it as a control, while every one
+   * of those moves is a single call the page already owns. "An empty state
+   * without a next action is a dead end", in the shared component's own words,
+   * and this screen had four.
+   */
+  action?: React.ReactNode;
 }): React.ReactElement {
   if (total === 0) {
     return (
       <EmptyState surface="inset"
+        fill
         icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron personas"
         description="Ninguna persona se registró en este rango. Pruebe con un rango de fechas más amplio."
+        action={action}
       />
     );
   }
@@ -708,7 +760,7 @@ function PersonaPreview({
           <tr>
             <TableHeaderCell>Nombre</TableHeaderCell>
             <TableHeaderCell>Cédula</TableHeaderCell>
-            <TableHeaderCell>Fecha Nac.</TableHeaderCell>
+            <TableHeaderCell>Fecha de nacimiento</TableHeaderCell>
             <TableHeaderCell>Edad</TableHeaderCell>
             <TableHeaderCell>Teléfono</TableHeaderCell>
           </tr>
@@ -732,16 +784,21 @@ function PersonaPreview({
 function AsistenciaPreview({
   results,
   total,
+  action,
 }: {
   results: AttendanceRecord[];
   total: number;
+  /** See `PersonaPreview`. */
+  action?: React.ReactNode;
 }): React.ReactElement {
   if (total === 0) {
     return (
       <EmptyState surface="inset"
+        fill
         icon={<CheckCircle size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron registros de asistencia"
         description="Ningún registro coincide con los filtros. Amplíe el rango de fechas o quite el filtro de horario."
+        action={action}
       />
     );
   }
@@ -778,16 +835,21 @@ function AsistenciaPreview({
 function PagosPreview({
   results,
   total,
+  action,
 }: {
   results: PaymentValidationRequest[];
   total: number;
+  /** See `PersonaPreview`. */
+  action?: React.ReactNode;
 }): React.ReactElement {
   if (total === 0) {
     return (
       <EmptyState surface="inset"
+        fill
         icon={<Wallet size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron pagos"
         description="Ningún pago coincide con los filtros. Amplíe el rango de fechas o elija otro estado."
+        action={action}
       />
     );
   }
@@ -797,7 +859,7 @@ function PagosPreview({
         <TableHead>
           <tr>
             <TableHeaderCell>Estudiante</TableHeaderCell>
-            <TableHeaderCell>Responsable de Pago</TableHeaderCell>
+            <TableHeaderCell>Responsable de pago</TableHeaderCell>
             <TableHeaderCell>Período</TableHeaderCell>
             <TableHeaderCell>Monto</TableHeaderCell>
             <TableHeaderCell>Método</TableHeaderCell>

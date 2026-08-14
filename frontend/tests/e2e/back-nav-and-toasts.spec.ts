@@ -228,7 +228,13 @@ test.describe("Back navigation + toasts", () => {
     // rejection must leave the payment where it was rather than swallow it.
     // It is a real `BackLink` (a link, not a button) since the redesign put
     // the control through the design system's shared back-navigation piece.
-    await page.getByRole("link", { name: /volver a la cola/i }).click();
+    //
+    // The label comes from `lib/destinations.ts`, not from this screen: the
+    // registry lists "Volver a la cola" as one of the four hand-written
+    // spellings it replaced, so asserting it here was asserting the defect.
+    // A back control names its DESTINATION, and the destination is the
+    // section, not the shape it happens to have on that screen.
+    await page.getByRole("link", { name: /volver a membresías y pagos/i }).click();
     await expect(openRequest).toBeVisible();
 
     await home.click();

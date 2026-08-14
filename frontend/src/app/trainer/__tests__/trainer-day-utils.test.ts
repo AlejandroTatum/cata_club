@@ -11,6 +11,8 @@ import {
   formatAbsenceCount,
   formatElapsedMinutes,
   formatEnrolledCount,
+  formatStateCount,
+  formatTimeUntilStart,
   groupRecordsBySession,
   minutesSinceMidnight,
   minutesUntilStart,
@@ -385,6 +387,63 @@ describe("formatElapsedMinutes", () => {
 
   it("says the session just started rather than 'hace 0 minutos'", () => {
     expect(formatElapsedMinutes(0)).toBe("Recién empezó");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The wait, in the shape of what it measures.
+//
+// The card used to print the raw minute count as its 46px figure, which is
+// only a readable quantity for about an hour: opened at 03:20 on a day whose
+// first session is at 15:00, it read "700 minutos". A wait is a duration, and
+// a duration over an hour is said in hours.
+// ---------------------------------------------------------------------------
+
+describe("formatTimeUntilStart", () => {
+  it("counts minutes while the wait is still countable in minutes", () => {
+    expect(formatTimeUntilStart(1)).toBe("Empieza en 1 minuto");
+    expect(formatTimeUntilStart(25)).toBe("Empieza en 25 minutos");
+    expect(formatTimeUntilStart(59)).toBe("Empieza en 59 minutos");
+  });
+
+  it("switches to hours at the hour, and keeps the remainder", () => {
+    expect(formatTimeUntilStart(60)).toBe("Empieza en 1 hora");
+    expect(formatTimeUntilStart(120)).toBe("Empieza en 2 horas");
+    expect(formatTimeUntilStart(700)).toBe("Empieza en 11 horas y 40 minutos");
+    expect(formatTimeUntilStart(61)).toBe("Empieza en 1 hora y 1 minuto");
+  });
+
+  it("never counts down from zero or below — that state is 'En curso'", () => {
+    expect(formatTimeUntilStart(0)).toBe("Empieza ahora");
+    expect(formatTimeUntilStart(-5)).toBe("Empieza ahora");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// One vocabulary for "N of a state".
+//
+// The nouns already existed here, private, spelling the bar's `aria-label`.
+// Every OTHER surface wrote its own — the hover breakdown and the history
+// table both printed a count against a singular label ("9 Presente", "0
+// Tardanza"), which is the "regla de las palabras" broken in the one place the
+// interface counts out loud.
+// ---------------------------------------------------------------------------
+
+describe("formatStateCount", () => {
+  it("agrees the noun with the count", () => {
+    expect(formatStateCount("present", 9)).toBe("9 presentes");
+    expect(formatStateCount("present", 1)).toBe("1 presente");
+    expect(formatStateCount("late", 1)).toBe("1 tardanza");
+    expect(formatStateCount("justified", 0)).toBe("0 justificados");
+    expect(formatStateCount("absent", 2)).toBe("2 ausentes");
+  });
+
+  it("spells the same nouns the bar's accessible name already used", () => {
+    const counts = { present: 9, late: 1, justified: 0, absent: 2 };
+    const label = buildSessionBarAriaLabel(counts, 12);
+    for (const estado of ["present", "late", "justified", "absent"] as const) {
+      expect(label).toContain(formatStateCount(estado, counts[estado]));
+    }
   });
 });
 

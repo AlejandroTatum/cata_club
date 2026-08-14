@@ -30,17 +30,19 @@ import {
   ErrorState,
   FilterPanel,
   FilterPill,
+  IdentityCell,
   LoadingState,
+  MEMBER_ROLE_LABELS,
   Pagination,
   SearchInput,
   STAT_GRID,
   StatCard,
+  StatTrack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeaderCell,
-  TableNameCell,
   TableRow,
 } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
@@ -70,6 +72,7 @@ import {
   buildMemberStats,
   formatMembershipPeriod,
   filterAccounts,
+  getAccountIdentity,
   accountMatchesFlag,
   countAccountsMatchingFlag,
   getAccountStatusBadge,
@@ -329,34 +332,85 @@ const ROLE_ICONS: Record<BackendTipoRol, typeof ShieldCheck> = {
   ALUMNO: User,
 };
 
+/**
+ * The words the identity of one account resolves to, in the club's own
+ * vocabulary — `MEMBER_ROLE_LABELS` is the single place any of them is spelled.
+ *
+ * It exists because this screen draws the same account TWICE, as a table row
+ * above `sm` and as a card below it. Two call sites deriving the same sentence
+ * are two call sites that can disagree about who an account is, and the
+ * disagreement only shows up when somebody resizes a window.
+ *
+ * Frequently EMPTY, and that is the normal case rather than a failure: an
+ * account whose dependants are unknown has nothing provable to say about who
+ * its holder is, so both renderings say nothing. See `getAccountIdentity`.
+ */
+function accountRoleLabels(account: MemberAccount): string[] {
+  const { roles, represents } = getAccountIdentity(account);
+  return roles.map((role) => MEMBER_ROLE_LABELS[role](represents));
+}
+
+/**
+ * The trigger every row carries, at D5's THIRD level.
+ *
+ * It used to be `secondary` — `bg-paper` on a `line-2` border — which is the
+ * skin D8 reserves for the one action that may stand beside the header's
+ * primary. Drawn once per row on a paper table it is a box you can see and
+ * cannot use: forty-five identical outlines down the page, none of them more
+ * important than the row it belongs to. `tertiary` is distinguished by FILL
+ * instead, which reads as a control without adding a forty-fifth line to the
+ * grid — and it is the correct LEVEL, not just the quieter one.
+ */
+function EditAccountButton({ account, onEdit }: AccountListItemProps): React.ReactElement {
+  return (
+    <Button
+      variant="tertiary"
+      size="sm"
+      // Focus the trigger explicitly: the dialog restores focus to whatever was
+      // focused at mount, and a mouse click does not reliably move focus to a
+      // <button> on its own.
+      onClick={(event) => {
+        event.currentTarget.focus();
+        onEdit();
+      }}
+      aria-label={`Editar ${account.nombres} ${account.apellidos}`}
+    >
+      Editar
+    </Button>
+  );
+}
+
 /** One account as a table row (`sm` and up). */
 function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
+  const { roles, represents } = getAccountIdentity(account);
 
   return (
     <TableRow>
-      <TableNameCell
-        name={`${account.nombres} ${account.apellidos}`}
-        sub={getPayerTypeLabel(account.role)}
-      />
+      {/* D9's shared identity cell, not a second drawing of the same layout.
+          What it says comes from `getAccountIdentity`, and what it does NOT say
+          is the point: this row shows NO ROLE. `account.role` is not one —
+          `lib/server/members-adapter.ts:173` stamps `role: "representante" as
+          const` on every root account because the DTO carries no roles and the
+          only role endpoints mutate, so the field says the same word about a
+          representative, a lone player and a member who also coaches. Boxed in
+          the cell it read as information. It comes back when the backend can be
+          asked; until then the real roles are read one account at a time, in the
+          edit dialog. The companion line survives only where `estudiantes`
+          proves a relationship — see `getAccountIdentity`'s own doc. */}
+      <TableCell>
+        <IdentityCell
+          name={`${account.nombres} ${account.apellidos}`}
+          roles={roles}
+          represents={represents}
+        />
+      </TableCell>
       <TableCell type="number">{account.estudiantes.length}</TableCell>
       <TableCell type="badge">
         <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
       </TableCell>
       <TableCell type="action">
-        <Button
-          size="sm"
-          // Focus the trigger explicitly: the dialog restores focus to
-          // whatever was focused at mount, and a mouse click does not reliably
-          // move focus to a <button> on its own.
-          onClick={(event) => {
-            event.currentTarget.focus();
-            onEdit();
-          }}
-          aria-label={`Editar ${account.nombres} ${account.apellidos}`}
-        >
-          Editar
-        </Button>
+        <EditAccountButton account={account} onEdit={onEdit} />
       </TableCell>
     </TableRow>
   );
@@ -371,7 +425,14 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
       name={`${account.nombres} ${account.apellidos}`}
       meta={
         <>
-          <DataBox>{getPayerTypeLabel(account.role)}</DataBox>
+          {/* The same sentence the table's identity cell draws, in the box
+              this row's metadata is made of. `DataRow` renders `name` inside a
+              `<p>`, so `IdentityCell` — a div holding a list — cannot go
+              there; what travels between the two renderings is the WORDS, out
+              of one function. */}
+          {accountRoleLabels(account).map((label) => (
+            <DataBox key={label}>{label}</DataBox>
+          ))}
           <DataBox>{account.telefono}</DataBox>
           {account.email ? (
             <DataBox className="max-w-[10rem] truncate">{account.email}</DataBox>
@@ -380,18 +441,7 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
         </>
       }
       status={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
-      actions={
-        <Button
-          size="sm"
-          onClick={(event) => {
-            event.currentTarget.focus();
-            onEdit();
-          }}
-          aria-label={`Editar ${account.nombres} ${account.apellidos}`}
-        >
-          Editar
-        </Button>
-      }
+      actions={<EditAccountButton account={account} onEdit={onEdit} />}
     />
   );
 }
@@ -486,9 +536,24 @@ function MemberEditDialog({
                   {getUserInitials(`${account.nombres} ${account.apellidos}`)}
                 </div>
                 <div className="min-w-0">
+                  {/* DESIGN.md's `title` step — Graduate at 20px, uppercase,
+                      weight 400 — because this IS the dialog's title: the
+                      element `aria-labelledby` points at. The case is a
+                      `text-transform`, so the accessible name stays the person's
+                      name as written. `tracking-flat` cancels the -0.02em
+                      `text-lg` carries for Barlow's lowercase.
+
+                      Measured cost, since the line truncates: at 20px the face
+                      runs ~35% wider than Barlow-800 — "María González" is
+                      177.2px against 131.6px, and a full four-part name 391.7px
+                      against 295.5px. The dialog gives this block ~450px at
+                      `max-w-2xl`, so nothing is cut on a desktop; below ~420px
+                      viewport width a two-part name starts to ellipsize where
+                      Barlow just fit. The full name is never lost — it is in the
+                      row behind and in the identity fields below. */}
                   <h2
                     id={`edit-member-title-${account.id}`}
-                    className="truncate text-lg font-bold leading-tight text-ink"
+                    className="truncate font-display text-lg uppercase leading-tight tracking-flat text-ink"
                   >
                     {account.nombres} {account.apellidos}
                   </h2>
@@ -775,6 +840,10 @@ export default function MembersPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Miembros"
+        // D11c: the subtitle says WHAT this screen is, in one line, and
+        // everything explaining HOW it works lives behind "Ver ayuda" — which
+        // is why the note about the 200-record cap is not repeated here.
+        subtitle="Las cuentas que pagan y los jugadores que tienen a cargo."
         actions={
           <Link href="/admin/crear-cuenta" className={buttonClasses("primary", "sm")}>
             <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
@@ -792,7 +861,21 @@ export default function MembersPage(): React.ReactElement {
 
         {/* Stats row — `07-miembros.html`'s four tiles. Figures are ink; the
             old version put a red icon disc beside every one of them, which
-            made four neutral counts read as four alerts. */}
+            made four neutral counts read as four alerts.
+
+            D7 asks these four to stop wearing one shape for four different
+            jobs. The RULE OF THE SHOULDER gives the coal tile to the one thing
+            that asks somebody to come and do it — payments waiting to be
+            validated is a queue of work; the other three report a state of the
+            world — and only to that one, because a shoulder on all four marks
+            nothing. The RULE OF SHAPE gives the bar to the one figure that is
+            a proportion.
+
+            The two counts stay quiet, and that is a finding rather than a
+            preference: `MemberAccount` carries id, role, name, phone and
+            students, and nothing anywhere on this screen is dated at account
+            or student level. There is no "+6 this month" to draw, so none is
+            drawn. */}
         <div className={STAT_GRID}>
           <StatCard label="Cuentas" value={stats.totalAccounts} hint="responsables de pago" />
           <StatCard label="Estudiantes" value={stats.totalStudents} hint="perfiles registrados" />
@@ -816,14 +899,36 @@ export default function MembersPage(): React.ReactElement {
             hint={
               membresiasDegraded
                 ? "No disponible ahora mismo"
-                // The count itself already sits in the "Estudiantes" tile
-                // right beside this one — repeating it here just echoed
-                // that figure. The population it's measured against still
-                // has to be named, because it is students, not accounts.
-                : "de los estudiantes"
+                : // The count itself already sits in the "Estudiantes" tile
+                  // right beside this one — repeating it here just echoed that
+                  // figure. The population it's measured against still has to
+                  // be named, because it is students, not accounts.
+                  //
+                  // The bar is what carries the DENOMINATOR now: 21 out of 69
+                  // and 21 out of 25 are the same tile until something on it
+                  // takes the shape of a proportion, and a bar says which one
+                  // without reprinting the neighbour's own figure.
+                  //
+                  // No bar when the upstream lookup degraded: a share of an
+                  // unreadable numerator would draw at 0%, which is exactly
+                  // the "0 is not the same as unknown" lie the em dash above
+                  // exists to avoid.
+                  <span className="flex flex-col gap-y-field">
+                    <StatTrack value={stats.activeMemberships} total={stats.totalStudents} />
+                    <span>de los estudiantes</span>
+                  </span>
             }
           />
-          <StatCard label="Pagos pendientes" value={stats.pendingPayments} hint="por validar" />
+          {/* The only tile on this row that is a pile of work somebody has to
+              clear. `hot` also spends the ball dot on its foot line, which is
+              D7's "pie con punto de estado": a bare 15 is neither good news
+              nor bad, and "por validar" is what makes it a queue. */}
+          <StatCard
+            label="Pagos pendientes"
+            value={stats.pendingPayments}
+            hint="por validar"
+            variant="hot"
+          />
         </div>
 
         {/* Search + filter chips. They used to sit loose on the canvas as two
@@ -854,14 +959,25 @@ export default function MembersPage(): React.ReactElement {
               ))}
             </div>
           }
+          // D11c — "la ayuda no vive suelta". This used to be a bare child of
+          // the canvas, in a band of its own between the panel and the table,
+          // holding itself there with a margin no other block in the column
+          // speaks. What it opens is a caveat about what the search can REACH,
+          // so it belongs to the block that searches; and because the panel is
+          // the one part of the screen drawn in every state, the caveat is
+          // still there in the case that needs it most — a search that found
+          // nobody, where the reason may well be the cap itself.
+          help={
+            <ContextualHelp title="Ayuda sobre límite de resultados">
+              <p>
+                Este listado puede incluir hasta {MEMBERS_AGGREGATE_LIMIT} registros y no confirma
+                que se hayan cargado todos los miembros.
+              </p>
+            </ContextualHelp>
+          }
         />
 
         {/* Members table */}
-        {!loading && (
-          <ContextualHelp title="Ayuda sobre límite de resultados">
-            <p>Este listado puede incluir hasta {MEMBERS_AGGREGATE_LIMIT} registros y no confirma que se hayan cargado todos los miembros.</p>
-          </ContextualHelp>
-        )}
         {loading ? (
           <div className="card">
             <LoadingState label="Cargando miembros…" />
@@ -905,8 +1021,21 @@ export default function MembersPage(): React.ReactElement {
                     <TableHeaderCell>Responsable de pago</TableHeaderCell>
                     <TableHeaderCell type="number">Estudiantes</TableHeaderCell>
                     <TableHeaderCell type="badge">Membresía</TableHeaderCell>
+                    {/* Named for what the column HOLDS, not for the button
+                        inside it — a column called "Editar" is a heading that
+                        reads the label of the control under it back to you.
+                        D9's rule of words also forbids a label deducible from
+                        another, and every trigger in this column already
+                        announces itself as "Editar <nombre>".
+
+                        Kept off the screen rather than renamed in place: over
+                        a column of 32px triggers a printed heading is one more
+                        word to skip past, and "Acciones" tells a sighted
+                        reader nothing the buttons underneath do not. It stays
+                        in the accessibility tree because a `<th>` with no name
+                        is a column a screen reader announces as blank. */}
                     <TableHeaderCell type="action">
-                      <span className="sr-only">Editar</span>
+                      <span className="sr-only">Acciones</span>
                     </TableHeaderCell>
                   </TableRow>
                 </TableHead>
@@ -940,8 +1069,15 @@ export default function MembersPage(): React.ReactElement {
           </div>
         ) : null}
 
+        {/* D11b measured this one: 25% of the viewport — 227px — went dead the
+            moment a search found nobody, because three short lines kept their
+            own height and the rest of the column stayed bare canvas underneath.
+            `fill` stretches the card to the column it stands in, so the surplus
+            becomes air inside the surface instead of a hole below it. The three
+            parts D11 requires are untouched. */}
         {!loading && filteredAccounts.length === 0 && (
           <EmptyState
+            fill
             icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title={
               searchTerm || activeFlag !== "all"

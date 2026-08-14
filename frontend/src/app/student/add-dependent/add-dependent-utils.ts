@@ -31,11 +31,22 @@ export type AddDependentStep = "child" | "credentials" | "health" | "summary";
 export const ADD_DEPENDENT_STEP_ORDER: AddDependentStep[] = ["child", "credentials", "health", "summary"];
 
 /** Human-readable labels for each step, in Spanish. */
+/**
+ * Sentence case, and the same words the public wizard uses for the same step.
+ *
+ * These were Title Case ("Datos del Dependiente") on a screen whose every
+ * other label is sentence case, and "Ficha Médica" was a second name for the
+ * step `STEP_LABELS` (enroll-utils.ts) calls "Salud y emergencia" — the same
+ * four questions, asked of the same person, under two names. The parenthetical
+ * "(Opcional)" went too: the two fields inside the step already carry
+ * `(opcional)` from `wizard-fields.tsx`, and a title that repeats a mark the
+ * fields make is the mark said twice.
+ */
 export const ADD_DEPENDENT_STEP_LABELS: Record<AddDependentStep, string> = {
-  child: "Datos del Dependiente",
-  credentials: "Cuenta de Acceso (Opcional)",
-  health: "Ficha Médica",
-  summary: "Resumen y Confirmación",
+  child: "Datos del dependiente",
+  credentials: "Cuenta de acceso",
+  health: "Salud y emergencia",
+  summary: "Resumen y confirmación",
 };
 
 /**
@@ -139,6 +150,64 @@ export function validateAddDependentForm(data: AddDependentFormData): string[] {
 
 /** A form field this wizard can point an error at. */
 export type AddDependentField = keyof AddDependentFormData;
+
+/**
+ * The DOM id of each field, declared once and derived from the field NAME —
+ * never from the label the visitor reads.
+ *
+ * This is `ENROLL_FIELD_TOKEN`'s twin (`enroll-utils.ts`), and it is here for
+ * the same reason: `WizardInput` falls back to slugifying the label text when
+ * no `field` is passed, and this wizard passed none for its two textareas
+ * while writing its two `<select>` ids by hand to match what that slugifier
+ * would have produced. So the visible copy was the id in three places and a
+ * hand-kept copy of the id in two more — "Tipo de Sangre" is what made the
+ * blood-type select `#add-dependent-tipo-de-sangre` while the identical field
+ * on the public wizard is `#add-dependent-tipo-sangre`'s sibling
+ * `#enroll-tipo-sangre`. Two names for one field, produced by two spellings
+ * of one label.
+ *
+ * The tokens are deliberately the SAME strings the public wizard uses: the two
+ * flows collect the same person, and a field that means the same thing should
+ * not be addressed two ways because it is on another screen.
+ *
+ * `institucionId` names a `<select>` the page renders itself rather than a
+ * `WizardInput`, and it stays in the table so this remains a total function of
+ * `AddDependentField`: a new form field cannot be added without answering
+ * "what is its id" here first.
+ */
+export const ADD_DEPENDENT_FIELD_TOKEN: Record<AddDependentField, string> = {
+  nombres: "nombres",
+  apellidos: "apellidos",
+  fechaNacimiento: "fecha-nacimiento",
+  cedula: "cedula",
+  telefono: "telefono",
+  correo: "correo",
+  contrasenia: "contrasenia",
+  institucionId: "institucion",
+  tipoSangre: "tipo-sangre",
+  enfermedades: "enfermedades",
+  alergias: "alergias",
+  contactoEmergencia: "contacto-emergencia",
+  telefonoEmergencia: "telefono-emergencia",
+};
+
+/** The id prefix every field on this wizard shares. */
+export const ADD_DEPENDENT_ID_PREFIX = "add-dependent";
+
+/** The full DOM id of a field — what a test, a `<label for>` and a deep link all address. */
+export function addDependentFieldId(field: AddDependentField): string {
+  return `${ADD_DEPENDENT_ID_PREFIX}-${ADD_DEPENDENT_FIELD_TOKEN[field]}`;
+}
+
+/**
+ * The id of the school-TYPE filter.
+ *
+ * Declared beside the tokens but deliberately outside the table: it narrows
+ * the institution catalogue and never reaches the payload, so it is not a
+ * field of `AddDependentFormData` and must not be added to a map that has to
+ * stay total over one.
+ */
+export const ADD_DEPENDENT_SCHOOL_TYPE_ID = `${ADD_DEPENDENT_ID_PREFIX}-tipo-escuela`;
 
 /** Field → its first unmet rule. A field with no entry is currently valid. */
 export type AddDependentFieldErrors = Partial<Record<AddDependentField, string>>;

@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Faro 3 — Perfil y Login · Cata Club</title>
+    <style>
+      /* Las tres familias del club, desde el mismo `public/fonts` que sirve el
+         producto. Rutas relativas: este archivo se abre desde el repositorio. */
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-600.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-800.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+      @font-face { font-family: "Graduate"; src: url("../../../frontend/public/fonts/graduate-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+      @font-face { font-family: "Playfair Display"; src: url("../../../frontend/public/fonts/playfair-display-600.woff2") format("woff2"); font-display: swap; }
+
+      /* Los tokens de DESIGN.md, transcritos. Ninguno inventado acá. */
+      :root {
+        --coal: #131316; --coal-2: #1c1c21; --coal-3: #26262c;
+        --red: #d92128; --red-dark: #a11d22;
+        --ball: #ffd600; --ball-ink: #6e5700;
+        --paper: #fff; --sunken: #f4f4f7; --canvas: #e8e8ee;
+        --line: #dedee6; --line-2: #cfcfda;
+        --ink: #17181c; --ink-2: #4a4a55; --ink-3: #74747f; --ink-3-strong: #63636e;
+        --ok: #137739; --ok-bg: #e7f4ec;
+        --warn: #a94d08; --warn-bg: #fbf0e2;
+        --bad: #c51b22; --bad-bg: #fbe9ea;
+        --r-card: 14px; --r-ctl: 10px;
+        --s-page: 20px; --s-section: 14px; --s-field: 7px;
+        --shadow-card: 0 1px 2px rgba(19,19,22,.06), 0 4px 10px -3px rgba(19,19,22,.08);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: Barlow, system-ui, sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+        letter-spacing: -0.01em;
+      }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 40px var(--s-page) 80px; }
+
+      /* --- Cabecera ------------------------------------------------------ */
+      header.top {
+        background: var(--coal);
+        color: var(--paper);
+        border-radius: var(--r-card);
+        padding: 28px var(--s-page);
+        margin-bottom: var(--s-page);
+      }
+      .kicker {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ball); margin: 0 0 10px;
+      }
+      h1 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 46px;
+        line-height: .95; letter-spacing: -.05em; text-transform: uppercase;
+        margin: 0 0 12px;
+      }
+      header.top p { margin: 0; color: #b9b9c1; max-width: 62ch; }
+
+      h2 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 26px;
+        line-height: 1.15; letter-spacing: -.03em; text-transform: uppercase;
+        margin: 40px 0 var(--s-section);
+      }
+      h3 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 20px;
+        line-height: 1.2; letter-spacing: -.02em; text-transform: uppercase;
+        margin: 0 0 var(--s-field);
+      }
+      p { margin: 0 0 var(--s-section); }
+      strong { font-weight: 700; }
+      /* Un identificador de código, en el sistema: sin familia monoespaciada
+         —el sistema tiene tres familias y ninguna lo es— y con el radio de
+         control, que es uno de los dos radios que existen. Barlow a 12.5px es
+         el paso `xs`, el mismo que usa el producto para metadato secundario. */
+      code {
+        font-size: 12.5px; background: var(--sunken); border: 1px solid var(--line);
+        border-radius: var(--r-ctl); padding: 1px 6px;
+      }
+
+      .card {
+        background: var(--paper); border: 1px solid var(--line);
+        border-radius: var(--r-card); box-shadow: var(--shadow-card);
+        padding: var(--s-page); margin-bottom: var(--s-section);
+      }
+      /* El hombro de caucho: lo lleva la tarjeta que pide algo, y solo esa. */
+      .card.shoulder { padding: 0; overflow: hidden; }
+      .card.shoulder > .shoulder-bar {
+        background: var(--coal); padding: 8px var(--s-page);
+        display: flex; justify-content: flex-end;
+      }
+      .card.shoulder > .shoulder-bar span {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ball);
+      }
+      .card.shoulder > .shoulder-body { padding: var(--s-page); }
+
+      /* --- Tablas -------------------------------------------------------- */
+      table { width: 100%; border-collapse: collapse; }
+      thead th {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink-3-strong);
+        text-align: left; padding: 0 10px 8px; border-bottom: 1px solid var(--line-2);
+      }
+      tbody td {
+        font-size: 13.5px; padding: 11px 10px; border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      tbody tr:last-child td { border-bottom: 0; }
+      td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .win { color: var(--ok); font-weight: 700; }
+      .flat { color: var(--ink-3-strong); }
+
+      /* --- Insignias ----------------------------------------------------- */
+      .badge {
+        display: inline-flex; align-items: center; gap: 6px; height: 26px;
+        padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+        letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+      }
+      .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .badge.ok { background: var(--ok-bg); color: var(--ok); }
+      .badge.warn { background: var(--warn-bg); color: var(--warn); }
+      .badge.bad { background: var(--bad-bg); color: var(--bad); }
+      .badge.neutral { background: #efeff2; color: var(--ink-3-strong); }
+
+      /* --- Capturas ------------------------------------------------------ */
+      .shots { display: grid; gap: var(--s-section); margin-bottom: var(--s-page); }
+      @media (min-width: 900px) { .shots { grid-template-columns: 1fr 1fr; } }
+      figure { margin: 0; }
+      figure img {
+        display: block; width: 100%; height: auto;
+        border: 1px solid var(--line-2); border-radius: var(--r-ctl);
+        background: var(--paper);
+      }
+      figcaption {
+        margin-top: var(--s-field); font-size: 12.5px; color: var(--ink-3-strong);
+      }
+      figcaption b {
+        display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink); margin-bottom: 2px;
+      }
+
+      /* --- Listas de hallazgos ------------------------------------------- */
+      ul.findings { list-style: none; margin: 0 0 var(--s-section); padding: 0; }
+      ul.findings > li {
+        border-top: 1px solid var(--line); padding: 12px 0 12px 0;
+      }
+      ul.findings > li:first-child { border-top: 0; padding-top: 0; }
+      ul.findings .what { font-weight: 700; }
+      ul.findings .why { color: var(--ink-2); font-size: 13.5px; }
+
+      /* La regla roja: separa bloques, no decora. */
+      hr.rule { border: 0; border-top: 3px solid var(--red); width: 56px; margin: 36px 0 0; }
+
+      /* Una decisión de producto tomada en automático. Destacada, no enterrada. */
+      .call {
+        border-left: 3px solid var(--red); background: var(--sunken);
+        border-radius: 0 var(--r-ctl) var(--r-ctl) 0;
+        padding: 14px 16px; margin: 0 0 var(--s-section);
+      }
+      .call .tag {
+        display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--red-dark); margin-bottom: 4px;
+      }
+      .call p:last-child { margin-bottom: 0; }
+      .note { color: var(--ink-2); font-size: 13.5px; }
+      a { color: var(--red-dark); text-underline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <p class="kicker">Fase 3 · Faro 3 de 3</p>
+        <h1>Perfil y Login</h1>
+        <p>
+          La cara al socio. Dos pantallas capturadas contra el entorno de QA con el mismo guión de
+          medición que Miembros, a 1440×900, antes y después, con la misma base de datos. El código
+          está escrito, la suite en verde y el tipo comprobado.
+        </p>
+      </header>
+
+      <p class="note">
+        La imagen de QA ya traía la fundación y Graduate en los títulos de página, así que el antes
+        y el después aíslan lo que cambió en <strong>estas dos pantallas</strong> y no repiten lo
+        que ya se revisó en Miembros.
+      </p>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>1 · Las mediciones</h2>
+
+      <p>
+        El aire muerto se mide igual que siempre: la distancia entre el borde inferior del contenido
+        más bajo y el fondo de la ventana, dividida por el alto de la ventana. Es el hueco que la
+        persona ve vacío sin scrollear.
+      </p>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Pantalla</th>
+              <th>Estado</th>
+              <th>Antes</th>
+              <th>Después</th>
+              <th>Qué lo movió</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Perfil</td>
+              <td>Jugador con membresía</td>
+              <td class="num">12% · 105px</td>
+              <td class="num win">10% · 91px</td>
+              <td>La columna izquierda dejó de ser una tarjeta sola sobre lienzo pelado.</td>
+            </tr>
+            <tr>
+              <td>Login</td>
+              <td>Formulario en reposo</td>
+              <td class="num">23% · 205px</td>
+              <td class="num flat">23% · 208px</td>
+              <td>Sin cambio, y es la respuesta correcta — ver abajo.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="call">
+        <span class="tag">Decisión tomada sola</span>
+        <p>
+          <strong>El 23% del login no se toca.</strong> Ese hueco no es un descuido: es la
+          consecuencia de centrar la tarjeta en el eje vertical de la página, que es exactamente lo
+          que el dueño del producto pidió al rechazar la versión anterior —
+          <em>«el login y la parte izquierda no están bien centradas, se ven desalineadas»</em>. Las
+          dos mitades comparten una grilla <code>1fr / auto / 1fr</code>, y bajarlo significaría
+          descentrar la tarjeta o inventar contenido para el riel de abajo. Se prefirió reportar el
+          número plano antes que mejorarlo rompiendo una decisión ya tomada. Lo que se arregló acá
+          es tipográfico y de color, no espacial.
+        </p>
+      </div>
+
+      <p class="note">
+        La medición del perfil es la del jugador, que es la cuenta por la que el cliente se quejó.
+        Una cuenta de staff no tiene tarjeta de membresía y conserva un hueco mayor en su columna
+        izquierda; está anotado en «Lo que falta».
+      </p>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>2 · Perfil — el «perfil genérico»</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-profile.png" alt="Perfil antes del cambio" />
+          <figcaption><b>Antes</b>Banda roja de 100px sobre el borde de la tarjeta, tres insignias, «Sin foto cargada», y una columna izquierda que termina a media pantalla.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-profile.png" alt="Perfil después del cambio" />
+          <figcaption><b>Después</b>Hombro de caucho con el antetítulo en amarillo, una insignia que puede variar, y la membresía real del club debajo de la identidad.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">El único gesto de marca era el gesto prohibido.</p>
+          <p class="why">
+            La tarjeta de identidad dibujaba una banda roja de 100px con <code>clip-path</code>
+            sobre su borde superior. <code>DESIGN.md</code> lo prohíbe por nombre: <em>«es el
+            recurso más repetido de las interfaces genéricas y es exactamente el reproche que
+            originó este sistema»</em>. Además gastaba el rojo —el token reservado para la acción—
+            en 100px de decoración, al lado de un botón que era rojo por un motivo real. Ahora lleva
+            el <strong>hombro de caucho</strong> (D7), con el antetítulo en amarillo, y es la única
+            tarjeta de la pantalla que lo lleva. El avatar sigue puenteando un borde; ahora el de
+            caucho. De paso, el contraste: la banda obligaba a 112px de relleno para que ningún
+            texto cayera sobre ella (tinta sobre rojo mide 3.6:1); amarillo sobre caucho mide
+            13.13:1 y es el par que el riel ya gasta.
+          </p>
+        </li>
+        <li>
+          <p class="what">Tres palabras para la misma persona, en una sola pantalla.</p>
+          <p class="why">
+            «Estudiante» en la insignia, «Alumno» en la lista de roles y «Jugador» en el kit. D9 ya
+            había unificado en <strong>Jugador</strong>, la palabra que la persona leyó el día que
+            entró al club, y <code>IdentityCell</code> la usaba desde entonces; las dos funciones de
+            <code>auth-utils.ts</code> eran las últimas rezagadas. El pie del riel también dice
+            «Jugador» ahora, porque sale de la misma función. Se movió <strong>la palabra</strong> y
+            nada más: la ruta sigue siendo <code>/student</code> y el enum del backend sigue siendo
+            <code>ALUMNO</code>.
+          </p>
+        </li>
+        <li>
+          <p class="what">El club no aparecía, y no era por falta de datos.</p>
+          <p class="why">
+            La pantalla ya llamaba a <code>fetchStudentPortal()</code>, y ese payload traía
+            <code>categoria</code>, <code>modalidad</code>, <code>fechaActivacion</code>,
+            <code>fechaFin</code> y <code>recentSessions</code>. Se leía el estado y la fecha de
+            nacimiento; el resto se descartaba. Eso es el «perfil genérico» completo: datos
+            tirados, no datos faltantes. La tarjeta «Tu membresía» los pone en pantalla
+            <strong>sin una sola llamada nueva</strong> —hay un test que fija que la cuenta de
+            llamadas sigue siendo una— y sin inventar nada: para la cuenta capturada el payload no
+            trae fecha de fin, así que esa fila no existe.
+          </p>
+        </li>
+        <li>
+          <p class="what">Nombraba ausencias donde el sistema dice que no se nombran.</p>
+          <p class="why">
+            «Foto de perfil: Sin foto cargada» explicaba con una frase lo que el avatar de al lado
+            ya mostraba, y «Miembro desde —» le daba una línea, una etiqueta y una raya a un dato
+            que no existe. La celda de identidad nunca nombra una ausencia: las dos se fueron, y la
+            fecha se dibuja solo cuando la hay. «Cuenta activa» también, por otro motivo: era
+            verdad, pero era <strong>infalsificable</strong> —nadie la vio nunca ausente ni la verá—
+            y una insignia que no puede variar es una decoración con forma de estado.
+          </p>
+        </li>
+        <li>
+          <p class="what">Dos botones rojos a la vez, y una acción con dos nombres.</p>
+          <p class="why">
+            Con el staff editando su teléfono había dos rojos en pantalla: «Guardar» en el
+            encabezado y «Cambiar foto» en la tarjeta. «Cambiar foto» pasó a secundario —la acción
+            primaria vive en el encabezado— y hay un test que cuenta los rojos de la pantalla y
+            exige exactamente uno. Aparte, el mismo <code>logout()</code> existía dos veces, como
+            «Cerrar sesión» en la tarjeta y como «Salir» en Seguridad. Queda una sola vez, en
+            Seguridad, que es donde ya viven las otras dos acciones de sesión, y con la palabra que
+            nombra el acto.
+          </p>
+        </li>
+        <li>
+          <p class="what">Ningún título de tarjeta estaba en su paso.</p>
+          <p class="why">
+            Los tres <code>h2</code> eran <code>text-sm font-bold</code>: 13.5px de Barlow, que es
+            el paso <em>denso</em>, el tamaño de una celda de tabla. O sea que el título de una
+            tarjeta y los valores de adentro medían lo mismo y se distinguían solo por el grosor.
+            Ahora toman el paso <code>title</code> —Graduate, 20px, versalitas— que es la misma
+            corrección que <code>PageHeader</code> ya había hecho un nivel más arriba. Sin clase de
+            peso: Graduate tiene un solo corte de 400, y pedirle negrita hace que el navegador la
+            falsifique.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>3 · Login — la primera pantalla que ve cualquiera</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-login.png" alt="Login antes del cambio" />
+          <figcaption><b>Antes</b>El lema del club en Barlow ExtraBold, el título en Barlow, y seis elementos rojos de los cuales uno solo era la acción.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-login.png" alt="Login después del cambio" />
+          <figcaption><b>Después</b>El lema en Playfair, el título en Graduate, un solo rojo de acción y dos enlaces que se leen como enlaces.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">La voz del club estaba en la tipografía de la interfaz.</p>
+          <p class="why">
+            «Formando campeones para la vida» es literalmente el club hablando en primera persona,
+            que es el único trabajo que <code>DESIGN.md</code> le da a Playfair. Playfair estaba
+            cargada en todas las rutas y <strong>no se usaba en ningún archivo de
+            <code>src/</code></strong>: una familia de marca comprada, servida y gastada en nada. El
+            lema la toma ahora, en el paso <code>voice</code> —que también hubo que crear, porque
+            <code>DESIGN.md</code> lo declara desde el principio y la escala de Tailwind nunca lo
+            tuvo—. El título de la tarjeta pasó a Graduate, que es el mismo defecto que ya se había
+            arreglado en <code>PageHeader</code>.
+          </p>
+        </li>
+        <li>
+          <p class="what">La medida se volvió a derivar midiendo, no estimando.</p>
+          <p class="why">
+            El <code>clamp(25rem, 72%, 44rem)</code> del bloque de marca estaba calibrado contra
+            Barlow ExtraBold a 46px, y Playfair pone otro ancho por carácter. Se midió en Chromium
+            contra el woff2 que sirve el producto: el lema mide <strong>507px</strong> sin cortar en
+            el techo de 31px del clamp, su primera línea natural («“Formando campeones») mide
+            <strong>326px</strong>, y la línea de apoyo de abajo mide <strong>350px</strong>. De ahí
+            sale <code>clamp(22.5rem, 72%, 31rem)</code> = 360px…496px: 10px de aire sobre la línea
+            de apoyo en el piso, 11px por debajo del ancho en que el lema colapsa a una sola línea
+            en el techo. Resultado: dos líneas en todos los anchos desde <code>split</code>, donde
+            antes derivaba de 3 a 2 a 1. En teléfono el tope pasó de <code>15ch</code> —que contra
+            Playfair da ~150px y lo parte en cuatro— a 16rem, medido igual.
+          </p>
+        </li>
+        <li>
+          <p class="what">Seis elementos rojos, uno solo era la acción.</p>
+          <p class="why">
+            El antetítulo, los dos enlaces, las dos líneas de error y el botón, todos del mismo
+            color y con tres comportamientos distintos. El antetítulo perdió el rojo (es una
+            microetiqueta que orienta y no se aprieta). Los errores pasaron a
+            <code>state-bad</code>, que es la tinta de error de la rampa —y de paso arregla un
+            problema de contraste real: <code>cata-red</code> como texto mide 4.10:1 sobre papel y
+            no llega a AA—. Queda un rojo de acción: el botón.
+          </p>
+        </li>
+        <li>
+          <p class="what">Los enlaces no parecían enlaces.</p>
+          <p class="why">
+            Ni subrayado ni flecha, y con el mismo peso que un error. <code>DESIGN.md</code> es
+            explícito: <em>«Lo que navega no es un botón: es un enlace subrayado en rojo, con flecha
+            cuando apunta a otra pantalla»</em>. Los dos van a otra pantalla, así que los dos llevan
+            flecha. El rojo que toman es <code>red-dark</code>, que es el que el sistema reserva
+            para texto por la misma medición de arriba. El subrayado es lo que separa los dos
+            trabajos del color: el botón se aprieta, los enlaces se siguen. El enlace de
+            «Inscríbase» sigue sin piso de 24px a propósito: la SC 2.5.8 de WCAG 2.2 exime a un
+            enlace embebido en una oración, y ponérselo abriría la línea que lo contiene.
+          </p>
+        </li>
+        <li>
+          <p class="what">El fallo de credenciales no dejaba marca en el formulario.</p>
+          <p class="why">
+            Una contraseña incorrecta producía un toast y nada más: unos segundos después, con el
+            toast ya ido, la pantalla era idéntica a una que nunca se envió. El toast sigue siendo
+            el canal que <strong>anuncia</strong> —hay dos tests que lo fijan, y también que no
+            vuelva la caja <code>.alert-error</code>—, y lo que se agrega es lo que queda cierto
+            después: borde de estado en los dos campos, <code>aria-invalid</code>, y un mensaje
+            debajo. Se borra en cuanto la persona toca cualquiera de los dos campos.
+          </p>
+        </li>
+      </ul>
+
+      <div class="call">
+        <span class="tag">Decisión tomada sola</span>
+        <p>
+          <strong>El campo se marca solo cuando el error es del campo.</strong> De los seis tipos de
+          fallo que el login distingue, únicamente <code>invalid_credentials</code> pinta los campos.
+          Un timeout, un backend caído o un servidor mal configurado no son la tecleada de nadie, y
+          pintarle los campos de rojo a alguien manda a revisar algo que nunca estuvo mal. El mensaje
+          tampoco dice cuál de las dos mitades falló, porque el backend responde igual para un correo
+          inexistente que para una contraseña equivocada: distinguirlos le diría a un desconocido qué
+          cuentas existen.
+        </p>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>4 · Estado flaco</h2>
+
+      <p>
+        La regla del estado flaco pide diseñar primero con el socio nuevo. Acá el dataset de QA lo
+        entrega solo: <strong>ninguna</strong> de las cuatro cuentas de jugador sembradas tiene
+        asistencias registradas, y ninguna membresía trae fecha de fin. Las capturas de arriba
+        <em>son</em> el estado flaco.
+      </p>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Dato del payload</th>
+              <th>En QA</th>
+              <th>Qué dibuja la pantalla</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>membership.categoria</code></td>
+              <td><span class="badge ok">Presente</span></td>
+              <td>Fila «Plan» — «Mensual Infantil».</td>
+            </tr>
+            <tr>
+              <td><code>membership.fechaActivacion</code></td>
+              <td><span class="badge ok">Presente</span></td>
+              <td>Fila «Socio desde» — 13/08/2026.</td>
+            </tr>
+            <tr>
+              <td><code>membership.modalidad</code></td>
+              <td><span class="badge warn">Redundante</span></td>
+              <td>Ninguna fila. El nombre del plan ya dice «Mensual».</td>
+            </tr>
+            <tr>
+              <td><code>membership.fechaFin</code></td>
+              <td><span class="badge neutral">Ausente</span></td>
+              <td>Ninguna fila. No hay «Vigente hasta —».</td>
+            </tr>
+            <tr>
+              <td><code>recentSessions</code></td>
+              <td><span class="badge neutral">Vacío</span></td>
+              <td>Ninguna tarjeta. La lista existe y está cubierta por test.</td>
+            </tr>
+            <tr>
+              <td><code>membershipPlans</code></td>
+              <td><span class="badge ok">Presente</span></td>
+              <td>Nada. Es el catálogo del club, no un dato de la persona.</td>
+            </tr>
+            <tr>
+              <td><code>membership.montoAplicado</code></td>
+              <td><span class="badge ok">Presente</span></td>
+              <td>Nada, a propósito — ver abajo.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="call">
+        <span class="tag">Decisión tomada sola</span>
+        <p>
+          <strong>La modalidad se dibuja solo cuando dice algo que el plan no dice.</strong> Todos
+          los planes que el club vende hoy se llaman por cómo se cobran —«Mensual Infantil» con
+          modalidad <code>MENSUAL</code>, «Mensual Adultos» igual—, así que poner las dos es la misma
+          palabra dos veces bajo dos etiquetas: el mismo defecto que esta pantalla vino a arreglar,
+          en chiquito. No se borró el campo, se condicionó: <code>PERSONALIZADA</code> contra un plan
+          llamado por su temporada sí es una fila que aporta, y hay un test para cada rama.
+        </p>
+      </div>
+
+      <div class="call">
+        <span class="tag">Decisión tomada sola</span>
+        <p>
+          <strong>La plata no entra al perfil.</strong> <code>montoAplicado</code> («25.00») viene en
+          el payload y se dejó afuera: un número solo no dice si está pagado, si se debe o si está
+          vencido, y «Mis pagos» existe para responder exactamente eso. Un dato que no sirve para
+          decidir ni para encontrar no entra.
+        </p>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>5 · Lo que falta</h2>
+
+      <ul class="findings">
+        <li>
+          <p class="what">El hueco de la columna izquierda en una cuenta de staff.</p>
+          <p class="why">
+            Con la tarjeta de membresía, la columna del jugador llega a ~660px contra los ~810px del
+            espacio de trabajo. Una cuenta de administrador o entrenador no tiene membresía, así que
+            su columna sigue terminando antes. <strong>No se tapó estirando una tarjeta</strong>: la
+            regla del aire (<em>«una tarjeta estirada empuja su acción al pie con
+            <code>margin-top: auto</code>»</em>) sirve cuando algo estira la tarjeta de verdad —una
+            fila de hermanas de igual alto—, y acá el sobrante es de la columna, no de la tarjeta.
+            Estirar la de identidad 400px para que su pie quede abajo cambia un agujero en el lienzo
+            por un agujero adentro de una tarjeta. Queda medido y sin arreglar hasta que haya un dato
+            honesto que ponerle.
+          </p>
+        </li>
+        <li>
+          <p class="what">La lista de asistencias no se pudo fotografiar.</p>
+          <p class="why">
+            «Últimas asistencias» está escrita y probada, pero ninguna cuenta del dataset de QA tiene
+            asistencias, así que no aparece en ninguna captura. Se verifica con test (fecha, horario y
+            estado de dos sesiones) y no con imagen. Sembrar asistencias habría alterado los datos
+            contra los que se midió el antes.
+          </p>
+        </li>
+        <li>
+          <p class="what">«No disponible — consulte con administración» sigue en pie.</p>
+          <p class="why">
+            Es otra ausencia con nombre, pero vive en una fila de dato, no en la celda de identidad,
+            y es honesta por un motivo real: <code>fetchMemberships</code> devuelve lista vacía tanto
+            cuando no hay membresía como cuando la consulta fue rechazada, y las dos cosas no se
+            pueden colapsar en «sin membresía». Reemplazarla pide distinguir esos dos casos en el
+            backend. Fuera de alcance de un cambio visual.
+          </p>
+        </li>
+        <li>
+          <p class="what">«Estudiante» sigue vivo en otras cuatro pantallas.</p>
+          <p class="why">
+            La unificación en «Jugador» tocó las dos funciones de <code>auth-utils.ts</code>, que son
+            las que alimentan el perfil y el pie del riel. Los literales de
+            <code>payments-adapter</code>, <code>members-utils</code>, <code>enroll-utils</code> y
+            los filtros de asistencia son vocabularios propios de sus pantallas y se barren en la
+            fase 4, con sus propias capturas.
+          </p>
+        </li>
+        <li>
+          <p class="what">El 23% de aire muerto del login.</p>
+          <p class="why">
+            Medido, plano y explicado arriba: bajarlo exige descentrar la tarjeta o inventar
+            contenido, y ninguna de las dos cosas está permitida. Si el dueño prefiere el número
+            antes que el centrado, es una decisión suya y se revierte en una línea.
+          </p>
+        </li>
+        <li>
+          <p class="what">El paso <code>voice</code> lo estrena una sola pantalla.</p>
+          <p class="why">
+            Se agregó a la escala porque <code>DESIGN.md</code> lo declaraba y Tailwind no lo tenía,
+            y hoy lo gasta únicamente el lema del login. El resto de las pantallas donde el club
+            habla en primera persona —la bienvenida del portal, los estados vacíos— llegan en la
+            fase 4.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <h2>6 · Cómo verificarlo</h2>
+      <div class="card">
+        <p class="note" style="margin-bottom: 10px">
+          Suite completa, tipos y lint sobre este cambio:
+        </p>
+        <p style="margin-bottom: 10px"><code>npm test</code> — 186 archivos, 3064 tests, todo en verde.</p>
+        <p style="margin-bottom: 10px"><code>npm run type-check</code> — sin errores.</p>
+        <p style="margin-bottom: 0"><code>npm run lint</code> — sin advertencias.</p>
+      </div>
+      <p class="note">
+        Las capturas se regeneran con el guión de medición contra QA en
+        <code>http://localhost:3000</code>, a 1440×900, entrando como
+        <code>ana@cataclub.com</code>. El índice de todas las comparaciones está en
+        <a href="README.md">README.md</a>.
+      </p>
+    </div>
+  </body>
+</html>

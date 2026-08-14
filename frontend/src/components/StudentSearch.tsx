@@ -103,7 +103,7 @@ export default function StudentSearch({
         <Search
           size={ICON.sm}
           strokeWidth={1.5}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-cata-text/40"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
           aria-hidden="true"
         />
         <input
@@ -113,7 +113,7 @@ export default function StudentSearch({
           onFocus={() => results.length > 0 && setOpen(true)}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full rounded-lg border border-cata-border bg-white py-2.5 pl-9 pr-9 text-sm text-cata-text placeholder:text-cata-text/40 focus:border-cata-red focus:outline-none focus:ring-1 focus:ring-cata-red disabled:opacity-50"
+          className="w-full rounded-lg border border-cata-border bg-white py-2.5 pl-9 pr-9 text-sm text-cata-text placeholder:text-ink-3 focus:border-cata-red focus:outline-none focus:ring-1 focus:ring-cata-red disabled:opacity-50"
           aria-label="Buscar alumno"
           aria-autocomplete="list"
           aria-expanded={open}
@@ -124,7 +124,7 @@ export default function StudentSearch({
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-cata-text/40 hover:text-cata-text"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-3 hover:text-cata-text"
             aria-label="Limpiar búsqueda"
           >
             {/* `Loader2`, not a hand-rolled bordered circle: one spinner in

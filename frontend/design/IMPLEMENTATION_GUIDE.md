@@ -65,7 +65,7 @@ Se pueden tomar del mockup de estudiante colores, espaciado, tarjetas, jerarquí
 - La sesión se gestiona en `src/contexts/AuthContext.tsx` y se hidrata desde almacenamiento local. Durante esa hidratación debe mantenerse una interfaz de carga, no contenido protegido transitorio.
 - `src/components/ProtectedRoute.tsx` protege las pantallas en cliente: sin sesión redirige a `/login`; con rol incorrecto redirige a la ruta predeterminada del rol.
 - `src/lib/auth-utils.ts` es la fuente central de navegación y redirección: `admin` va a `/dashboard`, `trainer` a `/trainer`, y `representante`/`estudiante` a `/student`.
-- La navegación visible se deriva de `getNavLinksForRole`. Una barra lateral o encabezado inspirado en los mockups debe seguir mostrando únicamente los enlaces autorizados para el rol actual. No mostrar accesos administrativos a entrenador, representante o estudiante.
+- La navegación visible se deriva de `getNavGroupsForRoles`. Una barra lateral o encabezado inspirado en los mockups debe seguir mostrando únicamente los enlaces autorizados para los roles que la cuenta tiene — todos ellos, agrupados por sección (D12d), no solo el rol primario. No mostrar accesos administrativos a quien no es administrador.
 - Las rutas administrativas conservan `allowedRoles={["admin"]}`; las de entrenador, `allowedRoles={["trainer"]}`; las de estudiante, `allowedRoles={["representante", "estudiante"]}`.
 
 ### Datos y dominio

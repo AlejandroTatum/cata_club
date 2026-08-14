@@ -23,16 +23,19 @@
   --red:        #D92128;
   --red-dark:   #A11D22;
   --ball:       #FFD600;
-  --ball-ink:   #8A6D00;
-  /* Companion a --ball-ink para la pastilla de 10.5px/700 del marco de
-     revisión (.note .mine), que es el único lugar donde la tinta cae SOBRE
-     el amarillo. Ese par mide 3.48:1 con --ball-ink, por debajo del 4.5:1
-     que pide AA; a #6E5700 —el mismo tono, un 20% más oscuro— mide 4.91:1.
-     --ball-ink NO se toca: es espejo de `ball.ink` en tailwind.config.ts y
-     cambiarlo acá dejaría al prototipo con mejor contraste que el producto,
-     que es exactamente el desfase que este archivo debe evitar. El par
-     amarillo de la app arrastra el mismo 3.48:1 y necesita su propio arreglo. */
-  --ball-ink-strong: #6E5700;
+  /* Espejo de `ball.ink` en tailwind.config.ts. Valía #8A6D00, que fallaba
+     AA en las dos superficies que alcanza: 3.48:1 impreso SOBRE el amarillo
+     —el par para el que existe una tinta companion, la pastilla de 10.5px/700
+     de .note .mine— y 4.03:1 sobre --canvas. Sólo cumplía sobre --paper
+     (4.92:1), que es como sobrevivió sin que nadie lo midiera.
+     Este archivo llegó primero al valor correcto: tenía un --ball-ink-strong
+     #6E5700 propio, creado justamente porque el compartido no alcanzaba para
+     .note .mine. Ese token local ya no existe. Guardarlo era darle al
+     prototipo mejor contraste que al producto, que es el desfase que este
+     archivo debe evitar, así que el valor subió a la app y bajó de vuelta
+     acá como token compartido: 4.91:1 sobre --ball, 5.69:1 sobre --canvas y
+     6.94:1 sobre --paper. Un solo tono amarillo de tinta en los dos lados. */
+  --ball-ink:   #6E5700;
 
   /* --- tinta y superficies --- */
   --ink:        #17181C;
@@ -112,6 +115,15 @@
   --h-row: 60px;  --h-thead: 44px;   --h-stat: 116px;  --h-drow: 56px;
   --r-card: 14px; --r-ctl: 10px;
 
+  /* Histórico, y ya NO es espejo del producto. La app dejó Inter: su texto es
+     Barlow, sus títulos Graduate y su voz Playfair, declaradas en
+     `frontend/src/lib/fonts.ts` y montadas por el layout raíz. Esta pila se
+     conserva tal cual porque estas maquetas están archivadas y se abren como
+     HTML suelto, sin las woff2 del producto: apuntarlas a Barlow las dejaría
+     reclamando una fuente que no cargan. La autoridad tipográfica es
+     `tailwind.config.ts`; el candado de `prototipos-sistema-tokens.test.ts`
+     mide color, no tipografía, así que esta línea no la cubre nadie — de ahí
+     que lo diga acá y no en ningún lado más. */
   --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
@@ -166,7 +178,7 @@ svg { display: block; }
 .note p { margin: 0; font-size: 13.5px; color: var(--chrome-mute); max-width: 94ch; }
 .note p b { color: var(--chrome-ink); font-weight: 600; }
 .note code { font-family: var(--mono); font-size: .85em; background: var(--chrome-bg); border: 1px solid var(--chrome-line); border-radius: 4px; padding: 1px 5px; }
-.note .mine { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: var(--ball); color: var(--ball-ink-strong); margin-right: 7px; }
+.note .mine { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: var(--ball); color: var(--ball-ink); margin-right: 7px; }
 
 .foot { border-top: 1px solid var(--chrome-line); padding-top: 15px; margin-top: 6px; font-size: 12.5px; color: var(--chrome-mute); display: flex; flex-wrap: wrap; gap: 6px 20px; }
 

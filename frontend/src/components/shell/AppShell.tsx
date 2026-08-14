@@ -20,6 +20,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -44,7 +45,15 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
-import { getNavLinksForRole, getRoleLabel, getUserInitials, type NavLinkDef } from "@/lib/auth-utils";
+import {
+  getNavGroupsForRoles,
+  getRoleLabel,
+  getUserInitials,
+  userRolesFromBackendRoles,
+  type NavGroup,
+  type NavLinkDef,
+} from "@/lib/auth-utils";
+import type { UserRole } from "@/types/domain";
 import { isMinor } from "@/app/student/student-utils";
 import { normalizeText } from "@/app/members/members-utils";
 import { useNotificaciones } from "@/lib/useNotificaciones";
@@ -208,7 +217,25 @@ const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
  * `aria-hidden`/`visibility` handling is untouched.
  *
  * The labels are deliberately shorter than the sidebar's ("Panel", not "Panel
- * de Control"): a 4-up tab bar at 390px has ~90px per label.
+ * de Control"): a 4-up tab bar at 390px has ~90px per label. That is also why
+ * they are written here instead of read off `lib/destinations.ts` — the
+ * registry owns the name of a destination, and these are not names, they are
+ * what fits in 90px of one specific control.
+ *
+ * ## Why this list did not become role-aware when the rail did
+ *
+ * The rail now draws the UNION of a person's sections (D12d). The tab bar
+ * cannot: it is three slots and an overflow, and there is no evidence in this
+ * repo — no usage data, no ranking in the prototypes — for which three of an
+ * admin-and-trainer's ten destinations deserve them. Any pick would be
+ * invented, and an invented pick is worse here than a fixed one, because a tab
+ * bar that reshuffles per account is a control nobody can learn.
+ *
+ * What has to hold instead is that the bar is never the ONLY way out, and it
+ * is not: the fourth slot is "Más", which opens the same drawer, which draws
+ * the whole grouped rail. Nothing a multi-role account holds became
+ * unreachable — it is one tap further away, exactly as it already was for
+ * "/groups" or "/reports". `AppShell.test.tsx` locks that.
  */
 const MOBILE_TABS: { href: string; label: string }[] = [
   { href: "/dashboard", label: "Panel" },
@@ -296,9 +323,27 @@ export function resolveActiveHref(navLinks: NavLinkDef[], pathname: string): str
  * The brand block's second line. Prototype `_nav-admin.html` uses a fixed
  * per-area label ("Panel de gestión" for staff, "Mi cuenta" for the family
  * portal) — it names the AREA, not the current page.
+ *
+ * It reads the whole role ARRAY, the same source the rail below it is built
+ * from. It used to read the COLLAPSED role — one value picked by precedence —
+ * and D12d had already moved the rail off that value precisely because it
+ * cannot describe a person who holds more than one: a trainer who also plays
+ * was told "Panel de gestión" while the rail under him drew a "Mi cuenta"
+ * group, the shell contradicting itself two rows apart.
+ *
+ * `null` for that person, deliberately: the rail draws a rótulo per area the
+ * moment there are two of them, so the areas ARE named, correctly, 40px below.
+ * A single label there could only be half true, and the brand block is not the
+ * place to pick a favourite.
  */
-function getAreaLabel(role: string | null): string {
-  return role === "representante" || role === "estudiante" ? "Mi cuenta" : "Panel de gestión";
+export function getAreaLabel(roles: readonly UserRole[]): string | null {
+  const staff = roles.some((role) => role === "admin" || role === "trainer");
+  const family = roles.some((role) => role === "representante" || role === "estudiante");
+  if (staff && family) return null;
+  if (family) return "Mi cuenta";
+  // Includes the unauthenticated and unrecognised-role rails, which have kept
+  // this label since the prototype.
+  return "Panel de gestión";
 }
 
 /** `.nav-i` — 40px row, 10px radius, 13.5px label. */
@@ -350,14 +395,60 @@ export default function AppShell({
   // the shell only triggers it and reports its state.
   const chatOpen = useHelpChatOpen();
 
+  // The COLLAPSED role — still what the tab bar, the badge poll, the area
+  // label and the user card gate on. `pickPrimaryRole` decides it server-side
+  // and this change does not touch it: guards, redirects and permissions are
+  // behavior, and D12d is about the shape of the rail only.
   const role = session?.user.role ?? null;
   // See the equivalent comment in Header.tsx's `useNavLinks` — only an
   // "estudiante" session carries `fechaNacimiento`.
+  //
+  // Which means the age gate can only fire when "estudiante" is ALSO the
+  // primary role. A trainer who plays and is an adult gets no Ficha médica
+  // row, because his session carries no birth date to check — the same row he
+  // did not have before this change either. Widening that needs the session to
+  // carry the date for every account, which is behavior, and is issue #269.
   const studentIsAdult =
     session?.user.role === "estudiante" ? !isMinor(session.user.fechaNacimiento) : false;
+  /**
+   * The rail: every section this PERSON holds, grouped and titled. Read off
+   * `session.roles` — the whole backend role array, which the BFF has always
+   * put on the session (`buildSession`) — and not off the one collapsed role
+   * above, which is what left a trainer who also plays without his own fees.
+   *
+   * `/` is dropped here rather than in `getNavGroupsForRoles`: the brand link
+   * at the top of this sidebar already goes home, so a row for it would be the
+   * same destination twice. `Header`, which has no brand row of its own, keeps
+   * it. A group emptied by that filter is not drawn at all.
+   */
+  const heldRoles = useMemo<UserRole[]>(
+    () => (session ? userRolesFromBackendRoles(session.roles) : []),
+    [session],
+  );
+  const navGroups = useMemo<NavGroup[]>(
+    () =>
+      getNavGroupsForRoles(heldRoles, studentIsAdult)
+        .map((group) => ({ ...group, links: group.links.filter((link) => link.href !== "/") }))
+        .filter((group) => group.links.length > 0),
+    [heldRoles, studentIsAdult],
+  );
+  /** The brand block's area line — same roles, same source as the rail. */
+  const areaLabel = getAreaLabel(heldRoles);
+  /**
+   * Whether the rótulos are drawn at all.
+   *
+   * One group needs no title: it would name the entire rail, which the brand
+   * block right above it already names ("Panel de gestión" / "Mi cuenta", see
+   * `getAreaLabel`) — so a lone "Mi cuenta" heading would put the same two
+   * words twice within 60px of each other. A heading earns its line the moment
+   * there is a second group to tell it apart from.
+   */
+  const showGroupHeadings = navGroups.length > 1;
+  // The rail flattened: `resolveActiveHref` and the command palette both ask
+  // about the whole rail, not about one group of it.
   const navLinks = useMemo<NavLinkDef[]>(
-    () => getNavLinksForRole(role, studentIsAdult).filter((link) => link.href !== "/"),
-    [role, studentIsAdult],
+    () => navGroups.flatMap((group) => group.links),
+    [navGroups],
   );
   const activeHref = useMemo(
     (): string | null => resolveActiveHref(navLinks, pathname),
@@ -369,6 +460,10 @@ export default function AppShell({
    * The tab bar is the admin's phone navigation. Other roles keep the
    * hamburger: a trainer has two destinations, and a 4-up bar with two empty
    * slots is worse than a menu.
+   *
+   * Still gated on the COLLAPSED role, deliberately — see `MOBILE_TABS`. An
+   * account that administers gets the bar whatever else it also is, and
+   * everything the bar does not fit stays in the drawer behind "Más".
    */
   const showMobileTabs = role === "admin";
   const activeTab = MOBILE_TABS.find(
@@ -390,6 +485,64 @@ export default function AppShell({
   }, [navLinks, query]);
 
   const paletteOptionId = (index: number): string => `${paletteListId}-option-${index}`;
+
+  /**
+   * One `.nav-i` row. Extracted verbatim from the rail's old flat `.map` when
+   * the rail became a list of GROUPS: a row is now drawn from two places
+   * (inside a titled group, or directly under the nav when there is only one),
+   * and a row that looked different depending on which was the whole point of
+   * not duplicating it.
+   */
+  function renderNavRow(link: NavLinkDef): React.ReactElement {
+    const isActive = link.href === activeHref;
+    const Icon = NAV_ICON_MAP[link.href] ?? User;
+    const badge = link.href === COUNT_BADGE_HREF ? pendingPayments : null;
+    const showBadge = badge !== null && badge > 0;
+    return (
+      <Link
+        key={link.href}
+        href={link.href}
+        onClick={(): void => setSidebarOpen(false)}
+        aria-current={isActive ? "page" : undefined}
+        title={link.label}
+        // The label span is hidden at `lg` while collapsed, and a native
+        // `title` tooltip is not reliably exposed to assistive technology —
+        // the accessible name has to survive on its own.
+        aria-label={showBadge ? `${link.label} — ${badge} pendientes` : link.label}
+        className={`${NAV_ITEM_CLASSES} ${
+          isActive ? NAV_ITEM_ACTIVE_CLASSES : NAV_ITEM_IDLE_CLASSES
+        }`}
+      >
+        {isActive && (
+          // `.nav-i.on::before` — 3px red bar pinned to the row's left edge.
+          <span
+            className="absolute inset-y-[9px] left-0 w-[3px] rounded-r-[3px] bg-cata-red"
+            aria-hidden="true"
+          />
+        )}
+        <Icon size={ICON.base} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+        <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>{link.label}</span>
+        {showBadge && (
+          // `.nav-i .cnt` — count is already in the accessible name above.
+          <span
+            className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-cata-red px-1.5 text-2xs tracking-flat font-bold text-white"
+            aria-hidden="true"
+          >
+            {badge}
+          </span>
+        )}
+        {isActive && !showBadge && (
+          // `.nav-i.on::after` — the yellow ball marks the current row.
+          <span
+            className={`ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-ball ${
+              collapsed ? "lg:hidden" : ""
+            }`}
+            aria-hidden="true"
+          />
+        )}
+      </Link>
+    );
+  }
 
   // Ctrl+K / Cmd+K opens the "go to" command palette from anywhere in the shell.
   useEffect((): (() => void) => {
@@ -531,9 +684,11 @@ export default function AppShell({
               {/* 50%, not the spec's 42%: white at 0.42 over `coal` composites
                   to 4.10:1, under AA. At 0.50 it measures 5.36:1 and still
                   reads as the quieter second line under the club name. */}
-              <span className="mt-px block truncate text-2xs font-bold uppercase text-white/50">
-                {getAreaLabel(role)}
-              </span>
+              {areaLabel && (
+                <span className="mt-px block truncate text-2xs font-bold uppercase text-white/50">
+                  {areaLabel}
+                </span>
+              )}
             </span>
           </Link>
           <button
@@ -572,54 +727,39 @@ export default function AppShell({
           className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-3"
           aria-label="Navegación principal"
         >
-          {navLinks.map((link): React.ReactElement => {
-            const isActive = link.href === activeHref;
-            const Icon = NAV_ICON_MAP[link.href] ?? User;
-            const badge = link.href === COUNT_BADGE_HREF ? pendingPayments : null;
-            const showBadge = badge !== null && badge > 0;
+          {navGroups.map((group): React.ReactElement => {
+            const rows = group.links.map(renderNavRow);
+            // A single group is drawn exactly as the rail always was — same
+            // rows, same parent, no wrapper — so nothing about the one-role
+            // sidebar changes shape on the way through here.
+            if (!showGroupHeadings || group.heading === null) {
+              return <Fragment key={group.heading ?? "principal"}>{rows}</Fragment>;
+            }
             return (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={(): void => setSidebarOpen(false)}
-                aria-current={isActive ? "page" : undefined}
-                title={link.label}
-                // The label span is hidden at `lg` while collapsed, and a
-                // native `title` tooltip is not reliably exposed to assistive
-                // technology — the accessible name has to survive on its own.
-                aria-label={showBadge ? `${link.label} — ${badge} pendientes` : link.label}
-                className={`${NAV_ITEM_CLASSES} ${
-                  isActive ? NAV_ITEM_ACTIVE_CLASSES : NAV_ITEM_IDLE_CLASSES
-                }`}
+              <div
+                key={group.heading}
+                // Named, not just visually titled: the rótulo is what tells a
+                // trainer who also plays which of the two "Asistencias" in his
+                // rail is his own, and a screen reader gets that from the
+                // group's name rather than from the heading's position.
+                role="group"
+                aria-label={group.heading}
+                className="flex flex-col gap-0.5"
               >
-                {isActive && (
-                  // `.nav-i.on::before` — 3px red bar pinned to the row's left edge.
-                  <span
-                    className="absolute inset-y-[9px] left-0 w-[3px] rounded-r-[3px] bg-cata-red"
-                    aria-hidden="true"
-                  />
-                )}
-                <Icon size={ICON.base} strokeWidth={2} className="shrink-0" aria-hidden="true" />
-                <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>{link.label}</span>
-                {showBadge && (
-                  // `.nav-i .cnt` — count is already in the accessible name above.
-                  <span
-                    className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-cata-red px-1.5 text-2xs tracking-flat font-bold text-white"
-                    aria-hidden="true"
-                  >
-                    {badge}
-                  </span>
-                )}
-                {isActive && !showBadge && (
-                  // `.nav-i.on::after` — the yellow ball marks the current row.
-                  <span
-                    className={`ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-ball ${
-                      collapsed ? "lg:hidden" : ""
-                    }`}
-                    aria-hidden="true"
-                  />
-                )}
-              </Link>
+                {/* The same micro-label as the brand block's second line —
+                    `text-white/50`, whose comment above records why 42% is not
+                    an option (4.10:1, under AA) and 50% is (5.36:1). It hides
+                    with the labels when the rail collapses to 76px: a rótulo
+                    over a column of bare icons titles nothing. */}
+                <p
+                  className={`px-3 pb-0.5 pt-3 text-2xs font-bold uppercase text-white/50 ${
+                    collapsed ? "lg:hidden" : ""
+                  }`}
+                >
+                  {group.heading}
+                </p>
+                {rows}
+              </div>
             );
           })}
         </nav>

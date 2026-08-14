@@ -34,7 +34,7 @@
  *
  * ## Defense in depth against a minor `estudiante` typing the URL directly
  *
- * The nav entry (`getNavLinksForRole` in `src/lib/auth-utils.ts`) already
+ * The nav entry (`getNavGroupsForRoles` in `src/lib/auth-utils.ts`) already
  * hides this destination from a minor `estudiante` session. A minor who
  * reaches the URL anyway is redirected to `/student` the moment the portal
  * fetch resolves — the backend would 403 the ficha médica call regardless
@@ -112,6 +112,10 @@ function RepresentanteMedicalRecordView({
         icon={<Stethoscope size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron estudiantes asociados a esta cuenta"
         description="Agregue un hijo o dependiente para ver y corregir su ficha médica."
+        // `fill` because this is the page's ONLY block: without it the
+        // statement sits at the top of a window whose remaining 600px stay
+        // blank, which is the reproche this pass exists to close (D11b).
+        fill
         action={
           <Link href="/student/add-dependent" className={buttonClasses("secondary", "sm")}>
             Agregar hijo o dependiente
@@ -132,18 +136,18 @@ function RepresentanteMedicalRecordView({
         onChange={setSelectedId}
       />
 
-      {/* Names whose record is on screen — `MedicalRecordEditor`'s own
-          heading below just says "Ficha médica", which a guardian reading two
-          children's records one click apart cannot tell apart on its own. */}
-      <section className="card p-5" aria-label={`Ficha médica de ${studentName}`}>
-        <h2 className="text-base font-bold tracking-tight text-ink">
-          Ficha médica de {studentName}
-        </h2>
-        <p className="mt-1 text-sm text-ink-3">
-          Alergias, enfermedades, tipo de sangre y contacto de emergencia. Los cambios se guardan
-          de inmediato.
-        </p>
-      </section>
+      {/* D11c: this used to be a card of its own above the editor, and it was
+          the third heading in a row naming the same thing — the page's own h1
+          says "Ficha médica", the editor's pinned header says it again, and
+          this said it a third time with the student's name attached. Its
+          paragraph was worse: it restated the page subtitle in different
+          words, which is the exact repetition D11c forbids ("ninguna ayuda
+          repite el subtítulo: si lo repite, sobra una de las dos").
+
+          What it was actually FOR — telling a guardian which of two children's
+          records is on screen — is already done, and done better, by the
+          editor's own `sticky` header, because that one survives the fields
+          scrolling under it. `studentName` below is what feeds it. */}
 
       {/* The reused admin editor — see the file header for why this is not a
           second implementation. `key` forces a fresh mount per persona, so
@@ -210,7 +214,20 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
       : "Consulte y corrija sus propios datos de salud.";
 
   return (
-    <AppShell title="Ficha médica" subtitle={subtitle}>
+    // `measure="short"` (D11b): this screen measured the worst dead air in the
+    // product — 57% as an adult titular, 42% as a guardian, at 1440x900 — and
+    // it is the one place where that is PURE layout. Five controls that never
+    // grow with data were being drawn on `max-w-8xl`, the product's WIDEST
+    // measure, for its narrowest content: a 1356px column carrying a 300px
+    // form.
+    //
+    // `short` is the instrument `AppShell` already documents for exactly this
+    // shape, and until now only `/discounts` and `/groups` used it. It is
+    // honest about what it does: the canvas under the last card does not
+    // shrink, the block above it stops reading as a page that ran out of rows.
+    // There is nothing else to put here — no history, no trend, no "última
+    // actualización" — and inventing one would break D14's own rule.
+    <AppShell title="Ficha médica" subtitle={subtitle} measure="short">
       {state.status === "loading" && (
         <div className="card">
           <LoadingState label="Cargando su cuenta…" />

@@ -29,13 +29,16 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: vi.fn(),
 }));
 
-// The shell is stubbed so these tests stay about the FORM. Its two class
-// constants are re-exported as-is, since the page applies them to its inputs
-// and labels; see ResetPasswordPage.test.tsx for coverage of the real shell.
-vi.mock("@/components/auth/AuthShell", () => ({
+// The shell is stubbed so these tests stay about the FORM. Only the COMPOSITION
+// is replaced; every class constant comes through from the real module, because
+// the link skin is one of them now and "the links look like links" below reads
+// it. Stubbing those to "" would make that case pass against nothing. See
+// ResetPasswordPage.test.tsx for coverage of the real shell.
+vi.mock("@/components/auth/AuthShell", async () => ({
+  ...(await vi.importActual<typeof import("@/components/auth/AuthShell")>(
+    "@/components/auth/AuthShell",
+  )),
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  AUTH_INPUT_CLASSES: "",
-  AUTH_LABEL_CLASSES: "",
 }));
 
 const mockShowError = vi.fn();
@@ -279,5 +282,129 @@ describe("LoginPage", () => {
       expect(mockReplace).toHaveBeenCalledWith("/dashboard");
       vi.useRealTimers();
     });
+  });
+});
+
+/**
+ * The failure that left the form looking untouched.
+ *
+ * A wrong password produced a toast and nothing else: the two fields stayed
+ * exactly as they were, so a few seconds later — once the toast had gone —
+ * the screen was indistinguishable from one that had never been submitted.
+ * The person is left holding a form that looks fine and a memory of a message.
+ *
+ * The toast is NOT being replaced, and the two tests above still hold it as
+ * the channel that ANNOUNCES the failure: it is the thing that moves, and it
+ * carries the recovery sentence. What is added is the part that has to still
+ * be true after it fades — `DESIGN.md`'s field-error contract: *"Error: borde
+ * en el rojo de estado, con el mensaje debajo diciendo qué pasó y cómo
+ * arreglarlo."* No `.alert-error` box comes back with it; that was a
+ * full-width banner, and this is the field reacting.
+ */
+describe("LoginPage — the failed credentials leave a mark on the form", () => {
+  it("marks both fields and keeps a message under them after the toast is gone", async () => {
+    const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "invalid_credentials" });
+    mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+    render(<LoginPage />);
+    submitLoginForm();
+
+    const email = screen.getByLabelText("Correo electrónico");
+    const password = screen.getByLabelText("Contraseña");
+    await waitFor(() => expect(email).toHaveAttribute("aria-invalid", "true"));
+    expect(password).toHaveAttribute("aria-invalid", "true");
+
+    // One message for the pair, under the second field: the failure is about
+    // the COMBINATION, and the backend deliberately never says which half was
+    // wrong (naming it would confirm which accounts exist).
+    const message = screen.getByTestId("credentials-error");
+    expect(message).toHaveTextContent(/no coinciden/i);
+    expect(password.getAttribute("aria-describedby")).toContain(message.id);
+
+    // The banner the #51 decision retired stays retired.
+    expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
+  });
+
+  it("blames nobody's typing when the server is the one that failed", async () => {
+    // `backend_unavailable` is not a wrong password. Painting the fields red
+    // would tell the person to re-check something that was never the problem.
+    const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "backend_unavailable" });
+    mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+    render(<LoginPage />);
+    submitLoginForm();
+
+    await waitFor(() => expect(mockShowError).toHaveBeenCalled());
+    expect(screen.getByLabelText("Correo electrónico")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.queryByTestId("credentials-error")).not.toBeInTheDocument();
+  });
+
+  it("clears the mark as soon as the person starts fixing it", async () => {
+    const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "invalid_credentials" });
+    mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+    render(<LoginPage />);
+    submitLoginForm();
+    await screen.findByTestId("credentials-error");
+
+    fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "otra-clave" } });
+
+    // An error that outlives the thing it describes trains people to ignore it.
+    expect(screen.queryByTestId("credentials-error")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Contraseña")).toHaveAttribute("aria-invalid", "false");
+  });
+
+  it("states a field error in the state red, not in the action red", () => {
+    // `cata-red` is the fill of the button 40px below, and as TEXT it measures
+    // 4.10:1 on paper — under AA. `state-bad` is the ramp's error ink, defined
+    // to be read on this surface, and it stops an error line from looking like
+    // one more thing to press.
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth());
+
+    render(<LoginPage />);
+    fireEvent.submit(
+      screen.getByRole("button", { name: /iniciar sesión/i }).closest("form") as HTMLFormElement,
+    );
+
+    const alert = screen.getByText("Ingrese su correo electrónico.");
+    expect(alert.className).toContain("text-state-bad");
+    expect(alert.className).not.toContain("text-cata-red");
+  });
+});
+
+/**
+ * *"Lo que navega no es un botón: es un enlace subrayado en rojo, con flecha
+ * cuando apunta a otra pantalla."*
+ *
+ * Both links on this card were red, bold and bare — the same weight as an
+ * error line and the same colour as the submit button, with nothing to say
+ * they were links at all. Underlining them is what separates the two things
+ * that share the colour: one is pressed, the others are followed.
+ *
+ * `red-dark` rather than `red`: red-on-paper measures 4.10:1 and fails AA at
+ * this size, which is the reason `DESIGN.md` writes *"Como texto se usa su
+ * versión oscura"*.
+ */
+describe("LoginPage — the links look like links", () => {
+  beforeEach(() => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth());
+    render(<LoginPage />);
+  });
+
+  it("underlines both, in the readable shade of the brand red", () => {
+    for (const name of [/olvidó su contraseña/i, /inscríbase/i]) {
+      const link = screen.getByRole("link", { name });
+      expect(link.className).toContain("underline");
+      expect(link.className).toContain("text-cata-red-dark");
+    }
+  });
+
+  it("gives each one the arrow that says it leads off this screen", () => {
+    // Both go somewhere else — /forgot-password and /student/enroll — which is
+    // exactly the case the rule reserves the arrow for.
+    for (const name of [/olvidó su contraseña/i, /inscríbase/i]) {
+      const link = screen.getByRole("link", { name });
+      expect(link.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+    }
   });
 });

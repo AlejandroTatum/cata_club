@@ -134,6 +134,66 @@ describe("EmptyState — the surface it sits on", () => {
   });
 });
 
+/**
+ * D11b turned dead air into a measured number, and `/members` reports 25% —
+ * 227px — the moment a search finds nobody: the empty-state card keeps the
+ * height of its own three short lines and the rest of the column stays bare
+ * canvas underneath it.
+ *
+ * `fill` is the answer, and it is a LAYOUT prop: the three parts D11 requires —
+ * what is missing, why, what to do — are untouched. The card stretches to the
+ * column it stands in, so the surplus lands INSIDE the surface as air instead
+ * of under it as a hole.
+ *
+ * Why the statement is centred and not pinned to the foot: the repo already
+ * measured the alternative. `SessionCard.tsx:26-29` records QA rejecting
+ * exactly that treatment — "`mt-auto` on the actions left the surplus stranded
+ * as dead air in the middle instead of respiro under them" — on a card whose
+ * body did not grow to meet it. An empty state never grows, so it is that case
+ * by definition. Splitting the surplus above and below reads as deliberate
+ * air; pooling it all between the description and its button reads as the same
+ * hole moved indoors.
+ */
+describe("EmptyState — the stretched card (D11b)", () => {
+  it("does not stretch by default, so no existing caller's layout moves", () => {
+    const { container } = render(<EmptyState title="Sin registros" />);
+    expect(container.firstElementChild).not.toHaveClass("flex-1");
+    expect(container.firstElementChild).not.toHaveClass("justify-center");
+  });
+
+  it("stretches to its column so the surplus falls inside the surface", () => {
+    const { container } = render(<EmptyState title="Sin registros" fill />);
+    expect(container.firstElementChild).toHaveClass("flex-1");
+  });
+
+  it("splits the surplus above and below the statement instead of pooling it at one end", () => {
+    const { container } = render(<EmptyState title="Sin registros" fill />);
+    expect(container.firstElementChild).toHaveClass("justify-center");
+  });
+
+  it("keeps the three parts together — the action never drifts to the foot", () => {
+    // The action sits 4px under the body copy (`29-estados.html:67-72`), and
+    // stretching the card is not a licence to move it: `mt-auto` is the
+    // treatment SessionCard's own QA note rejected.
+    const { container } = render(
+      <EmptyState
+        title="No se encontraron miembros"
+        description="Ningún miembro coincide con la búsqueda."
+        action={<Button>Limpiar búsqueda</Button>}
+        fill
+      />,
+    );
+    const action = screen.getByRole("button", { name: "Limpiar búsqueda" }).parentElement;
+    expect(action).toHaveClass("mt-1");
+    expect(action).not.toHaveClass("mt-auto");
+  });
+
+  it("still draws its own surface when it stretches", () => {
+    const { container } = render(<EmptyState title="Sin registros" fill />);
+    expect(container.firstElementChild).toHaveClass("card");
+  });
+});
+
 function sourceFiles(dir: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(dir)) {

@@ -1,8 +1,10 @@
 /**
  * Header — Top navigation bar for Cata Club Admin
  *
- * Navigation links use the canonical getNavLinksForRole() helper
- * so the nav contract is always consistent across the app.
+ * Navigation links use the canonical getNavGroupsForRoles() helper
+ * so the nav contract is always consistent across the app. This bar draws
+ * them flat: the rótulos of D12d are the sidebar rail’s answer to more than
+ * one role, and a horizontal strip has nowhere to put one.
  *
  *  - Unauthenticated: only Inicio and Iniciar Sesión.
  *  - Admin: Admin + Members + Payments.
@@ -36,7 +38,11 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
-import { getNavLinksForRole, type NavLinkDef } from "@/lib/auth-utils";
+import {
+  getNavGroupsForRoles,
+  userRolesFromBackendRoles,
+  type NavLinkDef,
+} from "@/lib/auth-utils";
 import { isMinor } from "@/app/student/student-utils";
 import { hidesTopHeader } from "@/lib/shell-routes";
 import { useDismissablePopup } from "@/lib/useDismissablePopup";
@@ -54,7 +60,7 @@ interface NavLink {
 
 /**
  * Map canonical href → lucide icon component.
- * Single source of truth for icon assignment — maps what getNavLinksForRole
+ * Single source of truth for icon assignment — maps what getNavGroupsForRoles
  * returns to the UI layer.
  *
  * The set is the one named in the plan (Fase 1, item 4): layout-grid, users,
@@ -101,14 +107,23 @@ function useNavLinks(): NavLink[] {
   const { isAuthenticated, session } = useAuth();
 
   return useMemo<NavLink[]>((): NavLink[] => {
-    const role = isAuthenticated && session ? session.user.role : null;
+    // Every role the account holds, not the one it collapses to: an account
+    // that is both trainer and player has to reach both from here as well.
+    const roles = isAuthenticated && session ? userRolesFromBackendRoles(session.roles) : null;
     // Only an "estudiante" session carries `fechaNacimiento` (see
-    // UsuarioEstudiante in src/types/domain.ts) — `getNavLinksForRole` itself
+    // UsuarioEstudiante in src/types/domain.ts) — `getNavGroupsForRoles` itself
     // ignores this flag for every other role, so computing it unconditionally
     // here is safe.
     const studentIsAdult =
       session?.user.role === "estudiante" ? !isMinor(session.user.fechaNacimiento) : false;
-    const defs: NavLinkDef[] = getNavLinksForRole(role, studentIsAdult);
+    // Flattened: this bar is one horizontal strip on the public routes, with
+    // no second line to hang a rótulo on and no vertical room to make one
+    // worth the space. The GROUPING is the sidebar's answer to more than one
+    // role; the destinations are the same either way, which is what the helper
+    // guarantees and what a flat strip needs from it.
+    const defs: NavLinkDef[] = getNavGroupsForRoles(roles, studentIsAdult).flatMap(
+      (group) => group.links,
+    );
     return defs.map((def): NavLink => ({
       href: def.href,
       label: def.label,

@@ -64,7 +64,7 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // when there are reviewed rows to flush.
   "app/payments/page.tsx": "queue — actions are per row",
   // --- The five family screens, decided in #43 -----------------------------
-  // A wizard. Its buttons are "Continuar" and "Confirmar Asistencia": they move
+  // A wizard. Its buttons are "Continuar" and "Confirmar asistencia": they move
   // through the steps rather than act on the page, and which one is showing is
   // the step's business. A header slot would name whichever verb happened to be
   // live, or a third one that is neither.

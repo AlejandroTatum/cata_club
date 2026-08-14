@@ -122,6 +122,141 @@ describe("the surface ladder — canvas, sunken, paper", () => {
   });
 });
 
+describe("the tertiary button — a third level made of fill, not of absence", () => {
+  // D5 of the visual redesign gives the third button level a surface of its
+  // own: `sunken` at rest, `line` on hover, border transparent throughout. It
+  // replaces `ghost`, which was `bg-transparent border-transparent` — a
+  // control with no surface at all, rejected in as many words ("no me gustan
+  // los botones vacíos o sin box").
+  //
+  // Dropping the transparency is what makes these measurements possible. A
+  // ghost button's real background was whichever of the three surfaces it
+  // happened to land on, so its label had to be measured against all of them
+  // and hope; a filled button carries its own backdrop and this block can
+  // assert the pair.
+  const RESTING_FILL = SUNKEN;
+  const HOVER_FILL = line.DEFAULT;
+
+  it("meets AA for the resting label on the resting fill", () => {
+    const ratio = contrastRatio(ink["2"], RESTING_FILL);
+    expect(ratio, `ink-2 on sunken measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the resting label on the HOVER fill, which it crosses mid-transition", () => {
+    // `Button`'s `BASE` transitions colours over 150ms, and background and
+    // text are two separate properties: for that whole window the still-`ink-2`
+    // label is already sitting on the arriving `line` fill. The intermediate
+    // frame is a real state a reader can stop on, so it is measured like one.
+    const ratio = contrastRatio(ink["2"], HOVER_FILL);
+    expect(ratio, `ink-2 on line measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the settled hover pair", () => {
+    const ratio = contrastRatio(ink.DEFAULT, HOVER_FILL);
+    expect(ratio, `ink on line measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  // The fill is the whole control — there is no border to fall back on, so a
+  // fill that vanishes into the surface underneath is a button that vanishes.
+  // A tertiary button stands on a card (`paper`) on /profile and /payments and
+  // on an inset commit bar on /trainer/attendance, so BOTH neighbours count.
+  //
+  // The threshold is the ladder's own, not a new one: `sunken` earns its rung
+  // by clearing 1.09:1 against `paper`, which is the line the retired #FAFAFB
+  // head fill failed at 1.043:1 (see "the surface ladder" above).
+  const SURFACE_STEP = 1.09;
+
+  it.each([
+    ["paper", PAPER],
+    ["canvas", CANVAS],
+  ])("keeps the resting fill visible against %s", (_name, surface) => {
+    const ratio = contrastRatio(RESTING_FILL, surface);
+    expect(ratio, `sunken on ${_name} measures ${ratio.toFixed(3)}:1, under ${SURFACE_STEP}:1`)
+      .toBeGreaterThanOrEqual(SURFACE_STEP);
+  });
+
+  it("confirms the ghost fill it replaces could not have cleared that on any of them", () => {
+    // `bg-transparent` is the surface it sits on, by definition: 1:1 against
+    // every one of the three. This is the number the rejection was about.
+    for (const surface of [PAPER, SUNKEN, CANVAS]) {
+      expect(contrastRatio(surface, surface)).toBeLessThan(SURFACE_STEP);
+    }
+  });
+});
+
+describe("the back control — the same third level, on both fields it stands on", () => {
+  // D12b retires the red-outlined back pill and dresses `BackLink` in the
+  // `tertiary` skin measured above, so on the light surfaces there is nothing
+  // new to measure — the block above already owns `ink-2` on `sunken`, `ink-2`
+  // on `line` mid-transition, and `ink` on `line` once settled, and `BackLink`
+  // takes those exact classes from `buttonSkin("tertiary")` rather than
+  // restating them.
+  //
+  // What IS new is the second skin. The auth screens' coal panel had its own
+  // back control — a bare grey link with no box — precisely because the light
+  // fill is invisible there, and absorbing it into the one control means the
+  // one control now has to work on a dark field too. `coal` is not on the
+  // surface ladder (that ramp is defined for light fields only), so these pairs
+  // have no home in the block above.
+  const COAL = coal.DEFAULT;
+
+  /** `bg-white/10` at rest, `bg-white/[0.18]` on hover, both over `coal`. */
+  const RESTING_FILL = compositeOver("#FFFFFF", COAL, 0.1);
+  const HOVER_FILL = compositeOver("#FFFFFF", COAL, 0.18);
+
+  it("meets AA for the white label on the resting fill", () => {
+    const ratio = contrastRatio("#FFFFFF", RESTING_FILL);
+    expect(ratio, `white on white/10 over coal measures ${ratio.toFixed(2)}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the white label on the hover fill", () => {
+    // Same reasoning as the tertiary block's mid-transition case: the fill
+    // arrives over 150ms and the label is already sitting on it. Here the label
+    // does not change colour at all, so the hover fill is simply the darker
+    // half of the pair — a lighter fill under white is the direction that can
+    // fail, and 18% is where it lands.
+    const ratio = contrastRatio("#FFFFFF", HOVER_FILL);
+    expect(ratio, `white on white/18 over coal measures ${ratio.toFixed(2)}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("keeps both fills visible as a BOX against the coal behind them", () => {
+    // The point of #202 that survives D12b: the control has an edge you can
+    // see without hovering. On coal that edge is the fill, so the fill has to
+    // clear the surface step the ladder asks of `sunken` on `paper` — the
+    // threshold is borrowed rather than invented, for the same reason.
+    for (const [name, fill] of [["resting", RESTING_FILL], ["hover", HOVER_FILL]] as const) {
+      const ratio = contrastRatio(fill, COAL);
+      expect(ratio, `the ${name} fill measures ${ratio.toFixed(3)}:1 on coal`)
+        .toBeGreaterThanOrEqual(1.09);
+    }
+  });
+
+  it("draws a hover border that clears the non-text threshold", () => {
+    // `hover:border-white/30` composites over the hover fill it outlines, and
+    // it is a boundary rather than text, so 1.4.11's 3:1 is the bar.
+    const border = compositeOver("#FFFFFF", HOVER_FILL, 0.3);
+    const ratio = contrastRatio(border, COAL);
+    expect(ratio, `the hover border measures ${ratio.toFixed(2)}:1 on coal`)
+      .toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it("confirms the bare link it replaces was the dimmer of the two", () => {
+    // `ON_COAL_MUTED` in `AuthShell` — #8B8B93, the colour "Volver al sitio"
+    // was set in. It passes AA on its own (5.49:1) and was never the defect;
+    // the defect was that it had no box and stood 24px tall, under the system's
+    // own control height. White on the resting fill is the brighter label, and
+    // now it is a control rather than a line of text.
+    expect(contrastRatio("#8B8B93", COAL)).toBeLessThan(
+      contrastRatio("#FFFFFF", RESTING_FILL),
+    );
+  });
+});
+
 describe("every foreground that lands on the deepened canvas", () => {
   // Deepening the page field costs contrast on the page field. This is the
   // list of tokens that pay for it, and the reason the canvas stops where it
@@ -408,6 +543,52 @@ describe("sidebar rail — the two sub-labels on coal", () => {
   });
 });
 
+describe("ball-ink — the two surfaces ink lands on next to the yellow", () => {
+  // `ball-ink` is the text-weight companion to the ball, the same job
+  // `fuchsia-ink` does for the pink below. It shipped at #8A6D00 and failed
+  // BOTH of the surfaces it can reach, which is why this block asserts two
+  // pairs and not one:
+  //
+  //   · on `ball` itself ... 3.48:1 — a label printed ON the yellow, which is
+  //     what a companion ink is FOR. `_sistema.css`'s `.note .mine` pill is
+  //     the shape of it.
+  //   · on `canvas` ....... 4.03:1 — the yellow-coloured word sitting on the
+  //     page field, which is where every muted foreground in this file has to
+  //     be measured since the canvas was deepened to #E8E8EE.
+  //
+  // On `paper` it was already fine (4.92:1), so the token never looked broken
+  // on a card — that is exactly how two failures survived unmeasured.
+  const BALL = (colors.ball as Record<string, string>).DEFAULT;
+  const BALL_INK = (colors.ball as Record<string, string>).ink;
+
+  it("meets AA for ball-ink ON the yellow, the pair the token exists for", () => {
+    const ratio = contrastRatio(BALL_INK, BALL);
+    expect(ratio, `ball-ink on ball measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for ball-ink on the canvas, where the same word lands off-card", () => {
+    const ratio = contrastRatio(BALL_INK, CANVAS);
+    expect(ratio, `ball-ink on canvas measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("keeps it readable on paper too, which is the surface it never failed", () => {
+    const ratio = contrastRatio(BALL_INK, PAPER);
+    expect(ratio, `ball-ink on paper measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  // Why the ball itself is not darkened instead: it is a FILL, and the focus
+  // ring above depends on its exact luminance against the coal rail
+  // (`contrastRatio(BALL, coal-3) ≥ 3`). Moving the yellow to rescue the ink
+  // would break the indicator this same file locks four assertions around.
+  it("confirms the retired #8A6D00 failed both surfaces, so the ink had to move", () => {
+    expect(contrastRatio("#8A6D00", BALL)).toBeLessThan(AA_NORMAL_TEXT);
+    expect(contrastRatio("#8A6D00", CANVAS)).toBeLessThan(AA_NORMAL_TEXT);
+  });
+});
+
 describe("/trainer — fuchsia quick-action cards", () => {
   // The cards are `bg-cata-fuchsia/10` over the page background, so the real
   // backdrop is the composited tint, not the bare page. Measured against the
@@ -533,15 +714,30 @@ const RAW_PALETTE = new RegExp(
  * measured debt. The list only ever shrinks, and `admin/crear-cuenta` is the
  * first entry off it.
  *
+ * `app/student/enroll/page.tsx` is the second. It carried two: `text-blue-700`
+ * on the second line of an AMBER notice — a raw blue inside a warn box, which
+ * is a colour the palette does not have making a statement the box contradicts
+ * — and `text-amber-700` on the development quick-fill icon. Both are `state-*`
+ * tokens now.
+ *
  * Entries are never added. A new one is exactly what this guard exists to
  * prevent — an unavoidable new hue gets a name in `tailwind.config.ts` first,
  * and stops being Tailwind's.
  */
 const RAW_PALETTE_DEBT: readonly string[] = [
   "app/attendance/attendance-utils.ts",
-  "app/groups/page.tsx",
-  "app/student/add-dependent/page.tsx",
-  "app/student/enroll/page.tsx",
+  // `app/groups/page.tsx` was here and is PAID OFF. Its one entry was
+  // `hover:bg-red-50` on the roster's "Desasignar" control — a raw Tailwind
+  // red where the system has `state-bad-bg` — and the admin batch replaced it.
+  // The list shrinks rather than keeping a clean file on it, which is what the
+  // test below exists to force: a debt entry nobody removes is a file that
+  // reads as still owing.
+  // `app/student/add-dependent/page.tsx` was here and is PAID OFF. Its two
+  // entries were `text-blue-700/80` on the credentials notice and
+  // `text-amber-700/80` on the "datos sensibles" one — 3.84:1 on the canvas
+  // and 3.25:1 on the warn tint, both under AA — and the final batch replaced
+  // them with `ink-2` and `state-warn`, which are the tokens those two boxes
+  // were already half-wearing.
   "app/student/proof-utils.ts",
 ];
 
@@ -567,5 +763,92 @@ describe("no screen paints with Tailwind's default palette", () => {
   it("reports a debt entry that no longer has any use left, so the list shrinks", () => {
     const files = new Set(offenders.map((line) => line.slice(0, line.indexOf(": "))));
     expect(RAW_PALETTE_DEBT.filter((file) => !files.has(file))).toEqual([]);
+  });
+});
+
+describe("D9's two shared pieces — the identity cell's role chips and the week strip", () => {
+  // Both live in a dense table, and a table in this product stands on `paper`
+  // (a card) and on `canvas` (the page field) depending on the screen. The
+  // pairs below are split along that fact: a label printed on an OPAQUE fill
+  // does not change when the surface underneath changes, so the label pairs are
+  // measured once, and it is the FILLS that are measured against both fields.
+  const SURFACE_STEP = 1.09;
+  /** `bg-coal/[0.08]` — the identity accent, over each field it can land on. */
+  const AVATAR_ON_PAPER = compositeOver(coal.DEFAULT, PAPER, 0.08);
+  const AVATAR_ON_CANVAS = compositeOver(coal.DEFAULT, CANVAS, 0.08);
+
+  it("meets AA for a role label on the chip fill it is printed on", () => {
+    // The chip wears the `DataBox` skin — `ink-2` on `sunken`. The tertiary
+    // button block above measures the same token pair for a different
+    // component; this is the chip's own lock, because the chip is what breaks
+    // if either half of the skin is retuned.
+    const ratio = contrastRatio(ink["2"], SUNKEN);
+    expect(ratio, `ink-2 on sunken measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("confirms the quieter chip tint could not have carried the chip on the canvas", () => {
+    // `state-neutral-bg` was the other candidate fill: it is the flattest tint
+    // in the palette and would have made the role line quieter, which in a
+    // dense cell is a real argument. On `paper` it clears the ladder's rung;
+    // on the page field it is 1.063:1 — a chip nobody can see the edge of.
+    expect(contrastRatio(state["neutral-bg"], PAPER)).toBeGreaterThanOrEqual(SURFACE_STEP);
+    expect(contrastRatio(state["neutral-bg"], CANVAS)).toBeLessThan(SURFACE_STEP);
+  });
+
+  it.each([
+    ["paper", PAPER],
+    ["canvas", CANVAS],
+  ])("keeps the identity accent readable as a disc on %s", (name, surface) => {
+    const fill = name === "paper" ? AVATAR_ON_PAPER : AVATAR_ON_CANVAS;
+    expect(contrastRatio(fill, surface), `the accent fill measures ${contrastRatio(fill, surface).toFixed(3)}:1 on ${name}`)
+      .toBeGreaterThanOrEqual(SURFACE_STEP);
+    expect(contrastRatio(coal.DEFAULT, fill)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the letter in a day that runs", () => {
+    const ratio = contrastRatio("#FFFFFF", cata.red);
+    expect(ratio, `white on cata-red measures ${ratio.toFixed(2)}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA for the letter in a day that does not", () => {
+    // `ink-3` is the muted ink a dimmed box reaches for by reflex, and the
+    // block above already records that it is 4.21:1 on this fill. The strip
+    // takes `ink-3-strong`, the companion that exists for exactly the surfaces
+    // that are not `paper`.
+    const ratio = contrastRatio(ink["3-strong"], SUNKEN);
+    expect(ratio, `ink-3-strong on sunken measures ${ratio.toFixed(2)}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it.each([
+    ["paper", PAPER],
+    ["canvas", CANVAS],
+  ])("keeps both kinds of box visible as boxes on %s", (_name, surface) => {
+    // The idle fill is the ladder's own rung again; the lit fill is a control
+    // fill and is held to 1.4.11's 3:1, because on a row where every day is
+    // lit the red boxes are the only thing marking the seven positions.
+    expect(contrastRatio(SUNKEN, surface)).toBeGreaterThanOrEqual(SURFACE_STEP);
+    expect(contrastRatio(cata.red, surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it("clears 3:1 between a day that runs and the day beside it that does not", () => {
+    // This is the pair WCAG 1.4.11 actually hangs on here: the information the
+    // strip carries is WHICH boxes are lit, so the boundary that has to be
+    // perceivable is lit against unlit, not box against page.
+    const ratio = contrastRatio(cata.red, SUNKEN);
+    expect(ratio, `the lit fill measures ${ratio.toFixed(2)}:1 against the idle one`)
+      .toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it("confirms an outline could not have been what distinguishes an idle box", () => {
+    // The measurement that decided the idle box has no border. Both hairlines
+    // are far under the non-text threshold on this fill, so a bordered box
+    // would have been a box whose edge is decoration — the seven positions are
+    // marked by the seven letters (5.40:1, text) and by the fill, both of
+    // which are measured above.
+    expect(contrastRatio(line.DEFAULT, SUNKEN)).toBeLessThan(AA_NON_TEXT);
+    expect(contrastRatio(line["2"], SUNKEN)).toBeLessThan(AA_NON_TEXT);
   });
 });

@@ -442,9 +442,9 @@ describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
   it("returns focus to the row action it came from", async () => {
     renderPage();
     await openRequest("Juan Pérez");
-    await screen.findByRole("link", { name: /volver a la cola/i });
+    await screen.findByRole("link", { name: /volver a membresías y pagos/i });
 
-    fireEvent.click(screen.getByRole("link", { name: /volver a la cola/i }));
+    fireEvent.click(screen.getByRole("link", { name: /volver a membresías y pagos/i }));
 
     await screen.findByTestId("payments-table");
     const action = within(queueTable()).getByRole("button", {
@@ -456,7 +456,7 @@ describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
   it("does not pretend to be a modal", async () => {
     renderPage();
     await openRequest("Juan Pérez");
-    await screen.findByRole("link", { name: /volver a la cola/i });
+    await screen.findByRole("link", { name: /volver a membresías y pagos/i });
 
     // An in-page view swap, not a dialog: no `role="dialog"`, no `aria-modal`,
     // no focus trap. Calling it a dialog would promise a background that is
@@ -894,6 +894,14 @@ describe("PaymentsPage — batch approval", () => {
     expect(within(row).queryByText(reason)).not.toBeInTheDocument();
     expect(checkbox).toHaveAccessibleName(`Juan Pérez ${reason}`);
     expect(screen.queryByRole("group", { name: /aprobación por lote/i })).not.toBeInTheDocument();
+
+    // It renders once, above the list, on the page canvas rather than inside a
+    // card — and `ink-3` only clears AA on `paper`. Measured against the QA
+    // stack this line came out 3.78:1 at 12.5px, under the 4.5:1 floor, which
+    // made the sentence explaining WHY every batch checkbox is disabled the
+    // least legible string on the screen. `ink-3-strong` is the step the ramp
+    // declares for this surface.
+    expect(screen.getByText(reason)).toHaveClass("text-ink-3-strong");
   });
 
   it("requires the payment's own checklist before it can be parked for a batch", async () => {
@@ -955,7 +963,7 @@ describe("PaymentsPage — batch approval", () => {
     // Parking Juan auto-advances to Sofia's detail — back to the queue, then
     // reopen Juan's own detail to see how a parked payment reads there.
     await reviewForBatch("Juan Pérez");
-    fireEvent.click(await screen.findByRole("link", { name: /volver a la cola/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /volver a membresías y pagos/i }));
     await openRequest("Juan Pérez");
 
     await screen.findByRole("heading", { name: /detalle de la solicitud/i });
@@ -1042,7 +1050,7 @@ describe("PaymentsPage — batch approval", () => {
 
     await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1));
     // The approval auto-advances back to Juan's detail; return to the queue.
-    fireEvent.click(await screen.findByRole("link", { name: /volver a la cola/i }));
+    fireEvent.click(await screen.findByRole("link", { name: /volver a membresías y pagos/i }));
 
     // Juan is the only one left in the batch; the resolved payment left it.
     const bar = await screen.findByRole("group", { name: /aprobación por lote/i });
@@ -1273,3 +1281,64 @@ describe("PaymentsPage — the hold is visible while it lasts", () => {
 // them exactly as a single payment is.
 // ---------------------------------------------------------------------------
 
+
+// ---------------------------------------------------------------------------
+// La regla del rojo único
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — el rojo es una acción, no una columna", () => {
+  it("does not paint the row action red on the pending queue", async () => {
+    // "Nunca hay dos botones rojos en una pantalla." The pending tab is the
+    // default, so this drew one red button per pending row — ten down a single
+    // column on a full page. At ten, red stops meaning "the one thing to
+    // press" and becomes the colour of the column, which also leaves the real
+    // decision ("Aprobar pago", in the detail) wearing the same red as every
+    // link that leads to it.
+    renderPage();
+    await screen.findAllByText("Juan Pérez");
+
+    for (const action of screen.getAllByRole("button", { name: /revisar el pago de/i })) {
+      expect(action.className).not.toContain("bg-cata-red");
+    }
+  });
+
+  it("keeps at most one red control in the queue at a time", async () => {
+    renderPage();
+    await screen.findAllByText("Juan Pérez");
+
+    const red = screen
+      .getAllByRole("button")
+      .filter((node) => node.className.includes("bg-cata-red"));
+    expect(red.length).toBeLessThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D11c and the empty state's third part
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — la ayuda y la salida", () => {
+  it("discloses the queue's fetch ceiling in the block that filters", async () => {
+    // The four pill counts read as club totals and are counts of what this
+    // page fetched. `/members` already discloses the same cap in the same slot.
+    renderPage();
+    await screen.findAllByText("Juan Pérez");
+
+    const toggle = screen.getByRole("button", { name: /alcance de la cola/i });
+    const panel = screen.getByRole("region", { name: /filtros de pagos/i });
+    expect(panel.contains(toggle)).toBe(true);
+  });
+
+  it("gives the truly-empty queue a way out instead of a dead end", async () => {
+    // The `all` filter with no query was the one branch that shipped with no
+    // action at all — the dead end the shared component's own doc warns about.
+    mockFetchPaymentValidations.mockResolvedValue([]);
+    renderPage();
+    // The queue opens on "Pendientes"; the branch under test is the "Todas"
+    // one, which is the only state that means "the club has no requests".
+    fireEvent.click(await screen.findByRole("button", { name: /^Todas/ }));
+    await screen.findByText(/aún no hay solicitudes/i);
+
+    expect(screen.getByRole("link", { name: /ir a miembros/i })).toBeInTheDocument();
+  });
+});

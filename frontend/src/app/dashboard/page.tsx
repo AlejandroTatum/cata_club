@@ -45,6 +45,8 @@ import {
   PAGE_RAIL,
   STAT_GRID,
   StatCard,
+  StatSpark,
+  StatTrack,
 } from "@/components/ui";
 import {
   fetchDashboardStats,
@@ -174,8 +176,20 @@ export default function DashboardPage(): React.ReactElement {
                 is at the top right" was right on three screens out of eight.
                 The action moved to the header's `actions` slot; the number and
                 the sentence stay, because they are what the action is FOR. */}
-            <section className="flex flex-wrap items-center gap-x-6 gap-y-section rounded-card bg-coal px-6 py-6">
-              <span className="text-display font-extrabold leading-none tabular-nums text-white">
+            {/* The one coal card of the screen, now built the way the system
+                builds a figure on coal.
+
+                Three things were wrong and all three were invisible in a
+                screenshot. The 46px number carried `text-display` — the
+                display SIZE — with no `font-display`, so the largest figure in
+                the admin panel was the only stat in the product not set in
+                Graduate. `font-extrabold` asked that face for a weight it does
+                not ship (`lib/fonts.ts` has one 400 cut), which is the same
+                request `StatCard` already records having removed from its own
+                figure. And `px-6 py-6`/`gap-x-6` are 24px, a step the vertical
+                rhythm does not have. */}
+            <section className="flex flex-wrap items-center gap-x-section gap-y-section rounded-card bg-coal p-page">
+              <span className="font-display text-display leading-none tabular-nums tracking-flat text-white">
                 {pendingPayments}
               </span>
               <span className="min-w-0 flex-1">
@@ -187,7 +201,7 @@ export default function DashboardPage(): React.ReactElement {
                 {heroNote && (
                   <span
                     data-testid="hero-note"
-                    className="mt-1 flex items-center gap-2 text-sm text-white/60"
+                    className="mt-field flex items-center gap-2 text-sm text-white/60"
                   >
                     <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
                     {heroNote}
@@ -220,22 +234,60 @@ export default function DashboardPage(): React.ReactElement {
                   full padrón; the backend supplies both counts precisely so
                   neither has to stand in for the other.
               */}
+              {/*
+                  LA REGLA DE LA FORMA. This is the one tile on the row that is
+                  a PROPORTION — a part and a whole the endpoint supplies as two
+                  fields — and it printed the share as a sentence. `StatTrack`
+                  is the piece built for exactly this, and `/members` already
+                  spends it on the same statistic; the note above this row says
+                  a meter was dropped because "Miembros has no ratio the API
+                  supplies", which is true of Miembros and is why the bar
+                  belongs to this tile alone rather than to all four.
+
+                  The percentage stays in words beside the bar: the bar is read
+                  at a glance, the figure is read when it matters, and dropping
+                  either would trade one for the other.
+              */}
               <StatCard
                 label="Membresías activas"
                 value={activeMemberships}
                 unit={`de ${totalAlumnos}`}
-                hint={`${membershipPercent}% del total`}
+                hint={
+                  <span className="flex flex-col gap-y-field">
+                    <StatTrack value={activeMemberships} total={totalAlumnos} />
+                    <span>{membershipPercent}% del total</span>
+                  </span>
+                }
               />
               <StatCard
                 label="Sin membresía"
                 value={personasSinMembresia}
                 hint="por regularizar"
               />
+              {/*
+                  The other half of the rule of shape: "una serie lleva
+                  tendencia". `buildFourWeekAttendance` returns FOUR windows,
+                  each with its own total, present count and rate — and the tile
+                  rendered the pooled percentage and dropped `bars` on the
+                  floor. So 52% could be four flat weeks or a slide from 70 to
+                  30, and the tile read the same either way.
+
+                  Nothing is invented: every bar is a window the page already
+                  holds, from a fetch that pages the whole range rather than a
+                  capped first page. When there are no records the series is
+                  empty and `StatSpark` renders nothing, so a silent tile stays
+                  silent instead of drawing four bars of zero.
+              */}
               <StatCard
                 label="Asistencia · 4 semanas"
                 value={fourWeeks.ratePercent}
                 unit="%"
-                hint={`${fourWeeks.present} de ${fourWeeks.total} presentes`}
+                hint={
+                  <span className="flex flex-col gap-y-field">
+                    <StatSpark values={fourWeeks.bars.map((bar) => bar.ratePercent)} />
+                    <span>{`${fourWeeks.present} de ${fourWeeks.total} presentes`}</span>
+                  </span>
+                }
               />
             </div>
           </>
@@ -306,7 +358,7 @@ export default function DashboardPage(): React.ReactElement {
           </section>
 
           <section className="card p-[18px]">
-            <h2 className="mb-4 text-base font-bold text-ink">Distribución de asistencias</h2>
+            <h2 className="mb-section font-display text-lg uppercase leading-tight tracking-flat text-ink">Distribución de asistencias</h2>
             {attendanceStats.totalStudents > 0 ? (
               <AttendanceStatusChart stats={attendanceStats} />
             ) : (

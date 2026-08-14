@@ -126,6 +126,25 @@ vi.mock("@/services/api", () => {
  * sentinel is the disappearance of the loading block, which works for an empty
  * list too.
  */
+/**
+ * The seven boxes of a row's week strip, in render order.
+ *
+ * The screen used to draw a local `DiaTrack` keyed by the backend's
+ * `data-dia="LUNES"`; it now draws the shared `ui/WeekStrip`, which is keyed by
+ * the frontend's `data-day="lun"` — the vocabulary the rest of the product
+ * carries — and always renders all seven.
+ */
+function daysOf(card: HTMLElement): HTMLElement[] {
+  return Array.from(
+    within(card).getByTestId("week-strip").querySelectorAll<HTMLElement>("[data-day]"),
+  );
+}
+
+/** `activo` | `disponible` | `inactivo` for one day of a strip. */
+function stateOf(boxes: HTMLElement[], day: string): string | undefined {
+  return boxes.find((box) => box.dataset.day === day)?.dataset.state;
+}
+
 async function waitForHorarios(): Promise<void> {
   await waitFor(() => {
     expect(screen.queryByText("Cargando horarios…")).not.toBeInTheDocument();
@@ -245,22 +264,60 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     ).toBeInTheDocument();
   });
 
-  it("lays the categoria's week out as día markers, flagging the ones it actually runs", async () => {
+  /**
+   * RENEGOTIATED, and tightened rather than loosened.
+   *
+   * This asserted the old local `DiaTrack`: a capsule per día OF THE TRACK, so
+   * the expected list was 6 entries for COMPETITIVO and 5 for everyone else —
+   * i.e. the test encoded the variable-length row that broke the rule of
+   * format ("los días son siempre siete casillas fijas en el mismo orden").
+   * The screen now draws the shared `WeekStrip`, so the assertion becomes
+   * SEVEN boxes always, in one fixed order, which is a stricter statement than
+   * the one it replaces: it fails if the strip ever shrinks to the track again.
+   *
+   * The three-state fact the old markers carried is preserved and still
+   * asserted — it just moved from `data-active` true/false plus absence, to
+   * `data-state` activo/disponible/inactivo, which can say all three.
+   */
+  it("lays the categoria's week out as seven fixed boxes, flagging the ones it actually runs", async () => {
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
     const card = screen.getAllByTestId("horario-card")[0];
-    const markers = within(card).getAllByTestId("dia-marker");
+    const boxes = daysOf(card);
 
-    // COMPETITIVO may meet Lunes–Sábado; these rows only use Lun/Mié/Vie.
-    expect(markers.map((marker) => marker.dataset.dia)).toEqual([
-      "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO",
+    expect(boxes.map((box) => box.dataset.day)).toEqual([
+      "lun", "mar", "mie", "jue", "vie", "sab", "dom",
     ]);
-    expect(
-      markers.filter((marker) => marker.dataset.active === "true").map((marker) => marker.dataset.dia),
-    ).toEqual(["LUNES", "MIERCOLES", "VIERNES"]);
+    // COMPETITIVO may meet Lunes–Sábado; these rows only use Lun/Mié/Vie.
+    expect(stateOf(boxes, "lun")).toBe("activo");
+    expect(stateOf(boxes, "mie")).toBe("activo");
+    expect(stateOf(boxes, "vie")).toBe("activo");
+    // Allowed by the track and unused — the distinction the dashed capsule
+    // used to carry.
+    expect(stateOf(boxes, "mar")).toBe("disponible");
+    expect(stateOf(boxes, "sab")).toBe("disponible");
+    // Outside the track entirely, and now visible as a position rather than
+    // as a missing capsule.
+    expect(stateOf(boxes, "dom")).toBe("inactivo");
+  });
+
+  it("says the week in whole words for a screen reader, never in three-letter slices", async () => {
+    // The letters in the boxes are positions on a scale, which is the one
+    // declared exception to the rule of words. "Lun"/"Mié"/"Sáb" were not
+    // that: they were the day's name, cut. The sentence carries the fact.
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const card = screen.getAllByTestId("horario-card")[0];
+    expect(within(card).getByTestId("week-strip")).toHaveAttribute(
+      "aria-label",
+      "Lunes, miércoles y viernes",
+    );
   });
 
   it("shows the live Sábado row as an active día marker, not a missing one", async () => {
@@ -270,10 +327,7 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     await waitForHorarios();
 
     const card = screen.getAllByTestId("horario-card")[0];
-    const sabado = within(card)
-      .getAllByTestId("dia-marker")
-      .find((marker) => marker.dataset.dia === "SABADO");
-    expect(sabado?.dataset.active).toBe("true");
+    expect(stateOf(daysOf(card), "sab")).toBe("activo");
   });
 
   /**
@@ -307,16 +361,16 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     await waitForHorarios();
 
     const card = screen.getAllByTestId("horario-card")[0];
-    const markers = within(card).getAllByTestId("dia-marker");
+    const markers = daysOf(card).filter((box) => box.dataset.state !== "inactivo");
 
-    expect(markers.map((marker) => marker.dataset.dia)).toEqual([
-      "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES",
+    expect(markers.map((box) => box.dataset.day)).toEqual([
+      "lun", "mar", "mie", "jue", "vie",
     ]);
-    const miercoles = markers.find((marker) => marker.dataset.dia === "MIERCOLES");
-    expect(miercoles?.dataset.active).toBe("false");
+    const miercoles = markers.find((box) => box.dataset.day === "mie");
+    expect(miercoles?.dataset.state).toBe("disponible");
     expect(
-      markers.filter((marker) => marker.dataset.dia !== "MIERCOLES"),
-    ).toSatisfy((rest: HTMLElement[]) => rest.every((marker) => marker.dataset.active === "true"));
+      markers.filter((box) => box.dataset.day !== "mie"),
+    ).toSatisfy((rest: HTMLElement[]) => rest.every((box) => box.dataset.state === "activo"));
   });
 
   it("names every column inside the row, not only in the strip above it", async () => {
@@ -568,9 +622,13 @@ describe("GroupsPage — unknown categoria value does not crash the card (bugfix
     await waitForHorarios();
 
     const card = screen.getAllByTestId("horario-card")[0];
-    const markers = within(card).getAllByTestId("dia-marker");
-    expect(markers.map((marker) => marker.dataset.dia)).toEqual(["LUNES"]);
-    expect(markers[0].dataset.active).toBe("true");
+    const boxes = daysOf(card);
+    // Seven boxes even here: with no allowed-day metadata the strip has no
+    // track to shade, so the other six read as unlit positions rather than
+    // disappearing and leaving a one-capsule row.
+    expect(boxes).toHaveLength(7);
+    expect(stateOf(boxes, "lun")).toBe("activo");
+    expect(boxes.filter((box) => box.dataset.state === "activo")).toHaveLength(1);
   });
 });
 
@@ -607,7 +665,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
   it("ticking a new día saves the categoría with the whole new day-set in ONE actualizarCategoria call", async () => {
     await openEditAndSubmit();
 
-    fireEvent.click(screen.getByLabelText("Viernes"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Viernes" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     await waitFor(() => {
@@ -623,7 +681,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
     await openEditAndSubmit();
 
-    fireEvent.click(screen.getByLabelText("Miércoles"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Miércoles" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     await waitFor(() => {
@@ -642,7 +700,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     ]);
     await openEditAndSubmit();
 
-    fireEvent.click(screen.getByLabelText("Miércoles"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Miércoles" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
@@ -662,7 +720,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     ]);
     await openEditAndSubmit();
 
-    fireEvent.click(screen.getByLabelText("Miércoles"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Miércoles" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
@@ -1285,7 +1343,7 @@ describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Preinfantil" } });
     fireEvent.change(screen.getByLabelText("Hora de inicio"), { target: { value: "15:00" } });
     fireEvent.change(screen.getByLabelText("Hora de fin"), { target: { value: "16:00" } });
-    fireEvent.click(screen.getByLabelText("Lunes"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await waitFor(() => {

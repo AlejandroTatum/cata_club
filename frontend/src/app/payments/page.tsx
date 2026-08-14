@@ -54,6 +54,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import ContextualHelp from "@/components/ContextualHelp";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -86,6 +87,7 @@ import { calendarIsoDate } from "@/lib/club-date";
 import {
   paginatePaymentRequests,
   getTotalPages,
+  PAYMENTS_FETCH_LIMIT,
   PAYMENTS_PAGE_SIZE,
   humanizePaymentPeriod,
   getPendingRequests,
@@ -100,6 +102,7 @@ import {
 } from "@/app/payments/payments-utils";
 import {
   BackLink,
+  buttonClasses,
   Badge,
   Button,
   DataBox,
@@ -698,8 +701,13 @@ export default function PaymentsPage(): React.ReactElement {
       (r) => r.validationStatus === "pendiente" && !batch.reviewed[r.id],
     );
     if (!hasUnreviewedPending) return null;
+    /* `ink-3-strong`, not `ink-3`: this line renders above the list on the page
+       canvas, and the shared muted step only clears AA on `paper` (4.62:1
+       there, 3.78:1 here). It is the sentence that explains why every
+       unreviewed checkbox is disabled, so it is the last string on the screen
+       that should be the hardest to read. */
     return (
-      <p id={BATCH_REVIEW_REASON_ID} className="mb-2 text-xs text-ink-3">
+      <p id={BATCH_REVIEW_REASON_ID} className="mb-2 text-xs text-ink-3-strong">
         {BATCH_REVIEW_REASON_TEXT}
       </p>
     );
@@ -772,7 +780,7 @@ export default function PaymentsPage(): React.ReactElement {
             <button
               type="button"
               onClick={deferredDecision.undo}
-              className="ml-auto rounded px-2 py-1 font-bold text-ink underline underline-offset-2"
+              className="ml-auto rounded-ctl px-2 py-1 font-bold text-ink underline underline-offset-2"
             >
               Deshacer
             </button>
@@ -783,8 +791,10 @@ export default function PaymentsPage(): React.ReactElement {
             on its own line underneath — which was the exact inverse of
             Members. `FilterPanel` renders the slots in one fixed order, so the
             two screens cannot disagree again. */}
+        {/* No `mb-6`. `<main>` is a `gap-page` column, so a margin here was
+            24px added ON TOP of the 20px step — a fourth distance, and the one
+            the panel's own doc says it never carries. */}
         <FilterPanel
-          className="mb-6"
           label="Filtros de pagos"
           search={
             <SearchInput
@@ -810,6 +820,22 @@ export default function PaymentsPage(): React.ReactElement {
                 />
               ))}
             </div>
+          }
+          // D11c, and the panel's fourth slot, which this screen left empty
+          // while carrying exactly the caveat it is for. The four pill counts
+          // read as the club's totals — "Todas 62" — but they are counts of
+          // what this page FETCHED, and the request is capped. `/members` has
+          // the same cap and already discloses it here; this screen is the one
+          // where the number is a queue somebody is working through, so an
+          // undisclosed ceiling is worth more.
+          help={
+            <ContextualHelp title="Ayuda sobre el alcance de la cola">
+              <p>
+                Esta cola trae hasta {PAYMENTS_FETCH_LIMIT} solicitudes por consulta, y los números
+                de las pestañas cuentan sobre lo traído. Si el club supera ese volumen, use el
+                buscador o el reporte de pagos para llegar a una solicitud puntual.
+              </p>
+            </ContextualHelp>
           }
         />
 
@@ -899,7 +925,7 @@ export default function PaymentsPage(): React.ReactElement {
               </Button>
             )}
             {batch.targets.length > 0 && (
-              <Button size="sm" variant="ghost" disabled={batch.running} onClick={batch.clearSelection}>
+              <Button size="sm" variant="tertiary" disabled={batch.running} onClick={batch.clearSelection}>
                 Limpiar selección
               </Button>
             )}
@@ -924,6 +950,11 @@ export default function PaymentsPage(): React.ReactElement {
 
         {!loading && !error && filtered.length === 0 && (
           <EmptyState
+            // A search that finds nobody left 397px of bare canvas under a
+            // three-line statement — 44%. `fill` puts the surplus inside the
+            // surface, which is the same move `/members` measured on its own
+            // "found nobody" state.
+            fill
             icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title={
               normalizedQuery
@@ -940,7 +971,19 @@ export default function PaymentsPage(): React.ReactElement {
                   : "La cola está al día."
             }
             action={
-              activeFilter === "all" && !normalizedQuery ? undefined : (
+              activeFilter === "all" && !normalizedQuery ? (
+                // The one branch that shipped WITHOUT a way out — "an empty
+                // state without a next action is a dead end", in the shared
+                // component's own words. It is the club with no requests at
+                // all, so there is nothing to un-filter; what there is, is the
+                // reason the queue is empty, which is that nobody has uploaded
+                // a proof. The way out is the screen where a payment gets
+                // registered, which is the same destination the rest of the
+                // panel already names.
+                <Link href="/members" className={buttonClasses("secondary")}>
+                  Ir a Miembros
+                </Link>
+              ) : (
                 <Button
                   onClick={() => {
                     setActiveFilter("all");
@@ -1002,9 +1045,22 @@ export default function PaymentsPage(): React.ReactElement {
                             </Badge>
                           )}
                           {batch.reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
+                          {/* LA REGLA DEL ROJO ÚNICO. This was `primary` for
+                              every pending row, and the default tab IS the
+                              pending queue: ten red buttons down one column,
+                              fifteen in the badge beside the nav item. "Nunca
+                              hay dos botones rojos en una pantalla" — and at
+                              ten, red has stopped meaning "the one thing to
+                              press" and become the colour of the column.
+
+                              What it opens is the detail, where the decision
+                              actually happens and where "Aprobar pago" is the
+                              one red control on screen. Spending the CTA colour
+                              on the step BEFORE the decision left the real
+                              decision wearing the same red as the ten links
+                              that lead to it. */}
                           <Button
                             size="sm"
-                            variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
                             aria-label={actionLabel(req)}
                             data-payment-action={req.id}
                             onClick={() => setSelectedId(req.id)}
@@ -1051,9 +1107,12 @@ export default function PaymentsPage(): React.ReactElement {
                         </Badge>
                       )}
                       {batch.reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
+                      {/* The narrow rendering of the same row — see the note on
+                          the table's copy. The two are separate JSX, so the
+                          red had to be removed twice or the phone would keep
+                          the column of CTAs the desktop just lost. */}
                       <Button
                         size="sm"
-                        variant={req.validationStatus === "pendiente" ? "primary" : "secondary"}
                         aria-label={actionLabel(req)}
                         data-payment-action={req.id}
                         onClick={() => setSelectedId(req.id)}
@@ -1107,7 +1166,6 @@ export default function PaymentsPage(): React.ReactElement {
               queue⇄detail round trip to actually leave the page. */}
           <BackLink
             href="/payments"
-            label="Volver a la cola"
             onClick={(e) => {
               e.preventDefault();
               setSelectedId(null);
@@ -1164,7 +1222,7 @@ export default function PaymentsPage(): React.ReactElement {
               <h2
                 ref={detailHeadingRef}
                 tabIndex={-1}
-                className="border-b border-line px-[18px] py-4 text-base font-bold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ball focus-visible:shadow-focus-band-inset"
+                className="border-b border-line px-[18px] py-4 font-display text-lg uppercase leading-tight tracking-flat text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ball focus-visible:shadow-focus-band-inset"
               >
                 Detalle de la solicitud
               </h2>
@@ -1219,7 +1277,7 @@ export default function PaymentsPage(): React.ReactElement {
                 aria-labelledby="antes-de-aprobar"
               >
                 <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
-                  <h2 id="antes-de-aprobar" className="flex-1 text-base font-bold text-ink">
+                  <h2 id="antes-de-aprobar" className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
                     Antes de aprobar
                   </h2>
                   <Badge tone={checklistComplete ? "ok" : "warn"}>
@@ -1261,7 +1319,7 @@ export default function PaymentsPage(): React.ReactElement {
 
             {isPending && (
               <section className="flex flex-col gap-3 card p-[18px]">
-                <h2 className="text-base font-bold text-ink">Decisión</h2>
+                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
 
                 {!showRejectForm ? (
                   <>
@@ -1322,7 +1380,7 @@ export default function PaymentsPage(): React.ReactElement {
                           decisions this screen exists for, so they keep the
                           weight; parking for later is the less-common path. */}
                       <Button
-                        variant="ghost"
+                        variant="tertiary"
                         disabled={!checklistComplete || actionLoading !== null}
                         onClick={handleMarkReviewed}
                       >

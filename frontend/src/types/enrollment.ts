@@ -14,6 +14,27 @@ export const BLOOD_TYPES = {
 
 export type BloodType = (typeof BLOOD_TYPES)[keyof typeof BLOOD_TYPES];
 
+/**
+ * What each blood type is CALLED on screen.
+ *
+ * The wizard used to print the enum with its underscore swapped for a space —
+ * "O POSITIVO", "AB NEGATIVO" — in the option list and again in the summary.
+ * That is the backend's spelling wearing a costume: shouted, and not the way
+ * anybody writes a blood type. The enum stays the wire value; this table is
+ * the only thing a person reads.
+ */
+export const BLOOD_TYPE_LABELS: Record<BloodType, string> = {
+  A_POSITIVO: "A positivo",
+  A_NEGATIVO: "A negativo",
+  B_POSITIVO: "B positivo",
+  B_NEGATIVO: "B negativo",
+  AB_POSITIVO: "AB positivo",
+  AB_NEGATIVO: "AB negativo",
+  O_POSITIVO: "O positivo",
+  O_NEGATIVO: "O negativo",
+  DESCONOCIDO: "No lo sé",
+};
+
 export interface EnrollmentStudent {
   nombres: string;
   apellidos: string;

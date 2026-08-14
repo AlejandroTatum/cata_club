@@ -37,6 +37,7 @@ import {
   Pagination,
   STAT_GRID,
   StatCard,
+  StatTrack,
   Table,
   TableBody,
   TableCell,
@@ -135,20 +136,46 @@ export default function AttendancePage(): React.ReactElement {
         <div className={STAT_GRID}>
           <StatCard label="Horarios" value={schedules.length} hint="sesiones semanales" />
           <StatCard label="Registros" value={stats.totalStudents} hint="en el rango elegido" />
+          {/* LA REGLA DE LA FORMA. "Presentes" is a proportion of "Registros"
+              right beside it, and it stated the share as a bare "54%" glued to
+              the figure with "del total" underneath — a sentence where the
+              system has a shape. `StatTrack` is the piece, and `/members` and
+              `/dashboard` now draw the same statistic the same way. */}
           <StatCard
             label="Presentes"
             value={stats.totalPresent}
-            unit={stats.totalStudents > 0 ? `${presentPercent}%` : undefined}
-            hint="del total"
+            hint={
+              <span className="flex flex-col gap-y-field">
+                <StatTrack value={stats.totalPresent} total={stats.totalStudents} />
+                <span>
+                  {stats.totalStudents > 0 ? `${presentPercent}% del total` : "del total"}
+                </span>
+              </span>
+            }
           />
+          {/* "Ausencias / tardanzas · combinadas" was a slash compound holding
+              two different states in one figure, with the caption spending its
+              line to say that it did. The two counts exist separately — the
+              donut on `/dashboard` draws them apart — so the caption states the
+              split instead of announcing that there is one. No shoulder on this
+              row and no `hot` tile: the shoulder marks what ASKS somebody to
+              come and do it, and this screen reports a log rather than holding
+              a queue. Marking one of four here would mark nothing. */}
           <StatCard
-            label="Ausencias / tardanzas"
+            label="Ausencias y tardanzas"
             value={stats.totalAbsent + stats.totalLate}
-            hint="combinadas"
+            hint={`${stats.totalAbsent} ausencias y ${stats.totalLate} tardanzas`}
           />
         </div>
 
-        <AttendanceFilters filters={filters} schedules={schedules} />
+        {/* The panel spans the page here, so its slots flow across the width.
+            It used to stack three controls in the left 320px of a full-width
+            card — 254px tall with the entire right half empty, which is the
+            "espacios vacíos" reproche inside the block that is meant to be
+            dense. The trainer's history draws this same component in the left
+            third of its layout and keeps the column, which is why the axis is
+            declared by the caller and not changed for everyone. */}
+        <AttendanceFilters filters={filters} schedules={schedules} layout="row" />
 
         {loading && <LoadingState label="Cargando registros…" />}
 
@@ -156,11 +183,17 @@ export default function AttendancePage(): React.ReactElement {
 
         {!loading && !error && records.length === 0 && (
           <EmptyState
+            fill
             icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="No hay registros en este rango"
             description="Cambie el rango o los filtros, o registre una sesión de entrenamiento."
             action={
-              <Link href="/trainer/attendance" className={buttonClasses("primary")}>
+              // NOT `primary`. The page header already draws "Tomar asistencia"
+              // in red, so the empty state was putting the same label, in the
+              // same colour, pointing at the same destination, a second time on
+              // the same screen — two red buttons at once, and the client's "un
+              // botón por acá y otro por allá" in its most literal form.
+              <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
                 Tomar asistencia
               </Link>
             }

@@ -11,8 +11,14 @@ export default function ContextualHelp({ title, children }: ContextualHelpProps)
   const [isOpen, setIsOpen] = useState(false);
   const panelId = `contextual-help-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
+  // No margin of its own. `docs/ux/ritmo-vertical.md` is explicit that no rule
+  // in the system separates two blocks with a margin — the distance is a `gap`
+  // on the column that holds them. The `mt-3` this used to carry was a fourth
+  // distance nobody declared: under the shell's `gap-page` column it simply
+  // added 12px on top of the 20px step, and inside a panel it fought that
+  // panel's own gap. `FilterPanel` states the same rule for itself.
   return (
-    <div className="mt-3">
+    <div>
       <button
         type="button"
         onClick={(): void => setIsOpen((open) => !open)}
@@ -33,7 +39,18 @@ export default function ContextualHelp({ title, children }: ContextualHelpProps)
           id={panelId}
           role="region"
           aria-label={title}
-          className="mt-2 rounded-lg border border-cata-border bg-cata-bg p-3 text-xs leading-relaxed text-ink-2"
+          // An area HUNDIDA inside the block that opened it — `sunken` plus a
+          // `line` hairline, at the control radius. It used to be `rounded-lg`
+          // (8px) over `cata-bg`/`cata-border`, i.e. a radius the system does
+          // not have filled with the palette the foundation retired. The panel
+          // is not a card: it is the inside of one, so it takes the same
+          // treatment the system gives every other sunken area.
+          //
+          // `mt-2` stays, and it is not the `mt-3` this component lost. That
+          // one separated the disclosure from its NEIGHBOURS, which is the
+          // column's job; this one separates the panel from the toggle that
+          // owns it, inside one block, which is the field step.
+          className="mt-field rounded-ctl border border-line bg-sunken p-3 text-xs leading-relaxed text-ink-2"
         >
           {children}
         </section>

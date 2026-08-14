@@ -69,6 +69,19 @@ describe("RecentSessionsList", () => {
     expect(screen.queryByText(/Entrenador/)).not.toBeInTheDocument();
   });
 
+  it("counts each state with a noun that agrees, not a count against a singular label", () => {
+    render(<RecentSessionsList sessions={SESSIONS} />);
+
+    // The breakdown beside the bar used to read "9 Presente" / "0 Justificado"
+    // — a count welded to the NAME of the state. `formatStateCount` is the one
+    // place this product counts a state out loud, and the history table reads
+    // from it too.
+    expect(screen.getByText("9 presentes")).toBeInTheDocument();
+    expect(screen.getByText("8 presentes")).toBeInTheDocument();
+    expect(screen.getAllByText("1 tardanza")).toHaveLength(2);
+    expect(screen.getByText("0 justificados")).toBeInTheDocument();
+  });
+
   it("links to the history view, once, from its own header", () => {
     render(<RecentSessionsList sessions={SESSIONS} />);
 

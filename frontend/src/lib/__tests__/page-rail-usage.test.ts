@@ -116,8 +116,17 @@ describe("a page splits into a main column and a rail one way", () => {
     // and "Últimas listas" runs full width beneath them. A screen that stops
     // being a rail is not a rail written by hand, so it leaves the rule rather
     // than breaking it — and the canary above still bites at 5.
+    //
+    // Was 5 until the socio redesign pass (docs/ux/comparaciones/socio.html).
+    // `/student/payments` leaves for the same reason and by the same test: its
+    // rail held exactly one block, "Cómo se registra un pago", and that block
+    // is a procedure, so D11c moved it behind "Ver ayuda". With nothing left to
+    // put beside the membership card, keeping a 340px column for its own sake
+    // is precisely the "a rail does NOT close vertical emptiness" mistake
+    // `PAGE_RAIL`'s own doc comment warns about. Four users remain —
+    // `/dashboard`, `/discounts`, `/student` and `/student/attendance`.
     const users = FILES.filter(({ code }) => USES_CONSTANT.test(code)).map(({ path }) => path);
 
-    expect(users.length).toBeGreaterThanOrEqual(5);
+    expect(users.length).toBeGreaterThanOrEqual(4);
   });
 });

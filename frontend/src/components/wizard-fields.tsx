@@ -28,8 +28,43 @@ const ACCENTED_CHARS: Record<string, string> = {
 };
 
 /**
+ * The neutral marker an OPTIONAL field carries.
+ *
+ * It replaces the red asterisk that used to mark the required ones, and the
+ * swap is not cosmetic. Seven asterisks per step in `cata-red` spent the
+ * system's one action colour on decoration, next to the single red button that
+ * had earned it ("la regla del rojo único"). It also marked the majority: on
+ * this wizard nearly every field is required, so the asterisk carried no
+ * information — a mark that fires on almost everything is a texture.
+ *
+ * Marking the minority instead says the same thing with one word and no
+ * colour. `required` stays on the input, so assistive technology still hears
+ * it from the attribute that means it.
+ */
+const OPTIONAL_MARKER = "(opcional)";
+
+/**
+ * How a placeholder announces that it is an example.
+ *
+ * "p. ej." appeared eight times on the enrolment wizard alone, and it is an
+ * abbreviation — the one thing "la regla de las palabras" forbids outright:
+ * *"la interfaz no abrevia. Si algo no entra, entra menos información, nunca
+ * una palabra cortada."* A placeholder has room for the whole word.
+ */
+export function example(value: string): string {
+  return `Por ejemplo: ${value}`;
+}
+
+/**
  * Derives a stable, unique-enough field id from a label so <label htmlFor>
  * can be programmatically associated with its <input>/<textarea>.
+ *
+ * This is the FALLBACK, not the contract. A label is copy, and copy gets
+ * rewritten; deriving the id from it makes every visible word a selector, and
+ * that is exactly how renaming one label in `/student/enroll` could take forty
+ * end-to-end cases with it. Callers that care pass an explicit `field` token
+ * (see `ENROLL_FIELD_TOKEN` in `enroll-utils.ts`); this keeps working for the
+ * wizards that have not declared theirs yet.
  */
 export function slugifyLabel(label: string): string {
   return label
@@ -43,6 +78,12 @@ export function slugifyLabel(label: string): string {
 
 interface WizardInputProps {
   idPrefix: string;
+  /**
+   * The field's own id token, appended to `idPrefix`. Declared by the caller
+   * so the DOM id survives a rewrite of `label` — see `slugifyLabel`, which is
+   * what runs when this is omitted.
+   */
+  field?: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -78,7 +119,7 @@ interface WizardInputProps {
 }
 
 export function WizardInput(opts: WizardInputProps): ReactElement {
-  const fieldId = `${opts.idPrefix}-${slugifyLabel(opts.label)}`;
+  const fieldId = `${opts.idPrefix}-${opts.field ?? slugifyLabel(opts.label)}`;
   const messageId = `${fieldId}-message`;
   const hasError = Boolean(opts.error);
   const { numericMode } = opts;
@@ -147,13 +188,13 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
 
   return (
     <div className="mb-4">
-      <label htmlFor={fieldId} className="mb-1.5 block text-sm font-semibold text-cata-text">
+      <label htmlFor={fieldId} className="mb-field block text-sm font-semibold text-ink">
         {opts.label}
-        {opts.required && <span className="ml-0.5 text-cata-red">*</span>}
+        {!opts.required && <span className="ml-1 font-normal text-ink-3">{OPTIONAL_MARKER}</span>}
       </label>
       <div className="relative">
         {opts.icon && (
-          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-cata-text/65">
+          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3">
             {opts.icon}
           </span>
         )}
@@ -174,13 +215,19 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           aria-invalid={hasError || undefined}
           aria-describedby={opts.error || limitReached || opts.hint ? messageId : undefined}
           inputMode={(opts.inputMode ?? "text") as InputHTMLAttributes<HTMLInputElement>["inputMode"]}
+          /* `state-bad` is the error ink of the ramp; `cata-red` is the ACTION
+             colour, and as a border it said "press me" on the one field the
+             visitor got wrong. The 3px `cata-red/10` halo went with it: a
+             translucent red composites to 1.27–1.96:1, which the system already
+             retired once as decoration rather than an indicator. The border
+             alone is the state, and the shared focus ring marks focus. */
           className={`input-field ${opts.icon ? "pl-10" : ""} ${
-            hasError ? "border-cata-red ring-[3px] ring-cata-red/10" : ""
+            hasError ? "border-state-bad" : ""
           }`}
         />
       </div>
       {hasError ? (
-        <p id={messageId} className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red">
+        <p id={messageId} className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-bad">
           <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
           {opts.error}
         </p>
@@ -188,13 +235,13 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
         <p
           id={messageId}
           aria-live="polite"
-          className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-state-warn"
+          className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-warn"
         >
           <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
           {LIMIT_REACHED_MESSAGE}
         </p>
       ) : opts.hint ? (
-        <p id={messageId} className="mt-1.5 text-xs text-ink-3">
+        <p id={messageId} className="mt-field text-xs text-ink-3">
           {opts.hint}
         </p>
       ) : null}
@@ -204,6 +251,8 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
 
 interface WizardTextareaProps {
   idPrefix: string;
+  /** See `WizardInputProps.field` — the id token, declared rather than slugged from the label. */
+  field?: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -215,19 +264,16 @@ interface WizardTextareaProps {
 }
 
 export function WizardTextarea(opts: WizardTextareaProps): ReactElement {
-  const fieldId = `${opts.idPrefix}-${slugifyLabel(opts.label)}`;
+  const fieldId = `${opts.idPrefix}-${opts.field ?? slugifyLabel(opts.label)}`;
   return (
     <div className="mb-4">
-      <label htmlFor={fieldId} className="mb-1.5 block text-sm font-semibold text-cata-text">
+      <label htmlFor={fieldId} className="mb-field block text-sm font-semibold text-ink">
         {opts.label}
-        {opts.required && <span className="ml-0.5 text-cata-red">*</span>}
-        {!opts.required && (
-          <span className="ml-1 text-cata-text/45">(opcional)</span>
-        )}
+        {!opts.required && <span className="ml-1 font-normal text-ink-3">{OPTIONAL_MARKER}</span>}
       </label>
       <div className="relative">
         {opts.icon && (
-          <span className="pointer-events-none absolute left-3.5 top-3 text-cata-text/65">
+          <span className="pointer-events-none absolute left-3.5 top-3 text-ink-3">
             {opts.icon}
           </span>
         )}
@@ -299,29 +345,29 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
   return (
     <>
       <WizardInput
-        idPrefix={idPrefix} disabled={disabled} label="Nombres" value={props.nombres}
-        onChange={props.onNombresChange} placeholder="p. ej. Juan Carlos" required
+        idPrefix={idPrefix} field="nombres" disabled={disabled} label="Nombres" value={props.nombres}
+        onChange={props.onNombresChange} placeholder={example("Juan Carlos")} required
         icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         error={errors.nombres} onBlur={() => props.onFieldBlur?.("nombres")}
         pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <WizardInput
-        idPrefix={idPrefix} disabled={disabled} label="Apellidos" value={props.apellidos}
-        onChange={props.onApellidosChange} placeholder="p. ej. Rodríguez López" required
+        idPrefix={idPrefix} field="apellidos" disabled={disabled} label="Apellidos" value={props.apellidos}
+        onChange={props.onApellidosChange} placeholder={example("Rodríguez López")} required
         icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         error={errors.apellidos} onBlur={() => props.onFieldBlur?.("apellidos")}
         pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <WizardInput
-          idPrefix={idPrefix} disabled={disabled} label="Fecha de Nacimiento" value={props.fechaNacimiento}
+          idPrefix={idPrefix} field="fecha-nacimiento" disabled={disabled} label="Fecha de nacimiento" value={props.fechaNacimiento}
           onChange={props.onFechaNacimientoChange} type="date" required
           icon={<Calendar size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           error={errors.fechaNacimiento} onBlur={() => props.onFieldBlur?.("fechaNacimiento")}
         />
         <WizardInput
-          idPrefix={idPrefix} disabled={disabled} label="Cédula de Identidad" value={props.cedula}
-          onChange={props.onCedulaChange} placeholder="p. ej. 1712345678" required
+          idPrefix={idPrefix} field="cedula" disabled={disabled} label="Cédula de identidad" value={props.cedula}
+          onChange={props.onCedulaChange} placeholder={example("1712345678")} required
           icon={<Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           pattern="[0-9]{10}" inputMode="numeric" numericMode="cedula"
           error={errors.cedula} onBlur={() => props.onFieldBlur?.("cedula")}
@@ -333,15 +379,19 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         />
       </div>
       <WizardInput
-        idPrefix={idPrefix} disabled={disabled} label="Teléfono" value={props.telefono}
-        onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
+        idPrefix={idPrefix} field="telefono" disabled={disabled} label="Teléfono" value={props.telefono}
+        onChange={props.onTelefonoChange} placeholder={example("0991234567")} required
         icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         pattern="[0-9]+" inputMode="tel" numericMode="phone"
         error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
         hint={PHONE_HINT}
       />
+      {/* `sunken`, not `canvas`. The surface ladder is canvas → sunken → paper,
+          so `canvas` is the field the PAGE stands on; spending it on a recessed
+          well INSIDE a paper card inverts the ladder and paints the well darker
+          than the page around the card that holds it. */}
       {props.fechaNacimiento && (
-        <div className="rounded-ctl bg-canvas p-3 text-xs text-ink-3">
+        <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
           Edad calculada:{" "}
           <span className="font-semibold text-ink">
             {ageValid ? `${age} años` : "—"}
@@ -371,24 +421,28 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
   const { idPrefix, disabled } = props;
   return (
     <>
-      <div className="my-8 h-px bg-line" />
-      <div className="mb-3 flex items-center gap-2">
+      {/* One first-level step between blocks (`page`, 20px), not the 32px this
+          used to write by hand. The wizard carried seven hand-written distances
+          and separated the same kind of work with 16px on one step and 32px on
+          the next. */}
+      <div className="my-page h-px bg-line" />
+      <div className="mb-section flex items-center gap-2">
         <Phone size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
         <p className="text-2xs font-bold uppercase text-ink-3">
-          Contacto de Emergencia
+          Contacto de emergencia
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <WizardInput
-          idPrefix={idPrefix} disabled={disabled} label="Nombre del Contacto" value={props.contacto}
-          onChange={props.onContactoChange} placeholder="p. ej. María Rodríguez" required
+          idPrefix={idPrefix} field="contacto-emergencia" disabled={disabled} label="Nombre del contacto" value={props.contacto}
+          onChange={props.onContactoChange} placeholder={example("María Rodríguez")} required
           icon={<UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           error={props.contactoError} onBlur={props.onContactoBlur}
           pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={150} minLength={3}
         />
         <WizardInput
-          idPrefix={idPrefix} disabled={disabled} label="Teléfono de Emergencia" value={props.telefono}
-          onChange={props.onTelefonoChange} placeholder="p. ej. 0991234567" required
+          idPrefix={idPrefix} field="telefono-emergencia" disabled={disabled} label="Teléfono de emergencia" value={props.telefono}
+          onChange={props.onTelefonoChange} placeholder={example("0991234567")} required
           icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           pattern="[0-9]+" inputMode="tel" numericMode="phone"
           error={props.telefonoError} onBlur={props.onTelefonoBlur}
@@ -442,7 +496,7 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
   return (
     <>
       {props.formErrors.length > 0 && (
-        <div className="alert-error mt-4 items-start" role="alert">
+        <div className="alert-error mt-section items-start" role="alert">
           <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
           <div className="space-y-2">
             <ul className="list-inside list-disc space-y-1">
@@ -469,10 +523,10 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
         </div>
       )}
 
-      <div className="mt-8 flex items-start justify-between gap-3">
+      <div className="mt-page flex items-start justify-between gap-3">
         <div>
           {!props.isFirst && (
-            <Button variant="ghost" onClick={props.onBack} disabled={props.submitting}>
+            <Button variant="tertiary" onClick={props.onBack} disabled={props.submitting}>
               <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Atrás
             </Button>
