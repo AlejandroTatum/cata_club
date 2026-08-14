@@ -27,28 +27,46 @@
 import { type FormEvent, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Lock, Eye, EyeOff, ArrowLeft, AlertCircle, Check, X, CheckCircle2 } from "lucide-react";
+import { Lock, Eye, EyeOff, AlertCircle, Check, X, CheckCircle2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { restablecerContrasenia } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
-import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
-import { BackLink, Button } from "@/components/ui";
+import AuthShell, {
+  AUTH_INPUT_CLASSES,
+  AUTH_LABEL_CLASSES,
+  AUTH_LINK_CLASSES,
+} from "@/components/auth/AuthShell";
+import { BackLink, Button, buttonClasses } from "@/components/ui";
 import { buildPasswordRules } from "./reset-password-utils";
 import { toUserMessage } from "@/lib/error-message";
 
-/** `.authnote` for this screen — the expired-link exit the prototype asks for. */
+/**
+ * `.authnote` for this screen — the expired-link exit the prototype asks for.
+ *
+ * It wears `AUTH_LINK_CLASSES` now, the same skin `/login`'s two links wear.
+ * The hand-written version was `font-semibold text-cata-red` with no
+ * underline: 4.10:1 on the canvas this note stands on, at 10.5px, and
+ * indistinguishable from a red phrase that is not a link.
+ */
 const EXPIRED_LINK_NOTE = (
   <>
     ¿El enlace ya venció?{" "}
-    <Link
-      href="/forgot-password"
-      className="font-semibold text-cata-red transition-colors hover:text-cata-red-dark"
-    >
+    <Link href="/forgot-password" className={AUTH_LINK_CLASSES}>
       Pedir uno nuevo
     </Link>{" "}
     — los enlaces duran 30 minutos.
   </>
 );
+
+/**
+ * The same note on the state that ALREADY offers that exit as its action.
+ *
+ * The dead-link card's whole content is "ask for a new one", and the note
+ * underneath repeated the destination sixty pixels below it under a second
+ * name. What only the note carries is the thirty minutes, so that is what it
+ * keeps here.
+ */
+const LINK_LIFETIME_NOTE = "Los enlaces de recuperación duran 30 minutos.";
 
 function ResetPasswordContent(): React.ReactElement {
   const toast = useToast();
@@ -72,21 +90,23 @@ function ResetPasswordContent(): React.ReactElement {
 
   if (!token) {
     return (
-      <AuthShell title="Enlace no válido" note={EXPIRED_LINK_NOTE}>
+      <AuthShell title="Enlace no válido" note={LINK_LIFETIME_NOTE}>
         <div className="flex flex-col items-center gap-2.5 py-2 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">
-            <AlertCircle size={ICON.lg} className="text-cata-red" strokeWidth={1.5} aria-hidden="true" />
+            {/* `state-bad`, not the action red: this disc reports a state, and
+                the only thing on this card that may say "press me" is the exit
+                below it. */}
+            <AlertCircle size={ICON.lg} className="text-state-bad" strokeWidth={1.5} aria-hidden="true" />
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
             El enlace de recuperación no contiene un token válido. Solicite uno nuevo y
             vuelva a intentarlo.
           </p>
         </div>
-        <Link
-          href="/forgot-password"
-          className="inline-flex h-ctl w-full items-center justify-center gap-2 rounded-ctl border border-cata-red bg-cata-red text-sm font-semibold text-white transition-colors hover:border-cata-red-dark hover:bg-cata-red-dark"
-        >
-          <ArrowLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+        {/* The product's one recipe for "a navigation that is this block's
+            action", not a nineteenth hand-written copy of it. The back arrow
+            went with the string: this control moves forward. */}
+        <Link href="/forgot-password" className={buttonClasses("primary", "md", "w-full")}>
           Solicitar nuevo enlace
         </Link>
       </AuthShell>
@@ -123,11 +143,10 @@ function ResetPasswordContent(): React.ReactElement {
             su nueva contraseña.
           </p>
         </div>
-        <Link
-          href="/login"
-          className="inline-flex h-ctl w-full items-center justify-center gap-2 rounded-ctl border border-cata-red bg-cata-red text-sm font-semibold text-white transition-colors hover:border-cata-red-dark hover:bg-cata-red-dark"
-        >
-          Iniciar Sesión
+        {/* Same recipe as the dead-link exit, and sentence case: the interface
+            writes "Iniciar sesión", not a headline. */}
+        <Link href="/login" className={buttonClasses("primary", "md", "w-full")}>
+          Iniciar sesión
         </Link>
       </AuthShell>
     );
@@ -223,16 +242,21 @@ function ResetPasswordContent(): React.ReactElement {
               disabled={submitting}
               aria-invalid={mismatch}
               aria-describedby={mismatch ? "confirm-password-error" : undefined}
-              className={`${AUTH_INPUT_CLASSES} pl-9 ${
-                mismatch ? "border-cata-red ring-[3px] ring-cata-red/10" : ""
-              }`}
+              /* `state-bad` is the error ink of the ramp; `cata-red` is the
+                 ACTION colour and as a border it said "press me" on the one
+                 field the visitor got wrong. The 3px `cata-red/10` halo went
+                 with it: a translucent red composites to 1.27–1.96:1, which the
+                 system retired once already as decoration rather than an
+                 indicator. `WizardInput` made both of those moves in the
+                 enrolment batch; this screen kept the old pair. */
+              className={`${AUTH_INPUT_CLASSES} pl-9 ${mismatch ? "border-state-bad" : ""}`}
             />
           </div>
           {mismatch && (
             <p
               id="confirm-password-error"
               role="alert"
-              className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-cata-red"
+              className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-state-bad"
             >
               <AlertCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               No coincide con la anterior.

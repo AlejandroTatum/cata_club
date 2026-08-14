@@ -123,6 +123,30 @@ export const AUTH_INPUT_CLASSES =
 export const AUTH_LABEL_CLASSES = "mb-1.5 block text-xs font-semibold text-ink";
 
 /**
+ * The ONE link skin the four auth screens share.
+ *
+ * It lived in `login/page.tsx` as a file-local constant, which is why
+ * `/reset-password` could write a second one — `font-semibold text-cata-red`,
+ * no underline — and nothing noticed. Two screens inheriting one shell had two
+ * answers for "what does a link look like here".
+ *
+ * `cata-red-dark`, not `cata-red`: the fill measures 4.10:1 on the canvas the
+ * note below the card stands on, and 5.00:1 on the paper inside it, so it is
+ * under AA exactly where the small print is. The dark cut reads 6.34:1 and
+ * 7.74:1. The underline is what separates the colour's two jobs — the button
+ * is pressed, these are followed.
+ *
+ * The hit area is deliberately NOT in here: WCAG 2.2 SC 2.5.8 exempts a link
+ * inline in a sentence, and every use of this string so far is one. A link
+ * that stands alone adds `min-h-[24px]` itself, the way `/login`'s recovery
+ * link does.
+ */
+export const AUTH_LINK_CLASSES =
+  "inline-flex items-center gap-1 text-xs font-semibold text-cata-red-dark " +
+  "underline decoration-cata-red-dark/40 underline-offset-[3px] transition-colors " +
+  "hover:decoration-cata-red-dark";
+
+/**
  * The muted ink used on coal (`#8B8B93`) and the brighter supporting line
  * (`#B9B9C1`). Both are prototype literals with no product token: the `ink-*`
  * ramp is defined for light surfaces only.

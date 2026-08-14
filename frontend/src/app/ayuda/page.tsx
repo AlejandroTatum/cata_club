@@ -80,11 +80,14 @@ export default function AyudaPage(): React.ReactElement {
        * needs to READ OFF rather than read — a parent checking whether they
        * make it from school by 16:00 is scanning a column, not a paragraph.
        */}
-      <section
-        aria-labelledby="horarios-heading"
-        className="card p-5 sm:p-6"
-      >
-        <h2 id="horarios-heading" className="mb-1 text-base font-extrabold text-ink">
+      <section aria-labelledby="horarios-heading" className="card p-page">
+        {/* The `title` step: 20px Graduate, uppercase, weight 400 — the name of
+            a card, spelled the way every other card on this shell spells it.
+            `tracking-flat` cancels the -0.02em the step carries for Barlow. */}
+        <h2
+          id="horarios-heading"
+          className="mb-1 font-display text-lg uppercase leading-tight tracking-flat text-ink"
+        >
           Horarios de entrenamiento
         </h2>
         <p className="mb-4 text-xs text-ink-2">
@@ -142,19 +145,20 @@ export default function AyudaPage(): React.ReactElement {
           const Icon = accent.icon;
 
           return (
-            <section
-              key={section.title}
-              aria-labelledby={headingId}
-              className="card p-5 sm:p-6"
-            >
+            <section key={section.title} aria-labelledby={headingId} className="card p-page">
               <div className="mb-4 flex items-center gap-3">
+                {/* `rounded-ctl`, not the 12px this used to write: the system
+                    has two radii, and a 36px chip is control-shaped. */}
                 <span
                   aria-hidden="true"
-                  className={`flex h-9 w-9 flex-none items-center justify-center rounded-xl ${accent.iconBg}`}
+                  className={`flex h-9 w-9 flex-none items-center justify-center rounded-ctl ${accent.iconBg}`}
                 >
                   <Icon size={ICON.base} strokeWidth={1.5} className={accent.iconFg} />
                 </span>
-                <h2 id={headingId} className="text-base font-extrabold text-ink">
+                <h2
+                  id={headingId}
+                  className="font-display text-lg uppercase leading-tight tracking-flat text-ink"
+                >
                   {section.title}
                 </h2>
               </div>
@@ -177,7 +181,10 @@ export default function AyudaPage(): React.ReactElement {
        * scrolled this far did not find their answer, and that is exactly the
        * moment to offer a person.
        */}
-      <section className="rounded-card border border-line-2 bg-sunken p-5 text-center sm:p-6">
+      {/* A sunken inset, not a card — so its heading stays at the dense step
+          and in Barlow. It is a question put to the reader, not the name of a
+          block, and "si dudás, es Barlow". */}
+      <section className="rounded-card border border-line-2 bg-sunken p-page text-center">
         <HelpCircle size={ICON.base} strokeWidth={1.5} aria-hidden="true" className="mx-auto mb-2 text-ink-3" />
         <h2 className="text-sm font-extrabold text-ink">¿No encontró lo que buscaba?</h2>
         <p className="mx-auto mt-1 max-w-md text-xs text-ink-2">

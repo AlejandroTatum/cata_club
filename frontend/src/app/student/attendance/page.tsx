@@ -197,9 +197,25 @@ function SessionList({
   studentName: string | null;
 }): React.ReactElement {
   const sessions = profile.recentSessions;
+  const empty = sessions.length === 0;
 
   return (
-    <section className="card overflow-hidden" aria-labelledby="sessions-title">
+    /*
+     * `flex-1` when — and only when — there is nothing to list (D11b).
+     *
+     * `AppShell` stretches `<main>` to the window, and until this batch no
+     * first-level child of this screen claimed that height: a socio nuevo saw
+     * the record card stop at 466px and 434px of bare canvas under it, 48% of
+     * a 900px window. This is the same move `/student/payments` measured, and
+     * it is conditional for the reason recorded there — stretching a card that
+     * holds ONE row draws an empty frame under a single line, which is the
+     * hole relocated inside a border rather than closed.
+     */
+    <section
+      data-testid="sessions-card"
+      className={cn("card flex flex-col overflow-hidden", empty && "flex-1")}
+      aria-labelledby="sessions-title"
+    >
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
         {/* The record is the main column, and it names its subject: a guardian
             reading two children's histories one click apart must never have to
@@ -214,8 +230,13 @@ function SessionList({
         )}
       </div>
 
-      {sessions.length === 0 ? (
-        <EmptyState surface="inset"
+      {empty ? (
+        /* `fill` goes with the `flex-1` above: it centres the statement inside
+           the stretched surface. Pinned to the top it would be the same hole,
+           only now framed. */
+        <EmptyState
+          surface="inset"
+          fill
           icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
           title={
             studentName
@@ -243,6 +264,23 @@ function SessionList({
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * The scope, stated. Rows presented without this line read as "this is the
+ * whole record".
+ *
+ * Extracted because both layouts render it and the two used to be two copies
+ * of the same sentence — the drift that put four different spellings of the
+ * same fact into this product before.
+ */
+function PortalWindowNote(): React.ReactElement {
+  return (
+    <p className="max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
+      Su portal recibe las {PORTAL_SESSION_WINDOW} sesiones más recientes que el club registró. Si
+      necesita un período anterior, pídalo al club.
+    </p>
   );
 }
 
@@ -285,6 +323,11 @@ function StudentAttendanceContent(): React.ReactElement {
       // reading a dependent's record. See the same change on `/student/payments`.
       title="Asistencias"
       subtitle="Cada sesión que el entrenador registró, con el estado que le asignó."
+      // `short`, like its two siblings. This screen's height is a function of
+      // how many sessions EXIST — the portal hands over a capped window with
+      // no pager — which is the reading that admits a screen to the 1024px
+      // measure. See `lib/__tests__/content-measure.test.ts`.
+      measure="short"
     >
       {state.status === "loading" && (
         <div className="card">
@@ -349,17 +392,35 @@ function AttendanceView({
             </Link>
           }
         />
+      ) : selectedProfile.recentSessions.length === 0 ? (
+        /*
+         * The socio nuevo: ONE column, and the record is it.
+         *
+         * The rail exists to hold the counted recap, and at zero sessions
+         * there is nothing counted — the card would read "Todavía no hay
+         * sesiones registradas" over four zeros, which is the same sentence
+         * the record already says two hundred pixels to its left, plus a
+         * tally of nothing. `/student/payments` dropped its own rail for the
+         * same reason once the block that justified it moved out: a 340px
+         * column kept for its own sake is the "un riel no cierra un vacío
+         * vertical" mistake `PAGE_RAIL`'s own note warns about.
+         *
+         * With the rail gone the record is a direct child of `<main>`, which
+         * is the flex column that already holds the window's full height, so
+         * its `flex-1` finally has something to claim. The scope footnote
+         * stays where a footnote goes: under it, at the foot.
+         */
+        <>
+          <SessionList profile={selectedProfile} studentName={studentName} />
+          <PortalWindowNote />
+        </>
       ) : (
         <div className={PAGE_RAIL}>
-          <div className="flex min-w-0 flex-col gap-3">
+          {/* `gap-section` — the declared step between the parts of one block,
+              not the 12px this wrote by hand. */}
+          <div className="flex min-w-0 flex-col gap-section">
             <SessionList profile={selectedProfile} studentName={studentName} />
-
-            {/* The scope, stated. Rows presented without this line read as
-                "this is the whole record". */}
-            <p className="max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
-              Su portal recibe las {PORTAL_SESSION_WINDOW} sesiones más recientes que el club
-              registró. Si necesita un período anterior, pídalo al club.
-            </p>
+            <PortalWindowNote />
           </div>
 
           <AttendanceRecap profile={selectedProfile} studentName={studentName} />

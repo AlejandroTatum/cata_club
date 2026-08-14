@@ -19,13 +19,13 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { BackLink } from "@/components/ui";
+import { BackLink, Button, Stepper, buttonClasses, cn } from "@/components/ui";
+import Link from "next/link";
 import { useToast } from "@/contexts/ToastContext";
-import { WizardInput, WizardNavigation } from "@/components/wizard-fields";
+import { WizardInput, WizardNavigation, example } from "@/components/wizard-fields";
 import { crearCuentaAdmin, searchStudents, fetchInstituciones, type Institucion } from "@/services/api";
 import {
   GraduationCap,
@@ -43,10 +43,15 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { calculatePersonAge } from "@/lib/identity-validation";
+import { formatDate } from "@/lib/format-utils";
 import {
+  CREAR_CUENTA_ID_PREFIX,
+  CREAR_CUENTA_SCHOOL_TYPE_ID,
+  CREAR_CUENTA_SHORT_LABELS,
   CREAR_CUENTA_STEP_ORDER,
   CREAR_CUENTA_STEP_LABELS,
   BLOOD_TYPE_OPTIONS,
+  crearCuentaFieldId,
   initialCrearCuentaFormData,
   validateCrearCuentaStep,
   validateCrearCuentaForm,
@@ -56,12 +61,124 @@ import {
   type AccountType,
 } from "./crear-cuenta-utils";
 
+/**
+ * The four kinds of account, and the hue each one carries.
+ *
+ * Written as a table instead of four near-identical `<button>` blocks: the old
+ * markup repeated the same forty-character class string four times, which is
+ * how the selected-state skin came to be red in four places at once and why
+ * changing it meant changing it four times.
+ *
+ * The hues themselves are unchanged and stay declared where they were
+ * (`tailwind.config.ts`, `cuenta.*`): they are the one place in this product
+ * where colour carries CATEGORY rather than status, they are measured as
+ * pairs, and "Jugador" wearing the system accent at `/15` is deliberate and
+ * documented there. What changes is the SELECTED state, which was also red —
+ * so choosing "Jugador" painted red over red, one for identity and one for
+ * selection, and neither could be told from the other.
+ */
+const ACCOUNT_TYPES: {
+  type: AccountType;
+  icon: typeof GraduationCap;
+  iconBg: string;
+  iconFg: string;
+  title: string;
+  description: string;
+}[] = [
+  {
+    type: "JUGADOR",
+    icon: GraduationCap,
+    iconBg: "bg-cata-red/15",
+    iconFg: "text-cata-red-dark",
+    title: "Jugador",
+    description: "Mayor de 18 que entrena y paga su propia mensualidad.",
+  },
+  {
+    type: "REPRESENTANTE",
+    icon: Building2,
+    iconBg: "bg-cuenta-representante-bg",
+    iconFg: "text-cuenta-representante",
+    title: "Representante",
+    description: "Adulto que paga por sus hijos y también entrena.",
+  },
+  {
+    type: "MENOR",
+    icon: Baby,
+    iconBg: "bg-cuenta-menor-bg",
+    iconFg: "text-cuenta-menor",
+    title: "Menor o dependiente",
+    description: "Menor de 18 a cargo de un representante que paga por él.",
+  },
+  {
+    type: "ENTRENADOR",
+    icon: Dumbbell,
+    iconBg: "bg-cuenta-entrenador-bg",
+    iconFg: "text-cuenta-entrenador",
+    title: "Entrenador",
+    description: "Mayor de 18 que dicta los entrenamientos. No paga mensualidad.",
+  },
+];
+
+/**
+ * One block of the summary — the four used to be four copies of the same
+ * eleven lines, which is how they came to share a red icon and a label the
+ * reader could not see.
+ *
+ * The icon is `ink-3`, not `cata-red`. Ten decorative red icons on a wizard
+ * with one red button is "el rojo como decoración", and the rule is explicit
+ * that the colour is the primary action and the destructive state, and nothing
+ * else.
+ *
+ * The heading is the LABEL step of the type scale — 10.5px, weight 800,
+ * `tracking-caps` — spelled with tokens instead of `text-xs font-semibold
+ * tracking-wider`. Its ink was `cata-text/45`: 2.67:1 on paper, so the six
+ * words naming the six blocks of the account about to be created were the
+ * least legible strings on the screen. `ink-3-strong` reads 5.24:1 on the
+ * sunken surface these blocks stand on.
+ */
+function SummaryBlock({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: typeof FileText;
+  title: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div className="rounded-card border border-line bg-sunken p-page">
+      <div className="mb-3 flex items-center gap-2">
+        <Icon size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+        <h3 className="text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">
+          {title}
+        </h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** One fact of the summary — the `<dt>`/`<dd>` pair, spelled once. */
+function SummaryRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <>
+      <dt className="text-ink-2">{label}</dt>
+      <dd className="font-semibold text-ink">{value}</dd>
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 function CrearCuentaContent(): React.ReactElement {
-  const router = useRouter();
   const { showSuccess } = useToast();
 
   const [formData, setFormData] = useState<CrearCuentaFormData>(initialCrearCuentaFormData);
@@ -95,7 +212,6 @@ function CrearCuentaContent(): React.ReactElement {
   const currentIndex = CREAR_CUENTA_STEP_ORDER.indexOf(step);
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === CREAR_CUENTA_STEP_ORDER.length - 1;
-  const progress = ((currentIndex + 1) / CREAR_CUENTA_STEP_ORDER.length) * 100;
 
   const doSearchRepresentante = useCallback(async (query: string): Promise<void> => {
     if (query.trim().length < 2) {
@@ -229,86 +345,69 @@ function CrearCuentaContent(): React.ReactElement {
     const age = formData.fechaNacimiento ? calculatePersonAge(formData.fechaNacimiento) : null;
     return (
       <div className="space-y-section">
-        <p className="text-sm leading-relaxed text-cata-text/65">
+        <p className="text-sm leading-relaxed text-ink-2">
           Seleccione el tipo de cuenta que desea crear:
         </p>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <button
-            type="button"
-            onClick={() => selectAccountType("JUGADOR")}
-            className={`rounded-xl border-2 p-5 text-left transition-all duration-200 ${
-              formData.accountType === "JUGADOR"
-                ? "border-cata-red/40 bg-cata-red/10 ring-1 ring-cata-red/20"
-                : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
-            }`}
-          >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cata-red/15">
-              <GraduationCap size={ICON.base} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            </div>
-            <h3 className="mb-1 font-semibold text-cata-text">Jugador</h3>
-            <p className="text-xs leading-relaxed text-cata-text/65">
-              Mayor de 18 que entrena y paga su propia mensualidad.
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => selectAccountType("REPRESENTANTE")}
-            className={`rounded-xl border-2 p-5 text-left transition-all duration-200 ${
-              formData.accountType === "REPRESENTANTE"
-                ? "border-cata-red/40 bg-cata-red/10 ring-1 ring-cata-red/20"
-                : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
-            }`}
-          >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cuenta-representante-bg">
-              <Building2 size={ICON.base} strokeWidth={1.5} className="text-cuenta-representante" aria-hidden="true" />
-            </div>
-            <h3 className="mb-1 font-semibold text-cata-text">Representante</h3>
-            <p className="text-xs leading-relaxed text-cata-text/65">
-              Adulto que paga por sus hijos y también entrena.
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => selectAccountType("MENOR")}
-            className={`rounded-xl border-2 p-5 text-left transition-all duration-200 ${
-              formData.accountType === "MENOR"
-                ? "border-cata-red/40 bg-cata-red/10 ring-1 ring-cata-red/20"
-                : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
-            }`}
-          >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cuenta-menor-bg">
-              <Baby size={ICON.base} strokeWidth={1.5} className="text-cuenta-menor" aria-hidden="true" />
-            </div>
-            <h3 className="mb-1 font-semibold text-cata-text">Menor / Dependiente</h3>
-            <p className="text-xs leading-relaxed text-cata-text/65">
-              Menor de 18 a cargo de un representante que paga por él.
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => selectAccountType("ENTRENADOR")}
-            className={`rounded-xl border-2 p-5 text-left transition-all duration-200 ${
-              formData.accountType === "ENTRENADOR"
-                ? "border-cata-red/40 bg-cata-red/10 ring-1 ring-cata-red/20"
-                : "border-cata-border bg-cata-surface hover:border-cata-red/20 hover:shadow-soft"
-            }`}
-          >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-cuenta-entrenador-bg">
-              <Dumbbell size={ICON.base} strokeWidth={1.5} className="text-cuenta-entrenador" aria-hidden="true" />
-            </div>
-            <h3 className="mb-1 font-semibold text-cata-text">Entrenador</h3>
-            <p className="text-xs leading-relaxed text-cata-text/65">
-              Mayor de 18 que dicta los entrenamientos. No paga mensualidad.
-            </p>
-          </button>
+        {/*
+         * Two up, not four.
+         *
+         * `lg:grid-cols-4` inside a capped form column gave each card 138px of
+         * content box, so every description wrapped to four or five lines and
+         * two of the four titles broke in the middle — the row read as four
+         * leaflets rather than four choices. At two up each card gets 342px,
+         * every description sets on two lines, and no title wraps.
+         *
+         * `items-stretch`: the four titles used to sit at four different
+         * heights because each card was as tall as its own copy. They are one
+         * row of equal boxes now, which is what makes them comparable.
+         */}
+        <div className="grid items-stretch gap-4 sm:grid-cols-2">
+          {ACCOUNT_TYPES.map(({ type, icon: Icon, iconBg, iconFg, title, description }) => {
+            const selected = formData.accountType === type;
+            return (
+              <button
+                key={type}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => selectAccountType(type)}
+                className={cn(
+                  "flex flex-col rounded-card border bg-paper p-4 text-left transition-colors duration-150",
+                  // "Un estado activo se dibuja con caucho más el punto
+                  // amarillo" — `FilterPill`'s rule, which is the product's
+                  // one answer for "this is the chosen one". The red it
+                  // replaces was forbidden twice over: as a selected state at
+                  // all, and here in particular, because "Jugador" already
+                  // wears red as its category.
+                  selected
+                    ? "border-coal shadow-card"
+                    : "border-line-2 hover:border-coal/30",
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`mb-section flex h-10 w-10 items-center justify-center rounded-ctl ${iconBg}`}
+                >
+                  <Icon size={ICON.base} strokeWidth={1.5} className={iconFg} />
+                </span>
+                <span className="mb-1 flex items-center gap-1.5 text-sm font-bold text-ink">
+                  {title}
+                  {selected && (
+                    <span
+                      data-testid={`account-type-mark-${type}`}
+                      aria-hidden="true"
+                      className="h-1.5 w-1.5 flex-none rounded-full bg-ball"
+                    />
+                  )}
+                </span>
+                <span className="text-xs leading-relaxed text-ink-2">{description}</span>
+              </button>
+            );
+          })}
         </div>
 
         {formData.accountType === "MENOR" && age !== null && !isNaN(age) && age >= 18 && (
-          <div className="rounded-xl border border-state-warn/30 bg-state-warn-bg p-3 text-xs text-state-warn">
+          <div className="rounded-ctl border border-state-warn/30 bg-state-warn-bg p-3 text-xs text-state-warn">
             <p className="flex items-center gap-1.5 font-semibold">
               <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               La fecha de nacimiento indica una persona mayor de edad ({age} años). Seleccione Jugador o Representante.
@@ -322,12 +421,13 @@ function CrearCuentaContent(): React.ReactElement {
   function renderPersonalStep(): React.ReactElement {
     return (
       <div className="space-y-field">
-        <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
+        <p className="mb-4 text-sm leading-relaxed text-ink-2">
           Ingrese los datos personales de la cuenta a crear:
         </p>
 
         <WizardInput
-          idPrefix="crear-cuenta"
+          idPrefix={CREAR_CUENTA_ID_PREFIX}
+          field="nombres"
           label="Nombres"
           value={formData.nombres}
           onChange={(v) => updateField("nombres", v)}
@@ -340,7 +440,8 @@ function CrearCuentaContent(): React.ReactElement {
         />
 
         <WizardInput
-          idPrefix="crear-cuenta"
+          idPrefix={CREAR_CUENTA_ID_PREFIX}
+          field="apellidos"
           label="Apellidos"
           value={formData.apellidos}
           onChange={(v) => updateField("apellidos", v)}
@@ -353,8 +454,9 @@ function CrearCuentaContent(): React.ReactElement {
         />
 
         <WizardInput
-          idPrefix="crear-cuenta"
-          label="Cédula"
+          idPrefix={CREAR_CUENTA_ID_PREFIX}
+          field="cedula"
+          label="Cédula de identidad"
           value={formData.cedula}
           onChange={(v) => updateField("cedula", v)}
           disabled={submitting}
@@ -365,8 +467,9 @@ function CrearCuentaContent(): React.ReactElement {
         />
 
         <WizardInput
-          idPrefix="crear-cuenta"
-          label="Fecha de Nacimiento"
+          idPrefix={CREAR_CUENTA_ID_PREFIX}
+          field="fecha-nacimiento"
+          label="Fecha de nacimiento"
           value={formData.fechaNacimiento}
           onChange={(v) => updateField("fechaNacimiento", v)}
           type="date"
@@ -375,7 +478,8 @@ function CrearCuentaContent(): React.ReactElement {
         />
 
         <WizardInput
-          idPrefix="crear-cuenta"
+          idPrefix={CREAR_CUENTA_ID_PREFIX}
+          field="telefono"
           label="Teléfono"
           value={formData.telefono}
           onChange={(v) => updateField("telefono", v)}
@@ -390,11 +494,14 @@ function CrearCuentaContent(): React.ReactElement {
         {/* School selector — only for MENOR type */}
         {formData.accountType === "MENOR" && instituciones.length > 0 && (
           <div className="mt-4">
-            <label htmlFor="crear-cuenta-tipo-escuela" className="mb-1.5 block text-sm font-semibold text-cata-text">
-              Tipo de Escuela
+            <label
+              htmlFor={CREAR_CUENTA_SCHOOL_TYPE_ID}
+              className="mb-1.5 block text-sm font-semibold text-ink"
+            >
+              Tipo de escuela
             </label>
             <select
-              id="crear-cuenta-tipo-escuela"
+              id={CREAR_CUENTA_SCHOOL_TYPE_ID}
               value={tipoEscuelaFilter}
               onChange={(e) => {
                 setTipoEscuelaFilter(e.target.value);
@@ -410,14 +517,19 @@ function CrearCuentaContent(): React.ReactElement {
               <option value="MUNICIPAL">Municipal</option>
             </select>
 
-            <label htmlFor="crear-cuenta-institucion" className="mb-1.5 mt-3 block text-sm font-semibold text-cata-text">
-              Escuela / Institución
+            <label
+              htmlFor={crearCuentaFieldId("institucionId")}
+              className="mb-1.5 mt-3 block text-sm font-semibold text-ink"
+            >
+              Escuela o institución
             </label>
-            <p className="mb-2 text-xs text-cata-text/50">
+            {/* `ink-3` — 4.62:1 on paper. This line was `cata-text/50`, which
+                measures 3.05:1 and is the hint nobody could read. */}
+            <p className="mb-2 text-xs text-ink-3">
               Seleccione la institución educativa del menor (opcional).
             </p>
             <select
-              id="crear-cuenta-institucion"
+              id={crearCuentaFieldId("institucionId")}
               value={formData.institucionId}
               onChange={(e) => updateField("institucionId", e.target.value)}
               disabled={submitting}
@@ -436,9 +548,9 @@ function CrearCuentaContent(): React.ReactElement {
         )}
 
         {formData.accountType === "MENOR" && (
-          <div className="mt-4 rounded-xl border border-cuenta-menor/25 bg-cuenta-menor-bg p-4">
+          <div className="mt-4 rounded-card border border-cuenta-menor/25 bg-cuenta-menor-bg p-page">
             <h3 className="mb-2 text-sm font-semibold text-cuenta-menor">
-              Representante Legal
+              Representante legal
             </h3>
             <p className="mb-3 text-xs text-cuenta-menor">
               Busque y seleccione el representante legal para este menor:
@@ -447,7 +559,7 @@ function CrearCuentaContent(): React.ReactElement {
               <Search
                 size={ICON.sm}
                 strokeWidth={1.5}
-                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-cata-text/65"
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3"
                 aria-hidden="true"
               />
               <input
@@ -463,7 +575,7 @@ function CrearCuentaContent(): React.ReactElement {
               <p className="mt-2 text-xs text-cuenta-menor">Buscando...</p>
             )}
             {representanteResults.length > 0 && (
-              <ul className="mt-2 max-h-40 divide-y divide-cuenta-menor/25 overflow-y-auto rounded-lg border border-cuenta-menor/25 bg-paper">
+              <ul className="mt-2 max-h-40 divide-y divide-cuenta-menor/25 overflow-y-auto rounded-ctl border border-cuenta-menor/25 bg-paper">
                 {representanteResults.map((r) => (
                   <li key={r.id}>
                     <button
@@ -494,17 +606,31 @@ function CrearCuentaContent(): React.ReactElement {
   function renderHealthStep(): React.ReactElement {
     return (
       <div className="space-y-section">
-        <p className="text-sm leading-relaxed text-cata-text/65">
-          Información médica del estudiante (opcional pero recomendada).
+        <p className="text-sm leading-relaxed text-ink-2">
+          Información médica de la persona. Si completa alguno de estos campos, el tipo de
+          sangre y el contacto de emergencia pasan a ser obligatorios.
         </p>
 
-        <div className="rounded-xl border border-state-ok/30 bg-state-ok-bg p-4">
+        {/*
+         * A plain block, not a green one.
+         *
+         * The five medical fields used to sit inside `bg-state-ok-bg` with a
+         * `state-ok` border — the SUCCESS tint of the state ramp, spent on a
+         * form that has not succeeded at anything yet. "Cuatro estados y
+         * ningún vocabulario paralelo": a state colour that describes no state
+         * is the vocabulary leaking. What the block needed was a boundary, and
+         * a hairline on the sunken step is what the system gives for that.
+         */}
+        <div className="rounded-card border border-line bg-sunken p-page">
           <div className="mb-3">
-            <label htmlFor="crear-cuenta-tipo-sangre" className="mb-1.5 block text-sm font-semibold text-cata-text">
-              Tipo de Sangre
+            <label
+              htmlFor={crearCuentaFieldId("tipoSangre")}
+              className="mb-1.5 block text-sm font-semibold text-ink"
+            >
+              Tipo de sangre
             </label>
             <select
-              id="crear-cuenta-tipo-sangre"
+              id={crearCuentaFieldId("tipoSangre")}
               value={formData.tipoSangre}
               onChange={(e) => updateField("tipoSangre", e.target.value)}
               disabled={submitting}
@@ -517,36 +643,42 @@ function CrearCuentaContent(): React.ReactElement {
             </select>
           </div>
 
+          {/* `example()`, not "p. ej." — four abbreviations in one step, on a
+              wizard whose sibling screens already say the whole word. */}
           <WizardInput
-            idPrefix="crear-cuenta"
-            label="Condiciones de Salud"
+            idPrefix={CREAR_CUENTA_ID_PREFIX}
+            field="condiciones-salud"
+            label="Condiciones de salud"
             value={formData.condicionesSalud}
             onChange={(v) => updateField("condicionesSalud", v)}
             disabled={submitting}
-            placeholder="p. ej. Asma, diabetes (separar con comas)"
+            placeholder={example("Asma, diabetes (separar con comas)")}
           />
 
           <WizardInput
-            idPrefix="crear-cuenta"
+            idPrefix={CREAR_CUENTA_ID_PREFIX}
+            field="alergias"
             label="Alergias"
             value={formData.alergias}
             onChange={(v) => updateField("alergias", v)}
             disabled={submitting}
-            placeholder="p. ej. Penicilina, mariscos"
+            placeholder={example("Penicilina, mariscos")}
           />
 
           <WizardInput
-            idPrefix="crear-cuenta"
-            label="Contacto de Emergencia"
+            idPrefix={CREAR_CUENTA_ID_PREFIX}
+            field="contacto-emergencia"
+            label="Nombre del contacto de emergencia"
             value={formData.contactoEmergencia}
             onChange={(v) => updateField("contactoEmergencia", v)}
             disabled={submitting}
-            placeholder="p. ej. Maria Lopez (madre)"
+            placeholder={example("María Rodríguez")}
           />
 
           <WizardInput
-            idPrefix="crear-cuenta"
-            label="Telefono de Emergencia"
+            idPrefix={CREAR_CUENTA_ID_PREFIX}
+            field="telefono-emergencia"
+            label="Teléfono de emergencia"
             value={formData.telefonoEmergencia}
             onChange={(v) => updateField("telefonoEmergencia", v)}
             disabled={submitting}
@@ -563,12 +695,13 @@ function CrearCuentaContent(): React.ReactElement {
   function renderCredentialsStep(): React.ReactElement {
     return (
       <div className="space-y-field">
-        <p className="mb-4 text-sm leading-relaxed text-cata-text/65">
+        <p className="mb-4 text-sm leading-relaxed text-ink-2">
           Ingrese las credenciales de acceso para la cuenta:
         </p>
 
         <WizardInput
-          idPrefix="crear-cuenta"
+          idPrefix={CREAR_CUENTA_ID_PREFIX}
+          field="correo"
           label="Correo electrónico"
           value={formData.correo}
           onChange={(v) => updateField("correo", v)}
@@ -579,7 +712,8 @@ function CrearCuentaContent(): React.ReactElement {
         />
 
         <WizardInput
-          idPrefix="crear-cuenta"
+          idPrefix={CREAR_CUENTA_ID_PREFIX}
+          field="contrasenia"
           label="Contraseña"
           value={formData.contrasenia}
           onChange={(v) => updateField("contrasenia", v)}
@@ -602,119 +736,82 @@ function CrearCuentaContent(): React.ReactElement {
     };
     return (
       <div className="space-y-section">
-        <p className="text-sm leading-relaxed text-cata-text/65">
+        <p className="text-sm leading-relaxed text-ink-2">
           Revise la información antes de crear la cuenta:
         </p>
 
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <FileText size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Tipo de Cuenta
-            </h3>
-          </div>
-          <p className="text-sm font-semibold text-cata-text">
+        <SummaryBlock icon={FileText} title="Tipo de cuenta">
+          <p className="text-sm font-semibold text-ink">
             {typeLabels[formData.accountType as AccountType]}
           </p>
-        </div>
+        </SummaryBlock>
 
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <User size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Datos Personales
-            </h3>
-          </div>
+        <SummaryBlock icon={User} title="Datos personales">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-field text-sm">
-            <dt className="text-cata-text/65">Nombres</dt>
-            <dd className="font-semibold text-cata-text">{formData.nombres}</dd>
-            <dt className="text-cata-text/65">Apellidos</dt>
-            <dd className="font-semibold text-cata-text">{formData.apellidos}</dd>
-            <dt className="text-cata-text/65">Cédula</dt>
-            <dd className="font-semibold text-cata-text">{formData.cedula}</dd>
-            <dt className="text-cata-text/65">Fecha de Nacimiento</dt>
-            <dd className="font-semibold text-cata-text">
-              {formData.fechaNacimiento}
-              {age !== null && !isNaN(age) && (
-                <span className="ml-2 text-cata-text/45">({age} años)</span>
-              )}
-            </dd>
-            <dt className="text-cata-text/65">Teléfono</dt>
-            <dd className="font-semibold text-cata-text">{formData.telefono}</dd>
+            <SummaryRow label="Nombres" value={formData.nombres} />
+            <SummaryRow label="Apellidos" value={formData.apellidos} />
+            <SummaryRow label="Cédula" value={formData.cedula} />
+            {/* `formatDate`, not the raw ISO string the field holds. "Una
+                columna, un formato": every other date the product prints is
+                `dd/mm/yyyy`, and this one was showing `1998-03-20` on the last
+                screen before the account is created. */}
+            <SummaryRow
+              label="Fecha de nacimiento"
+              value={
+                <>
+                  {formData.fechaNacimiento ? formatDate(formData.fechaNacimiento) : "—"}
+                  {age !== null && !isNaN(age) && (
+                    <span className="ml-2 font-normal text-ink-3">({age} años)</span>
+                  )}
+                </>
+              }
+            />
+            <SummaryRow label="Teléfono" value={formData.telefono} />
             {formData.accountType === "MENOR" && representanteSelected && (
-              <>
-                <dt className="text-cata-text/65">Representante</dt>
-                <dd className="font-semibold text-cata-text">
-                  {representanteSelected.nombre}
-                </dd>
-              </>
+              <SummaryRow label="Representante" value={representanteSelected.nombre} />
             )}
             {formData.institucionId && (
-              <>
-                <dt className="text-cata-text/65">Institución</dt>
-                <dd className="font-semibold text-cata-text">
-                  {instituciones.find((i) => String(i.id) === formData.institucionId)?.nombre || "—"}
-                </dd>
-              </>
+              <SummaryRow
+                label="Institución"
+                value={
+                  instituciones.find((i) => String(i.id) === formData.institucionId)?.nombre || "—"
+                }
+              />
             )}
           </dl>
-        </div>
+        </SummaryBlock>
 
-        <div className="card-hover p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Mail size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-              Credenciales de Acceso
-            </h3>
-          </div>
+        <SummaryBlock icon={Mail} title="Credenciales de acceso">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-field text-sm">
-            <dt className="text-cata-text/65">Correo</dt>
-            <dd className="font-semibold text-cata-text">{formData.correo}</dd>
-            <dt className="text-cata-text/65">Contraseña</dt>
-            <dd className="font-semibold text-cata-text">••••••••</dd>
+            <SummaryRow label="Correo" value={formData.correo} />
+            <SummaryRow label="Contraseña" value="••••••••" />
           </dl>
-        </div>
+        </SummaryBlock>
 
         {formData.tipoSangre && (
-          <div className="card-hover p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <FileText size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-cata-text/45">
-                Ficha Medica
-              </h3>
-            </div>
+          <SummaryBlock icon={Heart} title="Salud y emergencia">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-field text-sm">
-              <dt className="text-cata-text/65">Tipo de Sangre</dt>
-              <dd className="font-semibold text-cata-text">{formData.tipoSangre.replace(/_/g, " ")}</dd>
+              <SummaryRow label="Tipo de sangre" value={formData.tipoSangre.replace(/_/g, " ")} />
               {formData.condicionesSalud.trim() && (
-                <>
-                  <dt className="text-cata-text/65">Condiciones</dt>
-                  <dd className="font-semibold text-cata-text">{formData.condicionesSalud}</dd>
-                </>
+                <SummaryRow label="Condiciones de salud" value={formData.condicionesSalud} />
               )}
               {formData.alergias.trim() && (
-                <>
-                  <dt className="text-cata-text/65">Alergias</dt>
-                  <dd className="font-semibold text-cata-text">{formData.alergias}</dd>
-                </>
+                <SummaryRow label="Alergias" value={formData.alergias} />
               )}
               {formData.contactoEmergencia.trim() && (
-                <>
-                  <dt className="text-cata-text/65">Contacto Emergencia</dt>
-                  <dd className="font-semibold text-cata-text">{formData.contactoEmergencia}</dd>
-                </>
+                <SummaryRow
+                  label="Contacto de emergencia"
+                  value={formData.contactoEmergencia}
+                />
               )}
               {formData.telefonoEmergencia.trim() && (
-                <>
-                  <dt className="text-cata-text/65">Telefono Emergencia</dt>
-                  <dd className="font-semibold text-cata-text">{formData.telefonoEmergencia}</dd>
-                </>
+                <SummaryRow label="Teléfono de emergencia" value={formData.telefonoEmergencia} />
               )}
             </dl>
-          </div>
+          </SummaryBlock>
         )}
 
-        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-state-ok/30 bg-state-ok-bg p-4 text-sm text-state-ok">
+        <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-state-ok/30 bg-state-ok-bg p-page text-sm text-state-ok">
           <input
             type="checkbox"
             checked={summaryReviewed}
@@ -741,76 +838,111 @@ function CrearCuentaContent(): React.ReactElement {
   // ---- Render ----
 
   return (
-    <AppShell title="Crear Cuenta">
+    <AppShell
+      title="Crear cuenta"
+      subtitle="Cree una cuenta completa desde el panel, con su rol y su ficha médica."
+    >
       {confirmed ? (
-        <div className="flex min-h-[75vh] items-center justify-center py-12">
-          <div className="w-full max-w-lg text-center">
-            <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-cata-state-ok/10">
-              <CheckCircle size={ICON.lg} className="text-cata-state-ok" strokeWidth={1.5} aria-hidden="true" />
-            </div>
-            <h1 className="mb-3 text-xl font-bold tracking-tight text-cata-text">
-              Cuenta Creada
-            </h1>
-            <p className="mb-2 text-sm leading-relaxed text-cata-text/65">
-              <strong className="text-cata-text">
-                {formData.nombres} {formData.apellidos}
-              </strong>{" "}
-              ha sido registrado exitosamente.
-            </p>
-            <p className="mb-8 text-xs leading-relaxed text-cata-text/40">
-              Las credenciales de acceso fueron creadas de forma segura.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <button type="button" onClick={() => router.push("/members")} className="btn-primary">
-                Volver a Miembros
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFormData(initialCrearCuentaFormData);
-                  resetToFirstStep();
-                  setConfirmed(false);
-                  setSubmitting(false);
-                  setSummaryReviewed(false);
-                  setFormErrors([]);
-                  setRepresentanteSelected(null);
-                  setRepresentanteSearch("");
-                }}
-                className="btn-secondary"
-              >
-                Crear Otra Cuenta
-              </button>
-            </div>
+        /*
+         * The success screen no longer reserves three quarters of the window.
+         *
+         * `min-h-[75vh]` around four short lines is the shape the enrolment
+         * batch already removed from its own success screen — a hole with the
+         * message floating in the middle of it. It says what happened and what
+         * comes next, at the top of the column, and stops.
+         */
+        <div className="card mx-auto w-full max-w-lg p-page text-center">
+          <span className="mx-auto mb-section flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
+            <CheckCircle size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
+          </span>
+          <h2 className="mb-section font-display text-lg uppercase leading-tight tracking-flat text-ink">
+            Cuenta creada
+          </h2>
+          <p className="mb-2 text-sm leading-relaxed text-ink-2">
+            <strong className="font-semibold text-ink">
+              {formData.nombres} {formData.apellidos}
+            </strong>{" "}
+            ya puede entrar con el correo y la contraseña que acaba de registrar.
+          </p>
+          {/* `ink-3`, 4.62:1. It was `cata-text/40` — 2.36:1, the least legible
+              string this screen printed. */}
+          <p className="mb-page text-xs leading-relaxed text-ink-3">
+            Las credenciales de acceso fueron creadas de forma segura.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            {/* An `<a>`, not a `<button>` that calls `router.push`. "Lo que
+                navega no es un botón": this control changed the address bar
+                while wearing the one shape the system reserves for something
+                that does not, so it could not be middle-clicked, opened in a
+                tab, or read as a destination by anything. The skin is
+                unchanged — `buttonClasses` is the same recipe the button
+                spelled by hand — and the shape is now honest. */}
+            <Link href="/members" className={buttonClasses("primary")}>
+              Volver a Miembros
+            </Link>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setFormData(initialCrearCuentaFormData);
+                resetToFirstStep();
+                setConfirmed(false);
+                setSubmitting(false);
+                setSummaryReviewed(false);
+                setFormErrors([]);
+                setRepresentanteSelected(null);
+                setRepresentanteSearch("");
+              }}
+            >
+              Crear otra cuenta
+            </Button>
           </div>
         </div>
       ) : (
         <>
-          <BackLink href="/members" className="mb-6" />
+          <BackLink href="/members" />
 
-          {/* Progress bar */}
-          <div>
-            <div className="mb-2 flex items-center justify-between text-xs text-cata-text/45">
-              <span>
-                Paso {currentIndex + 1} de {CREAR_CUENTA_STEP_ORDER.length}
-              </span>
-              <span>{CREAR_CUENTA_STEP_LABELS[step]}</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-cata-border">
-              <div
-                className="h-full rounded-full bg-cata-red transition-all duration-400 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
+          {/*
+           * The named stepper, not an anonymous bar.
+           *
+           * `/student/enroll` and `/student/add-dependent` both draw `Stepper`
+           * — five pills, each with the name of what it asks — while this one
+           * drew a red fill and "Paso 1 de 5", which is the same fact as a
+           * percentage and tells nobody what step four wants. Two vocabularies
+           * for one job, and the one that carried less information was also
+           * the one spending the action colour on a decoration.
+           */}
+          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3">
+            Paso {currentIndex + 1} de {CREAR_CUENTA_STEP_ORDER.length}
+          </p>
 
-          {/* Form card */}
-          <div className="card mx-auto max-w-2xl p-6 sm:p-8">
-            <div className="mb-6 flex items-center gap-2">
-              {step === "type" && <GraduationCap size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "personal" && <User size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "health" && <Heart size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "credentials" && <Lock size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
-              {step === "summary" && <FileText size={ICON.sm} strokeWidth={1.5} className="text-cata-red" aria-hidden="true" />}
+          <Stepper
+            label="Pasos para crear una cuenta"
+            current={currentIndex + 1}
+            steps={CREAR_CUENTA_STEP_ORDER.map((s) => CREAR_CUENTA_SHORT_LABELS[s])}
+          />
+
+          {/*
+           * Left-aligned, not centred.
+           *
+           * `mx-auto` put the card's left edge at x=502 in a 1152px column
+           * while the back control, the stepper and the page title all started
+           * at x=262 — four pieces of one screen on two different left edges,
+           * which is the client's "cosas desalineadas" in its plainest form.
+           * The cap stays (a form is a reading column, and this one asks one
+           * question per row) and matches the 760px its sibling wizard
+           * `/student/add-dependent` already uses, so the two flows that
+           * collect the same person are the same width.
+           */}
+          <div className="card w-full max-w-[760px] p-page">
+            <div className="mb-page flex items-center gap-2">
+              {/* `ink-3`. Five decorative red icons — one per step — on a
+                  wizard whose single red control is the button that creates
+                  the account. */}
+              {step === "type" && <GraduationCap size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
+              {step === "personal" && <User size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
+              {step === "health" && <Heart size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
+              {step === "credentials" && <Lock size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
+              {step === "summary" && <FileText size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
               {/* DESIGN.md's `title` step: Graduate at 20px, uppercase, weight
                   400 — the title of the wizard's form card. The step labels are
                   short ("Datos personales" measures 195.8px uppercase, the
@@ -818,7 +950,7 @@ function CrearCuentaContent(): React.ReactElement {
                   heading never truncates, so the extra width this face costs
                   wraps at phone widths instead of overflowing. `tracking-flat`
                   cancels the -0.02em the size step carries for Barlow. */}
-              <h2 className="font-display text-lg uppercase tracking-flat text-cata-text">
+              <h2 className="font-display text-lg uppercase tracking-flat text-ink">
                 {CREAR_CUENTA_STEP_LABELS[step]}
               </h2>
             </div>
@@ -839,17 +971,20 @@ function CrearCuentaContent(): React.ReactElement {
                 onBack={handleBack}
                 onNext={handleNext}
                 submitButton={
+                  /* `buttonClasses`, like every other submit in the product —
+                     `.btn-primary` is the global class the primitive replaced,
+                     and it came with a `shadow-soft` no other button wears. */
                   <button
                     type="submit"
                     disabled={submitting || !summaryReviewed}
-                    className="btn-primary shadow-soft disabled:cursor-not-allowed disabled:opacity-50"
+                    className={buttonClasses("primary", "md", "disabled:cursor-not-allowed")}
                   >
                     {submitting ? (
-                      "Creando cuenta..."
+                      "Creando cuenta…"
                     ) : (
                       <>
                         <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                        Crear Cuenta
+                        Crear cuenta
                       </>
                     )}
                   </button>

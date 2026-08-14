@@ -23,7 +23,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getDefaultRoute } from "@/lib/auth-utils";
 import type { AuthErrorKind } from "@/services/auth";
-import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
+import AuthShell, {
+  AUTH_INPUT_CLASSES,
+  AUTH_LABEL_CLASSES,
+  AUTH_LINK_CLASSES,
+} from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui";
 
 /**
@@ -43,30 +47,19 @@ function firstNameOf(fullName: string): string {
 /** Written once because two fields point at it through `aria-describedby`. */
 const CREDENTIALS_ERROR_ID = "credentials-error";
 
-/**
- * The skin of a link on this card.
+/*
+ * The skin of a link on this card now lives in `AuthShell` as
+ * `AUTH_LINK_CLASSES`, beside the input and label recipes the same four
+ * screens already shared.
  *
  * `DESIGN.md`, Links: *"Lo que navega no es un botón: es un enlace subrayado
- * en rojo, con flecha cuando apunta a otra pantalla. Un enlace disfrazado de
- * botón es lo que hace que una pantalla tenga cinco cosas iguales que se
- * comportan distinto."* Both links here went somewhere else and neither was
- * underlined, so the card had two red bold phrases, two red bold error lines
- * and a red button, all wearing one colour and behaving three ways.
- *
- * `cata-red-dark`, not `cata-red`: the fill measures 4.10:1 on paper and fails
- * AA as text, which is why the system reserves the dark cut for exactly this.
- * The underline is what separates the colour's two jobs — the button is
- * pressed, these are followed.
- *
- * The hit area is NOT in here, and that is deliberate: WCAG 2.2 SC 2.5.8
- * exempts a link inline in a sentence, and "Inscríbase" is one — a 24px floor
- * on it would open up the line it sits in. The standalone recovery link adds
- * the floor itself, below.
+ * en rojo, con flecha cuando apunta a otra pantalla."* Both links here went
+ * somewhere else and neither was underlined, so the card had two red bold
+ * phrases, two red bold error lines and a red button, all wearing one colour
+ * and behaving three ways. That was fixed here and stayed here, which is how
+ * `/reset-password` came to write a second, underline-less version of the same
+ * idea: a recipe that lives in one screen is not a system.
  */
-const AUTH_LINK_CLASSES =
-  "inline-flex items-center gap-1 text-xs font-semibold text-cata-red-dark " +
-  "underline decoration-cata-red-dark/40 underline-offset-[3px] transition-colors " +
-  "hover:decoration-cata-red-dark";
 
 /** Permissive client-side format check — the backend is the real source of truth for validity. */
 const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

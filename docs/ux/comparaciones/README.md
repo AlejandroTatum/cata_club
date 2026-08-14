@@ -138,6 +138,35 @@ listas estaban escritas a mano— y con ella un tercer radio de 8px que vivía e
 todo el producto; y declara la **paleta de gráfico** en `DESIGN.md` y su sidecar, que era la deuda
 que la tanda del entrenador dejó apuntada para acá.
 
+### 9 · Fase 4 · La tanda final — las siete que faltaban
+**[`final.html`](final.html)**
+
+Las siete pantallas que quedaban, y con ellas se cierra el producto: `/admin/crear-cuenta`,
+`/student/attendance`, `/student/add-dependent`, `/ayuda`, `/forgot-password`, `/reset-password` y
+`/unauthorized`. Veintiocho capturas: catorce estados antes y después. Como las dos tandas
+anteriores, ninguna tenía issue que la midiera, así que el diagnóstico se armó leyéndolas contra
+[`DESIGN.md`](../../../DESIGN.md).
+
+**Dos de las siete son credenciales**, así que ahí la consigna vale doble: el contrato
+anti-enumeración, la política de contraseña y la lista de reglas en vivo quedaron intactos, y lo
+único que cambió es de qué color son dos bordes, con qué receta se dibujan dos enlaces y cuántas
+veces se nombra un mismo destino.
+
+Lo que cambió: la asistencia del socio nuevo bajó su **48% de aire muerto** —el segundo número más
+grande del rediseño— soltando el riel que no tenía nada que contar y dejando que el registro
+reclamara el alto; `/reset-password` dejó de ofrecer **el mismo destino dos veces con dos nombres a
+sesenta píxeles**; las cuatro tarjetas de tipo de cuenta dejaron de dibujar su selección en el rojo
+que una de ellas ya usaba como identidad; el asterisco rojo retirado se fue del único paso donde
+seguía vivo, al lado de los «(opcional)» que lo habían reemplazado; los cinco «p. ej.» pasaron a la
+palabra entera; **el id de cada campo dejó de derivarse del texto de su etiqueta** en los dos
+asistentes que faltaban, con el patrón del faro 2; y la pantalla de éxito del alta dejó de reservar
+75vh con un botón que en realidad navegaba. **Estado: pendiente de revisión.**
+
+Cierra además **doce cadenas de texto por debajo de AA** —cuatro de ellas bajo 3:1— con un candado
+nuevo, `lib/__tests__/ink-ramp-usage.test.ts`, que prohíbe apagar la tinta con un alfa en lugar de
+nombrar un escalón de la rampa; y con él, once cadenas más en seis archivos compartidos que estaban
+en el mismo estado, incluido el *placeholder* de `.input-field` a 2.09:1.
+
 ---
 
 ## Las mediciones
@@ -185,6 +214,20 @@ ventana, a 1440×900. Es el hueco que la persona ve vacío sin scrollear.
 | Descuentos | Catálogo vacío | 62% · 555px | **38% · 340px** |
 | Reportes | Este mes (87 personas) | 0% | 0% |
 | Reportes | Rango sin datos (enero 2019) | 22% · 194px | **15% · 137px** |
+| Crear cuenta | Paso 1 · Tipo | 29% · 263px | **19% · 173px** |
+| Crear cuenta | Paso 3 · Salud | 5% · 47px | **0%** |
+| Crear cuenta | Paso 5 · Resumen | 0% | 0% · 4px |
+| Agregar dependiente | Paso 1 · Datos | 5% · 43px | **4% · 38px** |
+| Agregar dependiente | Paso 3 · Salud | 4% · 33px | **3% · 28px** |
+| Agregar dependiente | Paso 4 · Resumen | 3% · 31px | 3% · 31px |
+| Asistencias (socio) | Jugador con 24 sesiones | 0% | 0% |
+| Asistencias (socio) | Socio nuevo, cero sesiones | 48% · 434px | **4% · 32px** |
+| Preguntas frecuentes | Sin sesión | 2% · 14px | **0%** |
+| Recuperar contraseña | Formulario en reposo | 23% · 204px | 23% · 204px |
+| Recuperar contraseña | Enlace enviado | 24% · 217px | 24% · 217px |
+| Elegir contraseña | Formulario con token | 16% · 148px | **16% · 144px** |
+| Elegir contraseña | Enlace no válido | 26% · 238px | 26% · 238px |
+| Sin permiso | Cuenta sin rol | 34% · 303px | 34% · 303px |
 
 El login es el primer número que no baja, y es a propósito: el hueco lo produce el centrado de la
 tarjeta sobre el eje de la página, que es lo que el dueño pidió expresamente. Bajarlo exige
@@ -231,7 +274,22 @@ crece con datos porque no hay datos que la hagan crecer.
 Ya no queda nada medido sin tocar, y con la tanda del admin **ya no queda nada sin medir**: las seis
 pantallas del panel de gestión tampoco tenían issue que las cuantificara, así que su diagnóstico se
 armó leyéndolas contra `DESIGN.md`, igual que el del entrenador, y está en
-[`admin.html`](admin.html) con su lista priorizada de doce hallazgos.
+[`admin.html`](admin.html) con su lista priorizada de doce hallazgos. Lo mismo vale para las siete
+de la tanda final, con su lista de catorce en [`final.html`](final.html).
+
+La asistencia del socio nuevo es el **48%** con el que arrancó la tanda final y el segundo número
+más grande de todo el rediseño. El 4% de la derecha **no cuenta toda la historia y su comparación lo
+dice**: el sobrante entró a la superficie en lugar de desaparecer, así que la tarjeta mide ahora
+unos 600px de los que cerca de 460 son blanco dentro del borde. Es la misma contrapartida que
+`/members` y `/student/payments` ya midieron sobre este movimiento. Las dos alternativas están
+descartadas con su motivo: no estirar deja **53%** de lienzo desnudo —peor que el 48% de partida— y
+lo único que llenaría el hueco con contenido verdadero es el horario semanal del alumno, que esa
+pantalla tiene prohibido mostrar por escrito desde que se creó.
+
+Las cuatro pantallas que **no se mueven** en la tanda final son las tres de credenciales y la de sin
+permiso, y por la misma razón que el login: el hueco lo produce el centrado de la tarjeta sobre el
+eje de la página. Bajarlo exige descentrarla o inventar contenido, y dos de ellas son además las que
+D14 protege más.
 
 Descuentos es el **62%** con el que arrancó esta tanda y el número más grande de todo el rediseño.
 El 38% de la derecha subestima la mejora: el guión mide la última **hoja** del árbol, y con la
@@ -266,6 +324,10 @@ con la regla de `DESIGN.md` que rompe cada hallazgo. Las pantallas anteriores lo
 issue; de acá en adelante se arma leyendo la pantalla contra el sistema, y va escrito para poder
 discutirse antes de mirar una sola captura.
 
+Una pantalla capturada y **no** modificada también entra a su comparación, con las dos tomas y el
+motivo. Es la única forma de distinguir «se miró y estaba bien» de «no se miró»: en la tanda final
+son `/forgot-password`, su estado de enlace enviado y `/unauthorized`.
+
 ---
 
 ## El orden del plan
@@ -275,9 +337,16 @@ discutirse antes de mirar una sola captura.
 | F1 | Fundación: tokens, tipografía, primitivas, riel | ✅ |
 | F2 | La landing renovada — la trabaja Alejandro. **Espera el OK del cliente** | pendiente |
 | F3 | Tres faros: Miembros · Inscripción · Login y Perfil | ✅ 3 de 3 |
+| **F4** | **El barrido de las pantallas del producto** | **✅ completa** |
 | F4 · tanda 1 | El socio: Mi cuenta · Ficha médica · Mis pagos | ✅ |
 | F4 · tanda 2 | El entrenador: Mi día · Pasar lista · Historial | ✅ |
 | F4 · tanda 3 | El admin: Panel · Pagos · Horarios · Asistencias · Descuentos · Reportes | ✅ |
+| F4 · tanda final | Crear cuenta · Asistencias del socio · Agregar dependiente · Preguntas frecuentes · Recuperar y elegir contraseña · Sin permiso | ✅ |
+
+**F4 está completa.** Las veinte pantallas del producto pasaron por el sistema, cada una con su
+comparación, sus mediciones antes y después y su diagnóstico escrito contra `DESIGN.md`. Lo único
+que queda del plan es **F2, la landing**, que la trabaja Alejandro aparte y es la única que
+necesita el OK del cliente antes de entregarse.
 
 Los faros están elegidos por contraste, no por importancia: una tabla densa, un formulario largo y
 la cara al socio. Si el sistema aguanta esos tres, aguanta los que siguen.

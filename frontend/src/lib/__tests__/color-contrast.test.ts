@@ -732,7 +732,12 @@ const RAW_PALETTE_DEBT: readonly string[] = [
   // The list shrinks rather than keeping a clean file on it, which is what the
   // test below exists to force: a debt entry nobody removes is a file that
   // reads as still owing.
-  "app/student/add-dependent/page.tsx",
+  // `app/student/add-dependent/page.tsx` was here and is PAID OFF. Its two
+  // entries were `text-blue-700/80` on the credentials notice and
+  // `text-amber-700/80` on the "datos sensibles" one — 3.84:1 on the canvas
+  // and 3.25:1 on the warn tint, both under AA — and the final batch replaced
+  // them with `ink-2` and `state-warn`, which are the tokens those two boxes
+  // were already half-wearing.
   "app/student/proof-utils.ts",
 ];
 

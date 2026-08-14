@@ -106,7 +106,7 @@ export default function AgeUpConfirmation({
         </p>
 
         <div className="mt-4">
-          <label htmlFor="age-up-password" className="text-xs font-semibold text-cata-text/45">
+          <label htmlFor="age-up-password" className="text-xs font-semibold text-ink">
             Confirma tu contraseña
           </label>
           <input

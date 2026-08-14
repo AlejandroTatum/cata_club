@@ -29,13 +29,16 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: vi.fn(),
 }));
 
-// The shell is stubbed so these tests stay about the FORM. Its two class
-// constants are re-exported as-is, since the page applies them to its inputs
-// and labels; see ResetPasswordPage.test.tsx for coverage of the real shell.
-vi.mock("@/components/auth/AuthShell", () => ({
+// The shell is stubbed so these tests stay about the FORM. Only the COMPOSITION
+// is replaced; every class constant comes through from the real module, because
+// the link skin is one of them now and "the links look like links" below reads
+// it. Stubbing those to "" would make that case pass against nothing. See
+// ResetPasswordPage.test.tsx for coverage of the real shell.
+vi.mock("@/components/auth/AuthShell", async () => ({
+  ...(await vi.importActual<typeof import("@/components/auth/AuthShell")>(
+    "@/components/auth/AuthShell",
+  )),
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  AUTH_INPUT_CLASSES: "",
-  AUTH_LABEL_CLASSES: "",
 }));
 
 const mockShowError = vi.fn();

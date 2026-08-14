@@ -1,0 +1,1177 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fase 4 — La tanda final · Cata Club</title>
+    <style>
+      /* Las tres familias del club, desde el mismo `public/fonts` que sirve el
+         producto. Rutas relativas: este archivo se abre desde el repositorio. */
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-600.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+      @font-face { font-family: "Barlow"; src: url("../../../frontend/public/fonts/barlow-800.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+      @font-face { font-family: "Graduate"; src: url("../../../frontend/public/fonts/graduate-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+      @font-face { font-family: "Playfair Display"; src: url("../../../frontend/public/fonts/playfair-display-600.woff2") format("woff2"); font-display: swap; }
+
+      /* Los tokens de DESIGN.md, transcritos. Ninguno inventado acá. */
+      :root {
+        --coal: #131316; --coal-2: #1c1c21; --coal-3: #26262c;
+        --red: #d92128; --red-dark: #a11d22;
+        --ball: #ffd600; --ball-ink: #6e5700;
+        --paper: #fff; --sunken: #f4f4f7; --canvas: #e8e8ee;
+        --line: #dedee6; --line-2: #cfcfda;
+        --ink: #17181c; --ink-2: #4a4a55; --ink-3: #74747f; --ink-3-strong: #63636e;
+        --ok: #137739; --ok-bg: #e7f4ec;
+        --warn: #a94d08; --warn-bg: #fbf0e2;
+        --bad: #c51b22; --bad-bg: #fbe9ea;
+        --r-card: 14px; --r-ctl: 10px;
+        --s-page: 20px; --s-section: 14px; --s-field: 7px;
+        --shadow-card: 0 1px 2px rgba(19,19,22,.06), 0 4px 10px -3px rgba(19,19,22,.08);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: Barlow, system-ui, sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+        letter-spacing: -0.01em;
+      }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 40px var(--s-page) 80px; }
+
+      /* --- Cabecera ------------------------------------------------------ */
+      header.top {
+        background: var(--coal);
+        color: var(--paper);
+        border-radius: var(--r-card);
+        padding: 28px var(--s-page);
+        margin-bottom: var(--s-page);
+      }
+      .kicker {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ball); margin: 0 0 10px;
+      }
+      h1 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 46px;
+        line-height: .95; letter-spacing: -.05em; text-transform: uppercase;
+        margin: 0 0 12px;
+      }
+      header.top p { margin: 0; color: #b9b9c1; max-width: 62ch; }
+
+      h2 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 26px;
+        line-height: 1.15; letter-spacing: -.03em; text-transform: uppercase;
+        margin: 40px 0 var(--s-section);
+      }
+      h3 {
+        font-family: Graduate, serif; font-weight: 400; font-size: 20px;
+        line-height: 1.2; letter-spacing: -.02em; text-transform: uppercase;
+        margin: 0 0 var(--s-field);
+      }
+      p { margin: 0 0 var(--s-section); }
+      strong { font-weight: 700; }
+      /* Un identificador de código, en el sistema: sin familia monoespaciada
+         —el sistema tiene tres familias y ninguna lo es— y con el radio de
+         control, que es uno de los dos radios que existen. Barlow a 12.5px es
+         el paso `xs`, el mismo que usa el producto para metadato secundario. */
+      code {
+        font-size: 12.5px; background: var(--sunken); border: 1px solid var(--line);
+        border-radius: var(--r-ctl); padding: 1px 6px;
+      }
+
+      .card {
+        background: var(--paper); border: 1px solid var(--line);
+        border-radius: var(--r-card); box-shadow: var(--shadow-card);
+        padding: var(--s-page); margin-bottom: var(--s-section);
+      }
+      /* El hombro de caucho: lo lleva la tarjeta que pide algo, y solo esa. */
+      .card.shoulder { padding: 0; overflow: hidden; }
+      .card.shoulder > .shoulder-bar {
+        background: var(--coal); padding: 8px var(--s-page);
+        display: flex; justify-content: flex-end;
+      }
+      .card.shoulder > .shoulder-bar span {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ball);
+      }
+      .card.shoulder > .shoulder-body { padding: var(--s-page); }
+
+      /* --- Tablas -------------------------------------------------------- */
+      table { width: 100%; border-collapse: collapse; }
+      thead th {
+        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink-3-strong);
+        text-align: left; padding: 0 10px 8px; border-bottom: 1px solid var(--line-2);
+      }
+      tbody td {
+        font-size: 13.5px; padding: 11px 10px; border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      tbody tr:last-child td { border-bottom: 0; }
+      td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .win { color: var(--ok); font-weight: 700; }
+      .flat { color: var(--ink-3-strong); }
+      .lose { color: var(--warn); font-weight: 700; }
+
+      /* --- Insignias ----------------------------------------------------- */
+      .badge {
+        display: inline-flex; align-items: center; gap: 6px; height: 26px;
+        padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+        letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+      }
+      .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .badge.ok { background: var(--ok-bg); color: var(--ok); }
+      .badge.warn { background: var(--warn-bg); color: var(--warn); }
+      .badge.bad { background: var(--bad-bg); color: var(--bad); }
+      .badge.neutral { background: #efeff2; color: var(--ink-3-strong); }
+
+      /* --- Capturas ------------------------------------------------------ */
+      .shots { display: grid; gap: var(--s-section); margin-bottom: var(--s-page); }
+      @media (min-width: 900px) { .shots { grid-template-columns: 1fr 1fr; } }
+      figure { margin: 0; }
+      figure img {
+        display: block; width: 100%; height: auto;
+        border: 1px solid var(--line-2); border-radius: var(--r-ctl);
+        background: var(--paper);
+      }
+      figcaption {
+        margin-top: var(--s-field); font-size: 12.5px; color: var(--ink-3-strong);
+      }
+      figcaption b {
+        display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink); margin-bottom: 2px;
+      }
+
+      /* --- Listas de hallazgos ------------------------------------------- */
+      ul.findings { list-style: none; margin: 0 0 var(--s-section); padding: 0; }
+      ul.findings > li {
+        border-top: 1px solid var(--line); padding: 12px 0 12px 0;
+      }
+      ul.findings > li:first-child { border-top: 0; padding-top: 0; }
+      ul.findings .what { font-weight: 700; }
+      ul.findings .why { color: var(--ink-2); font-size: 13.5px; }
+
+      /* El diagnóstico priorizado: una fila por hallazgo, con su gravedad. */
+      ol.diagnosis { list-style: none; margin: 0 0 var(--s-section); padding: 0; counter-reset: hallazgo; }
+      ol.diagnosis > li {
+        display: grid; grid-template-columns: 34px 1fr; gap: 0 12px;
+        border-top: 1px solid var(--line); padding: 12px 0;
+      }
+      ol.diagnosis > li:first-child { border-top: 0; padding-top: 0; }
+      ol.diagnosis > li::before {
+        counter-increment: hallazgo; content: counter(hallazgo, decimal-leading-zero);
+        font-family: Graduate, serif; font-size: 20px; line-height: 1.2;
+        letter-spacing: -.02em; color: var(--ink-3);
+      }
+      ol.diagnosis .what { font-weight: 700; margin: 0 0 2px; }
+      ol.diagnosis .why { color: var(--ink-2); font-size: 13.5px; margin: 0; }
+      ol.diagnosis .rule {
+        display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink-3-strong); margin-top: 4px;
+      }
+
+      /* La regla roja: separa bloques, no decora. */
+      hr.rule { border: 0; border-top: 3px solid var(--red); width: 56px; margin: 36px 0 0; }
+
+      /* Una decisión de producto tomada en automático. Destacada, no enterrada. */
+      .call {
+        border-left: 3px solid var(--red); background: var(--sunken);
+        border-radius: 0 var(--r-ctl) var(--r-ctl) 0;
+        padding: 14px 16px; margin: 0 0 var(--s-section);
+      }
+      .call .tag {
+        display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--red-dark); margin-bottom: 4px;
+      }
+      .call p:last-child { margin-bottom: 0; }
+      .note { color: var(--ink-2); font-size: 13.5px; }
+      a { color: var(--red-dark); text-underline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <p class="kicker">Fase 4 · La tanda final · Con esto se cierra el producto</p>
+        <h1>Las siete<br />que faltaban</h1>
+        <p>
+          El alta desde el panel, la asistencia del socio, agregar un dependiente, las preguntas
+          frecuentes, las dos pantallas de recuperar contraseña y la de sin permiso. Capturadas
+          contra el entorno de QA a 1440×900, con el mismo guión de medición que las trece
+          anteriores. Catorce estados, antes y después. El diagnóstico salió de leer las siete
+          contra <a href="../../../DESIGN.md">DESIGN.md</a> y sus reglas con nombre, como en las
+          dos tandas anteriores: ninguna de las siete tenía issue que la midiera.
+        </p>
+      </header>
+
+      <p class="note">
+        La consigna de la fase —<strong>cambia cómo se ve, no qué hace</strong>— se cumple con la
+        suite entera en verde: <strong>3169 tests</strong> en 190 archivos, ningún endpoint tocado,
+        ninguna regla de negocio movida. Vale doble en dos de estas siete:
+        <strong><code>/forgot-password</code> y <code>/reset-password</code> son credenciales</strong>,
+        así que ninguna validación, ningún flujo y ningún mensaje de seguridad se tocó — el
+        contrato anti-enumeración del backend, la política de contraseña de ocho caracteres y la
+        lista de reglas en vivo están exactamente como estaban, y lo único que cambió ahí es de qué
+        color son dos bordes, con qué receta se dibujan dos enlaces y cuántas veces se nombra un
+        mismo destino.
+      </p>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>1 · El diagnóstico, por gravedad</h2>
+
+      <p>
+        Catorce hallazgos, ordenados por lo que le cuestan a la persona que usa la pantalla y no
+        por lo que cuestan de arreglar. Cada uno nombra la regla de <code>DESIGN.md</code> que
+        rompe. Los catorce se arreglaron.
+      </p>
+
+      <div class="card">
+        <ol class="diagnosis">
+          <li>
+            <div>
+              <p class="what">48% de aire muerto en la primera pantalla que abre un socio nuevo.</p>
+              <p class="why">
+                <code>/student/attendance</code> con cero sesiones registradas medía
+                <strong>434px de lienzo desnudo</strong> bajo una tarjeta que terminaba a los 466 —
+                el número más grande de esta tanda y el segundo del rediseño entero. Es exactamente
+                la forma que la tanda 1 cerró en las otras tres pantallas del socio:
+                <code>AppShell</code> estira <code>&lt;main&gt;</code> al alto de la ventana y
+                ningún hijo de primer nivel reclamaba el sobrante. Y encima la pantalla decía dos
+                veces lo mismo — «Todavía no hay sesiones registradas» en el riel, «Aún no hay
+                asistencias registradas» en la lista, a doscientos píxeles uno del otro— sobre un
+                recuento de cuatro ceros.
+              </p>
+              <span class="rule">La regla del aire · La regla del estado flaco</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Doce cadenas de texto por debajo de AA, cuatro de ellas bajo 3:1.</p>
+              <p class="why">
+                <code>/admin/crear-cuenta</code> apagaba la tinta con un alfa en lugar de nombrar un
+                escalón de la rampa: <code>cata-text/45</code> mide <strong>2.67:1</strong> sobre
+                papel, <code>/40</code> mide <strong>2.36:1</strong> y <code>/50</code> mide
+                <strong>3.05:1</strong>. Seis de las ocho eran los rótulos del resumen, así que las
+                palabras que nombran cada bloque de la cuenta que está por crearse eran lo menos
+                legible de la pantalla. En <code>/student/add-dependent</code>, dos colores de la
+                paleta cruda de Tailwind: <code>text-blue-700/80</code> a
+                <strong>3.84:1</strong> sobre el lienzo y <code>text-amber-700/80</code> a
+                <strong>3.25:1</strong> sobre su propio tinte. Y en <code>/reset-password</code>,
+                <code>text-cata-red</code> como enlace de la letra chica: 4.10:1 sobre canvas, a
+                10,5px.
+              </p>
+              <span class="rule">La regla del par medido</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Dos controles al mismo destino, con dos nombres, a sesenta píxeles.</p>
+              <p class="why">
+                El estado de enlace vencido de <code>/reset-password</code> dibujaba un botón rojo
+                de ancho completo que decía «Solicitar nuevo enlace» —con una flecha hacia
+                <em>atrás</em> sobre un control que va hacia adelante— y justo debajo, en la letra
+                chica, «Pedir uno nuevo». Los dos apuntaban a <code>/forgot-password</code>. Es el
+                «un botón por acá y otro por allá» del cliente en su forma más literal, y de paso
+                dos etiquetas que se deducen una de la otra. Los dos botones estaban además
+                escritos a mano —<code>inline-flex h-ctl … bg-cata-red</code>—, o sea una
+                decimonovena copia de una receta que el producto ya exporta.
+              </p>
+              <span class="rule">La regla de la acción · La regla de las palabras · Enlaces</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">El rojo como estado seleccionado, encima del rojo que ya era identidad.</p>
+              <p class="why">
+                Las cuatro tarjetas de tipo de cuenta dibujaban su selección con
+                <code>bg-cata-red/10</code> + <code>ring-cata-red/20</code> +
+                <code>border-cata-red/40</code>, y la regla lo prohíbe con esas palabras: <em>«Nunca
+                es un estado seleccionado […] Un estado activo se dibuja con caucho más el punto
+                amarillo.»</em> Peor: «Jugador» lleva <code>cata-red/15</code> como su
+                <strong>categoría</strong> —declarado y medido en <code>tailwind.config.ts</code>—,
+                así que elegirlo pintaba rojo sobre rojo, uno por identidad y otro por selección, y
+                ninguno de los dos se distinguía del otro.
+              </p>
+              <span class="rule">La regla del rojo único</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Dos marcadores contradictorios de obligatoriedad, en el mismo paso.</p>
+              <p class="why">
+                El paso de salud de <code>/student/add-dependent</code> dibujaba «Tipo de Sangre
+                <span style="color: var(--red)">*</span>» —el asterisco rojo que
+                <code>wizard-fields.tsx</code> retiró, con su porqué escrito— ochenta píxeles encima
+                de dos campos marcados «(opcional)» por el reemplazo. La misma pantalla marcaba lo
+                obligatorio de una manera y lo opcional de la otra, y había que aprender las dos
+                para leer cualquiera de las dos.
+              </p>
+              <span class="rule">La regla del rojo único · Ningún cuarto vocabulario</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Cinco «p. ej.» contra cuatro «Por ejemplo:», a veces en la misma tarjeta.</p>
+              <p class="why">
+                La abreviatura es lo único que «la regla de las palabras» prohíbe de plano, y
+                <code>example()</code> existe justamente para que nadie la vuelva a escribir. En el
+                paso de salud del asistente del representante las dos convenciones se veían a la
+                vez: «p. ej. Asma, diabetes» en el campo de enfermedades y «Por ejemplo: María
+                Rodríguez» ochenta píxeles más abajo, en el contacto de emergencia.
+              </p>
+              <span class="rule">La regla de las palabras</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">El id de cada campo salía del texto de su etiqueta, en los dos asistentes.</p>
+              <p class="why">
+                Es la deuda que el faro 2 cerró con <code>ENROLL_FIELD_TOKEN</code> y que estas dos
+                pantallas no habían pagado. Ninguno de los siete <code>WizardInput</code> de
+                <code>/admin/crear-cuenta</code> declaraba un <code>field</code>, así que
+                <code>slugifyLabel</code> construía el id con la copia visible: «Fecha de
+                Nacimiento» daba <code>#crear-cuenta-fecha-de-nacimiento</code> mientras el mismo
+                campo en los otros dos asistentes es <code>-fecha-nacimiento</code>, y «Contraseña»
+                daba <code>-contrasena</code> contra <code>-contrasenia</code>. Dos de los renombres
+                que esta tanda hace —sacar las mayúsculas de título, poner los acentos— habrían
+                movido un id cada uno, en silencio.
+              </p>
+              <span class="rule">Deuda anotada del faro 2</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Diez iconos rojos decorativos en un asistente con un solo botón rojo.</p>
+              <p class="why">
+                Uno por encabezado de paso y uno por bloque del resumen, todos
+                <code>text-cata-red</code>. El rojo es la acción primaria y el estado destructivo y
+                <strong>nunca decoración</strong>; a los diez, el único control que lo había ganado
+                —«Crear cuenta»— competía con diez adornos del mismo color.
+              </p>
+              <span class="rule">La regla del rojo único</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Una tarjeta centrada debajo de tres controles alineados a la izquierda.</p>
+              <p class="why">
+                <code>/admin/crear-cuenta</code> ponía su tarjeta de formulario con
+                <code>mx-auto max-w-2xl</code>, así que su borde izquierdo caía en x=502 mientras el
+                título de la pantalla, el control de volver y la barra de progreso arrancaban todos
+                en x=262. Cuatro piezas de una pantalla sobre dos ejes distintos: el «cosas
+                desalineadas» del cliente en su forma más simple. Y las cuatro tarjetas de tipo, en
+                <code>lg:grid-cols-4</code> dentro de una columna de 672px, quedaban con
+                <strong>138px de caja de contenido</strong>: dos de los cuatro títulos partidos a la
+                mitad y todas las descripciones en cuatro o cinco renglones.
+              </p>
+              <span class="rule">La regla del aire</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">La pantalla de éxito reservaba tres cuartos de la ventana.</p>
+              <p class="why">
+                <code>min-h-[75vh]</code> alrededor de cuatro renglones cortos — la misma forma que
+                la tanda de inscripción ya había sacado de su propia pantalla de éxito. Y su acción
+                primaria era un <code>&lt;button&gt;</code> que llamaba a <code>router.push</code>:
+                un control que cambia la barra de direcciones vestido con la única forma que el
+                sistema le reserva a algo que no navega, así que no se podía abrir en otra pestaña
+                ni leer como destino.
+              </p>
+              <span class="rule">La regla del aire · Enlaces</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Dos vocabularios de progreso para un solo trabajo.</p>
+              <p class="why">
+                <code>/student/enroll</code> y <code>/student/add-dependent</code> dibujan
+                <code>Stepper</code> —pastillas con el nombre de lo que cada paso pregunta— y
+                <code>/admin/crear-cuenta</code> dibujaba una barra roja rellena más «Paso 1 de 5»,
+                que es el mismo dato en forma de porcentaje y no le dice a nadie qué pide el paso
+                cuatro. El que cargaba menos información era además el que gastaba el color de la
+                acción en una decoración.
+              </p>
+              <span class="rule">Ningún cuarto vocabulario · La regla del rojo único</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Trece radios de 12px y uno de 8, en pantallas que tienen dos.</p>
+              <p class="why">
+                <code>rounded-xl</code> doce veces en <code>/admin/crear-cuenta</code>, una en
+                <code>/student/add-dependent</code> y una en <code>/ayuda</code>, más un
+                <code>rounded-lg</code> y cuatro <code>border-2</code> que el sistema tampoco tiene.
+                Con ellos venía la paleta retirada entera: cinco <code>cata-border</code>, cuatro
+                <code>cata-surface</code> y veinticinco <code>cata-text</code> — más que en
+                cualquier otra pantalla del producto.
+              </p>
+              <span class="rule">Dos radios y nada más · La regla del par medido</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">La caja verde de «correcto» envolviendo un formulario que no acertó nada.</p>
+              <p class="why">
+                Los cinco campos médicos de <code>/admin/crear-cuenta</code> vivían dentro de
+                <code>bg-state-ok-bg</code> con borde <code>state-ok</code> — el tinte de
+                <em>éxito</em> de la rampa de estados, gastado en un formulario vacío. Un color de
+                estado que no describe ningún estado es el vocabulario filtrándose. Lo que ese
+                bloque necesitaba era un límite, y para eso el sistema tiene la hairline sobre el
+                escalón hundido.
+              </p>
+              <span class="rule">La rampa de estados · Ningún cuarto vocabulario</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="what">Seis títulos de tarjeta fuera de Graduate, y un puñado de acentos perdidos.</p>
+              <p class="why">
+                Tres en <code>/ayuda</code> y uno en <code>/student/add-dependent</code> —este
+                último a <code>text-sm</code>, 13,5px, <strong>más chico que las etiquetas de los
+                campos de la tarjeta que titula</strong>—. El candado de tipografía no los ve: su
+                regla se dispara sobre un encabezado que <em>ya está</em> en el paso de título, así
+                que un título un escalón por debajo del piso pasa por ser demasiado chico, no por
+                cumplir. Con ellos, «Fecha de Nacimiento», «Tipo de Sangre», «Ficha Medica»,
+                «Telefono Emergencia», «Iniciar Sesión» y «Crear Otra Cuenta»: mayúsculas de título
+                y dos acentos faltando, en pantallas cuyos otros rótulos escriben «Nombre del
+                contacto». Y una fecha cruda, <code>1998-03-20</code>, en la última pantalla antes
+                de crear la cuenta.
+              </p>
+              <span class="rule">La regla de Graduate · La regla de las palabras · La regla del formato</span>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>2 · Las mediciones</h2>
+
+      <p>
+        Se mide igual que siempre: la distancia entre el borde inferior del contenido más bajo y el
+        fondo de la ventana, dividida por el alto de la ventana, a 1440×900. Las dos rondas leen la
+        misma base de QA y entran con la misma cuenta.
+      </p>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Pantalla</th>
+              <th>Estado</th>
+              <th>Antes</th>
+              <th>Después</th>
+              <th>Qué lo movió</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Crear cuenta</td>
+              <td>Paso 1 · Tipo</td>
+              <td class="num">29% · 263px</td>
+              <td class="num win">19% · 173px</td>
+              <td>Las cuatro tarjetas en 2×2, y la tarjeta a la izquierda.</td>
+            </tr>
+            <tr>
+              <td>Crear cuenta</td>
+              <td>Paso 3 · Salud</td>
+              <td class="num">5% · 47px</td>
+              <td class="num win">0%</td>
+              <td>Scrollea: el enunciado dice qué vuelve obligatorio qué.</td>
+            </tr>
+            <tr>
+              <td>Crear cuenta</td>
+              <td>Paso 5 · Resumen</td>
+              <td class="num">0%</td>
+              <td class="num flat">0% · 4px</td>
+              <td>Scrollea en los dos lados.</td>
+            </tr>
+            <tr>
+              <td>Agregar dependiente</td>
+              <td>Paso 1 · Datos</td>
+              <td class="num">5% · 43px</td>
+              <td class="num win">4% · 38px</td>
+              <td>Scrollea. Lo que cambió acá no es alto.</td>
+            </tr>
+            <tr>
+              <td>Agregar dependiente</td>
+              <td>Paso 3 · Salud</td>
+              <td class="num">4% · 33px</td>
+              <td class="num win">3% · 28px</td>
+              <td>Scrollea. Un marcador menos, una convención menos.</td>
+            </tr>
+            <tr>
+              <td>Agregar dependiente</td>
+              <td>Paso 4 · Resumen</td>
+              <td class="num">3% · 31px</td>
+              <td class="num flat">3% · 31px</td>
+              <td>Scrollea: 1116px → 1121px de documento.</td>
+            </tr>
+            <tr>
+              <td>Asistencias</td>
+              <td>Jugador con 24 sesiones</td>
+              <td class="num">0%</td>
+              <td class="num flat">0%</td>
+              <td>Scrollea: 1626px → 1628px de documento.</td>
+            </tr>
+            <tr>
+              <td>Asistencias</td>
+              <td><strong>Socio nuevo, cero sesiones</strong></td>
+              <td class="num">48% · 434px</td>
+              <td class="num win">4% · 32px</td>
+              <td>El registro reclama el sobrante — ver abajo.</td>
+            </tr>
+            <tr>
+              <td>Preguntas frecuentes</td>
+              <td>Sin sesión</td>
+              <td class="num">2% · 14px</td>
+              <td class="num win">0%</td>
+              <td>Scrollea, y el documento baja <strong>28px</strong>.</td>
+            </tr>
+            <tr>
+              <td>Recuperar contraseña</td>
+              <td>Formulario en reposo</td>
+              <td class="num">23% · 204px</td>
+              <td class="num flat">23% · 204px</td>
+              <td>Sin cambios: la tarjeta está centrada en el eje.</td>
+            </tr>
+            <tr>
+              <td>Recuperar contraseña</td>
+              <td>Enlace enviado</td>
+              <td class="num">24% · 217px</td>
+              <td class="num flat">24% · 217px</td>
+              <td>Sin cambios. Esta pantalla ya estaba bien.</td>
+            </tr>
+            <tr>
+              <td>Elegir contraseña</td>
+              <td>Formulario con token</td>
+              <td class="num">16% · 148px</td>
+              <td class="num win">16% · 144px</td>
+              <td>El halo del error se fue; el centrado manda.</td>
+            </tr>
+            <tr>
+              <td>Elegir contraseña</td>
+              <td>Enlace no válido</td>
+              <td class="num">26% · 238px</td>
+              <td class="num flat">26% · 238px</td>
+              <td>Un control menos y una nota más corta se compensan.</td>
+            </tr>
+            <tr>
+              <td>Sin permiso</td>
+              <td>Cuenta sin rol</td>
+              <td class="num">34% · 303px</td>
+              <td class="num flat">34% · 303px</td>
+              <td>No se tocó — ver la sección 8.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="call">
+        <span class="tag">Asistencias: el 4% no es todo lo que hay que decir</span>
+        <p>
+          El hueco bajó de <strong>434px a 32px</strong>, y eso es real: la tarjeta del registro
+          reclama ahora el alto que <code>&lt;main&gt;</code> ya tenía reservado, con el enunciado
+          centrado adentro. Pero el sobrante <strong>entró a la superficie</strong> en lugar de
+          desaparecer: la tarjeta mide unos 600px y cerca de 460 de esos son blanco dentro del
+          borde. Es el mismo movimiento —y la misma contrapartida— que <code>/members</code> midió
+          en su búsqueda sin resultados y que <code>/student/payments</code> midió en su historial
+          vacío, y por eso está escrito acá en vez de celebrado como un 4% limpio.
+        </p>
+        <p>
+          Las dos alternativas se descartaron con su motivo. No estirar deja
+          <strong>53% de lienzo desnudo</strong> —peor que el 48% de partida, porque el riel que se
+          fue también ocupaba alto—. Y lo único que llenaría ese hueco con contenido verdadero es
+          el horario semanal del alumno, que este archivo <strong>tiene prohibido mostrar</strong>
+          por escrito desde que se creó: mezclar «lo que se registró» con «lo que viene» es lo que
+          hacía que el portal viejo imprimiera una sesión pasada bajo un título que la familia lee
+          como la próxima.
+        </p>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>3 · Asistencias — el 48% del socio nuevo</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-attendance-sin-datos.png" alt="Asistencias sin sesiones, antes" />
+          <figcaption><b>Antes · Socio nuevo</b>434px de lienzo desnudo bajo una tarjeta que termina a los 466. Y la pantalla dice dos veces lo mismo: «Todavía no hay sesiones registradas» en el riel, «Aún no hay asistencias registradas» en la lista, sobre un recuento de cuatro ceros.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-attendance-sin-datos.png" alt="Asistencias sin sesiones, después" />
+          <figcaption><b>Después · Socio nuevo</b>Una columna. El recuento no tiene nada que contar, así que se retira y el registro —que es donde vive el enunciado— toma el ancho y reclama el alto. La nota de alcance queda al pie, que es donde va una nota al pie.</figcaption>
+        </figure>
+      </div>
+
+      <div class="call">
+        <span class="tag">Decisión tomada en automático</span>
+        <p>
+          <strong>El riel deja de dibujarse cuando no hay nada que contar.</strong> La tarjeta del
+          recuento existe para decir «asistió a X de N» y desglosarlo en cuatro estados; con cero
+          sesiones decía «Todavía no hay sesiones registradas» sobre cuatro ceros, que es la misma
+          frase que la lista de al lado y un recuento de nada. Es el movimiento que
+          <code>/student/payments</code> ya hizo cuando el bloque que justificaba su riel se fue
+          detrás de «Ver ayuda»: una columna de 340px conservada por sí misma es exactamente el
+          error contra el que advierte el propio comentario de <code>PAGE_RAIL</code>. Con datos, el
+          riel vuelve y es incondicional otra vez — hay un test para cada una de las dos mitades.
+        </p>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">El estirón es condicional, y eso está medido en otra pantalla.</p>
+          <p class="why">
+            La tarjeta reclama el sobrante <strong>solo</strong> cuando no tiene nada que listar.
+            Estirarla siempre ya se midió y se rechazó en <code>/student/payments</code>: con una
+            sola fila adentro, la tarjeta llega al pie de la ventana y dibuja un marco vacío bajo un
+            renglón, que es el mismo hueco metido adentro de un borde y hecho <em>más</em> visible
+            que el lienzo que reemplaza. Hay un caso para cada lado.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y la pantalla entra al grupo de las que no pueden llenarse.</p>
+          <p class="why">
+            <code>measure="short"</code> (1024px en lugar de 1408), que es la respuesta que
+            <code>/discounts</code>, <code>/groups</code>, la ficha médica y los pagos del socio ya
+            tienen. El criterio de admisión no es «se ve más prolijo angosto» sino una lectura: el
+            alto de esta pantalla es función de cuántas sesiones <em>existen</em> —el portal entrega
+            una ventana acotada y no hay paginador debajo—, que es la misma forma que
+            <code>/student/payments</code>. La lista y su lectura están en
+            <code>lib/__tests__/content-measure.test.ts</code>, que es donde entra el número.
+          </p>
+        </li>
+      </ul>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-attendance-con-datos.png" alt="Asistencias con datos, antes" />
+          <figcaption><b>Antes · 24 sesiones</b>Con datos la pantalla scrollea y su hueco medía 0% antes y después. Lo que esta mitad prueba es que el riel y el recuento siguen exactamente donde estaban cuando hay algo que contar.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-attendance-con-datos.png" alt="Asistencias con datos, después" />
+          <figcaption><b>Después · 24 sesiones</b>Idéntica, salvo el ancho: la medida corta deja la columna en 1024 en lugar de 1408. El registro es el sujeto y sigue tomando la columna principal; el recuento sigue en el riel.</figcaption>
+        </figure>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>4 · Crear cuenta — la pantalla con más sistema retirado del producto</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-crear-cuenta-tipo.png" alt="Crear cuenta, paso 1, antes" />
+          <figcaption><b>Antes · Paso 1 · Tipo</b>La tarjeta centrada bajo tres controles alineados a la izquierda. Cuatro tarjetas de 138px con dos títulos partidos a la mitad, sus cuatro encabezados a cuatro alturas distintas, y una barra de progreso roja que dice lo mismo que el «Paso 1 de 5» de arriba.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-crear-cuenta-tipo.png" alt="Crear cuenta, paso 1, después" />
+          <figcaption><b>Después · Paso 1 · Tipo</b>Un solo borde izquierdo para las cuatro piezas. Las tarjetas en 2×2, con 342px cada una: ningún título se parte y ninguna descripción pasa de dos renglones. Y el stepper con nombre que los otros dos asistentes ya usaban.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">Los cuatro colores de categoría <strong>no</strong> se tocaron.</p>
+          <p class="why">
+            Son la única parte del producto donde el color carga <em>categoría</em> y no estado, y
+            están declarados y medidos como pares en <code>tailwind.config.ts</code>, con el motivo
+            escrito: <code>state-ok</code> verde sobre «Entrenador» diría que la cuenta está sana,
+            no que entrena. «Jugador» llevando el acento del sistema al <code>/15</code> también
+            está anotado ahí y también se queda. Lo que cambió es el estado
+            <strong>seleccionado</strong>, que era rojo y por lo tanto se pisaba con el rojo que ya
+            era identidad.
+          </p>
+        </li>
+        <li>
+          <p class="what">La selección es caucho más el punto amarillo, que es la regla y ya tenía dueño.</p>
+          <p class="why">
+            <code>FilterPill</code> es el primitivo que la posee, y su receta es
+            <code>bg-coal border-coal</code> con un punto de 6px en <code>ball</code>. Acá la
+            tarjeta se queda en papel —adentro vive un chip de color que un relleno de caucho
+            taparía— y toma el borde de caucho más el punto. El <code>aria-pressed</code> dice lo
+            mismo para quien no ve ninguno de los dos.
+          </p>
+        </li>
+        <li>
+          <p class="what">Las cuatro tarjetas se escriben una sola vez.</p>
+          <p class="why">
+            Eran cuatro bloques <code>&lt;button&gt;</code> casi idénticos, con la misma cadena de
+            cuarenta caracteres repetida cuatro veces — que es exactamente por qué la piel de
+            selección llegó a ser roja en cuatro lugares a la vez y por qué cambiarla significaba
+            cambiarla cuatro veces. Ahora son una tabla y un <code>map</code>.
+          </p>
+        </li>
+      </ul>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-crear-cuenta-salud.png" alt="Crear cuenta, paso de salud, antes" />
+          <figcaption><b>Antes · Paso 3 · Salud</b>Cinco campos dentro de una caja verde de éxito, con cuatro «p. ej.» adentro, y un enunciado que dice «opcional pero recomendada» sin decir que elegir un tipo de sangre vuelve obligatorio el contacto de emergencia.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-crear-cuenta-salud.png" alt="Crear cuenta, paso de salud, después" />
+          <figcaption><b>Después · Paso 3 · Salud</b>Un bloque hundido con hairline: un límite, no un veredicto. Los cuatro ejemplos con la palabra entera, las etiquetas en minúsculas y con sus acentos, y el enunciado diciendo la condición que la validación ya aplicaba en silencio.</figcaption>
+        </figure>
+      </div>
+
+      <div class="call">
+        <span class="tag">Decisión tomada en automático</span>
+        <p>
+          <strong>El enunciado del paso de salud dice ahora lo que la validación siempre hizo.</strong>
+          <code>validateMedical</code> es explícito: si se completa <em>cualquiera</em> de los cinco
+          campos, el tipo de sangre y el contacto de emergencia pasan a ser obligatorios. La
+          pantalla decía «opcional pero recomendada» y nada más, así que el admin que elegía un tipo
+          de sangre para ser prolijo se encontraba con dos errores nuevos al apretar «Siguiente».
+          <strong>No se cambió una sola regla</strong> — se escribió la que había. Decir en voz alta
+          una condición que el código ya aplica es forma, no comportamiento.
+        </p>
+      </div>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-crear-cuenta-resumen.png" alt="Crear cuenta, resumen, antes" />
+          <figcaption><b>Antes · Paso 5 · Resumen</b>Los seis rótulos de bloque en <code>cata-text/45</code>: 2.67:1, lo menos legible de la pantalla, sobre la información que el admin está por confirmar. Cinco iconos rojos, cuatro tarjetas dentro de una tarjeta, «Ficha Medica» sin acento y la fecha cruda <code>1998-03-20</code>.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-crear-cuenta-resumen.png" alt="Crear cuenta, resumen, después" />
+          <figcaption><b>Después · Paso 5 · Resumen</b>Los rótulos en el paso de etiqueta del sistema sobre <code>ink-3-strong</code> (5.24:1), los iconos en tinta apagada, los bloques como áreas hundidas dentro de la tarjeta —no tarjetas adentro de una tarjeta— y la fecha en <code>20/03/1998</code>, que es el formato que el resto del producto imprime.</figcaption>
+        </figure>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>5 · Agregar dependiente — dos marcas y dos vocabularios en un paso</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-add-dependent-salud.png" alt="Agregar dependiente, salud, antes" />
+          <figcaption><b>Antes · Paso 3 · Salud</b>«Tipo de Sangre <span style="color: var(--red)">*</span>» con el asterisco retirado, ochenta píxeles encima de dos «(opcional)». «p. ej.» en los dos primeros campos y «Por ejemplo:» en los dos de abajo. Y «Ficha Médica» a 13,5px, más chica que las etiquetas de los campos que titula.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-add-dependent-salud.png" alt="Agregar dependiente, salud, después" />
+          <figcaption><b>Después · Paso 3 · Salud</b>Una marca: la minoría opcional lleva la palabra, y lo obligatorio no lleva nada —<code>required</code> sigue en el control, que es el atributo que un lector de pantalla realmente lee—. Un vocabulario de ejemplo. Y «Salud y emergencia» en Graduate, con las mismas palabras que usan los otros dos asistentes para el mismo paso.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">Los tres asistentes nombran cada paso igual.</p>
+          <p class="why">
+            «Ficha Médica» era el nombre del <em>registro</em>; el paso pregunta por la salud y por
+            a quién llamar, que es lo que dice «Salud y emergencia» — el rótulo que
+            <code>/student/enroll</code> ya usaba para las mismas cuatro preguntas. Con él se fueron
+            las mayúsculas de título y el «(Opcional)» del rótulo de la cuenta de acceso, que
+            repetía la marca que los dos campos de adentro ya llevan.
+          </p>
+        </li>
+        <li>
+          <p class="what">Los dos avisos salieron de la paleta de Tailwind.</p>
+          <p class="why">
+            <code>text-blue-700/80</code> sobre el lienzo mide 3.84:1 y
+            <code>text-amber-700/80</code> sobre el tinte de advertencia mide 3.25:1 — los dos bajo
+            AA, y los dos de una paleta con la que este producto no pinta. Ahora son
+            <code>ink-2</code> y <code>state-warn</code>, que son los tokens que esas dos cajas ya
+            llevaban a medias. Con eso, <code>/student/add-dependent</code>
+            <strong>sale de la lista congelada de deuda de paleta cruda</strong> de
+            <code>color-contrast.test.ts</code>, y esa lista encoge — que es literalmente lo que ese
+            caso existe para forzar.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y el id del tipo de sangre dejó de venir de su etiqueta.</p>
+          <p class="why">
+            Era <code>#add-dependent-tipo-de-sangre</code>, escrito a mano para coincidir con lo que
+            <code>slugifyLabel</code> habría producido a partir de «Tipo de Sangre» — mientras el
+            campo idéntico del asistente público es <code>#enroll-tipo-sangre</code>. Dos nombres
+            para un campo, producidos por dos escrituras de un rótulo.
+            <code>ADD_DEPENDENT_FIELD_TOKEN</code> los declara, y usa las mismas cadenas que los
+            otros dos asistentes.
+          </p>
+        </li>
+      </ul>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-add-dependent-datos.png" alt="Agregar dependiente, datos, antes" />
+          <figcaption><b>Antes · Paso 1 · Datos</b>El «Paso 3 de 4» envuelto en un <code>div</code> vacío que el ritmo de la página contaba como un bloque, y las etiquetas de los dos selectores de escuela en mayúsculas de título contra el resto de la pantalla en minúsculas.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-add-dependent-datos.png" alt="Agregar dependiente, datos, después" />
+          <figcaption><b>Después · Paso 1 · Datos</b>«Tipo de escuela» y «Escuela o institución», con la barra invertida fuera del rótulo. La misma pantalla, con una convención menos que aprender.</figcaption>
+        </figure>
+      </div>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-add-dependent-resumen.png" alt="Agregar dependiente, resumen, antes" />
+          <figcaption><b>Antes · Paso 4 · Resumen</b>Este paso ya estaba bien: filas de 56px con su «Corregir», el marcador de identidad duplicada, y la casilla de confirmación. Se incluye porque es lo que prueba que no se movió.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-add-dependent-resumen.png" alt="Agregar dependiente, resumen, después" />
+          <figcaption><b>Después · Paso 4 · Resumen</b>Idéntico salvo el título en Graduate. Las nueve filas, el orden, el «Corregir» de cada una y la casilla siguen exactamente donde estaban.</figcaption>
+        </figure>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>6 · Las dos de credenciales</h2>
+
+      <p class="note">
+        Acá la consigna vale doble y por eso conviene decirlo antes de las capturas:
+        <strong>ninguna validación, ningún flujo y ningún mensaje de seguridad se tocó.</strong> El
+        contrato anti-enumeración —que la respuesta sea idéntica esté o no registrado el correo—,
+        la política de ocho caracteres que el backend declara, la lista de reglas en vivo y el
+        estado de enlace vencido están exactamente como estaban. Los 26 tests de las dos pantallas
+        pasan sin que se renegociara uno solo de comportamiento.
+      </p>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-reset-password-sin-token.png" alt="Enlace no válido, antes" />
+          <figcaption><b>Antes · Enlace no válido</b>Dos controles al mismo destino a sesenta píxeles: un botón rojo de ancho completo —con la flecha apuntando hacia atrás sobre un control que va hacia adelante— y, debajo, «Pedir uno nuevo» en rojo de relleno a 10,5px sobre el lienzo, 4.10:1.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-reset-password-sin-token.png" alt="Enlace no válido, después" />
+          <figcaption><b>Después · Enlace no válido</b>Una salida, con un nombre, dibujada con la receta que el producto ya exporta. La nota conserva el único dato que solo ella tenía —los treinta minutos— y suelta el control duplicado.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">La piel del enlace vivía en un archivo y por eso había dos.</p>
+          <p class="why">
+            <code>AUTH_LINK_CLASSES</code> —<code>cata-red-dark</code>, subrayado, con el
+            desplazamiento del subrayado declarado— estaba escrito dentro de
+            <code>login/page.tsx</code>. La pantalla de al lado, que hereda el mismo shell, escribió
+            la suya: <code>font-semibold text-cata-red</code>, sin subrayar. Dos pantallas de una
+            misma plantilla con dos respuestas a «cómo se ve un enlace acá». La receta se mudó a
+            <code>AuthShell</code>, al lado de las de campo y etiqueta que esas cuatro pantallas ya
+            compartían, y las dos la leen de ahí.
+          </p>
+        </li>
+        <li>
+          <p class="what">El error del campo repetido dejó el rojo de acción y su halo.</p>
+          <p class="why">
+            <code>border-cata-red ring-[3px] ring-cata-red/10</code> — el par exacto que
+            <code>WizardInput</code> retiró una tanda antes, con su porqué anotado: el rojo de
+            acción como borde le dice «apretame» al único campo que la persona escribió mal, y un
+            rojo translúcido compone entre 1.27:1 y 1.96:1, que es decoración y no un indicador.
+            Acá seguía vivo, que es como sobrevive un tratamiento retirado: se arregló donde se
+            notó, no donde se declaró.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y el <code>focus:border-cata-red</code> se queda, a propósito.</p>
+          <p class="why">
+            Ese sí es el campo reaccionando, un cambio de estado medido en 5.00:1 sobre papel que
+            <code>AuthShell</code> documenta. El candado nuevo mira el borde <em>en reposo</em>, no
+            cualquier aparición de la cadena: prohibir el token entero habría borrado un indicador
+            medido para satisfacer una regla que no habla de él.
+          </p>
+        </li>
+      </ul>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-reset-password.png" alt="Elegir contraseña, antes" />
+          <figcaption><b>Antes · Formulario con token</b>El «Pedir uno nuevo» de la nota en rojo de relleno sin subrayar, y el mismo halo esperando en el campo de repetir. Lo demás —las dos reglas en vivo, el orden, el botón deshabilitado hasta que las dos se cumplen— ya estaba bien.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-reset-password.png" alt="Elegir contraseña, después" />
+          <figcaption><b>Después · Formulario con token</b>El enlace con la piel compartida. Acá la nota <strong>conserva</strong> su enlace: es el único camino a un enlace nuevo desde este estado, así que no duplica nada.</figcaption>
+        </figure>
+      </div>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-forgot-password.png" alt="Recuperar contraseña, antes" />
+          <figcaption><b>Antes · Recuperar contraseña</b>Nada que reprochar: hereda <code>AuthShell</code> entero, usa el campo y la etiqueta compartidos, tiene una acción primaria y su nota dice lo que solo ella sabe.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-forgot-password.png" alt="Recuperar contraseña, después" />
+          <figcaption><b>Después · Recuperar contraseña</b>Idéntica, y el número lo confirma: 204px antes y 204px después. Se capturó para poder decir que se miró, no porque hiciera falta cambiarla.</figcaption>
+        </figure>
+      </div>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-forgot-password-enviado.png" alt="Enlace enviado, antes" />
+          <figcaption><b>Antes · Enlace enviado</b>La confirmación deliberadamente idéntica esté o no registrado el correo, que es el contrato anti-enumeración del backend hecho interfaz.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-forgot-password-enviado.png" alt="Enlace enviado, después" />
+          <figcaption><b>Después · Enlace enviado</b>Sin cambios, y a propósito: tocar esta pantalla es tocar el único mensaje que no debe distinguir una cuenta que existe de una que no.</figcaption>
+        </figure>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>7 · Preguntas frecuentes — lo que ya estaba bien, y lo que no</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-ayuda.png" alt="Preguntas frecuentes, antes" />
+          <figcaption><b>Antes</b>La estructura ya estaba resuelta —una columna, el control de volver del sistema, la tabla de horarios primero, 2% de aire muerto—. Lo que quedó de su propia tanda: los títulos de tarjeta en Barlow y los chips de audiencia a 12px.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-ayuda.png" alt="Preguntas frecuentes, después" />
+          <figcaption><b>Después</b>Cuatro títulos en Graduate, como los de todas las pantallas de este shell, y los chips en el radio de control. El documento baja 28px y la pantalla deja de tener hueco.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">Se revisó primero si hacía falta tocarla, y la respuesta fue «casi no».</p>
+          <p class="why">
+            <code>/ayuda</code> se rehízo hace poco (commit <code>eace106</code>) y esa tanda cerró
+            lo que importaba: un solo «Volver al Inicio» con la piel canónica, la grilla que colapsa
+            a una columna sin partir una sección, la tabla de horarios primero porque es la única
+            respuesta que se <em>lee de un vistazo</em> en vez de leerse. Quedaban tres cosas, y las
+            tres son de sistema, no de estructura.
+          </p>
+        </li>
+        <li>
+          <p class="what">El candado de tipografía no podía verlo.</p>
+          <p class="why">
+            <code>display-face-usage.test.ts</code> dispara sobre un encabezado que <em>ya está</em>
+            en el paso de título (20px) y sigue en la cara de interfaz. Estos estaban a
+            <code>text-base</code> y <code>text-sm</code>, o sea pasaban por estar
+            <em>debajo</em> del piso de Graduate, no por cumplirlo — el mismo mecanismo por el que
+            la tanda del admin encontró cero <code>font-display</code> en cuatro pantallas.
+          </p>
+        </li>
+        <li>
+          <p class="what">Los cuatro colores de audiencia se quedan.</p>
+          <p class="why">
+            Son los mismos tokens de categoría que <code>/admin/crear-cuenta</code>, declarados y
+            medidos, y acá cumplen el mismo trabajo: que la grilla se lea como un conjunto de
+            audiencias y no como una pared de tarjetas iguales. El rojo del chip de administrador es
+            uso <strong>de icono</strong> —3:1, no el piso de 4.5:1 del texto— y así está anotado en
+            el archivo desde que se escribió.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y el «¿No encontró lo que buscaba?» del pie se queda en Barlow.</p>
+          <p class="why">
+            No es una tarjeta: es un área hundida con hairline, y su encabezado es una pregunta
+            dirigida al lector, no el nombre de un bloque. «Si dudás, es Barlow.»
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>8 · Sin permiso — se miró y no se tocó</h2>
+
+      <div class="shots">
+        <figure>
+          <img src="capturas/antes-final-unauthorized.png" alt="Sin permiso, antes" />
+          <figcaption><b>Antes · Cuenta sin rol</b>Una tarjeta sola sobre el lienzo, sin shell: la persona no tiene a dónde navegar y ofrecerle un menú vacío es peor que no ofrecerle nada.</figcaption>
+        </figure>
+        <figure>
+          <img src="capturas/despues-final-unauthorized.png" alt="Sin permiso, después" />
+          <figcaption><b>Después · Cuenta sin rol</b>Idéntica. 303px antes y 303px después, y es el resultado correcto: el hueco lo produce el centrado de la tarjeta sobre el eje de la página, igual que en el login.</figcaption>
+        </figure>
+      </div>
+
+      <ul class="findings">
+        <li>
+          <p class="what">Los dos «valores raros» que tiene son los dos que debe tener.</p>
+          <p class="why">
+            <code>rounded-[18px]</code> y <code>shadow-hero</code> parecen un tercer radio y una
+            sombra suelta, y no lo son: <code>DESIGN.md</code> dice que la sombra <em>hero</em> es
+            para «una tarjeta sola sobre el canvas sin cromo alrededor» y que
+            <strong>existen exactamente dos en el producto</strong>. Un grep confirma las dos: la
+            tarjeta de <code>AuthShell</code> y esta. Son el mismo objeto en dos rutas, y por eso
+            llevan la misma medida.
+          </p>
+        </li>
+        <li>
+          <p class="what">Su acción enfática es caucho, que es exactamente la regla.</p>
+          <p class="why">
+            «Contactar al club» abre el asistente y no es ni la acción primaria de un flujo ni algo
+            destructivo, así que lleva la variante <code>dark</code> — «la acción enfática que no
+            debe ser roja». Al lado, «Cerrar sesión» en secundaria. Una pantalla con dos controles y
+            ningún rojo, correctamente.
+          </p>
+        </li>
+        <li>
+          <p class="what">Cómo se capturó, ya que ninguna cuenta de QA está en ese estado.</p>
+          <p class="why">
+            Esta pantalla solo la alcanza una cuenta <em>autenticada</em> cuyo arreglo de roles esté
+            vacío, y las 82 cuentas de QA tienen rol. Para las dos tomas se le quitó el rol a una
+            cuenta de alumno sin asistencias ni pagos y se le devolvió inmediatamente después,
+            verificando en la base que volvió — dos veces, una por ronda. No se creó ninguna
+            persona, no se borró ningún dato y el estado final es idéntico al inicial.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>9 · El candado nuevo, y las cuatro deudas que cierra</h2>
+
+      <ul class="findings">
+        <li>
+          <p class="what">La rampa de tinta es cuatro tokens, no un control de opacidad.</p>
+          <p class="why">
+            <code>lib/__tests__/ink-ramp-usage.test.ts</code> barre el producto entero y falla,
+            nombrando archivo y valor, si vuelve a aparecer <code>text-cata-text/30</code>,
+            <code>/35</code>, <code>/40</code>, <code>/45</code> o <code>/50</code> — los cinco
+            escalones que miden bajo 3.1:1 sobre <em>todas</em> las superficies del producto. La
+            línea está donde la pone la medición y no en un número redondo: <code>/65</code> mide
+            4.72:1 sobre papel, pasa AA, y se queda donde está, porque prohibirlo acá sería una
+            regla que dispara sobre archivos que esta tanda no puede tocar.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y arreglarlo salió de las siete pantallas, a propósito.</p>
+          <p class="why">
+            Los escalones bajo AA vivían en <strong>seis archivos más</strong>: la campana de
+            notificaciones (cuatro), el buscador de alumnos (tres), la confirmación de mayoría de
+            edad (uno) y el <em>placeholder</em> de <code>.input-field</code> en
+            <code>globals.css</code> a 2.09:1 — que es el campo de los dos asistentes de esta tanda
+            y de media docena de pantallas más. Un candado que hubiera dejado once cadenas bajo AA
+            afuera para no salirse del alcance no habría sido un candado, así que las once
+            entraron. Ninguna es un cambio de forma: es el mismo gris, nombrado.
+          </p>
+        </li>
+        <li>
+          <p class="what">La lista congelada de paleta cruda encogió.</p>
+          <p class="why">
+            <code>color-contrast.test.ts</code> tiene un caso cuyo único trabajo es fallar cuando un
+            archivo de la lista de deuda ya no debe nada. Falló, y a favor:
+            <code>/student/add-dependent</code> pagó sus dos entradas y salió. Es el segundo archivo
+            que sale de esa lista —el primero fue <code>/groups</code>, en la tanda del admin— y el
+            mecanismo funcionó las dos veces.
+          </p>
+        </li>
+        <li>
+          <p class="what">Y la lista de pantallas de medida corta creció, con su lectura escrita.</p>
+          <p class="why">
+            <code>content-measure.test.ts</code> no deja adoptar ni soltar
+            <code>measure="short"</code> sin tocarlo, que es el punto. <code>/student/attendance</code>
+            entra como quinta, con el mismo criterio que las cuatro anteriores —su alto es función
+            de cuántos registros existen, no de un tamaño de página— y con el número que lo motivó
+            anotado ahí: 434px, 48%, a 1440×900, sobre un socio nuevo.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <!-- ================================================================ -->
+      <h2>10 · Lo que no se tocó, y por qué</h2>
+
+      <ul class="findings">
+        <li>
+          <p class="what">Los dos títulos de tarjeta que quedan en Barlow, en el socio.</p>
+          <p class="why">
+            <code>/student</code> y <code>/student/payments</code> escriben los suyos a
+            <code>text-sm font-bold</code>, igual que escribía <code>/student/attendance</code>
+            hasta esta tanda. Las dos se aprobaron en la tanda 1 y esta tanda no reabre una
+            comparación aprobada; moverlos es una tanda de tipografía sobre las dos, no dos líneas
+            sueltas. Queda anotado acá, que es donde se busca un pendiente.
+          </p>
+        </li>
+        <li>
+          <p class="what">Los once <code>rounded-xl</code> de la cabecera del shell.</p>
+          <p class="why">
+            <code>components/Header.tsx</code> sigue con el radio de 12px en su cromo, y aparece en
+            las catorce capturas de esta tanda porque aparece en todas. Es un archivo de la
+            fundación (F1) y de otra tanda: el candado de radios que esta tanda escribe está
+            acotado al formulario de cada asistente justamente para no pedirle a un test de pantalla
+            que arregle el shell. Anotado.
+          </p>
+        </li>
+        <li>
+          <p class="what">El «Paso N de M» encima del stepper, en los tres asistentes.</p>
+          <p class="why">
+            Se puede deducir del propio stepper, y por eso parece sobrar. Se queda porque los tres
+            asistentes lo tienen y porque <code>/student/enroll</code> tiene escrito el motivo al
+            lado: llegar desde la landing a un asistente ya empezado necesita una frase que diga
+            cuánto falta antes de que las pastillas se lean. Sacarlo es una decisión sobre los tres
+            a la vez. Lo que sí se hizo fue igualarlo: <code>/admin/crear-cuenta</code> no lo tenía
+            junto al stepper y ahora sí, y el <code>div</code> vacío que lo envolvía en
+            <code>/student/add-dependent</code> se fue.
+          </p>
+        </li>
+        <li>
+          <p class="what">Los dos controles de volver de las pantallas de credenciales.</p>
+          <p class="why">
+            <code>/forgot-password</code> y <code>/reset-password</code> dibujan el «Volver al
+            Inicio» del panel de caucho <em>y</em> un «Volver a Iniciar sesión» adentro de la
+            tarjeta. Son dos destinos distintos, los dos legítimos, y los dos usan el <strong>mismo
+            control</strong> del sistema, que es lo que D12b pide — la regla habla del vocabulario,
+            no de cuántas instancias hay. Sacar el de adentro dejaría a alguien sin camino de vuelta
+            al login, que es comportamiento.
+          </p>
+        </li>
+        <li>
+          <p class="what">La caja de resultados del buscador de representante.</p>
+          <p class="why">
+            Es un desplegable sobre el tinte de la categoría «menor», con el mismo violeta que la
+            tarjeta que lo contiene, y funciona. Lo que le falta es lo mismo que a cualquier
+            desplegable de búsqueda: no dice cuántos resultados trajo ni qué pasa si son más de
+            diez, que es el techo que el cliente pide. Decirlo es contenido nuevo, no forma.
+            Anotado.
+          </p>
+        </li>
+        <li>
+          <p class="what">El aviso de foco en el diálogo destructivo, otra vez.</p>
+          <p class="why">
+            Sigue abierto desde D12c: el diálogo de confirmación pone el foco de teclado en
+            confirmar <strong>también cuando es destructivo</strong>. No aparece en ninguna de estas
+            siete pantallas, y sigue siendo comportamiento con su issue aparte. Se repite acá porque
+            esta es la última comparación y un pendiente que solo vive en una comparación de agosto
+            es un pendiente que se pierde.
+          </p>
+        </li>
+      </ul>
+
+      <hr class="rule" />
+
+      <h2>11 · Cómo verificarlo</h2>
+      <div class="card">
+        <p class="note" style="margin-bottom: 10px">
+          Suite completa, tipos y lint sobre este cambio:
+        </p>
+        <p style="margin-bottom: 10px"><code>npm test</code> — 190 archivos, 3169 tests, todo en verde (eran 187 y 3133; el neto son treinta y seis casos nuevos en tres archivos nuevos).</p>
+        <p style="margin-bottom: 10px"><code>npm run type-check</code> — sin errores.</p>
+        <p style="margin-bottom: 0"><code>npm run lint</code> — sin advertencias.</p>
+      </div>
+      <p class="note">
+        Se renegociaron <strong>cuatro</strong> casos y los cuatro llevan el motivo escrito adentro,
+        que es la única forma en que un candado se puede aflojar — y <strong>tres de los cuatro
+        quedaron más estrictos</strong>. El de la asistencia sin registros pedía las <em>dos</em>
+        frases vacías en pantalla a la vez; ahora pide la que queda y además que no haya ninguna
+        proporción declarada, que es lo que el caso realmente defiende y lo que la escritura vieja
+        habría dejado pasar. El doble de <code>AuthShell</code> en el test del login devolvía
+        <code>""</code> por sus constantes de clase: con la piel del enlace mudada ahí, eso habría
+        hecho pasar contra nada el caso que prueba que los enlaces se subrayan, así que ahora lee
+        el módulo real. Y la lista de medida corta creció con su lectura. El cuarto es la lista
+        congelada de paleta cruda, que <strong>encogió</strong> — y esa es la que falló a favor:
+        el caso pedía un cambio en el <em>test</em>, no en el código, porque
+        <code>/student/add-dependent</code> pagó su deuda.
+      </p>
+      <p class="note">
+        Las capturas se regeneran con el guión de medición contra QA en
+        <code>http://localhost:3000</code>, a 1440×900. El índice de todas las comparaciones está en
+        <a href="README.md">README.md</a>.
+      </p>
+    </div>
+  </body>
+</html>

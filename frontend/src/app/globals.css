@@ -137,7 +137,7 @@
     /* `line-2` — same reason as `.btn-secondary`: a field needs an edge. */
     border: 1px solid #CFCFDA;
     color: #17181C;
-    @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-all duration-200 placeholder:text-cata-text/35 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-all duration-200 placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .input-field::placeholder {

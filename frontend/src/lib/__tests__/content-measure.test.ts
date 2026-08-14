@@ -116,10 +116,23 @@ const SHORT_SCREENS = SHELL_SCREENS.filter(({ code }) => /measure="short"/.test(
  * registra un pago" moved behind "Ver ayuda" (D11c) the second column had
  * nothing left in it, and the single column that remained inherited 1356px —
  * a membership card with 600px of nothing to the right of its own heading.
+ *
+ * | Screen                     | Why it qualifies                          | Reading |
+ * |----------------------------|-------------------------------------------|---------|
+ * | `/student/attendance`      | the family's own record, a capped window, no pager | tanda final |
+ *
+ * `/student/attendance` is `/student/payments`'s twin and joined the list on
+ * the same kind of reading, taken the same way: 1440x900 against QA, on a
+ * socio nuevo. The record card stopped at 466px and left **434px, 48% of the
+ * window**, the largest number in this batch. Its height is a function of how
+ * many sessions the club recorded — the portal hands over a capped window of
+ * the most recent ones and there is no pager underneath — so it is the same
+ * shape, not a screen that adopted `short` because narrow looked tidy.
  */
 const SHORT_MEASURE_SCREENS = [
   "discounts/page.tsx",
   "groups/page.tsx",
+  "student/attendance/page.tsx",
   "student/medical-record/page.tsx",
   "student/payments/page.tsx",
 ];

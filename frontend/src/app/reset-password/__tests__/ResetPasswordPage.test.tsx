@@ -22,6 +22,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import ResetPasswordPage from "@/app/reset-password/page";
 import { buildPasswordRules } from "@/app/reset-password/reset-password-utils";
+import { AUTH_LINK_CLASSES } from "@/components/auth/AuthShell";
+import { buttonClasses } from "@/components/ui";
 // The mocked ApiClientError — see the vi.mock factory below.
 import { ApiClientError as MockApiClientError } from "@/services/api";
 
@@ -170,6 +172,24 @@ describe("ResetPasswordPage", () => {
     );
   });
 
+  /**
+   * The auth screens have ONE link skin, and this one wrote a second by hand.
+   *
+   * `cata-red` measures 4.10:1 on the canvas this note stands on — under AA at
+   * any size, and this line is 10.5px. `/login` already declares the recipe
+   * that exists for exactly this, `cata-red-dark` (6.34:1 on canvas) with the
+   * underline that separates the colour's two jobs: the button is pressed,
+   * these are followed. It was local to that one file, which is why the screen
+   * next door could invent its own and nothing noticed.
+   */
+  it("wears the shared auth link skin, not a red of its own", () => {
+    render(<ResetPasswordPage />);
+
+    expect(screen.getByRole("link", { name: "Pedir uno nuevo" }).className).toBe(
+      AUTH_LINK_CLASSES,
+    );
+  });
+
   // -------------------------------------------------------------------------
   // Live rules, shown before typing — not an error after submit.
   // -------------------------------------------------------------------------
@@ -215,6 +235,37 @@ describe("ResetPasswordPage", () => {
       expect(ruleItem("Las dos contraseñas coinciden")).toHaveAttribute("data-met", "false");
       expect(screen.getByRole("button", { name: "Guardar contraseña" })).toBeDisabled();
       expect(mockShowError).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The error ink is `state-bad`, and the halo is gone.
+     *
+     * `cata-red` is the ACTION colour; as a border it told the visitor to
+     * press the one field they got wrong. `WizardInput` retired exactly this
+     * pair in the enrolment batch — border to `state-bad`, and the 3px
+     * `cata-red/10` ring with it, because a translucent red composites to
+     * 1.27–1.96:1 and is decoration rather than an indicator. This screen kept
+     * both, which is how a retired treatment survives: it was fixed where it
+     * was noticed, not where it was declared.
+     */
+    it("marks the mismatched field with the state ramp and no translucent halo", () => {
+      render(<ResetPasswordPage />);
+
+      fireEvent.change(screen.getByLabelText("Nueva contraseña"), {
+        target: { value: "password123" },
+      });
+      fireEvent.change(screen.getByLabelText("Repetir contraseña"), {
+        target: { value: "password456" },
+      });
+
+      const field = screen.getByLabelText("Repetir contraseña");
+      expect(field.className).toMatch(/\bborder-state-bad\b/);
+      // The RESTING border only. `focus:border-cata-red` stays and is meant to:
+      // that is the field reacting, a measured 5.00:1 state change the shell
+      // documents. What is banned is the action red describing an error.
+      expect(field.className).not.toMatch(/(?:^|\s)border-cata-red\b/);
+      expect(field.className).not.toMatch(/\bring-/);
+      expect(screen.getByRole("alert").className).toMatch(/\btext-state-bad\b/);
     });
 
     it("enables submit only once every rule is met", () => {
@@ -289,6 +340,51 @@ describe("ResetPasswordPage", () => {
         screen.getByRole("link", { name: /solicitar nuevo enlace/i }),
       ).toHaveAttribute("href", "/forgot-password");
       expect(mockShowError).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ONE way out, under one name.
+     *
+     * This state used to draw the same destination twice, sixty pixels apart
+     * and in two vocabularies: a full-width red button reading "Solicitar
+     * nuevo enlace", and directly under it the note's "Pedir uno nuevo". Two
+     * controls, two names, one `/forgot-password` — the client's "un botón por
+     * acá y otro por allá" in its most literal form, and "ninguna etiqueta que
+     * se deduzca de otra" broken by the pair.
+     *
+     * The note keeps the fact that only IT carries (the thirty minutes) and
+     * gives up the duplicate control. On the form state, where there is no
+     * other way to a fresh link, the note keeps its link — that is where it
+     * was earning its keep.
+     */
+    it("names the way to a new link once, not twice", () => {
+      mockToken = null;
+
+      render(<ResetPasswordPage />);
+
+      const exits = screen
+        .getAllByRole("link")
+        .filter((link) => link.getAttribute("href") === "/forgot-password");
+      expect(exits).toHaveLength(1);
+      expect(screen.getByText(/duran 30 minutos/i)).toBeInTheDocument();
+    });
+
+    /**
+     * The exit is a navigation that LOOKS like the primary action, and the
+     * product has one recipe for that: `<Link className={buttonClasses(…)}>`,
+     * used on eighteen call sites. This screen hand-wrote the skin instead —
+     * `inline-flex h-ctl … border-cata-red bg-cata-red …` — which is a
+     * nineteenth copy of a string that already exists, and it came with a
+     * BACK arrow on a control that goes forward.
+     */
+    it("draws that exit with the shared button recipe", () => {
+      mockToken = null;
+
+      render(<ResetPasswordPage />);
+
+      expect(screen.getByRole("link", { name: /solicitar nuevo enlace/i }).className).toBe(
+        buttonClasses("primary", "md", "w-full"),
+      );
     });
 
     it("still wears the shared template on the dead-link state", () => {
