@@ -15,7 +15,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import TrainerAttendanceHistoryPage from "@/app/trainer/attendance/history/page";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
@@ -26,8 +26,11 @@ vi.mock("@/components/ProtectedRoute", () => ({
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => createAuthenticatedAuth("trainer", "Carlos Mendoza"),
+  useAuth: vi.fn(),
 }));
+
+import { useAuth } from "@/contexts/AuthContext";
+const mockUseAuth = vi.mocked(useAuth);
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/trainer/attendance/history",
@@ -108,11 +111,24 @@ const RECORDS: AttendanceRecord[] = [
   record("justified", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00", 7),
 ];
 
+// Fixed "today" for the clock-dependent correction gate (issue #262): without
+// this pin the 30-day window shifts with whatever day the CI happens to run on.
+// The existing fixtures (2026-07-17/20) fall inside the window; 2026-07-15 is
+// one day past the 30-day cut-off (2026-07-16).
+const TODAY_IN_CLUB_TIME = new Date("2026-08-15T15:00:00Z");
+
 describe("TrainerAttendanceHistoryPage", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(TODAY_IN_CLUB_TIME);
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
     mockFetchAttendanceRecords.mockReset().mockResolvedValue(RECORDS);
     mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
     mockSearchStudents.mockReset().mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders one row per session, most recent first — not one per student", async () => {
@@ -191,7 +207,8 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.getAllByRole("img", { name: /sobre \d+ registros/ })).toHaveLength(2);
   });
 
-  it("offers a Corregir action per session", async () => {
+  it("shows Corregir for every session within 30 days when the user is admin", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
     render(<TrainerAttendanceHistoryPage />);
 
     const links = await screen.findAllByRole("link", { name: "Corregir" });
@@ -199,6 +216,7 @@ describe("TrainerAttendanceHistoryPage", () => {
   });
 
   it("deep-links Corregir into that session's roll call, not the picker", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
     render(<TrainerAttendanceHistoryPage />);
 
     const links = await screen.findAllByRole("link", { name: "Corregir" });
@@ -217,6 +235,33 @@ describe("TrainerAttendanceHistoryPage", () => {
       "href",
       "/trainer/attendance?horario=7&fecha=2026-07-17&paso=lista",
     );
+  });
+
+  it("does not show Corregir to a trainer", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
+  });
+
+  it("does not show Corregir to an admin for a session older than 30 days", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
+    const oldRecords: AttendanceRecord[] = [
+      record("present", "Sofia Vera", "2026-07-15"),
+    ];
+    mockFetchAttendanceRecords.mockResolvedValue(oldRecords);
+
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the table aligned with an empty action cell when Corregir is hidden", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    const rows = await screen.findAllByRole("row");
+    expect(within(rows[1]).getAllByRole("cell")).toHaveLength(3);
   });
 
   it("refetches with a new range when a preset is picked", async () => {

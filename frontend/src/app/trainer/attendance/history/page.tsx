@@ -66,6 +66,7 @@ import {
   BackLink,
   buttonClasses,
 } from "@/components/ui";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   getTotalPages,
   paginateRecords,
@@ -73,6 +74,7 @@ import {
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
 import { formatDate } from "@/lib/format-utils";
+import { calendarIsoDate, clubToday } from "@/lib/club-date";
 import { groupRecordsBySession, type SessionSummary } from "../../trainer-day-utils";
 import {
   SessionCompositionBar,
@@ -82,6 +84,9 @@ import { buildWizardQuery } from "../attendance-utils";
 
 /** Sessions per page. */
 const PAGE_SIZE = 10;
+
+/** Corregir solo admite sesiones con hasta 30 días de antigüedad (issue #262). */
+const LIMITE_CORRECCION_DIAS = 30;
 
 /**
  * Where "Corregir" goes: that session's roll call, already open.
@@ -101,6 +106,17 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+
+  const { session } = useAuth();
+  const esAdmin = session?.user.role === "admin";
+  // "Hoy - 30 días" resuelto en la zona del club, en YYYY-MM-DD para compararlo
+  // lexicográficamente contra `sessionRow.fecha` (también YYYY-MM-DD).
+  const corteCorreccion = useMemo(() => {
+    const hoy = clubToday();
+    const corte = new Date(hoy);
+    corte.setDate(corte.getDate() - LIMITE_CORRECCION_DIAS);
+    return calendarIsoDate(corte);
+  }, []);
 
   const filters = useAttendanceFilters("this_month");
   const { query } = filters;
@@ -239,14 +255,18 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                               />
                             </div>
                           </TableCell>
-                          <TableCell align="right">
-                            <Link
-                              href={buildCorrectionHref(sessionRow)}
-                              className={buttonClasses("secondary", "sm")}
-                            >
-                              Corregir
-                            </Link>
-                          </TableCell>
+                          {esAdmin && sessionRow.fecha >= corteCorreccion ? (
+                            <TableCell align="right">
+                              <Link
+                                href={buildCorrectionHref(sessionRow)}
+                                className={buttonClasses("secondary", "sm")}
+                              >
+                                Corregir
+                              </Link>
+                            </TableCell>
+                          ) : (
+                            <TableCell align="right" />
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
