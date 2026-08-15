@@ -106,6 +106,18 @@ class PagoRepositorio:
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
+    def cobertura_aprobada_en_rango(self, membresia_id: int, fecha_inicio: date, fecha_fin: date) -> bool:
+        """True si la membresía ya tiene un pago APROBADO cuyo período [fecha_inicio, fecha_fin]
+        se solapa con el rango dado (issue #284: la regularización no puede pisar
+        cobertura ya aprobada)."""
+        stmt = select(func.count()).select_from(Pago).where(
+            Pago.membresia_id == membresia_id,
+            Pago.estado_pago == EstadoPago.APROBADO,
+            Pago.fecha_inicio <= fecha_fin,
+            Pago.fecha_fin >= fecha_inicio,
+        )
+        return self.db.execute(stmt).scalar_one() > 0
+
     def crear(self, pago: Pago) -> Pago:
         self.db.add(pago)
         self.db.commit()

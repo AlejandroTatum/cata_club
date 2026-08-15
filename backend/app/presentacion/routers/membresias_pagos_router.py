@@ -13,6 +13,7 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
     TipoMembresiaCreateDTO, TipoMembresiaResponseDTO,
+    DeudaMembresiaResponseDTO, RegularizacionDeudaDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -277,6 +278,37 @@ async def obtener_membresia(
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
     )
+# --- Deuda y regularización (issue #284) ---------------------------------
+# Deuda = meses adeudados desde la última cobertura aprobada hasta hoy; la ve
+# SOLO un administrador (nunca el alumno/representante). La regularización es
+# bookkeeping del admin: entra APROBADO directo, con fechas retroactivas
+# explícitas y motivo obligatorio. No toca el estado de la membresía (ver
+# `PagoServicio.regularizar_deuda`).
+@router.get(
+    "/{membresia_id}/deuda",
+    response_model=DeudaMembresiaResponseDTO,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+def obtener_deuda_membresia(membresia_id: int, db: Session = Depends(obtener_sesion)):
+    return PagoServicio(db).obtener_deuda(membresia_id)
+
+
+@router.post(
+    "/{membresia_id}/regularizar-deuda",
+    response_model=PagoResponseDTO,
+    status_code=201,
+)
+def regularizar_deuda_membresia(
+    membresia_id: int,
+    datos: RegularizacionDeudaDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorPermisos(ROL_ADMIN)),
+):
+    servicio = PagoServicio(db)
+    pago = servicio.regularizar_deuda(
+        membresia_id, datos, persona_id_admin=token_payload.get("persona_id"),
+    )
+    return servicio.pago_a_response_dto(pago)
 # Registra un pago pendiente. A diferencia de antes, ya NO basta con estar
 # autenticado con cualquier rol: se exige ser el dueño (persona_id del token
 # == persona_id del payload) o ADMINISTRADOR, igual que en /voucher. Antes

@@ -76,6 +76,11 @@ class EstadoPago(str, enum.Enum):
 class TipoPago(str, enum.Enum):
     EFECTIVO = "EFECTIVO"
     TRANSFERENCIA = "TRANSFERENCIA"
+    # Issue #284: tipo de los pagos de regularización de deuda. No es un
+    # pago que registre el cliente: es una operación de bookkeeping del
+    # administrador (ver `PagoServicio.regularizar_deuda`), que entra
+    # APROBADO directo y con auditoría obligatoria (quién/cuándo/motivo).
+    REGULARIZACION = "REGULARIZACION"
 
 
 class EstadoAsistencia(str, enum.Enum):

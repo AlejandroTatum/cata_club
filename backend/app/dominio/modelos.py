@@ -234,10 +234,11 @@ class Persona(Base):
     # --- Relaciones 1 a muchos ---
     # Como alumno:
     asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="persona")
-    # `foreign_keys` explícito: `Pago` ahora tiene DOS FKs a `persona.id`
-    # (`persona_id` y `descuento_autorizado_por_persona_id`, issue #11
-    # colapsado a columnas) -- sin esto, SQLAlchemy no puede elegir cuál usar
-    # para esta relación y falla con `AmbiguousForeignKeysError`.
+    # `foreign_keys` explícito: `Pago` ahora tiene TRES FKs a `persona.id`
+    # (`persona_id`, `descuento_autorizado_por_persona_id` del issue #11 y
+    # `regularizada_por_persona_id` del issue #284) -- sin esto, SQLAlchemy no
+    # puede elegir cuál usar para esta relación y falla con
+    # `AmbiguousForeignKeysError`.
     pagos: Mapped[List["Pago"]] = relationship(
         back_populates="persona", foreign_keys="Pago.persona_id",
     )
@@ -346,6 +347,7 @@ class Pago(Base):
         Index("ix_pago_membresia_id", "membresia_id"),
         Index("ix_pago_descuento_id", "descuento_id"),
         Index("ix_pago_descuento_autorizado_por_persona_id", "descuento_autorizado_por_persona_id"),
+        Index("ix_pago_regularizada_por_persona_id", "regularizada_por_persona_id"),
         # Espejo en la base del invariante que `PagoServicio._congelar_descuento`
         # ya respeta: un descuento congelado sin su valor sería un hecho
         # histórico incompleto. El servicio sigue siendo el camino primario de
@@ -413,6 +415,17 @@ class Pago(Base):
     descuento_autorizado_por_persona_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("persona.id"), nullable=True,
     )
+
+    # --- Regularización de deuda (issue #284) -----------------------------
+    # Solo se setean en la operación de regularización del administrador
+    # (`PagoServicio.regularizar_deuda`), nunca en un pago que registra el
+    # cliente. `regularizada_por_persona_id` es QUIÉN (admin) la ejecutó;
+    # `motivo_regularizacion` es POR QUÉ (obligatorio). El CUÁNDO es
+    # `fecha_validacion`, que ya existe y se setea al crear la regularización.
+    regularizada_por_persona_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True,
+    )
+    motivo_regularizacion: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
 
 # ---------------------------------------------------------------------------

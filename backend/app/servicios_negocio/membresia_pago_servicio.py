@@ -24,7 +24,7 @@ from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
 from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO, ComprobantePagoCreateDTO,
-    PagoListItemDTO, PagoResponseDTO,
+    PagoListItemDTO, PagoResponseDTO, RegularizacionDeudaDTO,
 )
 
 
@@ -41,6 +41,24 @@ def _sumar_meses(fecha: date, meses: int) -> date:
     mes = mes_total % 12 + 1
     ultimo_dia_mes_destino = calendar.monthrange(anio, mes)[1]
     return date(anio, mes, min(fecha.day, ultimo_dia_mes_destino))
+
+
+def _meses_enteros_desde(fin: date, hoy: date) -> int:
+    """Meses calendario COMPLETOS transcurridos entre `fin` y `hoy`.
+
+    Paridad con el SQL verificado por el club (issue #284):
+
+        date_part('year', age(CURRENT_DATE, ultimo_fin)) * 12
+        + date_part('month', age(CURRENT_DATE, ultimo_fin))
+
+    con `hoy_club()` en lugar de `CURRENT_DATE`. La resta por año/mes cuenta
+    meses calendario completos, así que si el día de `hoy` aún no alcanzó el día
+    de `fin` en el mes corriente, ese mes no se cuenta (se resta uno).
+    """
+    meses = (hoy.year - fin.year) * 12 + (hoy.month - fin.month)
+    if hoy.day < fin.day:
+        meses -= 1
+    return meses
 
 
 # --- Regla Familiar E04-RF002 -----------------------------------------------
@@ -442,6 +460,83 @@ class PagoServicio:
             ),
             datos.monto - valor,
         )
+
+    def calcular_meses_adeudados(self, membresia_id: int) -> int:
+        ultimo_fin = self.repo.fecha_fin_maxima_aprobada(membresia_id)
+        if ultimo_fin is None:
+            return 0
+        hoy = hoy_club()
+        if ultimo_fin >= hoy:
+            return 0
+        return _meses_enteros_desde(ultimo_fin, hoy)
+
+    def obtener_deuda(self, membresia_id: int) -> dict:
+        membresia = self.repo_membresia.obtener_por_id(membresia_id)
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
+        ultimo_fin = self.repo.fecha_fin_maxima_aprobada(membresia_id)
+        return {
+            "meses_adeudados": self.calcular_meses_adeudados(membresia_id),
+            "ultima_cobertura_fin": ultimo_fin,
+            "monto_mensual": membresia.monto_aplicado,
+        }
+
+    def regularizar_deuda(self, membresia_id: int, datos: RegularizacionDeudaDTO, persona_id_admin: int) -> Pago:
+        """Regulariza deuda de una membresía (issue #284), operación SOLO de admin.
+
+        La deuda es un valor DERIVADO (meses adeudados desde la última cobertura
+        aprobada hasta hoy), no una columna. Este método permite al administrador
+        cubrir casos puntuales con fechas retroactivas explícitas; admite cubrir
+        una parte (1 de 4 meses salda ese mes y el resto sigue visible como deuda).
+
+        Decisiones conservadoras (documentadas en el PR):
+          * El pago entra APROBADO directo (no PENDIENTE_VALIDACION): es
+            bookkeeping del admin, no un pago del cliente; la accountability
+            viene de la auditoría (regularizada_por_persona_id, motivo, fecha).
+          * NO activa ni toca el estado de la membresía, NO dispara
+            notificaciones, PDF ni la regla familiar: la deuda parcial debe
+            seguir visible.
+          * `motivo` es OBLIGATORIO (ya validado por el DTO; se doble-chequea acá).
+        """
+        membresia = self.repo_membresia.obtener_por_id(membresia_id)
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
+
+        if not datos.motivo.strip():
+            raise OperacionInvalida("Debe indicar el motivo de la regularización.")
+
+        precio = membresia.monto_aplicado
+        if precio > 0 and datos.monto % precio != 0:
+            raise OperacionInvalida(
+                f"El monto (${datos.monto}) debe ser múltiplo del precio mensual "
+                f"(${precio})."
+            )
+
+        hoy = hoy_club()
+        if datos.fecha_inicio > hoy:
+            raise OperacionInvalida(
+                "La regularización cubre meses adeudados; la fecha de inicio "
+                "no puede ser posterior a hoy."
+            )
+
+        if self.repo.cobertura_aprobada_en_rango(membresia_id, datos.fecha_inicio, datos.fecha_fin):
+            raise OperacionInvalida(
+                "El período indicado ya está cubierto por un pago aprobado."
+            )
+
+        pago = Pago(
+            monto=datos.monto,
+            estado_pago=EstadoPago.APROBADO,
+            tipo_pago=TipoPago.REGULARIZACION,
+            fecha_validacion=datetime.now(timezone.utc),
+            fecha_inicio=datos.fecha_inicio,
+            fecha_fin=datos.fecha_fin,
+            persona_id=membresia.persona_id,
+            membresia_id=membresia_id,
+            regularizada_por_persona_id=persona_id_admin,
+            motivo_regularizacion=datos.motivo,
+        )
+        return self.repo.crear(pago)
 
     def obtener_pago(
         self,

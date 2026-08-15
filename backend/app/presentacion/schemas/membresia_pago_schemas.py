@@ -128,6 +128,32 @@ class PagoListItemDTO(ResponseBase, BaseModel):
     voucher_formato: Optional[str] = Field(default=None, examples=["image/jpeg"])
 
 
+# --- Deuda y regularización (issue #284) -------------------------------------
+# Deuda = meses adeudados desde la última cobertura aprobada hasta hoy; es un
+# valor DERIVADO (sin columna nueva). Solo la ve un ADMINISTRADOR (nunca el
+# alumno/representante). La regularización es bookkeeping del admin: fechas
+# retroactivas explícitas y motivo obligatorio.
+class DeudaMembresiaResponseDTO(ResponseBase, BaseModel):
+    meses_adeudados: int = Field(..., examples=[4])
+    ultima_cobertura_fin: Optional[date] = Field(default=None, examples=["2026-03-31"])
+    monto_mensual: Decimal = Field(..., examples=["30.00"])
+
+
+class RegularizacionDeudaDTO(BaseModel):
+    monto: Decimal = Field(..., gt=0)
+    fecha_inicio: date
+    fecha_fin: date
+    motivo: str = Field(..., min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def _validar(self) -> "RegularizacionDeudaDTO":
+        if not self.motivo.strip():
+            raise ValueError("Debe indicar el motivo de la regularización.")
+        if self.fecha_inicio >= self.fecha_fin:
+            raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
+        return self
+
+
 # --- ComprobantePago ---
 class ComprobantePagoCreateDTO(BaseModel):
     archivo_url: str
