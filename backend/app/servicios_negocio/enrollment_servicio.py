@@ -199,13 +199,6 @@ class EnrollmentServicio:
             self._notificar_nueva_inscripcion(alumno)
             return self._emitir_tokens(usuario)
 
-        # Sin credenciales (caso admin que registra sin auto-login)
-        self._notificar_nueva_inscripcion(alumno)
-        return {
-            "persona_id": alumno.id,
-            "mensaje": "Alumno registrado exitosamente. Las credenciales de acceso se crearán posteriormente.",
-        }
-
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
         """Asigna un rol al usuario si aún no lo tiene (idempotente)."""
         if any(r.tipo_rol == tipo_rol for r in usuario.roles):
@@ -246,7 +239,7 @@ class EnrollmentServicio:
         """Notifica a todos los administradores sobre una nueva inscripción.
 
         La inscripción en sí YA está commiteada cuando esto corre (es el
-        último paso de los tres call sites que lo invocan), así que un
+        último paso de los dos call sites que lo invocan), así que un
         fallo al avisar a UN administrador se loguea y no interrumpe el
         aviso a los demás ni tira la respuesta del endpoint público de
         autoinscripción."""

@@ -6,7 +6,7 @@ el wizard del frontend sin intervención del administrador. El endpoint orquesta
 la creación de Persona, Usuario, FichaMedica y AntecedentesClub en un solo
 request transaccional, y retorna tokens JWT para auto-login inmediato.
 """
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, model_validator
 from datetime import date
 from typing import Optional, List
 
@@ -74,12 +74,29 @@ class EnrollmentCreateDTO(BaseModel):
       incluir `credenciales_alumno`.
     - Inscripción "child" (representante inscribe hijo):
       incluir `representante` con credenciales.
+
+    El validador `_representante_o_credenciales` exige exactamente eso:
+    este endpoint es la puerta de entrada pública (sin auth) y su única
+    salida son tokens JWT de auto-login. Un cuerpo sin ninguno de los dos
+    no tiene a quién emitirle tokens, y antes de este validador pasaba
+    toda la validación y moría recién al serializar la respuesta, DESPUÉS
+    de persistir la Persona (issue #275).
     """
     representante: Optional[EnrollmentRepresentanteDTO] = None
     alumno: EnrollmentAlumnoDTO
     credenciales_alumno: Optional[EnrollmentCredencialesDTO] = None
     ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
     antecedentes: Optional[EnrollmentAntecedentesDTO] = None
+
+    @model_validator(mode="after")
+    def _representante_o_credenciales(self) -> "EnrollmentCreateDTO":
+        if self.representante is None and self.credenciales_alumno is None:
+            raise ValueError(
+                "Falta indicar las credenciales de acceso del alumno o los "
+                "datos del representante legal: debe completarse al menos "
+                "uno de los dos."
+            )
+        return self
 
 
 class EnrollmentResponseDTO(BaseModel):
