@@ -35,7 +35,13 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  /* Los runners de ubuntu-latest tienen 4 vCPU. Con workers: 1 la suite creció
+     a 156 tests y el paso E2E tardaba ~22 min corriendo de a un test. Con
+     `fullyParallel: false` el paralelismo es POR ARCHIVO — los tests dentro de
+     un spec siguen secuenciales, así que no hay estado compartido que romper.
+     Local se mantiene 1 worker: los desarrolladores suelen tener otras cosas
+     corriendo, y la suite local arranca el build ella misma. */
+  workers: process.env.CI ? 4 : 1,
   reporter: [["html", { outputFolder: "playwright-report" }]],
 
   /* Runs before any browser is launched: a wrong or absent target stops the
