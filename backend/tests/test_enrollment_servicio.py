@@ -157,10 +157,26 @@ def test_inscripcion_menor_correo_duplicado_rechazada(db_session):
 
 # --- Validación de campos del enrollment -----------------------------------
 
-def test_alumno_menor_sin_representante_rechazado(db_session):
-    """Un menor (5-17 años) sin representante debe ser rechazado."""
+def test_alumno_menor_sin_representante_rechazado():
+    """Un menor (5-17 años) sin representante ni credenciales propias es
+    rechazado por el DTO (issue #275): el validador exige `representante`
+    o `credenciales_alumno`, y el rechazo ocurre antes de tocar la base."""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="representante"):
+        EnrollmentCreateDTO(
+            alumno=_alumno_dto(),
+        )
+
+
+def test_menor_con_credenciales_sin_representante_rechazado(db_session):
+    """Defensa que queda en el servicio: un menor con `credenciales_alumno`
+    (el camino de adulto) pero sin representante sigue rechazado — los
+    menores requieren representante legal."""
     datos = EnrollmentCreateDTO(
-        alumno=_alumno_dto(),
+        alumno=_alumno_dto(),  # 15 años
+        credenciales_alumno=EnrollmentCredencialesDTO(
+            correo="menor@example.com", contrasenia="password8",
+        ),
     )
     from app.dominio.excepciones import OperacionInvalida
     with pytest.raises(OperacionInvalida, match="representante"):
@@ -379,18 +395,38 @@ def test_autoinscripcion_adulto_notifica_a_los_administradores(db_session):
     assert tipos == [TipoNotificacion.NUEVA_INSCRIPCION]
 
 
-def test_inscripcion_sin_credenciales_notifica_a_los_administradores(db_session):
-    """Tercer camino de `enroll()`: registro sin auto-login."""
-    admin_id = _crear_administrador(db_session)
-    datos = EnrollmentCreateDTO(
-        alumno=_alumno_dto(cedula=cedula_valida(254), fecha_nacimiento=date(2000, 1, 1)),
+def test_inscripcion_sin_credenciales_rechazada_en_dto():
+    """El cuerpo sin `representante` y sin `credenciales_alumno` se rechaza
+    en el DTO (issue #275): el endpoint público no tiene un tercer camino, y
+    antes este cuerpo pasaba toda la validación y moría recién al serializar
+    la respuesta, DESPUÉS de persistir la Persona."""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="credenciales"):
+        EnrollmentCreateDTO(
+            alumno=_alumno_dto(cedula=cedula_valida(254), fecha_nacimiento=date(2000, 1, 1)),
+        )
+
+
+def test_api_inscripcion_sin_credenciales_devuelve_422_y_no_persiste(client, db_session):
+    """Criterios de aceptación del issue #275: POST sin representante ni
+    credenciales_alumno devuelve 422 con un mensaje que dice qué falta, y
+    el conteo de `persona` no cambia después del request rechazado."""
+    cedula = cedula_valida(254)
+    total_antes = db_session.query(Persona).count()
+    respuesta = client.post(
+        "/api/v1/enrollment/",
+        json={
+            "alumno": {
+                "nombres": "Prueba",
+                "apellidos": "Quinientos",
+                "cedula": cedula,
+                "fecha_nacimiento": "1990-05-05",
+                "telefono": "0991234567",
+            }
+        },
     )
+    assert respuesta.status_code == 422
+    assert "representante" in respuesta.text and "credenciales" in respuesta.text
+    assert db_session.query(Persona).count() == total_antes
+    assert db_session.query(Persona).filter(Persona.cedula == cedula).count() == 0
 
-    resultado = EnrollmentServicio(db_session).enroll(datos)
-
-    assert "persona_id" in resultado
-    tipos = [
-        n.tipo for n in db_session.query(Notificacion)
-        .filter(Notificacion.persona_id == admin_id).all()
-    ]
-    assert tipos == [TipoNotificacion.NUEVA_INSCRIPCION]
