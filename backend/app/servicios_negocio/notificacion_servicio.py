@@ -8,6 +8,9 @@ funcionalidad del ranking competitivo. Compartían módulo solo por historia
 de implementación; con el ranking eliminado por completo, quedan en su
 propio servicio.
 """
+from typing import Optional
+
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Notificacion
@@ -45,10 +48,16 @@ class NotificacionServicio:
         self.db = db
         self.repo = NotificacionRepositorio(db)
 
-    def listar_propias(self, persona_id: int) -> list[Notificacion]:
-        return self.repo.listar_por_persona(persona_id)
+    def listar_propias(
+        self, persona_id: int, skip: int = 0, limit: Optional[int] = None
+    ) -> tuple[list[Notificacion], int]:
+        items = self.repo.listar_por_persona(persona_id, skip=skip, limit=limit)
+        total = self.repo.contar_por_persona(persona_id)
+        return items, total
 
-    def listar_para_persona_y_hijos(self, persona_id: int) -> list[Notificacion]:
+    def listar_para_persona_y_hijos(
+        self, persona_id: int, skip: int = 0, limit: Optional[int] = None
+    ) -> tuple[list[Notificacion], int]:
         """Para representantes: incluye notificaciones propias y de sus hijos.
 
         Baja lógica: los dependientes salen de
@@ -66,17 +75,26 @@ class NotificacionServicio:
         )
         persona = self.db.get(Persona, persona_id)
         if not persona:
-            return []
+            return [], 0
         hijos_ids = [
             h.id for h in PersonaRepositorio(self.db).listar_representados(persona_id)
         ]
         todos_ids = [persona_id] + hijos_ids
-        return (
+        query = (
             self.db.query(Notificacion)
             .filter(Notificacion.persona_id.in_(todos_ids))
-            .order_by(Notificacion.fecha_creacion.desc())
-            .all()
+            .order_by(Notificacion.fecha_creacion.desc(), Notificacion.id.desc())
+            .offset(skip)
         )
+        if limit is not None:
+            query = query.limit(limit)
+        items = query.all()
+        total = (
+            self.db.query(func.count(Notificacion.id))
+            .filter(Notificacion.persona_id.in_(todos_ids))
+            .scalar()
+        )
+        return items, total
 
     def marcar_leida(self, notificacion_id: int, persona_id: int) -> Notificacion:
         notificacion = self.db.get(Notificacion, notificacion_id)

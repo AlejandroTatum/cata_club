@@ -61,7 +61,7 @@ const mockActualizarMiPerfil = vi.fn();
 const mockSolicitarRecuperacion = vi.fn();
 const mockFetchStudentPortal = vi.fn();
 const mockSubirFotoPerfil = vi.fn();
-const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
+const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 const mockInvalidarOtrasSesiones = vi.fn();
 

@@ -28,6 +28,13 @@ const notificacion = {
   entidadRelacionadaId: 5,
 };
 
+const paginatedBody = {
+  items: [notificacion],
+  total: 1,
+  skip: 0,
+  limit: 20,
+};
+
 beforeEach(() => {
   vi.spyOn(global, "fetch");
   process.env.BACKEND_API_URL = "http://localhost:8000/api/v1";
@@ -46,8 +53,8 @@ describe("GET /api/ranking/notificaciones/mias", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("forwards the token as Bearer and passes through the notification list unmodified", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([notificacion]));
+  it("forwards the token as Bearer and passes through the paginated envelope unmodified", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(paginatedBody));
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=abc123`));
     const body = await response.json();
@@ -60,7 +67,7 @@ describe("GET /api/ranking/notificaciones/mias", () => {
       }),
     );
     expect(response.status).toBe(200);
-    expect(body).toEqual([notificacion]);
+    expect(body).toEqual(paginatedBody);
   });
 
   it("propagates a backend error status and message", async () => {

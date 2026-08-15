@@ -11,23 +11,25 @@ frontend ya consume `GET /api/v1/ranking/notificaciones/mias` y
 razón de negocio para cambiar en esta limpieza -- renombrarla sería un
 segundo cambio (de contrato) montado sobre uno de organización interna.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.infraestructura.db import obtener_sesion
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.notificacion_servicio import NotificacionServicio
 from app.presentacion.schemas.notificacion_schemas import NotificacionResponseDTO
+from app.presentacion.schemas.base import PaginatedResponse
 
 router = APIRouter(prefix="/ranking/notificaciones", tags=["notificaciones"])
 
 
 @router.get(
-    "/mias", response_model=List[NotificacionResponseDTO],
+    "/mias", response_model=PaginatedResponse[NotificacionResponseDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
 async def listar_mis_notificaciones(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
@@ -35,8 +37,12 @@ async def listar_mis_notificaciones(
     roles = token_payload.get("roles", [])
     servicio = NotificacionServicio(db)
     if "REPRESENTANTE" in roles:
-        return servicio.listar_para_persona_y_hijos(persona_id)
-    return servicio.listar_propias(persona_id)
+        items, total = servicio.listar_para_persona_y_hijos(
+            persona_id, skip=skip, limit=limit
+        )
+    else:
+        items, total = servicio.listar_propias(persona_id, skip=skip, limit=limit)
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.patch(

@@ -64,7 +64,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 const mockFetchMembers = vi.fn();
-const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
+const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 const mockFetchHorarios = vi.fn().mockResolvedValue([]);
 const mockCrearCategoria = vi.fn();

@@ -61,7 +61,7 @@ vi.mock("@/services/api", () => ({
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   searchStudents: (...args: unknown[]) => mockSearchStudents(...args),
-  fetchNotificaciones: vi.fn().mockResolvedValue([]),
+  fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
 

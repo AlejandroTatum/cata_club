@@ -82,7 +82,7 @@ vi.mock("@/contexts/AuthContext", (): { useAuth: typeof useAuth } => ({
 // useNotificaciones (rendered via NotificationBell in the topbar) fetches on
 // mount — stub it out so AppShell's tests don't depend on network/timer
 // behavior unrelated to shell/nav rendering.
-const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
+const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/services/api", () => ({
   fetchNotificaciones: () => mockFetchNotificaciones(),
@@ -113,7 +113,7 @@ describe("AppShell", (): void => {
     mockUseAuth.mockReset();
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
     mockFetchNotificaciones.mockClear();
-    mockFetchNotificaciones.mockResolvedValue([]);
+    mockFetchNotificaciones.mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
     mockMarcarNotificacionLeida.mockClear();
     mockMarcarNotificacionLeida.mockResolvedValue(undefined);
     vi.stubGlobal("localStorage", createMemoryStorage());

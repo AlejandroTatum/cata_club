@@ -1,13 +1,14 @@
 /**
  * BFF proxy — GET /api/ranking/notificaciones/mias
  *
- * Lists the logged-in persona's own in-app ranking notifications. Proxies to
+ * Lists the logged-in persona's own in-app notifications. Proxies to
  * FastAPI's `GET /ranking/notificaciones/mias` (confirmed live in
  * ranking_router.py — `listar_mis_notificaciones` derives the persona from
  * the token itself via `token_payload.get("persona_id")`, same pattern as
- * `/auth/me`; no query param needed). Returns `NotificacionResponseDTO[]`,
- * already camelCase via `ResponseBase`'s alias_generator (see
- * ranking_schemas.py) — passed through unmodified.
+ * `/auth/me`; no query param needed). Returns the paginated envelope
+ * `{items, total, skip, limit}` (issue #281), already camelCase via
+ * `ResponseBase`'s alias_generator (see ranking_schemas.py) — passed through
+ * unmodified.
  */
 
 import { NextRequest, NextResponse } from "next/server";

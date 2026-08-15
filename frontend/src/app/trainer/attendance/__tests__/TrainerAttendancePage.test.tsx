@@ -105,7 +105,7 @@ vi.mock("@/services/api", () => ({
   fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   registerAttendance: (request: unknown) => mockRegisterAttendance(request),
-  fetchNotificaciones: vi.fn().mockResolvedValue([]),
+  fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
 

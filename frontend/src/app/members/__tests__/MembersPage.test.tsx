@@ -116,7 +116,7 @@ const mockCrearMembresia = vi.fn();
 const mockRegistrarPago = vi.fn();
 const mockSubirVoucherPago = vi.fn().mockResolvedValue({ voucherUrl: "https://example.test/voucher.pdf" });
 const mockFetchDescuentos = vi.fn().mockResolvedValue([]);
-const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
+const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("@/services/api", () => {
