@@ -17,8 +17,9 @@ Creates:
 Login credentials:
   Admin:      admin@cataclub.com       / admin12345
   Trainer:    entrenador@cataclub.com   / trainer12345
-  Representante 1: (auto-generated email) / shared_password
-  Representante 2: (auto-generated email) / shared_password
+  Representante 1: (auto-generated email) / alumno123
+  Representante 2: (auto-generated email) / alumno123 (shared with the
+    self-managed students)
 
 For a larger dataset, run the bulk seed manually:
     docker compose exec backend uv run python scripts/seed_dev_bulk.py
