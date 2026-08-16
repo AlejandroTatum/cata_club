@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Request, status, Query, UploadFile
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
@@ -7,6 +7,7 @@ from datetime import date, datetime, time, timezone
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.rate_limit import limiter
 from app.soporte_transversal.tiempo import hoy_club
+from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaUpdateDTO,
@@ -17,6 +18,7 @@ from app.presentacion.schemas.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
 from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
+from app.servicios_negocio.auth_servicio import AuthServicio
 from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.antecedentes_club_servicio import AntecedentesClubServicio
 from app.servicios_negocio.rol_servicio import RolServicio
@@ -419,6 +421,42 @@ async def independizar_persona(
         roles_privilegiados=SOLO_ADMINISTRADOR,
     )
     return PersonaServicio(db).independizar(persona_id, datos)
+
+
+# --- Foto de una persona (carnet de socio, issue #286) ---------------------
+# El dueño (self-service por id, el mismo caso que `POST /auth/me/foto` pero
+# sobre una persona objetivo), el representante de esa persona, o
+# ADMINISTRADOR. La identidad sale del token, nunca de la URL:
+# `PoliticaAccesoPersona.exigir_acceso` con `SOLO_ADMINISTRADOR` deja pasar
+# dueño + representante + admin (NO usa `exigir_acceso_directo`, que excluye
+# la rama del representante). Rate-limited (D6-c): tier self-service, igual
+# que `actualizar_foto_perfil`.
+@router.post(
+    "/{persona_id}/foto",
+    response_model=PersonaResponseDTO,
+    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+)
+@limiter.limit("10/minute")
+async def actualizar_foto_persona(
+    request: Request,
+    persona_id: int,
+    archivo: UploadFile = File(...),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    PoliticaAccesoPersona(db).exigir_acceso(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=SOLO_ADMINISTRADOR,
+        mensaje="Solo la propia persona, su representante, o un administrador pueden actualizar su foto",
+    )
+    contenido = await leer_con_limite(archivo, AuthServicio.TAMANO_MAXIMO_FOTO_PERFIL_BYTES)
+    return PersonaServicio(db).actualizar_foto(
+        persona_id=persona_id,
+        contenido=contenido,
+        content_type=archivo.content_type,
+    )
 
 
 @router.patch(

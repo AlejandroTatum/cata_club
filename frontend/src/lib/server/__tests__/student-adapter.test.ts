@@ -91,7 +91,16 @@ describe("buildStudentProfileView", () => {
       representanteId: null,
       recentSessions: [],
       membership: null,
+      fotoUrl: null,
     });
+  });
+
+  it("passes the backend photo URL through instead of dropping it", () => {
+    const profile = buildStudentProfileView(
+      { ...persona, fotoUrl: "https://res.cloudinary.com/test/image/upload/perfil-fake.jpg" },
+      [],
+    );
+    expect(profile.fotoUrl).toBe("https://res.cloudinary.com/test/image/upload/perfil-fake.jpg");
   });
 });
 

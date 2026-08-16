@@ -849,6 +849,8 @@ export interface StudentProfileSummary {
   membership: MembershipSummary | null;
   representante: { nombres: string; apellidos: string } | null;
   representanteId: number | null;
+  /** Profile photo URL (Cloudinary). Absent/null until someone uploads one. */
+  fotoUrl?: string | null;
 }
 
 export interface MembershipSummary {
@@ -1671,6 +1673,22 @@ export async function subirFotoPerfil(archivo: File): Promise<PerfilPropio> {
 
   return request<PerfilPropio>(
     apiEndpoint("/auth/me/foto"),
+    { method: "POST", body: formData },
+    FOTO_PERFIL_UPLOAD_TIMEOUT_MS,
+  );
+}
+
+/**
+ * Upload/replace a persona's photo — POST /api/personas/[personaId]/foto.
+ * Same multipart contract and timeout as `subirFotoPerfil`; the backend
+ * authorizes the owner, their representative, or an ADMINISTRADOR.
+ */
+export async function subirFotoPersona(personaId: string, archivo: File): Promise<PersonaResponse> {
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+
+  return request<PersonaResponse>(
+    apiEndpoint(`/personas/${personaId}/foto`),
     { method: "POST", body: formData },
     FOTO_PERFIL_UPLOAD_TIMEOUT_MS,
   );

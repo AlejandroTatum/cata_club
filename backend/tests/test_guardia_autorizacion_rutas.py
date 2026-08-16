@@ -163,6 +163,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("POST", "/membresias/pagos"),                                # (b) - dueño/admin validado en el servicio
     ("POST", "/membresias/pagos/{pago_id}/voucher"),             # (b) - dueño/admin validado en el servicio
     ("POST", "/personas/{persona_id}/independizar"),             # (b)
+    ("POST", "/personas/{persona_id}/foto"),                      # (b) - dueño/representante/admin validado en el router
 }
 
 
