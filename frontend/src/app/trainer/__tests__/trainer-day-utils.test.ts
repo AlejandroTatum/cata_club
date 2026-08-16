@@ -1,9 +1,14 @@
 import { describe, it, expect } from "vitest";
-import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
+import type {
+  AttendanceDayStats,
+  AttendanceRecord,
+  TrainingSchedule,
+} from "@/app/attendance/attendance-utils";
 import type { AlumnoHorario } from "@/services/api";
 import {
   ABSENCE_ALERT_THRESHOLD,
   buildEnrolledCountsByHorario,
+  buildMonthAttendanceRate,
   buildSessionBarAriaLabel,
   buildSessionBarSegments,
   buildSessionCardState,
@@ -19,6 +24,7 @@ import {
   monthToDateRange,
   parseHoraToMinutes,
   selectTodaySessions,
+  sumEnrolledToday,
 } from "@/app/trainer/trainer-day-utils";
 
 function schedule(
@@ -502,5 +508,72 @@ describe("monthToDateRange", () => {
       fechaInicio: "2026-07-01",
       fechaFin: "2026-07-23",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The pulse row's two derived figures
+//
+// `/trainer` grew the admin panel's StatCard row, and a tile is only worth
+// drawing if the number behind it is READ rather than invented — the rule
+// /profile's own history spells out twice. Both of these come from data the
+// screen already holds.
+// ---------------------------------------------------------------------------
+
+describe("sumEnrolledToday", () => {
+  it("adds up the enrolments across every session the club runs today", () => {
+    const today = [schedule(1, "15:00", "16:00"), schedule(2, "18:00", "20:00")];
+
+    expect(sumEnrolledToday(today, { 1: 7, 2: 12 })).toBe(19);
+  });
+
+  it("is zero — not unknown — on a day with no sessions at all", () => {
+    expect(sumEnrolledToday([], {})).toBe(0);
+    expect(sumEnrolledToday([], { 1: 7 })).toBe(0);
+  });
+
+  it("refuses a partial sum: one missing session makes the whole figure unknown", () => {
+    // The roster call is a garnish and is allowed to fail. Adding up only the
+    // sessions that did arrive would not be a smaller number, it would be a
+    // WRONG one — and it would render as confidently as a right one.
+    const today = [schedule(1, "15:00", "16:00"), schedule(2, "18:00", "20:00")];
+
+    expect(sumEnrolledToday(today, { 1: 7 })).toBeNull();
+    expect(sumEnrolledToday(today, {})).toBeNull();
+  });
+});
+
+describe("buildMonthAttendanceRate", () => {
+  const stats = (present: number, total: number): AttendanceDayStats => ({
+    totalPresent: present,
+    totalAbsent: total - present,
+    totalLate: 0,
+    totalJustified: 0,
+    totalUnknown: 0,
+    totalStudents: total,
+  });
+
+  it("reads the rate as presentes over all records, like the admin four-week tile", () => {
+    // Deliberately NOT present + tardanza + justificado: the admin panel's own
+    // tile says "N de M presentes", and folding three states into one here
+    // would produce a number that cannot be compared with it.
+    expect(buildMonthAttendanceRate(stats(135, 262))).toEqual({
+      percent: 52,
+      present: 135,
+      total: 262,
+    });
+  });
+
+  it("returns zero instead of NaN for a month with no records", () => {
+    expect(buildMonthAttendanceRate(stats(0, 0))).toEqual({
+      percent: 0,
+      present: 0,
+      total: 0,
+    });
+  });
+
+  it("rounds to a whole percent", () => {
+    expect(buildMonthAttendanceRate(stats(1, 3)).percent).toBe(33);
+    expect(buildMonthAttendanceRate(stats(2, 3)).percent).toBe(67);
   });
 });
