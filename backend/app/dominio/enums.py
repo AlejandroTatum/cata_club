@@ -132,3 +132,11 @@ class TipoNotificacion(str, enum.Enum):
     # representante ANTERIOR de un dependiente, después del hecho, cuando otro
     # representante lo vincula a su propia cuenta escribiendo su cédula.
     VINCULACION_REPRESENTANTE = "VINCULACION_REPRESENTANTE"
+    # Issue #285 (aviso de mora): tres tipos SEPARADOS a propósito, para que
+    # la clave de dedup existente `(tipo, persona_id, entidad_relacionada_id)`
+    # distinga el primer aviso (día 1), el segundo y último (día 8) y el
+    # resumen diario del administrador. Un solo tipo para día 1 y día 8
+    # colisionaría sobre el mismo pago y el segundo aviso nunca se enviaría.
+    MIEMBRESIA_MORA_DIA_1 = "MIEMBRESIA_MORA_DIA_1"
+    MIEMBRESIA_MORA_DIA_8 = "MIEMBRESIA_MORA_DIA_8"
+    RESUMEN_MORA_ADMIN = "RESUMEN_MORA_ADMIN"
