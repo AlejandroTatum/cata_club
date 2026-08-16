@@ -40,13 +40,26 @@
  *     the checklist on the transfers where reading the voucher IS the job. The
  *     list is now derived from the payment (see `buildApprovalChecklist`); the
  *     gate did not move.
- *   · Thirteen pending payments were thirteen separate decisions with thirteen
- *     confirmations. There is now a batch path — but the only way into it is
- *     the detail view with that payment's own checklist complete, so a batch
- *     commits reviews that already happened instead of replacing them.
  *
  * The stat-card row is gone: the filter pills already carry every one of those
  * four counts, and the surface is allowed one message.
+ *
+ * ## One payment, one decision
+ *
+ * A batch path used to sit alongside this: a per-row checkbox in the queue,
+ * enabled only once that payment's own detail checklist had been completed and
+ * parked, feeding an "Aprobar N pagos" bar. The safeguard worked — nothing
+ * could enter a batch unreviewed — but the affordance did not. The column
+ * rendered disabled for every admin who had parked nothing yet, which is every
+ * admin opening the screen, and the single muted line above the list was the
+ * only thing explaining why. It read as decoration, and decoration that looks
+ * like a control is worse than no control.
+ *
+ * It was removed rather than re-signposted (product decision, QA de agosto
+ * 2026): a payment is reviewed and decided in its own detail view, and nowhere
+ * else. The cost is explicit — N pending payments are N confirmations again,
+ * which is the pain the batch was built for. If that cost bites, the answer is
+ * a better batch, not this one back.
  */
 
 "use client";
@@ -77,7 +90,6 @@ import type {
   ValidationStatus,
 } from "@/services/api";
 import { fetchPaymentValidations, updatePaymentValidation } from "@/services/api";
-import { useBatchApproval } from "./useBatchApproval";
 import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import { usePersistentPreference } from "@/lib/persistent-preference";
@@ -93,9 +105,7 @@ import {
   getPendingRequests,
   findQueueNeighbours,
   getAutoAdvanceId,
-  getNextUnreviewedId,
   buildApprovalChecklist,
-  describeBatchApproval,
   composeRejectionReason,
   REJECTION_REASONS,
   REJECTION_NOTE_MAX_LENGTH,
@@ -363,16 +373,6 @@ export default function PaymentsPage(): React.ReactElement {
   const [editStartDate, setEditStartDate] = useState("");
   const [editMonths, setEditMonths] = useState<number>(1);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
-  /**
-   * Batch approval, and the reason it is not a bypass.
-   *
-   * `batch.reviewed` holds only payments whose OWN checklist the admin completed, one
-   * by one, in the detail view — together with the validity period they settled
-   * on there. Nothing else can enter it, so "Aprobar N pagos" commits decisions
-   * that were already made individually; it never makes them. What the batch
-   * removes is the 13 confirmation dialogs and the 13 round trips, not the
-   * review.
-   */
 
   function calcEditEndDate(startDate: string, months: number): string {
     if (!startDate || months <= 0) return "";
@@ -487,35 +487,6 @@ export default function PaymentsPage(): React.ReactElement {
   );
   const remainingChecks = checklist.items.filter((item) => !checked[item.key]).length;
   const checklistComplete = remainingChecks === 0;
-
-  // Batch approval is a whole concept — review mark, selection, progress,
-  // outcome — so it lives in one hook instead of five useState threaded
-  // through the queue, the detail and the single approve/reject flow.
-  // What stays here is what belongs to the detail panel: which payment is
-  // open, whether its checklist is complete, and the period the admin picked.
-  const batch = useBatchApproval({
-    pending,
-    onRequestUpdated: (updated) =>
-      setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r))),
-  });
-
-  /**
-   * Park the current payment for a batch approval instead of committing it now.
-   *
-   * Requires exactly what "Aprobar pago" requires — a complete checklist — and
-   * stores the period the admin chose, so the eventual batch call sends the
-   * dates they saw rather than re-deriving them later.
-   */
-  function handleMarkReviewed(): void {
-    if (!selectedRequest || !checklistComplete) return;
-    const { id, studentName } = selectedRequest;
-    const startDate = editStartDate || selectedRequest.startDate;
-    batch.markReviewed(id, { startDate, endDate: calcEditEndDate(startDate, editMonths) });
-    // Reviewed payments stay in the pending queue, so the plain auto-advance
-    // would walk straight back into one the admin has already been through.
-    setSelectedId(getNextUnreviewedId(pending, id, new Set([...Object.keys(batch.reviewed), id])));
-    showSuccess(`Revisado: ${studentName}. Queda listo para aprobar en lote.`);
-  }
 
   /** The pending queue as it stood before the in-flight decision resolves. */
   const pendingBeforeDecision = useRef<PaymentValidationRequest[]>([]);
@@ -675,88 +646,6 @@ export default function PaymentsPage(): React.ReactElement {
   // Queue
   // -------------------------------------------------------------------------
 
-  /**
-   * The reason an unreviewed payment's batch checkbox is disabled, shared by
-   * every such checkbox on the page via `aria-labelledby` (see
-   * `renderBatchCheckbox`) and rendered exactly once, above the list, by
-   * `renderBatchReviewReason` below.
-   *
-   * It used to live ONLY in the accessible name, which answered a sighted
-   * admin's "why can't I check this?" with nothing at all — the first defect.
-   * The fix then repeated this same sentence inline next to every unreviewed
-   * checkbox, which is real text but duplicated down a 52px-wide table
-   * column: one word per line, once per row, the second defect. Neither
-   * problem is the checklist's fault; both are about WHERE the explanation
-   * renders. It needs to render exactly once — sighted users read it there,
-   * every unreviewed checkbox still cites it by id, so the accessible name
-   * says the same thing the page shows instead of nothing at all.
-   */
-  const BATCH_REVIEW_REASON_ID = "batch-review-reason";
-  const BATCH_REVIEW_REASON_TEXT =
-    "Un pago se puede sumar a un lote recién después de revisarlo.";
-
-  /** Renders `BATCH_REVIEW_REASON_TEXT` once, only when it is needed. */
-  function renderBatchReviewReason(): React.ReactElement | null {
-    const hasUnreviewedPending = paginatedRequests.some(
-      (r) => r.validationStatus === "pendiente" && !batch.reviewed[r.id],
-    );
-    if (!hasUnreviewedPending) return null;
-    /* `ink-3-strong`, not `ink-3`: this line renders above the list on the page
-       canvas, and the shared muted step only clears AA on `paper` (4.62:1
-       there, 3.78:1 here). It is the sentence that explains why every
-       unreviewed checkbox is disabled, so it is the last string on the screen
-       that should be the hardest to read. */
-    return (
-      <p id={BATCH_REVIEW_REASON_ID} className="mb-2 text-xs text-ink-3-strong">
-        {BATCH_REVIEW_REASON_TEXT}
-      </p>
-    );
-  }
-
-  /**
-   * The per-row batch checkbox.
-   *
-   * Rendered — and disabled — rather than hidden for a pending payment nobody
-   * has batch.reviewed yet: the affordance is what raises the question, answered by
-   * `renderBatchReviewReason` above the list. `aria-labelledby` accepts
-   * several ids, so an unreviewed checkbox cites both that shared reason AND
-   * the row's own name element — the same node the sighted admin already
-   * reads to know whose row this is — which is what keeps two unreviewed
-   * checkboxes from sharing one accessible name even though the reason text
-   * itself is the same for both. A resolved payment gets no control at all,
-   * because there is nothing left to decide about it.
-   */
-  function renderBatchCheckbox(
-    req: PaymentValidationRequest,
-    nameId: string,
-  ): React.ReactElement | null {
-    if (req.validationStatus !== "pendiente") return null;
-    const isReviewed = Boolean(batch.reviewed[req.id]);
-    if (isReviewed) {
-      return (
-        <input
-          type="checkbox"
-          checked={batch.selection.includes(req.id)}
-          disabled={batch.running}
-          onChange={() => batch.toggleSelection(req.id)}
-          aria-label={`Incluir el pago de ${req.studentName} en el lote`}
-          className="h-[18px] w-[18px] flex-none accent-coal disabled:cursor-not-allowed disabled:opacity-40"
-        />
-      );
-    }
-
-    return (
-      <input
-        type="checkbox"
-        checked={false}
-        disabled
-        onChange={() => batch.toggleSelection(req.id)}
-        aria-labelledby={`${nameId} ${BATCH_REVIEW_REASON_ID}`}
-        className="h-[18px] w-[18px] flex-none accent-coal disabled:cursor-not-allowed disabled:opacity-40"
-      />
-    );
-  }
-
   function renderQueue(): React.ReactElement {
     return (
       <>
@@ -839,111 +728,6 @@ export default function PaymentsPage(): React.ReactElement {
           }
         />
 
-        {/* A batch that ended half-done is the one outcome a toast cannot
-            carry: it names people the admin has to go back to. It stays on the
-            page until they dismiss it. */}
-        {batch.outcome && batch.outcome.failed.length > 0 && (
-          <section
-            aria-labelledby="lote-resultado"
-            className="mb-4 rounded-card border border-state-bad/25 bg-state-bad-bg p-4"
-          >
-            <div className="mb-2 flex items-center gap-2">
-              <XCircle size={ICON.sm} strokeWidth={2} className="text-state-bad" aria-hidden="true" />
-              <h2 id="lote-resultado" className="text-sm font-bold text-state-bad">
-                El lote quedó a medias
-              </h2>
-            </div>
-            {batch.outcome.approved.length > 0 && (
-              <p className="text-sm text-ink-2">
-                Se aprobaron {batch.outcome.approved.length}: {batch.outcome.approved.join(", ")}.
-              </p>
-            )}
-            <p className="mt-1 text-sm text-ink-2">
-              No se pudo aprobar {batch.outcome.failed.length === 1 ? "1 pago" : `${batch.outcome.failed.length} pagos`}:{" "}
-              {batch.outcome.failed.join(", ")}. {batch.outcome.failed.length === 1 ? "Sigue" : "Siguen"} pendiente
-              {batch.outcome.failed.length === 1 ? "" : "s"} y con la revisión hecha.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={batch.running}
-                onClick={() => batch.setConfirmOpen(true)}
-              >
-                Reintentar {batch.outcome.failed.length === 1 ? "el pago" : `los ${batch.outcome.failed.length} pagos`}
-              </Button>
-              <Button size="sm" onClick={() => batch.clearOutcome()}>
-                Descartar aviso
-              </Button>
-            </div>
-          </section>
-        )}
-
-        {/* The batch bar exists only because payments got here one at a time,
-            each with its own checklist completed. It commits; it never
-            reviews. */}
-        {batch.reviewedPending.length > 0 && (
-          <div
-            role="group"
-            aria-label="Aprobación por lote"
-            className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-field rounded-card border border-line bg-canvas px-4 py-3"
-          >
-            <p className="min-w-[240px] flex-1 text-xs text-ink-2">
-              {batch.targets.length > 0 ? (
-                <>
-                  <span className="font-bold text-ink">{batch.targets.length}</span> de{" "}
-                  {batch.reviewedPending.length} pagos revisados seleccionados ·{" "}
-                  <span className="font-semibold tabular-nums text-ink">
-                    {formatCurrency(batch.total)}
-                  </span>
-                </>
-              ) : (
-                /* The instructional half of the old copy ("Elija cuáles
-                   aprobar juntos") only repeated the button right below it.
-                   What is left to explain — how batch approval actually
-                   works — already has a full answer in Ayuda, so it is a
-                   link rather than more prose on a screen that is trying to
-                   carry less. */
-                <>
-                  {batch.reviewedPending.length} pagos revisados esperan aprobación.{" "}
-                  <Link
-                    href="/ayuda#faq-si-es-administrador"
-                    className="font-semibold text-ink underline underline-offset-2"
-                  >
-                    Cómo funciona
-                  </Link>
-                </>
-              )}
-            </p>
-            {batch.targets.length < batch.reviewedPending.length && (
-              <Button
-                size="sm"
-                disabled={batch.running}
-                onClick={batch.selectAllReviewed}
-              >
-                Seleccionar los {batch.reviewedPending.length} revisados
-              </Button>
-            )}
-            {batch.targets.length > 0 && (
-              <Button size="sm" variant="tertiary" disabled={batch.running} onClick={batch.clearSelection}>
-                Limpiar selección
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={batch.targets.length === 0 || batch.running}
-              onClick={() => batch.setConfirmOpen(true)}
-            >
-              {batch.progress
-                ? `Aprobando ${Math.min(batch.progress.done + 1, batch.progress.total)} de ${batch.progress.total}…`
-                : batch.targets.length === 1
-                  ? "Aprobar 1 pago"
-                  : `Aprobar ${batch.targets.length} pagos`}
-            </Button>
-          </div>
-        )}
-
         {loading && <LoadingState label="Cargando solicitudes…" />}
 
         {error && !loading && <ErrorState message={error} onRetry={() => void loadRequests()} />}
@@ -999,16 +783,12 @@ export default function PaymentsPage(): React.ReactElement {
 
         {!loading && !error && filtered.length > 0 && (
           <>
-            {renderBatchReviewReason()}
             <div className="card overflow-hidden">
             {/* Desktop: the five columns that carry a decision. */}
             <div data-testid="payments-table" className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableHeaderCell type="text" className="w-[52px] pr-0">
-                      <span className="sr-only">Selección para el lote</span>
-                    </TableHeaderCell>
                     <TableHeaderCell type="text">Estudiante</TableHeaderCell>
                     <TableHeaderCell type="text">Período</TableHeaderCell>
                     <TableHeaderCell type="number">Monto</TableHeaderCell>
@@ -1023,7 +803,6 @@ export default function PaymentsPage(): React.ReactElement {
                     const desktopNameId = `payment-name-desktop-${req.id}`;
                     return (
                     <TableRow key={req.id}>
-                      <TableCell className="pr-0">{renderBatchCheckbox(req, desktopNameId)}</TableCell>
                       <TableNameCell
                         name={<span id={desktopNameId}>{req.studentName}</span>}
                         sub={payerLabel(req)}
@@ -1044,7 +823,6 @@ export default function PaymentsPage(): React.ReactElement {
                               {VALIDATION_STATUS_LABELS[req.validationStatus]}
                             </Badge>
                           )}
-                          {batch.reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
                           {/* LA REGLA DEL ROJO ÚNICO. This was `primary` for
                               every pending row, and the default tab IS the
                               pending queue: ten red buttons down one column,
@@ -1082,14 +860,11 @@ export default function PaymentsPage(): React.ReactElement {
                 const mobileNameId = `payment-name-mobile-${req.id}`;
                 return (
                 <li key={req.id} className="flex flex-col gap-3 p-4">
-                  <div className="flex min-w-0 items-start gap-3">
-                    {renderBatchCheckbox(req, mobileNameId)}
-                    <div className="min-w-0">
-                      <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
-                        {req.studentName}
-                      </p>
-                      <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
-                    </div>
+                  <div className="min-w-0">
+                    <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
+                      {req.studentName}
+                    </p>
+                    <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
                   </div>
                   <p className="text-xs text-ink-2">
                     {humanizePaymentPeriod(req.membershipPeriod)} · {req.paymentMethod}
@@ -1106,7 +881,6 @@ export default function PaymentsPage(): React.ReactElement {
                           {VALIDATION_STATUS_LABELS[req.validationStatus]}
                         </Badge>
                       )}
-                      {batch.reviewed[req.id] && <Badge tone="ok">Revisado</Badge>}
                       {/* The narrow rendering of the same row — see the note on
                           the table's copy. The two are separate JSX, so the
                           red had to be removed twice or the phone would keep
@@ -1371,21 +1145,6 @@ export default function PaymentsPage(): React.ReactElement {
                       >
                         {actionLoading === "approve" ? "Procesando…" : "Aprobar pago"}
                       </Button>
-                      {/* The only door into a batch: a payment can be added to
-                          one solely from here, with its own checklist complete,
-                          which is what keeps "Aprobar N pagos" from becoming a
-                          way around the review. `ghost`, not `secondary`: three
-                          same-weight buttons next to each other read as "too
-                          many buttons" — Aprobar and Rechazar are the two
-                          decisions this screen exists for, so they keep the
-                          weight; parking for later is the less-common path. */}
-                      <Button
-                        variant="tertiary"
-                        disabled={!checklistComplete || actionLoading !== null}
-                        onClick={handleMarkReviewed}
-                      >
-                        Revisado, aprobar después
-                      </Button>
                       <Button
                         disabled={actionLoading !== null}
                         onClick={() => setShowRejectForm(true)}
@@ -1400,14 +1159,6 @@ export default function PaymentsPage(): React.ReactElement {
                           : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`}
                       </p>
                     )}
-                    {/* Was a full sentence explaining how batch approval
-                        works — the density rule (design review) caps a
-                        screen at one line of prose, and that explanation
-                        already lives in Ayuda (see the batch bar's "Cómo
-                        funciona" link). A compact badge, matching the same
-                        "Revisado" mark the queue already shows, states the
-                        fact without re-explaining the mechanism. */}
-                    {batch.reviewed[request.id] && <Badge tone="ok">Revisado, en el lote</Badge>}
                   </>
                 ) : (
                   <div className="flex flex-col gap-4">
@@ -1547,24 +1298,6 @@ export default function PaymentsPage(): React.ReactElement {
             void handleApprove();
           }}
           onCancel={() => setConfirmApproveOpen(false)}
-        />
-
-        {/* The batch confirmation says what it is about to do, to how many, and
-            to whom — "¿Aprobar 7 pagos?" is not a decision anyone can make. */}
-        <ConfirmDialog
-          open={batch.confirmOpen}
-          variant="state-ok"
-          title={batch.targets.length === 1 ? "Aprobar 1 pago" : `Aprobar ${batch.targets.length} pagos`}
-          message={describeBatchApproval(
-            batch.targets.map((r) => r.studentName),
-            formatCurrency(batch.total),
-          )}
-          confirmLabel={batch.targets.length === 1 ? "Aprobar el pago" : `Aprobar los ${batch.targets.length}`}
-          onConfirm={() => {
-            batch.setConfirmOpen(false);
-            void batch.run();
-          }}
-          onCancel={() => batch.setConfirmOpen(false)}
         />
 
         {/* Fullscreen voucher viewer modal */}
