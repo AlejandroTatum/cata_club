@@ -178,6 +178,51 @@ class Usuario(Base):
         self.version_sesion += 1
 
 
+class Sesion(Base):
+    """Registro OBSERVACIONAL de un login. No decide nada.
+
+    La invalidación de sesiones es y sigue siendo `Usuario.version_sesion`, el
+    epoch que viaja en el claim `sver` y que `GestorAutenticacion.epoch_valido`
+    compara. Esta tabla no participa de esa decisión: existe para que el dueño
+    de la cuenta pueda VER desde dónde entró, y nada más. Si un día se
+    consultara para autorizar, habríamos movido un control de seguridad a una
+    tabla que nació para llenar una pantalla.
+
+    Por eso cada fila guarda el `version_sesion` vigente cuando se abrió: una
+    fila cuyo epoch quedó por debajo del epoch actual del usuario está muerta,
+    y eso se DERIVA del mecanismo autoritativo en lugar de duplicarlo.
+    `revocar_sesiones()` no toca esta tabla justamente por eso.
+
+    Sin IP: es dato personal, el club maneja cuentas de menores y de sus
+    representantes, y ningún caso de uso la lee (ver
+    `soporte_transversal/dispositivo.py`).
+
+    Sin `ultimo_uso_en`: actualizarlo exigiría que el refresh sepa a QUÉ fila
+    corresponde, y hoy el token no lleva identificador de sesión. Una columna
+    que nunca se actualiza es una mentira con forma de dato.
+    """
+
+    __tablename__ = "sesion"
+    __table_args__ = (
+        # El acceso real es siempre "las sesiones de este usuario, la más
+        # reciente primero" -- el índice cubre las dos mitades de esa consulta.
+        Index("ix_sesion_usuario_iniciada", "usuario_id", "iniciada_en"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False)
+    # Etiqueta legible ya derivada del user-agent, nunca el user-agent crudo.
+    dispositivo: Mapped[str] = mapped_column(String(80), nullable=False)
+    iniciada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc, nullable=False,
+    )
+    # El epoch bajo el que se abrió. Ver el docstring: se guarda para derivar
+    # "muerta", no para decidirlo.
+    version_sesion: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    usuario: Mapped["Usuario"] = relationship()
+
+
 # ---------------------------------------------------------------------------
 # Persona (entidad central, con relación reflexiva Representante/Representados)
 # ---------------------------------------------------------------------------
