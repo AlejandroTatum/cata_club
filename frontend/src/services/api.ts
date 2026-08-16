@@ -472,6 +472,8 @@ export interface RegisterAttendanceRequest {
 export interface RegisterAttendanceResult {
   createdCount: number;
   failed: { personaId: number; message: string }[];
+  /** Who took the list (issue #263), persisted by the backend — surfaced on the receipt. */
+  registradoPorNombre?: string | null;
 }
 
 // ---------------------------------------------------------------------------

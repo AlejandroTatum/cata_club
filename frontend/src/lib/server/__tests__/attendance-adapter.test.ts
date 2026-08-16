@@ -90,6 +90,8 @@ describe("buildAttendanceRecord", () => {
     estadoJustificativo: null,
     personaId: 3,
     horarioId: 1,
+    registradoPorId: 7,
+    registradoPorNombre: "Carlos Ruiz",
   };
   const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
   const personas = new Map([
@@ -105,7 +107,22 @@ describe("buildAttendanceRecord", () => {
       personaId: 3,
       estudiante: "Sofia Alumna",
       estado: "present",
+      registradoPorId: 7,
+      registradoPorNombre: "Carlos Ruiz",
     });
+  });
+
+  it("carries the persisted taker (issue #263), not a browser-side name", () => {
+    const built = buildAttendanceRecord(asistencia, horario, personas);
+    expect(built.registradoPorId).toBe(7);
+    expect(built.registradoPorNombre).toBe("Carlos Ruiz");
+  });
+
+  it("maps a null taker (legacy row) to null, not a fabricated name", () => {
+    const legacy: BackendAsistencia = { ...asistencia, registradoPorId: null, registradoPorNombre: null };
+    const built = buildAttendanceRecord(legacy, horario, personas);
+    expect(built.registradoPorId).toBeNull();
+    expect(built.registradoPorNombre).toBeNull();
   });
 
   it("keeps the raw horarioId even when the label falls back to a placeholder", () => {

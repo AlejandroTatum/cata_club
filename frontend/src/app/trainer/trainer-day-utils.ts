@@ -128,6 +128,8 @@ export interface SessionSummary {
   horarioId: number;
   counts: Record<EstadoAsistencia, number>;
   total: number;
+  /** Who took the list (issue #263) — `null`/absent for legacy sessions. */
+  registradoPorNombre?: string | null;
 }
 
 /** The time-of-day inside a horario label, used only for ordering. */
@@ -166,6 +168,9 @@ export function groupRecordsBySession(records: AttendanceRecord[]): SessionSumma
         horarioId: record.horarioId,
         counts: emptyCounts(),
         total: 0,
+        // Every record of a session was filed in one batch, so the taker
+        // (issue #263) is the same across them — capture it from the first.
+        registradoPorNombre: record.registradoPorNombre ?? null,
       };
       bySession.set(key, session);
     }

@@ -54,6 +54,10 @@ export interface AttendanceRecord {
   personaId: number;
   estudiante: string;
   estado: EstadoAsistencia;
+  /** Who took the list (issue #263) — `null`/absent for legacy rows. */
+  registradoPorId?: number | null;
+  /** The taker's display name, already resolved by the backend. */
+  registradoPorNombre?: string | null;
 }
 
 /** Aggregate counts for today's attendance overview. */

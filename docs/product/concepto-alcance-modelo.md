@@ -92,6 +92,7 @@ Cada solicitud que caiga en esta tabla se responde con este documento y se cotiz
 - **No existe entrenador fijo por horario:** la clase la da el entrenador disponible. Se elimina la relación en el modelo y desaparece la pantalla de asignación.
 - **Permisos simplificados:** cualquier entrenador puede operar cualquier horario, incluida la toma de asistencia.
 - **No se registra quién dictó cada clase:** los entrenadores cobran mensual fijo; el dato no tiene consumidor. Regla general aplicada: no se modela lo que nadie consume, y lo derivable de un hecho ya registrado no gana columna propia.
+  - **Matiz (#263):** la TOMA de la lista de asistencia sí registra quién la tomó (`Asistencia.registrado_por_id`, FK a `persona.id`) — trazabilidad real de auditoría, ahora que la asistencia impacta el ciclo de cobro (corrección #262). Quién corrige después es un follow-up documentado, fuera de ese alcance (no hay columna `corregido_por`). El punto de «quién dictó la clase» sigue sin modelarse: el sueldo es mensual fijo y ese dato no tiene consumidor.
 
 ### Nombres y rigidez
 

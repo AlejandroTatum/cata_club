@@ -557,3 +557,132 @@ def test_re_tomar_mismo_dia_por_entrenador_se_rechaza_como_correccion(client_ent
         "/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"},
     )
     assert resp.status_code == 403
+
+
+# --- Issue #263: persistir quién tomó la lista ---------------------------------
+# La identidad viene del TOKEN (`persona_id`), nunca del DTO. Solo se setea en la
+# rama de CREACIÓN; la corrección (#262) no la pisa. Las filas históricas quedan
+# con `registrado_por_id = NULL` (sin backfill falso) y se exponen como tal.
+
+
+def _crear_autor_y_alumno(client):
+    """Primera persona creada (id=1) es el AUTOR (el token admin es
+    `persona_id=1`); la segunda (id=2) es el alumno al que se le toma lista.
+    Devuelve (autor, alumno, horario)."""
+    autor = _crear_persona_api(client, cedula_valida(146), "María")
+    alumno = _crear_persona_api(client, cedula_valida(147), "Ana")
+    assert autor["id"] == 1
+    horario = _crear_horario_api(client)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    return autor, alumno, horario
+
+
+def test_registrar_asistencia_persiste_quien_tomo_la_lista(client):
+    """La creación graba `registrado_por_id` con la persona del token y el DTO
+    de respuesta expone `registrado_por_nombre` resuelto (join a Persona)."""
+    autor, alumno, horario = _crear_autor_y_alumno(client)
+
+    resp = client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": str(date(2026, 7, 13)), "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["registradoPorId"] == autor["id"]
+    assert resp.json()["registradoPorNombre"] == "María Torres"
+
+
+def test_registrar_asistencia_ignora_autor_enviado_en_el_body(client):
+    """La identidad sale del token, nunca del DTO: un `registrado_por_id`
+    forjado en el body se ignora (AsistenciaCreateDTO no tiene campos de
+    identidad) y se graba la persona del token."""
+    autor, alumno, horario = _crear_autor_y_alumno(client)
+
+    resp = client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": str(date(2026, 7, 13)), "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+            "registrado_por_id": 999,  # forjado: debe descartarse
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["registradoPorId"] == autor["id"]
+    assert resp.json()["registradoPorNombre"] == "María Torres"
+
+
+def test_corregir_no_pisa_quien_tomo_la_lista(client, monkeypatch):
+    """La rama de corrección (#262) actualiza el estado pero NO sobrescribe
+    `registrado_por_id`: la columna significa 'quién tomó la lista
+    originalmente'."""
+    # Mismo patrón que los tests de #262: congela el `hoy_club()` del
+    # servicio para que la antigüedad no dependa del reloj real.
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    autor, alumno, horario = _crear_autor_y_alumno(client)
+
+    payload = {
+        "fecha_entrenamiento": str(_HOY_CORRECCION - timedelta(days=1)),
+        "estado": "PRESENTE",
+        "persona_id": alumno["id"], "horario_id": horario["id"],
+    }
+    primera = client.post("/api/v1/asistencias/", json=payload)
+    assert primera.status_code == 201
+
+    segunda = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
+    assert segunda.status_code == 201
+    assert segunda.json()["registradoPorId"] == autor["id"]
+    assert segunda.json()["registradoPorNombre"] == "María Torres"
+
+
+def test_historial_expone_quien_tomo_la_lista(client):
+    """El listado por persona (`GET /asistencias/persona/{id}`) devuelve los
+    campos de autor en cada item."""
+    autor, alumno, horario = _crear_autor_y_alumno(client)
+
+    client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": str(date(2026, 7, 13)), "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+
+    historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
+    assert historial.status_code == 200
+    items = historial.json()["items"]
+    assert items[0]["registradoPorId"] == autor["id"]
+    assert items[0]["registradoPorNombre"] == "María Torres"
+
+
+def test_asistencia_historica_sin_autor_expone_null(client, db_session):
+    """Fila previa a #263 (sin autor): `registrado_por_id` queda NULL (no hay
+    backfill falso) y el historial lo expone como null."""
+    from app.dominio.modelos import Asistencia
+    from app.dominio.enums import EstadoAsistencia
+
+    alumno = _crear_persona_api(client, cedula_valida(148), "Ana")
+    horario = _crear_horario_api(client)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    # Fila "legacy": se inserta directamente sin `registrado_por_id`.
+    db_session.add(Asistencia(
+        fecha_entrenamiento=date(2026, 7, 6),
+        estado=EstadoAsistencia.PRESENTE,
+        persona_id=alumno["id"],
+        horario_id=horario["id"],
+    ))
+    db_session.commit()
+
+    historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
+    assert historial.status_code == 200
+    items = historial.json()["items"]
+    assert items[0]["registradoPorId"] is None
+    assert items[0]["registradoPorNombre"] is None

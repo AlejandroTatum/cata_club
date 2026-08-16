@@ -93,6 +93,12 @@ class AsistenciaResponseDTO(ResponseBase, BaseModel):
     estado_justificativo: Optional[bool] = None
     persona_id: int
     horario_id: int
+    # Quién tomó la lista (#263): `registrado_por_id` es la FK a persona del
+    # autor (nullable: las filas históricas no tienen autor conocido) y
+    # `registrado_por_nombre` el nombre ya resuelto (join a Persona) para que
+    # el frontend nunca muestre un nombre sacado del navegador.
+    registrado_por_id: Optional[int] = None
+    registrado_por_nombre: Optional[str] = None
 
 
 # --- Asignación directa Alumno ↔ Horario ------------------------------------
@@ -110,9 +116,10 @@ class AlumnoHorarioResponseDTO(ResponseBase, BaseModel):
 
 class UltimaListaDTO(ResponseBase, BaseModel):
     """Una sesión (horario + fecha) con al menos una Asistencia registrada,
-    con sus cuatro conteos. Sin autor a propósito: `Asistencia` no guarda
-    quién tomó la lista (modelos.py:536, deliberado) -- ver
-    decisiones-de-negocio-2026-08-11.md §8. Usada por el panel del
+    con sus cuatro conteos. Esta tarjeta sigue sin autor a propósito: es un
+    resumen de conteos, no un detalle (ver decisiones-de-negocio-2026-08-11.md
+    §8) -- `Asistencia` SÍ guarda quién tomó la lista desde #263
+    (`registrado_por_id`), expuesto en el historial. Usada por el panel del
     entrenador para "las últimas listas del club"."""
     horario_id: int
     fecha_entrenamiento: date

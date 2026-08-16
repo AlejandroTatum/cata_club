@@ -51,6 +51,8 @@ function record(
     personaId: partial.personaId ?? 1,
     estudiante: partial.estudiante ?? "Ana López",
     estado: partial.estado,
+    registradoPorId: partial.registradoPorId ?? null,
+    registradoPorNombre: partial.registradoPorNombre ?? null,
   };
 }
 
@@ -180,6 +182,21 @@ describe("groupRecordsBySession", () => {
     ]);
 
     expect(sessions[0].horarioId).toBe(7);
+  });
+
+  it("carries who took the list from the first record of a session (issue #263)", () => {
+    const sessions = groupRecordsBySession([
+      record({ estado: "present", registradoPorNombre: "Carlos Mendoza" }),
+      record({ estado: "present", registradoPorNombre: "Carlos Mendoza" }),
+    ]);
+
+    expect(sessions[0].registradoPorNombre).toBe("Carlos Mendoza");
+  });
+
+  it("marks a legacy session with no taker as null, not a fabricated name", () => {
+    const sessions = groupRecordsBySession([record({ estado: "present" })]);
+
+    expect(sessions[0].registradoPorNombre).toBeNull();
   });
 
   it("separates two horarios on the same day", () => {

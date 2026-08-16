@@ -101,6 +101,7 @@ class AsistenciaRepositorio:
             .options(
                 joinedload(Asistencia.persona),
                 joinedload(Asistencia.horario),
+                joinedload(Asistencia.registrado_por),
             )
             .where(Asistencia.persona_id == persona_id)
             .order_by(Asistencia.fecha_entrenamiento.desc(), Asistencia.id.desc())
@@ -161,6 +162,7 @@ class AsistenciaRepositorio:
         query = self.db.query(Asistencia).options(
             joinedload(Asistencia.persona),
             joinedload(Asistencia.horario),
+            joinedload(Asistencia.registrado_por),
         )
         if horario_id is not None:
             query = query.filter(Asistencia.horario_id == horario_id)

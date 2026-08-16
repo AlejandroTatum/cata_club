@@ -4,8 +4,9 @@
  *
  * "Las últimas listas del club" card on the trainer panel (Fix 8 / DSH-2,
  * decisiones-de-negocio-2026-08-11.md §8). Deliberately no author and no
- * per-student name: `Asistencia` doesn't record who took the list
- * (modelos.py:536), and there's no entrenador–horario relation to filter by
+ * per-student name in THIS summary card: it's counts-only. `Asistencia`
+ * records who took the list since #263 (`registrado_por_id`/nombre), exposed
+ * in the history — there's still no entrenador–horario relation to filter by
  * (issue #13) — the card lists the club's own recent sessions, translating
  * each backend `BackendUltimaLista` into a `RecentSession` the same way
  * `attendance/records/route.ts` builds `AttendanceRecord`.

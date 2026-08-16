@@ -312,6 +312,10 @@ export interface Asistencia {
   estado: EstadoAsistencia;
   observacion?: string;
   createdAt: string;
+  /** Who took the list (issue #263) — FK to persona, nullable for legacy rows. */
+  registradoPorId?: string | null;
+  /** The taker's display name, already resolved by the backend (join to Persona). */
+  registradoPorNombre?: string | null;
 }
 
 /**

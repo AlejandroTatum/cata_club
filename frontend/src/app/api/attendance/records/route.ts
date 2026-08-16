@@ -210,7 +210,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
 
       if (!result.ok) {
-        return { student, ok: false as const, message: "No se pudo contactar al servidor.", refreshedAccessToken: undefined };
+        return { student, ok: false as const, message: "No se pudo contactar al servidor.", registradoPorNombre: null, refreshedAccessToken: undefined };
       }
       if (!result.response.ok) {
         let message = "No se pudo registrar la asistencia.";
@@ -223,9 +223,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         } catch {
           // ignore parse errors — use fallback
         }
-        return { student, ok: false as const, message, refreshedAccessToken: result.refreshedAccessToken };
+        return { student, ok: false as const, message, registradoPorNombre: null, refreshedAccessToken: result.refreshedAccessToken };
       }
-      return { student, ok: true as const, message: undefined, refreshedAccessToken: result.refreshedAccessToken };
+      // The backend `POST /asistencias/` returns the created Asistencia, now
+      // including `registradoPorNombre` (issue #263). Capturing it here lets the
+      // receipt show the PERSISTED taker instead of a browser-side name (the
+      // fake traceability the issue reports). Best-effort: if the body can't be
+      // parsed, the receipt falls back to "No registrado".
+      let registradoPorNombre: string | null = null;
+      try {
+        const created = (await result.response.json()) as { registradoPorNombre?: string | null };
+        registradoPorNombre = created.registradoPorNombre ?? null;
+      } catch {
+        // ignore parse errors — the author name is not required
+      }
+      return { student, ok: true as const, message: undefined, registradoPorNombre, refreshedAccessToken: result.refreshedAccessToken };
     }),
   );
 
@@ -233,8 +245,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const failed = outcomes
     .filter((o) => !o.ok)
     .map((o) => ({ personaId: o.student.personaId, message: o.message ?? "No se pudo registrar la asistencia." }));
+  const registradoPorNombre = outcomes.find((o) => o.ok && o.registradoPorNombre != null)?.registradoPorNombre ?? null;
 
-  const response = NextResponse.json({ createdCount, failed }, { status: failed.length > 0 && createdCount === 0 ? 502 : 201 });
+  const response = NextResponse.json({ createdCount, failed, registradoPorNombre }, { status: failed.length > 0 && createdCount === 0 ? 502 : 201 });
   const refreshedAccessToken = outcomes.find((o) => o.refreshedAccessToken)?.refreshedAccessToken;
   if (refreshedAccessToken) {
     setAuthCookies(response, { accessToken: refreshedAccessToken });
