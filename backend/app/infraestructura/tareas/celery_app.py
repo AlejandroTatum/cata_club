@@ -106,7 +106,15 @@ celery_app.conf.beat_schedule = {
         "task": "app.infraestructura.tareas.vencimientos_tareas.marcar_membresias_vencidas",
         "schedule": _parsear_hora_crontab("02:35"),
     },
-    # 3) Reconciliación de comprobantes perdidos (cada 15 minutos):
+    # 3) Aviso de mora de membresía (día 1 y día 8 desde el vencimiento) +
+    #    resumen diario al administrador. Corre 5 min después de
+    #    marcar-membresias-vencidas para que las membresías expiradas ya estén
+    #    VENCIDA cuando el scan de mora las lea (issue #285).
+    "alertar-mora-diaria": {
+        "task": "app.infraestructura.tareas.alertas_tareas.alertar_mora_diaria",
+        "schedule": _parsear_hora_crontab("02:40"),
+    },
+    # 4) Reconciliación de comprobantes perdidos (cada 15 minutos):
     #    Re-despacha la generación del comprobante PDF para pagos APROBADOS
     #    que siguen sin comprobante pasado el umbral (el disparo original se
     #    perdió, p. ej. Redis caído justo después del commit de la aprobación
