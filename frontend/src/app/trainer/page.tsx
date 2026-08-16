@@ -2,17 +2,35 @@
  * Trainer — "Mi día" (issue #211,
  * `docs/archive/prototypes/prototipos/31-entrenador-dashboard-alternativas.html`).
  *
- * Compacted from the Fix 8 / DSH-2 layout it replaces: two symmetric cards up
- * top — coal `SessionCard` for the immediate session, white
- * "Distribución de asistencias" for the month's donut — then `RecentSessionsList`
- * ("Últimas listas") as dense, full-width rows below. `SessionCard` moved the
- * one primary action out of the page header (compare the old `actions` prop
- * this file used to pass `AppShell`) and onto the card itself, named by the
- * session's own hour: "Pasar lista de las 15:00", never "esta sesión".
+ * ## The panel's anatomy, because the owner approves the panel
  *
- * The old per-trainer "Última lista" `StatGrid` recap is gone — it duplicated
- * what the dense rows below already show for the same (fecha, horario) pair,
- * once the badge-table version of that list became the proportional bar.
+ * This screen and `/dashboard` used to read as two different products, and the
+ * owner named the admin one as the reference. So the three layers are its
+ * three layers:
+ *
+ *   1. a full-width coal band — `SessionCard`, which already spoke that
+ *      vocabulary (`rounded-card bg-coal`, a `font-display text-display`
+ *      figure) and was merely boxed into half a screen by a
+ *      `split:grid-cols-2` pair with the donut;
+ *   2. the pulse row on `STAT_GRID`, four tiles in one grammar;
+ *   3. `PAGE_RAIL` — `RecentSessionsList` ("Últimas listas") fluid beside the
+ *      340px "Distribución de asistencias" card.
+ *
+ * What did NOT come across is the hero's empty hands. `/dashboard` moved its
+ * action to the header because it was the third place in the product where a
+ * primary action could be found; this one is bound to one session and named by
+ * that session's own hour — "Pasar lista de las 15:00", never "esta sesión" —
+ * which is exactly what #211 put on the card and why. Porting a shape is not a
+ * reason to undo a placement.
+ *
+ * ## The pulse row is not the recap that was removed
+ *
+ * A per-trainer "Última lista" `StatGrid` used to sit here and was deleted for
+ * duplicating what the dense rows below already show for the same (fecha,
+ * horario) pair. These four tiles are the opposite case — none of them can be
+ * read off those rows: how many sessions the club runs TODAY, how many
+ * students are enrolled in them, the month's attendance rate, and how many
+ * lists have been taken all month. Same component, different question.
  *
  * ## Only what the backend can sustain
  *
@@ -48,7 +66,16 @@ import {
   fetchRecentAttendanceSessions,
   type RecentAttendanceSession,
 } from "@/services/api";
-import { EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PAGE_RAIL,
+  STAT_GRID,
+  StatCard,
+  StatTrack,
+  buttonClasses,
+} from "@/components/ui";
 import {
   buildAttendanceStats,
   formatDay,
@@ -58,10 +85,13 @@ import {
 import { todayDiaSemana } from "@/lib/club-date";
 import {
   buildEnrolledCountsByHorario,
+  buildMonthAttendanceRate,
   buildSessionCardState,
   findAbsenceAlert,
   formatAbsenceCount,
+  groupRecordsBySession,
   monthToDateRange,
+  sumEnrolledToday,
 } from "./trainer-day-utils";
 import SessionCard from "./SessionCard";
 import RecentSessionsList from "./RecentSessionsList";
@@ -135,6 +165,25 @@ export default function TrainerPage(): React.ReactElement {
   const attendanceStats = useMemo(() => buildAttendanceStats(monthRecords), [monthRecords]);
 
   /**
+   * The pulse row's four figures — every one of them read from state this
+   * screen already holds, none of them a new call.
+   *
+   * `listsThisMonth` counts SESSIONS, not records: `groupRecordsBySession`
+   * keys on (fecha, horarioId), so a list of twenty students is one list. The
+   * record count would have been a bigger number measuring nothing anyone
+   * asks for.
+   */
+  const enrolledToday = useMemo(
+    () => sumEnrolledToday(todaySchedules, enrolledCounts),
+    [todaySchedules, enrolledCounts],
+  );
+  const monthRate = useMemo(() => buildMonthAttendanceRate(attendanceStats), [attendanceStats]);
+  const listsThisMonth = useMemo(
+    () => groupRecordsBySession(monthRecords).length,
+    [monthRecords],
+  );
+
+  /**
    * Enrolled counts for every session shown on the card today — the hero
    * session AND the "rest of today" list underneath it. One club-wide roster
    * call (`fetchRosterDeTodosLosHorarios`, the same TRA-7 move `/groups`
@@ -188,40 +237,110 @@ export default function TrainerPage(): React.ReactElement {
         {!loading && !error && (
           <>
             {/*
-              Two symmetric cards on desktop (`split:grid-cols-2`), sharing
-              height. `SessionCard` anchors its actions to the bottom with
-              `mt-auto` so the surplus of an uneven pair lands there, never in
-              the middle.
+              LAYER 1 — the hero band, full width.
+
+              It used to be half of a `split:grid-cols-2` pair with the donut,
+              which is the single biggest reason this screen and `/dashboard`
+              read as different products: the panel the owner approves leads
+              with ONE full-width coal band and sends its secondary cards to
+              the rail below. `SessionCard` already spoke that vocabulary —
+              `rounded-card bg-coal`, a `font-display text-display` figure —
+              it was just boxed into half a screen.
+
+              Its action stays on the card and did NOT move to the header.
+              `/dashboard`'s hero gave its action up because it was the third
+              place in the product where a primary action could be found; this
+              one is bound to a specific session and named by that session's
+              own hour ("Pasar lista de las 15:00"), which is the whole point
+              of #211's placement. Porting the shape is not a reason to undo it.
 
               On a rest day `sessionCardState` is `null` and `SessionCard`
-              renders nothing — that guard is the component's whole safety
-              rule and does not move. What changed is what stands in its slot:
-              the grid used to collapse to one column, which left the summary
-              card 1150px wide around a 260px donut and, worse, left the
-              screen saying nothing at all about a day with no sessions. This
-              is the panel DESIGN.md's "regla del estado flaco" was written
-              about, so the rest day gets the three parts D11 asks for.
+              renders nothing — that guard is the component's whole safety rule
+              and does not move. The rest-day statement takes the band's place,
+              full width, with the three parts D11 asks for. It no longer needs
+              `fill`: there is no equal-height sibling left to match.
             */}
-            <div className="grid items-stretch gap-[18px] split:grid-cols-2">
-              {sessionCardState ? (
-                <SessionCard state={sessionCardState} enrolledCounts={enrolledCounts} />
-              ) : (
-                <EmptyState
-                  fill
-                  icon={<CalendarOff size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                  title="Hoy no hay entrenamientos"
-                  description={`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puede pasar la lista de otro día si quedó pendiente.`}
-                  action={
-                    // The same words the card uses for the same destination —
-                    // "Elegir otro horario" is already how this screen names
-                    // the picker, and a second name for one place is the drift
-                    // the destination registry exists to stop.
-                    <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
-                      Elegir otro horario
-                    </Link>
-                  }
-                />
-              )}
+            {sessionCardState ? (
+              <SessionCard state={sessionCardState} enrolledCounts={enrolledCounts} />
+            ) : (
+              <EmptyState
+                icon={<CalendarOff size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                title="Hoy no hay entrenamientos"
+                description={`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puede pasar la lista de otro día si quedó pendiente.`}
+                action={
+                  // The same words the card uses for the same destination —
+                  // "Elegir otro horario" is already how this screen names
+                  // the picker, and a second name for one place is the drift
+                  // the destination registry exists to stop.
+                  <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
+                    Elegir otro horario
+                  </Link>
+                }
+              />
+            )}
+
+            {/*
+              LAYER 2 — the pulse, on `/dashboard`'s own `STAT_GRID`.
+
+              One internal grammar across all four tiles, the same the admin
+              panel states: uppercase label, ink figure with its unit, one
+              caption line. Every figure is read from data already on this
+              screen — nothing here triggers a call, and nothing here is
+              derived from something the backend does not send. That second
+              constraint is not decoration: `/profile`'s history records two
+              figures retired for failing it.
+
+              "Inscritos hoy" is an em dash rather than a number when the
+              roster did not fully arrive. `sumEnrolledToday` returns `null`
+              instead of a partial sum for the reason its own doc gives — a
+              partial sum is not a smaller number, it is a wrong one — and the
+              tile has to state that absence rather than paper over it.
+            */}
+            <div data-testid="trainer-pulse" className={STAT_GRID}>
+              <StatCard
+                label="Sesiones hoy"
+                value={todaySchedules.length}
+                hint={formatDay(todayDiaSemana()).toLowerCase()}
+              />
+              <StatCard
+                label="Inscritos hoy"
+                value={enrolledToday ?? "—"}
+                hint={
+                  enrolledToday === null
+                    ? "no se pudo leer el padrón"
+                    : "alumnos en las sesiones de hoy"
+                }
+              />
+              <StatCard
+                label="Asistencia del mes"
+                value={monthRate.percent}
+                unit="%"
+                hint={
+                  <span className="flex flex-col gap-y-field">
+                    <StatTrack value={monthRate.present} total={monthRate.total} />
+                    <span>{`${monthRate.present} de ${monthRate.total} presentes`}</span>
+                  </span>
+                }
+              />
+              <StatCard
+                label="Listas del mes"
+                value={listsThisMonth}
+                hint="sesiones con lista tomada"
+              />
+            </div>
+
+            {/*
+              LAYER 3 — the rail. Neither the recent lists nor the donut needs
+              the full width, and `PAGE_RAIL` is the token `/dashboard` spends
+              on exactly this pair: a fluid feed beside a fixed 340px card.
+
+              The absence alert stays inside the donut card. It is a fact ABOUT
+              attendance and it belongs to the block that draws attendance —
+              moving it up to the band would have made it the second thing in
+              a hero whose own rule is one number and the sentence that reads it.
+            */}
+            <div data-testid="trainer-lower" className={PAGE_RAIL}>
+              <RecentSessionsList sessions={recentSessions} />
 
               <section className="card flex flex-col gap-4 p-[18px]">
                 {absenceAlert && (
@@ -254,8 +373,6 @@ export default function TrainerPage(): React.ReactElement {
                 </div>
               </section>
             </div>
-
-            <RecentSessionsList sessions={recentSessions} />
           </>
         )}
       </AppShell>

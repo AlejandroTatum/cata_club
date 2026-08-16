@@ -21,6 +21,7 @@
 import type { EstadoAsistencia } from "@/types/domain";
 import { buildDateRange, type DateRange } from "@/lib/club-date";
 import type {
+  AttendanceDayStats,
   AttendanceRecord,
   TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
@@ -440,4 +441,64 @@ export function buildSessionBarAriaLabel(
   const parts = STATE_ORDER.map((estado) => pluralizedCount(counts[estado], BAR_STATE_NOUNS[estado]));
   const last = parts[parts.length - 1];
   return `${parts.slice(0, -1).join(", ")} y ${last} sobre ${total} registros`;
+}
+
+// ---------------------------------------------------------------------------
+// The pulse row (the admin panel's StatCard grammar, on this screen)
+// ---------------------------------------------------------------------------
+
+/**
+ * How many students are enrolled across every session the club runs today.
+ *
+ * `null`, never 0, when the roster is not fully known. The roster call is a
+ * garnish on this screen — it is allowed to fail and leave counts unset — and
+ * a partial sum would not be a smaller number, it would be a WRONG one,
+ * rendered as confidently as a right one. A day with no sessions is a real 0.
+ *
+ * The figure counts `AlumnoHorario` rows: who is ENROLLED, never who turned
+ * up. No DTO on this screen says who turned up, which is the same limit the
+ * module doc records for "N estudiantes inscritos".
+ */
+export function sumEnrolledToday(
+  todaySchedules: TrainingSchedule[],
+  enrolledCounts: Record<number, number>,
+): number | null {
+  if (todaySchedules.length === 0) return 0;
+
+  let total = 0;
+  for (const schedule of todaySchedules) {
+    const count = enrolledCounts[schedule.id];
+    if (count === undefined) return null;
+    total += count;
+  }
+  return total;
+}
+
+export interface MonthAttendanceRate {
+  /** Whole percent, 0–100. */
+  percent: number;
+  present: number;
+  total: number;
+}
+
+/**
+ * The month's attendance as a proportion — presentes over all records.
+ *
+ * Deliberately NOT present + tardanza + justificado. `/dashboard`'s own
+ * four-week tile reads "N de M presentes", and a rate here that quietly
+ * folded three states into one would print beside it on the same screen
+ * grammar while measuring something else.
+ *
+ * A month with no records is 0%, not NaN: this runs on the first day of every
+ * month, before anyone has taken a list.
+ */
+export function buildMonthAttendanceRate(stats: AttendanceDayStats): MonthAttendanceRate {
+  const total = stats.totalStudents;
+  if (total <= 0) return { percent: 0, present: 0, total: 0 };
+
+  return {
+    percent: Math.round((stats.totalPresent / total) * 100),
+    present: stats.totalPresent,
+    total,
+  };
 }

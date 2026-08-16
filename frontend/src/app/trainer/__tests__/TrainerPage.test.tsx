@@ -13,6 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { PAGE_RAIL, STAT_GRID } from "@/components/ui";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import TrainerPage from "@/app/trainer/page";
 import type { TrainingSchedule, AttendanceRecord } from "@/app/attendance/attendance-utils";
@@ -496,20 +497,21 @@ describe("TrainerPage — Mi día", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the two top cards in one row on desktop, on a rest day too", async () => {
+  it("runs the session hero across the full width instead of pairing it with the donut", async () => {
+    // The pair was this screen's own invention: `/dashboard`, the panel the
+    // owner approves, leads with ONE full-width coal band and puts its
+    // secondary cards in the rail below. The half-width pair is what made the
+    // two screens read as different products.
     const { container: withSession } = render(<TrainerPage />);
     await screen.findByText("Lunes 15:00 — 16:00");
-    expect(withSession.querySelector(".split\\:grid-cols-2")).not.toBeNull();
+    expect(withSession.querySelector(".split\\:grid-cols-2")).toBeNull();
 
-    // The row used to collapse to one column on a rest day, which left the
-    // summary card 1150px wide around a 260px donut. The slot is not empty any
-    // more — it carries the rest-day statement — so the pair keeps its shape.
     mockFetchTrainingSchedules.mockResolvedValue([
       { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
     ]);
     const { container: restDay } = render(<TrainerPage />);
     await screen.findAllByText("Distribución de asistencias");
-    expect(restDay.querySelector(".split\\:grid-cols-2")).not.toBeNull();
+    expect(restDay.querySelector(".split\\:grid-cols-2")).toBeNull();
   });
 
   it("scopes the header row correctly: exactly one primary action reaches the DOM", async () => {
@@ -518,5 +520,109 @@ describe("TrainerPage — Mi día", () => {
 
     const header = within(screen.getByRole("banner"));
     expect(header.queryByRole("link", { name: /Pasar lista/ })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The admin panel's anatomy, on this screen
+//
+// The owner approves `/dashboard` and asked for this one to be rebuilt on it,
+// because the two read as different products. `/dashboard` is three layers: a
+// full-width coal band, a STAT_GRID pulse row, and a PAGE_RAIL region holding
+// a fluid feed beside a 340px rail. This screen had the first layer's
+// VOCABULARY already — SessionCard is `rounded-card bg-coal` with a
+// `font-display text-display` figure — but none of its SHAPE: no pulse row at
+// all, and a symmetric pair where the rail belongs.
+//
+// Every tile below is read from data the screen already fetches. That
+// constraint is the point: /profile's own history records two attempts to
+// fill space with figures nobody could falsify, and both were retired.
+// ---------------------------------------------------------------------------
+
+describe("TrainerPage — la anatomía del panel de admin", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(NOW);
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
+    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("draws the pulse row on the admin panel's own grid", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const pulse = screen.getByTestId("trainer-pulse");
+    expect(pulse.className).toBe(STAT_GRID);
+  });
+
+  it("counts today's sessions, ignoring the ones on other days", async () => {
+    // TODAY_SCHEDULES carries a Tuesday session that must never be counted.
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const tile = within(screen.getByTestId("trainer-pulse")).getByText("Sesiones hoy");
+    expect(tile.closest("[data-testid='stat-card']") ?? tile.parentElement).toHaveTextContent("3");
+  });
+
+  it("adds the enrolments across today's sessions, empty classes included", async () => {
+    // ROSTER is 12 in horario 1 and 3 in horario 2; horario 3 has nobody, and
+    // an empty class counts as 0 rather than dropping out of the sum.
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const pulse = within(screen.getByTestId("trainer-pulse"));
+    expect(pulse.getByText("Inscritos hoy")).toBeInTheDocument();
+    expect(pulse.getByText("15")).toBeInTheDocument();
+  });
+
+  it("says nothing about enrolments when the roster did not arrive", async () => {
+    // A wrong number renders exactly as confidently as a right one, so the
+    // tile states the absence instead of a partial sum.
+    mockFetchRosterDeTodosLosHorarios.mockRejectedValue(new Error("network"));
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const pulse = within(screen.getByTestId("trainer-pulse"));
+    await waitFor(() => {
+      expect(pulse.getByText("Inscritos hoy")).toBeInTheDocument();
+    });
+    expect(pulse.queryByText("15")).not.toBeInTheDocument();
+  });
+
+  it("reads the month's attendance as presentes over all records", async () => {
+    // MONTH_RECORDS is 2 present out of 7 — 29%, the same reading
+    // /dashboard's four-week tile gives its own figure.
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const pulse = within(screen.getByTestId("trainer-pulse"));
+    expect(pulse.getByText("Asistencia del mes")).toBeInTheDocument();
+    expect(pulse.getByText("29")).toBeInTheDocument();
+    expect(pulse.getByText("2 de 7 presentes")).toBeInTheDocument();
+  });
+
+  it("counts the lists taken as sessions, not as records", async () => {
+    // Seven records across three (fecha, horarioId) pairs is three lists —
+    // counting rows would have said seven.
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const pulse = within(screen.getByTestId("trainer-pulse"));
+    expect(pulse.getByText("Listas del mes")).toBeInTheDocument();
+  });
+
+  it("puts the recent lists beside the donut in the rail, as the panel does", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const lower = screen.getByTestId("trainer-lower");
+    expect(lower.className).toBe(PAGE_RAIL);
+    expect(within(lower).getByText("Distribución de asistencias")).toBeInTheDocument();
   });
 });
