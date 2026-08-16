@@ -6,10 +6,32 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import AyudaPage from "@/app/ayuda/page";
 import { FAQ_SECTIONS } from "@/app/ayuda/faq-content";
+import type { UserRole } from "@/types/domain";
+
+/**
+ * The screen is public, so signed out is its default state here — which is
+ * also what keeps every pre-#295 assertion in this file reading "/".
+ */
+let mockRole: UserRole | null = null;
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({
+    session: mockRole
+      ? { user: { id: "u1", name: "Test", email: "t@cataclub.com", role: mockRole, representanteId: null } }
+      : null,
+    isAuthenticated: mockRole !== null,
+    isLoading: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
+beforeEach(() => {
+  mockRole = null;
+});
 
 vi.mock("@/components/shell/AppShell", () => ({
   __esModule: true,
@@ -172,5 +194,66 @@ describe("AyudaPage — questions are accordions (#203)", () => {
     render(<AyudaPage />);
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Horarios de entrenamiento" })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// "Volver" from a screen reachable from everywhere (#295)
+//
+// /ayuda is public, but it is linked from the authenticated sidebar
+// ("Preguntas frecuentes"), from the chat widget and from /student. A fixed
+// "/" therefore ejected a signed-in admin out of the panel and onto the
+// public landing — the way out of the product, offered as the way back.
+// ---------------------------------------------------------------------------
+
+describe("AyudaPage — the way back follows who is asking (#295)", () => {
+  it("sends a signed-out visitor to the public site", () => {
+    render(<AyudaPage />);
+
+    expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/");
+  });
+
+  it("sends an administrator back into the panel, not out of it", () => {
+    mockRole = "admin";
+    render(<AyudaPage />);
+
+    const back = screen.getByRole("link", { name: /^volver/i });
+    expect(back).toHaveAttribute("href", "/dashboard");
+    expect(back).toHaveTextContent("Volver al Panel de Control");
+  });
+
+  it("sends a trainer to their own day", () => {
+    mockRole = "trainer";
+    render(<AyudaPage />);
+
+    expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/trainer");
+  });
+
+  it("sends a student and a representante to their account", () => {
+    mockRole = "estudiante";
+    const { unmount } = render(<AyudaPage />);
+    expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/student");
+    unmount();
+
+    mockRole = "representante";
+    render(<AyudaPage />);
+    expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/student");
+  });
+
+  it("falls back to the public site for a role with no home to return to", () => {
+    // `getDefaultRoute("unsupported")` is /unauthorized — not a place anyone
+    // goes BACK to, and not a name the destination registry carries, so
+    // BackLink would throw on it rather than render.
+    mockRole = "unsupported";
+    render(<AyudaPage />);
+
+    expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/");
+  });
+
+  it("still offers exactly one back control (DSH-3 stays settled)", () => {
+    mockRole = "admin";
+    render(<AyudaPage />);
+
+    expect(screen.getAllByRole("link", { name: /^volver/i })).toHaveLength(1);
   });
 });

@@ -347,3 +347,53 @@ describe("AuthShell — the brand measure tracks the panel", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// The exit names the screen's real previous step (#295)
+//
+// The control's destination was hardcoded to "/" in this component, and three
+// screens inherit it — so /forgot-password and /reset-password both offered
+// "Volver al Inicio" back to the public landing, when the step the user
+// actually came from is /login. Worse, those two ALSO carried a second back
+// control inside the card pointing at /login, so the screen contradicted
+// itself.
+//
+// The destination is a prop now. It stays "/" by default, because /login is
+// the one screen where the public site really is the previous step, and
+// BackLink keeps deriving the label from the href (lib/destinations.ts) — so
+// the sentence cannot disagree with where the control goes.
+// ---------------------------------------------------------------------------
+
+describe("AuthShell — the exit points at the previous step, not always at the site", () => {
+  it("defaults to the public site, which is where /login came from", () => {
+    renderShell();
+
+    const back = screen.getByRole("link", { name: /volver al inicio/i });
+    expect(back).toHaveAttribute("href", "/");
+  });
+
+  it("follows an explicit destination, and renames itself to match it", () => {
+    render(
+      <AuthShell title="Recuperar contraseña" backHref="/login">
+        <button type="submit">Enviar</button>
+      </AuthShell>,
+    );
+
+    const back = screen.getByRole("link", { name: /volver a iniciar sesión/i });
+    expect(back).toHaveAttribute("href", "/login");
+    expect(screen.queryByRole("link", { name: /volver al inicio/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the coal skin whatever the destination is", () => {
+    render(
+      <AuthShell title="Recuperar contraseña" backHref="/login">
+        <button type="submit">Enviar</button>
+      </AuthShell>,
+    );
+
+    expect(screen.getByRole("link", { name: /volver a iniciar sesión/i })).toHaveClass(
+      "bg-white/10",
+      "text-white",
+    );
+  });
+});

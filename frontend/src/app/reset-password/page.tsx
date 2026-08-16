@@ -36,7 +36,7 @@ import AuthShell, {
   AUTH_LABEL_CLASSES,
   AUTH_LINK_CLASSES,
 } from "@/components/auth/AuthShell";
-import { BackLink, Button, buttonClasses } from "@/components/ui";
+import { Button, buttonClasses } from "@/components/ui";
 import { buildPasswordRules } from "./reset-password-utils";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -90,7 +90,7 @@ function ResetPasswordContent(): React.ReactElement {
 
   if (!token) {
     return (
-      <AuthShell title="Enlace no válido" note={LINK_LIFETIME_NOTE}>
+      <AuthShell title="Enlace no válido" note={LINK_LIFETIME_NOTE} backHref="/login">
         <div className="flex flex-col items-center gap-2.5 py-2 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">
             {/* `state-bad`, not the action red: this disc reports a state, and
@@ -133,7 +133,7 @@ function ResetPasswordContent(): React.ReactElement {
 
   if (success) {
     return (
-      <AuthShell title="Contraseña actualizada">
+      <AuthShell title="Contraseña actualizada" backHref="/login">
         <div className="flex flex-col items-center gap-2.5 py-2 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
             <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
@@ -157,6 +157,11 @@ function ResetPasswordContent(): React.ReactElement {
       title="Elija una contraseña nueva"
       subtitle="Debe cumplir las dos condiciones de abajo"
       note={EXPIRED_LINK_NOTE}
+      // Every state of this screen ends at the login form: the link is dead,
+      // or the password is set, or the user gave up — all three want /login,
+      // never the landing. Arrival is from an email, so there is no history to
+      // go back to either (#295).
+      backHref="/login"
     >
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
         <div>
@@ -274,10 +279,8 @@ function ResetPasswordContent(): React.ReactElement {
         </Button>
       </form>
 
-      {/* `.fcard .aux` — 12.5px line with the action in red/600. */}
-      <p className="text-center text-xs text-ink-3">
-        <BackLink href="/login" />
-      </p>
+      {/* No back control here any more: the shell's coal exit now points at
+          /login itself, and two controls to one place is the DSH-3 defect. */}
     </AuthShell>
   );
 }

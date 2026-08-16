@@ -164,6 +164,21 @@ export interface AuthShellProps {
    * /login, the "el enlace vencido" escape hatch on /reset-password.
    */
   note?: React.ReactNode;
+  /**
+   * Where the coal panel's exit goes — the step this screen was reached FROM,
+   * not a fixed way out of the product (#295).
+   *
+   * It defaults to the public site because /login is the screen this shell was
+   * written for, and there the site really is the previous step. The screens
+   * reached FROM login (/forgot-password, /reset-password) pass "/login"
+   * instead: sending them to the landing skips the user back past the thing
+   * they were in the middle of.
+   *
+   * The label is not a second prop and must not become one — `BackLink` reads
+   * it from this href through `lib/destinations.ts`, so the sentence the
+   * control says cannot drift from the place it goes.
+   */
+  backHref?: string;
   /** The screen's form, rendered inside the elevated card. */
   children: React.ReactNode;
 }
@@ -175,6 +190,7 @@ export default function AuthShell({
   title,
   subtitle,
   note,
+  backHref = "/",
   children,
 }: AuthShellProps): React.ReactElement {
   const years = yearsSinceFounding();
@@ -288,7 +304,7 @@ export default function AuthShell({
          * WCAG 2.2 SC 2.5.8's 24×24 target the old link only just reached
          * (measured 101.8 × 19.5 before the hit area was padded out).
          */}
-        <BackLink href="/" tone="coal" className="relative z-[1] justify-self-start" />
+        <BackLink href={backHref} tone="coal" className="relative z-[1] justify-self-start" />
 
         {/*
          * The centred cluster — `gap:22px`, and a measure that TRACKS THE
