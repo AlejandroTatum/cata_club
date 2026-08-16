@@ -366,7 +366,12 @@ export type TipoNotificacion =
   | "NUEVA_INSCRIPCION"
   // INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): notice to the
   // PREVIOUS guardian when a dependent gets linked to another account.
-  | "VINCULACION_REPRESENTANTE";
+  | "VINCULACION_REPRESENTANTE"
+  // Issue #285 (aviso de mora): day-1 and day-8 family notices plus the
+  // daily admin summary. Kept in sync by tipo-notificacion-parity.test.ts.
+  | "MIEMBRESIA_MORA_DIA_1"
+  | "MIEMBRESIA_MORA_DIA_8"
+  | "RESUMEN_MORA_ADMIN";
 
 /**
  * An in-app notification (`GET /ranking/notificaciones/mias`) —
