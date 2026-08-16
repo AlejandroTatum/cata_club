@@ -5,7 +5,7 @@ from typing import Callable
 import jwt
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Usuario
+from app.dominio.modelos import Sesion, Usuario
 from app.dominio.excepciones import (
     CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
     ServicioNoDisponible,
@@ -16,6 +16,7 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRe
 from app.presentacion.schemas.auth_schemas import RegistroUsuarioDTO, ActualizarPerfilPropioDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.dispositivo import describir_dispositivo
 from app.soporte_transversal.firma_archivos import es_firma_valida
 
 _log = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class AuthServicio:
         self._dormir = dormir
 
     # --- Login ---------------------------------------------------------------
-    def login(self, correo: str, contrasenia: str) -> dict:
+    def login(self, correo: str, contrasenia: str, user_agent: str | None = None) -> dict:
         """
         Devuelve el shape estandarizado `{access_token, refresh_token, token_type}`
         para el auto-login tras autenticarse (y para reutilizarlo tras registro).
@@ -70,6 +71,10 @@ class AuthServicio:
         curva_de_retraso_que_una_real`): ambas incrementan el MISMO tipo de
         contador y sufren el MISMO retraso, sin importar qué rama de
         `_verificar_credenciales` fue la que falló.
+
+        `user_agent` es opcional y solo alimenta el registro observacional de
+        sesiones: un cliente que no lo manda abre una sesión igual, con la
+        etiqueta diciendo que no se sabe qué dispositivo es.
         """
         clave = correo.strip().lower()
         try:
@@ -79,7 +84,28 @@ class AuthServicio:
             raise
 
         _INTENTOS_FALLIDOS_LOGIN.pop(clave, None)
+        self._registrar_sesion(usuario, user_agent)
         return self._emitir_par_tokens(usuario)
+
+    def _registrar_sesion(self, usuario: Usuario, user_agent: str | None) -> None:
+        """Deja constancia de un login. Nada más que constancia.
+
+        Va DESPUÉS de `_verificar_credenciales` a propósito: ese método
+        rechaza también la cuenta suspendida y la persona dada de baja, que
+        son los dos casos donde un registro mal ubicado dejaría la fila de una
+        sesión que nunca llegó a existir.
+
+        La fila guarda el epoch vigente (`version_sesion`) para que después se
+        pueda DERIVAR si sigue viva, sin que esta tabla participe de la
+        decisión -- ver el docstring de `Sesion`. Por eso tampoco se limpia
+        nada acá: revocar sesiones bombea el epoch y no toca esta tabla.
+        """
+        self.db.add(Sesion(
+            usuario_id=usuario.id,
+            dispositivo=describir_dispositivo(user_agent),
+            version_sesion=usuario.version_sesion,
+        ))
+        self.db.commit()
 
     def _verificar_credenciales(self, correo: str, contrasenia: str) -> Usuario:
         usuario = self.repo.obtener_por_correo(correo)

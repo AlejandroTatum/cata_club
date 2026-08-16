@@ -20,7 +20,12 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 @router.post("/login")
 @limiter.limit("60/minute")
 async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(obtener_sesion)):
-    return AuthServicio(db).login(form.username, form.password)
+    # El user-agent alimenta SOLO el registro observacional de sesiones (ver
+    # `AuthServicio._registrar_sesion`). No participa de la autenticación: un
+    # cliente que no lo manda entra igual.
+    return AuthServicio(db).login(
+        form.username, form.password, user_agent=request.headers.get("user-agent"),
+    )
 
 
 @router.post(
