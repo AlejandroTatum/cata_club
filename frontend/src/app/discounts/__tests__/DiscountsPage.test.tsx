@@ -279,24 +279,61 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
 // ---------------------------------------------------------------------------
 
 describe("DiscountsPage — la segunda columna", () => {
-  it("keeps the two columns whether or not a form is open", async () => {
-    // A split that appears with the form is a layout that moves under the
-    // admin every time they press "Editar" — the defect #81 removed from the
-    // dashboard, which is not worth reintroducing here.
+  it("keeps the catalog on one column while no form is open", async () => {
+    // The rail holds the form, and nothing else. It used to be reserved the
+    // instant the catalog had a row, so the ORDINARY state of this screen — a
+    // short table with nobody editing — stood beside 340px of empty column.
+    // #199 is why it was empty: the permanent "Cómo funciona el catálogo"
+    // card moved into the header's disclosure and nothing replaced it. A
+    // track reserved for content that no longer exists is not a layout, it is
+    // a leftover.
     renderPage();
     await screen.findByText("Beca municipal");
 
-    const rail = screen.getByTestId("discounts-split");
-    expect(rail.className).toBe(PAGE_RAIL);
+    expect(screen.getByTestId("discounts-split").className).not.toBe(PAGE_RAIL);
+    expect(screen.queryByTestId("discounts-rail")).not.toBeInTheDocument();
+  });
+
+  it("opens the second column only when there is a form to put in it", async () => {
+    renderPage();
+    await screen.findByText("Beca municipal");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
     expect(screen.getByTestId("discounts-split").className).toBe(PAGE_RAIL);
+    expect(screen.getByTestId("discounts-rail")).toBeInTheDocument();
+  });
+
+  it("gives the column back when the form is dismissed", async () => {
+    renderPage();
+    await screen.findByText("Beca municipal");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+
+    expect(screen.getByTestId("discounts-split").className).not.toBe(PAGE_RAIL);
+    expect(screen.queryByTestId("discounts-rail")).not.toBeInTheDocument();
+  });
+
+  it("does not stretch the catalog card past its own rows", async () => {
+    // `flex-1` on the card exists for the EMPTY state, whose `fill` needs a
+    // tall parent to centre itself in. Applying it to a populated card would
+    // just move the dead air inside the card, and a card taller than its own
+    // content reads as broken where short canvas only reads as the end of the
+    // page. /members already draws its table card this way.
+    renderPage();
+    await screen.findByText("Beca municipal");
+
+    const card = screen.getByRole("table").closest("section") as HTMLElement;
+    expect(card.className).not.toContain("flex-1");
   });
 
   it("puts the form beside the table, not above it", async () => {
-    // The assertion that carries the weight: the table and the form are
-    // SIBLINGS in the split, so opening one cannot push the other down. It
-    // used to render between the page header and the catalog.
+    // The assertion that carries the weight, and the one #81 is about: the
+    // table and the form are SIBLINGS in the split, so opening one cannot
+    // push the other down. It used to render between the page header and the
+    // catalog. Losing the always-on track costs a horizontal reflow when the
+    // form opens; it does not bring back the vertical shove.
     renderPage();
     const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
 
@@ -309,18 +346,6 @@ describe("DiscountsPage — la segunda columna", () => {
     expect(form).not.toBeNull();
     expect(split.contains(table)).toBe(true);
     expect(form?.contains(table)).toBe(false);
-  });
-
-  it("leaves the rail empty when no form is open", async () => {
-    // Issue #199: the catalog rules no longer live in a permanent rail card —
-    // that is what pushed the empty state's action off-balance and left too
-    // much unexplained lateral space. The split itself stays (see the two
-    // tests above), but with no form open the rail now holds nothing.
-    renderPage();
-    await screen.findByText("Beca municipal");
-
-    const rail = screen.getByTestId("discounts-rail");
-    expect(rail).toBeEmptyDOMElement();
   });
 });
 
@@ -349,10 +374,16 @@ describe("DiscountsPage — ayuda contextual", () => {
   });
 
   it("does not put the catalog rules inside the form rail", async () => {
+    // #199 moved the rules out of a permanent rail card and into the header's
+    // disclosure. The rail is the form's column now and holds nothing else,
+    // so this has to be asserted with a form actually open — with none, there
+    // is no rail at all (see "la segunda columna").
     renderPage();
     await screen.findByText("Beca municipal");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.click(screen.getByRole("button", { name: /cómo funciona el catálogo/i }));
 
+    expect(await screen.findByText(/no se elimina/i)).toBeInTheDocument();
     const rail = screen.getByTestId("discounts-rail");
     expect(within(rail).queryByText(/no se elimina/i)).not.toBeInTheDocument();
   });
