@@ -148,6 +148,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/membresias/pagos/persona/{persona_id}"),           # (b)
     ("GET", "/membresias/pagos/{pago_id}"),                      # (b)
     ("GET", "/membresias/persona/{persona_id}"),                 # (b)
+    ("GET", "/auth/me/sesiones"),                                # (b) - propio via `sub`, nunca un id de path
     ("GET", "/membresias/tipos"),                                # (a)
     ("GET", "/membresias/{membresia_id}"),                       # (b)
     ("GET", "/personas/buscar"),                                 # (a) - autocomplete, no PII sensible expuesta en el DTO

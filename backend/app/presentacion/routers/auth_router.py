@@ -1,3 +1,5 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -8,6 +10,7 @@ from app.presentacion.schemas.auth_schemas import (
     RegistroUsuarioDTO, RefreshTokenDTO, UsuarioMeResponseDTO, LogoutResponseDTO,
     SolicitarRecuperacionDTO, SolicitarRecuperacionResponseDTO, RestablecerContraseniaDTO,
     ActualizarPerfilPropioDTO, ActualizarPerfilPropioResponseDTO, ActualizarFotoPerfilResponseDTO,
+    SesionResponseDTO,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.auth_servicio import AuthServicio
@@ -105,6 +108,25 @@ async def actualizar_foto_perfil(
     )
 
 
+@router.get("/me/sesiones", response_model=List[SesionResponseDTO])
+async def listar_mis_sesiones(
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    """
+    Las sesiones del usuario AUTENTICADO. La identidad sale del `sub` del JWT,
+    nunca de un path param, por el mismo motivo que `PATCH /auth/me`: así nadie
+    puede leer el historial de otra cuenta.
+
+    `sid` es opcional a propósito -- los tokens emitidos antes de que el claim
+    existiera siguen siendo válidos y simplemente no marcan ninguna sesión como
+    actual, en vez de fallar.
+    """
+    return AuthServicio(db).listar_sesiones(
+        token_payload["sub"], sesion_actual_id=token_payload.get("sid"),
+    )
+
+
 @router.post("/refresh")
 @limiter.limit("120/minute")
 async def refrescar(request: Request, datos: RefreshTokenDTO, db: Session = Depends(obtener_sesion)):
@@ -129,8 +151,15 @@ async def invalidar_sesiones(
     refresh, ver `GestorAutenticacion.epoch_valido`) y reemitiendo un par
     nuevo en esta misma respuesta para que el CALLER permanezca autenticado
     (distinto de invalidar también su propia sesión actual).
+
+    Ese par reemitido ES una sesión nueva para este equipo, así que se registra
+    con su user-agent: sin eso el usuario tocaría el botón y vería una lista
+    vacía, porque toda fila previa -- la suya incluida-- nació bajo el epoch
+    que se acaba de bombear.
     """
-    return AuthServicio(db).invalidar_otras_sesiones(token_payload["sub"])
+    return AuthServicio(db).invalidar_otras_sesiones(
+        token_payload["sub"], user_agent=request.headers.get("user-agent"),
+    )
 
 
 @router.post("/logout", response_model=LogoutResponseDTO)
