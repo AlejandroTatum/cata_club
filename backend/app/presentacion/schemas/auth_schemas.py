@@ -58,6 +58,27 @@ class LogoutResponseDTO(ResponseBase, BaseModel):
     mensaje: str
 
 
+class SesionResponseDTO(ResponseBase, BaseModel):
+    """Una sesión propia, tal como la ve su dueño.
+
+    Los cinco campos son todo lo que sale. En particular NO sale la IP ni el
+    user-agent crudo: `dispositivo` es una etiqueta ya derivada
+    (`soporte_transversal/dispositivo.py`), y la IP directamente no se guarda
+    -- es dato personal, el club maneja cuentas de menores y de sus
+    representantes, y ningún caso de uso la lee.
+
+    `vigente` y `actual` son DERIVADOS, no columnas: el primero compara el
+    epoch de la fila contra el del usuario, el segundo contra el claim `sid`
+    del token que hizo la llamada. Ver `AuthServicio.SesionVista`.
+    """
+
+    id: int
+    dispositivo: str
+    iniciada_en: datetime
+    vigente: bool
+    actual: bool
+
+
 # --- Issue #36: perfil propio (self-service) --------------------------------
 class ActualizarPerfilPropioDTO(BaseModel):
     """Payload de PATCH /auth/me. `correo` deliberadamente NO es editable

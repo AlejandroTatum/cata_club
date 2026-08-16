@@ -1,5 +1,7 @@
 import logging
 import time
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable
 
 import jwt
@@ -32,6 +34,29 @@ _log = logging.getLogger(__name__)
 _INTENTOS_FALLIDOS_LOGIN: dict[str, int] = {}
 _UMBRAL_RETRASO_INTENTOS = 3
 _TECHO_RETRASO_SEGUNDOS = 60
+
+# Cuántas sesiones devuelve `listar_sesiones`. La tarjeta del perfil responde
+# "¿desde dónde entré últimamente?", no "dame la bitácora completa". Es un
+# corte de LECTURA: la tabla conserva todo.
+LIMITE_SESIONES_LISTADAS = 10
+
+
+@dataclass(frozen=True)
+class SesionVista:
+    """Una fila de `sesion` ya resuelta contra el epoch del usuario.
+
+    Existe para que `vigente` y `actual` -- que son DERIVADOS, no columnas--
+    no se calculen en el router ni, peor, se persistan. Si vivieran en la
+    tabla, la tabla habría empezado a opinar sobre validez, que es justo lo
+    que el docstring de `Sesion` prohíbe.
+    """
+
+    id: int
+    usuario_id: int
+    dispositivo: str
+    iniciada_en: datetime
+    vigente: bool
+    actual: bool
 
 
 def _calcular_retraso_login(intentos_fallidos: int) -> int:
@@ -84,10 +109,10 @@ class AuthServicio:
             raise
 
         _INTENTOS_FALLIDOS_LOGIN.pop(clave, None)
-        self._registrar_sesion(usuario, user_agent)
-        return self._emitir_par_tokens(usuario)
+        sesion = self._registrar_sesion(usuario, user_agent)
+        return self._emitir_par_tokens(usuario, sesion_id=sesion.id)
 
-    def _registrar_sesion(self, usuario: Usuario, user_agent: str | None) -> None:
+    def _registrar_sesion(self, usuario: Usuario, user_agent: str | None) -> Sesion:
         """Deja constancia de un login. Nada más que constancia.
 
         Va DESPUÉS de `_verificar_credenciales` a propósito: ese método
@@ -100,12 +125,15 @@ class AuthServicio:
         decisión -- ver el docstring de `Sesion`. Por eso tampoco se limpia
         nada acá: revocar sesiones bombea el epoch y no toca esta tabla.
         """
-        self.db.add(Sesion(
+        sesion = Sesion(
             usuario_id=usuario.id,
             dispositivo=describir_dispositivo(user_agent),
             version_sesion=usuario.version_sesion,
-        ))
+        )
+        self.db.add(sesion)
         self.db.commit()
+        self.db.refresh(sesion)
+        return sesion
 
     def _verificar_credenciales(self, correo: str, contrasenia: str) -> Usuario:
         usuario = self.repo.obtener_por_correo(correo)
@@ -329,9 +357,16 @@ class AuthServicio:
             raise CredencialesInvalidas("Refresh token inválido o expirado")
 
         roles_actuales = [rol.tipo_rol.value for rol in usuario.roles]
+        claims = {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles_actuales}
+        # `sid` se arrastra del refresh en vez de abrirse de nuevo: refrescar
+        # es el mismo equipo continuando la misma sesión, no una sesión nueva.
+        # Sin esto, el primer refresh dejaría al usuario sin poder reconocer su
+        # propio equipo en la lista.
+        sid = payload.get("sid")
+        if sid is not None:
+            claims["sid"] = sid
         access_token = GestorAutenticacion.crear_token_acceso(
-            {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles_actuales},
-            version_sesion=usuario.version_sesion,
+            claims, version_sesion=usuario.version_sesion,
         )
         return {"access_token": access_token, "token_type": "bearer"}
 
@@ -352,15 +387,21 @@ class AuthServicio:
         self.db.refresh(usuario)
         return usuario
 
-    def invalidar_otras_sesiones(self, correo: str) -> dict:
+    def invalidar_otras_sesiones(self, correo: str, user_agent: str | None = None) -> dict:
         """POST /auth/sesiones/invalidar: bombea el epoch y le reemite un par
         de tokens nuevo EN LA MISMA respuesta. El re-issue es lo que
         convierte esto en "cerrar mis OTRAS sesiones" en vez de "cerrar
         también la mía": el caller sigue autenticado con el par nuevo, que ya
         lleva el `sver` vigente.
+
+        Reemitir tokens ES abrir una sesión, así que se registra como tal. Sin
+        esta fila el usuario tocaría el botón y quedaría mirando una lista
+        vacía mientras sigue perfectamente logueado: todas las filas previas
+        nacieron bajo el epoch anterior y acaban de morir, incluida la suya.
         """
         usuario = self._bombear_epoch_sesion(correo)
-        return self._emitir_par_tokens(usuario)
+        sesion = self._registrar_sesion(usuario, user_agent)
+        return self._emitir_par_tokens(usuario, sesion_id=sesion.id)
 
     # --- TRA-10: POST /auth/logout -------------------------------------------
     def cerrar_sesion(self, correo: str) -> dict:
@@ -378,15 +419,68 @@ class AuthServicio:
         return {"mensaje": "Sesión finalizada"}
 
     # --- Privado: emisión del par access + refresh -------------------------
-    def _emitir_par_tokens(self, usuario: Usuario) -> dict:
+    def _emitir_par_tokens(self, usuario: Usuario, sesion_id: int | None = None) -> dict:
+        """`sesion_id` viaja como claim `sid` y es ADITIVO y OBSERVACIONAL.
+
+        Nada lo valida y nada autoriza con él: sirve para que
+        `GET /auth/me/sesiones` pueda decir cuál de las filas corresponde al
+        equipo que está mirando la pantalla, que con varios equipos bajo el
+        mismo epoch no se puede deducir de otra forma. Un token sin `sid` --
+        los emitidos antes de este cambio, y los de `registrar_usuario`, que
+        no abre sesión-- simplemente no marca ninguna como actual.
+
+        Que sea opcional no es descuido: si `sid` fuera obligatorio para algo,
+        habría dejado de ser observacional.
+        """
         roles = [rol.tipo_rol.value for rol in usuario.roles]
         claims = {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles}
-        access_token = GestorAutenticacion.crear_token_acceso(claims, version_sesion=usuario.version_sesion)
         # El refresh token no necesita roles (solo sirve para pedir un nuevo
         # access token; los roles se releyan del usuario en cada refresh).
         refresh_claims = {"sub": usuario.correo, "persona_id": usuario.persona_id}
+        if sesion_id is not None:
+            claims["sid"] = sesion_id
+            # También en el refresh: sin esto, el primer refresh perdería la
+            # identidad de la sesión y el equipo del usuario dejaría de
+            # reconocerse a sí mismo en la lista.
+            refresh_claims["sid"] = sesion_id
+
+        access_token = GestorAutenticacion.crear_token_acceso(claims, version_sesion=usuario.version_sesion)
         refresh_token = GestorAutenticacion.crear_token_refresco(refresh_claims, version_sesion=usuario.version_sesion)
         return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+    # --- Listado de sesiones propias ----------------------------------------
+    def listar_sesiones(self, correo: str, sesion_actual_id: int | None) -> list[SesionVista]:
+        """Las sesiones del usuario autenticado, la más reciente primero.
+
+        `vigente` se DERIVA comparando el epoch de cada fila contra
+        `usuario.version_sesion`. Es una lectura del mecanismo autoritativo, no
+        una segunda fuente de verdad: por eso revocar no escribe acá, y por eso
+        una fila nunca se actualiza ni se borra al morir.
+
+        El corte en `LIMITE_SESIONES_LISTADAS` es de LECTURA. Cada login agrega
+        una fila para siempre y la tarjeta del perfil muestra las últimas, no
+        una bitácora de auditoría -- pero borrar el resto sería tirar historial
+        para ahorrar en una consulta que ya está indexada.
+        """
+        usuario = self.obtener_usuario_actual(correo)
+        filas = (
+            self.db.query(Sesion)
+            .filter(Sesion.usuario_id == usuario.id)
+            .order_by(Sesion.iniciada_en.desc(), Sesion.id.desc())
+            .limit(LIMITE_SESIONES_LISTADAS)
+            .all()
+        )
+        return [
+            SesionVista(
+                id=fila.id,
+                usuario_id=fila.usuario_id,
+                dispositivo=fila.dispositivo,
+                iniciada_en=fila.iniciada_en,
+                vigente=fila.version_sesion == usuario.version_sesion,
+                actual=sesion_actual_id is not None and fila.id == sesion_actual_id,
+            )
+            for fila in filas
+        ]
 
     # --- E01-RF003: recuperación de contraseña -------------------------------
     def solicitar_recuperacion(self, correo: str) -> dict:
