@@ -5,8 +5,8 @@
  * honours `?horario=&fecha=`. Neither can catch the two halves agreeing on a
  * URL that the OTHER one does not actually read the same way — which is the
  * only failure mode this feature really has. So this spec starts on the
- * history, clicks the button a trainer clicks, and follows it all the way to
- * the batch that gets POSTed.
+ * history, clicks the button an administrator clicks, and follows it all the
+ * way to the batch that gets POSTed.
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
@@ -17,13 +17,13 @@ const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
 const BASE_URL = E2E_BASE_URL;
 const MOCK_SESSION = {
   user: {
-    id: "2",
-    name: "Carla Entrenadora",
-    email: "trainer@cataclub.test",
-    role: "trainer" as const,
+    id: "1",
+    name: "Admin Demo",
+    email: "admin@cataclub.com",
+    role: "admin" as const,
     representanteId: null,
   },
-  roles: ["ENTRENADOR"],
+  roles: ["ADMINISTRADOR"],
   loggedInAt: "2026-07-21T00:00:00.000Z",
 };
 

@@ -117,10 +117,13 @@ def listar_horarios(
     return AsistenciaServicio(db).listar_horarios(categoria)
 
 
-@router.post("/", response_model=AsistenciaResponseDTO, status_code=status.HTTP_201_CREATED,
-             dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))])
-async def registrar_asistencia(datos: AsistenciaCreateDTO, db: Session = Depends(obtener_sesion)):
-    return AsistenciaServicio(db).registrar_asistencia(datos)
+@router.post("/", response_model=AsistenciaResponseDTO, status_code=status.HTTP_201_CREATED)
+async def registrar_asistencia(
+    datos: AsistenciaCreateDTO,
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).registrar_asistencia(datos, token_payload.get("roles", []))
 
 
 # Historial de asistencia de una persona: dato sensible (presencia/régimen).

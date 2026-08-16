@@ -2,7 +2,7 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
-from datetime import date
+from datetime import date, timedelta
 
 
 def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
@@ -434,4 +434,126 @@ def test_listar_ultimas_listas_entrenador_puede_acceder(client_entrenador, clien
 def test_listar_ultimas_listas_rechaza_rol_sin_permiso(client_sin_permisos, client):
     _restaurar_token_alumno()
     resp = client_sin_permisos.get("/api/v1/asistencias/ultimas-listas")
+    assert resp.status_code == 403
+
+
+# --- Issue #262: corrección de asistencia con reglas del club -----------------
+# Solo el ADMINISTRADOR corrige; el ENTRENADOR toma pero nunca corrige. Tope de
+# 30 días (día 30 permitido, día 31 rechazado) SOLO para corregir -- la toma
+# original (crear) no tiene tope. Re-tomar el mismo día es corrección (rama de
+# actualización), no toma original.
+_HOY_CORRECCION = date(2026, 8, 15)
+
+
+def _congelar_hoy_asistencia(monkeypatch, hoy):
+    """Fija el `hoy_club()` del servicio de asistencia para que la antigüedad
+    no dependa del reloj real del equipo que corre la suite."""
+    import app.servicios_negocio.asistencia_servicio as asistencia_mod
+    monkeypatch.setattr(asistencia_mod, "hoy_club", lambda: hoy)
+
+
+def _preparar_asistencia_para_corregir(client, fecha):
+    """Crea persona + horario + inscripción + una asistencia inicial (como
+    ADMINISTRADOR) y devuelve el payload de esa asistencia."""
+    alumno = _crear_persona_api(client)
+    horario = _crear_horario_api(client)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    payload = {
+        "fecha_entrenamiento": fecha, "estado": "PRESENTE",
+        "persona_id": alumno["id"], "horario_id": horario["id"],
+    }
+    primera = client.post("/api/v1/asistencias/", json=payload)
+    assert primera.status_code == 201, primera.text
+    return payload
+
+
+def test_entrenador_no_puede_corregir_asistencia_existente(client_entrenador, client, monkeypatch):
+    """Corregir un registro ya existente exige ADMINISTRADOR: el ENTRENADOR
+    recibe 403 con el mensaje de ROL, distinto del mensaje de antigüedad."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    payload = _preparar_asistencia_para_corregir(
+        client, str(_HOY_CORRECCION - timedelta(days=5))
+    )
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.post(
+        "/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Solo el administrador puede corregir asistencias ya registradas."
+
+
+def test_admin_no_puede_corregir_asistencia_con_mas_de_30_dias(client, monkeypatch):
+    """El ADMINISTRADOR corrige, pero no algo de más de 30 días: 400 con el
+    mensaje de ANTIGÜEDAD, distinto del de rol."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    payload = _preparar_asistencia_para_corregir(
+        client, str(_HOY_CORRECCION - timedelta(days=31))
+    )
+
+    resp = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "No se puede corregir una asistencia con más de 30 días de antigüedad."
+
+
+def test_admin_corrige_en_el_dia_30_permitido(client, monkeypatch):
+    """Límite exacto: 30 días de antigüedad es el último día corregible."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    payload = _preparar_asistencia_para_corregir(
+        client, str(_HOY_CORRECCION - timedelta(days=30))
+    )
+
+    resp = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
+    assert resp.status_code == 201
+    assert resp.json()["estado"] == "AUSENTE"
+
+
+def test_admin_corrige_en_el_dia_31_rechazado(client, monkeypatch):
+    """Límite exacto: 31 días de antigüedad ya excede el techo de 30."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    payload = _preparar_asistencia_para_corregir(
+        client, str(_HOY_CORRECCION - timedelta(days=31))
+    )
+
+    resp = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
+    assert resp.status_code == 400
+
+
+def test_toma_original_por_entrenador_no_tiene_tope_de_antiguedad(client_entrenador, client, monkeypatch):
+    """La toma ORIGINAL (crear el primer registro) sigue siendo del ENTRENADOR
+    y no hereda el tope de 30 días: crear un registro antiguo no se rechaza."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    alumno = _crear_persona_api(client)
+    horario = _crear_horario_api(client)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": str(_HOY_CORRECCION - timedelta(days=45)),
+            "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+    assert resp.status_code == 201
+
+
+def test_re_tomar_mismo_dia_por_entrenador_se_rechaza_como_correccion(client_entrenador, client, monkeypatch):
+    """Re-tomar el MISMO día es una actualización, no una toma original: un
+    ENTRENADOR que reenvía la lista del día cae en la rama de corrección y
+    recibe 403."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    payload = _preparar_asistencia_para_corregir(client, str(_HOY_CORRECCION))
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.post(
+        "/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"},
+    )
     assert resp.status_code == 403

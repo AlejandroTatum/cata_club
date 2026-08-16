@@ -9,7 +9,7 @@ from app.dominio.modelos import (
 )
 from app.dominio.enums import EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
-from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
+from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
@@ -26,6 +26,12 @@ from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.soporte_transversal.tiempo import hoy_club
 
 _CODIGO_MAX_LEN = 20
+
+# Tope de corrección de asistencia (issue #262, regla del club): una asistencia
+# puede corregirse hasta 30 días después de la fecha de la sesión -- atado al
+# ciclo de cobro, un mes cerrado es un mes cerrado. Aplica SOLO a corregir un
+# registro ya existente; la toma original (crear) no tiene tope.
+LIMITE_CORRECCION_ASISTENCIA_DIAS = 30
 
 
 def _sluggificar_nombre(nombre: str) -> str:
@@ -335,7 +341,7 @@ class AsistenciaServicio:
         self.repo_alumno_horario.eliminar_por_horario(horario_id)
         self.repo_horario.eliminar(horario)
 
-    def registrar_asistencia(self, datos: AsistenciaCreateDTO) -> Asistencia:
+    def registrar_asistencia(self, datos: AsistenciaCreateDTO, roles_solicitante: list[str]) -> Asistencia:
         """No se registra quién dictó la sesión: cualquier entrenador opera
         cualquier horario y el dato no tiene consumidor (issue #13,
         docs/product/concepto-alcance-modelo.md §4).
@@ -344,7 +350,21 @@ class AsistenciaServicio:
         asistencia para una sesión ya registrada (ej. reabrir el wizard
         "Tomar asistencia") actualiza el registro existente en vez de crear
         uno duplicado -- no hay constraint único en BD, así que la
-        deduplicación se hace explícitamente aquí."""
+        deduplicación se hace explícitamente aquí.
+
+        Reglas de CORRECCIÓN (issue #262), que aplican SOLO a la rama de
+        actualización -- la toma original (crear el primer registro) no las
+        hereda:
+
+        1. Solo el ADMINISTRADOR corrige. El entrenador toma asistencia pero
+           nunca corrige: una actualización sin el rol ADMINISTRADOR se rechaza
+           con `PermisosInsuficientes` (403).
+        2. Tope de antigüedad: corregir una asistencia de más de
+           `LIMITE_CORRECCION_ASISTENCIA_DIAS` días se rechaza con
+           `OperacionInvalida` (400). Día 30 permitido, día 31 rechazado.
+
+        Re-tomar el MISMO día también cae en la rama de actualización: es una
+        corrección, no una toma original."""
         # La persona se ata a un nombre en vez de descartarse: el mensaje de
         # más abajo la nombra, y esta consulta ya se estaba haciendo.
         persona = self.repo_persona.obtener_por_id(datos.persona_id)
@@ -377,6 +397,17 @@ class AsistenciaServicio:
             datos.persona_id, datos.horario_id, datos.fecha_entrenamiento
         )
         if existente:
+            # Corrección (issue #262): la rama de actualización exige
+            # ADMINISTRADOR y no puede tener más de 30 días de antigüedad.
+            if "ADMINISTRADOR" not in roles_solicitante:
+                raise PermisosInsuficientes(
+                    "Solo el administrador puede corregir asistencias ya registradas."
+                )
+            antiguedad = (hoy_club() - datos.fecha_entrenamiento).days
+            if antiguedad > LIMITE_CORRECCION_ASISTENCIA_DIAS:
+                raise OperacionInvalida(
+                    "No se puede corregir una asistencia con más de 30 días de antigüedad."
+                )
             existente.estado = datos.estado
             existente.justificativo = datos.justificativo
             existente.estado_justificativo = datos.estado_justificativo
