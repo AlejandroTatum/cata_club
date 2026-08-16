@@ -184,16 +184,39 @@ export default function DiscountsPage(): React.ReactElement {
   }
 
   /**
-   * Whether the screen is a two-column split at all.
+   * Whether the screen is a two-column split at all: only while a form is open.
    *
-   * The rail's argument is "the row being edited must not move", and it holds
-   * for every state that HAS rows: the grid stays unconditional there, form
-   * open or not, exactly as before. An empty catalog is the state that argument
-   * says nothing about — there is no row to keep still — and reserving the
-   * 340px track anyway put a blank column next to a card whose entire message
-   * is that there is nothing here.
+   * The track used to be reserved the instant the catalog had a row, on the
+   * anti-jump argument #81 gave the dashboard — a split that appears with the
+   * form is a layout that moves under the admin every time they open one. The
+   * argument is sound; the price it was paying stopped being worth it once
+   * #199 emptied the rail. That issue moved the permanent "Cómo funciona el
+   * catálogo" card into the header's disclosure and put nothing back, so the
+   * ORDINARY state of this screen — a short table with nobody editing — was a
+   * card beside 340px of reserved nothing. A track held open for content that
+   * no longer exists is not a layout, it is a leftover.
+   *
+   * What the jump actually costs here is smaller than the #81 wording
+   * suggests, and that is the reason this is affordable: #81 was about a form
+   * that STACKED, pushing the row being edited ~200px down and out of view.
+   * This form is a sibling of the table, so opening it reflows the table
+   * horizontally and leaves every row on its own line. The guarantee #81 was
+   * really buying — "the row you clicked does not run away from you" — is
+   * pinned by the "puts the form beside the table" test, not by this flag.
    */
-  const splitting = form !== null || descuentos.length > 0;
+  const splitting = form !== null;
+
+  /**
+   * Whether the catalog CARD stretches to the page's height.
+   *
+   * This is the empty state's `fill` and nothing else: it needs a tall parent
+   * to centre itself in, and that is the only reason the card ever grew past
+   * its own content. Applying it to a populated card would move the dead air
+   * INSIDE the card, which reads worse than short canvas — bare canvas says
+   * "the page ends here", a card with a floor of empty space says something
+   * failed to render. `/members` draws its own table card the same way.
+   */
+  const fillsHeight = form === null && descuentos.length === 0;
 
   function renderForm(): React.ReactElement | null {
     if (!form) return null;
@@ -307,12 +330,10 @@ export default function DiscountsPage(): React.ReactElement {
          * longer see, and "Cancelar" moved everything back up again. Beside
          * the table, the row being edited does not move at all.
          *
-         * The grid keeps its two columns UNCONDITIONALLY, for the reason #81
-         * gave the dashboard: a split that appears with the form is a layout
-         * that moves under the admin every time they open one. With no form
-         * open the rail is empty — it used to carry a permanent "Cómo
-         * funciona el catálogo" card, which is now the `ContextualHelp`
-         * disclosure above (issue #199).
+         * The second column now exists only while that form does — see
+         * `splitting`. It used to be reserved from the first row onward, which
+         * meant the state this screen is in almost all the time showed a table
+         * beside 340px of nothing.
          *
          * What this is NOT is a cure for vertical emptiness. A rail moves
          * content sideways; it cannot make a six-row table taller. See the
@@ -342,7 +363,7 @@ export default function DiscountsPage(): React.ReactElement {
              * is the same slot `/members` gives its own caveat, which is the
              * last slot of the block that owns it.
              */}
-            <section className={cn("card flex min-w-0 flex-col overflow-hidden", !splitting && "flex-1")}>
+            <section className={cn("card flex min-w-0 flex-col overflow-hidden", fillsHeight && "flex-1")}>
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-[18px] py-3">
                 <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
                   Catálogo de descuentos
@@ -464,18 +485,11 @@ export default function DiscountsPage(): React.ReactElement {
           </div>
 
           {/*
-           * With no form open, the rail holds nothing — the anti-jump grid
-           * from the comment above still needs its second track (see
-           * PAGE_RAIL), but there is no longer a permanent card claiming it.
-           * The catalog rules live in the card header beside the table now.
-           *
-           * It is only DRAWN while the screen is splitting, and that is the
-           * one case the anti-jump argument does not cover: with an empty
-           * catalog there is no row to hold still, so the 340px track was
-           * reserved emptiness standing beside a statement that there is
-           * nothing here — 340 of the 470 horizontal pixels this screen was
-           * wasting. The instant a form opens, or the instant the catalog has
-           * a row, the split is back and unconditional.
+           * The rail is the form's column and only the form's column, so it
+           * is not drawn when there is no form — see `splitting` for why the
+           * always-on track was retired. The catalog rules that used to live
+           * here are the `ContextualHelp` in the card header now (#199), which
+           * is what left this track holding nothing in the first place.
            */}
           {splitting ? <div data-testid="discounts-rail">{renderForm()}</div> : null}
         </div>
