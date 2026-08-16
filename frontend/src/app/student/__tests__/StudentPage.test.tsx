@@ -54,13 +54,20 @@ vi.mock("next/image", () => ({
   },
 }));
 
+/**
+ * The authenticated session, mutable per-test so the dual-role scenario
+ * (REPRESENTANTE + ALUMNO) from #269 can be exercised. `user.role` is the
+ * single primary role; `roles` is the full backend array.
+ */
+let mockAuthSession = {
+  user: { id: "9", name: "Alumno Test", email: "alumno@cataclub.com", role: "estudiante", representanteId: null },
+  roles: ["ALUMNO"],
+  loggedInAt: "2026-07-01T12:00:00Z",
+};
+
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
-    session: {
-      user: { id: "9", name: "Alumno Test", email: "alumno@cataclub.com", role: "estudiante", representanteId: null },
-      roles: ["ALUMNO"],
-      loggedInAt: "2026-07-01T12:00:00Z",
-    },
+    session: mockAuthSession,
     isAuthenticated: true,
     isLoading: false,
     login: vi.fn(),
@@ -148,6 +155,11 @@ const PAGO_APROBADO: PagoPersona = {
 };
 
 beforeEach(() => {
+  mockAuthSession = {
+    user: { id: "9", name: "Alumno Test", email: "alumno@cataclub.com", role: "estudiante", representanteId: null },
+    roles: ["ALUMNO"],
+    loggedInAt: "2026-07-01T12:00:00Z",
+  };
   searchParams = new URLSearchParams();
   mockReplace.mockReset();
   window.sessionStorage.clear();
@@ -255,6 +267,57 @@ describe("StudentPage — contextual dependent CTA", () => {
 
     const link = await screen.findByText("Agregar hijo o dependiente");
     expect(link.closest("a")).toHaveAttribute("href", "/student/add-dependent");
+  });
+});
+
+/**
+ * #269 — the backend grants every representante account ALUMNO as well
+ * (`admin_cuenta_servicio.py:45`), but `hasAlumnoRole` used to read the single
+ * primary role, so the screen behaved as if a dual account had no student
+ * profile: it offered the role the account already holds and silently
+ * redirected the student view to the first dependent.
+ */
+describe("StudentPage — dual-role account (REPRESENTANTE + ALUMNO)", () => {
+  const DUAL_PORTAL: StudentPortalSummary = {
+    self: { ...PORTAL.self!, personaId: "9", nombres: "Alumno", apellidos: "Test" },
+    representados: [{ ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera" }],
+    membershipPlans: [],
+  };
+
+  beforeEach(() => {
+    mockAuthSession = {
+      user: {
+        id: "9",
+        name: "Representante Test",
+        email: "rep@cataclub.com",
+        role: "representante",
+        representanteId: null,
+      },
+      roles: ["REPRESENTANTE", "ALUMNO"],
+      loggedInAt: "2026-07-01T12:00:00Z",
+    };
+    mockFetchStudentPortal.mockReset().mockResolvedValue(DUAL_PORTAL);
+  });
+
+  it("does not offer the join-as-player CTA to an account that already holds ALUMNO", async () => {
+    render(<StudentPage />);
+
+    // The dual account keeps its representante CTA...
+    expect(await screen.findByText("Agregar hijo o dependiente")).toBeInTheDocument();
+    // ...but is never offered the role it already has (#269 symptom 1).
+    expect(screen.queryByRole("link", { name: /unirme como jugador/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the account's own student profile selected instead of rewriting to the first dependent (#269 symptom 2)", async () => {
+    render(<StudentPage />);
+
+    // Without the fix, hasAlumnoRole was false (primary role: representante),
+    // the self profile fell out of managedProfiles and the picker silently
+    // fell back to the first dependent as the subject.
+    expect(await screen.findByTestId("student-carnet")).toHaveAttribute(
+      "aria-label",
+      "Carnet de socio de Alumno Test",
+    );
   });
 });
 
