@@ -118,6 +118,18 @@ const mockSubirVoucherPago = vi.fn().mockResolvedValue({ voucherUrl: "https://ex
 const mockFetchDescuentos = vi.fn().mockResolvedValue([]);
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
+const mockFetchMembresiaDeuda = vi.fn().mockResolvedValue({
+  mesesAdeudados: 4,
+  ultimaCoberturaFin: "2026-03-31",
+  montoMensual: 85,
+});
+const mockRegularizarDeuda = vi.fn().mockResolvedValue({
+  id: 99,
+  estadoPago: "APROBADO",
+  tipoPago: "REGULARIZACION",
+  fechaInicio: "2026-04-01",
+  fechaFin: "2026-04-30",
+});
 
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
@@ -144,6 +156,8 @@ vi.mock("@/services/api", () => {
     fetchDescuentos: () => mockFetchDescuentos(),
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
+    fetchMembresiaDeuda: () => mockFetchMembresiaDeuda(),
+    regularizarDeuda: (membresiaId: number, data: unknown) => mockRegularizarDeuda(membresiaId, data),
     ApiClientError: MockApiClientError,
   };
 });
@@ -1147,6 +1161,41 @@ describe("MembersPage — Registrar pago inline form", () => {
     expect(
       await within(dialog).findByText("El descuento total no puede superar el 100% del monto"),
     ).toBeInTheDocument();
+  });
+
+  it("offers 'Regularizar deuda' for a membership, shows the derived debt and submits the motivo", async () => {
+    mockFetchMembresiaDeuda.mockResolvedValue({
+      mesesAdeudados: 4,
+      ultimaCoberturaFin: "2026-03-31",
+      montoMensual: 85,
+    });
+    const dialog = await openMemberDialog({
+      membresia: {
+        tipo: "Mensual (Tarde)",
+        estado: "vencida",
+        fechaInicio: "2026-03-01",
+        fechaFin: "2026-03-31",
+        monto: 85,
+        id: 42,
+      },
+    });
+
+    // The debt is derived and admin-only: opening the tool fetches it and
+    // shows the owed months before anything is written.
+    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    expect(await within(dialog).findByText(/4 meses adeudados/i)).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText(/fecha inicio/i), { target: { value: "2026-04-01" } });
+    fireEvent.change(within(dialog).getByLabelText(/fecha fin/i), { target: { value: "2026-04-30" } });
+    fireEvent.change(within(dialog).getByLabelText(/^motivo/i), { target: { value: "Demora del club" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^regularizar$/i }));
+
+    expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, {
+      monto: 85,
+      fechaInicio: "2026-04-01",
+      fechaFin: "2026-04-30",
+      motivo: "Demora del club",
+    });
   });
 
   it("does NOT render a 'Registrar pago' button when the student has no membership", async () => {

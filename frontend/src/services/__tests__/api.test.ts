@@ -42,6 +42,8 @@ import {
   exportNuevosPorPeriodoPdf,
   exportAsistenciaReportePdf,
   consultarChatbot,
+  fetchMembresiaDeuda,
+  regularizarDeuda,
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
@@ -1133,3 +1135,61 @@ describe("registrarPago — descuentos", () => {
   });
 });
 
+describe("fetchMembresiaDeuda / regularizarDeuda — deuda (issue #284)", () => {
+  it("fetchMembresiaDeuda GETs the derived debt endpoint", async () => {
+    const deuda = { mesesAdeudados: 4, ultimaCoberturaFin: "2026-03-31", montoMensual: 30 };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(deuda));
+
+    const result = await fetchMembresiaDeuda(9);
+
+    expect(result).toEqual(deuda);
+    expect(String(vi.mocked(global.fetch).mock.calls[0]?.[0])).toBe("/api/membresias/9/deuda");
+  });
+
+  it("regularizarDeuda POSTs the explicit dates + motivo and parses the APROBADO payment", async () => {
+    const pago = {
+      id: 42,
+      monto: "120.00",
+      estadoPago: "APROBADO",
+      tipoPago: "REGULARIZACION",
+      fechaInicio: "2026-04-01",
+      fechaFin: "2026-07-31",
+      personaId: 9,
+      membresiaId: 3,
+    };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(pago, { status: 201 }));
+
+    const result = await regularizarDeuda(3, {
+      monto: 120,
+      fechaInicio: "2026-04-01",
+      fechaFin: "2026-07-31",
+      motivo: "Demora del club",
+    });
+
+    expect(result).toEqual(pago);
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0] as [RequestInfo | URL, RequestInit];
+    expect(String(url)).toBe("/api/membresias/3/regularizar-deuda");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({
+      monto: 120,
+      fechaInicio: "2026-04-01",
+      fechaFin: "2026-07-31",
+      motivo: "Demora del club",
+    });
+  });
+
+  it("regularizarDeuda propagates a backend rejection (solapamiento)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ message: "El período indicado ya está cubierto por un pago aprobado." }, { status: 400 }),
+    );
+
+    await expect(
+      regularizarDeuda(3, {
+        monto: 30,
+        fechaInicio: "2026-03-15",
+        fechaFin: "2026-04-15",
+        motivo: "Pisa cobertura",
+      }),
+    ).rejects.toThrow(/cubierto por un pago aprobado/);
+  });
+});

@@ -1231,6 +1231,53 @@ export async function subirVoucherPago(pagoId: number, archivo: File): Promise<P
     headers: { ...mockHeaders },
   });
 }
+// -------------------------------------------------------------------------
+// Deuda y regularización (issue #284) — admin-only
+// -------------------------------------------------------------------------
+
+/** Derived owed months of a membership (issue #284): computed from the last
+ *  approved coverage to today, NO stored column. Only the admin sees it —
+ *  the student/representative never does. Mirrors backend
+ *  `DeudaMembresiaResponseDTO` (camelCase via `ResponseBase`). */
+export interface DeudaMembresia {
+  mesesAdeudados: number;
+  ultimaCoberturaFin: string | null;
+  montoMensual: number;
+}
+
+/** Regularize (settle) owed months with explicit retroactive dates — admin
+ *  bookkeeping entry (issue #284). `motivo` is mandatory (the audit trail:
+ *  who/when/why). */
+export interface RegularizarDeudaInput {
+  monto: number;
+  fechaInicio: string;
+  fechaFin: string;
+  motivo: string;
+}
+
+/** Fetch a membership's derived owed months — `GET /api/membresias/{id}/deuda` (admin only). */
+export async function fetchMembresiaDeuda(membresiaId: number): Promise<DeudaMembresia> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<DeudaMembresia>(apiEndpoint(`/membresias/${membresiaId}/deuda`), {
+    headers: mockHeaders,
+  });
+}
+
+/** Register an admin regularization — `POST /api/membresias/{id}/regularizar-deuda`.
+ *  The payment enters APROBADO directly (admin-operated bookkeeping, not a
+ *  client payment) with explicit retroactive dates and a mandatory reason. */
+export async function regularizarDeuda(
+  membresiaId: number,
+  datos: RegularizarDeudaInput,
+): Promise<PagoPersona> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<PagoPersona>(apiEndpoint(`/membresias/${membresiaId}/regularizar-deuda`), {
+    method: "POST",
+    body: JSON.stringify(datos),
+    headers: { "Content-Type": "application/json", ...mockHeaders },
+  });
+}
+
 
 /** Catalog entry for a membership plan type. */
 export interface TipoMembresiaCatalogo {

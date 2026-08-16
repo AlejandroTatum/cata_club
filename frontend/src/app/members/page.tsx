@@ -98,6 +98,7 @@ import AccountInfoSection from "./AccountInfoSection";
 import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
 import CreateMembershipForm from "./CreateMembershipForm";
 import RegisterPaymentForm from "./RegisterPaymentForm";
+import RegularizarDeudaForm from "./RegularizarDeudaForm";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
@@ -174,10 +175,16 @@ interface StudentRowProps {
    * delegate that to the user.
    */
   onMembershipCreated: () => void;
+  /**
+   * Called after a debt regularization is recorded (issue #284) so the page
+   * can refetch and show the remaining debt — same silent-refresh semantics
+   * as `onMembershipCreated` (never unmount the open dialog).
+   */
+  onDebtRegularized: () => void;
 }
 
 
-function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): React.ReactElement {
+function StudentEditPanel({ student, onMembershipCreated, onDebtRegularized }: StudentRowProps): React.ReactElement {
   const [showMedical, setShowMedical] = useState(false);
 
   const personaId = Number(student.id);
@@ -280,6 +287,11 @@ function StudentEditPanel({ student, onMembershipCreated }: StudentRowProps): Re
       {student.membresia && (
         <div className="mt-2.5">
           <RegisterPaymentForm personaId={personaId} membresia={student.membresia} />
+          <RegularizarDeudaForm
+            membresiaId={Number(student.membresia.id)}
+            montoMensual={student.membresia.monto ?? 0}
+            onRegularized={onDebtRegularized}
+          />
         </div>
       )}
 
@@ -320,6 +332,7 @@ interface MemberEditDialogProps {
   onClose: () => void;
   /** Refetch the member list — forwarded to each student's edit panel. */
   onMembershipCreated: () => void;
+  onDebtRegularized: () => void;
 }
 
 const ALL_BACKEND_ROLES: BackendTipoRol[] = ["ADMINISTRADOR", "ENTRENADOR", "REPRESENTANTE", "ALUMNO"];
@@ -450,6 +463,7 @@ function MemberEditDialog({
   account,
   onClose,
   onMembershipCreated,
+  onDebtRegularized,
 }: MemberEditDialogProps): React.ReactElement {
   // Roles and estado are ONE concern, not two: a single request answers both,
   // a failed load has to show up in both places, and the header badge below
@@ -729,6 +743,7 @@ function MemberEditDialog({
                         key={estudiante.id}
                         student={estudiante}
                         onMembershipCreated={onMembershipCreated}
+                            onDebtRegularized={onDebtRegularized}
                       />
                     ))}
                   </ul>
@@ -1114,6 +1129,7 @@ export default function MembersPage(): React.ReactElement {
             account={editingAccount}
             onClose={() => setEditingAccountId(null)}
             onMembershipCreated={() => void loadMembers({ silent: true })}
+            onDebtRegularized={() => void loadMembers({ silent: true })}
           />
         )}
       </AppShell>
