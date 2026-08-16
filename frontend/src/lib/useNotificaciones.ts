@@ -25,7 +25,7 @@ export function useNotificaciones(enabled: boolean): {
   const load = useCallback(async (): Promise<void> => {
     try {
       const data = await fetchNotificaciones();
-      setNotificaciones(data);
+      setNotificaciones(data.items);
       setLoadError(false);
     } catch {
       // Silent — the bell degrades to "no notifications" rather than

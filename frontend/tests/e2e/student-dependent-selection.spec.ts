@@ -98,7 +98,9 @@ async function mockGuardianPortal(page: Page): Promise<void> {
   await page.route("**/api/student?*", (route: Route) => fulfillJson(route, PORTAL));
   await page.route("**/api/membresias/pagos/persona/*", (route: Route) => fulfillJson(route, []));
   await page.route("**/api/asistencias/alumnos/*/horarios", (route: Route) => fulfillJson(route, []));
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) => fulfillJson(route, []));
+  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+    fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
+  );
 }
 
 /** The sidebar row a guardian actually clicks — not a scripted `goto`. */

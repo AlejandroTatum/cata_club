@@ -518,13 +518,13 @@ function makeNotificacion(overrides: Partial<Notificacion> = {}): Notificacion {
 
 describe("fetchNotificaciones", () => {
   it("calls the real BFF route GET /api/ranking/notificaciones/mias", async () => {
-    const items = [makeNotificacion()];
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(items));
+    const body = { items: [makeNotificacion()], total: 1, skip: 0, limit: 20 };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(body));
 
     const result = await fetchNotificaciones();
 
     expect(global.fetch).toHaveBeenCalledWith("/api/ranking/notificaciones/mias", expect.anything());
-    expect(result).toEqual(items);
+    expect(result).toEqual(body);
   });
 });
 

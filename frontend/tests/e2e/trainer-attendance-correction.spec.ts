@@ -74,7 +74,9 @@ async function mockCorrectionRuntime(page: Page): Promise<CorrectionRuntime> {
     url: BASE_URL,
   }]);
   await page.route("**/api/auth/session", (route: Route) => fulfillJson(route, MOCK_SESSION));
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) => fulfillJson(route, []));
+  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+    fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
+  );
   await page.route("**/api/attendance/schedules", (route: Route) => fulfillJson(route, [
     { id: HORARIO_ID, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00" },
   ]));

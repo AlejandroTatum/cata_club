@@ -32,6 +32,7 @@ import type {
   PersonaResponse,
   PersonaBusqueda,
   Notificacion,
+  PaginatedResponse,
   PerfilPropio,
   ActualizarPerfilPropioPayload,
   DiaSemana,
@@ -1634,10 +1635,10 @@ export async function subirFotoPerfil(archivo: File): Promise<PerfilPropio> {
 // removed along with those features).
 // ---------------------------------------------------------------------------
 
-/** List the logged-in persona's own in-app notifications — `GET /ranking/notificaciones/mias`. */
-export async function fetchNotificaciones(): Promise<Notificacion[]> {
+/** List the logged-in persona's own in-app notifications — `GET /ranking/notificaciones/mias` (paginated, issue #281). */
+export async function fetchNotificaciones(): Promise<PaginatedResponse<Notificacion>> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
-  return request<Notificacion[]>(apiEndpoint("/ranking/notificaciones/mias"), {
+  return request<PaginatedResponse<Notificacion>>(apiEndpoint("/ranking/notificaciones/mias"), {
     headers: mockHeaders,
   });
 }

@@ -346,7 +346,7 @@ def test_desactivada_desaparece_del_feed_de_notificaciones_del_representante(
         respuesta = c.get("/api/v1/ranking/notificaciones/mias")
     app.dependency_overrides.clear()
     assert respuesta.status_code == 200
-    mensajes = [n["mensaje"] for n in respuesta.json()]
+    mensajes = [n["mensaje"] for n in respuesta.json()["items"]]
     # El DTO no expone `persona_id`; el mensaje es el discriminante.
     assert "Pago de Beto aprobado" not in mensajes
     # Control positivo: el feed sigue trayendo lo propio (si el test pasara

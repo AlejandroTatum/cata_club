@@ -77,7 +77,7 @@ vi.mock("@/lib/auth-utils", async (importOriginal) => {
 // useNotificaciones (consumed once by Header, fed into every rendered
 // NotificationBell) fetches on mount — stub it out so Header's tests don't
 // depend on network/timer behavior unrelated to nav/auth rendering.
-const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
+const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/services/api", () => ({
   fetchNotificaciones: () => mockFetchNotificaciones(),
@@ -114,7 +114,7 @@ describe("Header", (): void => {
     // Default: not loading, not authenticated
     mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
     mockFetchNotificaciones.mockClear();
-    mockFetchNotificaciones.mockResolvedValue([]);
+    mockFetchNotificaciones.mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
     mockMarcarNotificacionLeida.mockClear();
     mockMarcarNotificacionLeida.mockResolvedValue(undefined);
   });
@@ -472,16 +472,21 @@ describe("Header", (): void => {
 
   it("restores the previous read state when marking a notification as read fails", async (): Promise<void> => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin"));
-    mockFetchNotificaciones.mockResolvedValue([
-      {
-        id: 7,
-        tipo: "MIEMBRESIA_VENCIMIENTO_PROXIMO",
-        mensaje: "Tu membresía vence pronto.",
-        leida: false,
-        fechaCreacion: "2026-07-19T10:00:00Z",
-        entidadRelacionadaId: 5,
-      },
-    ]);
+    mockFetchNotificaciones.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          tipo: "MIEMBRESIA_VENCIMIENTO_PROXIMO",
+          mensaje: "Tu membresía vence pronto.",
+          leida: false,
+          fechaCreacion: "2026-07-19T10:00:00Z",
+          entidadRelacionadaId: 5,
+        },
+      ],
+      total: 1,
+      skip: 0,
+      limit: 20,
+    });
     mockMarcarNotificacionLeida.mockRejectedValue(new Error("network down"));
 
     render(<Header />);

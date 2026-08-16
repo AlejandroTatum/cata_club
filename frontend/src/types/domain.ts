@@ -381,3 +381,15 @@ export interface Notificacion {
   fechaCreacion: string;
   entidadRelacionadaId: number | null;
 }
+
+/**
+ * Standard backend pagination envelope (`PaginatedResponse` in FastAPI,
+ * backend/app/presentacion/schemas/base.py). `fetchNotificaciones` consumes
+ * the paginated feed (`GET /ranking/notificaciones/mias`) — issue #281.
+ */
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  skip: number;
+  limit: number;
+}

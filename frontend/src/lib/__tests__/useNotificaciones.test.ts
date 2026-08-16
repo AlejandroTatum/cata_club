@@ -31,9 +31,18 @@ function makeNotificacion(overrides: Partial<Notificacion> = {}): Notificacion {
   };
 }
 
+function makePaginated(items: Notificacion[]): {
+  items: Notificacion[];
+  total: number;
+  skip: number;
+  limit: number;
+} {
+  return { items, total: items.length, skip: 0, limit: 20 };
+}
+
 describe("useNotificaciones", (): void => {
   beforeEach((): void => {
-    mockFetchNotificaciones.mockReset().mockResolvedValue([]);
+    mockFetchNotificaciones.mockReset().mockResolvedValue(makePaginated([]));
     mockMarcarNotificacionLeida.mockReset().mockResolvedValue(undefined);
   });
 
@@ -44,7 +53,7 @@ describe("useNotificaciones", (): void => {
   });
 
   it("fetches notificaciones on mount when enabled", async (): Promise<void> => {
-    mockFetchNotificaciones.mockResolvedValue([makeNotificacion()]);
+    mockFetchNotificaciones.mockResolvedValue(makePaginated([makeNotificacion()]));
 
     const { result } = renderHook(() => useNotificaciones(true));
 
@@ -76,7 +85,7 @@ describe("useNotificaciones", (): void => {
   });
 
   it("optimistically marks a notification read and rolls back on failure", async (): Promise<void> => {
-    mockFetchNotificaciones.mockResolvedValue([makeNotificacion({ id: 7, leida: false })]);
+    mockFetchNotificaciones.mockResolvedValue(makePaginated([makeNotificacion({ id: 7, leida: false })]));
     mockMarcarNotificacionLeida.mockRejectedValue(new Error("network down"));
 
     const { result } = renderHook(() => useNotificaciones(true));

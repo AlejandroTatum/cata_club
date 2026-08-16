@@ -100,7 +100,9 @@ async function mockSession(page: Page, role: "admin" | "trainer"): Promise<void>
   );
   // Both fire on every authenticated screen from `AppShell`; unstubbed they
   // hang the shell and every reading below would be of a half-drawn page.
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) => fulfillJson(route, []));
+  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+    fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
+  );
   await page.route("**/api/dashboard", (route: Route) => fulfillJson(route, {}));
 }
 

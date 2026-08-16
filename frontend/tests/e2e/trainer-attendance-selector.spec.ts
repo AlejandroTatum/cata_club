@@ -93,7 +93,9 @@ async function mockTrainerAttendanceRuntime(page: Page): Promise<void> {
     skip: 0,
     limit: 200,
   }));
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) => fulfillJson(route, []));
+  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+    fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
+  );
   await page.route("**/api/attendance/records*", (route: Route) => fulfillJson(route, []));
 }
 

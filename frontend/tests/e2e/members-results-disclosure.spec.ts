@@ -41,7 +41,9 @@ async function mockMembersRuntime(page: Page, accounts = [ACCOUNT], personasCapp
     loggedInAt: "2026-07-21T00:00:00.000Z",
   }));
   await page.route("**/api/members", (route: Route) => fulfillJson(route, { accounts, personasCapped }));
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) => fulfillJson(route, []));
+  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+    fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
+  );
 }
 
 test("members disclose visible results and essential membership information at 390px without pagination", async ({ page }) => {

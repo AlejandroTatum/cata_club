@@ -74,7 +74,7 @@ function buildRecords(count: number): AttendanceRecord[] {
 const mockFetchTrainingSchedules = vi.fn();
 const mockFetchAttendanceRecords = vi.fn();
 const mockSearchStudents = vi.fn().mockResolvedValue([]);
-const mockFetchNotificaciones = vi.fn().mockResolvedValue([]);
+const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("@/services/api", () => ({
