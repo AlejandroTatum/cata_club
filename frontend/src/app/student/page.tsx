@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -11,6 +11,7 @@ import {
   fetchPagosDePersona,
   fetchHorariosPorAlumno,
   independizarPersona,
+  subirFotoPersona,
 } from "@/services/api";
 import type {
   AlumnoHorario,
@@ -219,14 +220,43 @@ function Carnet({
   situation,
   horariosState,
   className,
+  canManagePhoto,
+  onPhotoUploaded,
 }: {
   profile: StudentProfileSummary;
   situation: PaymentSituation;
   /** The same assignments the training panel reads — see `franja` below. */
   horariosState: HorariosState;
   className?: string;
+  /** Whether the authenticated account may manage this profile's photo. */
+  canManagePhoto: boolean;
+  onPhotoUploaded: () => void;
 }): React.ReactElement {
   const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
+  const initial = fullName.trim().charAt(0).toUpperCase() || "?";
+  const fotoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [fotoError, setFotoError] = useState<string | null>(null);
+  const [fotoFallback, setFotoFallback] = useState(false);
+
+  async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const archivo = e.target.files?.[0];
+    e.target.value = ""; // reset so re-selecting the same file re-triggers onChange
+    if (!archivo) return;
+
+    setFotoError(null);
+    setUploadingFoto(true);
+    try {
+      await subirFotoPersona(profile.personaId, archivo);
+      setFotoFallback(false);
+      onPhotoUploaded();
+    } catch (error: unknown) {
+      setFotoError(toUserMessage(error, "No se pudo actualizar la foto."));
+    } finally {
+      setUploadingFoto(false);
+    }
+  }
+
   const facts: { label: string; value: string }[] = [];
   // "Socio desde" rather than the prototype's "MIEMBRO Nº · DESDE": the backend
   // has no member-number concept, and printing the surrogate persona id as one
@@ -299,9 +329,57 @@ function Carnet({
           currently needs from them about it — so they sit close together,
           while the header above and the fact grid below are separated by
           18px. */}
-      <p className="relative z-10 mt-[18px] text-balance text-xl font-extrabold">
-        {fullName}
-      </p>
+      <div className="relative z-10 mt-[18px] flex items-center gap-3">
+        <span
+          data-testid="carnet-photo"
+          className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20"
+        >
+          {profile.fotoUrl && !fotoFallback ? (
+            <Image
+              src={profile.fotoUrl}
+              alt={`Foto de ${fullName}`}
+              width={48}
+              height={48}
+              className="h-12 w-12 object-cover"
+              onError={() => setFotoFallback(true)}
+            />
+          ) : (
+            <span aria-hidden="true" className="text-base font-bold text-white/70">
+              {initial}
+            </span>
+          )}
+        </span>
+        <p className="min-w-0 flex-1 text-balance text-xl font-extrabold">
+          {fullName}
+        </p>
+      </div>
+
+      {canManagePhoto && (
+        <div className="relative z-10 mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fotoInputRef.current?.click()}
+            disabled={uploadingFoto}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-2xs font-bold text-white/80 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
+          </button>
+          <input
+            ref={fotoInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFotoChange}
+            className="hidden"
+            data-testid="carnet-photo-input"
+          />
+        </div>
+      )}
+
+      {fotoError && (
+        <p role="alert" className="relative z-10 mt-2 text-2xs text-[#FF8A93]">
+          {fotoError}
+        </p>
+      )}
 
       <CarnetStatusBand situation={situation} />
 
@@ -650,12 +728,14 @@ function ActivePortalView({
   hasAlumnoRole,
   accountPersonaId,
   onIndependizar,
+  onPhotoUploaded,
 }: {
   data: StudentPortalSummary;
   hasAlumnoRole: boolean;
   /** The persona behind the SESSION — not the profile currently selected. */
   accountPersonaId: string;
   onIndependizar: () => void;
+  onPhotoUploaded: () => void;
 }): React.ReactElement {
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
@@ -735,6 +815,14 @@ function ActivePortalView({
    */
   const viewingOwnProfile =
     selectedProfile !== null && selectedProfile.personaId === accountPersonaId;
+  /**
+   * Whether the authenticated account may manage the selected profile's
+   * photo: the profile is the account's own, or the account is its
+   * representante. The backend re-checks the real permission regardless.
+   */
+  const canManagePhoto =
+    selectedProfile !== null &&
+    (viewingOwnProfile || selectedProfile.representanteId === Number(accountPersonaId));
   /**
    * Only a minor looking at their OWN account is read-only on payments. A
    * representante looking at their minor child is the person the backend
@@ -851,6 +939,8 @@ function ActivePortalView({
               profile={selectedProfile}
               situation={paymentSituation}
               horariosState={horariosState}
+              canManagePhoto={canManagePhoto}
+              onPhotoUploaded={onPhotoUploaded}
             />
 
             {/* Only on the minor's OWN account. Shown to a guardian looking
@@ -1046,6 +1136,7 @@ function StudentPortalContent(): React.ReactElement {
             hasAlumnoRole={hasAlumnoRole}
             accountPersonaId={personaId}
             onIndependizar={() => setShowAgeUpModal(true)}
+            onPhotoUploaded={() => setReloadToken((n) => n + 1)}
           />
         ))}
       <AgeUpConfirmation

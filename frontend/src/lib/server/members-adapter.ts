@@ -56,6 +56,8 @@ export interface BackendPersonaFull {
   telefono: string;
   fechaNacimiento: string;
   representanteId: number | null;
+  /** Profile photo URL (Cloudinary). Absent/null until someone uploads one. */
+  fotoUrl?: string | null;
 }
 
 // ---------------------------------------------------------------------------

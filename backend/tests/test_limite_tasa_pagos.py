@@ -117,6 +117,10 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
         # freno real de intentos en serie vive en `PersonaServicio` (retraso
         # progresivo por representante), no en este decorador.
         "vincular_representado": "10/minute",
+        # #286 (carnet de socio): sube un archivo sobre la persona objetivo;
+        # mismo tier de autoservicio autenticado que `actualizar_foto_perfil`
+        # (10/min), sin acuñar identidad ni listar personas.
+        "actualizar_foto_persona": "10/minute",
         "listar_personas": "30/minute",
         "listar_representados": "30/minute",
         "buscar_personas": "30/minute",

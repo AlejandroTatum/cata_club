@@ -80,6 +80,7 @@ const mockFetchStudentPortal = vi.fn();
 const mockFetchPagosDePersona = vi.fn();
 const mockFetchHorariosPorAlumno = vi.fn();
 const mockIndependizarPersona = vi.fn();
+const mockSubirFotoPersona = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchStudentPortal: () => mockFetchStudentPortal(),
@@ -90,6 +91,7 @@ vi.mock("@/services/api", () => ({
   // entrenamientos" panel is allowed to state a future session from.
   fetchHorariosPorAlumno: (...args: unknown[]) => mockFetchHorariosPorAlumno(...args),
   independizarPersona: (...args: unknown[]) => mockIndependizarPersona(...args),
+  subirFotoPersona: (...args: unknown[]) => mockSubirFotoPersona(...args),
 }));
 
 /** One `AlumnoHorario` row, in the camelCase shape the backend actually serializes. */
@@ -167,6 +169,7 @@ beforeEach(() => {
   mockFetchPagosDePersona.mockReset().mockResolvedValue([]);
   mockFetchHorariosPorAlumno.mockReset().mockResolvedValue([]);
   mockIndependizarPersona.mockReset().mockResolvedValue(undefined);
+  mockSubirFotoPersona.mockReset().mockResolvedValue(undefined);
 });
 
 /**
@@ -433,6 +436,87 @@ describe("StudentPage — the club membership card (carnet)", () => {
 
     const facts = await screen.findByTestId("carnet-facts");
     expect(facts.className).not.toMatch(/max-w-\[360px\]/);
+  });
+});
+
+describe("StudentPage — the carnet shows the student's photo", () => {
+  it("renders the photo when fotoUrl is present", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: { ...PORTAL.self!, fotoUrl: "https://res.cloudinary.com/test/image/upload/perfil-fake.jpg" },
+    });
+
+    render(<StudentPage />);
+
+    const photo = await screen.findByTestId("carnet-photo");
+    expect(within(photo).getByRole("img")).toHaveAttribute(
+      "src",
+      "https://res.cloudinary.com/test/image/upload/perfil-fake.jpg",
+    );
+  });
+
+  it("falls back to initials instead of showing a broken image when the photo fails to load", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: { ...PORTAL.self!, fotoUrl: "https://broken.example/foto.jpg" },
+    });
+
+    render(<StudentPage />);
+
+    const photo = await screen.findByTestId("carnet-photo");
+    fireEvent.error(within(photo).getByRole("img"));
+
+    await waitFor(() => {
+      expect(within(photo).queryByRole("img")).not.toBeInTheDocument();
+      expect(within(photo).getByText("A")).toBeInTheDocument();
+    });
+  });
+
+  it("shows initials when there is no photo, never a broken image", async () => {
+    render(<StudentPage />);
+
+    const photo = await screen.findByTestId("carnet-photo");
+    expect(within(photo).queryByRole("img")).not.toBeInTheDocument();
+    expect(within(photo).getByText("A")).toBeInTheDocument();
+  });
+
+  it("offers the upload trigger on the account's own carnet", async () => {
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    expect(screen.getByRole("button", { name: /cambiar foto/i })).toBeInTheDocument();
+  });
+
+  it("offers the upload trigger on a represented dependent's carnet", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: null,
+      representados: [
+        { ...PORTAL.self!, personaId: "42", nombres: "Sofía", apellidos: "Vera", representanteId: 9 },
+      ],
+    });
+
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    expect(screen.getByRole("button", { name: /cambiar foto/i })).toBeInTheDocument();
+  });
+
+  it("uploads the selected file for the selected profile and refetches the portal", async () => {
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+
+    const input = screen.getByTestId("carnet-photo-input") as HTMLInputElement;
+    const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [archivo] } });
+
+    await waitFor(() => {
+      expect(mockSubirFotoPersona).toHaveBeenCalledWith("9", archivo);
+    });
+    await waitFor(() => {
+      expect(mockFetchStudentPortal).toHaveBeenCalledTimes(2);
+    });
   });
 });
 

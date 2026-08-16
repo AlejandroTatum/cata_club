@@ -9,6 +9,7 @@ from app.dominio.enums import TipoRol, TipoNotificacion
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_VINCULACION_NO_DISPONIBLE
 from app.soporte_transversal.tiempo import hoy_club
+from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import (
@@ -18,6 +19,7 @@ from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepo
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
+from app.servicios_negocio.auth_servicio import AuthServicio
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO, IndependizarDTO,
     VincularRepresentadoDTO,
@@ -317,6 +319,43 @@ class PersonaServicio:
         persona = self.obtener_persona(persona_id)
         datos = cambios.model_dump(exclude_unset=True)
         return self.repo.actualizar(persona, datos)
+
+    # --- Foto de una persona (carnet de socio, issue #286) -------------------
+    # Misma validación + subida que `AuthServicio.actualizar_foto_perfil`
+    # (`POST /auth/me/foto`), pero sobre una Persona OBJETIVO y no sobre la
+    # persona del token. El permiso de QUIÉN puede subirla lo resuelve el
+    # router con `PoliticaAccesoPersona.exigir_acceso` (dueño, su
+    # representante, o ADMINISTRADOR). El `public_id` deriva del
+    # `persona_id` del objetivo, así una foto nueva SOBRESCRIBE la anterior
+    # en Cloudinary (mismo criterio que el self-service).
+    def actualizar_foto(self, persona_id: int, contenido: bytes, content_type: str) -> Persona:
+        persona = self.obtener_persona(persona_id)
+
+        if content_type not in AuthServicio.TIPOS_MIME_PERMITIDOS_FOTO_PERFIL:
+            raise OperacionInvalida("Formato de archivo no permitido. Use JPG o PNG")
+        # La firma binaria real debe coincidir con el tipo declarado: el
+        # Content-Type que manda el cliente no prueba nada sobre el
+        # contenido real (mismo criterio que `actualizar_foto_perfil`).
+        if not es_firma_valida(contenido, content_type):
+            raise OperacionInvalida(
+                "El contenido del archivo no coincide con el formato declarado"
+            )
+        # Defensa en profundidad: el router ya acota la lectura vía
+        # `leer_con_limite` antes de llegar acá.
+        if len(contenido) > AuthServicio.TAMANO_MAXIMO_FOTO_PERFIL_BYTES:
+            raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
+
+        from app.infraestructura.cloudinary_cliente import subir_foto_perfil
+
+        public_id = f"perfil_{persona.id}"
+        url = subir_foto_perfil(
+            contenido=contenido,
+            nombre_publico=public_id,
+            content_type=content_type,
+            persona_id=persona.id,
+        )
+        return self.repo.actualizar(persona, {"foto_url": url})
+
 
     # --- Baja lógica (reemplaza el borrado duro) --------------------------
     def cambiar_estado(self, persona_id: int, activo: bool) -> Persona:

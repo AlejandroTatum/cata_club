@@ -42,6 +42,8 @@ export interface StudentProfileView {
   membership: MembershipView | null;
   representante: { nombres: string; apellidos: string } | null;
   representanteId: number | null;
+  /** Profile photo URL (Cloudinary) from `Persona.foto_url`, or null. */
+  fotoUrl: string | null;
 }
 
 /**
@@ -174,5 +176,6 @@ export function buildStudentProfileView(
     membership,
     representante,
     representanteId: persona.representanteId,
+    fotoUrl: persona.fotoUrl ?? null,
   };
 }
