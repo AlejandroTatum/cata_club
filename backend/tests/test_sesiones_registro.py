@@ -188,4 +188,8 @@ class TestRegistroEnLogin:
 
         sesiones = _sesiones_de(db_session, usuario.id)
         assert len(sesiones) == 1
-        assert sesiones[0].version_sesion == epoch_de_apertura < usuario.version_sesion
+        # Dos asserts y no una comparación encadenada (`a == b < c`): Python la
+        # evalúa como `(a == b) and (b < c)`, que es correcto pero se lee como
+        # otra cosa, y cuando falla no dice cuál de las dos mitades fue.
+        assert sesiones[0].version_sesion == epoch_de_apertura
+        assert epoch_de_apertura < usuario.version_sesion

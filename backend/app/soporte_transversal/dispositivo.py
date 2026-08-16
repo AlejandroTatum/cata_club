@@ -74,9 +74,13 @@ def describir_dispositivo(user_agent: Optional[str]) -> str:
 
     if sistema and navegador:
         etiqueta = f"{sistema} · {navegador}"
-    elif sistema or navegador:
-        etiqueta = sistema or navegador or DESCONOCIDO
     else:
-        etiqueta = DESCONOCIDO
+        # Una sola rama para los tres casos restantes, y el `or` encadenado
+        # los cubre: uno de los dos presente gana, y si faltan ambos cae en
+        # DESCONOCIDO. La versión anterior tenía un `elif sistema or navegador`
+        # con `... or DESCONOCIDO` adentro, donde ese último operando era
+        # inalcanzable por construcción -- código muerto que se lee como una
+        # salvaguarda.
+        etiqueta = sistema or navegador or DESCONOCIDO
 
     return etiqueta[:LARGO_MAXIMO]
