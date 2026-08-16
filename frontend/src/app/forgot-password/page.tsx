@@ -20,7 +20,7 @@ import { type FormEvent, useState } from "react";
 import { Mail, CheckCircle2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
-import { BackLink, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { solicitarRecuperacion, ApiClientError } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import { toUserMessage } from "@/lib/error-message";
@@ -61,6 +61,9 @@ export default function ForgotPasswordPage(): React.ReactElement {
           : "Ingrese su correo para recibir un enlace de recuperación"
       }
       note="Los enlaces de recuperación duran 30 minutos. Si vence, puede pedir uno nuevo desde esta misma pantalla."
+      // Reached from the login form, so that is the step behind this one — the
+      // shell's default ("/") would skip the user past what they were doing.
+      backHref="/login"
     >
       {submitted ? (
         /* Confirmation — deliberately identical regardless of whether the
@@ -108,10 +111,8 @@ export default function ForgotPasswordPage(): React.ReactElement {
         </form>
       )}
 
-      {/* `.fcard .aux` — 12.5px line with the action in red/600. */}
-      <p className="text-center text-xs text-ink-3">
-        <BackLink href="/login" />
-      </p>
+      {/* No back control here any more: the shell's coal exit now points at
+          /login itself, and two controls to one place is the DSH-3 defect. */}
     </AuthShell>
   );
 }

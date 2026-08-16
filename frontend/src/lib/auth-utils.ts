@@ -290,6 +290,25 @@ export function getDefaultRoute(role: UserRole): string {
 }
 
 /**
+ * Where a BACK control goes for a given role — the caller's own home, or the
+ * public site when there is nobody (or nobody with a home to return to).
+ *
+ * Vive acá, y no duplicada en cada pantalla, porque ya se escribió dos veces:
+ * `/ayuda` y el asistente público de inscripción son ambos rutas PÚBLICAS a
+ * las que se entra desde adentro del producto, y las dos tenían que responder
+ * la misma pregunta. La segunda copia se escribió mal (#295).
+ *
+ * `unsupported` cae al sitio público a propósito, no a su home. Ese home es
+ * `/unauthorized`, que no es un lugar al que nadie VUELVA y que
+ * `lib/destinations.ts` no nombra — `BackLink` haría throw en vez de
+ * renderizar.
+ */
+export function backHrefForRole(role: UserRole | null | undefined): string {
+  if (!role || role === "unsupported") return "/";
+  return getDefaultRoute(role);
+}
+
+/**
  * Human-readable label for a role, in Spanish.
  *
  * "estudiante" reads **Jugador**, and that is D9's vocabulary ruling rather

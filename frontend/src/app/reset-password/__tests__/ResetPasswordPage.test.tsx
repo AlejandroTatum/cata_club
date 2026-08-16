@@ -154,11 +154,15 @@ describe("ResetPasswordPage", () => {
   it("inherits the shared AuthShell template instead of drawing its own layout", () => {
     render(<ResetPasswordPage />);
 
-    // The coal panel's motto and its "volver al sitio" exit come from the
-    // template — if the screen stopped inheriting it, these disappear.
+    // The coal panel's motto and its exit come from the template — if the
+    // screen stopped inheriting it, these disappear. The exit reads "Volver a
+    // Iniciar sesión" here rather than "al Inicio" because this screen passes
+    // its own destination (#295), which is itself template-supplied behaviour.
     expect(screen.getByText(/Formando/)).toBeInTheDocument();
     expect(screen.getByText("campeones")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /volver al inicio/i }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("link", { name: /volver a iniciar sesión/i }).length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByAltText("Cata Club").length).toBeGreaterThan(0);
   });
 
@@ -394,5 +398,31 @@ describe("ResetPasswordPage", () => {
 
       expect(screen.getByText("campeones")).toBeInTheDocument();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The way back is /login, and there is only one of it (#295)
+//
+// This screen is reached from an email link, so there is no in-app history
+// behind it — a history-based back would walk the user out of the product.
+// Every state it can be in (dead link, password set, gave up) ends at the
+// login form, so that is the destination, declared explicitly.
+// ---------------------------------------------------------------------------
+
+describe("ResetPasswordPage — the way back", () => {
+  it("sends the exit to the login form, not out to the public site", () => {
+    render(<ResetPasswordPage />);
+
+    const back = screen.getAllByRole("link", { name: /volver a iniciar sesión/i });
+    expect(back).toHaveLength(1);
+    expect(back[0]).toHaveAttribute("href", "/login");
+  });
+
+  it("offers exactly one back control, not one per panel", () => {
+    render(<ResetPasswordPage />);
+
+    expect(screen.getAllByRole("link", { name: /^volver/i })).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: /volver al inicio/i })).not.toBeInTheDocument();
   });
 });

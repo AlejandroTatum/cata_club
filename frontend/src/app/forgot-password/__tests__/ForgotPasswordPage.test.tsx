@@ -138,3 +138,29 @@ describe("ForgotPasswordPage", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// The way back is /login, and there is only one of it (#295)
+//
+// This screen is reached from the login form's "¿Olvidó su contraseña?", so
+// the step behind it is /login — never the public landing. It used to say
+// both: AuthShell's coal exit pointed at "/" while a second control inside
+// the card pointed at "/login", which is two back controls disagreeing on one
+// screen (the DSH-3 defect, already settled once on /ayuda).
+// ---------------------------------------------------------------------------
+
+describe("ForgotPasswordPage — the way back", () => {
+  it("sends the exit to the login form, not out to the public site", () => {
+    render(<ForgotPasswordPage />);
+
+    const back = screen.getByRole("link", { name: /volver a iniciar sesión/i });
+    expect(back).toHaveAttribute("href", "/login");
+  });
+
+  it("offers exactly one back control, not one per panel", () => {
+    render(<ForgotPasswordPage />);
+
+    expect(screen.getAllByRole("link", { name: /^volver/i })).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: /volver al inicio/i })).not.toBeInTheDocument();
+  });
+});

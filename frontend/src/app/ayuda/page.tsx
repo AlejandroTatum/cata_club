@@ -18,6 +18,8 @@ import type { LucideIcon } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
 import { Accordion, BackLink, Button } from "@/components/ui";
+import { useAuth } from "@/contexts/AuthContext";
+import { backHrefForRole } from "@/lib/auth-utils";
 import { openHelpChat } from "@/components/chatbot/help-chat-store";
 import { FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
 
@@ -67,12 +69,13 @@ function sectionSlug(title: string): string {
 }
 
 export default function AyudaPage(): React.ReactElement {
+  const { session } = useAuth();
   return (
     <AppShell
       title="Preguntas frecuentes"
       subtitle="Cómo funciona la app del club, sección por sección."
     >
-      <BackLink href="/" />
+      <BackLink href={backHrefForRole(session?.user.role)} />
 
       {/*
        * The schedule first, and as a table rather than prose. It is the most
