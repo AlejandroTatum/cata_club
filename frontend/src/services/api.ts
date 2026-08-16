@@ -1629,6 +1629,30 @@ export async function fetchMiPerfil(): Promise<PerfilPropio> {
   return request<PerfilPropio>(apiEndpoint("/auth/me"));
 }
 
+/**
+ * One row of the caller's own session history.
+ *
+ * `dispositivo` is a LABEL the backend already derived ("Android · Chrome"),
+ * never a raw user-agent, and there is no IP field because the backend does
+ * not store one — see `soporte_transversal/dispositivo.py` for why.
+ *
+ * `vigente` and `actual` are both derived server-side: the first compares the
+ * row's session epoch against the user's current one, the second against the
+ * `sid` claim of the token that made the call.
+ */
+export interface SesionPropia {
+  id: number;
+  dispositivo: string;
+  iniciadaEn: string;
+  vigente: boolean;
+  actual: boolean;
+}
+
+/** Fetch the caller's own session history — GET /api/auth/me/sesiones. */
+export async function fetchMisSesiones(): Promise<SesionPropia[]> {
+  return request<SesionPropia[]>(apiEndpoint("/auth/me/sesiones"));
+}
+
 /** Update the logged-in user's own telefono — PATCH /api/auth/me. Correo is not editable (see `ActualizarPerfilPropioPayload`). */
 export async function actualizarMiPerfil(data: ActualizarPerfilPropioPayload): Promise<PerfilPropio> {
   const body: Record<string, unknown> = {};
