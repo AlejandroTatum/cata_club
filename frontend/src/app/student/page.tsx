@@ -970,7 +970,7 @@ function ActivePortalView({
 function StudentPortalContent(): React.ReactElement {
   const { session, refreshSession } = useAuth();
   const personaId = session?.user.id ?? "";
-  const hasAlumnoRole = session?.user.role === "estudiante";
+  const hasAlumnoRole = session?.roles.includes("ALUMNO") ?? false;
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [reloadToken, setReloadToken] = useState(0);
