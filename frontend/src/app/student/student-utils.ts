@@ -772,3 +772,31 @@ export function compactPaymentLabel(situation: PaymentSituation): string {
   return situation.kind === "covered" ? "Al día" : situation.headline;
 }
 
+
+// ---------------------------------------------------------------------------
+// The pulse row (issue "el dashboard de alumno en base al de admin")
+//
+// `/dashboard` states its four figures in one grammar, and this screen had no
+// equivalent — which is most of why the two read as different products. What
+// this screen DID have is the same facts written as prose, spread across the
+// carnet band and "Esta semana". These helpers turn two of those into figures
+// so the tiles can ABSORB the sentences rather than repeat them.
+//
+// Los días de cobertura NO viven acá: `daysUntil` ya los calcula arriba, con
+// su propia nota sobre por qué compara a medianoche local. Escribir un segundo
+// contador habría sido dos verdades donde hay una.
+// ---------------------------------------------------------------------------
+
+/**
+ * How many training slots the student has in a normal week.
+ *
+ * Cuenta SLOTS, no días: dos turnos el mismo sábado son dos entrenamientos, y
+ * contar días diría "1" a alguien que va dos veces. Reusa
+ * `buildWeeklyTrainingSchedule`, que ya descarta las filas con horas
+ * imposibles, para que la cifra no cuente lo que el panel de abajo no muestra.
+ */
+export function contarEntrenamientosSemanales(
+  rows: Pick<AlumnoHorario, "horarioDia" | "horarioHoraInicio" | "horarioHoraFin">[],
+): number {
+  return buildWeeklyTrainingSchedule(rows).length;
+}
