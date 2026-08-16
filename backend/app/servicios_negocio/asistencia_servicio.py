@@ -341,10 +341,19 @@ class AsistenciaServicio:
         self.repo_alumno_horario.eliminar_por_horario(horario_id)
         self.repo_horario.eliminar(horario)
 
-    def registrar_asistencia(self, datos: AsistenciaCreateDTO, roles_solicitante: list[str]) -> Asistencia:
+    def registrar_asistencia(
+        self, datos: AsistenciaCreateDTO, roles_solicitante: list[str], persona_id_solicitante: int
+    ) -> Asistencia:
         """No se registra quién dictó la sesión: cualquier entrenador opera
         cualquier horario y el dato no tiene consumidor (issue #13,
         docs/product/concepto-alcance-modelo.md §4).
+
+        Matiz (#263): SÍ se registra quién TOMÓ la lista, en
+        `registrado_por_id` -- la identidad viene del TOKEN
+        (`persona_id_solicitante`), nunca del DTO. Solo se setea en la rama de
+        CREACIÓN: la corrección (#262) actualiza el estado pero NO pisa quién
+        tomó la lista originalmente (quién corrige después es un follow-up
+        fuera de alcance).
 
         Upsert por (persona_id, horario_id, fecha_entrenamiento): re-tomar
         asistencia para una sesión ya registrada (ej. reabrir el wizard
@@ -413,7 +422,9 @@ class AsistenciaServicio:
             existente.estado_justificativo = datos.estado_justificativo
             return self.repo.actualizar(existente)
 
-        return self.repo.crear(Asistencia(**datos.model_dump()))
+        return self.repo.crear(
+            Asistencia(**datos.model_dump(), registrado_por_id=persona_id_solicitante)
+        )
 
     def historial_por_persona(
         self, persona_id: int, skip: int = 0, limit: Optional[int] = None

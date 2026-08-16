@@ -1664,7 +1664,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             unit={`/${students.length} ${students.length === 1 ? "alumno" : "alumnos"}`}
             hint={
               confirmedAt
-                ? `${formatDateTime(confirmedAt.toISOString())} · ${session?.user?.name ?? ""}`
+                ? `${formatDateTime(confirmedAt.toISOString())} · ${result?.registradoPorNombre ?? "No registrado"}`
                 : undefined
             }
           />

@@ -41,6 +41,10 @@ export interface BackendAsistencia {
   estadoJustificativo?: boolean | null;
   personaId: number;
   horarioId: number;
+  /** Who took the list (issue #263) — nullable for legacy rows. */
+  registradoPorId?: number | null;
+  /** The taker's display name, already resolved by the backend. */
+  registradoPorNombre?: string | null;
 }
 
 export interface BackendPersonaName {
@@ -182,6 +186,8 @@ export function buildAttendanceRecord(
     personaId: asistencia.personaId,
     estudiante: personaFullName(personas.get(asistencia.personaId), `Persona ${asistencia.personaId}`),
     estado: ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND[asistencia.estado],
+    registradoPorId: asistencia.registradoPorId ?? null,
+    registradoPorNombre: asistencia.registradoPorNombre ?? null,
   };
 }
 
@@ -190,9 +196,9 @@ export function buildAttendanceRecord(
 // ---------------------------------------------------------------------------
 
 /** `GET /asistencias/ultimas-listas` DTO — a session (horario + fecha) with
- *  at least one Asistencia, and its four counts. No author: `Asistencia`
- *  deliberately doesn't record who took the list (modelos.py:536) — see
- *  decisiones-de-negocio-2026-08-11.md §8. */
+ *  at least one Asistencia, and its four counts. This summary card carries
+ *  no author (it's counts-only): `Asistencia` now records who took the list
+ *  (#263), but that author is surfaced in the history, not here. */
 export interface BackendUltimaLista {
   horarioId: number;
   fechaEntrenamiento: string;

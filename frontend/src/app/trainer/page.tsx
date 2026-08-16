@@ -42,12 +42,12 @@
  *
  * ## "Últimas listas" has no author column
  *
- * `Asistencia` deliberately doesn't record who took the list
- * (`modelos.py:536`) — the trainers are paid a flat monthly rate and the club
- * never asked "who marked this kid absent". Adding it is a real, separate
- * idea (`registrado_por`, for audit trail) parked for after launch — see
- * decisiones-de-negocio-2026-08-11.md §8's own closing note. This list does
- * not grow a column to fill that gap.
+ * This summary list carries no author column on purpose — it's counts-only.
+ * `Asistencia` DOES record who took the list since #263
+ * (`registrado_por_id`/nombre), surfaced in the history, not here. Who TAUGHT
+ * the session is still unrecorded: trainers are paid a flat monthly rate and
+ * the club never asked "who marked this kid absent". This list does not grow a
+ * column to fill that gap.
  */
 
 "use client";

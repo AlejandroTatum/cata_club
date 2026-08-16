@@ -220,7 +220,7 @@ def test_actualizar_categoria_quitar_dia_con_asistencias_bloquea_la_edicion_ente
     servicio.registrar_asistencia(AsistenciaCreateDTO(
         fecha_entrenamiento="2026-08-10", estado=EstadoAsistencia.PRESENTE,
         persona_id=alumno["id"], horario_id=horario_lunes.id,
-    ), ["ADMINISTRADOR"])
+    ), ["ADMINISTRADOR"], alumno["id"])
 
     with pytest.raises(OperacionInvalida) as exc_info:
         servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(
@@ -264,7 +264,7 @@ def test_eliminar_categoria_con_asistencias_bloquea_y_no_borra_nada(db_session, 
     servicio.registrar_asistencia(AsistenciaCreateDTO(
         fecha_entrenamiento="2026-08-10", estado=EstadoAsistencia.PRESENTE,
         persona_id=alumno["id"], horario_id=horario.id,
-    ), ["ADMINISTRADOR"])
+    ), ["ADMINISTRADOR"], alumno["id"])
 
     with pytest.raises(OperacionInvalida):
         servicio.eliminar_categoria(categoria.codigo)

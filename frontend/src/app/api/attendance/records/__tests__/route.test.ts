@@ -47,6 +47,8 @@ const asistencia = {
   estadoJustificativo: null,
   personaId: 3,
   horarioId: 1,
+  registradoPorId: 7,
+  registradoPorNombre: "Carlos Ruiz",
 };
 const horario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
 const personas = { items: [{ id: 3, nombres: "Sofia", apellidos: "Alumna" }] };
@@ -81,7 +83,7 @@ describe("GET /api/attendance/records", () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual([
-      { id: "1", fecha: "2026-07-18", horario: "Lunes 15:00 — 16:30", horarioId: 1, personaId: 3, estudiante: "Sofia Alumna", estado: "present" },
+      { id: "1", fecha: "2026-07-18", horario: "Lunes 15:00 — 16:30", horarioId: 1, personaId: 3, estudiante: "Sofia Alumna", estado: "present", registradoPorId: 7, registradoPorNombre: "Carlos Ruiz" },
     ]);
   });
 
@@ -226,7 +228,7 @@ describe("POST /api/attendance/records", () => {
     const body = await response.json();
 
     expect(response.status).toBe(201);
-    expect(body).toEqual({ createdCount: 2, failed: [] });
+    expect(body).toEqual({ createdCount: 2, failed: [], registradoPorNombre: "Carlos Ruiz" });
     expect(global.fetch).toHaveBeenNthCalledWith(
       1,
       "http://localhost:8000/api/v1/asistencias/",

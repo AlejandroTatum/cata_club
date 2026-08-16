@@ -89,6 +89,7 @@ function record(
   fecha: string,
   horario = "Lunes 15:00 — 16:00",
   horarioId = 12,
+  registradoPorNombre: string | null = null,
 ): AttendanceRecord {
   return {
     id: `${estudiante}-${fecha}-${horario}-${estado}`,
@@ -98,14 +99,15 @@ function record(
     personaId: 1,
     estudiante,
     estado,
+    registradoPorNombre,
   };
 }
 
 const RECORDS: AttendanceRecord[] = [
-  record("present", "Sofia Vera", "2026-07-20"),
-  record("present", "Diego Mendoza", "2026-07-20"),
-  record("late", "Ana Garcia", "2026-07-20"),
-  record("absent", "Luis Lopez", "2026-07-20"),
+  record("present", "Sofia Vera", "2026-07-20", "Lunes 15:00 — 16:00", 12, "Carlos Mendoza"),
+  record("present", "Diego Mendoza", "2026-07-20", "Lunes 15:00 — 16:00", 12, "Carlos Mendoza"),
+  record("late", "Ana Garcia", "2026-07-20", "Lunes 15:00 — 16:00", 12, "Carlos Mendoza"),
+  record("absent", "Luis Lopez", "2026-07-20", "Lunes 15:00 — 16:00", 12, "Carlos Mendoza"),
   // A different session, on an earlier day and on a different horario.
   record("present", "Kevin Sabando", "2026-07-17", "Viernes 17:00 — 18:00", 7),
   record("justified", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00", 7),
@@ -158,13 +160,18 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.queryByText(/sesións/)).not.toBeInTheDocument();
   });
 
-  it("does not show who filed each list — attendance no longer records it (issue #13)", async () => {
+  it("shows who took each list (issue #263) — a persisted taker, and 'No registrado' for legacy rows", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
-    expect(screen.queryByText("Registró")).not.toBeInTheDocument();
-    // Header: Sesión, Resultado, acciones — no trainer column.
-    expect(within(rows[0]).getAllByRole("columnheader")).toHaveLength(3);
+    // Header: Sesión, Registró, Resultado, acciones.
+    expect(within(rows[0]).getByText("Registró")).toBeInTheDocument();
+    expect(within(rows[0]).getAllByRole("columnheader")).toHaveLength(4);
+
+    // The Monday session carries a persisted taker; the Friday session is
+    // legacy (no author) and renders the explicit "No registrado" placeholder.
+    expect(within(rows[1]).getByText("Carlos Mendoza")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("No registrado")).toBeInTheDocument();
   });
 
   /*
@@ -186,7 +193,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
-    const resultCell = within(rows[1]).getAllByRole("cell")[1];
+    const resultCell = within(rows[1]).getAllByRole("cell")[2];
     expect(resultCell.querySelector(".sr-only")).toBeNull();
     expect(resultCell).toHaveTextContent("2 presentes");
     expect(resultCell).toHaveTextContent("1 tardanza");
@@ -261,7 +268,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
-    expect(within(rows[1]).getAllByRole("cell")).toHaveLength(3);
+    expect(within(rows[1]).getAllByRole("cell")).toHaveLength(4);
   });
 
   it("refetches with a new range when a preset is picked", async () => {

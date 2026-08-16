@@ -278,7 +278,13 @@ class Persona(Base):
 
     # --- Relaciones 1 a muchos ---
     # Como alumno:
-    asistencias: Mapped[List["Asistencia"]] = relationship(back_populates="persona")
+    # `foreign_keys` explícito: `Asistencia` tiene DOS FKs a `persona.id`
+    # (`persona_id` para el alumno, `registrado_por_id` para quién tomó la
+    # lista, issue #263) -- sin esto, SQLAlchemy no puede elegir cuál usar
+    # (mismo criterio que `Persona.pagos`, documentado justo abajo).
+    asistencias: Mapped[List["Asistencia"]] = relationship(
+        back_populates="persona", foreign_keys="Asistencia.persona_id",
+    )
     # `foreign_keys` explícito: `Pago` ahora tiene TRES FKs a `persona.id`
     # (`persona_id`, `descuento_autorizado_por_persona_id` del issue #11 y
     # `regularizada_por_persona_id` del issue #284) -- sin esto, SQLAlchemy no
@@ -631,13 +637,20 @@ class HorarioEntrenamiento(Base):
 
 class Asistencia(Base):
     """
-    No registra quién dictó la sesión: los entrenadores cobran un mensual
-    fijo y el dato no tiene consumidor (docs/product/concepto-alcance-modelo.md §4).
+    No registra quién DICTÓ la sesión: los entrenadores cobran un mensual
+    fijo y ese dato no tiene consumidor (docs/product/concepto-alcance-modelo.md §4).
+
+    Matiz (#263): SÍ registra quién TOMÓ la lista, en `registrado_por_id` -- FK
+    a `persona.id` (la identidad del sistema es `persona_id`, no `usuario_id`;
+    el JWT la trae y `Asistencia` ya usaba `persona_id` para el alumno). Quién
+    corrige DESPUÉS es un follow-up documentado, FUERA de este alcance (no
+    existe columna `corregido_por`).
     """
     __tablename__ = "asistencia"
     __table_args__ = (
         Index("ix_asistencia_persona_id", "persona_id"),
         Index("ix_asistencia_horario_id", "horario_id"),
+        Index("ix_asistencia_registrado_por_id", "registrado_por_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -648,10 +661,38 @@ class Asistencia(Base):
     estado_justificativo: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
-    persona: Mapped["Persona"] = relationship(back_populates="asistencias")
+    # `foreign_keys` explícito: ver `Persona.asistencias` -- misma ambigüedad
+    # (dos FKs a `persona.id`), mismo motivo.
+    persona: Mapped["Persona"] = relationship(
+        back_populates="asistencias", foreign_keys=[persona_id]
+    )
 
     horario_id: Mapped[int] = mapped_column(ForeignKey(_HORARIO_FK))
     horario: Mapped["HorarioEntrenamiento"] = relationship(back_populates="asistencias")
+
+    # Quién tomó la lista (#263). Nullable a propósito: las filas históricas no
+    # tienen autor conocido (sin backfill falso) y se muestran como "No
+    # registrado". Se setea SOLO en la rama de creación de `registrar_asistencia`
+    # (la identidad viene del token, nunca del DTO); la corrección (#262) NO lo
+    # pisa.
+    registrado_por_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True,
+    )
+    registrado_por: Mapped[Optional["Persona"]] = relationship(
+        foreign_keys=[registrado_por_id]
+    )
+
+    @property
+    def registrado_por_nombre(self) -> Optional[str]:
+        """Nombre de quien tomó la lista, expuesto como `registrado_por_nombre`
+        en `AsistenciaResponseDTO` (from_attributes). `None` para las filas
+        históricas sin autor. La relación `registrado_por` va eager-loaded en
+        los listados del repositorio (evita N+1); en la creación (una sola fila)
+        se resuelve por lazy load."""
+        autor = self.registrado_por
+        if autor is None:
+            return None
+        return f"{autor.nombres} {autor.apellidos}".strip()
 
 
 # ---------------------------------------------------------------------------

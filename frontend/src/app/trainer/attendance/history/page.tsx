@@ -12,8 +12,9 @@
  *
  * The prototype's reasoning, verbatim: *"el entrenador no busca «qué hizo Ana
  * el 14»; busca «la lista del lunes pasado»"*. So each row is one session,
- * with the four state counts in the row itself. There is no "Registró"
- * column: attendance does not record who taught the session (issue #13).
+ * with the four state counts in the row itself. A "Registró" column shows
+ * who TOOK the list (issue #263, persisted `registrado_por_id`/nombre). Who
+ * TAUGHT the session still isn't recorded (issue #13) — a separate fact.
  *
  * ## Filters
  *
@@ -221,6 +222,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                     <TableHead>
                       <tr>
                         <TableHeaderCell>Sesión</TableHeaderCell>
+                        <TableHeaderCell>Registró</TableHeaderCell>
                         <TableHeaderCell>Resultado</TableHeaderCell>
                         <TableHeaderCell align="right">
                           <span className="sr-only">Acciones</span>
@@ -234,6 +236,9 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                             name={formatDate(sessionRow.fecha)}
                             sub={sessionRow.horario}
                           />
+                          <TableCell>
+                            {sessionRow.registradoPorNombre ?? "No registrado"}
+                          </TableCell>
                           <TableCell>
                             {/*
                               The composition, drawn the way the panel already

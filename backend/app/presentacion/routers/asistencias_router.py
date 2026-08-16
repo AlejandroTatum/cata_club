@@ -123,7 +123,9 @@ async def registrar_asistencia(
     token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"])),
     db: Session = Depends(obtener_sesion),
 ):
-    return AsistenciaServicio(db).registrar_asistencia(datos, token_payload.get("roles", []))
+    return AsistenciaServicio(db).registrar_asistencia(
+        datos, token_payload.get("roles", []), token_payload.get("persona_id")
+    )
 
 
 # Historial de asistencia de una persona: dato sensible (presencia/régimen).
@@ -237,12 +239,14 @@ async def reporte_asistencia_pdf(
 
 
 # --- Panel del entrenador: "últimas listas del club" (Fix 8, DSH-2) --------
-# Sin autor a propósito: `Asistencia` no guarda quién tomó la lista
-# (modelos.py:536, deliberado) -- §8 de decisiones-de-negocio-2026-08-11.md.
-# Cero migración: se computa de Asistencia + HorarioEntrenamiento, lo mismo
-# que ya existía. Mismo tier de permiso que `/reportes` (ADMINISTRADOR y
-# ENTRENADOR): ninguno de los dos roles necesita el nombre de un alumno para
-# esta tarjeta, solo el horario, la fecha y los cuatro conteos.
+# Esta TARJETA no expone autor a propósito: es un resumen de conteos por
+# sesión, no un detalle. `Asistencia` SÍ guarda quién tomó la lista desde el
+# issue #263 (`registrado_por_id`), expuesto en el historial -- el resumen de
+# acá sigue sin incluirlo (misma forma que el panel). Cero migración para
+# esta tarjeta: se computa de Asistencia + HorarioEntrenamiento. Mismo tier
+# de permiso que `/reportes` (ADMINISTRADOR y ENTRENADOR): ninguno de los dos
+# roles necesita el nombre de un alumno para esta tarjeta, solo el horario,
+# la fecha y los cuatro conteos.
 @router.get(
     "/ultimas-listas",
     response_model=List[UltimaListaDTO],
