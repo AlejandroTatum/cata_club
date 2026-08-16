@@ -1,5 +1,5 @@
 /**
- * POST /api/personas/[personaId]/foto — upload/replace a persona's photo
+ * POST /api/personas/[id]/foto — upload/replace a persona's photo
  * (carnet de socio, issue #286 slice 1).
  *
  * BFF proxy for FastAPI's `POST /personas/{persona_id}/foto`. Reads the
@@ -17,11 +17,11 @@ import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backen
 import type { PersonaResponse } from "@/types/domain";
 
 interface RouteContext {
-  params: { personaId: string };
+  params: { id: string };
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const personaId = Number(context.params.personaId);
+  const personaId = Number(context.params.id);
   if (Number.isNaN(personaId)) {
     return NextResponse.json({ message: "El id de persona no es válido." }, { status: 400 });
   }

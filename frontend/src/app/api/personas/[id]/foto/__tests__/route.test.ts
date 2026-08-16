@@ -1,11 +1,11 @@
 /**
- * Route Handler Tests — POST /api/personas/[personaId]/foto
+ * Route Handler Tests — POST /api/personas/[id]/foto
  *
  * Proxies backend POST /personas/{persona_id}/foto: reads the incoming
  * multipart/form-data request, forwards the file to FastAPI via
  * `backendFetchAuthed`, returns the updated Persona JSON. Mirrors
  * `auth/me/foto/__tests__/route.test.ts` (auth-cookie gating, backend-error
- * passthrough) plus the `[personaId]` path validation used by the sibling
+ * passthrough) plus the `[id]` path validation used by the sibling
  * personas routes.
  *
  * @vitest-environment node
@@ -63,10 +63,10 @@ afterEach(() => {
   delete process.env.BACKEND_API_URL;
 });
 
-describe("POST /api/personas/[personaId]/foto", () => {
+describe("POST /api/personas/[id]/foto", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
     const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
-    const response = await POST(fotoRequest("42", archivo), { params: { personaId: "42" } });
+    const response = await POST(fotoRequest("42", archivo), { params: { id: "42" } });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -76,7 +76,7 @@ describe("POST /api/personas/[personaId]/foto", () => {
     const access = makeJwt(3600);
     const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
     const response = await POST(fotoRequest("abc", archivo, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { personaId: "abc" },
+      params: { id: "abc" },
     });
 
     expect(response.status).toBe(400);
@@ -86,7 +86,7 @@ describe("POST /api/personas/[personaId]/foto", () => {
   it("returns 400 without calling the backend when no file is attached", async () => {
     const access = makeJwt(3600);
     const response = await POST(fotoRequest("42", null, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { personaId: "42" },
+      params: { id: "42" },
     });
 
     expect(response.status).toBe(400);
@@ -99,7 +99,7 @@ describe("POST /api/personas/[personaId]/foto", () => {
     const access = makeJwt(3600);
     const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
     const response = await POST(fotoRequest("42", archivo, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { personaId: "42" },
+      params: { id: "42" },
     });
     const body = await response.json();
 
@@ -124,7 +124,7 @@ describe("POST /api/personas/[personaId]/foto", () => {
     const access = makeJwt(3600);
     const archivo = new File(["contenido"], "archivo.pdf", { type: "application/pdf" });
     const response = await POST(fotoRequest("42", archivo, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { personaId: "42" },
+      params: { id: "42" },
     });
 
     expect(response.status).toBe(400);
