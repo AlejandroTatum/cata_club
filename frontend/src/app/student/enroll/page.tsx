@@ -20,6 +20,7 @@ import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "
 import Link from "next/link";
 import { enrollStudent, fetchInstituciones, type Institucion } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { backHrefForRole } from "@/lib/auth-utils";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
@@ -124,7 +125,7 @@ function schoolTypeLabel(value: string): string {
 // ---------------------------------------------------------------------------
 
 function EnrollWizard(): React.ReactElement {
-  const { refreshSession, isAuthenticated } = useAuth();
+  const { refreshSession, isAuthenticated, isLoading, session } = useAuth();
   const demoQuickFillEnabled = isDemoQuickFillEnabled();
   const [formData, setFormData] = useState<EnrollFormData>(initialFormData);
   const [submitting, setSubmitting] = useState(false);
@@ -1086,7 +1087,23 @@ function EnrollWizard(): React.ReactElement {
               (see PUBLIC_EXCEPTIONS in src/lib/middleware-utils.ts): most
               visitors arrive from the landing with no account, and sending
               them to `/student` would bounce them straight to /login, which
-              is the wall the landing funnel exists to route around. */}
+              is the wall the landing funnel exists to route around.
+
+              Dos cosas que la primera pasada del #295 dio por buenas y no lo
+              eran, porque la condición se LEE bien:
+
+              1. Decidía sin saber. `isAuthenticated` es false mientras la
+                 sesión se hidrata — `AuthContext` arranca en `session: null,
+                 isLoading: true` y recién resuelve tras un round trip — así
+                 que un usuario logueado veía "Volver al Inicio" en esa ventana
+                 y, si tocaba ahí, la promesa se cumplía: salía a la landing.
+                 Mientras no se sabe, no se ofrece destino; el hueco reserva la
+                 altura del control para que la fila no salte cuando aparece.
+              2. `/student` no es la casa de todos. Un admin o un entrenador
+                 logueado no vuelve al portal del alumno. `backHrefForRole`
+                 resuelve la casa de cada rol, y es la MISMA función que usa
+                 /ayuda: la regla se escribió dos veces y la segunda salió
+                 mal. */}
           {/* Back on the left, help on the right — the two things a visitor
               reaches for when a five-step form stops making sense. The
               assistant is public (`POST /chatbot` needs no session), which is
@@ -1096,7 +1113,11 @@ function EnrollWizard(): React.ReactElement {
               of the doctrine — a distance belongs to the container, not to
               each thing inside it. */}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <BackLink href={isAuthenticated ? "/student" : "/"} />
+            {isLoading ? (
+              <span className="h-ctl-sm" aria-hidden="true" />
+            ) : (
+              <BackLink href={backHrefForRole(session?.user.role)} />
+            )}
             <HelpChatLauncher
               variant="quiet"
               label="¿Tiene dudas? Pregunte al asistente"

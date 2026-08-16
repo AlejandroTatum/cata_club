@@ -37,11 +37,13 @@ vi.mock("next/link", () => ({
 
 let mockIsAuthenticated = false;
 
+let mockAuthRole: "admin" | "trainer" | "representante" | "estudiante" | "unsupported" | null = null;
+let mockAuthLoading = false;
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
-    session: null,
+    session: mockAuthRole ? { user: { role: mockAuthRole } } : null,
     isAuthenticated: mockIsAuthenticated,
-    isLoading: false,
+    isLoading: mockAuthLoading,
     refreshSession: vi.fn(),
   }),
 }));
@@ -112,7 +114,12 @@ describe("EnrollPage — back link", () => {
   });
 
   it("sends an authenticated user back to their account", () => {
+    // El rol viaja CON la sesión: `isAuthenticated` es `session !== null` en el
+    // contexto real, así que el destino se deriva de la sesión y no de los dos
+    // valores por separado. Con los dos, podían contradecirse -- y la rama que
+    // ganaba mandaba a un usuario logueado a la landing (#295, segunda pasada).
     mockIsAuthenticated = true;
+    mockAuthRole = "estudiante";
 
     render(<EnrollPage />);
 
@@ -368,5 +375,63 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
 
     const telefonoRow = screen.getByText("Teléfono").closest("li");
     expect(within(telefonoRow as HTMLElement).queryByText(/revisar/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// La salida del asistente (#295, segunda pasada)
+//
+// La primera pasada del #295 dio por bueno este control porque su condición se
+// LEE bien: autenticado -> /student, si no -> /. Los dos lados están mal.
+//
+// Uno: decidía sin saber. `isAuthenticated` es false mientras la sesión se
+// hidrata (AuthContext arranca en `session: null, isLoading: true`), así que
+// un usuario logueado veía "Volver al Inicio" durante ese round trip y, si
+// tocaba ahí, salía a la landing. Un control no puede afirmar un destino que
+// todavía no conoce -- es el mismo defecto que el issue nombró, una pantalla
+// más allá.
+//
+// Dos: `/student` no es la casa de todos. Un admin o un entrenador logueado
+// no vuelve al portal del alumno.
+// ---------------------------------------------------------------------------
+
+describe("EnrollPage — la salida del asistente", () => {
+  beforeEach(() => {
+    mockIsAuthenticated = false;
+    mockAuthRole = null;
+    mockAuthLoading = false;
+  });
+
+  it("manda al sitio público al visitante anónimo, que es de donde vino", () => {
+    render(<EnrollPage />);
+
+    expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/");
+  });
+
+  it("no ofrece ningún destino mientras todavía no sabe si hay sesión", () => {
+    // El caso que reportó el QA: logueado, pero la sesión no terminó de
+    // hidratarse. Antes decía "Volver al Inicio" y cumplía la amenaza.
+    mockAuthLoading = true;
+    render(<EnrollPage />);
+
+    expect(screen.queryByRole("link", { name: /^volver/i })).not.toBeInTheDocument();
+  });
+
+  it("devuelve a cada rol a SU casa, no al portal del alumno", () => {
+    mockIsAuthenticated = true;
+
+    mockAuthRole = "admin";
+    const { unmount } = render(<EnrollPage />);
+    expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/dashboard");
+    unmount();
+
+    mockAuthRole = "trainer";
+    const segundo = render(<EnrollPage />);
+    expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/trainer");
+    segundo.unmount();
+
+    mockAuthRole = "representante";
+    render(<EnrollPage />);
+    expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/student");
   });
 });

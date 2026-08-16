@@ -19,8 +19,7 @@ import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
 import { Accordion, BackLink, Button } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
-import { getDefaultRoute } from "@/lib/auth-utils";
-import type { UserRole } from "@/types/domain";
+import { backHrefForRole } from "@/lib/auth-utils";
 import { openHelpChat } from "@/components/chatbot/help-chat-store";
 import { FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
 
@@ -67,24 +66,6 @@ const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; iconFg:
 
 function sectionSlug(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-}
-
-/**
- * Where "volver" goes from a screen that is reachable from everywhere.
- *
- * This page is public, but the sidebar's "Preguntas frecuentes", the chat
- * widget and /student all link into it from INSIDE the product. A fixed "/"
- * therefore threw a signed-in admin out to the public landing (#295): the way
- * out of the app, offered as the way back.
- *
- * `unsupported` deliberately falls through to the public site rather than to
- * its own home. That home is /unauthorized — not a place anyone returns TO,
- * and not a name `lib/destinations.ts` carries, so `BackLink` would throw on
- * it instead of rendering.
- */
-function backHrefForRole(role: UserRole | null | undefined): string {
-  if (!role || role === "unsupported") return "/";
-  return getDefaultRoute(role);
 }
 
 export default function AyudaPage(): React.ReactElement {
