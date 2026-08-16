@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { STAT_GRID } from "@/components/ui";
 import StudentPage from "@/app/student/page";
 import type { StudentPortalSummary } from "@/services/api";
 import type { PagoPersona } from "@/services/api";
@@ -885,8 +886,36 @@ describe("StudentPage — training panel", () => {
 
     render(<StudentPage />);
 
-    expect(await screen.findByText(/de sus últimas 3 sesiones registradas/i)).toBeInTheDocument();
-    expect(screen.getByText("2 de 3")).toBeInTheDocument();
+    // La cifra vive en la tile "Asistencia" de la fila de pulso; el pie del
+    // panel se quedó con el ALCANCE, que es lo que la tile no puede decir.
+    // Estar en los dos lugares sería el recap duplicado que el panel del
+    // entrenador ya borró una vez.
+    expect(await screen.findByText(/sobre sus últimas 3 sesiones registradas/i)).toBeInTheDocument();
+
+    const pulso = within(screen.getByTestId("student-pulse"));
+    expect(pulso.getByText("Asistencia")).toBeInTheDocument();
+    // 2 de 3 asistidas (present + late) = 67%.
+    expect(pulso.getByText("67")).toBeInTheDocument();
+    expect(pulso.getByText("2 de 3 sesiones")).toBeInTheDocument();
+  });
+
+  it("no repite la cifra de asistencia fuera de su tile", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        recentSessions: [
+          { fecha: "2026-07-20", horario: "Lunes 15:00 — 16:00", estado: "present" },
+          { fecha: "2026-07-18", horario: "Viernes 15:00 — 16:00", estado: "absent" },
+          { fecha: "2026-07-15", horario: "Lunes 15:00 — 16:00", estado: "late" },
+        ],
+      },
+    });
+
+    render(<StudentPage />);
+    await screen.findByTestId("student-pulse");
+
+    expect(screen.getAllByText("2 de 3 sesiones")).toHaveLength(1);
   });
 
   it("makes no attendance claim at all when nothing has been recorded", async () => {
@@ -1358,5 +1387,63 @@ describe("StudentPage — the no-schedule state fills its box and offers a way o
     const emptyState = title.parentElement;
     expect(emptyState?.className).toMatch(/\bflex-1\b/);
     expect(emptyState?.className).toMatch(/justify-center/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// La fila de pulso — /student en la gramática de /dashboard
+//
+// El dueño aprueba el panel de admin y pidió que esta pantalla se rehiciera
+// sobre esa. Lo que faltaba era la FORMA: el vocabulario ya estaba (el carnet
+// es coal con su cifra en `font-display`), pero no había ninguna fila de
+// tiles. Lo que NO se portó es el carnet como banda a lo ancho: tiene
+// proporciones de credencial imprimible (#297) y el fix 12b ya probó
+// estirarlo, con el sobrante cayendo dentro de la tarjeta.
+// ---------------------------------------------------------------------------
+
+describe("StudentPage — la fila de pulso", () => {
+  it("usa la misma grilla de tiles que el panel de admin", async () => {
+    render(<StudentPage />);
+
+    expect((await screen.findByTestId("student-pulse")).className).toBe(STAT_GRID);
+  });
+
+  it("cuenta los entrenamientos de la semana como ventanas, no como filas", async () => {
+    render(<StudentPage />);
+    const pulso = within(await screen.findByTestId("student-pulse"));
+
+    expect(pulso.getByText("Entrenamientos")).toBeInTheDocument();
+    expect(pulso.getByText("por semana")).toBeInTheDocument();
+  });
+
+  it("dice que no sabe en vez de decir cero cuando el horario no cargó", async () => {
+    // Un horario que falló no es un alumno sin entrenamientos, y un 0 se
+    // dibujaría con la misma confianza que una cifra real.
+    mockFetchHorariosPorAlumno.mockRejectedValue(new Error("network"));
+    render(<StudentPage />);
+    const pulso = within(await screen.findByTestId("student-pulse"));
+
+    await waitFor(() => {
+      expect(pulso.getByText("horario no disponible")).toBeInTheDocument();
+    });
+  });
+
+  it("distingue no haber pagado nunca de que la cobertura venza hoy", async () => {
+    // Sin pago aprobado no hay días que contar: la tile lo dice, no inventa
+    // un 0 que se leería como "se te vence hoy".
+    mockFetchPagosDePersona.mockResolvedValue([]);
+    render(<StudentPage />);
+    const pulso = within(await screen.findByTestId("student-pulse"));
+
+    await waitFor(() => {
+      expect(pulso.getByText("sin pago aprobado todavía")).toBeInTheDocument();
+    });
+  });
+
+  it("declara los pagos que esperan validación del club", async () => {
+    render(<StudentPage />);
+    const pulso = within(await screen.findByTestId("student-pulse"));
+
+    expect(pulso.getByText("Pagos en revisión")).toBeInTheDocument();
   });
 });

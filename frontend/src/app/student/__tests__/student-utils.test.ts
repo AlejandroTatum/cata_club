@@ -17,6 +17,7 @@ import {
   resolveCoverageEnd,
   describePaymentSituation,
   buildWeeklyTrainingSchedule,
+  contarEntrenamientosSemanales,
   findNextTrainingSessions,
   COVERAGE_ENDING_SOON_DAYS,
 } from "../student-utils";
@@ -666,5 +667,49 @@ describe("findNextTrainingSessions", () => {
 
   it("returns nothing when there is no schedule to walk", () => {
     expect(findNextTrainingSessions([], 3, WEDNESDAY_MORNING)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// La fila de tiles: /student en la gramática de /dashboard
+// ---------------------------------------------------------------------------
+
+describe("contarEntrenamientosSemanales", () => {
+  it("cuenta ventanas de entrenamiento, no filas de horario", () => {
+    // Tres bloques adyacentes de una hora son UN entrenamiento -- es lo que el
+    // seed crea para un "Mensual Infantil", y contar filas diría 3.
+    expect(
+      contarEntrenamientosSemanales([
+        asignacion("LUNES", "15:00:00", "16:00:00"),
+        asignacion("LUNES", "16:00:00", "17:00:00"),
+        asignacion("LUNES", "17:00:00", "18:00:00"),
+      ]),
+    ).toBe(1);
+  });
+
+  it("cuenta dos veces el día que tiene dos turnos separados", () => {
+    // Y por eso no cuenta DÍAS: quien va sábado a la mañana y a la tarde
+    // entrena dos veces, no una.
+    expect(
+      contarEntrenamientosSemanales([
+        asignacion("SABADO", "09:00:00", "11:00:00"),
+        asignacion("SABADO", "18:00:00", "20:00:00"),
+      ]),
+    ).toBe(2);
+  });
+
+  it("no cuenta lo que el panel de abajo tampoco muestra", () => {
+    // Filas con horas imposibles las descarta `buildWeeklyTrainingSchedule`.
+    // Si la cifra las contara, diría un número que la lista no sostiene.
+    expect(
+      contarEntrenamientosSemanales([
+        asignacion("MARTES", "18:00:00", "18:00:00"),
+        asignacion("MARTES", "20:00:00", "19:00:00"),
+      ]),
+    ).toBe(0);
+  });
+
+  it("es cero para un alumno sin horarios asignados", () => {
+    expect(contarEntrenamientosSemanales([])).toBe(0);
   });
 });

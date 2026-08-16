@@ -20,7 +20,17 @@ import type {
   PagoPersona,
 } from "@/services/api";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
-import { EmptyState, ErrorState, LoadingState, PAGE_RAIL, buttonClasses, cn } from "@/components/ui";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PAGE_RAIL,
+  STAT_GRID,
+  StatCard,
+  StatTrack,
+  buttonClasses,
+  cn,
+} from "@/components/ui";
 import AgeUpConfirmation from "@/components/AgeUpConfirmation";
 import ManagedStudentPicker, {
   useManagedProfiles,
@@ -40,6 +50,8 @@ import {
   paymentBandTone,
   resolveCoverageEnd,
   summarizeRecentAttendance,
+  contarEntrenamientosSemanales,
+  daysUntil,
   type PaymentSituation,
   type UpcomingTraining,
 } from "./student-utils";
@@ -651,13 +663,12 @@ function TrainingPanel({
       <div className="mt-auto flex flex-wrap items-center justify-between gap-x-5 gap-y-field border-t border-line bg-sunken px-5 py-3.5">
         <p className="text-xs leading-relaxed text-ink-3-strong">
           {recap ? (
-            <>
-              De {scope} asistió a{" "}
-              <b className="font-semibold text-ink">
-                {recap.attended} de {recap.total}
-              </b>
-              .
-            </>
+            // La CIFRA se fue a la tile "Asistencia" de la fila de pulso: acá
+            // queda el alcance, que es lo que la tile no puede decir ("sus
+            // últimas 10 sesiones registradas"). Repetir "8 de 10" en los dos
+            // lugares habría sido el recap duplicado que este proyecto ya
+            // borró una vez en el panel del entrenador.
+            <>Sobre {scope}.</>
           ) : viewingOwnProfile ? (
             "Su asistencia aparecerá aquí en cuanto el entrenador tome lista."
           ) : (
@@ -829,6 +840,33 @@ function ActivePortalView({
         : 0,
     [pagosState],
   );
+  /**
+   * Las tres cifras derivadas de la fila de pulso. Ninguna dispara una
+   * llamada: salen del estado que esta pantalla ya tenía.
+   *
+   * `null` significa "todavía no se sabe", nunca 0. Un alumno sin pago
+   * aprobado y uno cuya cobertura vence hoy son situaciones distintas, y un
+   * horario que no cargó no es un alumno sin entrenamientos.
+   */
+  const diasDeCobertura = useMemo(() => daysUntil(coverageEnd), [coverageEnd]);
+  const entrenamientosSemanales = useMemo(
+    () =>
+      horariosState.status === "ready"
+        ? contarEntrenamientosSemanales(horariosState.asignaciones)
+        : null,
+    [horariosState],
+  );
+  const asistencia = useMemo(() => {
+    const recap = selectedProfile
+      ? summarizeRecentAttendance(selectedProfile.recentSessions)
+      : null;
+    if (!recap) return null;
+    return {
+      ...recap,
+      porcentaje: Math.round((recap.attended / recap.total) * 100),
+    };
+  }, [selectedProfile]);
+
   const selectedIsMinor = isMinor(selectedProfile?.fechaNacimiento);
   /**
    * Whether the profile on screen is the account holder's own, rather than a
@@ -956,6 +994,68 @@ function ActivePortalView({
         // absorbs free space its container ALREADY has; with nothing stretched
         // it has nothing to absorb, which is exactly how the same attempt died
         // on the profile screen.
+        <>
+        {/*
+          LA FILA DE PULSO, en la gramática de `/dashboard` (STAT_GRID).
+
+          Es lo que faltaba para que esta pantalla y el panel de admin dejaran
+          de leerse como dos productos: el vocabulario ya estaba -- el carnet
+          es coal con su cifra en `font-display` -- pero la forma no, porque
+          acá no había ninguna fila de tiles.
+
+          Lo que NO se portó, y por qué: el carnet no se convierte en banda a
+          lo ancho. Tiene proporciones de carnet, no de columna -- el #297
+          acaba de volverlo una credencial imprimible de 54x85.6mm-- y el fix
+          12b ya probó estirarlo: el sobrante terminó DENTRO de la tarjeta,
+          bajo su grilla de datos. Tampoco se toca el `1fr 1fr` del split, que
+          es el fix 12c: el riel de 340px de `PAGE_RAIL` dejaba el carnet a
+          tres cuartos de la fila, mucho más de lo que sus cuatro datos llenan.
+
+          Cada cifra sale de datos que la pantalla ya tenía, y ninguna repite
+          una cifra que ya esté abajo. La de asistencia se MUDÓ: el pie de
+          "Esta semana" cedió su "8 de 10" y se quedó con el alcance, que es lo
+          que una tile no puede decir.
+        */}
+        <div data-testid="student-pulse" className={STAT_GRID}>
+          <StatCard
+            label="Cobertura"
+            value={diasDeCobertura === null ? "—" : Math.abs(diasDeCobertura)}
+            unit={diasDeCobertura === null ? undefined : diasDeCobertura === 1 || diasDeCobertura === -1 ? "día" : "días"}
+            hint={
+              diasDeCobertura === null
+                ? "sin pago aprobado todavía"
+                : diasDeCobertura < 0
+                  ? "vencida"
+                  : "de membresía paga"
+            }
+          />
+          <StatCard
+            label="Asistencia"
+            value={asistencia === null ? "—" : asistencia.porcentaje}
+            unit={asistencia === null ? undefined : "%"}
+            hint={
+              asistencia === null ? (
+                "sin listas tomadas todavía"
+              ) : (
+                <span className="flex flex-col gap-y-field">
+                  <StatTrack value={asistencia.attended} total={asistencia.total} />
+                  <span>{`${asistencia.attended} de ${asistencia.total} sesiones`}</span>
+                </span>
+              )
+            }
+          />
+          <StatCard
+            label="Entrenamientos"
+            value={entrenamientosSemanales ?? "—"}
+            hint={entrenamientosSemanales === null ? "horario no disponible" : "por semana"}
+          />
+          <StatCard
+            label="Pagos en revisión"
+            value={pendingPagos}
+            hint={pendingPagos === 0 ? "nada esperando validación" : "esperan validación del club"}
+          />
+        </div>
+
         <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,1fr)_minmax(0,1fr)]", "flex-1")}>
           <div className="flex flex-col gap-5">
             <Carnet
@@ -1032,6 +1132,7 @@ function ActivePortalView({
             />
           </div>
         </div>
+        </>
       )}
 
       {/* A minor manages nothing on their own account: no dependents, no
