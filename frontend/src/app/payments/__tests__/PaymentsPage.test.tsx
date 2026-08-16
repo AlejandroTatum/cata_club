@@ -157,32 +157,6 @@ async function openRequest(studentName: string): Promise<void> {
   fireEvent.click(action);
 }
 
-/**
- * The desktop table's batch checkbox for a given student, scoped by row
- * rather than by accessible name: several unreviewed rows can carry the same
- * shared reason text, so the row is what disambiguates them in a lookup.
- */
-function batchCheckbox(studentName: string): HTMLElement {
-  const row = within(queueTable()).getByText(studentName).closest("tr");
-  if (!row) throw new Error(`No row found for ${studentName}`);
-  return within(row as HTMLElement).getByRole("checkbox");
-}
-
-/**
- * The accessible name an `aria-labelledby` list produces: the referenced
- * elements' text content, in order, joined by a space. Computed by hand
- * rather than imported from an accessibility library so the assertion does
- * not depend on one being resolvable in this workspace.
- */
-function accessibleNameFromLabelledby(el: HTMLElement): string {
-  return (el.getAttribute("aria-labelledby") ?? "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
-    .join(" ")
-    .trim();
-}
-
 /** Tick every checklist item, which is what unlocks "Aprobar pago". */
 function completeChecklist(): void {
   const group = screen.getByRole("group", { name: /antes de aprobar/i });
@@ -845,242 +819,46 @@ describe("PaymentsPage — unrelated happy path", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Batch approval — multi-select that commits reviews, never replaces them
+// One payment, one decision — the batch path is gone
+//
+// The queue used to carry a per-row checkbox that only became usable after
+// that payment's own detail checklist had been completed and parked. For an
+// admin who had parked nothing yet — which is every admin opening the screen
+// — the whole column was therefore dead on arrival, and the only thing
+// explaining it was a single muted line above the list. The batch was removed
+// rather than re-signposted: a payment is reviewed and decided in its own
+// detail view, and nowhere else.
 // ---------------------------------------------------------------------------
 
-describe("PaymentsPage — batch approval", () => {
+describe("PaymentsPage — one payment is one decision", () => {
   beforeEach(() => {
     mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, SECOND_PENDING]);
   });
 
-  /** Complete the open detail's checklist and park it for the batch. */
-  async function parkOpenDetail(): Promise<void> {
-    await screen.findByRole("button", { name: /aprobar pago/i });
-    completeChecklist();
-    fireEvent.click(screen.getByRole("button", { name: /revisado, aprobar después/i }));
-  }
-
-  /** Open a request from the queue, then park it. */
-  async function reviewForBatch(studentName: string): Promise<void> {
-    await openRequest(studentName);
-    await parkOpenDetail();
-  }
-
-  /** Park both pending requests: parking the first advances to the second. */
-  async function reviewBothForBatch(): Promise<void> {
-    await reviewForBatch("Juan Pérez");
-    await parkOpenDetail();
-  }
-
-  it("cannot select a payment that was never reviewed, and says why on screen", async () => {
-    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, SECOND_PENDING]);
+  it("offers no per-row selection control in the queue", async () => {
     renderPage();
     await screen.findByTestId("payments-table");
 
-    const checkbox = batchCheckbox("Juan Pérez");
-    expect(checkbox).toBeDisabled();
-    // The reason used to be duplicated inline next to every unreviewed
-    // checkbox, which is what stacked one word per line in the batch
-    // column's 52px width. It now reads once, above the list, and every
-    // unreviewed checkbox's accessible name is composed from that single
-    // node plus the row's own student name — real text a sighted admin can
-    // read, and the same text a screen reader announces, never duplicated
-    // per row. Both pending rows here are unreviewed, so the shared reason
-    // alone would not be a unique name; the student name is what
-    // disambiguates them.
-    const reason = "Un pago se puede sumar a un lote recién después de revisarlo.";
-    expect(screen.getAllByText(reason)).toHaveLength(1);
-    const row = checkbox.closest("tr") as HTMLElement;
-    expect(within(row).queryByText(reason)).not.toBeInTheDocument();
-    expect(checkbox).toHaveAccessibleName(`Juan Pérez ${reason}`);
-    expect(screen.queryByRole("group", { name: /aprobación por lote/i })).not.toBeInTheDocument();
-
-    // It renders once, above the list, on the page canvas rather than inside a
-    // card — and `ink-3` only clears AA on `paper`. Measured against the QA
-    // stack this line came out 3.78:1 at 12.5px, under the 4.5:1 floor, which
-    // made the sentence explaining WHY every batch checkbox is disabled the
-    // least legible string on the screen. `ink-3-strong` is the step the ramp
-    // declares for this surface.
-    expect(screen.getByText(reason)).toHaveClass("text-ink-3-strong");
+    expect(within(queueTable()).queryAllByRole("checkbox")).toHaveLength(0);
   });
 
-  it("requires the payment's own checklist before it can be parked for a batch", async () => {
+  it("does not explain a batch that no longer exists", async () => {
     renderPage();
-    await openRequest("Juan Pérez");
+    await screen.findByTestId("payments-table");
 
-    // Same gate as "Aprobar pago": the batch is a commit path, not a shortcut.
-    expect(await screen.findByRole("button", { name: /revisado, aprobar después/i })).toBeDisabled();
-    completeChecklist();
-    expect(screen.getByRole("button", { name: /revisado, aprobar después/i })).toBeEnabled();
-  });
-
-  it("parks a reviewed payment without approving it, and moves to the next unreviewed one", async () => {
-    renderPage();
-    await reviewForBatch("Juan Pérez");
-
-    // Still pending: nothing was sent.
-    expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
-    expect(await screen.findByText("Pendiente 2 de 2")).toBeInTheDocument();
-  });
-
-  it("shows the parked payments as a batch with its count and total", async () => {
-    renderPage();
-    await reviewBothForBatch();
-
-    // Both reviewed → the queue comes back on its own.
-    const bar = await screen.findByRole("group", { name: /aprobación por lote/i });
-    expect(bar.textContent).toContain("2 de 2 pagos revisados seleccionados");
-    expect(bar.textContent).toContain("$75,00");
-    expect(batchCheckbox("Juan Pérez")).toBeEnabled();
-    expect(within(queueTable()).getAllByText("Revisado")).toHaveLength(2);
-  });
-
-  // The density rule from design review: a screen keeps one line of prose at
-  // most, and anything that explains how the system works moves to Ayuda. The
-  // "N pagos revisados esperan aprobación. Elija cuáles aprobar juntos." copy
-  // repeated the "Seleccionar los N revisados" button right below it, so the
-  // instructional half is gone — replaced by a link to the FAQ answer that
-  // already covers batch approval, for whoever still wants the explanation.
-  it("keeps the parked-batch prompt to one short line, with a link to the explanation instead of prose", async () => {
-    // A single pending payment: parking it has nothing left to advance to, so
-    // it returns straight to the queue with the batch bar visible. Parking
-    // pre-selects it into the batch, so "nothing selected" — the copy under
-    // test — only shows once that selection is explicitly cleared.
-    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST]);
-    renderPage();
-    await reviewForBatch("Juan Pérez");
-    const bar = await screen.findByRole("group", { name: /aprobación por lote/i });
-    fireEvent.click(within(bar).getByRole("button", { name: /limpiar selección/i }));
-
-    expect(bar.textContent).toContain("1 pagos revisados esperan aprobación.");
-    expect(bar.textContent).not.toMatch(/elija cuáles aprobar juntos/i);
-    const helpLink = within(bar).getByRole("link", { name: /cómo funciona/i });
-    expect(helpLink).toHaveAttribute("href", "/ayuda#faq-si-es-administrador");
-  });
-
-  it("marks a parked payment's own detail with a compact badge, not a sentence explaining the batch", async () => {
-    renderPage();
-    // Parking Juan auto-advances to Sofia's detail — back to the queue, then
-    // reopen Juan's own detail to see how a parked payment reads there.
-    await reviewForBatch("Juan Pérez");
-    fireEvent.click(await screen.findByRole("link", { name: /volver a membresías y pagos/i }));
-    await openRequest("Juan Pérez");
-
-    await screen.findByRole("heading", { name: /detalle de la solicitud/i });
+    expect(screen.queryByText(/sumar a un lote/i)).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/ya está marcado como revisado y espera en la cola/i),
+      screen.queryByRole("region", { name: /aprobación por lote/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/revisado.*lote/i)).toBeInTheDocument();
   });
 
-  it("names the payments in the confirmation before approving any of them", async () => {
-    renderPage();
-    await reviewBothForBatch();
-
-    fireEvent.click(await screen.findByRole("button", { name: /^aprobar 2 pagos$/i }));
+  it("decides a reviewed payment on the spot instead of parking it", async () => {
+    await openPendingWithChecklistDone();
 
     expect(
-      within(screen.getByRole("dialog")).getByText(
-        /Se van a aprobar 2 pagos ya revisados, por un total de \$75,00\. Se activan las membresías de Juan Pérez, Sofia Vera\./,
-      ),
-    ).toBeInTheDocument();
-    expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
-  });
-
-  it("sends one call per payment, with the period each was reviewed with", async () => {
-    renderPage();
-    await reviewBothForBatch();
-
-    fireEvent.click(await screen.findByRole("button", { name: /^aprobar 2 pagos$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^aprobar los 2$/i }));
-
-    // No batch endpoint exists (PATCH /membresias/pagos/{id}/validar is per
-    // payment), so N sequential calls is the honest implementation.
-    await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(2));
-    expect(mockUpdatePaymentValidation).toHaveBeenNthCalledWith(1, "req-1", {
-      action: "approved",
-      startDate: "2026-07-01",
-      endDate: "2026-08-01",
-    });
-    expect(mockUpdatePaymentValidation).toHaveBeenNthCalledWith(2, "req-2", {
-      action: "approved",
-      startDate: "2026-07-01",
-      endDate: "2026-08-01",
-    });
-  });
-
-  it("reports a half-done batch by name, and keeps the failures ready to retry", async () => {
-    mockUpdatePaymentValidation.mockImplementation((id: string) =>
-      id === "req-2"
-        ? Promise.reject(new Error("500"))
-        : Promise.resolve({ ...PENDING_REQUEST, id, validationStatus: "validado" }),
-    );
-    renderPage();
-    await reviewBothForBatch();
-
-    fireEvent.click(await screen.findByRole("button", { name: /^aprobar 2 pagos$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^aprobar los 2$/i }));
-
-    const report = await screen.findByRole("region", { name: /el lote quedó a medias/i });
-    expect(within(report).getByText(/Se aprobaron 1: Juan Pérez\./)).toBeInTheDocument();
-    expect(within(report).getByText(/No se pudo aprobar 1 pago: Sofia Vera\./)).toBeInTheDocument();
-    // The survivor is still pending, still reviewed, still selected — one click
-    // retries it and nothing has to be reviewed twice.
-    expect(within(report).getByRole("button", { name: /reintentar el pago/i })).toBeEnabled();
-    expect(await screen.findByRole("button", { name: /^aprobar 1 pago$/i })).toBeEnabled();
-  });
-
-  it("drops the batch mark for a payment approved on its own", async () => {
-    // The default mock echoes back the id it was called with — approving Sofía
-    // must resolve Sofía, not whichever request the fixture was cloned from.
-    renderPage();
-    await reviewForBatch("Juan Pérez");
-
-    // Still on the queue-parked state for Juan; approve Sofia individually.
-    await screen.findByRole("button", { name: /aprobar pago/i });
-    completeChecklist();
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
-
-    // The queue moves the moment the decision is made, but the request itself
-    // waits out the undo window — this case cares that it eventually lands.
-    await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS);
-    });
-
-    await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1));
-    // The approval auto-advances back to Juan's detail; return to the queue.
-    fireEvent.click(await screen.findByRole("link", { name: /volver a membresías y pagos/i }));
-
-    // Juan is the only one left in the batch; the resolved payment left it.
-    const bar = await screen.findByRole("group", { name: /aprobación por lote/i });
-    expect(bar.textContent).toContain("1 de 1 pagos revisados seleccionados");
-    expect(within(bar).getByRole("button", { name: /^aprobar 1 pago$/i })).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// An unreviewed batch checkbox's accessible name must stay unique per row.
-//
-// The visible reason is one sentence shared above the whole list, pointed at
-// by every unreviewed checkbox's `aria-labelledby`. With two unreviewed rows
-// on screen, a screen reader that only heard the shared reason would
-// announce two controls with the identical name and give the admin no way
-// to tell them apart.
-// ---------------------------------------------------------------------------
-
-describe("PaymentsPage — unreviewed batch checkboxes keep distinct accessible names", () => {
-  it("names each unreviewed checkbox after its own student, not just the shared reason", async () => {
-    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, SECOND_PENDING]);
-    renderPage();
-    await screen.findByTestId("payments-table");
-
-    const juanName = accessibleNameFromLabelledby(batchCheckbox("Juan Pérez"));
-    const sofiaName = accessibleNameFromLabelledby(batchCheckbox("Sofia Vera"));
-
-    expect(juanName).toContain("Juan Pérez");
-    expect(sofiaName).toContain("Sofia Vera");
-    expect(juanName).not.toBe(sofiaName);
+      screen.queryByRole("button", { name: /aprobar después/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeEnabled();
   });
 });
 

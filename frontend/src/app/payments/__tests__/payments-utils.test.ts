@@ -17,8 +17,6 @@ import {
   getAutoAdvanceId,
   buildApprovalChecklist,
   classifyPaymentMethod,
-  describeBatchApproval,
-  getNextUnreviewedId,
   composeRejectionReason,
   REJECTION_REASONS,
   REJECTION_NOTE_MAX_LENGTH,
@@ -259,48 +257,6 @@ describe("buildApprovalChecklist", () => {
     expect(keys).toEqual(
       buildApprovalChecklist({ ...transfer, expectedAmountLabel: "$40,00" }).items.map((c) => c.key),
     );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Batch approval
-// ---------------------------------------------------------------------------
-
-describe("getNextUnreviewedId", () => {
-  const pending = buildRequests(4);
-
-  it("walks forward to the first request still waiting for a review", () => {
-    expect(getNextUnreviewedId(pending, "req-0", new Set(["req-0"]))).toBe("req-1");
-    expect(getNextUnreviewedId(pending, "req-0", new Set(["req-0", "req-1"]))).toBe("req-2");
-  });
-
-  it("wraps to the top for anything skipped on the way down", () => {
-    expect(getNextUnreviewedId(pending, "req-3", new Set(["req-0", "req-2", "req-3"]))).toBe("req-1");
-  });
-
-  it("returns null when everything is reviewed, so the admin lands back on the queue", () => {
-    const all = new Set(pending.map((r) => r.id));
-    expect(getNextUnreviewedId(pending, "req-2", all)).toBeNull();
-    expect(getNextUnreviewedId([], "req-0", new Set())).toBeNull();
-  });
-});
-
-describe("describeBatchApproval", () => {
-  it("states the count, the money and who it lands on", () => {
-    expect(describeBatchApproval(["Ana Ruiz", "Beto Lima"], "$50,00")).toBe(
-      "Se van a aprobar 2 pagos ya revisados, por un total de $50,00. Se activan las membresías de Ana Ruiz, Beto Lima.",
-    );
-  });
-
-  it("agrees in the singular rather than saying '1 pagos'", () => {
-    expect(describeBatchApproval(["Ana Ruiz"], "$25,00")).toBe(
-      "Se va a aprobar 1 pago ya revisado, por $25,00. Se activa la membresía de Ana Ruiz.",
-    );
-  });
-
-  it("truncates a long batch instead of printing an unreadable roll call", () => {
-    const names = ["A", "B", "C", "D", "E", "F"];
-    expect(describeBatchApproval(names, "$150,00")).toContain("A, B, C, D y 2 más");
   });
 });
 

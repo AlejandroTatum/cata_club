@@ -303,62 +303,6 @@ export function buildApprovalChecklist({
   };
 }
 
-// ---------------------------------------------------------------------------
-// Batch approval (P7 — "selección múltiple + validación por lote")
-// ---------------------------------------------------------------------------
-
-/**
- * The next pending request still waiting to be reviewed, after `currentId`.
- *
- * Used by "Marcar como revisado", which — unlike approving — leaves the request
- * in the pending queue, so `getAutoAdvanceId` would walk straight back into an
- * item the admin has already been through. Looks forward first, then wraps to
- * the top for anything skipped, and returns null when nothing is left to
- * review, which sends the admin back to the queue to commit the batch.
- */
-export function getNextUnreviewedId(
-  pending: PaymentValidationRequest[],
-  currentId: string,
-  reviewedIds: ReadonlySet<string>,
-): string | null {
-  const index = pending.findIndex((r) => r.id === currentId);
-  const start = index === -1 ? 0 : index + 1;
-  const order = [...pending.slice(start), ...pending.slice(0, Math.max(start - 1, 0))];
-  return order.find((r) => r.id !== currentId && !reviewedIds.has(r.id))?.id ?? null;
-}
-
-/**
- * The confirmation sentence for a batch approval: what is about to happen, to
- * how many, and to whom.
- *
- * Names are the point — "¿Aprobar 7 pagos?" is not a decision anyone can make.
- * Long batches are truncated because a dialog nobody reads is the same as no
- * dialog at all.
- */
-export function describeBatchApproval(
-  studentNames: string[],
-  totalLabel: string,
-  maxNames = 4,
-): string {
-  const count = studentNames.length;
-  const shown = studentNames.slice(0, maxNames).join(", ");
-  const rest = count - Math.min(count, maxNames);
-  const names = rest > 0 ? `${shown} y ${rest} más` : shown;
-  const head =
-    count === 1
-      ? `Se va a aprobar 1 pago ya revisado, por ${totalLabel}.`
-      : `Se van a aprobar ${count} pagos ya revisados, por un total de ${totalLabel}.`;
-  const tail =
-    count === 1 ? `Se activa la membresía de ${names}.` : `Se activan las membresías de ${names}.`;
-  return `${head} ${tail}`;
-}
-
-/** Outcome of a batch run — every item lands in exactly one of the two lists. */
-export interface BatchApprovalOutcome {
-  approved: string[];
-  failed: string[];
-}
-
 export interface RejectionReasonOption {
   key: string;
   label: string;
