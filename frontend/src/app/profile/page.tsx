@@ -10,7 +10,9 @@
  *      coal shoulder (D7), the avatar astride its lower edge, the name, the
  *      membership badge when there is one, the "Cambiar foto" trigger and, in
  *      its own full-width row, "Correo de acceso" — plus, for anyone who has
- *      one, `MembershipCard` below it.
+ *      one, `MembershipCard` below it, and `SessionsCard` below that for
+ *      anyone with a session history (see "The gap this screen used to
+ *      document" at the foot of this doc).
  *   2. The workspace — "Datos personales" (one datum per `DetailRow`,
  *      including "Correo de cuenta" and "Rol" — deliberately repeated from
  *      the identity panel, see below), "Información de tu rol" (ALWAYS
@@ -83,14 +85,28 @@
  *
  * - **"Cédula"** — only the admin-facing `/personas/{id}` carries it, and
  *   that is not readable by the account itself.
- * - **"2 dispositivos" (device count on "Otras sesiones")** — the backend
- *   has no session enumeration at all. `POST /auth/sesiones/invalidar` bumps
- *   `Usuario.version_sesion` (an opaque epoch counter) and invalidates every
- *   token stamped with an older value; it does not track individual
- *   sessions/devices (IP, user-agent, issued-at), so there is nothing to
- *   count. Showing a number here would be invented, not read. Building this
- *   for real needs a `sesiones` table (device/UA/IP/issued-at) the backend
- *   does not have yet.
+ * - **"2 dispositivos" (device count on "Otras sesiones")** — still excluded,
+ *   and the reason moved rather than disappeared. It used to be "the backend
+ *   has no session enumeration at all"; that is no longer true — `SessionsCard`
+ *   below reads a real one. What stays true is that a COUNT beside that button
+ *   would be a second, weaker rendering of a list the same column already
+ *   shows in full, with names and dates. The row keeps its verb; the card
+ *   keeps the facts.
+ *
+ * ## The gap this screen used to document, and how it closed
+ *
+ * The identity column ran ~500px short of the workspace on any account with no
+ * membership card — staff, in other words — and the note by `ProfileLayout`
+ * said so in as many words. The fix could not be "show more of what we have":
+ * every field `GET /auth/me` returns was already on screen, correo and rol
+ * twice by the owner's own requirement, leaving only `fechaNacimiento` unused.
+ * And this file had already retired two attempts to fill space with something
+ * that was not data ("Cuenta activa", the device count above).
+ *
+ * So the space is filled by a datum that did not exist before: `SessionsCard`,
+ * backed by a `sesion` table, a `GET /auth/me/sesiones` endpoint and their
+ * migration. That table is OBSERVATIONAL — `Usuario.version_sesion` remains
+ * the only thing that decides whether a token is valid.
  */
 
 "use client";
@@ -119,6 +135,7 @@ import type {
 } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
 import { personInitials } from "@/app/student/student-utils";
+import SessionsCard from "./SessionsCard";
 import { Badge, Button, DataBox, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
@@ -1059,6 +1076,20 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           />
 
           {selfMembership && <MembershipCard membership={selfMembership} />}
+
+          {/*
+            Lo que cierra el hueco que este archivo venía documentando: "a
+            staff account, which has no membership card, keeps a taller gap".
+            Va para TODOS los roles, no solo staff -- un alumno también tiene
+            derecho a ver desde dónde entró, y con la tarjeta de membresía
+            arriba la columna simplemente queda mejor servida.
+
+            Se monta sin condición y decide sola si vale la pena renderizarse:
+            sin filas devuelve `null`, y un fallo de red la deja invisible en
+            vez de gritar. Es contenido de compañía; nadie abre esta pantalla
+            para leerlo.
+          */}
+          <SessionsCard />
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-5">

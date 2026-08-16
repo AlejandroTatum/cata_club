@@ -64,6 +64,7 @@ const mockSubirFotoPerfil = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 const mockInvalidarOtrasSesiones = vi.fn();
+const mockFetchMisSesiones = vi.fn().mockResolvedValue([]);
 
 /**
  * The exact shape a failing call reaches a screen as. Every failure route in
@@ -88,6 +89,11 @@ vi.mock("@/services/api", () => ({
   fetchNotificaciones: () => mockFetchNotificaciones(),
   marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
   invalidarOtrasSesiones: () => mockInvalidarOtrasSesiones(),
+  // La columna de identidad monta `SessionsCard`, que llama a esto al montar.
+  // Su propio comportamiento se prueba en SessionsCard.test.tsx; acá alcanza
+  // con que exista y no devuelva nada, para que la tarjeta no se dibuje y no
+  // interfiera con las aserciones de esta pantalla.
+  fetchMisSesiones: () => mockFetchMisSesiones(),
   ApiClientError: class ApiClientError extends Error {
     status: number;
     constructor(message: string, status: number) {
