@@ -521,7 +521,57 @@ describe("StudentPage — the carnet shows the student's photo", () => {
 });
 
 /**
- * The carnet's "Franja" and the "Próximos entrenamientos" panel are two
+ * #286 slice 2 — el carnet imprime como credencial independiente.
+ *
+ * La hoja `@media print` de globals.css oculta todo el layout y deja solo
+ * `#carnet-print-area` visible (tamaño 54×85.6mm, sobre blanco). Estos tests
+ * fijan el CONTRATO del DOM que esa hoja presupone: el área de impresión en
+ * el carnet, el botón que dispara `window.print`, y que la banda de estado y
+ * los botones no viajan al impreso (`print:hidden`).
+ */
+describe("StudentPage — the carnet prints as a standalone credential", () => {
+  it("marks the carnet as the print area the @media print sheet keeps visible", async () => {
+    render(<StudentPage />);
+
+    expect(await screen.findByTestId("student-carnet")).toHaveAttribute(
+      "id",
+      "carnet-print-area",
+    );
+  });
+
+  it("offers an Imprimir carnet button that triggers window.print", async () => {
+    const printSpy = vi.fn();
+    window.print = printSpy;
+    render(<StudentPage />);
+
+    const boton = await screen.findByRole("button", { name: /imprimir carnet/i });
+    fireEvent.click(boton);
+
+    expect(printSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the action buttons from the printed sheet", async () => {
+    render(<StudentPage />);
+
+    const imprimir = await screen.findByRole("button", { name: /imprimir carnet/i });
+    // El contenedor de acciones (Imprimir + Cambiar foto) no viaja al impreso.
+    expect(imprimir.closest("div")).toHaveClass("print:hidden");
+  });
+
+  it("keeps the payment status band off the printed sheet (#286 decision)", async () => {
+    render(<StudentPage />);
+
+    // La banda vive dentro de un wrapper print:hidden — el estado cambia cada
+    // mes y un carnet plastificado con «vencido» impreso envejece mal.
+    const carnet = await screen.findByTestId("student-carnet");
+    const band = carnet.querySelector('[data-testid="carnet-status-band"]');
+    expect(band).not.toBeNull();
+    expect(band?.closest("div[class*='print:hidden']")).not.toBeNull();
+    expect(band?.textContent).not.toBe("");
+  });
+});
+
+/**anel are two
  * inches apart on one screen, and they used to disagree: the card printed
  * `tipo_membresia.franja_horaria`, a hand-typed String(80) that nothing kept
  * in sync, while the panel derived the real window from the horarios the club

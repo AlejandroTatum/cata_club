@@ -43,7 +43,7 @@ import {
   type PaymentSituation,
   type UpcomingTraining,
 } from "./student-utils";
-import { AlertTriangle, CalendarDays, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
+import { AlertTriangle, CalendarDays, Printer, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -116,10 +116,10 @@ function CarnetFact({ label, value }: { label: string; value: string }): React.R
   const windows = value.split(" · ");
   return (
     <div className="min-w-0">
-      <span className="mb-[3px] block text-2xs font-semibold uppercase leading-tight text-white/60">
+      <span className="mb-[3px] block text-2xs font-semibold uppercase leading-tight text-white/60 print:text-coal/60">
         {label}
       </span>
-      <b className="block text-sm font-bold leading-tight tabular-nums">
+      <b className="block text-sm font-bold leading-tight tabular-nums print:text-2xs">
         {windows.length > 1
           ? windows.flatMap((window, index) => {
               const nodes: React.ReactNode[] = [
@@ -300,14 +300,22 @@ function Carnet({
     <section
       data-testid="student-carnet"
       aria-label={`Carnet de socio de ${fullName}`}
+      id="carnet-print-area"
       className={cn(
         "relative flex flex-col overflow-hidden rounded-card bg-gradient-to-br from-coal to-[#2A2A33] px-6 py-[22px] text-white",
+        // #286 slice 2 — impresión: sobre blanco, texto oscuro y borde fino
+        // (legible en B/N); el gradiente oscuro saldría como bloque de tinta
+        // plano. La banda de estado y los botones se ocultan abajo. El
+        // dimensionado 54×85.6mm vive en el bloque `@media print` de
+        // globals.css, junto al truco de visibility que imprime SOLO el
+        // carnet (sin navegación ni rail).
+        "print:rounded-none print:bg-none print:bg-white print:px-4 print:py-3 print:text-coal print:shadow-none print:ring-1 print:ring-coal/25",
         className,
       )}
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute -right-[46px] -top-[46px] h-[150px] w-[150px] rounded-full bg-ball/[0.08]"
+        className="pointer-events-none absolute -right-[46px] -top-[46px] h-[150px] w-[150px] rounded-full bg-ball/[0.08] print:hidden"
       />
 
       <div className="relative z-10 flex items-center gap-[11px]">
@@ -316,12 +324,12 @@ function Carnet({
             beside it, and the section is labelled "Carnet de socio de …".
             Naming the image would make a screen reader say the club's name
             twice in a row (WCAG 1.1.1: a redundant image is decorative). */}
-        <span className="flex h-[30px] w-[30px] flex-none items-center justify-center overflow-hidden rounded-full bg-white">
-          <Image src="/brand/cata-club-logo.jpeg" alt="" width={30} height={30} className="h-[30px] w-[30px] object-cover" />
+        <span className="flex h-[30px] w-[30px] flex-none items-center justify-center overflow-hidden rounded-full bg-white print:h-[24px] print:w-[24px] print:ring-1 print:ring-coal/20">
+          <Image src="/brand/cata-club-logo.jpeg" alt="" width={30} height={30} className="h-[30px] w-[30px] object-cover print:h-[24px] print:w-[24px]" />
         </span>
         <div>
-          <b className="block text-xs font-bold leading-tight">Cata Club</b>
-          <span className="block text-2xs uppercase leading-tight text-white/60">Tenis de mesa</span>
+          <b className="block text-xs font-bold leading-tight print:text-2xs">Cata Club</b>
+          <span className="block text-2xs uppercase leading-tight text-white/60 print:text-coal/60">Tenis de mesa</span>
         </div>
       </div>
 
@@ -329,10 +337,10 @@ function Carnet({
           currently needs from them about it — so they sit close together,
           while the header above and the fact grid below are separated by
           18px. */}
-      <div className="relative z-10 mt-[18px] flex items-center gap-3">
+      <div className="relative z-10 mt-[18px] flex items-center gap-3 print:mt-3">
         <span
           data-testid="carnet-photo"
-          className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20"
+          className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20 print:h-9 print:w-9 print:bg-coal/5 print:ring-coal/30"
         >
           {profile.fotoUrl && !fotoFallback ? (
             <Image
@@ -340,48 +348,63 @@ function Carnet({
               alt={`Foto de ${fullName}`}
               width={48}
               height={48}
-              className="h-12 w-12 object-cover"
+              className="h-12 w-12 object-cover print:h-9 print:w-9"
               onError={() => setFotoFallback(true)}
             />
           ) : (
-            <span aria-hidden="true" className="text-base font-bold text-white/70">
+            <span aria-hidden="true" className="text-base font-bold text-white/70 print:text-coal/70 print:text-xs">
               {initial}
             </span>
           )}
         </span>
-        <p className="min-w-0 flex-1 text-balance text-xl font-extrabold">
+        <p className="min-w-0 flex-1 text-balance text-xl font-extrabold print:text-xs print:leading-tight">
           {fullName}
         </p>
       </div>
 
-      {canManagePhoto && (
-        <div className="relative z-10 mt-2 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => fotoInputRef.current?.click()}
-            disabled={uploadingFoto}
-            className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-2xs font-bold text-white/80 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
-          </button>
-          <input
-            ref={fotoInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFotoChange}
-            className="hidden"
-            data-testid="carnet-photo-input"
-          />
-        </div>
-      )}
+      <div className="relative z-10 mt-2 flex items-center gap-2 print:hidden">
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-2xs font-bold text-white/80 transition-colors hover:bg-white/15"
+        >
+          <Printer size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Imprimir carnet
+        </button>
+        {canManagePhoto && (
+          <>
+            <button
+              type="button"
+              onClick={() => fotoInputRef.current?.click()}
+              disabled={uploadingFoto}
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-2xs font-bold text-white/80 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
+            </button>
+            <input
+              ref={fotoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFotoChange}
+              className="hidden"
+              data-testid="carnet-photo-input"
+            />
+          </>
+        )}
+      </div>
 
       {fotoError && (
-        <p role="alert" className="relative z-10 mt-2 text-2xs text-[#FF8A93]">
+        <p role="alert" className="relative z-10 mt-2 text-2xs text-[#FF8A93] print:hidden">
           {fotoError}
         </p>
       )}
 
-      <CarnetStatusBand situation={situation} />
+      {/* Decisión #286 (slice 2): la banda de estado NO viaja al impreso — el
+          estado cambia cada mes y un carnet plastificado con «vencido» impreso
+          envejece mal. Solo pantalla. */}
+      <div className="print:hidden">
+        <CarnetStatusBand situation={situation} />
+      </div>
 
       {/* A fixed two-column grid, not `auto-fit`: the carnet used to sit in a
           340px rail, where `auto-fit` and "two columns" were the same thing.
@@ -397,7 +420,7 @@ function Carnet({
       {facts.length > 0 && (
         <div
           data-testid="carnet-facts"
-          className="relative z-10 mt-[18px] grid grid-cols-2 gap-x-4 gap-y-section border-t border-white/10 pt-[15px]"
+          className="relative z-10 mt-[18px] grid grid-cols-2 gap-x-4 gap-y-section border-t border-white/10 pt-[15px] print:mt-3 print:gap-y-field print:border-coal/20 print:pt-2"
         >
           {facts.map((fact) => (
             <CarnetFact key={fact.label} label={fact.label} value={fact.value} />

@@ -344,3 +344,51 @@
     scroll-margin-bottom: 78px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Carnet imprimible (#286, slice 2) — la hoja de impresión del carnet.
+ *
+ * Ctrl+P / «Imprimir carnet» debe sacar SOLO el carnet: vertical, tamaño
+ * credencial 54×85.6mm, legible en blanco y negro (sobre blanco, texto oscuro,
+ * borde fino — el gradiente oscuro de pantalla saldría como bloque de tinta
+ * plano). El resto de la app (navegación, rail, paneles) no aparece.
+ *
+ * El truco de `visibility` no cambia el layout de pantalla en absoluto: en
+ * print, `body *` se oculta y solo `#carnet-print-area` (el <section> del
+ * carnet) queda visible, re-posicionado a la página. Las variantes
+ * `print:*` de Tailwind en el propio componente (fondo blanco, texto coal,
+ * banda de estado oculta, botones ocultos, tamaños de credencial) hacen el
+ * resto. `@page size` es un hint: los navegadores que no lo soporten igual
+ * imprimen el carnet a 54×85.6mm porque el área lo fuerza.
+ * ------------------------------------------------------------------------- */
+@media print {
+  @page {
+    size: 54mm 85.6mm;
+    margin: 0;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  /* Ocultar TODO el layout de la app sin tocarlo (visibility, no display:
+     conserva las dimensiones en pantalla; en print solo importa lo visible). */
+  body * {
+    visibility: hidden;
+  }
+
+  #carnet-print-area,
+  #carnet-print-area * {
+    visibility: visible;
+  }
+
+  #carnet-print-area {
+    position: absolute;
+    inset: 0;
+    width: 54mm;
+    height: 85.6mm;
+    margin: 0;
+    box-shadow: none !important;
+  }
+}
