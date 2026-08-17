@@ -5,8 +5,16 @@ personas por etiquetas fue removido upstream (#131) junto con
 `prioridad_municipal`/`porcentaje_beca`, así que su export PDF nunca llegó
 a existir en `main`."""
 
+import pytest
+from reportlab.lib import colors
+from reportlab.platypus import Paragraph
+
 from app.dominio.cedula import cedula_valida
+from app.infraestructura import generador_pdf
 from app.infraestructura.generador_pdf import generar_reporte_pdf
+from app.presentacion.routers.asistencias_router import _COLUMNAS_ASISTENCIA_PDF
+from app.presentacion.routers.membresias_pagos_router import _COLUMNAS_PAGOS_PDF
+from app.presentacion.routers.personas_router import _COLUMNAS_PERSONAS_PDF
 
 
 def _crear_persona(client, cedula):
@@ -530,3 +538,105 @@ def test_reporte_pagos_exactamente_en_el_limite_da_200(client, monkeypatch):
     resp = client.get("/api/v1/membresias/pagos/reportes")
     assert resp.status_code == 200
     assert len(resp.json()) == 2
+
+
+# --- Candado de ancho: ninguna tabla de reporte excede la página (#366) ------
+
+# Peor caso conocido de cada reporte, con los datos que el club produce de
+# verdad: nombre largo en MAYÚSCULAS (más ancho que el mismo texto en
+# minúsculas) y el estado `PENDIENTE_VALIDACION`, un token de 121pt que
+# ReportLab no puede partir por ningún lado.
+_ESTUDIANTE_LARGO = "MARIA FERNANDA ALEJANDRA CHILIQUINGA TAMAYO DE LA TORRE"
+
+_REPORTES_PEOR_CASO = [
+    (
+        "pagos",
+        _COLUMNAS_PAGOS_PDF,
+        [[
+            _ESTUDIANTE_LARGO, "USD 1200.00", "REGULARIZACION", "01/03/2026",
+            "31/03/2026", "PENDIENTE_VALIDACION", "17/08/2026",
+        ]],
+    ),
+    (
+        "personas",
+        _COLUMNAS_PERSONAS_PDF,
+        [[
+            "MARIA FERNANDA ALEJANDRA", "CHILIQUINGA TAMAYO DE LA TORRE",
+            "1710034065", "0987654321", "17/08/2026",
+        ]],
+    ),
+    (
+        "asistencias",
+        _COLUMNAS_ASISTENCIA_PDF,
+        [["17/08/2026", "MIERCOLES 18:00–19:30", _ESTUDIANTE_LARGO, "JUSTIFICADO"]],
+    ),
+]
+
+
+def _reporte_construido(monkeypatch, columnas, filas):
+    """Genera el reporte real y devuelve el `SimpleDocTemplate`, la `Table` y
+    las celdas que `generar_reporte_pdf` armó por dentro.
+
+    Se interceptan las dos clases en el módulo en vez de rehacer la tabla acá
+    porque el desborde es invisible desde afuera: ReportLab dibuja igual una
+    tabla más ancha que el frame -- sin excepción y sin warning -- y los bytes
+    del PDF salen válidos. Interceptar también el documento evita copiar los
+    márgenes al test: el ancho útil contra el que se mide es el que usó el
+    generador, aunque mañana esos márgenes cambien.
+
+    Las celdas se guardan tal como se le pasaron a `Table`: durante
+    `doc.build`, ReportLab reemplaza cada una por su versión ya maquetada y el
+    contenido original deja de estar a mano."""
+    capturado: dict = {}
+    documento_original = generador_pdf.SimpleDocTemplate
+    tabla_original = generador_pdf.Table
+
+    def _capturar_documento(*args, **kwargs):
+        capturado["doc"] = documento_original(*args, **kwargs)
+        return capturado["doc"]
+
+    def _capturar_tabla(celdas, *args, **kwargs):
+        capturado["celdas"] = celdas
+        capturado["tabla"] = tabla_original(celdas, *args, **kwargs)
+        return capturado["tabla"]
+
+    monkeypatch.setattr(generador_pdf, "SimpleDocTemplate", _capturar_documento)
+    monkeypatch.setattr(generador_pdf, "Table", _capturar_tabla)
+    generar_reporte_pdf(titulo="Candado de ancho", columnas=columnas, filas=filas)
+    return capturado["doc"], capturado["tabla"], capturado["celdas"]
+
+
+@pytest.mark.parametrize(
+    "reporte, columnas, filas",
+    _REPORTES_PEOR_CASO,
+    ids=[caso[0] for caso in _REPORTES_PEOR_CASO],
+)
+def test_tabla_de_reporte_no_desborda_el_ancho_de_la_pagina(
+    monkeypatch, reporte, columnas, filas,
+):
+    """Lo que se pierde cuando la tabla desborda no es una excepción: son las
+    columnas de la derecha, dibujadas fuera del papel. Y cuál se pierde
+    depende del largo de los datos, así que el mismo reporte sale distinto
+    según a quién liste."""
+    doc, tabla, _ = _reporte_construido(monkeypatch, columnas, filas)
+
+    ancho, _alto = tabla.wrap(doc.width, doc.height)
+
+    assert ancho <= doc.width, (
+        f"el reporte de {reporte} mide {ancho:.1f}pt dentro de un frame de "
+        f"{doc.width:.1f}pt: {ancho - doc.width:.1f}pt caen fuera de la hoja"
+    )
+
+
+def test_encabezado_del_reporte_se_lee_blanco_sobre_el_rojo(monkeypatch):
+    """El encabezado viaja como `Paragraph` para que también haga wrap, y un
+    `Paragraph` pinta su propio texto: el `TEXTCOLOR` del `TableStyle` deja de
+    aplicarle. Si el color no viaja en el estilo del párrafo, el título queda
+    negro sobre el rojo institucional y no se lee."""
+    _reporte, columnas, filas = _REPORTES_PEOR_CASO[0]
+    _doc, _tabla, celdas = _reporte_construido(monkeypatch, columnas, filas)
+
+    encabezado = celdas[0]
+
+    assert all(isinstance(celda, Paragraph) for celda in encabezado)
+    assert all(celda.style.textColor == colors.white for celda in encabezado)

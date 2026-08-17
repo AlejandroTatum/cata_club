@@ -19,6 +19,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     HRFlowable,
@@ -33,6 +34,13 @@ _NOMBRE_CLUB = "Cata Club - Academia de Tenis"
 
 FORMATO_SELLO_COMPROBANTE = "%d/%m/%Y %H:%M:%S"
 FORMATO_SELLO_REPORTE = "%d/%m/%Y %H:%M"
+
+# Tipografía y relleno de la tabla de reporte. Son constantes y no números
+# sueltos porque el cálculo de anchos de columna necesita medir el texto con
+# exactamente la misma fuente y el mismo padding con que después se dibuja:
+# si los dos lados se desincronizan, la tabla vuelve a desbordar la hoja.
+_TAM_FUENTE_REPORTE = 9
+_RELLENO_REPORTE = 5
 
 
 def sello_de_tiempo(formato: str) -> str:
@@ -228,6 +236,10 @@ def generar_reporte_pdf(
         forzaba un corte fijo cada 10 filas (`PageBreak` manual) sin importar
         cuánto espacio real ocupaban esas filas, dejando la mayor parte de
         cada página en blanco.
+      - La tabla nunca es más ancha que el frame: los anchos de columna se
+        calculan contra `doc.width` (ver `_tabla_de_reporte`) en vez de
+        dejárselos a ReportLab, que los deduce del dato más largo y dibuja
+        fuera del papel lo que no entra.
       - El logo institucional y una barra roja `#D92128` se dibujan en cada
         página vía callback `onFirstPage`/`onLaterPages` de `doc.build`.
       - Si `filas` está vacío se emite un `Paragraph` centrado indicando que
@@ -278,10 +290,7 @@ def generar_reporte_pdf(
             sin_resultados_estilo,
         ))
     else:
-        datos_tabla = [columnas] + filas
-        tabla = Table(datos_tabla, hAlign="LEFT", repeatRows=1)
-        tabla.setStyle(_estilo_tabla_reporte())
-        elementos.append(tabla)
+        elementos.append(_tabla_de_reporte(columnas, filas, doc.width))
 
     doc.build(
         elementos,
@@ -297,10 +306,108 @@ def _estilo_tabla_reporte() -> TableStyle:
     """Devuelve los estilos de la tabla de un reporte tabular genérico."""
     return _construir_estilo_tabla(
         color_encabezado=_ROJO_INSTITUCIONAL,
-        tamano_fuente=9,
+        tamano_fuente=_TAM_FUENTE_REPORTE,
         color_filas_alternas="#F3F0F0",
-        relleno=5,
+        relleno=_RELLENO_REPORTE,
     )
+
+
+def _anchos_de_columna_reporte(
+    datos_tabla: list[list[str]], ancho_disponible: float,
+) -> list[float]:
+    """Reparte `ancho_disponible` entre las columnas de un reporte.
+
+    Sin `colWidths`, ReportLab le da a cada columna el ancho de su celda más
+    larga y, si la suma excede el frame, dibuja la tabla igual desde el margen
+    izquierdo: las columnas de la derecha caen fuera del papel sin excepción y
+    sin warning, y cuál se pierde depende de a quién liste el reporte.
+
+    Si la tabla entra, se respeta el ancho natural. Si no entra, cada columna
+    baja hasta su mínimo -- la palabra más larga, que es lo único que no se
+    puede partir en dos renglones -- y el sobrante se reparte proporcional a
+    la holgura que cada columna pedía de más, para que el espacio se lo lleve
+    la columna de nombres y no las cuatro de fecha, que ya están cómodas.
+    """
+    # Lo que la celda ocupa además de su texto: el padding de los dos lados
+    # más el trazo del grid que la separa de la vecina.
+    extra = 2 * _RELLENO_REPORTE + 1
+    naturales: list[float] = []
+    minimos: list[float] = []
+    for indice in range(len(datos_tabla[0])):
+        anchos_celda: list[float] = []
+        anchos_palabra: list[float] = [0.0]
+        for numero_fila, fila in enumerate(datos_tabla):
+            fuente = "Helvetica-Bold" if numero_fila == 0 else "Helvetica"
+            texto = str(fila[indice])
+            anchos_celda.append(stringWidth(texto, fuente, _TAM_FUENTE_REPORTE))
+            anchos_palabra += [
+                stringWidth(palabra, fuente, _TAM_FUENTE_REPORTE)
+                for palabra in texto.split()
+            ]
+        naturales.append(max(anchos_celda) + extra)
+        minimos.append(max(anchos_palabra) + extra)
+
+    if sum(naturales) <= ancho_disponible:
+        return naturales
+
+    sobrante = ancho_disponible - sum(minimos)
+    if sobrante <= 0:
+        # Ni las palabras sueltas entran (un `PENDIENTE_VALIDACION` de 121pt
+        # junto a otras seis columnas): se escala todo por igual y ReportLab
+        # parte las palabras. Feo, pero adentro de la hoja.
+        factor = ancho_disponible / sum(minimos)
+        anchos = [minimo * factor for minimo in minimos]
+    else:
+        holgura = sum(naturales) - sum(minimos)
+        anchos = [
+            minimo + (natural - minimo) * sobrante / holgura
+            for minimo, natural in zip(minimos, naturales)
+        ]
+
+    # El reparto suma el ancho disponible en teoría, pero en punto flotante
+    # puede pasarse por una millonésima de punto: invisible en el papel y
+    # suficiente para que la tabla vuelva a medir más que el frame. El
+    # excedente se lo come la columna más ancha, que es la que menos lo nota.
+    exceso = sum(anchos) - ancho_disponible
+    if exceso > 0:
+        mas_ancha = max(range(len(anchos)), key=anchos.__getitem__)
+        anchos[mas_ancha] -= exceso + 1e-9
+    return anchos
+
+
+def _tabla_de_reporte(
+    columnas: list[str], filas: list[list[str]], ancho_disponible: float,
+) -> Table:
+    """Arma la tabla del reporte con anchos fijos y celdas que hacen wrap.
+
+    Las celdas viajan como `Paragraph` y no como texto plano porque un texto
+    plano no se parte en renglones: exige todo su ancho de una y empuja la
+    columna. Con `Paragraph`, un nombre largo baja a una segunda línea y la
+    columna respeta el ancho que se le asignó.
+
+    OJO con el encabezado: un `Paragraph` pinta su propio texto, así que el
+    `TEXTCOLOR` del `TableStyle` deja de aplicarle. El blanco tiene que viajar
+    en su `ParagraphStyle` o el título queda negro sobre el rojo institucional
+    y no se lee.
+    """
+    estilos = getSampleStyleSheet()
+    celda_estilo = ParagraphStyle(
+        "CeldaReporte", parent=estilos["BodyText"],
+        fontName="Helvetica", fontSize=_TAM_FUENTE_REPORTE,
+        leading=_TAM_FUENTE_REPORTE + 2, spaceBefore=0, spaceAfter=0,
+    )
+    encabezado_estilo = ParagraphStyle(
+        "EncabezadoReporte", parent=celda_estilo,
+        fontName="Helvetica-Bold", textColor=colors.white,
+    )
+
+    anchos = _anchos_de_columna_reporte([columnas] + filas, ancho_disponible)
+    contenido = [[Paragraph(str(c), encabezado_estilo) for c in columnas]]
+    contenido += [[Paragraph(str(c), celda_estilo) for c in fila] for fila in filas]
+
+    tabla = Table(contenido, colWidths=anchos, hAlign="LEFT", repeatRows=1)
+    tabla.setStyle(_estilo_tabla_reporte())
+    return tabla
 
 
 def _dibujar_encabezado_pagina(canvas, doc) -> None:
