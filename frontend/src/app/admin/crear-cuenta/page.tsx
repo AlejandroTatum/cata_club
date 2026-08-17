@@ -56,6 +56,9 @@ import {
   validateCrearCuentaStep,
   validateCrearCuentaForm,
   getCrearCuentaErrorMessage,
+  clearCrearCuentaDraft,
+  loadCrearCuentaDraft,
+  saveCrearCuentaDraft,
   type CrearCuentaFormData,
   type CrearCuentaStep,
   type AccountType,
@@ -186,6 +189,16 @@ function CrearCuentaContent(): React.ReactElement {
   const [confirmed, setConfirmed] = useState(false);
   const [summaryReviewed, setSummaryReviewed] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  /**
+   * Issue #353: restored from `sessionStorage`, not the server — nothing of
+   * this was ever sent. Follows the exact rótulo/lifecycle
+   * `student/enroll/page.tsx` already established for `restoredFromDraft`
+   * (issue #317 / K8): set once on mount if a draft exists, dropped the first
+   * time the admin touches the form again.
+   */
+  const [restoredFromDraft, setRestoredFromDraft] = useState(false);
+  /** Guards the auto-save effect below from firing before the mount-time restore effect has had its turn — see that effect's own comment. */
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   // Representante search state (for MENOR type)
   const [representanteSearch, setRepresentanteSearch] = useState("");
@@ -240,12 +253,35 @@ function CrearCuentaContent(): React.ReactElement {
     fetchInstituciones().then(setInstituciones).catch(() => {});
   }, []);
 
+  // Restore a draft left by a previous mount of this same tab — the one a
+  // session expiring mid-wizard (401 on the refresh) leaves behind when
+  // ProtectedRoute bounces to /login and back (issue #353). Runs once; a
+  // fresh mount after re-login IS "once per mount" for this purpose, same as
+  // the reload case `student/enroll/page.tsx`'s twin effect handles.
+  useEffect(() => {
+    const draft = loadCrearCuentaDraft();
+    if (draft) {
+      setFormData(draft);
+      setRestoredFromDraft(true);
+    }
+    setDraftHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    saveCrearCuentaDraft(formData);
+  }, [formData, draftHydrated]);
+
   function updateField<K extends keyof CrearCuentaFormData>(
     key: K,
     value: CrearCuentaFormData[K],
   ): void {
     setFormData((prev) => ({ ...prev, [key]: value }));
     setFormErrors([]);
+    // The admin is now actively working the form again — same moment the
+    // enrollment wizard's own "Recuperamos los datos…" banner drops on the
+    // first action after a restore.
+    setRestoredFromDraft(false);
   }
 
   function handleNext(): void {
@@ -316,6 +352,10 @@ function CrearCuentaContent(): React.ReactElement {
       showSuccess("Cuenta creada correctamente.");
       setSubmitting(false);
       setConfirmed(true);
+      // The draft did its job — the data it held is now the server's record,
+      // not an unsent attempt. Keeping it around would let a later reload of
+      // this same tab resurrect a stale form behind the confirmation screen.
+      clearCrearCuentaDraft();
     } catch (error: unknown) {
       setSubmitting(false);
       const message = getCrearCuentaErrorMessage(error);
@@ -952,6 +992,18 @@ function CrearCuentaContent(): React.ReactElement {
             current={currentIndex + 1}
             steps={CREAR_CUENTA_STEP_ORDER.map((s) => CREAR_CUENTA_SHORT_LABELS[s])}
           />
+
+          {/* Issue #353: recuperado de `sessionStorage`, no del servidor —
+              nada de esto se envió todavía. El rótulo lo dice para que un
+              dato restaurado nunca se confunda con uno ya guardado, la misma
+              distinción que #310 (K3) cerró del lado de asistencias y que
+              #317 (K8) ya usa en `/student/enroll`. */}
+          {restoredFromDraft && (
+            <p className="rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
+              Recuperamos los datos que ya había completado. Todavía no se han
+              enviado — revíselos antes de continuar.
+            </p>
+          )}
 
           {/*
            * Left-aligned, not centred.

@@ -14,15 +14,16 @@
 
 "use client";
 
-import { type FormEvent, useState, useEffect, useRef } from "react";
+import { type FormEvent, useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getDefaultRoute } from "@/lib/auth-utils";
 import type { AuthErrorKind } from "@/services/auth";
+import { STATUS_MESSAGES } from "@/lib/error-message";
 import AuthShell, {
   AUTH_INPUT_CLASSES,
   AUTH_LABEL_CLASSES,
@@ -107,10 +108,20 @@ function loginErrorFeedback(error: AuthErrorKind): { message: string; descriptio
   }
 }
 
-export default function LoginPage(): React.ReactElement {
+function LoginPageContent(): React.ReactElement {
   const router = useRouter();
   const { login, isAuthenticated, isLoading, session } = useAuth();
   const toast = useToast();
+  /**
+   * Issue #353: `ProtectedRoute` names an involuntary session loss in the
+   * redirect itself (`?motivo=sesion-expirada`, set only when
+   * `AuthContext`'s `sessionExpired` was true) — an ordinary unauthenticated
+   * visit or an explicit logout carries no such param. Read once; there is
+   * nothing to keep in sync with, the query string does not change under
+   * this form.
+   */
+  const searchParams = useSearchParams();
+  const sessionExpired = searchParams.get("motivo") === "sesion-expirada";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -249,6 +260,19 @@ export default function LoginPage(): React.ReactElement {
 
   return (
     <AuthShell title="Bienvenido de nuevo" subtitle="Inicie sesión para continuar">
+      {/* Issue #353: a redirect that lost the admin's session mid-form used
+          to land here with nothing to explain it — the toast on a FAILED
+          login names what went wrong, but nothing said anything about an
+          involuntary bounce that happened before this screen even loaded.
+          A static banner, not a toast: the admin needs to still see it while
+          reading the form, not catch it before it fades. Reuses
+          `STATUS_MESSAGES[401]` — the same sentence the rest of the app
+          already shows for an expired session, not a new one invented here. */}
+      {sessionExpired && (
+        <p role="status" className="rounded-ctl border border-line-2 bg-canvas px-3.5 py-2.5 text-sm text-ink-2">
+          {STATUS_MESSAGES[401]}
+        </p>
+      )}
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="email" className={AUTH_LABEL_CLASSES}>
@@ -404,5 +428,15 @@ export default function LoginPage(): React.ReactElement {
         </Link>
       </p>
     </AuthShell>
+  );
+}
+
+export default function LoginPage(): React.ReactElement {
+  return (
+    // `useSearchParams` needs a boundary to fall back to during prerender —
+    // same reason `/admin/crear-cuenta` and `/reset-password` wrap theirs.
+    <Suspense>
+      <LoginPageContent />
+    </Suspense>
   );
 }

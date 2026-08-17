@@ -61,9 +61,16 @@ function buildUser(role: UserRole, id: string, name: string, email: string): Usu
 
 /**
  * Build an AuthContextValue for the unauthenticated / loading state.
+ *
+ * `sessionExpired` defaults to false — an ordinary unauthenticated visit
+ * (never logged in, or an explicit logout) — set it true to build the
+ * involuntary "refresh-and-retry ultimately failed" state issue #353's
+ * ProtectedRoute redirect reads (see `AuthProvider`'s own doc comment on the
+ * field for the full contract).
  */
 export function createUnauthenticatedAuth(
   isLoading = false,
+  sessionExpired = false,
 ): AuthContextValue {
   return {
     session: null,
@@ -74,6 +81,7 @@ export function createUnauthenticatedAuth(
     refreshSession: vi.fn(),
     hydrationOutage: false,
     retryHydration: vi.fn(),
+    sessionExpired,
   };
 }
 
@@ -108,6 +116,7 @@ export function createAuthenticatedAuth(
     refreshSession: vi.fn(),
     hydrationOutage: false,
     retryHydration: vi.fn(),
+    sessionExpired: false,
     ...overrides,
   };
 }
@@ -142,6 +151,7 @@ export function createMultiRoleAuth(
     refreshSession: vi.fn(),
     hydrationOutage: false,
     retryHydration: vi.fn(),
+    sessionExpired: false,
   };
 }
 
@@ -158,6 +168,7 @@ export function createLoadingAuth(): AuthContextValue {
     refreshSession: vi.fn(),
     hydrationOutage: false,
     retryHydration: vi.fn(),
+    sessionExpired: false,
   };
 }
 
@@ -176,5 +187,6 @@ export function createHydrationOutageAuth(): AuthContextValue {
     refreshSession: vi.fn(),
     hydrationOutage: true,
     retryHydration: vi.fn(),
+    sessionExpired: false,
   };
 }

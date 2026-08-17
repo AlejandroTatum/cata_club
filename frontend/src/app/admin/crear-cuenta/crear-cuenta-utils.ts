@@ -291,3 +291,79 @@ function isEmail(value: string): boolean {
 export function getCrearCuentaErrorMessage(error: unknown): string {
   return toUserMessage(error, "No se pudo crear la cuenta. Revise los datos ingresados e intente nuevamente.");
 }
+
+// ---------------------------------------------------------------------------
+// Draft persistence (issue #353)
+//
+// A session that expires mid-wizard (401 on the refresh) bounces the admin
+// to /login and, without this, threw away everything typed so far — nombres,
+// cédula, teléfono, ficha médica. Follows the exact pattern issue #317 (K8)
+// already shipped for the public enrollment wizard
+// (`student/enroll/enroll-utils.ts`'s saveEnrollDraft/loadEnrollDraft/
+// clearEnrollDraft/parseEnrollDraft): `sessionStorage`, keyed to this one
+// wizard, discarded wholesale — never partially trusted — the moment it does
+// not parse as a complete `CrearCuentaFormData`.
+// ---------------------------------------------------------------------------
+
+const CREAR_CUENTA_DRAFT_KEY = "cata_crear_cuenta_draft";
+
+const KNOWN_ACCOUNT_TYPES: readonly (AccountType | "")[] = ["", "JUGADOR", "REPRESENTANTE", "MENOR", "ENTRENADOR"];
+
+function isCrearCuentaFormData(value: unknown): value is CrearCuentaFormData {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (!KNOWN_ACCOUNT_TYPES.includes(record.accountType as AccountType | "")) return false;
+  // `representanteId` is the one field that is not a plain string — every
+  // other key on `CrearCuentaFormData` is (see its interface above).
+  if (typeof record.representanteId !== "number" && record.representanteId !== "") return false;
+  return Object.keys(initialCrearCuentaFormData).every((key) => {
+    if (key === "accountType" || key === "representanteId") return true;
+    return typeof record[key] === "string";
+  });
+}
+
+/**
+ * Parse a stored draft. Returns `null` for anything that is not a complete,
+ * well-typed `CrearCuentaFormData` — a corrupted or tampered-with value is
+ * dropped rather than half-applied, same rule `parseEnrollDraft` follows.
+ */
+export function parseCrearCuentaDraft(raw: string | null): CrearCuentaFormData | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  return isCrearCuentaFormData(parsed) ? parsed : null;
+}
+
+/** Persist the draft. Losing draft persistence must never take the wizard down with it. */
+export function saveCrearCuentaDraft(data: CrearCuentaFormData): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage?.setItem(CREAR_CUENTA_DRAFT_KEY, JSON.stringify(data));
+  } catch {
+    // Best-effort: the wizard works exactly as before without it.
+  }
+}
+
+/** Read a stored draft, or `null` when there is none / storage is unavailable. */
+export function loadCrearCuentaDraft(): CrearCuentaFormData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return parseCrearCuentaDraft(window.sessionStorage?.getItem(CREAR_CUENTA_DRAFT_KEY) ?? null);
+  } catch {
+    return null;
+  }
+}
+
+/** Drop the draft — called once the account is actually created, or the admin starts over. */
+export function clearCrearCuentaDraft(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage?.removeItem(CREAR_CUENTA_DRAFT_KEY);
+  } catch {
+    // Ignore.
+  }
+}

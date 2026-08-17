@@ -134,6 +134,40 @@ describe("ProtectedRoute", () => {
     expect(mockReplace).toHaveBeenCalledWith("/custom-login");
   });
 
+  // --- Involuntary session loss names itself (issue #353) ---
+
+  it("names the reason when the bounce follows a failed refresh-and-retry, not an ordinary unauthenticated visit", () => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false, true));
+
+    render(
+      <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
+    );
+
+    expect(mockReplace).toHaveBeenCalledWith("/login?motivo=sesion-expirada");
+  });
+
+  it("stays silent for an ordinary unauthenticated visit — nothing expired, there is nothing to explain", () => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false, false));
+
+    render(
+      <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
+    );
+
+    expect(mockReplace).toHaveBeenCalledWith("/login");
+  });
+
+  it("carries the reason onto a custom redirectTo too", () => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false, true));
+
+    render(
+      <ProtectedRoute allowedRoles={["admin"]} redirectTo="/custom-login">
+        {CONTENT}
+      </ProtectedRoute>,
+    );
+
+    expect(mockReplace).toHaveBeenCalledWith("/custom-login?motivo=sesion-expirada");
+  });
+
   // --- Wrong role ---
 
   it("redirects users with an insufficient role to their default route", () => {
