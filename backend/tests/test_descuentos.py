@@ -201,6 +201,60 @@ def test_pago_con_descuento_de_monto_fijo(client, db_session):
     assert fila.descuento_porcentaje_aplicado is None
 
 
+def test_historial_propio_expone_el_descuento_congelado(client):
+    """El portal del socio lee `GET /membresias/pagos/persona/{id}`, y de ahí
+    -- no del POST -- saca lo que muestra en el historial. El socio no elige
+    descuentos (los aplica el admin, ver `registrar_pago`), pero sí tiene que
+    poder LEER el que el club ya le aplicó: sin `descuentoValorAplicado` en
+    esta respuesta, la pantalla solo puede mostrarle un monto final sin
+    explicación, que es justamente el reclamo de QA del 17/08/2026.
+
+    El precio de lista NO viaja como campo propio: `Pago.monto` es el monto
+    FINAL (`registrar_pago` hace `pago.monto = monto_final`) y el base se
+    reconstruye exacto sumándole el valor congelado, porque
+    `_congelar_descuento` devuelve justamente `monto_base - valor`. Este test
+    fija esa relación además de la presencia de los campos: es la aritmética
+    que el cliente rehace para poder nombrar los tres números."""
+    persona, membresia = escenario_membresia_sin_pago_api(client)
+    assert persona["id"] == 1  # el token de `client` es persona_id=1: es "su" historial
+    descuento = crear_descuento_api(client, "Media beca", porcentaje="50").json()
+    registrar_pago_api(
+        client, persona["id"], membresia["id"], descuento_ids=[descuento["id"]],
+    )
+
+    respuesta = client.get(f"/api/v1/membresias/pagos/persona/{persona['id']}")
+    assert respuesta.status_code == 200
+    historial = respuesta.json()
+    assert len(historial) == 1
+    pago = historial[0]
+
+    assert pago["descuentoId"] == descuento["id"]
+    assert Decimal(str(pago["descuentoValorAplicado"])) == Decimal("17.50")
+    assert Decimal(str(pago["descuentoPorcentajeAplicado"])) == Decimal("50")
+    assert Decimal(str(pago["monto"])) == Decimal("17.50")
+    # Precio de lista = monto final + descuento congelado, exacto.
+    assert (
+        Decimal(str(pago["monto"])) + Decimal(str(pago["descuentoValorAplicado"]))
+        == Decimal("35.00")
+    )
+
+
+def test_historial_propio_sin_descuento_deja_los_campos_en_null(client):
+    """El contrario del anterior, y la razón por la que la pantalla puede
+    decidir sin ambigüedad: un pago sin descuento no trae ceros, trae `None`.
+    Un `0.00` obligaría al cliente a distinguir «no hubo descuento» de «hubo
+    uno de cero», y el producto no muestra nada cuando no hubo."""
+    persona, membresia = escenario_membresia_sin_pago_api(client)
+    registrar_pago_api(client, persona["id"], membresia["id"])
+
+    historial = client.get(f"/api/v1/membresias/pagos/persona/{persona['id']}").json()
+    assert len(historial) == 1
+    pago = historial[0]
+    assert pago["descuentoId"] is None
+    assert pago["descuentoValorAplicado"] is None
+    assert pago["descuentoPorcentajeAplicado"] is None
+
+
 def test_descuento_total_no_puede_superar_el_100_por_ciento(client, db_session):
     """Tope firmado: no existen pagos negativos. Bajo la regla nueva (un pago
     admite UN solo descuento) el tope ya no se prueba sumando dos ids -- eso
