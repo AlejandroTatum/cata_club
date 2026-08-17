@@ -2745,3 +2745,107 @@ describe("TrainerAttendancePage — a schedule from a different day keeps ITS OW
     expect(window.sessionStorage.getItem("cata_attendance_draft:20:2026-07-21")).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #346 (regresión de #308 + #310): la fecha de una sesión y "hoy" eran
+// siempre el mismo valor antes de K1, así que ninguna pantalla necesitaba
+// distinguirlas. Separarlas en la escritura dejó expuesta cualquier lectura
+// que todavía asumiera que coinciden -- este candado cubre el detalle real de
+// la sesión (el propio roster del wizard), el tercer punto del triángulo
+// junto con "Mi día" e "Historial".
+//
+// Todos los mocks de `fetchAttendanceRecords` de arriba devuelven lo mismo sin
+// mirar el rango recibido, así que ninguno puede distinguir un rango correcto
+// de uno roto que hubiera pedido la fecha de HOY. Este bloque, en cambio,
+// filtra por el rango recibido -- como el backend real filtra por
+// `fecha_entrenamiento` -- para que la aserción solo pase si el wizard
+// realmente pide la fecha de la sesión.
+// ---------------------------------------------------------------------------
+describe("TrainerAttendancePage — el detalle de la sesión coincide con lo ya registrado (issue #346)", () => {
+  const SUNDAY_IN_CLUB_TIME = new Date("2026-08-16T15:00:00Z");
+  const WEDNESDAY_SCHEDULE = {
+    id: 30,
+    diaSemana: "mie",
+    horaInicio: "17:00",
+    horaFin: "18:00",
+    entrenadorId: 21,
+    entrenadorNombre: "Coach Vera",
+  };
+  const WEDNESDAY_SESSION_DATE = "2026-08-12";
+
+  function closedWednesdayRecords(): unknown[] {
+    return buildAlumnoHorarios(15).map((raw) => {
+      const s = raw as { personaId: number; personaNombreCompleto: string };
+      return {
+        id: `att-${s.personaId}`,
+        fecha: WEDNESDAY_SESSION_DATE,
+        horario: "Miércoles 17:00 — 18:00",
+        horarioId: WEDNESDAY_SCHEDULE.id,
+        personaId: s.personaId,
+        estudiante: s.personaNombreCompleto,
+        estado: "present",
+        registradoPorNombre: "Coach Vera",
+      };
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(SUNDAY_IN_CLUB_TIME);
+    mockReplace.mockReset();
+    mockPush.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([WEDNESDAY_SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(15));
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    window.sessionStorage.clear();
+    // El mismo mock consciente del rango que el candado de Historial: filtra
+    // por lo que de verdad recibe, no devuelve lo mismo siempre.
+    mockFetchAttendanceRecords.mockReset().mockImplementation(
+      (params?: { fechaInicio?: string; fechaFin?: string; horarioId?: number }) =>
+        Promise.resolve(
+          closedWednesdayRecords().filter((raw) => {
+            const r = raw as { fecha: string; horarioId: number };
+            if (params?.fechaInicio && r.fecha < params.fechaInicio) return false;
+            if (params?.fechaFin && r.fecha > params.fechaFin) return false;
+            if (params?.horarioId !== undefined && r.horarioId !== params.horarioId) return false;
+            return true;
+          }),
+        ),
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Hoy es domingo y no hay nada programado, así que el acordeón ya
+   *  muestra la semana completa (misma razón que en el bloque "#308"). */
+  async function openWednesdayRoster(): Promise<void> {
+    fireEvent.click(await screen.findByRole("button", { name: /^miércoles/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /17:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  }
+
+  it("abre en modo lectura con las 15 marcas ya registradas, visto un domingo (candado #346)", async () => {
+    render(
+      <ToastProvider>
+        <TrainerAttendancePage />
+      </ToastProvider>,
+    );
+    await openWednesdayRoster();
+    await screen.findByText("Student 01");
+
+    // El pedido de prefill tiene que direccionarse con la fecha DE LA SESIÓN
+    // (el miércoles pasado), nunca con la de hoy (domingo) -- pedir la de hoy
+    // habría vuelto con 0 registros y mostrado la lista como sin tomar.
+    expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({
+      fechaInicio: WEDNESDAY_SESSION_DATE,
+      fechaFin: WEDNESDAY_SESSION_DATE,
+      horarioId: WEDNESDAY_SCHEDULE.id,
+    });
+    expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
+    // Los 15 inscriptos completos, ninguno perdido por pedir la fecha
+    // equivocada -- el mismo número que reporta Admin para ese horario.
+    expect(screen.getByText("Student 15")).toBeInTheDocument();
+  });
+});

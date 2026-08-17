@@ -765,3 +765,77 @@ describe("TrainerPage — names the reason when a non-trainer session lands here
     expect(mockShowInfo).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #346 (regresión de #308 + #310): antes de K1, "la fecha de la sesión"
+// y "hoy" eran siempre el mismo valor. Separarlas en la escritura dejó
+// expuesta cualquier lectura que todavía asumiera que coinciden -- este
+// candado cubre el pulso mensual de "Mi día", el primer punto del triángulo
+// junto con "Historial" y el detalle propio de la sesión.
+//
+// `MONTH_RECORDS` arriba siempre vuelve igual sin mirar el rango que
+// `monthToDateRange()` construye, así que ese test no puede distinguir un
+// rango correcto de uno roto. Este bloque filtra por el rango recibido --
+// como el backend real filtra por `fecha_entrenamiento` -- para que la
+// aserción solo pase si la pantalla realmente pide un rango que alcance la
+// sesión, no solo hoy.
+// ---------------------------------------------------------------------------
+describe("TrainerPage — el pulso mensual no pierde una sesión de días antes (issue #346)", () => {
+  const SUNDAY_IN_CLUB_TIME = new Date("2026-08-16T15:00:00Z");
+  const WEDNESDAY_SESSION_DATE = "2026-08-12";
+
+  const CLOSED_WEDNESDAY_SESSION: AttendanceRecord[] = Array.from({ length: 15 }, (_, i) => ({
+    id: `w-${i}`,
+    fecha: WEDNESDAY_SESSION_DATE,
+    horario: "Miércoles 17:00 — 18:00",
+    horarioId: 30,
+    personaId: i,
+    estudiante: `Alumno ${i + 1}`,
+    estado: "present" as const,
+    registradoPorNombre: "Coach Vera",
+  }));
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(SUNDAY_IN_CLUB_TIME);
+    // Domingo no tiene horarios propios en este fixture -- el hero queda en
+    // su estado vacío, y el pulso mensual es lo único bajo prueba acá.
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([]);
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue([]);
+    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue([]);
+    mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+    mockShowInfo.mockReset();
+    // Un rango de verdad: solo vuelven los registros cuya PROPIA `fecha` cae
+    // dentro de [fechaInicio, fechaFin]. Un llamado que (por error) pidiera
+    // solo la fecha de hoy no recibiría nada de esta sesión.
+    mockFetchAttendanceRecords.mockReset().mockImplementation(
+      (params?: { fechaInicio?: string; fechaFin?: string }) =>
+        Promise.resolve(
+          CLOSED_WEDNESDAY_SESSION.filter((r) => {
+            if (params?.fechaInicio && r.fecha < params.fechaInicio) return false;
+            if (params?.fechaFin && r.fecha > params.fechaFin) return false;
+            return true;
+          }),
+        ),
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("cuenta los 15 registros de la sesión del miércoles en el pulso del mes, visto un domingo (candado #346)", async () => {
+    render(<TrainerPage />);
+
+    const pulse = within(await screen.findByTestId("trainer-pulse"));
+    await waitFor(() => {
+      expect(pulse.getByText("Listas del mes")).toBeInTheDocument();
+    });
+    // Una sola sesión (15 registros agrupados), no una sesión "perdida" ni
+    // partida en varias por una fecha mal resuelta.
+    const listsCard = pulse.getByText("Listas del mes").parentElement as HTMLElement;
+    expect(within(listsCard).getByText("1")).toBeInTheDocument();
+    expect(pulse.getByText("Asistencia del mes")).toBeInTheDocument();
+    expect(pulse.getByText("15 de 15 entrenaron")).toBeInTheDocument();
+  });
+});
