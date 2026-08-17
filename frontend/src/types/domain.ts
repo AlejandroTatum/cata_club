@@ -221,7 +221,7 @@ export interface PerfilPropio {
   apellidos: string;
   roles: BackendTipoRol[];
   telefono: string;
-  /** Account creation date (ISO datetime) — `Usuario.fecha_creacion`. Used by `/profile`'s "Miembro desde" field. */
+  /** Account creation date (ISO datetime) — `Usuario.fecha_creacion`. Used by `/profile`'s "Cuenta creada el" field. */
   fechaCreacion: string;
   /** Profile photo URL (Cloudinary), self-service upload via POST /api/auth/me/foto. Absent/null until the user uploads one. */
   fotoUrl?: string | null;
