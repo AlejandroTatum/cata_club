@@ -9,6 +9,7 @@ import {
   countPagosByStatus,
   wholeMonthsFor,
   addMonthsIso,
+  describePagoDescuento,
   type PagoStatusFilter,
 } from "../payments-utils";
 import type { PagoPersona } from "@/services/api";
@@ -28,6 +29,8 @@ function makePago(overrides: Partial<PagoPersona> = {}): PagoPersona {
     membresiaId: 1,
     voucherUrl: null,
     voucherFormato: null,
+    descuentoValorAplicado: null,
+    descuentoPorcentajeAplicado: null,
     ...overrides,
   };
 }
@@ -269,6 +272,88 @@ describe("countPagosByStatus", () => {
       PENDIENTE_VALIDACION: 0,
       APROBADO: 0,
       RECHAZADO: 0,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// El descuento que el club ya aplicó (hallazgo QA 17/08/2026)
+//
+// El socio NO elige descuentos -- los aplica un administrador
+// (`registrar_pago` rechaza `descuento_ids` de cualquier otro rol). Pero el
+// pago le llega con el monto ya descontado y sin una sola palabra que lo
+// explique, y un monto final solo es exactamente lo que genera el reclamo.
+// ---------------------------------------------------------------------------
+
+describe("describePagoDescuento", () => {
+  it("returns null when the payment carries no discount", () => {
+    expect(describePagoDescuento(makePago())).toBeNull();
+  });
+
+  it("names the three numbers of a percentage discount", () => {
+    // $35 de lista, media beca del 50 %: el backend congeló 17,50 y guardó
+    // 17,50 como `monto`. El precio de lista se reconstruye sumándolos.
+    const descuento = describePagoDescuento(
+      makePago({
+        monto: "17.50",
+        descuentoValorAplicado: "17.50",
+        descuentoPorcentajeAplicado: "50.00",
+      }),
+    );
+
+    expect(descuento).toEqual({
+      precioLista: "$35,00",
+      descuento: "$17,50",
+      porcentaje: "50%",
+      montoFinal: "$17,50",
+    });
+  });
+
+  it("omits the percentage for a fixed-amount discount", () => {
+    const descuento = describePagoDescuento(
+      makePago({
+        monto: "25.00",
+        descuentoValorAplicado: "10.00",
+        descuentoPorcentajeAplicado: null,
+      }),
+    );
+
+    expect(descuento).toEqual({
+      precioLista: "$35,00",
+      descuento: "$10,00",
+      porcentaje: null,
+      montoFinal: "$25,00",
+    });
+  });
+
+  it("adds in whole cents, so the list price never leaks binary noise", () => {
+    // `26.1 + 3.9` en punto flotante no siempre cae exacto en 30; el precio
+    // de lista es un número que el socio compara contra lo que le dijeron en
+    // administración, así que se suma en centavos enteros como `wholeMonthsFor`.
+    const descuento = describePagoDescuento(
+      makePago({ monto: "26.10", descuentoValorAplicado: "3.90" }),
+    );
+
+    expect(descuento?.precioLista).toBe("$30,00");
+  });
+
+  it("still explains a 100% discount, where the final amount is zero", () => {
+    // La beca total sigue el flujo normal de registro (no es un estado
+    // especial), y es el caso donde el socio MÁS necesita leer que el club
+    // cubrió todo en vez de un "$0,00" sin causa.
+    const descuento = describePagoDescuento(
+      makePago({
+        monto: "0.00",
+        descuentoValorAplicado: "35.00",
+        descuentoPorcentajeAplicado: "100.00",
+      }),
+    );
+
+    expect(descuento).toEqual({
+      precioLista: "$35,00",
+      descuento: "$35,00",
+      porcentaje: "100%",
+      montoFinal: "$0,00",
     });
   });
 });

@@ -91,6 +91,7 @@ import {
   formatPagoMonto,
   getEmptyStateMessage,
   describePagoEstado,
+  describePagoDescuento,
   pagoFaltaComprobante,
   countPagosByStatus,
   wholeMonthsFor,
@@ -814,6 +815,8 @@ function PagoRow({
   const estado = describePagoEstado(pago.estadoPago);
   const canUpload = !pago.voucherUrl && pago.estadoPago !== "APROBADO";
   const faltaComprobante = pagoFaltaComprobante(pago);
+  // `null` en la enorme mayoría de los pagos, y entonces no se dibuja nada.
+  const descuento = describePagoDescuento(pago);
 
   return (
     <li className="flex min-h-drow flex-wrap items-start gap-x-4 gap-y-field border-b border-line px-5 py-3.5 last:border-b-0">
@@ -833,6 +836,58 @@ function PagoRow({
           <span className="tabular-nums">{formatDate(pago.fechaRegistro)}</span> · Cubre{" "}
           <span className="tabular-nums">{formatDateRange(pago.fechaInicio, pago.fechaFin)}</span>
         </p>
+
+        {/* Por qué el monto de arriba es el que es.
+         *
+         * Hallazgo de QA humana (17/08/2026): «a la hora de pagar no se me
+         * muestra el apartado de descuentos». El club ya aplicaba descuentos y
+         * el backend ya los congelaba en el pago — lo que faltaba era el lado
+         * del socio, que veía un monto final sin explicación. Un monto solo es
+         * lo que genera el reclamo.
+         *
+         * Es un bloque de LECTURA. El socio no elige descuentos: eso es
+         * potestad exclusiva del administrador (issue #11 §4), y esta pantalla
+         * no ofrece ninguna forma de pedirlos ni de cambiarlos.
+         *
+         * Misma forma que el bloque del motivo de rechazo unas líneas más
+         * abajo — es la otra cosa que una fila de pago tiene para explicar —
+         * pero sobre `bg-sunken` y no sobre el fondo de alarma: un descuento
+         * es una buena noticia, no algo que el lector deba resolver. */}
+        {descuento && (
+          <div
+            data-testid="pago-descuento"
+            className="mt-2 rounded-ctl bg-sunken px-3.5 py-2.5"
+          >
+            <p className="text-2xs font-bold uppercase text-ink-3-strong">
+              Descuento aplicado por el club
+            </p>
+            <dl className="mt-1.5 flex flex-wrap gap-x-6 gap-y-field">
+              <div className="flex items-baseline gap-1.5">
+                <dt className="text-xs text-ink-3-strong">Precio de lista</dt>
+                {/* Tachado: es el precio que este pago YA no tuvo. */}
+                <dd className="text-xs font-semibold tabular-nums text-ink-3-strong line-through">
+                  {descuento.precioLista}
+                </dd>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <dt className="text-xs text-ink-3-strong">Descuento</dt>
+                <dd className="text-xs font-semibold tabular-nums text-ink-2">
+                  {/* U+2212 (signo menos), no un guión: es un número negativo,
+                      y en tabular-nums alinea con las cifras de al lado. */}
+                  {descuento.porcentaje
+                    ? `−${descuento.descuento} (${descuento.porcentaje})`
+                    : `−${descuento.descuento}`}
+                </dd>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <dt className="text-xs text-ink-3-strong">Monto final</dt>
+                <dd className="text-xs font-bold tabular-nums text-ink">
+                  {descuento.montoFinal}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
 
         {pago.voucherUrl && (
           <a

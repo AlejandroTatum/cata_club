@@ -139,6 +139,8 @@ const PAGO_RECHAZADO: PagoPersona = {
   membresiaId: 3,
   voucherUrl: null,
   voucherFormato: null,
+  descuentoValorAplicado: null,
+  descuentoPorcentajeAplicado: null,
 };
 
 const PAGO_APROBADO: PagoPersona = {
@@ -155,6 +157,8 @@ const PAGO_APROBADO: PagoPersona = {
   membresiaId: 3,
   voucherUrl: null,
   voucherFormato: null,
+  descuentoValorAplicado: null,
+  descuentoPorcentajeAplicado: null,
 };
 
 beforeEach(() => {

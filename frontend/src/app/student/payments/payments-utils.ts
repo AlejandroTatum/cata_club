@@ -214,6 +214,75 @@ export function formatPagoMonto(monto: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// El descuento que el club ya aplicó
+// ---------------------------------------------------------------------------
+
+/** Los tres números de un pago con descuento, ya formateados. */
+export interface PagoDescuento {
+  /** Lo que el pago habría costado sin el descuento. */
+  precioLista: string;
+  /** Lo que el club rebajó, sin signo — quien lo muestra decide cómo escribirlo. */
+  descuento: string;
+  /** `"50%"` cuando la rebaja era porcentual; `null` si era de monto fijo. */
+  porcentaje: string | null;
+  /** Lo que efectivamente se paga: `PagoPersona.monto` tal cual. */
+  montoFinal: string;
+}
+
+/**
+ * Lee el descuento congelado de un pago, o `null` si no llevó ninguno.
+ *
+ * El socio NO elige descuentos: aplicarlos es potestad exclusiva del
+ * administrador (issue #11 §4). Esto es la otra mitad de esa decisión —
+ * poder LEER el que el club ya le aplicó. Sin esto el historial le mostraba
+ * el monto final solo, que es justamente el reclamo que llegó de QA el
+ * 17/08/2026 ("no se me muestra el apartado de descuentos").
+ *
+ * `null` cuando no hubo descuento, y no un objeto en cero: la pantalla no
+ * escribe "Descuento: $0,00" para un pago que nunca lo tuvo, y el backend ya
+ * distingue los dos casos (`descuento_valor_aplicado` queda NULL, nunca 0 —
+ * lo garantiza `ck_pago_descuento_valor_congelado`).
+ *
+ * ## Por qué el precio de lista se calcula acá
+ *
+ * No viaja como campo: `Pago.monto` ES el monto final (`registrar_pago` hace
+ * `pago.monto = monto_final`) y el base no se persiste. Pero se reconstruye
+ * EXACTO, porque `_congelar_descuento` devuelve `monto_base - valor` y nada
+ * más toca esas dos columnas después.
+ *
+ * La suma va en centavos enteros por la misma razón que `wholeMonthsFor`
+ * compara en centavos: `Number("26.10") + Number("3.90")` es aritmética
+ * binaria sobre fracciones decimales, y el precio de lista es un número que
+ * el socio compara contra lo que le dijeron en administración. Un centavo de
+ * ruido acá es una discusión en el mostrador.
+ */
+export function describePagoDescuento(pago: PagoPersona): PagoDescuento | null {
+  if (pago.descuentoValorAplicado == null) return null;
+
+  const valor = Number(pago.descuentoValorAplicado);
+  const montoFinal = Number(pago.monto);
+  if (!Number.isFinite(valor) || !Number.isFinite(montoFinal)) return null;
+
+  const precioListaCents = toCents(montoFinal) + toCents(valor);
+  if (!Number.isSafeInteger(precioListaCents)) return null;
+
+  const porcentaje = pago.descuentoPorcentajeAplicado;
+  const porcentajeNumero = porcentaje == null ? null : Number(porcentaje);
+
+  return {
+    precioLista: formatCurrency(precioListaCents / 100),
+    descuento: formatCurrency(valor),
+    // `Number` de paso: el backend manda "50.00" y en pantalla eso es "50%".
+    // Misma gramática que `descuentoValorLabel` del catálogo de admin.
+    porcentaje:
+      porcentajeNumero != null && Number.isFinite(porcentajeNumero)
+        ? `${porcentajeNumero}%`
+        : null,
+    montoFinal: formatCurrency(montoFinal),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Empty state
 // ---------------------------------------------------------------------------
 

@@ -192,6 +192,8 @@ function makePago(overrides: Partial<PagoPersona> = {}): PagoPersona {
     membresiaId: 3,
     voucherUrl: null,
     voucherFormato: null,
+    descuentoValorAplicado: null,
+    descuentoPorcentajeAplicado: null,
     ...overrides,
   };
 }
@@ -897,5 +899,62 @@ describe("StudentPaymentsPage — the way back", () => {
 
     const back = await screen.findByRole("link", { name: /volver a mi cuenta/i });
     expect(back).toHaveAttribute("href", "/student");
+  });
+});
+
+/**
+ * El descuento que el club ya aplicó — hallazgo de QA humana del 17/08/2026:
+ * «a la hora de pagar no se me muestra el apartado de descuentos».
+ *
+ * El socio no elige descuentos: aplicarlos es potestad exclusiva del
+ * administrador (`registrar_pago` rechaza `descuento_ids` de cualquier otro
+ * rol; issue #11 §4). Pero el pago le llega con el monto ya descontado, y
+ * hasta acá el historial mostraba ese número solo, sin una palabra que lo
+ * explicara. El precio de lista no es un campo del backend: `Pago.monto` ES
+ * el monto final, y el base se reconstruye sumándole el valor congelado.
+ */
+describe("StudentPaymentsPage — el descuento que el club ya aplicó", () => {
+  it("explains the three numbers behind a discounted amount", async () => {
+    mockFetchPagosDePersona.mockResolvedValue([
+      makePago({
+        monto: "17.50",
+        descuentoValorAplicado: "17.50",
+        descuentoPorcentajeAplicado: "50.00",
+      }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    const detalle = await screen.findByTestId("pago-descuento");
+    expect(within(detalle).getByText("Descuento aplicado por el club")).toBeInTheDocument();
+    expect(within(detalle).getByText("Precio de lista")).toBeInTheDocument();
+    expect(within(detalle).getByText("$35,00")).toBeInTheDocument();
+    expect(within(detalle).getByText("Descuento")).toBeInTheDocument();
+    expect(within(detalle).getByText("−$17,50 (50%)")).toBeInTheDocument();
+    expect(within(detalle).getByText("Monto final")).toBeInTheDocument();
+  });
+
+  it("omits the percentage when the discount was a fixed amount", async () => {
+    mockFetchPagosDePersona.mockResolvedValue([
+      makePago({
+        monto: "25.00",
+        descuentoValorAplicado: "10.00",
+        descuentoPorcentajeAplicado: null,
+      }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    const detalle = await screen.findByTestId("pago-descuento");
+    expect(within(detalle).getByText("−$10,00")).toBeInTheDocument();
+    expect(within(detalle).queryByText(/%/)).not.toBeInTheDocument();
+  });
+
+  it("shows nothing at all when there was no discount — never a «Descuentos: 0»", async () => {
+    render(<StudentPaymentsPage />);
+
+    await screen.findByLabelText("Historial de pagos");
+    expect(screen.queryByTestId("pago-descuento")).not.toBeInTheDocument();
+    expect(screen.queryByText(/descuento/i)).not.toBeInTheDocument();
   });
 });
