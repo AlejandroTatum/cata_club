@@ -130,26 +130,32 @@ class ChatbotServicio:
     """Envuelve la llamada al gateway OpenCode Zen (OpenAI-compatible) para
     el chatbot de FAQ."""
 
-    def __init__(self) -> None:
-        # settings.opencode_api_key viene de OPENCODE_API_KEY en .env (vía
-        # Settings/pydantic-settings, igual que el resto de la config de la
-        # app) — os.environ.get(...) directo NO se popula solo desde .env,
-        # así que hay que pasarlo explícito al cliente openai (a diferencia
-        # de anthropic.Anthropic(), que sí lee la env var automáticamente).
-        # timeout/max_retries explícitos: sin ellos el SDK usa 600s y 2
-        # reintentos y el backend sobrevive al abort del BFF (ver la cuenta del
-        # presupuesto de tiempo arriba).
-        self._client = openai.OpenAI(
-            base_url=OPENCODE_ZEN_BASE_URL,
-            api_key=settings.opencode_api_key,
-            timeout=TIMEOUT_LLM_SEGUNDOS,
-            max_retries=MAX_REINTENTOS_LLM,
-        )
-
     def consultar(self, mensaje: str, historial: Optional[List[dict]] = None) -> str:
         mensajes = self._construir_mensajes(mensaje, historial)
         try:
-            respuesta = self._client.chat.completions.create(
+            # El cliente se construye ACÁ DENTRO, no en __init__ (issue #337):
+            # settings.opencode_api_key viene de OPENCODE_API_KEY en .env (vía
+            # Settings/pydantic-settings, igual que el resto de la config de la
+            # app) — os.environ.get(...) directo NO se popula solo desde .env,
+            # así que hay que pasarlo explícito al cliente openai (a diferencia
+            # de anthropic.Anthropic(), que sí lee la env var automáticamente).
+            # timeout/max_retries explícitos: sin ellos el SDK usa 600s y 2
+            # reintentos y el backend sobrevive al abort del BFF (ver la cuenta
+            # del presupuesto de tiempo arriba).
+            #
+            # Construirlo en __init__ dejaba `openai.OpenAI(api_key="")` fuera
+            # de este try/except: sin OPENCODE_API_KEY configurada, el SDK
+            # levanta `OpenAIError: Missing credentials` en el CONSTRUCTOR --
+            # antes de que existiera el bloque protegido, así que ninguno de
+            # los `except` de abajo podía verlo y el fallo más probable de un
+            # despliegue nuevo escapaba como 500 sin manejar.
+            client = openai.OpenAI(
+                base_url=OPENCODE_ZEN_BASE_URL,
+                api_key=settings.opencode_api_key,
+                timeout=TIMEOUT_LLM_SEGUNDOS,
+                max_retries=MAX_REINTENTOS_LLM,
+            )
+            respuesta = client.chat.completions.create(
                 model=MODELO_CHATBOT,
                 max_tokens=MAX_TOKENS_RESPUESTA,
                 messages=mensajes,
@@ -181,6 +187,19 @@ class ChatbotServicio:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="No se pudo contactar al asistente. Inténtalo de nuevo en un momento.",
+            ) from exc
+        # Catch-all DELIBERADO y al final: `OpenAIError` es la base de las
+        # cuatro excepciones de arriba (todas la heredan vía `APIError`), así
+        # que acá abajo solo cae lo que ninguna de ellas cubre -- el caso real
+        # es la construcción del cliente sin credencial (issue #337), que no
+        # es un fallo de RED ni de RATE LIMIT sino de configuración. Mismo
+        # tratamiento (503, "no disponible") que `APIConnectionError`: para
+        # quien pregunta, "falta la API key" y "el proveedor no responde" son
+        # la misma experiencia -- el asistente no está ahí.
+        except openai.OpenAIError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="El asistente no está disponible en este momento. Inténtalo más tarde.",
             ) from exc
 
         return self._limpiar_markdown(respuesta.choices[0].message.content or "")

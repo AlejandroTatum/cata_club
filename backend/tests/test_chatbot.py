@@ -217,6 +217,23 @@ def test_cada_falla_tiene_su_propio_mensaje(client, monkeypatch):
     assert len(mensajes) == len(fallas), f"mensajes repetidos: {mensajes}"
 
 
+# --- Credencial ausente (issue #337) ----------------------------------------
+# `openai.OpenAI(api_key="")` levanta `OpenAIError` en el CONSTRUCTOR -- antes
+# de que exista el try/except de `consultar()` que maneja las otras cuatro
+# fallas del proveedor. Este test NO mockea `openai.OpenAI`: usa el SDK real
+# para reproducir el fallo tal como ocurre en un despliegue sin
+# OPENCODE_API_KEY, que es exactamente el estado de un despliegue nuevo.
+
+
+def test_credencial_ausente_no_escapa_al_manejo_de_fallas(client, monkeypatch):
+    monkeypatch.setattr(chatbot_servicio_mod.settings, "opencode_api_key", "")
+
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
+
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["detail"]
+
+
 # --- Rate limit del endpoint ------------------------------------------------
 
 
