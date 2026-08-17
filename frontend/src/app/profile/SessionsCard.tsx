@@ -73,7 +73,7 @@ export default function SessionsCard(): React.ReactElement | null {
     >
       <div className="border-b border-line px-5 py-4">
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
-          Tus sesiones
+          Sus sesiones
         </h2>
       </div>
 

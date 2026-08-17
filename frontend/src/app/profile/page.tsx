@@ -198,28 +198,28 @@ const ROLE_COPY: Record<
   }
 > = {
   admin: {
-    lede: "Revisá tus datos y mantené segura tu cuenta.",
+    lede: "Revise sus datos y mantenga segura su cuenta.",
     roleCaption: "Rol asignado a esta cuenta",
     roleTitle: "Cuenta administrativa",
     roleText: () =>
       "Esta cuenta tiene el rol de Administrador. Los datos de miembros se gestionan desde las superficies administrativas.",
   },
   trainer: {
-    lede: "Revisá tu información de contacto y el acceso a tu cuenta.",
-    roleCaption: "Información de tu perfil",
+    lede: "Revise su información de contacto y el acceso a su cuenta.",
+    roleCaption: "Información de su perfil",
     roleTitle: "Perfil de entrenador",
     roleText: () =>
-      "Tu cuenta está identificada con el rol de Entrenador. El resto de la información operativa aparece en sus pantallas correspondientes.",
+      "Su cuenta está identificada con el rol de Entrenador. El resto de la información operativa aparece en sus pantallas correspondientes.",
   },
   estudiante: {
-    lede: "Consultá tus datos de cuenta y la información disponible de tu portal.",
+    lede: "Consulte sus datos de cuenta y la información disponible de su portal.",
     roleCaption: "Datos del portal estudiantil",
     roleTitle: "Perfil estudiantil",
     roleText: () => "Estos datos describen la cuenta del estudiante.",
   },
   representante: {
-    lede: "Administrá tus datos de cuenta y revisá las personas representadas.",
-    roleCaption: "Datos disponibles para tu cuenta",
+    lede: "Administre sus datos de cuenta y revise las personas representadas.",
+    roleCaption: "Datos disponibles para su cuenta",
     roleTitle: "Cuenta representante",
     roleText: (hasDependents) =>
       hasDependents
@@ -229,8 +229,8 @@ const ROLE_COPY: Record<
   // `ProtectedRoute`'s `allowedRoles` on this page never admits "unsupported"
   // — kept only so the lookup stays total and this never throws.
   unsupported: {
-    lede: "Revisá tus datos y mantené segura tu cuenta.",
-    roleCaption: "Información de tu cuenta",
+    lede: "Revise sus datos y mantenga segura su cuenta.",
+    roleCaption: "Información de su cuenta",
     roleTitle: "Cuenta",
     roleText: () => "Esta cuenta no tiene un rol reconocido asignado.",
   },
@@ -681,7 +681,7 @@ function MembershipCard({ membership }: { membership: MembershipSummary }): Reac
     <section data-testid="profile-membership" className="card flex flex-none flex-col overflow-hidden">
       <div className="border-b border-line px-5 py-4">
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
-          Tu membresía
+          Su membresía
         </h2>
       </div>
       {plan && <PanelFact label="Plan">{plan}</PanelFact>}
@@ -1102,7 +1102,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               #204 first pass" note). */}
           <CardSection
             title="Datos personales"
-            subtitle="Información de tu cuenta"
+            subtitle="Información de su cuenta"
             testId="profile-column-info"
           >
             <DetailRow label="Nombres">{fullName}</DetailRow>
@@ -1137,7 +1137,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           </CardSection>
 
           <CardSection
-            title="Información de tu rol"
+            title="Información de su rol"
             subtitle={roleCopy.roleCaption}
             testId="profile-role-info"
           >

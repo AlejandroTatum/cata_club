@@ -397,7 +397,7 @@ describe("ProfilePage — student/representante summary view", () => {
 
     expect((await screen.findAllByText("Sofía Alumna")).length).toBe(2);
     // No membership row exists to badge on the compact panel, so the honest
-    // "no disponible" note lives in "Información de tu rol" instead — a fact
+    // "no disponible" note lives in "Información de su rol" instead — a fact
     // is stated exactly once, never both as an absent badge AND text.
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Membresía")).toBeInTheDocument();
@@ -439,7 +439,7 @@ describe("ProfilePage — student/representante summary view", () => {
     expect(screen.getByText("Ana Hija")).toBeInTheDocument();
     // No `self` profile here — the hero shows no membership badge at all
     // (there is no personal status to report). The fallback text now appears
-    // 3 times: the 2 representado rows, PLUS "Información de tu rol"'s own
+    // 3 times: the 2 representado rows, PLUS "Información de su rol"'s own
     // "Membresía propia" fact (self === null is a definite "not enrolled as
     // a student", not the ambiguous case — see the module docstring).
     expect(screen.getAllByText("No disponible — consulte con administración")).toHaveLength(3);
@@ -546,7 +546,7 @@ describe("ProfilePage — student/representante summary view", () => {
 });
 
 describe("ProfilePage — issue #204 redesign: four role variants share one architecture", () => {
-  it("shows the Administrador variant's role on the identity panel, plus 'Cuenta administrativa' with Rol principal/Estado in Información de tu rol", async () => {
+  it("shows the Administrador variant's role on the identity panel, plus 'Cuenta administrativa' with Rol principal/Estado in Información de su rol", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
     mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
 
@@ -558,7 +558,7 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
 
     const hero = await waitForStaffProfile();
     expect(within(hero).getByText("Administrador")).toBeInTheDocument();
-    // "Información de tu rol" is now ALWAYS rendered — single-role staff
+    // "Información de su rol" is now ALWAYS rendered — single-role staff
     // accounts used to get nothing here at all.
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Cuenta administrativa")).toBeInTheDocument();
@@ -568,7 +568,7 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
     expect(within(roleInfo).getByText("Activo")).toBeInTheDocument();
   });
 
-  it("shows the Entrenador variant's role on the identity panel, plus 'Perfil de entrenador' with Rol principal/Estado in Información de tu rol", async () => {
+  it("shows the Entrenador variant's role on the identity panel, plus 'Perfil de entrenador' with Rol principal/Estado in Información de su rol", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("trainer"));
     mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, roles: ["ENTRENADOR"] });
 
@@ -586,7 +586,7 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
     expect(within(roleInfo).getByText("Activo")).toBeInTheDocument();
   });
 
-  it("shows the Estudiante variant's role and real fecha de nacimiento in 'Información de tu rol'", async () => {
+  it("shows the Estudiante variant's role and real fecha de nacimiento in 'Información de su rol'", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: {
@@ -1717,7 +1717,7 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
   it("labels each section with the prototype's own subtitle copy", async () => {
     await renderAdmin();
 
-    expect(within(screen.getByTestId("profile-column-info")).getByText("Información de tu cuenta")).toBeInTheDocument();
+    expect(within(screen.getByTestId("profile-column-info")).getByText("Información de su cuenta")).toBeInTheDocument();
     expect(within(screen.getByTestId("profile-role-info")).getByText("Rol asignado a esta cuenta")).toBeInTheDocument();
     expect(within(screen.getByTestId("profile-column-status")).getByText("Acciones de acceso")).toBeInTheDocument();
   });
@@ -1725,7 +1725,7 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
   it("shows the role-specific 'bajada' under the page title", async () => {
     await renderAdmin();
 
-    expect(screen.getByText("Revisá tus datos y mantené segura tu cuenta.")).toBeInTheDocument();
+    expect(screen.getByText("Revise sus datos y mantenga segura su cuenta.")).toBeInTheDocument();
   });
 
   it("shows a decorative icon on each of the three Seguridad rows", async () => {
@@ -1879,7 +1879,7 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
 
   it("draws no membership card at all when the account has no membership", async () => {
     // A representante with no alumno role of their own. The honest "No
-    // disponible" note in "Información de tu rol" already states this once;
+    // disponible" note in "Información de su rol" already states this once;
     // an empty card would state it a second time, as a shape.
     await renderStudent({ membership: null });
 
@@ -1967,7 +1967,7 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
 
     const titles = [
       within(screen.getByTestId("profile-column-info")).getByText("Datos personales"),
-      within(screen.getByTestId("profile-role-info")).getByText("Información de tu rol"),
+      within(screen.getByTestId("profile-role-info")).getByText("Información de su rol"),
       within(screen.getByTestId("profile-column-status")).getByText("Seguridad"),
     ];
 
@@ -2020,4 +2020,102 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
     });
     expect(photo.className).not.toContain("bg-cata-red");
   });
+});
+
+// ---------------------------------------------------------------------------
+// Register — issue #340. Perfil tuteaba/voseaba ("Revisá", "mantené", "tu
+// cuenta") while the other 20 audited screens use "usted" consistently. The
+// candado is a word-shape lock, not a fixed-string lock: the audit that found
+// this one also found the same origin could have left orphaned copy
+// elsewhere, and a lock on one literal sentence would miss a rewording that
+// keeps the same defect in different words. This one fails on the SHAPE
+// (voseo imperatives, "vos"/"tu"/"tus") wherever it appears in the rendered
+// screen, for any of the four role variants.
+// ---------------------------------------------------------------------------
+
+describe("ProfilePage — usted register (issue #340)", () => {
+  /**
+   * Common voseo imperatives (2nd person singular, stressed final vowel) plus
+   * the "vos"/"tu"/"tus" pronouns that belong to "su"/"sus" in an usted
+   * register. Not exhaustive — a curated list of the shapes this audit and
+   * the issue itself named — but it is what actually regressed here, and
+   * catches the same origin resurfacing under a different sentence.
+   */
+  const VOSEO_WORDS = [
+    "revisá", "revisás", "mantené", "mantenés", "entrá", "entrás", "hacé", "hacés",
+    "poné", "ponés", "tené", "tenés", "mirá", "mirás", "elegí", "elegís",
+    "seguí", "seguís", "guardá", "guardás", "consultá", "consultás",
+    "administrá", "administrás", "escribí", "escribís", "confirmá", "confirmás",
+    "actualizá", "actualizás", "cambiá", "cambiás", "agregá", "agregás",
+    "seleccioná", "seleccionás", "ingresá", "ingresás", "recordá", "recordás",
+    "completá", "completás", "verificá", "verificás", "probá", "probás",
+  ];
+  // JS's `\b` treats accented letters as non-word characters, so `\brevisá\b`
+  // silently fails to match "Revisá " — there is no word/non-word transition
+  // between the trailing "á" and the space after it. A lookaround built on an
+  // explicit Latin-letter class (including accents) is the boundary that
+  // actually works here.
+  const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";
+  const VOSEO_RE = new RegExp(
+    `(?<![${LETTER}])(${VOSEO_WORDS.join("|")}|vos|tú|tu|tus)(?![${LETTER}])`,
+    "giu",
+  );
+
+  async function renderRole(
+    role: "admin" | "trainer" | "estudiante" | "representante",
+  ): Promise<void> {
+    mockUseAuth.mockReturnValue(sessionForRole(role));
+    if (role === "admin" || role === "trainer") {
+      mockFetchMiPerfil.mockResolvedValueOnce({
+        ...PERFIL_ADMIN,
+        roles: role === "admin" ? ["ADMINISTRADOR"] : ["ENTRENADOR"],
+      });
+    } else if (role === "estudiante") {
+      mockFetchStudentPortal.mockResolvedValueOnce({
+        self: {
+          personaId: "1",
+          nombres: "Sofía",
+          apellidos: "Alumna",
+          fechaNacimiento: "2012-05-10",
+          recentSessions: [],
+          membership: null,
+        },
+        representados: [],
+        membershipPlans: [],
+      });
+    } else {
+      mockFetchStudentPortal.mockResolvedValueOnce({
+        self: null,
+        representados: [
+          {
+            personaId: "20",
+            nombres: "Juan",
+            apellidos: "Hijo",
+            fechaNacimiento: "2014-02-01",
+            recentSessions: [],
+            membership: null,
+          },
+        ],
+        membershipPlans: [],
+      });
+    }
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await screen.findByTestId("profile-role-info");
+  }
+
+  it.each(["admin", "trainer", "estudiante", "representante"] as const)(
+    "keeps the %s view entirely in usted — no voseo/tuteo shape in the rendered screen",
+    async (role) => {
+      await renderRole(role);
+
+      const main = screen.getByRole("main");
+      const offenders = [...(main.textContent ?? "").matchAll(VOSEO_RE)].map((m) => m[0]);
+      expect(offenders).toEqual([]);
+    },
+  );
 });
