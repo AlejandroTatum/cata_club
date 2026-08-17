@@ -1602,6 +1602,40 @@ export async function fetchFichaMedica(personaId: number): Promise<FichaMedicaEd
 }
 
 /**
+ * The seven fields of issue #360's emergency card — deliberately NOT the
+ * same shape as `FichaMedicaEditable`. The backend enumerates them by hand in
+ * `FichaEmergenciaResponseDTO` for the same reason this type does: if
+ * `FichaMedica` gains columns tomorrow, neither inherits them.
+ *
+ * The four medical fields are all nullable: an alumno can have no ficha
+ * médica registered yet, and that is not an error (see
+ * `FichaMedicaServicio.obtener_ficha_emergencia`) — the representative's
+ * backup is what the trainer sees instead.
+ */
+export interface FichaEmergencia {
+  alumnoNombreCompleto: string;
+  tipoSangre: TipoSangre | null;
+  alergias: string | null;
+  contactoEmergencia: string | null;
+  telefonoEmergencia: string | null;
+  representanteNombreCompleto: string | null;
+  representanteTelefono: string | null;
+}
+
+/**
+ * Fetch the emergency card for one alumno — GET
+ * /api/fichas-medicas/persona/[id]/emergencia. ADMINISTRADOR or ENTRENADOR
+ * only; every call is audited backend-side (who consulted whom, and when).
+ * Distinct endpoint from `fetchFichaMedica`: this one never opens the full
+ * medical record (still 403 for ENTRENADOR), and the scope is by DATA, not
+ * by which alumnos this trainer "owns" — the club does not assign trainers
+ * to schedules (see the backend router's own comment).
+ */
+export async function fetchFichaEmergencia(personaId: number): Promise<FichaEmergencia> {
+  return request<FichaEmergencia>(apiEndpoint(`/fichas-medicas/persona/${personaId}/emergencia`));
+}
+
+/**
  * Update a person's medical record — same ADMINISTRADOR-or-representative
  * authorization as `fetchFichaMedica`. `enfermedades` replaces the full list.
  *
