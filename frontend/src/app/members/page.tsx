@@ -20,6 +20,7 @@ import { createPortal } from "react-dom";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ContextualHelp from "@/components/ContextualHelp";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   Badge,
   Button,
@@ -517,6 +518,15 @@ function MemberEditDialog({
   const statusBadge = getAccountStatusBadge(account);
   const personaId = Number(account.id);
 
+  // Issue #314 (K6 hallazgo #16): otorgar o quitar el rol ADMINISTRADOR daba
+  // control total del club (o se lo quitaba) al primer clic, sin ningún paso
+  // intermedio — el bloque "Roles" ya avisa que "se guarda al instante" pero
+  // no distingue esa palabra de las otras tres. Solo ADMINISTRADOR gana esta
+  // compuerta: es la única de las cuatro con ese efecto, y las otras siguen
+  // siendo reversibles con un clic, como antes.
+  const [adminConfirmOpen, setAdminConfirmOpen] = useState(false);
+  const accountFullName = `${account.nombres} ${account.apellidos}`;
+  const grantingAdmin = !roles.includes("ADMINISTRADOR");
 
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -733,7 +743,16 @@ function MemberEditDialog({
                           <input
                             type="checkbox"
                             checked={selected}
-                            onChange={() => void toggleRole(role)}
+                            onChange={() => {
+                              // ADMINISTRADOR is the one role whose grant/revoke
+                              // is a privilege change, not a label — it needs an
+                              // explicit stop naming the effect (issue #314).
+                              if (role === "ADMINISTRADOR") {
+                                setAdminConfirmOpen(true);
+                                return;
+                              }
+                              void toggleRole(role);
+                            }}
                             disabled={roleLoading !== null || !rolesReady}
                             className="sr-only"
                           />
@@ -793,6 +812,22 @@ function MemberEditDialog({
             <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-5 py-3.5">
               <Button onClick={onClose}>Cerrar</Button>
             </div>
+
+            <ConfirmDialog
+              open={adminConfirmOpen}
+              variant="danger"
+              title={grantingAdmin ? "Otorgar el rol Admin" : "Quitar el rol Admin"}
+              message={
+                grantingAdmin
+                  ? `Va a convertir a ${accountFullName} en Administrador. Va a tener control total del club: podrá gestionar pagos, cuentas, roles y datos de todos los socios.`
+                  : `Va a quitarle el rol de Administrador a ${accountFullName}. Va a perder el control total del club: ya no va a poder gestionar pagos, cuentas, roles ni datos de otros socios.`
+              }
+              onConfirm={() => {
+                setAdminConfirmOpen(false);
+                void toggleRole("ADMINISTRADOR");
+              }}
+              onCancel={() => setAdminConfirmOpen(false)}
+            />
           </dialog>,
           document.body,
         )}

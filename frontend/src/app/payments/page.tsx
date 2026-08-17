@@ -386,6 +386,19 @@ export default function PaymentsPage(): React.ReactElement {
   const [page, setPage] = useState(1);
   const [editStartDate, setEditStartDate] = useState("");
   const [editMonths, setEditMonths] = useState<number>(1);
+  /**
+   * True once the admin has actually touched either "Período de vigencia"
+   * field for the request now open. Issue #314 (K6 hallazgos #11/#46):
+   * `handleApprove` used to ALWAYS recompute the end date from
+   * `editStartDate`/`editMonths`, even when the admin never touched either —
+   * and that seed is a lossy calendar-month approximation of the real
+   * `selectedRequest.endDate` (see the seeding effect below), so an untouched
+   * approval could silently save a shorter period than the one requested.
+   * While this stays false, the exact requested period is what gets
+   * submitted and previewed — the recomputed value only takes over once the
+   * admin has deliberately changed something.
+   */
+  const [editPeriodTouched, setEditPeriodTouched] = useState(false);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
 
   function calcEditEndDate(startDate: string, months: number): string {
@@ -441,6 +454,7 @@ export default function PaymentsPage(): React.ReactElement {
   useEffect(() => {
     if (selectedRequest === null) return;
     setEditStartDate(selectedRequest.startDate);
+    setEditPeriodTouched(false);
     if (selectedRequest.startDate && selectedRequest.endDate) {
       const start = new Date(selectedRequest.startDate + "T12:00:00");
       const end = new Date(selectedRequest.endDate + "T12:00:00");
@@ -501,6 +515,39 @@ export default function PaymentsPage(): React.ReactElement {
   );
   const remainingChecks = checklist.items.filter((item) => !checked[item.key]).length;
   const checklistComplete = remainingChecks === 0;
+
+  /**
+   * Issue #314 (K6 hallazgos #11/#46): the "Período de vigencia" editor seeds
+   * `editMonths` from a calendar-month difference — `(end.month - start.month)`,
+   * which floors away the day-of-month when the real gap is not a whole
+   * number of months (e.g. 1 ago → 5 sep, 35 days, floors to "1 mes"). On
+   * approve, `handleApprove` submits `calcEditEndDate(editStartDate,
+   * editMonths)`, NOT `selectedRequest.endDate` — so that floor silently
+   * shortened the recorded vigencia by days the family already paid for
+   * (verified live: pagos 50/62/58/46/36, each losing exactly the days its
+   * requested endDate fell short of a whole month).
+   *
+   * The period the backend derived at registration (`registrar_pago`,
+   * `membresia_pago_servicio.py`) IS the amount of coverage the payment
+   * bought — it is what `PERÍODO` up top shows, from the very same
+   * `pago.fechaInicio`/`fechaFin` this component seeds the editor from (see
+   * `buildPaymentValidationRequest`). That period wins by default: the editor
+   * exists so an admin can deliberately choose a different vigencia, not to
+   * silently re-derive a shorter one nobody asked for. When the two disagree
+   * the screen has to say which one is about to be grabbed, instead of
+   * leaving it for a `curl` after the fact to discover (#46).
+   */
+  // While untouched, the requested period wins outright (see
+  // `editPeriodTouched`'s doc comment) — the preview shows the EXACT value
+  // that will be submitted, not the lossy recompute. Once touched, the
+  // recompute is the admin's own deliberate choice and is shown as such.
+  const vigenciaEndDateToSave =
+    editPeriodTouched || !selectedRequest
+      ? calcEditEndDate(editStartDate, editMonths)
+      : selectedRequest.endDate;
+  const vigenciaDiffersFromRequestedPeriod = Boolean(
+    selectedRequest && editPeriodTouched && vigenciaEndDateToSave !== selectedRequest.endDate,
+  );
 
   /** The pending queue as it stood before the in-flight decision resolves. */
   const pendingBeforeDecision = useRef<PaymentValidationRequest[]>([]);
@@ -622,7 +669,9 @@ export default function PaymentsPage(): React.ReactElement {
     if (!selectedRequest || !checklistComplete) return;
     const request = selectedRequest;
     const startDate = editStartDate || request.startDate;
-    const endDate = calcEditEndDate(startDate, editMonths);
+    // Untouched → the exact requested period, never the lossy recompute
+    // (issue #314, K6 hallazgo #11). See `editPeriodTouched`.
+    const endDate = editPeriodTouched ? calcEditEndDate(startDate, editMonths) : request.endDate;
 
     decide(
       request,
@@ -1125,7 +1174,10 @@ export default function PaymentsPage(): React.ReactElement {
                           <input
                             type="date"
                             value={editStartDate}
-                            onChange={(e) => setEditStartDate(e.target.value)}
+                            onChange={(e) => {
+                              setEditStartDate(e.target.value);
+                              setEditPeriodTouched(true);
+                            }}
                             className="rounded-ctl border border-line bg-paper px-3 py-2 text-sm text-ink"
                           />
                         </label>
@@ -1139,6 +1191,7 @@ export default function PaymentsPage(): React.ReactElement {
                             onChange={(e) => {
                               const parsed = parseInt(e.target.value, 10);
                               setEditMonths(Number.isNaN(parsed) || parsed < 1 ? 1 : parsed);
+                              setEditPeriodTouched(true);
                             }}
                             className="rounded-ctl border border-line bg-paper px-3 py-2 text-sm tabular-nums text-ink"
                           />
@@ -1146,7 +1199,19 @@ export default function PaymentsPage(): React.ReactElement {
                       </div>
                       {editStartDate && editMonths > 0 && (
                         <p className="mt-2 text-xs text-ink-3">
-                          Vence el {formatDate(calcEditEndDate(editStartDate, editMonths))}
+                          Vence el {formatDate(vigenciaEndDateToSave)}
+                        </p>
+                      )}
+                      {/* Issue #314 (K6 hallazgo #46): the checklist's "La fecha
+                          de la transferencia cae dentro del período" never said
+                          which period it meant. Once the admin edits this away
+                          from the requested one, say so explicitly and name
+                          which value is about to be recorded. */}
+                      {vigenciaDiffersFromRequestedPeriod && (
+                        <p className="mt-2 text-xs font-semibold text-state-bad" role="alert">
+                          Esta vigencia ({formatDate(vigenciaEndDateToSave)}) no coincide con el
+                          PERÍODO que pidió el socio ({formatDate(request.endDate)}). Se va a grabar
+                          la vigencia de aquí abajo, no el período de arriba.
                         </p>
                       )}
                     </fieldset>
@@ -1169,6 +1234,14 @@ export default function PaymentsPage(): React.ReactElement {
                         Rechazar pago…
                       </Button>
                     </div>
+                    {/* Issue #314 (K6 hallazgo #17): this fact lived only in
+                        /ayuda, two clicks and a different screen away from the
+                        button that needs it. It has to be visible BEFORE that
+                        click, not discoverable after. */}
+                    <p className="text-xs text-ink-3">
+                      Tras aprobar va a tener unos segundos para deshacerlo con &quot;Deshacer&quot;.
+                      Pasado ese momento el pago queda registrado y ya no se puede revertir.
+                    </p>
                     {!checklistComplete && (
                       <p className="text-xs text-ink-3">
                         {remainingChecks === 1
@@ -1309,7 +1382,11 @@ export default function PaymentsPage(): React.ReactElement {
           open={confirmApproveOpen}
           variant="state-ok"
           title="Aprobar pago"
-          message="¿Confirma que aprueba este pago? La membresía pasará a activa."
+          message={
+            vigenciaDiffersFromRequestedPeriod
+              ? `¿Confirma que aprueba este pago? La membresía pasará a activa con vigencia hasta ${formatDate(vigenciaEndDateToSave)}, distinta del período solicitado (${selectedRequest ? formatDate(selectedRequest.endDate) : ""}). Va a tener unos segundos para deshacerlo; pasado ese momento no se puede revertir.`
+              : "¿Confirma que aprueba este pago? La membresía pasará a activa. Va a tener unos segundos para deshacerlo; pasado ese momento no se puede revertir."
+          }
           onConfirm={() => {
             if (confirmApproveInFlightRef.current) return;
             confirmApproveInFlightRef.current = true;
