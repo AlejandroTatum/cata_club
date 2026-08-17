@@ -62,6 +62,7 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal } from "@/services/api";
 import type { StudentPortalSummary } from "@/services/api";
 import { EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
@@ -168,6 +169,7 @@ function RepresentanteMedicalRecordView({
 
 function StudentMedicalRecordContent(): React.ReactElement | null {
   const { session } = useAuth();
+  const { showInfo } = useToast();
   const router = useRouter();
   const role = session?.user.role;
   const personaId = session?.user.id ?? "";
@@ -203,8 +205,16 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
     role === "estudiante" && state.status === "ready" && isMinor(state.data.self?.fechaNacimiento);
 
   useEffect(() => {
-    if (selfIsMinor) router.replace("/student");
-  }, [selfIsMinor, router]);
+    if (selfIsMinor) {
+      // #315 hallazgo #69: this used to redirect in silence — a minor
+      // typing the URL landed back on /student with no idea why, the exact
+      // same 403 this avoids surfacing but with no explanation at all.
+      showInfo(
+        "Su ficha médica la corrige su representante o un administrador del club.",
+      );
+      router.replace("/student");
+    }
+  }, [selfIsMinor, router, showInfo]);
 
   if (selfIsMinor) return null;
 

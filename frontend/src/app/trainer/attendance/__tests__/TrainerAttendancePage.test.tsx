@@ -176,6 +176,33 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     expect(justified).toHaveAttribute("aria-checked", "true");
   });
 
+  it("defines each of the four attendance states, not just names them (#315 hallazgo #20)", async () => {
+    // The FAQ enumerates "Presente Tardanza Justificado Ausente" with zero
+    // definitions (indexOf === -1 for all four, even with every accordion
+    // open), and this "Cómo funciona pasar lista" panel used to only list the
+    // same four names as badges. A novice trainer choosing between four
+    // equal-weight buttons needs to know what each one means, not just spell it.
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
+    ]);
+    mockFetchAlumnosPorHorario.mockResolvedValue([ANA_ALUMNO_HORARIO]);
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText("Ana López");
+
+    fireEvent.click(screen.getByRole("button", { name: /cómo funciona pasar lista/i }));
+    const panel = screen.getByRole("region", { name: /cómo funciona pasar lista/i });
+
+    for (const state of ["Presente", "Tardanza", "Justificado", "Ausente"]) {
+      expect(within(panel).getByText(new RegExp(`^${state}:`))).toBeInTheDocument();
+    }
+  });
+
   it("submits the existing justified state mapping after direct selection", async () => {
     const trainerAuth = createAuthenticatedAuth("trainer", "Coach Torres");
     if (trainerAuth.session) trainerAuth.session.user.id = "17";

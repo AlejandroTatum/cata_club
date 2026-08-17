@@ -49,8 +49,9 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+const mockShowInfo = vi.fn();
 vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
+  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showInfo: mockShowInfo }),
 }));
 
 const mockFetchStudentPortal = vi.fn();
@@ -150,6 +151,21 @@ describe("StudentOwnMedicalRecordPage", () => {
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
     expect(mockFetchFichaMedica).not.toHaveBeenCalled();
+  });
+
+  // #315 hallazgo #69: the bounce used to be silent (GET 200, no toast) — a
+  // minor typing the URL landed back on /student with no idea why. The
+  // backend 403 this avoids surfacing is real
+  // (test_el_titular_menor_de_edad_no_lee_su_propia_ficha_medica); the reader
+  // deserves the same reason in plain words instead of a navigation that just
+  // undid itself.
+  it("says why it bounced a minor back, instead of redirecting in silence", async () => {
+    mockUseAuth.mockReturnValue(estudianteSession("80"));
+    mockFetchStudentPortal.mockResolvedValue(portal(MINOR_SELF));
+    render(<StudentOwnMedicalRecordPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
+    expect(mockShowInfo).toHaveBeenCalledWith(expect.stringMatching(/representante|administrador/i));
   });
 
   it("shows an error state and lets the reader retry when the portal fetch fails", async () => {

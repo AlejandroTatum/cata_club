@@ -560,7 +560,7 @@ export default function DiscountsPage(): React.ReactElement {
           title="Desactivar descuento"
           message={
             pendingDeactivation
-              ? `Va a desactivar el descuento «${pendingDeactivation.nombre}». Deja de poder aplicarse a pagos nuevos a partir de ahora; los pagos ya registrados con este descuento no cambian.`
+              ? `Va a desactivar el descuento «${pendingDeactivation.nombre}». Deja de poder aplicarse a pagos nuevos a partir de ahora, pero sigue en la lista para poder reactivarlo; los pagos ya registrados con este descuento no cambian.`
               : ""
           }
           confirmLabel="Desactivar"

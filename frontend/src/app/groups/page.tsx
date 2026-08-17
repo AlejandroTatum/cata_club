@@ -194,7 +194,13 @@ const CELL_LABEL = "text-2xs font-bold uppercase text-ink-3-strong";
  * One source, read by both, so the strip above and the labels below cannot say
  * different things or forget each other.
  */
-const COLUMNS = ["Grupo", "Horario", "Alumnos", "Acciones"] as const;
+// "Categoría", not "Grupo" (#315 hallazgo #41): this column shows
+// `categoriaLabel(card.categoria)`, the exact value the "Nueva categoría" /
+// "Editar categoría" controls on this same screen already name — a third
+// word for the same thing was the finding, not the column itself. The
+// user-facing screen name stays "Horarios" (see the NAMING note at the top
+// of this file): that rename is deliberately out of scope, this one is not.
+const COLUMNS = ["Categoría", "Horario", "Alumnos", "Acciones"] as const;
 
 /**
  * A cell's own label. Visible below `xl`, where the stacked row has no header

@@ -89,7 +89,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       {
         question: "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
         answer:
-          "Sí. En Mi Cuenta, bajo Ficha médica, se ven y se corrigen las alergias, enfermedades, tipo de sangre y contacto de emergencia. Un representante puede hacerlo por cada hijo o dependiente a su cargo, y un socio mayor de edad que gestiona su propia cuenta, por la suya. La ficha de un menor la corrige su representante o un administrador del club.",
+          "Depende de quién es el titular. Un representante puede hacerlo por cada hijo o dependiente a su cargo, y un socio mayor de edad que gestiona su propia cuenta, por la suya: en Mi Cuenta, bajo Ficha médica, se ven y se corrigen las alergias, enfermedades, tipo de sangre y contacto de emergencia. La ficha de un menor con cuenta propia no la corrige el menor: la corrige su representante o un administrador del club.",
       },
       {
         question: "Represento a más de un hijo. ¿Cómo cambio entre ellos?",
@@ -128,7 +128,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       {
         question: "Tengo muchos pagos iguales. ¿Debo aprobarlos de a uno?",
         answer:
-          "No. Puede seleccionar varios en la cola y aprobarlos juntos. Sigue confirmando lo que revisó, pero una sola vez para todo el lote.",
+          "Sí, uno por uno. La cola de Membresías y Pagos revisa y decide cada solicitud por separado, con su propia lista de verificación: no hay una acción para aprobar varias a la vez.",
       },
       {
         question: "Aprobé un pago por error. ¿Puedo revertirlo?",
@@ -138,7 +138,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       {
         question: "¿Quién define los horarios?",
         answer:
-          "El administrador, desde Gestión de Horarios. Cada horario pertenece a una categoría con su día y su hora; la clase la da el entrenador disponible.",
+          "El administrador, desde Horarios. Cada categoría tiene su franja de días y hora; la clase la da el entrenador disponible.",
       },
     ],
   },
