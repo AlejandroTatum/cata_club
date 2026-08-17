@@ -417,6 +417,24 @@ def test_roster_de_todos_los_horarios_requiere_admin_o_entrenador(client_sin_per
     assert resp.status_code == 403
 
 
+# --- Issue #356: el recorte de permisos del entrenador (representados,
+# antecedentes-club) no le toca nada a su tarea diaria -- pasar lista. Este
+# candado prueba el roster con un token de ENTRENADOR PURO (sin
+# ADMINISTRADOR, a diferencia del fixture `client` combinado de arriba).
+def test_roster_de_todos_los_horarios_funciona_con_token_de_entrenador_puro(client_entrenador, client):
+    alumno = _crear_persona_api(client, cedula_valida(143), "Dani")
+    horario = _crear_horario_api(client)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.get("/api/v1/asistencias/horarios/alumnos")
+    assert resp.status_code == 200
+    assert alumno["id"] in [fila["personaId"] for fila in resp.json()]
+
+
 # --- Fix 8 / DSH-2: "últimas listas del club" -------------------------------
 # El panel del entrenador rediseñado (§8 de decisiones-de-negocio-2026-08-11.md)
 # muestra las últimas listas tomadas en el club, sin autor: no existe relación

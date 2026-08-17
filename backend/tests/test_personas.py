@@ -55,8 +55,10 @@ def test_representante_reflexivo(client):
 # — cualquier autenticado podía enumerar cédula/teléfono/fecha_nacimiento/
 # foto_url de los dependientes de OTRO representante. Mismo patrón de
 # ownership que el POST hermano (`crear_representado`), con la excepción de
-# que ADMINISTRADOR/ENTRENADOR sí necesitan consultar representados de
-# cualquier persona (uso legítimo en el panel admin).
+# que ADMINISTRADOR sí necesita consultar representados de cualquier persona
+# (uso legítimo en el panel admin). ENTRENADOR quedó afuera de esa excepción
+# por decisión del dueño (issue #356): solo toma lista y revisa listas, no
+# ve datos personales -- ver `test_listar_representados_entrenador_ya_no_puede_consultar_persona_ajena`.
 
 def test_listar_representados_propio_da_200(client, db_session):
     representante = _crear_persona_representante(db_session, cedula="1710034065")
@@ -85,12 +87,16 @@ def test_listar_representados_administrador_puede_consultar_cualquier_persona(cl
     assert resp.status_code == 200
 
 
-def test_listar_representados_entrenador_puede_consultar_cualquier_persona(client, db_session):
+# --- Issue #356: decisión del dueño -- "el entrenador no debería ver esos
+# datos, solo tomar lista, revisar listas y ya". Antes ENTRENADOR pasaba por
+# el mismo carve-out que ADMINISTRADOR; hoy exige SOLO_ADMINISTRADOR, igual
+# que el resto de las lecturas de PII de este router.
+def test_listar_representados_entrenador_ya_no_puede_consultar_persona_ajena(client, db_session):
     representante = _crear_persona_representante(db_session, cedula="1710034065")
     _restaurar_override_token(persona_id=999, roles=["ENTRENADOR"])
 
     resp = client.get(f"/api/v1/personas/{representante.id}/representados")
-    assert resp.status_code == 200
+    assert resp.status_code == 403
 
 
 def test_actualizar_persona(client):

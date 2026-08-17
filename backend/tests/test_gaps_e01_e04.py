@@ -319,6 +319,44 @@ def test_antecedentes_club_duplicado_falla(client):
     assert resp.status_code == 400
 
 
+# --- Issue #356: decisión del dueño -- "el entrenador no debería ver esos
+# datos, solo tomar lista, revisar listas y ya". `obtener_antecedentes_club`
+# exigía ADMINISTRADOR_O_ENTRENADOR; ahora exige SOLO_ADMINISTRADOR.
+def test_obtener_antecedentes_club_entrenador_da_403(client):
+    persona = _crear_persona(client, cedula_valida(330))
+    client.post(
+        f"/api/v1/personas/{persona['id']}/antecedentes-club",
+        json={
+            "nivel_tecnico_alumno": "NIVEL 1", "fecha_inicio_club": "2024-01-01",
+            "persona_id": persona["id"],
+        },
+    )
+
+    from fastapi.testclient import TestClient
+    from main import app
+
+    app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+        "sub": "entrenador@cataclub.test", "persona_id": 999, "roles": ["ENTRENADOR"],
+    }
+    c_entrenador = TestClient(app)
+    resp = c_entrenador.get(f"/api/v1/personas/{persona['id']}/antecedentes-club")
+    assert resp.status_code == 403
+
+
+def test_obtener_antecedentes_club_administrador_sigue_funcionando(client):
+    """Contracara del test de arriba: el recorte no le toca nada al admin."""
+    persona = _crear_persona(client, cedula_valida(331))
+    client.post(
+        f"/api/v1/personas/{persona['id']}/antecedentes-club",
+        json={
+            "nivel_tecnico_alumno": "NIVEL 1", "fecha_inicio_club": "2024-01-01",
+            "persona_id": persona["id"],
+        },
+    )
+    resp = client.get(f"/api/v1/personas/{persona['id']}/antecedentes-club")
+    assert resp.status_code == 200
+
+
 # --- Solo-lectura financiera para menores (E01-RF006/007, punto 8) ----------
 def test_menor_no_puede_registrar_su_propio_pago(client):
     representante = _crear_persona(client, cedula_valida(318), fecha_nacimiento="1990-01-01")
