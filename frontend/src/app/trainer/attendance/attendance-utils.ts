@@ -321,6 +321,33 @@ export function buildAttendanceReceipt(
  * `registrar_asistencia`, resubmitting updates those rows instead of creating
  * duplicates).
  */
+/**
+ * True once at least one row's `attendance` differs from `serverRoster` — the
+ * snapshot the roster carried the moment it left the server, taken BEFORE any
+ * draft overlay or trainer edit (see `openRoster`, page.tsx).
+ *
+ * `reviewed`/`reviewedCount` cannot answer "is there something unsaved":
+ * a row already comes back reviewed when the server sent a recorded `estado`
+ * for it (`buildRosterFromAlumnoHorarios` above), which is exactly what a
+ * read-only, already-registered session does for EVERY row without the
+ * trainer touching anything (issue #335). This diffs against the server
+ * snapshot instead, so only edits made in THIS visit — a live tap or a
+ * restored draft, both funneled through `commitStudents` in page.tsx — ever
+ * count as "unsaved".
+ *
+ * An empty roster has nothing to compare and is never "unsaved" — this
+ * matters for `handleReset`, which clears `students` back to `[]` without
+ * also clearing the stale server snapshot still sitting in the ref.
+ */
+export function hasUnsavedAttendanceEdits(
+  current: SessionStudent[],
+  serverRoster: SessionStudent[],
+): boolean {
+  if (current.length === 0) return false;
+  const serverAttendanceById = new Map(serverRoster.map((s) => [s.id, s.attendance]));
+  return current.some((s) => s.attendance !== serverAttendanceById.get(s.id));
+}
+
 export function buildRosterFromAlumnoHorarios(
   items: AlumnoHorario[],
   existingRecords: AttendanceRecord[] = [],

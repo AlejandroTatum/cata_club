@@ -2229,6 +2229,84 @@ describe("TrainerAttendancePage — leaving asks first", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Issue #335 — regression from #323's read-only mode. `hasUnsavedMarks` used
+// to be `!confirmed && reviewedCount > 0`: it could not tell "the server
+// already sent every state filled in" apart from "the trainer just typed
+// something", so opening an already-registered list in read-only mode and
+// leaving WITHOUT touching anything still fired the `beforeunload` prompt.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — el aviso de salida distingue datos del servidor de ediciones (issue #335)", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockPush.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset();
+    mockRegisterAttendance.mockReset();
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+  });
+
+  /** Every student in `buildAlumnoHorarios(3)` already has a record for TODAY. */
+  function existingRecordsForAllStudents(): unknown[] {
+    return buildAlumnoHorarios(3).map((raw) => {
+      const s = raw as { personaId: number; personaNombreCompleto: string };
+      return {
+        id: `att-${s.personaId}`,
+        fecha: "2026-07-21",
+        horario: "Martes 18:00 — 19:00",
+        horarioId: 12,
+        personaId: s.personaId,
+        estudiante: s.personaNombreCompleto,
+        estado: "present",
+        entrenador: "Coach Torres",
+      };
+    });
+  }
+
+  function beforeUnloadRegistrations(spy: ReturnType<typeof vi.spyOn>): unknown[][] {
+    return spy.mock.calls.filter(([type]) => type === "beforeunload");
+  }
+
+  it("no registra el listener de beforeunload en modo lectura sin ninguna interacción", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
+    const addEventListenerSpy = vi.spyOn(window, "addEventListener");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    // Modo lectura confirmado: sin radios que editar.
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(beforeUnloadRegistrations(addEventListenerSpy)).toHaveLength(0);
+
+    addEventListenerSpy.mockRestore();
+  });
+
+  it("sí registra el listener de beforeunload cuando el entrenador edita una marca en una lista abierta normalmente", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    const addEventListenerSpy = vi.spyOn(window, "addEventListener");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    expect(beforeUnloadRegistrations(addEventListenerSpy)).toHaveLength(0);
+
+    fireEvent.click(
+      within(screen.getByRole("radiogroup", { name: /Student 01/ })).getByRole("radio", {
+        name: "Tardanza",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(beforeUnloadRegistrations(addEventListenerSpy).length).toBeGreaterThan(0);
+    });
+
+    addEventListenerSpy.mockRestore();
+  });
+});
+
 describe("TrainerAttendancePage — the picker offers an unfinished list back", () => {
   beforeEach(() => {
     mockReplace.mockReset();

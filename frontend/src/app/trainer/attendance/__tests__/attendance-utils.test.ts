@@ -35,6 +35,7 @@ import {
   toAttendanceMarks,
   buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
+  hasUnsavedAttendanceEdits,
   type SessionStudent,
 } from "../attendance-utils";
 import type { AlumnoHorario } from "@/services/api";
@@ -648,6 +649,38 @@ describe("applyAttendanceDraft", () => {
     const result = applyAttendanceDraft(roster, { "1": "present", "2": "absent", "3": "late" });
     expect(countUnmarked(result)).toBe(0);
     expect(countUnreviewed(result)).toBe(0);
+  });
+});
+
+// Issue #335: `hasUnsavedMarks` (page.tsx) used to be `reviewedCount > 0`,
+// which could not tell "the server already put a decision on this row" apart
+// from "the trainer just typed one". `hasUnsavedAttendanceEdits` is the fix —
+// it diffs the current roster against the snapshot the server handed back,
+// so only rows the trainer actually changed in THIS visit count.
+describe("hasUnsavedAttendanceEdits", () => {
+  const serverRoster: SessionStudent[] = [
+    { id: "1", name: "A", attendance: "present", reviewed: true },
+    { id: "2", name: "B", attendance: "absent", reviewed: true },
+  ];
+
+  it("is false when the roster is byte-identical to what the server sent", () => {
+    const current: SessionStudent[] = [
+      { id: "1", name: "A", attendance: "present", reviewed: true },
+      { id: "2", name: "B", attendance: "absent", reviewed: true },
+    ];
+    expect(hasUnsavedAttendanceEdits(current, serverRoster)).toBe(false);
+  });
+
+  it("is true once a row's attendance diverges from the server snapshot", () => {
+    const current: SessionStudent[] = [
+      { id: "1", name: "A", attendance: "late", reviewed: true },
+      { id: "2", name: "B", attendance: "absent", reviewed: true },
+    ];
+    expect(hasUnsavedAttendanceEdits(current, serverRoster)).toBe(true);
+  });
+
+  it("is false for an empty roster regardless of the server snapshot", () => {
+    expect(hasUnsavedAttendanceEdits([], serverRoster)).toBe(false);
   });
 });
 
