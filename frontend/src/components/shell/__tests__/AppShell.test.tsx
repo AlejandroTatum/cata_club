@@ -448,6 +448,39 @@ describe("AppShell", (): void => {
     expect(screen.getByText(/No se encontraron secciones/i)).toBeInTheDocument();
   });
 
+  /**
+   * Issue #316 hallazgo #53: the palette read `navGroups` directly, so it
+   * only ever offered what the sidebar rail draws — and the rail does not
+   * draw `/ayuda` (it lives in the footer, "Preguntas frecuentes") or
+   * `/profile` (behind the user menu, "Perfil"). Typing either word into
+   * "Buscar una sección…" found nothing, though both are one click away from
+   * the very same sidebar.
+   */
+  it("finds Preguntas frecuentes and Perfil, not just the sidebar rail", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
+
+    fireEvent.change(screen.getByPlaceholderText("Ir a una sección…"), {
+      target: { value: "pregunta" },
+    });
+    expect(screen.getByRole("option", { name: "Preguntas frecuentes" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Ir a una sección…"), {
+      target: { value: "perfil" },
+    });
+    expect(screen.getByRole("option", { name: "Perfil" })).toBeInTheDocument();
+  });
+
+  it("navigates to /ayuda and /profile from the palette", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
+    fireEvent.click(screen.getByRole("option", { name: "Preguntas frecuentes" }));
+
+    expect(mockPush).toHaveBeenCalledWith("/ayuda");
+  });
+
   it("navigates and closes the palette when a result is clicked", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 

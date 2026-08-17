@@ -35,6 +35,7 @@ import {
   FileText,
   History,
   Stethoscope,
+  BookOpen,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
@@ -98,6 +99,12 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   // each other's nav, and within the family portal it collides with nothing.
   "/student/attendance": ClipboardCheck,
   "/student/medical-record": Stethoscope,
+  // Reachable by every authenticated role (issue #316 hallazgo #53), not just
+  // the family portal — same glyph the sidebar's own "Preguntas frecuentes"
+  // row already wears. "/profile" has no entry of its own: it falls back to
+  // `User` below, the same glyph "/student" already carries, and nothing in
+  // this map disambiguates two rows that are never both drawn in the sidebar.
+  "/ayuda": BookOpen,
 };
 
 /**
