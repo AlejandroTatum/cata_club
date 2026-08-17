@@ -782,6 +782,16 @@ export default function PaymentsPage(): React.ReactElement {
           // undisclosed ceiling is worth more.
           help={
             <ContextualHelp title="Ayuda sobre el alcance de la cola">
+              {/* #315 hallazgo #45: esta era la única ayuda de la cola y solo
+                  hablaba del tope técnico de la consulta — nunca de en qué
+                  consiste el trabajo que el administrador vino a hacer acá.
+                  El primer párrafo dice eso; el segundo, que ya estaba,
+                  sigue con el límite. */}
+              <p className="mb-2">
+                Validar un pago es revisar lo que la familia declaró — monto, período y comprobante
+                cuando corresponde — antes de decidir. Aprobar activa la membresía del período
+                pagado; rechazar le pide a la familia un comprobante nuevo.
+              </p>
               <p>
                 Esta cola trae hasta {PAYMENTS_FETCH_LIMIT} solicitudes por consulta, y los números
                 de las pestañas cuentan sobre lo traído. Si el club supera ese volumen, use el

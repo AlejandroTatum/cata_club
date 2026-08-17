@@ -1252,6 +1252,19 @@ describe("PaymentsPage — la ayuda y la salida", () => {
     expect(panel.contains(toggle)).toBe(true);
   });
 
+  it("explains what validating a payment is before it explains the fetch ceiling (#315 hallazgo #45)", async () => {
+    // This queue is where the admin's main job lives, and its only help
+    // panel used to explain a technical limit (the 200-request fetch cap)
+    // without ever saying what "validar" means. It has to lead with the job.
+    renderPage();
+    await screen.findAllByText("Juan Pérez");
+
+    fireEvent.click(screen.getByRole("button", { name: /alcance de la cola/i }));
+    const panel = screen.getByRole("region", { name: /alcance de la cola/i });
+
+    expect(within(panel).getByText(/validar/i)).toBeInTheDocument();
+  });
+
   it("gives the truly-empty queue a way out instead of a dead end", async () => {
     // The `all` filter with no query was the one branch that shipped with no
     // action at all — the dead end the shared component's own doc warns about.

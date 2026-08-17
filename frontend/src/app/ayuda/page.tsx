@@ -131,6 +131,20 @@ export default function AyudaPage(): React.ReactElement {
             </tbody>
           </table>
         </div>
+
+        {/*
+         * #315 hallazgo #48: this table cannot be reconciled with a reader's
+         * OWN carnet, because a plan's NAME can share a word with a categoría
+         * ("Mensual Infantil") without being that categoría — the plan is a
+         * price, never a schedule (`franja_horaria` was dropped from
+         * `tipo_membresia` for exactly this reason, #160). Without this line
+         * a family comparing the two concludes their own horario is loaded
+         * wrong, when it is the plan name that never promised a franja.
+         */}
+        <p className="mt-3 text-2xs text-ink-3">
+          El nombre del plan es una tarifa, no indica la categoría ni la franja: la franja real de
+          cada alumno es la que figura en su propio carnet, en Mi Cuenta.
+        </p>
       </section>
 
       {/*

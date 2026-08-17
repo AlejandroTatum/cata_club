@@ -377,21 +377,28 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     // The strip above the list is `aria-hidden` — correctly, since announcing
     // it too would read each column name twice per row. So the names assistive
     // tech actually gets are the ones INSIDE each row, and two of the four were
-    // missing: `Grupo` had a strip entry and no cell label, and the action
+    // missing: `Categoría` had a strip entry and no cell label, and the action
     // column had neither. Below `xl` there is no strip at all, so the first
     // column of every row was unnamed at every width.
     //
     // Asserted per row rather than per page: a label that exists once, above,
     // is exactly the state this replaces.
+    //
+    // Column reads "Categoría", not "Grupo" (#315 hallazgo #41): this column
+    // shows `categoriaLabel(card.categoria)`, the exact value the "Nueva
+    // categoría"/"Editar categoría" controls on this same screen already name
+    // — a third word for the same thing was the finding, not the column
+    // existing.
     mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
     for (const card of screen.getAllByTestId("horario-card")) {
-      for (const column of ["Grupo", "Horario", "Alumnos", "Acciones"]) {
+      for (const column of ["Categoría", "Horario", "Alumnos", "Acciones"]) {
         expect(within(card).getByText(column), `${column} is unnamed in the row`).toBeInTheDocument();
       }
+      expect(within(card).queryByText("Grupo")).not.toBeInTheDocument();
     }
   });
 

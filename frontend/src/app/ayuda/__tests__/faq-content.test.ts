@@ -93,6 +93,40 @@ describe("FAQ_SECTIONS", () => {
     expect(entry!.answer.toLowerCase().trim().startsWith("no:")).toBe(false);
   });
 
+  it("opens the medical-record answer with the condition, not with a flat 'Sí' (#315 hallazgo #69)", () => {
+    // The account reading this can be a minor's own — for that reader the
+    // true answer is "no". Opening with "Sí." teaches the wrong thing before
+    // the sentence that corrects it ever arrives.
+    const entry = FAQ_SECTIONS.flatMap((s) => s.entries).find(
+      (e) => e.question === "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
+    );
+    expect(entry).toBeDefined();
+    expect(entry!.answer.trim().startsWith("Sí.")).toBe(false);
+  });
+
+  it("never teaches the batch-approval flow /payments does not have (#315 hallazgo #13)", () => {
+    // PR #298 removed the payment queue's batch-selection affordance.
+    // /payments itself has a regression proving no checkbox/lote UI exists
+    // (PaymentsPage.test.tsx, "sumar a un lote" / "aprobación por lote"); this
+    // is the FAQ-side half — the copy that kept teaching the removed flow.
+    const entry = FAQ_SECTIONS.flatMap((s) => s.entries).find(
+      (e) => e.question === "Tengo muchos pagos iguales. ¿Debo aprobarlos de a uno?",
+    );
+    expect(entry).toBeDefined();
+    expect(entry!.answer).not.toMatch(/selecciona(r)? varios|lote|aprobarlos juntos/i);
+  });
+
+  it("names the schedules screen the way the nav does, never 'Gestión de Horarios' (#315 hallazgo #37)", () => {
+    // The nav entry and the page title are both exactly "Horarios"
+    // (`lib/auth-utils.ts`, `app/groups/layout.tsx`) — no screen in the menu
+    // is called "Gestión de Horarios".
+    const entry = FAQ_SECTIONS.flatMap((s) => s.entries).find(
+      (e) => e.question === "¿Quién define los horarios?",
+    );
+    expect(entry).toBeDefined();
+    expect(entry!.answer).not.toMatch(/Gestión de Horarios/i);
+  });
+
   it("names sections the way the menu does, never by route", () => {
     // The assistant is under explicit instruction never to mention a path;
     // a help page that does would contradict it in the same breath.

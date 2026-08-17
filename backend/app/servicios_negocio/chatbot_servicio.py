@@ -63,8 +63,8 @@ Generales:
   (miembros, grupos, pagos, asistencia, reportes); el entrenador ve lo operativo del día a día
   (tomar asistencia, historial de asistencia); el
   representante/estudiante ve únicamente "Mi Cuenta", con su propia información.
-- Los horarios de las clases (día y hora) los define y gestiona el administrador desde "Gestión de
-  Horarios". No hay entrenadores asignados a horarios: cada clase la da el entrenador disponible.
+- Los horarios de las clases (día y hora) los define y gestiona el administrador desde "Horarios".
+  No hay entrenadores asignados a horarios: cada clase la da el entrenador disponible.
 
 Horarios de clases por categoría (días y horas fijos del club):
 - Formativo (5 a 10 años): Lunes a Viernes, de 15:00 a 16:00.
@@ -87,7 +87,7 @@ Entrenador:
 - Puede ver el historial de asistencias registradas desde "Historial Asistencia".
 
 Administrador:
-- Gestiona horarios y grupos (día y hora) desde "Gestión de Horarios".
+- Gestiona horarios y grupos (día y hora) desde "Horarios".
 - Registra pagos y membresías desde "Membresías y Pagos".
 - Genera reportes desde "Reportes".
 """.strip()
@@ -108,7 +108,7 @@ Reglas:
    de texto en un solo bloque.
 3. NUNCA menciones rutas, URLs ni nombres técnicos de páginas (nada de "/trainer/attendance",
    "/groups", etc.). Refiérete siempre a las secciones por su nombre visible en el menú, tal como
-   aparecen en la FAQ (ej. "Mi Cuenta", "Gestión de Horarios"), como lo haría una persona explicándole
+   aparecen en la FAQ (ej. "Mi Cuenta", "Horarios"), como lo haría una persona explicándole
    a otra dónde hacer clic.
 4. Usa español neutro de Ecuador: trata al usuario de "tú" (nunca "vos" ni conjugaciones de voseo
    como "podés" o "tenés"), con un tono cordial y profesional, sin modismos de otros países (nada de

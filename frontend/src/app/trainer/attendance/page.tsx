@@ -219,6 +219,23 @@ const ATTENDANCE_ICONS: Record<EstadoAsistencia, React.ReactNode> = {
 /** Best news first — the same order every attendance surface reads in. */
 const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
 
+/**
+ * One line per estado, for the "Cómo funciona pasar lista" help panel.
+ *
+ * #315 hallazgo #20: the four estados were named all over the app (badges,
+ * radios, filters) but defined nowhere — a novice trainer choosing between
+ * four equal-weight buttons had no screen that said what any of them meant.
+ * `justified` is worded from `buildMonthAttendanceRate`'s own note (Justificado
+ * y ausente no son "entrenó", pero se cuentan aparte): it is its own bucket,
+ * not a synonym for ausente.
+ */
+const ATTENDANCE_DEFINITIONS: Record<EstadoAsistencia, string> = {
+  present: "asistió a la clase.",
+  late: "asistió, pero llegó después de que empezó.",
+  justified: "no asistió, pero avisó un motivo que el club aceptó — se registra aparte de una ausencia.",
+  absent: "no asistió y no hay motivo aceptado.",
+};
+
 /*
  * `RECEIPT_TONE_CLASS` used to live here: the state ramp (ok / warn / neutral
  * / bad), painting the receipt's proportional bar and its per-row dots.
@@ -1431,6 +1448,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   </Badge>
                 ))}
               </div>
+              <ul className="mt-2 flex flex-col gap-1">
+                {TOTAL_ORDER.map((state) => (
+                  <li key={state}>{`${ATTENDANCE_LABELS[state]}: ${ATTENDANCE_DEFINITIONS[state]}`}</li>
+                ))}
+              </ul>
               <p className="mt-2">
                 Una ficha con borde punteado y el estado{" "}
                 <span className="h-badge inline-flex items-center rounded-full border border-dashed border-line-2 px-[11px] text-2xs tracking-flat font-bold text-ink-3">

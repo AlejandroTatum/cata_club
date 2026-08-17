@@ -298,6 +298,21 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     expect(mockActualizarDescuento).not.toHaveBeenCalled();
   });
 
+  it("tells the reader the discount stays in the list to reactivate (#315 hallazgo #40)", async () => {
+    // The catalog's own "Ver ayuda" panel (D11c) already explains this, but
+    // it starts collapsed and nothing on the closed screen hints it is
+    // in there. This is the alternative the finding names: the consequence
+    // stated at the one moment the admin is guaranteed to read something —
+    // the confirmation the click itself opens.
+    renderPage();
+
+    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/reactivar/i)).toBeInTheDocument();
+  });
+
   it("deactivates an active discount via PATCH activo:false only after confirming", async () => {
     mockActualizarDescuento.mockResolvedValueOnce({ ...BECA, activo: false });
     renderPage();

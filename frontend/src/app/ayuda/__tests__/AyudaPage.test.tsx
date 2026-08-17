@@ -124,6 +124,25 @@ describe("AyudaPage — the club's face on its card titles", () => {
 // #203 — the FAQ grid collapses to one column and never fragments a section
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// #315 hallazgo #48 — the schedule table cannot be reconciled with a
+// student's own carnet without saying the plan is a price, not a category
+// ---------------------------------------------------------------------------
+
+describe("AyudaPage — the fixed-schedule table says a carnet's franja can differ (#315 hallazgo #48)", () => {
+  it("tells the reader their own carnet is the source, not the plan's name", () => {
+    render(<AyudaPage />);
+
+    // #160 already settled this for the app itself (`franja_horaria` was
+    // dropped from `tipo_membresia`; a plan is a price, never a schedule).
+    // This is the same fact stated where a reader can act on it: the one
+    // screen presenting the club's schedules as if they were fixed per name.
+    expect(
+      screen.getByText(/el plan .*(precio|tarifa).*no (indica|define) la categor[ií]a/i),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("AyudaPage — FAQ grid (#203)", () => {
   it("lays the FAQ sections out two-up on desktop and one-up on narrow screens", () => {
     render(<AyudaPage />);
