@@ -11,10 +11,12 @@ import {
   buildMonthAttendanceRate,
   buildSessionBarAriaLabel,
   buildSessionBarSegments,
+  buildDayRail,
   buildSessionCardState,
   findAbsenceAlert,
   formatAbsenceCount,
   formatElapsedMinutes,
+  formatMinutesAsHora,
   formatEnrolledCount,
   formatStateCount,
   formatTimeUntilStart,
@@ -593,5 +595,191 @@ describe("buildMonthAttendanceRate", () => {
   it("rounds to a whole percent", () => {
     expect(buildMonthAttendanceRate(stats(1, 3)).percent).toBe(33);
     expect(buildMonthAttendanceRate(stats(2, 3)).percent).toBe(67);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The day rail (issue #211 successor: the hero band spends WIDTH, not height)
+//
+// Geometry only. Every number below is a CSS percentage of the rail's own
+// window, never a displayed figure, so nothing here rounds.
+// ---------------------------------------------------------------------------
+
+/** A clock time on the fixture's day — the rail only ever reads hours/minutes. */
+function at(hours: number, minutes: number): Date {
+  return new Date(2026, 6, 23, hours, minutes);
+}
+
+describe("formatMinutesAsHora", () => {
+  it("pads both halves so the rail's two scale labels are the same width", () => {
+    expect(formatMinutesAsHora(0)).toBe("00:00");
+    expect(formatMinutesAsHora(9 * 60 + 5)).toBe("09:05");
+    expect(formatMinutesAsHora(15 * 60)).toBe("15:00");
+    expect(formatMinutesAsHora(23 * 60 + 59)).toBe("23:59");
+  });
+});
+
+describe("buildDayRail", () => {
+  it("is null when there is nothing to draw", () => {
+    expect(buildDayRail([], NOW)).toBeNull();
+  });
+
+  it("gives a lone session the whole rail — one full-width row, not a rail at all", () => {
+    const rail = buildDayRail([schedule(1, "15:00", "16:00")], NOW);
+
+    expect(rail).not.toBeNull();
+    expect(rail?.lanes).toBe(1);
+    expect(rail?.blocks).toHaveLength(1);
+    expect(rail?.blocks[0]).toMatchObject({ leftPercent: 0, widthPercent: 100, lane: 0 });
+    expect(rail?.startHora).toBe("15:00");
+    expect(rail?.endHora).toBe("16:00");
+  });
+
+  it("sizes every block by its own duration and places it by its own hour", () => {
+    // Window 15:00–20:00 is 300 minutes, so an hour is 20% and a half-hour 10%.
+    const rail = buildDayRail(
+      [
+        schedule(1, "15:00", "16:00"),
+        schedule(2, "17:00", "17:30"),
+        schedule(3, "19:00", "20:00"),
+      ],
+      NOW,
+    );
+
+    expect(rail?.blocks.map((b) => [b.schedule.id, b.leftPercent, b.widthPercent])).toEqual([
+      [1, 0, 20],
+      [2, 40, 10],
+      [3, 80, 20],
+    ]);
+    expect(rail?.startHora).toBe("15:00");
+    expect(rail?.endHora).toBe("20:00");
+  });
+
+  it("orders blocks by hour whatever order the API sent them in", () => {
+    const rail = buildDayRail(
+      [schedule(3, "19:00", "20:00"), schedule(1, "15:00", "16:00"), schedule(2, "17:00", "17:30")],
+      NOW,
+    );
+
+    expect(rail?.blocks.map((b) => b.schedule.id)).toEqual([1, 2, 3]);
+  });
+
+  it("phases each block against the clock: done, running, still to come", () => {
+    const rail = buildDayRail(
+      [
+        schedule(1, "15:00", "16:00"),
+        schedule(2, "17:00", "18:00"),
+        schedule(3, "19:00", "20:00"),
+      ],
+      at(17, 20),
+    );
+
+    expect(rail?.blocks.map((b) => b.phase)).toEqual(["past", "live", "upcoming"]);
+  });
+
+  it("counts a block as past only once it has ENDED, not once the next one is nearer", () => {
+    // 16:00 sharp: the 15:00 session is over, the 16:00 one has begun.
+    const rail = buildDayRail(
+      [schedule(1, "15:00", "16:00"), schedule(2, "16:00", "17:00")],
+      at(16, 0),
+    );
+
+    expect(rail?.blocks.map((b) => b.phase)).toEqual(["past", "live"]);
+  });
+
+  it("stacks overlapping sessions into rows instead of drawing them on top of each other", () => {
+    // The club runs two categories at once — `fetchTrainingSchedules` returns
+    // every horario of the day, not one trainer's.
+    const rail = buildDayRail(
+      [
+        schedule(1, "15:00", "16:00"),
+        schedule(2, "15:00", "16:00"),
+        schedule(3, "15:30", "16:30"),
+        schedule(4, "17:00", "18:00"),
+      ],
+      NOW,
+    );
+
+    expect(rail?.lanes).toBe(3);
+    expect(rail?.blocks.map((b) => [b.schedule.id, b.lane])).toEqual([
+      [1, 0],
+      [2, 1],
+      [3, 2],
+      // 17:00 clears every one of them, so it falls back to the first row.
+      [4, 0],
+    ]);
+  });
+
+  it("keeps a single row when sessions only touch end-to-start", () => {
+    const rail = buildDayRail(
+      [schedule(1, "15:00", "16:00"), schedule(2, "16:00", "17:00")],
+      NOW,
+    );
+
+    expect(rail?.lanes).toBe(1);
+    expect(rail?.blocks.every((b) => b.lane === 0)).toBe(true);
+  });
+
+  it("draws a session that crosses midday like any other — minutes, not clock faces", () => {
+    // 11:30–13:00 straddles 720 minutes past midnight; nothing about the
+    // window's arithmetic may notice.
+    const rail = buildDayRail(
+      [schedule(1, "11:30", "13:00"), schedule(2, "13:30", "14:30")],
+      at(12, 0),
+    );
+
+    expect(rail?.startHora).toBe("11:30");
+    expect(rail?.endHora).toBe("14:30");
+    // Window is 180 minutes: 90 of them is half the rail. The thirds are left
+    // unrounded on purpose — these are CSS widths, not figures anyone reads.
+    expect(rail?.blocks[0].leftPercent).toBe(0);
+    expect(rail?.blocks[0].widthPercent).toBe(50);
+    expect(rail?.blocks[1].leftPercent).toBeCloseTo(66.667, 3);
+    expect(rail?.blocks[1].widthPercent).toBeCloseTo(33.333, 3);
+    expect(rail?.blocks[0].phase).toBe("live");
+    expect(rail?.nowPercent).toBeCloseTo(16.667, 3);
+  });
+
+  it("puts the marker where the clock is, at either end included", () => {
+    const day = [schedule(1, "15:00", "16:00"), schedule(2, "19:00", "20:00")];
+
+    expect(buildDayRail(day, at(15, 0))?.nowPercent).toBe(0);
+    expect(buildDayRail(day, at(17, 30))?.nowPercent).toBe(50);
+    expect(buildDayRail(day, at(20, 0))?.nowPercent).toBe(100);
+  });
+
+  it("hides the marker before the day's first session — it is not standing at 15:00 yet", () => {
+    // 03:20 on a day that starts at 15:00. Pinning the marker to the left edge
+    // would say the first session is starting; the rail says nothing instead.
+    const rail = buildDayRail([schedule(1, "15:00", "16:00"), schedule(2, "19:00", "20:00")], at(3, 20));
+
+    expect(rail?.nowPercent).toBeNull();
+    expect(rail?.blocks.every((b) => b.phase === "upcoming")).toBe(true);
+  });
+
+  it("hides the marker once the day's last session is over", () => {
+    const rail = buildDayRail([schedule(1, "15:00", "16:00"), schedule(2, "19:00", "20:00")], at(21, 0));
+
+    expect(rail?.nowPercent).toBeNull();
+    expect(rail?.blocks.every((b) => b.phase === "past")).toBe(true);
+  });
+
+  it("drops a row it cannot draw instead of blanking the whole rail", () => {
+    // `horaInicio` arrives as a string from the API, and a session that ends
+    // before it starts has no width — neither may cost the day its rail.
+    const rail = buildDayRail(
+      [
+        schedule(1, "15:00", "16:00"),
+        schedule(2, "no es una hora", "17:00"),
+        schedule(3, "18:00", "17:00"),
+      ],
+      NOW,
+    );
+
+    expect(rail?.blocks.map((b) => b.schedule.id)).toEqual([1]);
+  });
+
+  it("is null when not one session of the day can be drawn", () => {
+    expect(buildDayRail([schedule(1, "??", "??")], NOW)).toBeNull();
   });
 });

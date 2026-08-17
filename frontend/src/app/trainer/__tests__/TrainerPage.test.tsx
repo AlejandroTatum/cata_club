@@ -218,38 +218,55 @@ describe("TrainerPage — Mi día", () => {
   });
 
   // -------------------------------------------------------------------------
-  // "The rest of today" — the fix for QA's actual complaint: a card with
-  // ~250px of dead air between its five short lines and the mt-auto actions.
+  // The day rail. QA's complaint about this band was its SIZE, and the band
+  // used to answer it with an `<ol>` that gained a ~40px row per session left
+  // today. The day is drawn along the band's width now — see the renegotiation
+  // note in `SessionCard.test.tsx`. What this pair is about (that today's
+  // sessions reach the band at all, that the roster is fetched ONCE and worded
+  // as "inscritos", and that a failed roster blocks nothing) did not move; the
+  // counts are read off each block's accessible name instead of off a text row.
   // -------------------------------------------------------------------------
 
-  it("fills the rest of the card with every OTHER session left today, roster counts included", async () => {
+  it("draws every session of today on the rail, roster counts included, and none of another day's", async () => {
     render(<TrainerPage />);
     await screen.findByText("Lunes 15:00 — 16:00");
 
-    const list = screen.getByRole("list", { name: "Después, más tarde hoy" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
-    expect(screen.getByText("16:00 — 17:00")).toBeInTheDocument();
-    expect(screen.getByText("17:00 — 18:00")).toBeInTheDocument();
+    const rail = screen.getByRole("list", { name: "Sus sesiones de hoy" });
+    // Three today. The Tuesday session in the fixture never reaches the band.
+    expect(within(rail).getAllByRole("listitem")).toHaveLength(3);
+
     // The roster resolves after the initial render, so wait for it.
-    expect(await screen.findByText(/3 estudiantes inscritos/)).toBeInTheDocument();
-    // Schedule 3's real, seeded enrollment is 0 — shown, not hidden.
-    expect(screen.getByText(/0 estudiantes inscritos/)).toBeInTheDocument();
-    // No hidden or tabbable session link snuck in through the list.
-    expect(within(list).queryAllByRole("link")).toHaveLength(0);
-    // Three sessions today, ONE roster call: the list must not reintroduce
+    expect(
+      await screen.findByRole("listitem", {
+        name: "16:00 a 17:00, por venir, 3 estudiantes inscritos",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("listitem", { name: "15:00 a 16:00, por venir, 12 estudiantes inscritos" }),
+    ).toBeInTheDocument();
+    // Schedule 3's real, seeded enrollment is 0 — said, not hidden.
+    expect(
+      screen.getByRole("listitem", { name: "17:00 a 18:00, por venir, 0 estudiantes inscritos" }),
+    ).toBeInTheDocument();
+
+    // No hidden or tabbable session link snuck in through the rail.
+    expect(within(rail).queryAllByRole("link")).toHaveLength(0);
+    // Three sessions today, ONE roster call: the rail must not reintroduce
     // the per-horario N+1 `fetchAlumnosPorHorario` replaced.
     expect(mockFetchRosterDeTodosLosHorarios).toHaveBeenCalledTimes(1);
   });
 
-  it("does not block the 'rest of today' list when the roster fails to load", async () => {
+  it("does not block the rail when the roster fails to load", async () => {
     mockFetchRosterDeTodosLosHorarios.mockRejectedValue(new Error("boom"));
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     render(<TrainerPage />);
     await screen.findByText("Lunes 15:00 — 16:00");
 
-    const list = screen.getByRole("list", { name: "Después, más tarde hoy" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    const rail = screen.getByRole("list", { name: "Sus sesiones de hoy" });
+    expect(within(rail).getAllByRole("listitem")).toHaveLength(3);
+    // Every block still names its hours; the count is the only part missing.
+    expect(screen.getByRole("listitem", { name: "16:00 a 17:00, por venir" })).toBeInTheDocument();
     expect(screen.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
   });
 
