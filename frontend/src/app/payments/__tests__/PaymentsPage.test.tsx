@@ -56,18 +56,13 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({
-    session: {
-      user: { id: "u1", name: "Admin Test", email: "admin@cataclub.com", role: "admin", representanteId: null },
-      roles: ["ADMINISTRADOR"],
-      loggedInAt: "2026-07-01T12:00:00Z",
-    },
-    isAuthenticated: true,
-    isLoading: false,
-    login: vi.fn(),
-    logout: vi.fn(),
-  }),
+  useAuth: vi.fn(),
 }));
+
+import { useAuth } from "@/contexts/AuthContext";
+import { createAuthenticatedAuth, createLoadingAuth } from "@/components/__tests__/test-utils";
+
+const mockUseAuth = vi.mocked(useAuth);
 
 const mockFetchPaymentValidations = vi.fn();
 const mockUpdatePaymentValidation = vi.fn();
@@ -191,6 +186,7 @@ beforeEach(() => {
   mockUpdatePaymentValidation.mockReset().mockImplementation((id: string) =>
     Promise.resolve({ ...PENDING_REQUEST, id, validationStatus: "validado" }),
   );
+  mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("admin"));
 });
 
 afterEach(() => {
@@ -1276,5 +1272,79 @@ describe("PaymentsPage — la ayuda y la salida", () => {
     await screen.findByText(/aún no hay solicitudes/i);
 
     expect(screen.getByRole("link", { name: /ir a miembros/i })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Role-gated fetch (issue #319 hallazgo #49).
+//
+// `loadRequests` ran from a bare mount effect, so a non-admin (e.g. a
+// student landing on /payments) fired GET /api/payments and logged a 403
+// before ProtectedRoute's redirect effect ran. ProtectedRoute is mocked to a
+// pass-through here so the fetch gate itself is what is under test.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — defers /api/payments until the role resolves", () => {
+  it("does not request payments while the session is still hydrating", async () => {
+    mockUseAuth.mockReturnValue(createLoadingAuth());
+
+    renderPage();
+
+    await waitFor(() => expect(mockFetchPaymentValidations).not.toHaveBeenCalled());
+  });
+
+  it("does not request payments for a resolved non-admin role", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante"));
+
+    renderPage();
+
+    await waitFor(() => expect(mockFetchPaymentValidations).not.toHaveBeenCalled());
+  });
+
+  it("requests payments once the admin role has resolved", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin"));
+
+    renderPage();
+
+    await waitFor(() => expect(mockFetchPaymentValidations).toHaveBeenCalled());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Silent bounce, explained (issue #319 hallazgo #68).
+//
+// `ProtectedRoute` (mocked to a pass-through here) already redirects a
+// non-admin session away from /payments — but silently, with nothing in the
+// UI naming why. Same pattern as the medical-record minor bounce (#315
+// hallazgo #69): a toast at the landing spot.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — names the reason when a non-admin session lands here", () => {
+  function renderWithToasts(): void {
+    render(
+      <ToastProvider>
+        <PaymentsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+  }
+
+  it("shows a visible reason for a resolved non-admin role", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante"));
+
+    renderWithToasts();
+
+    await liveRegionSaying(/permiso|autorizad|acceso|no corresponde/i);
+  });
+
+  it("shows no toast for the admin role that actually belongs here", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin"));
+
+    renderWithToasts();
+
+    await screen.findByTestId("payments-table");
+    expect(
+      screen.queryByText(/permiso|autorizad|acceso|no corresponde/i),
+    ).not.toBeInTheDocument();
   });
 });

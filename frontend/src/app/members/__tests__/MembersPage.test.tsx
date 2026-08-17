@@ -90,15 +90,17 @@ function hydratingAuth(): AuthState {
 // below overrides this per test.
 beforeEach(() => {
   mockUseAuth.mockReturnValue(resolvedAuth("admin"));
+  mockShowInfo.mockReset();
 });
 
+const mockShowInfo = vi.fn();
 vi.mock("@/contexts/ToastContext", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useToast: () => ({
     showToast: vi.fn(),
     showError: vi.fn(),
     showSuccess: vi.fn(),
-    showInfo: vi.fn(),
+    showInfo: mockShowInfo,
     showWarning: vi.fn(),
   }),
 }));
@@ -1758,6 +1760,46 @@ describe("MembersPage — defers /api/members until the role resolves", () => {
 
     await waitFor(() => expect(mockFetchMembers).toHaveBeenCalled());
     expect((await screen.findAllByText("María González")).length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Silent bounce, explained (issue #319 hallazgo #68).
+//
+// `ProtectedRoute` (mocked to a pass-through here) already redirects a
+// non-admin session away from /members — but silently, with nothing in the
+// UI naming why. Same pattern as the medical-record minor bounce (#315
+// hallazgo #69): a toast at the landing spot.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — names the reason when a non-admin session lands here", () => {
+  it("shows a visible reason for a resolved non-admin role", async () => {
+    mockUseAuth.mockReturnValue(resolvedAuth("student"));
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    await waitFor(() =>
+      expect(mockShowInfo).toHaveBeenCalledWith(
+        expect.stringMatching(/permiso|autorizad|acceso|no corresponde/i),
+      ),
+    );
+  });
+
+  it("shows no toast for the admin role that actually belongs here", async () => {
+    mockUseAuth.mockReturnValue(resolvedAuth("admin"));
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => expect(mockFetchMembers).toHaveBeenCalled());
+    expect(mockShowInfo).not.toHaveBeenCalled();
   });
 });
 
