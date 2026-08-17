@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.dominio.modelos import (
     Asistencia, HorarioEntrenamiento, AlumnoHorario, CategoriaHorario, CategoriaHorarioDia,
 )
-from app.dominio.enums import EstadoAsistencia, EstadoMembresia, EstadoPago
+from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
@@ -32,6 +32,23 @@ _CODIGO_MAX_LEN = 20
 # ciclo de cobro, un mes cerrado es un mes cerrado. Aplica SOLO a corregir un
 # registro ya existente; la toma original (crear) no tiene tope.
 LIMITE_CORRECCION_ASISTENCIA_DIAS = 30
+
+# `date.weekday()` (Python, Lunes=0..Domingo=6) -> `DiaSemana`. Usado por
+# `registrar_asistencia` para exigir que `fecha_entrenamiento` caiga
+# realmente en el `dia_semana` del horario (issue #308): sin esto, un
+# `fecha_entrenamiento` cualquiera pasaba con cualquier horario y el
+# historial acumulaba filas donde la fecha y el día de semana se
+# contradecían -- la invariante depende del backend porque el cliente es
+# quien la rompía.
+_WEEKDAY_A_DIA_SEMANA = {
+    0: DiaSemana.LUNES,
+    1: DiaSemana.MARTES,
+    2: DiaSemana.MIERCOLES,
+    3: DiaSemana.JUEVES,
+    4: DiaSemana.VIERNES,
+    5: DiaSemana.SABADO,
+    6: DiaSemana.DOMINGO,
+}
 
 
 def _sluggificar_nombre(nombre: str) -> str:
@@ -379,8 +396,29 @@ class AsistenciaServicio:
         persona = self.repo_persona.obtener_por_id(datos.persona_id)
         if not persona:
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
-        if not self.repo_horario.obtener_por_id(datos.horario_id):
+        horario = self.repo_horario.obtener_por_id(datos.horario_id)
+        if not horario:
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
+
+        # Issue #308: `fecha_entrenamiento` debe caer en el `dia_semana` real
+        # del horario. Invariante de dominio, no una validación de forma --
+        # sin esto el cliente podía (y lo hizo) mandar la fecha de HOY para
+        # un horario de otro día, y el historial quedaba con filas donde
+        # fecha y día de semana se contradicen. Se valida ACÁ, antes de la
+        # pertenencia del alumno, porque es una propiedad del par
+        # (fecha, horario) en sí, no de quién se está anotando.
+        dia_de_la_fecha = _WEEKDAY_A_DIA_SEMANA[datos.fecha_entrenamiento.weekday()]
+        if dia_de_la_fecha != horario.dia_semana:
+            raise OperacionInvalida(
+                f"La fecha {datos.fecha_entrenamiento.isoformat()} es "
+                f"{dia_en_castellano(dia_de_la_fecha)}, pero el horario es de "
+                f"{dia_en_castellano(horario.dia_semana)}.",
+                detalle_tecnico=(
+                    f"fecha_entrenamiento={datos.fecha_entrenamiento.isoformat()} "
+                    f"({dia_de_la_fecha.value}) horario_id={horario.id} "
+                    f"horario.dia_semana={horario.dia_semana.value}"
+                ),
+            )
 
         # LIFE-1: antes de esta línea el upsert de más abajo era ciego a si
         # el alumno está realmente inscrito en el horario -- se podía
