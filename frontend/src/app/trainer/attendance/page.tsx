@@ -115,6 +115,7 @@ import {
   toAttendanceMarks,
   buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
+  hasUnsavedAttendanceEdits,
   type SessionStudent,
   type StoredAttendanceDraft,
   type WizardLocation,
@@ -276,6 +277,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
   const [rosterError, setRosterError] = useState<string | null>(null);
 
   const [students, setStudents] = useState<SessionStudent[]>([]);
+  /**
+   * The roster exactly as `openRoster` last got it from the server — BEFORE
+   * the draft overlay, let alone any tap. `hasUnsavedMarks` diffs `students`
+   * against this to tell a row the server already filled in apart from one
+   * the trainer just edited (issue #335). A ref, not state: it only ever
+   * changes alongside `students` itself (inside `openRoster`/`handleReset`),
+   * so it needs no render of its own.
+   */
+  const serverRosterRef = useRef<SessionStudent[]>([]);
   const [undoStack, setUndoStack] = useState<RosterUndoEntry[]>([]);
   const [sessionDate, setSessionDate] = useState<string | null>(null);
   const [restoredFromDraft, setRestoredFromDraft] = useState(false);
@@ -540,6 +550,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
         // draft on top — the draft is the newer intent. Neither can produce
         // `UNMARKED`, so a student nobody has decided on stays undecided.
         const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
+        // Snapshot BEFORE the draft overlay below — see `hasUnsavedAttendanceEdits`.
+        serverRosterRef.current = roster;
         const draft = loadAttendanceDraft(attendanceDraftKey(horarioId, fecha));
         const withDraft = applyAttendanceDraft(roster, draft);
 
@@ -897,6 +909,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
     setRequestedDate(null);
     setRestoredFromDraft(false);
     setStudents([]);
+    serverRosterRef.current = [];
     setUndoStack([]);
     setSearchFilter("");
     setOnlyUnreviewed(false);
@@ -989,7 +1002,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
    * about discarding something nobody wrote.
    */
   const reviewedCount = students.length - unreviewedCount;
-  const hasUnsavedMarks = !confirmed && reviewedCount > 0;
+  /**
+   * NOT `reviewedCount > 0` (issue #335): `reviewed` also comes back `true`
+   * for a row the SERVER already sent an `estado` for — every row, on an
+   * already-registered session opened in read-only mode — which made
+   * `reviewedCount` count decisions nobody made in this visit. This diffs
+   * `students` against the server snapshot instead, so only an actual edit
+   * (a live tap or a restored draft) counts as "unsaved".
+   */
+  const hasUnsavedMarks = !confirmed && hasUnsavedAttendanceEdits(students, serverRosterRef.current);
 
   // ---- The confirmation receipt (issue #213) ----
 
