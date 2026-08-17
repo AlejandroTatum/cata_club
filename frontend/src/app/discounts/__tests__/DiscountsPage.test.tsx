@@ -222,6 +222,39 @@ describe("DiscountsPage — crear", () => {
     expect(await screen.findByText(/mayor a 0/i)).toBeInTheDocument();
     expect(mockCrearDescuento).not.toHaveBeenCalled();
   });
+
+  // Issue #314 (K6 hallazgo #34): a 521-char paste used to enter an
+  // uncontrolled `maxLength={100}` input, get silently clipped to 100 chars
+  // by the DOM, and save under a green "Descuento creado correctamente."
+  // toast — no counter, no color change, no warning anywhere. The field no
+  // longer truncates: it keeps the full pasted value, shows a live counter,
+  // and `handleSubmit` refuses to save until it fits.
+  it("keeps the full pasted name instead of silently clipping it at 100 chars", async () => {
+    renderPage();
+    await screen.findByText("Beca municipal");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
+    const nombreInput = screen.getByLabelText(/nombre/i) as HTMLInputElement;
+    const largo = "X".repeat(521);
+    fireEvent.change(nombreInput, { target: { value: largo } });
+
+    expect(nombreInput.value).toHaveLength(521);
+    expect(nombreInput).not.toHaveAttribute("maxLength");
+    expect(screen.getByText(/521\/100/)).toBeInTheDocument();
+  });
+
+  it("refuses to save a name over 100 characters instead of truncating it silently", async () => {
+    renderPage();
+    await screen.findByText("Beca municipal");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
+    fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "X".repeat(521) } });
+    fireEvent.change(screen.getByLabelText(/valor/i), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(await screen.findByText(/no puede superar los 100 caracteres/i)).toBeInTheDocument();
+    expect(mockCrearDescuento).not.toHaveBeenCalled();
+  });
 });
 
 describe("DiscountsPage — editar", () => {
@@ -249,25 +282,55 @@ describe("DiscountsPage — editar", () => {
 });
 
 describe("DiscountsPage — baja y reactivación suaves", () => {
-  it("deactivates an active discount via PATCH activo:false", async () => {
+  // Issue #314 (K6 hallazgo #14): this used to be the false lock — a single
+  // click on "Desactivar" fired the PATCH immediately, asserting the very
+  // bug the audit found as if it were correct behavior. "Desactivar" now
+  // opens a confirmation naming the discount before anything mutates;
+  // "Reactivar" is unaffected (reversible, stays one click) — see below.
+  it("opens a confirmation naming the discount on 'Desactivar' click, without mutating yet", async () => {
+    renderPage();
+
+    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/beca municipal/i)).toBeInTheDocument();
+    expect(mockActualizarDescuento).not.toHaveBeenCalled();
+  });
+
+  it("deactivates an active discount via PATCH activo:false only after confirming", async () => {
     mockActualizarDescuento.mockResolvedValueOnce({ ...BECA, activo: false });
     renderPage();
 
     const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
     fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^desactivar$/i }));
 
     await waitFor(() => {
       expect(mockActualizarDescuento).toHaveBeenCalledWith(1, { activo: false });
     });
   });
 
-  it("reactivates an inactive discount via PATCH activo:true", async () => {
+  it("leaves the discount untouched when the deactivation confirmation is canceled", async () => {
+    renderPage();
+
+    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockActualizarDescuento).not.toHaveBeenCalled();
+  });
+
+  it("reactivates an inactive discount via PATCH activo:true, with no confirmation step", async () => {
     mockActualizarDescuento.mockResolvedValueOnce({ ...CONVENIO, activo: true });
     renderPage();
 
     const convenioRow = (await screen.findByText("Convenio empresa")).closest("tr") as HTMLElement;
     fireEvent.click(within(convenioRow).getByRole("button", { name: /reactivar/i }));
 
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(mockActualizarDescuento).toHaveBeenCalledWith(2, { activo: true });
     });

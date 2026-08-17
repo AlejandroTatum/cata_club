@@ -20,6 +20,7 @@ import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ContextualHelp from "@/components/ContextualHelp";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   Badge,
   Button,
@@ -60,6 +61,18 @@ const EMPTY_FORM: FormState = {
 };
 
 /**
+ * Backend cap on `nombre` (issue #314, K6 hallazgo #34).
+ *
+ * The input used to carry a bare `maxLength={100}` — the DOM truncates a
+ * paste past that silently, with no color change, no counter, nothing. 521
+ * pasted characters became 100 saved ones under a green "Descuento creado
+ * correctamente." toast. The fix is not a bigger truncation warning: it is
+ * refusing to save a name that does not fit, the same way any other
+ * out-of-range value on this form already blocks submit above.
+ */
+const MAX_NOMBRE_LENGTH = 100;
+
+/**
  * The form's field skin, in the system's own vocabulary.
  *
  * The three fields were `rounded-lg` (8px — a radius DESIGN.md does not have)
@@ -86,6 +99,11 @@ export default function DiscountsPage(): React.ReactElement {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
+  // Issue #314 (K6 hallazgo #14): "Desactivar" fired PATCH on the first click,
+  // no dialog, no naming of which discount was going dark. Only deactivating
+  // gets the gate — reactivating just turns something back on and stays a
+  // reversible one-click action, same as before.
+  const [pendingDeactivation, setPendingDeactivation] = useState<DescuentoCatalogo | null>(null);
 
   const loadCatalog = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -128,6 +146,12 @@ export default function DiscountsPage(): React.ReactElement {
     const nombre = form.nombre.trim();
     if (!nombre) {
       setFormError("El nombre es obligatorio.");
+      return;
+    }
+    if (nombre.length > MAX_NOMBRE_LENGTH) {
+      setFormError(
+        `El nombre no puede superar los ${MAX_NOMBRE_LENGTH} caracteres (tiene ${nombre.length}). Acórtelo para continuar.`,
+      );
       return;
     }
     const valor = Number(form.valor);
@@ -181,6 +205,23 @@ export default function DiscountsPage(): React.ReactElement {
     } finally {
       setTogglingId(null);
     }
+  }
+
+  /** "Desactivar" click: ask before mutating, naming the discount. "Reactivar"
+   *  skips this entirely and mutates immediately — see `pendingDeactivation`. */
+  function requestToggleActivo(descuento: DescuentoCatalogo): void {
+    if (descuento.activo) {
+      setPendingDeactivation(descuento);
+      return;
+    }
+    void handleToggleActivo(descuento);
+  }
+
+  async function confirmPendingDeactivation(): Promise<void> {
+    const descuento = pendingDeactivation;
+    setPendingDeactivation(null);
+    if (!descuento) return;
+    await handleToggleActivo(descuento);
   }
 
   /**
@@ -242,14 +283,33 @@ export default function DiscountsPage(): React.ReactElement {
         <div className="flex flex-col gap-section">
           <label className={FIELD_LABEL}>
             Nombre
+            {/* No `maxLength` here on purpose (issue #314, K6 hallazgo #34):
+                the DOM attribute used to clip a paste to 100 chars with zero
+                feedback, and the toast on submit still said "correctamente"
+                over a mutilated value. The full paste is kept and shown —
+                the counter below turns into an error, and `handleSubmit`
+                refuses to save until it fits, instead of saving something
+                other than what was typed. */}
             <input
               type="text"
               value={form.nombre}
               onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              maxLength={100}
               className={FIELD_CONTROL}
               placeholder="Beca municipal"
+              aria-describedby="nombre-descuento-contador"
             />
+            <span
+              id="nombre-descuento-contador"
+              className={cn(
+                "text-2xs normal-case tracking-normal",
+                form.nombre.length > MAX_NOMBRE_LENGTH ? "font-bold text-state-bad" : "text-ink-3",
+              )}
+            >
+              {form.nombre.length}/{MAX_NOMBRE_LENGTH}
+              {form.nombre.length > MAX_NOMBRE_LENGTH
+                ? ` — supera el máximo por ${form.nombre.length - MAX_NOMBRE_LENGTH}. Acórtelo para poder guardar.`
+                : ""}
+            </span>
           </label>
           <label className={FIELD_LABEL}>
             Tipo
@@ -462,7 +522,7 @@ export default function DiscountsPage(): React.ReactElement {
                                 </Button>
                                 <Button
                                   size="sm"
-                                  onClick={() => void handleToggleActivo(descuento)}
+                                  onClick={() => requestToggleActivo(descuento)}
                                   disabled={isToggling}
                                 >
                                   {isToggling ? (
@@ -493,6 +553,20 @@ export default function DiscountsPage(): React.ReactElement {
            */}
           {splitting ? <div data-testid="discounts-rail">{renderForm()}</div> : null}
         </div>
+
+        <ConfirmDialog
+          open={pendingDeactivation !== null}
+          variant="danger"
+          title="Desactivar descuento"
+          message={
+            pendingDeactivation
+              ? `Va a desactivar el descuento «${pendingDeactivation.nombre}». Deja de poder aplicarse a pagos nuevos a partir de ahora; los pagos ya registrados con este descuento no cambian.`
+              : ""
+          }
+          confirmLabel="Desactivar"
+          onConfirm={() => void confirmPendingDeactivation()}
+          onCancel={() => setPendingDeactivation(null)}
+        />
       </AppShell>
     </ProtectedRoute>
   );
