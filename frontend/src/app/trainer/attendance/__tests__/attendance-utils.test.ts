@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   UNMARKED,
   nextAttendanceState,
+  arrowAttendanceState,
   cycleWizardAttendance,
   resolveFailedStudentNames,
   attendanceDraftKey,
@@ -59,6 +60,30 @@ describe("nextAttendanceState", () => {
   it("handles unknown state by returning absent", () => {
     // @ts-expect-error — testing runtime resilience with unexpected value
     expect(nextAttendanceState("unknown")).toBe("absent");
+  });
+});
+
+// #312 / hallazgo #26 — ArrowRight/ArrowLeft walk ATTENDANCE_STATES' own
+// display order (present, absent, late, justified), not the tap cycle's.
+describe("arrowAttendanceState", () => {
+  it("moves forward through the display order with ArrowRight", () => {
+    expect(arrowAttendanceState("present", "ArrowRight")).toBe("absent");
+    expect(arrowAttendanceState("absent", "ArrowRight")).toBe("late");
+    expect(arrowAttendanceState("late", "ArrowRight")).toBe("justified");
+  });
+
+  it("wraps from the last state back to the first with ArrowRight", () => {
+    expect(arrowAttendanceState("justified", "ArrowRight")).toBe("present");
+  });
+
+  it("moves backward with ArrowLeft, wrapping from the first to the last", () => {
+    expect(arrowAttendanceState("absent", "ArrowLeft")).toBe("present");
+    expect(arrowAttendanceState("present", "ArrowLeft")).toBe("justified");
+  });
+
+  it("treats ArrowDown/ArrowUp the same as ArrowRight/ArrowLeft", () => {
+    expect(arrowAttendanceState("present", "ArrowDown")).toBe("absent");
+    expect(arrowAttendanceState("present", "ArrowUp")).toBe("justified");
   });
 });
 

@@ -95,6 +95,7 @@ import {
   ATTENDANCE_LABELS,
   ATTENDANCE_STATES,
   UNMARKED,
+  arrowAttendanceState,
   WIZARD_STEP_ORDER as STEP_ORDER,
   applyAttendanceDraft,
   attendanceDraftKey,
@@ -1567,8 +1568,37 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                 type="button"
                                 role="radio"
                                 onClick={() => handleDirectAttendanceSet(idx, state)}
+                                // Roving tabindex (issue #312 / hallazgo #26):
+                                // the ARIA radiogroup pattern is ONE tab stop
+                                // per group, not one per option. Before this,
+                                // all four buttons sat in tab order — 5 Tab
+                                // presses per student (fiche + 4 radios).
+                                tabIndex={isActive ? 0 : -1}
+                                onKeyDown={(e) => {
+                                  if (
+                                    e.key !== "ArrowRight" &&
+                                    e.key !== "ArrowLeft" &&
+                                    e.key !== "ArrowDown" &&
+                                    e.key !== "ArrowUp"
+                                  ) {
+                                    return;
+                                  }
+                                  e.preventDefault();
+                                  const nextState = arrowAttendanceState(state, e.key);
+                                  handleDirectAttendanceSet(idx, nextState);
+                                  // Move focus WITH the checked state, same as
+                                  // a native <input type="radio"> group — the
+                                  // roving tabindex above only works if focus
+                                  // actually lands on the newly-checked radio.
+                                  const group = e.currentTarget.closest('[role="radiogroup"]');
+                                  const next = group?.querySelector<HTMLButtonElement>(
+                                    `[role="radio"][data-state="${nextState}"]`,
+                                  );
+                                  next?.focus();
+                                }}
                                 aria-checked={isActive}
                                 title={ATTENDANCE_LABELS[state]}
+                                data-state={state}
                                 className={`inline-flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-2xs tracking-flat font-semibold leading-tight transition-colors ${
                                   isActive
                                     ? `border-transparent ${getAttendanceBadgeTokens(state).badgeClass}`
@@ -1576,7 +1606,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                 }`}
                               >
                                 {ATTENDANCE_ICONS[state]}
-                                <span className="sm:sr-only">{ATTENDANCE_LABELS[state]}</span>
+                                {/* hallazgo #24: escondido desde 640px
+                                    (`sm:sr-only`), una laptop nunca lo veía.
+                                    Visible desde `lg` (1024px), donde la
+                                    ficha ya no es una columna angosta. */}
+                                <span className="sr-only lg:not-sr-only">{ATTENDANCE_LABELS[state]}</span>
                               </button>
                             );
                           })}
