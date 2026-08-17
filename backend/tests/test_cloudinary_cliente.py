@@ -144,6 +144,28 @@ def test_ninguna_funcion_reintenta_tras_un_fallo(nombre, invocar):
         assert mock_upload.call_count == 1
 
 
+# --- 4b. Guardia: el mensaje que ve el usuario no filtra el error crudo del
+# vendor (issue #347). Sin credencial, el SDK levanta un `ValueError` cuyo
+# texto ("Must supply api_key") es interno de Cloudinary -- `_MAPA_EXCEPCIONES`
+# de main.py devuelve `exc.mensaje` tal cual en el body de la respuesta 503,
+# así que ese texto crudo llegaba directo al socio. El texto del vendor debe
+# quedar en `detalle_tecnico` (log), nunca en `mensaje` (API/usuario).
+@pytest.mark.parametrize("nombre, invocar", FUNCIONES)
+def test_fallo_por_credencial_ausente_no_filtra_el_error_crudo_del_vendor(nombre, invocar):
+    with _parchear_upload() as mock_upload:
+        mock_upload.side_effect = ValueError("Must supply api_key")
+
+        with pytest.raises(ServicioNoDisponible) as exc_info:
+            invocar()
+
+    exc = exc_info.value
+    assert "api_key" not in exc.mensaje.lower(), (
+        f"el mensaje de cara al usuario filtra el error crudo del vendor: {exc.mensaje!r}"
+    )
+    assert exc.detalle_tecnico, "el detalle técnico (para el log) no puede quedar vacío"
+    assert "Must supply api_key" in exc.detalle_tecnico
+
+
 # --- 5. Guardia: el timeout viene de resiliencia.py, no de un literal futuro
 def test_timeout_viene_de_resiliencia_no_de_un_literal(monkeypatch):
     monkeypatch.setattr(cc, "TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS", 99.0)
