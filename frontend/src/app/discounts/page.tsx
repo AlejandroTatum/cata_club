@@ -24,6 +24,8 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   Badge,
   Button,
+  DataBox,
+  DataRow,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -259,6 +261,32 @@ export default function DiscountsPage(): React.ReactElement {
    */
   const fillsHeight = form === null && descuentos.length === 0;
 
+  /**
+   * The two actions a discount carries, shared verbatim between the table row
+   * (`sm` and up) and the card (below `sm`) — issue #339. Kept as one function
+   * instead of two near-identical JSX blocks, the same way `/members` shares
+   * `EditAccountButton` between `AccountRow` and `AccountCard`.
+   */
+  function renderRowActions(descuento: DescuentoCatalogo): React.ReactElement {
+    const isToggling = togglingId === descuento.id;
+    return (
+      <>
+        <Button size="sm" onClick={() => openEditForm(descuento)}>
+          <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+          Editar
+        </Button>
+        <Button size="sm" onClick={() => requestToggleActivo(descuento)} disabled={isToggling}>
+          {isToggling ? (
+            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Power size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+          )}
+          {descuento.activo ? "Desactivar" : "Reactivar"}
+        </Button>
+      </>
+    );
+  }
+
   function renderForm(): React.ReactElement | null {
     if (!form) return null;
     const isEditing = form.editingId !== null;
@@ -474,20 +502,49 @@ export default function DiscountsPage(): React.ReactElement {
                   }
                 />
             ) : descuentos.length > 0 ? (
-              /*
-               * `ui/Table`, not a `<ul>` of `<li>`.
-               *
-               * This list was already a table — four aligned facts per row, the
-               * same four every time — written as a flex list with its own `px-5
-               * py-4`. That padding is why a discount row was a different height
-               * from a member row and from an attendance row: three lists, three
-               * answers, none of them the `h-row` token.
-               *
-               * There was no header at all, so the value column ("100%", "$5") had
-               * nothing naming it. It has one now.
-               */
-              <div className="overflow-x-auto">
-                <Table>
+              <>
+                {/*
+                 * Below `sm` a four-column table does not fit the viewport at
+                 * all (issue #339): at 320/375px the old single `overflow-x-auto`
+                 * wrapper left 522px of content scrolling the BODY sideways,
+                 * with Acciones (Editar/Desactivar) off-screen and no affordance
+                 * that anything was cut off. `/members` solves the same problem
+                 * by reflowing to one `DataRow` card per account below `sm` —
+                 * same data, actions inside the card instead of scrolled away —
+                 * and this list now follows that exact pattern instead of
+                 * inventing a scrolling-table variant of its own.
+                 */}
+                <ul data-testid="discounts-cards" className="divide-y divide-line sm:hidden">
+                  {descuentos.map((descuento) => (
+                    <DataRow
+                      key={descuento.id}
+                      name={descuento.nombre}
+                      meta={<DataBox>{descuentoValorLabel(descuento)}</DataBox>}
+                      status={
+                        <Badge tone={descuento.activo ? "ok" : "neutral"}>
+                          {descuento.activo ? "Activo" : "Inactivo"}
+                        </Badge>
+                      }
+                      actions={renderRowActions(descuento)}
+                      className={descuento.activo ? undefined : "opacity-60"}
+                    />
+                  ))}
+                </ul>
+
+                {/*
+                 * `ui/Table`, not a `<ul>` of `<li>`, at `sm` and up.
+                 *
+                 * This list was already a table — four aligned facts per row, the
+                 * same four every time — written as a flex list with its own `px-5
+                 * py-4`. That padding is why a discount row was a different height
+                 * from a member row and from an attendance row: three lists, three
+                 * answers, none of them the `h-row` token.
+                 *
+                 * There was no header at all, so the value column ("100%", "$5") had
+                 * nothing naming it. It has one now.
+                 */}
+                <div data-testid="discounts-table" className="hidden overflow-x-auto sm:block">
+                  <Table>
                     <TableHead>
                       <TableRow>
                         <TableHeaderCell>Descuento</TableHeaderCell>
@@ -499,47 +556,28 @@ export default function DiscountsPage(): React.ReactElement {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {descuentos.map((descuento) => {
-                        const isToggling = togglingId === descuento.id;
-                        return (
-                          <TableRow
-                            key={descuento.id}
-                            data-inactivo={descuento.activo ? undefined : "true"}
-                            className={descuento.activo ? undefined : "opacity-60"}
-                          >
-                            <TableNameCell name={descuento.nombre} />
-                            <TableCell>{descuentoValorLabel(descuento)}</TableCell>
-                            <TableCell>
-                              <Badge tone={descuento.activo ? "ok" : "neutral"}>
-                                {descuento.activo ? "Activo" : "Inactivo"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell align="right">
-                              <div className="flex justify-end gap-2">
-                                <Button size="sm" onClick={() => openEditForm(descuento)}>
-                                  <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                                  Editar
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => requestToggleActivo(descuento)}
-                                  disabled={isToggling}
-                                >
-                                  {isToggling ? (
-                                    <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-                                  ) : (
-                                    <Power size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                                  )}
-                                  {descuento.activo ? "Desactivar" : "Reactivar"}
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                  </TableBody>
-                </Table>
-              </div>
+                      {descuentos.map((descuento) => (
+                        <TableRow
+                          key={descuento.id}
+                          data-inactivo={descuento.activo ? undefined : "true"}
+                          className={descuento.activo ? undefined : "opacity-60"}
+                        >
+                          <TableNameCell name={descuento.nombre} />
+                          <TableCell>{descuentoValorLabel(descuento)}</TableCell>
+                          <TableCell>
+                            <Badge tone={descuento.activo ? "ok" : "neutral"}>
+                              {descuento.activo ? "Activo" : "Inactivo"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell align="right">
+                            <div className="flex justify-end gap-2">{renderRowActions(descuento)}</div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             ) : null}
             </section>
           </div>

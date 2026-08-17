@@ -108,6 +108,19 @@ function renderPage(): void {
   );
 }
 
+/**
+ * The discount's table row (`sm` and up). Below `sm` the same discount is
+ * rendered again as a card (issue #339) — the four-column table cannot fit a
+ * phone, same reason `/members` reflows its own list. jsdom applies no real
+ * CSS, so both renderings are in the document here; this helper picks the
+ * row, mirroring `findAccountRow` in MembersPage.test.tsx.
+ */
+async function findDescuentoRow(nombre: string): Promise<HTMLElement> {
+  const matches = await screen.findAllByText(nombre);
+  const row = matches.map((el) => el.closest("tr")).find(Boolean);
+  return row as HTMLElement;
+}
+
 beforeEach(() => {
   mockFetchDescuentos.mockReset().mockResolvedValue([BECA, CONVENIO]);
   mockCrearDescuento.mockReset();
@@ -118,8 +131,8 @@ describe("DiscountsPage — listado", () => {
   it("lists active and inactive discounts, visually distinct", async () => {
     renderPage();
 
-    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
-    const convenioRow = screen.getByText("Convenio empresa").closest("tr") as HTMLElement;
+    const becaRow = await findDescuentoRow("Beca municipal");
+    const convenioRow = await findDescuentoRow("Convenio empresa");
 
     expect(within(becaRow).getByText("Activo")).toBeInTheDocument();
     expect(within(becaRow).getByText("100%")).toBeInTheDocument();
@@ -157,7 +170,7 @@ describe("DiscountsPage — listado", () => {
     mockFetchDescuentos.mockResolvedValue([BECA]);
     fireEvent.click(retry);
 
-    expect(await screen.findByText("Beca municipal")).toBeInTheDocument();
+    expect((await screen.findAllByText("Beca municipal")).length).toBeGreaterThan(0);
   });
 });
 
@@ -165,7 +178,7 @@ describe("DiscountsPage — crear", () => {
   it("creates a percentage discount from the form", async () => {
     mockCrearDescuento.mockResolvedValueOnce({ ...BECA, id: 3, nombre: "Media beca", porcentaje: "50" });
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Media beca" } });
@@ -182,7 +195,7 @@ describe("DiscountsPage — crear", () => {
   it("creates a fixed-amount discount when the modality is switched", async () => {
     mockCrearDescuento.mockResolvedValueOnce({ ...CONVENIO, id: 4, nombre: "Convenio dos", activo: true });
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Convenio dos" } });
@@ -199,7 +212,7 @@ describe("DiscountsPage — crear", () => {
     const { ApiClientError } = await import("@/services/api");
     mockCrearDescuento.mockRejectedValueOnce(new ApiClientError("Ya existe un descuento con ese nombre", 400));
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Beca municipal" } });
@@ -213,7 +226,7 @@ describe("DiscountsPage — crear", () => {
 
   it("validates locally that the value is positive before calling the API", async () => {
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Inválido" } });
@@ -231,7 +244,7 @@ describe("DiscountsPage — crear", () => {
   // and `handleSubmit` refuses to save until it fits.
   it("keeps the full pasted name instead of silently clipping it at 100 chars", async () => {
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     const nombreInput = screen.getByLabelText(/nombre/i) as HTMLInputElement;
@@ -245,7 +258,7 @@ describe("DiscountsPage — crear", () => {
 
   it("refuses to save a name over 100 characters instead of truncating it silently", async () => {
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "X".repeat(521) } });
@@ -262,7 +275,7 @@ describe("DiscountsPage — editar", () => {
     mockActualizarDescuento.mockResolvedValueOnce({ ...BECA, porcentaje: "75" });
     renderPage();
 
-    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    const becaRow = await findDescuentoRow("Beca municipal");
     fireEvent.click(within(becaRow).getByRole("button", { name: /editar/i }));
 
     const nombreInput = screen.getByLabelText(/nombre/i) as HTMLInputElement;
@@ -290,7 +303,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
   it("opens a confirmation naming the discount on 'Desactivar' click, without mutating yet", async () => {
     renderPage();
 
-    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    const becaRow = await findDescuentoRow("Beca municipal");
     fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
 
     const dialog = screen.getByRole("dialog");
@@ -306,7 +319,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     // the confirmation the click itself opens.
     renderPage();
 
-    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    const becaRow = await findDescuentoRow("Beca municipal");
     fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
 
     const dialog = screen.getByRole("dialog");
@@ -317,7 +330,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     mockActualizarDescuento.mockResolvedValueOnce({ ...BECA, activo: false });
     renderPage();
 
-    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    const becaRow = await findDescuentoRow("Beca municipal");
     fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
     const dialog = screen.getByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /^desactivar$/i }));
@@ -330,7 +343,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
   it("leaves the discount untouched when the deactivation confirmation is canceled", async () => {
     renderPage();
 
-    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    const becaRow = await findDescuentoRow("Beca municipal");
     fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
     fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
@@ -342,7 +355,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     mockActualizarDescuento.mockResolvedValueOnce({ ...CONVENIO, activo: true });
     renderPage();
 
-    const convenioRow = (await screen.findByText("Convenio empresa")).closest("tr") as HTMLElement;
+    const convenioRow = await findDescuentoRow("Convenio empresa");
     fireEvent.click(within(convenioRow).getByRole("button", { name: /reactivar/i }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -366,7 +379,7 @@ describe("DiscountsPage — la segunda columna", () => {
     // track reserved for content that no longer exists is not a layout, it is
     // a leftover.
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
 
     expect(screen.getByTestId("discounts-split").className).not.toBe(PAGE_RAIL);
     expect(screen.queryByTestId("discounts-rail")).not.toBeInTheDocument();
@@ -374,7 +387,7 @@ describe("DiscountsPage — la segunda columna", () => {
 
   it("opens the second column only when there is a form to put in it", async () => {
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
@@ -384,7 +397,7 @@ describe("DiscountsPage — la segunda columna", () => {
 
   it("gives the column back when the form is dismissed", async () => {
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
@@ -400,7 +413,7 @@ describe("DiscountsPage — la segunda columna", () => {
     // content reads as broken where short canvas only reads as the end of the
     // page. /members already draws its table card this way.
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
 
     const card = screen.getByRole("table").closest("section") as HTMLElement;
     expect(card.className).not.toContain("flex-1");
@@ -413,7 +426,7 @@ describe("DiscountsPage — la segunda columna", () => {
     // catalog. Losing the always-on track costs a horizontal reflow when the
     // form opens; it does not bring back the vertical shove.
     renderPage();
-    const becaRow = (await screen.findByText("Beca municipal")).closest("tr") as HTMLElement;
+    const becaRow = await findDescuentoRow("Beca municipal");
 
     fireEvent.click(within(becaRow).getByRole("button", { name: /editar/i }));
 
@@ -438,7 +451,7 @@ describe("DiscountsPage — ayuda contextual", () => {
     // a permanent lateral card; it now follows the Members disclosure
     // pattern instead — available, but not occupying space until asked for.
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
 
     expect(screen.queryByText(/no se elimina/i)).not.toBeInTheDocument();
 
@@ -457,7 +470,7 @@ describe("DiscountsPage — ayuda contextual", () => {
     // so this has to be asserted with a form actually open — with none, there
     // is no rail at all (see "la segunda columna").
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.click(screen.getByRole("button", { name: /cómo funciona el catálogo/i }));
 
@@ -478,7 +491,7 @@ describe("DiscountsPage — el formulario de alta/edición", () => {
     // "Porcentaje (%)" to render without being cut off. The fields must
     // stack in a single column so each one gets the rail's full width.
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     const nombreLabel = screen.getByLabelText(/nombre/i).closest("label");
@@ -489,7 +502,7 @@ describe("DiscountsPage — el formulario de alta/edición", () => {
 
   it("gives every field the full input width, so a long name has room to render", async () => {
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     const nombreInput = screen.getByLabelText(/nombre/i);
@@ -516,7 +529,7 @@ describe("DiscountsPage — la ayuda vive en el bloque que explica", () => {
     // with, and nothing caught it. Its three rules are all about the catalog,
     // so the catalog card is the block that owns it.
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
 
     const toggle = screen.getByRole("button", { name: /cómo funciona el catálogo/i });
     const block = screen.getByRole("table").closest("section");
@@ -580,7 +593,7 @@ describe("DiscountsPage — el catálogo vacío no reserva un riel", () => {
 describe("DiscountsPage — el formulario habla el idioma del sistema", () => {
   it("dresses its fields in the control radius, not the retired 8px one", async () => {
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     for (const field of [
@@ -597,11 +610,73 @@ describe("DiscountsPage — el formulario habla el idioma del sistema", () => {
 
   it("titles its card in the display face, like every other card title", async () => {
     renderPage();
-    await screen.findByText("Beca municipal");
+    await screen.findByTestId("discounts-table");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     expect(screen.getByRole("heading", { name: /nuevo descuento/i }).className).toContain(
       "font-display",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mobile reflow — issue #339 (blocks release)
+//
+// At 320/375px the table used to be the ONLY rendering: `overflow-x-auto` on
+// its own wrapper let the BODY scroll sideways instead, with no affordance
+// that Acciones (Editar/Desactivar) existed off-screen at all. `/members` and
+// `/payments` solve this the same way — reflow to cards below the table
+// breakpoint, actions inside each card — and this screen now follows that
+// exact pattern instead of inventing a scrolling-table variant.
+//
+// jsdom applies no real CSS, so both the card list and the table are always
+// in the document; the breakpoint classes (`sm:hidden` / `hidden sm:block`)
+// are what a browser actually uses to show only one. Only a browser can
+// measure real pixel widths against a viewport (see
+// tests/e2e/content-measure.spec.ts for that kind of assertion elsewhere in
+// this repo) — what a unit test CAN pin down, and the thing that actually
+// regressed here, is that the mechanism exists at all: a card rendering that
+// carries the actions, toggled by the same breakpoint classes `/members`
+// already ships.
+// ---------------------------------------------------------------------------
+
+describe("DiscountsPage — mobile reflow (issue #339)", () => {
+  it("collapses the catalog into cards below sm, each one carrying Editar and Desactivar", async () => {
+    renderPage();
+
+    const cards = await screen.findByTestId("discounts-cards");
+    expect(cards.className).toContain("sm:hidden");
+
+    const becaCard = within(cards).getByText("Beca municipal").closest("li") as HTMLElement;
+    expect(becaCard).not.toBeNull();
+    expect(within(becaCard).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
+    expect(within(becaCard).getByRole("button", { name: /desactivar/i })).toBeInTheDocument();
+
+    // The inactive discount's card carries "Reactivar" instead — same rule
+    // the table row already followed.
+    const convenioCard = within(cards).getByText("Convenio empresa").closest("li") as HTMLElement;
+    expect(within(convenioCard).getByRole("button", { name: /reactivar/i })).toBeInTheDocument();
+  });
+
+  it("hides the table below sm and shows it again at sm and up — never the only rendering", async () => {
+    renderPage();
+
+    const tableWrapper = await screen.findByTestId("discounts-table");
+    expect(tableWrapper.className).toContain("hidden");
+    expect(tableWrapper.className).toContain("sm:block");
+    expect(within(tableWrapper).getByRole("table")).toBeInTheDocument();
+  });
+
+  it("never wraps the table in a bare overflow-x-auto with no narrower affordance", async () => {
+    // The exact shape the issue rules out: `overflow-x-auto` alone, on a
+    // wrapper with no `hidden`/breakpoint class, forces the BODY (not a
+    // contained box) to carry the sideways scroll and gives the admin no
+    // signal there is more to the right at all.
+    renderPage();
+
+    const tableWrapper = await screen.findByTestId("discounts-table");
+    if (tableWrapper.className.includes("overflow-x-auto")) {
+      expect(tableWrapper.className).toContain("hidden");
+    }
   });
 });
