@@ -216,8 +216,8 @@ export default function DashboardPage(): React.ReactElement {
               <span className="min-w-0 flex-1">
                 <span className="block text-base font-bold text-white">
                   {pendingPayments === 1
-                    ? "Pago espera tu validación"
-                    : "Pagos esperan tu validación"}
+                    ? "Pago espera su validación"
+                    : "Pagos esperan su validación"}
                 </span>
                 {heroNote && (
                   <span

@@ -89,7 +89,7 @@ describe("ProtectedRoute", () => {
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
-    expect(screen.getByText("No se pudo verificar tu sesión")).toBeInTheDocument();
+    expect(screen.getByText("No se pudo verificar su sesión")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
 

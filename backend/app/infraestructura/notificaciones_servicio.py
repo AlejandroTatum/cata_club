@@ -128,18 +128,18 @@ class ServicioNotificaciones:
         asunto = "Recuperación de contraseña - Cata Club"
         texto = (
             f"Hola,\n\n"
-            f"Recibimos una solicitud para restablecer tu contraseña en Cata Club.\n"
-            f"Podés hacerlo clickeando el siguiente enlace (válido por 30 minutos):\n\n"
+            f"Recibimos una solicitud para restablecer su contraseña en Cata Club.\n"
+            f"Puede hacerlo haciendo clic en el siguiente enlace (válido por 30 minutos):\n\n"
             f"{enlace}\n\n"
-            f"Si no solicitaste el cambio, ignorá este correo.\n\n"
+            f"Si no solicitó el cambio, ignore este correo.\n\n"
             f"Saludos,\nEquipo Cata Club"
         )
         html = (
             "<html><body>"
             "<p>Hola,</p>"
-            "<p>Recibimos una solicitud para restablecer tu contraseña en Cata Club.</p>"
+            "<p>Recibimos una solicitud para restablecer su contraseña en Cata Club.</p>"
             f'<p><a href="{enlace}">Restablecer contraseña</a> (válido por 30 minutos)</p>'
-            "<p>Si no solicitaste el cambio, ignorá este correo.</p>"
+            "<p>Si no solicitó el cambio, ignore este correo.</p>"
             "<p>Saludos,<br>Equipo Cata Club</p>"
             "</body></html>"
         )

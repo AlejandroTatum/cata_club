@@ -42,6 +42,14 @@ coverage/
 test-results/
 playwright-report/
 
+# Playwright MCP's own session output (screenshots, console logs, page
+# snapshots) — a different tool from the `playwright-report/` test runner
+# above, and previously untracked AND unignored: the exact shape that let
+# `.claude/` slip into the index with a `git add -A` before it was covered.
+# `**/` guards every directory the tool gets invoked from, not just the repo
+# root, the same reason `.claude/` needed the same treatment below.
+**/.playwright-mcp/
+
 # AI orchestrator artifacts
 .atl/
 .codegraph/

@@ -185,7 +185,7 @@ def _disparar_notificacion_vencimiento(
     if alumno_pendiente:
         filas_pendientes.append(Notificacion(
             tipo=TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO,
-            mensaje=f"Tu membresía vence el {vence.strftime('%d/%m/%Y')}.",
+            mensaje=f"Su membresía vence el {vence.strftime('%d/%m/%Y')}.",
             persona_id=persona.id,
             entidad_relacionada_id=pago.id,
         ))
@@ -199,8 +199,8 @@ def _disparar_notificacion_vencimiento(
                     asunto="Vencimiento de membresía - Cata Club",
                     cuerpo_texto=(
                         f"Hola {persona.nombres},\n\n"
-                        f"Tu membresía vence el {vence.strftime('%d/%m/%Y')}. "
-                        f"Por favor, regulariza tu pago para evitar la suspensión de beneficios."
+                        f"Su membresía vence el {vence.strftime('%d/%m/%Y')}. "
+                        f"Por favor, regularice su pago para evitar la suspensión de beneficios."
                     ),
                 )
             except RuntimeError:
@@ -263,13 +263,13 @@ def _disparar_notificacion_mora(
     fecha_str = fecha_vencimiento.strftime("%d/%m/%Y")
     if tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1:
         mensaje = (
-            f"Tu membresía venció el {fecha_str}. Regularizá tu pago para no "
+            f"Su membresía venció el {fecha_str}. Regularice su pago para no "
             f"perder los beneficios."
         )
     else:
         mensaje = (
-            "Tu membresía sigue vencida. Este es el último aviso: regularizá tu "
-            "pago para reactivar tus beneficios."
+            "Su membresía sigue vencida. Este es el último aviso: regularice su "
+            "pago para reactivar sus beneficios."
         )
 
     filas_pendientes: list[Notificacion] = []

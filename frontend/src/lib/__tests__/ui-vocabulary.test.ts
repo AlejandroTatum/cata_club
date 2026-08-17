@@ -19,8 +19,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { sourceFiles, readableText } from "./source-scan";
 
 const SRC = join(__dirname, "..", "..");
 
@@ -57,47 +58,7 @@ const BFF = join("app", "api");
 /** A line of code, told apart from a line of prose by how it ends. */
 const IS_A_STATEMENT = /[;,{}()]\s*$|=>|\s=\s/;
 
-function sourceFiles(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      if (entry === "__tests__") continue;
-      found.push(...sourceFiles(full));
-      continue;
-    }
-    if (/\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry)) found.push(full);
-  }
-  return found.filter((path) => !path.includes(BFF));
-}
-
-/**
- * Everything a reader could end up looking at: double-quoted literals AND JSX
- * text nodes. The text nodes are the half that matters most — the leak this
- * test was written for was bare prose between two tags, with no quotes around
- * it for a literal-only scan to find.
- */
-function readableText(text: string): string[] {
-  const lines = text.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line));
-  return lines.flatMap((line) => [
-    // Both patterns are line-bounded. Letting them span newlines made a single
-    // match swallow a whole JSX block, which reports the offending file but
-    // buries the sentence that is actually wrong.
-    ...(line.match(/"[^"\n]{4,}"/g) ?? []),
-    ...(line.match(/>[^<>{}\n]{4,}</g) ?? []),
-    // A text node on its own line, between tags that sit on the lines around
-    // it — the shape almost all of this product's copy is written in.
-    //
-    // `IS_A_STATEMENT` is what keeps `porPersona.set(alumno.personaId);` out:
-    // a bare line of code is indistinguishable from prose by its first
-    // character, but not by its last one. Sentences do not end in a semicolon.
-    ...(/^\s*[A-Za-zÁÉÍÓÚÑáéíóúñ][^<>{}"]{6,}$/.test(line) && !IS_A_STATEMENT.test(line)
-      ? [line.trim()]
-      : []),
-  ]);
-}
-
-const OFFENDERS = sourceFiles(SRC).flatMap((path) => {
+const OFFENDERS = sourceFiles(SRC, { exclude: [BFF] }).flatMap((path) => {
   const text = readFileSync(path, "utf8");
   return readableText(text)
     .filter((literal) => LOOKS_LIKE_A_SENTENCE.test(literal))
@@ -113,7 +74,7 @@ function readableTextForTest(text: string): string[] {
 describe("no backend vocabulary inside user-facing prose", () => {
   it("finds source files to check at all", () => {
     // Guards the guard: a broken walk makes the assertion below vacuous.
-    expect(sourceFiles(SRC).length).toBeGreaterThan(50);
+    expect(sourceFiles(SRC, { exclude: [BFF] }).length).toBeGreaterThan(50);
   });
 
   it("recognises a sentence when it sees one", () => {
