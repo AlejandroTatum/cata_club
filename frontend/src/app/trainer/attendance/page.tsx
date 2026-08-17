@@ -452,6 +452,22 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   const selectedSchedule = schedules.find((s) => s.id === selectedScheduleId) ?? null;
 
+  /**
+   * Issue #368: lo mismo que `readOnly`, pero SABIDO desde el paso 1 y sin
+   * haber abierto nada. `readOnly` depende de `openRoster`, o sea de haberse
+   * decidido ya; esto se deriva del conteo que la tarjeta muestra, así que el
+   * motivo puede decirse junto al control que ofrece continuar en vez de en la
+   * pantalla siguiente.
+   *
+   * Acotado a HOY igual que la tarjeta: `todaysRecordCounts` solo trae la
+   * fecha de hoy, y un horario de otro día no tiene conteo que reportar (#308).
+   */
+  const selectedListTakenToday =
+    selectedSchedule !== null &&
+    selectedSchedule.diaSemana === today &&
+    (todaysRecordCounts.get(selectedSchedule.id) ?? 0) > 0 &&
+    !isAdmin;
+
   /** The draft's key — null until a session is actually chosen. */
   const draftKey = useMemo(
     () =>
@@ -1262,6 +1278,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
                           // #22).
                           const recordedToday =
                             group.day === today ? todaysRecordCounts.get(sched.id) ?? 0 : 0;
+                          // Issue #368: para el entrenador ese conteo no es un
+                          // dato más, es un IMPEDIMENTO — la sesión ya
+                          // registrada solo se abre en modo consulta. El
+                          // administrador sí corrige (ventana de 30 días del
+                          // backend), así que para él la tarjeta no cambia.
+                          const takenForThisUser = recordedToday > 0 && !isAdmin;
                           return (
                             <button
                               key={sched.id}
@@ -1292,6 +1314,17 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                   {recordedToday === 1 ? "registro" : "registros"}
                                 </span>
                               )}
+                              {/* Nodo aparte del conteo, no un sufijo: son dos
+                                  hechos distintos — CUÁNTO hay registrado, y
+                                  qué se puede hacer con eso. Se nombra la
+                                  consecuencia, porque una tarjeta que solo
+                                  informa deja al entrenador enterarse del modo
+                                  lectura en el paso 2 (issue #368). */}
+                              {takenForThisUser && (
+                                <span className="flex items-center gap-1 text-2xs font-bold text-state-warn">
+                                  Solo consulta — no se puede volver a tomar
+                                </span>
+                              )}
                             </button>
                           );
                         })}
@@ -1303,6 +1336,29 @@ export default function TrainerAttendancePage(): React.ReactElement {
             </div>
           )}
         </div>
+
+        {/*
+         * El aviso del #368, pegado al mismo control que el error de roster:
+         * "Continuar" sigue existiendo y sigue habilitado — abrir la lista en
+         * modo consulta es legítimo y útil — pero acá se dice a qué se entra.
+         * Deshabilitarlo callado sería el defecto del #312, y esconder la
+         * tarjeta dejaría al entrenador sin forma de ver lo que ya se registró.
+         *
+         * `role="status"`, no `alert`: describe el estado del horario elegido,
+         * no el resultado de algo que el entrenador acaba de hacer mal.
+         */}
+        {selectedListTakenToday && (
+          <div
+            role="status"
+            className="rounded-ctl border border-state-warn/30 bg-state-warn-bg p-4 text-sm text-state-warn"
+          >
+            <p className="font-semibold">Esta lista ya fue tomada hoy.</p>
+            <p>
+              Puede continuar para consultarla, pero no para volver a tomarla: corregir una lista
+              ya registrada solo lo puede hacer un administrador del club.
+            </p>
+          </div>
+        )}
 
         {/* Still directly above the control it blocks — that control is now
             the commit bar's "Continuar", which is the last thing on the card. */}
