@@ -1115,7 +1115,18 @@ function EnrollWizard(): React.ReactElement {
                 <ol className="space-y-section">
                   {[
                     "Su cuenta ya está creada y la sesión, iniciada.",
-                    "Registre el pago y suba el comprobante desde Mis pagos.",
+                    /* #348: "Mis pagos" no tiene ningún botón para el primer
+                       pago -- registrarlo requiere una membresía que todavía
+                       no existe, y crearla es una acción exclusiva del
+                       administrador (ver membresia_pago_servicio.
+                       registrar_pago, que exige una membresia_id ya
+                       existente, y crear_membresia, ROL_ADMIN). La
+                       confirmación no puede mandar al socio recién creado a
+                       una pantalla sin la acción que promete: la verdad es
+                       la misma que ya dice student-utils.ts para ese estado
+                       ("El club crea la membresía al registrar el primer
+                       pago. Acérquese a administración..."). */
+                    "Acérquese a administración o escríbanos por WhatsApp para registrar su primer pago.",
                     "El club lo valida y ahí se activa la membresía.",
                   ].map((linea) => (
                     <li key={linea} className="flex items-start gap-3 text-sm text-ink-2">
