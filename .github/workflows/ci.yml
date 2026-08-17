@@ -13,6 +13,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  guard-secretos:
+    name: "Guard: sin .env reales trackeados"
+    runs-on: ubuntu-latest
+    # Corre como PRIMER job a propósito: un `.env` committeado queda en el
+    # historial para siempre aunque se borre después, así que el candado
+    # debe disparar lo antes posible y sin depender de que el resto del
+    # workflow arranque Postgres o instale toolchains. El check es sobre el
+    # árbol del PR (`git ls-files`): detecta también un `git add -f` que
+    # bypassee el .gitignore.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail if any real .env is tracked
+        # Globs de `case`, no regex: el primer arm que matchea gana. Las
+        # plantillas versionadas terminan en `.example` (`.env.example`,
+        # `frontend/.env.local.example`, `.env.production.example`) y son el
+        # único caso permitido; cualquier otra ruta con basename `.env` o
+        # `.env.*` (`.env.local`, `.env.production`, un `.env` anidado)
+        # tira el job abajo.
+        run: |
+          IFS=$'\n' read -r -d '' -a tracked < <(git ls-files -z | tr '\0' '\n') || true
+          bad=()
+          for f in "${tracked[@]}"; do
+            case "$f" in
+              *.example) ;;                     # plantillas, OK
+              .env|.env.*|*/.env|*/.env.*) bad+=("$f") ;;
+            esac
+          done
+          if [ ${#bad[@]} -gt 0 ]; then
+            printf '::error::Archivos .env reales committeados: %s\n' "${bad[*]}"
+            exit 1
+          fi
+
   backend:
     name: Backend (Python)
     runs-on: ubuntu-latest
