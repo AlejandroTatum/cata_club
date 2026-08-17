@@ -1,13 +1,91 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Save, CheckCircle2, Stethoscope } from "lucide-react";
+import { Loader2, Save, CheckCircle2, Stethoscope, Pencil, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
-import { Badge, ErrorState, LoadingState } from "@/components/ui";
+import { Badge, Button, DataBox, ErrorState, LoadingState } from "@/components/ui";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
+
+const TIPOS_SANGRE: TipoSangre[] = [
+  "A_POSITIVO",
+  "A_NEGATIVO",
+  "B_POSITIVO",
+  "B_NEGATIVO",
+  "AB_POSITIVO",
+  "AB_NEGATIVO",
+  "O_POSITIVO",
+  "O_NEGATIVO",
+  "DESCONOCIDO",
+];
+
+/**
+ * El único lugar donde el enum del backend se vuelve texto legible.
+ *
+ * La fila de lectura y la opción del select nombran el mismo dato, así que si
+ * cada una lo formatea por su cuenta la pantalla se contradice sola al pasar
+ * de reposo a edición ("O POSITIVO" arriba, "O_POSITIVO" abajo).
+ */
+function etiquetaTipoSangre(tipo: TipoSangre): string {
+  return tipo.replace("_", " ");
+}
+
+/**
+ * La fila etiqueta-valor del modo lectura.
+ *
+ * Es la misma forma que `/profile` ya usa para su propio reposo (su
+ * `DetailRow`): etiqueta gris y angosta a la izquierda, valor a la derecha
+ * dentro de un `DataBox`. No se importa de allá porque es local a esa página;
+ * lo que se copia es la forma, no el componente, para que las dos únicas
+ * pantallas lectura-edición del producto se lean igual.
+ *
+ * La raya (`—`) no es decorativa: un campo médico opcional que quedó vacío
+ * tiene que decir "acá no hay nada" en vez de dejar un hueco que se confunde
+ * con un dato que no cargó.
+ */
+/**
+ * La ficha guardada, traducida a los cinco valores que llevan los inputs.
+ *
+ * Vive fuera del componente porque es la ÚNICA traducción, y la usan dos
+ * caminos que no se ven entre sí: la carga inicial y «Cancelar». Escrita
+ * adentro de cada uno, el día que aparezca un sexto campo uno de los dos se
+ * queda atrás — y el que se quedaría atrás es el de cancelar, que nadie mira
+ * hasta que descarta un cambio y el valor viejo no vuelve.
+ */
+function camposDe(ficha: FichaMedicaEditable): {
+  tipoSangre: TipoSangre;
+  enfermedades: string;
+  alergias: string;
+  contactoEmergencia: string;
+  telefonoEmergencia: string;
+} {
+  return {
+    tipoSangre: ficha.tipoSangre,
+    enfermedades: ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", "),
+    alergias: ficha.alergias ?? "",
+    contactoEmergencia: ficha.contactoEmergencia ?? "",
+    telefonoEmergencia: ficha.telefonoEmergencia ?? "",
+  };
+}
+
+function FilaLectura({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}): React.ReactElement {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-field border-b border-line py-2 last:border-b-0">
+      <span className="w-[110px] flex-none text-xs text-ink-3 sm:w-[150px]">{label}</span>
+      <span className="flex min-w-[9rem] flex-1 flex-wrap items-center gap-x-2 gap-y-field text-sm font-semibold text-ink">
+        <DataBox>{value || "—"}</DataBox>
+      </span>
+    </div>
+  );
+}
 
 interface MedicalRecordEditorProps {
   personaId: number;
@@ -34,6 +112,20 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
+  /**
+   * Reposo o edición. Lo decide la CARGA, no el usuario: una ficha que ya
+   * existe abre en reposo, una que no existe abre en edición.
+   *
+   * El reclamo que esto contesta: «parece que hay que llenar eso siempre». La
+   * ficha existente siempre se cargó — `fetchFichaMedica` está en el efecto de
+   * abajo desde el primer día — pero se dibujaba con los mismos cinco inputs
+   * llenos existiera o no, y cinco inputs llenos no dicen "esto ya está
+   * guardado", dicen "esto es un formulario". Sobre datos médicos esa
+   * diferencia importa: el que abre la pantalla tiene que poder LEER lo que
+   * el club sabe de esa persona sin tocar nada.
+   */
+  const [editing, setEditing] = useState(false);
+
   // Load-bearing default, not cosmetic: the backend's PATCH upsert rejects
   // creating a first record without a blood type (400). `DESCONOCIDO` is a
   // valid TipoSangre, so pre-selecting it keeps that error unreachable from
@@ -53,11 +145,16 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
     fetchFichaMedica(personaId)
       .then((ficha) => {
         if (cancelled) return;
-        setTipoSangre(ficha.tipoSangre);
-        setEnfermedadesInput(ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", "));
-        setAlergias(ficha.alergias ?? "");
-        setContactoEmergencia(ficha.contactoEmergencia ?? "");
-        setTelefonoEmergencia(ficha.telefonoEmergencia ?? "");
+        const campos = camposDe(ficha);
+        setTipoSangre(campos.tipoSangre);
+        setEnfermedadesInput(campos.enfermedades);
+        setAlergias(campos.alergias);
+        setContactoEmergencia(campos.contactoEmergencia);
+        setTelefonoEmergencia(campos.telefonoEmergencia);
+        // Reposo. Este efecto también corre después de guardar (`reloadToken`),
+        // así que es el mismo renglón el que cierra la edición y muestra lo
+        // recién guardado: no hay un segundo camino que pueda olvidarse.
+        setEditing(false);
         setState({ status: "ready", ficha, isNew: false });
       })
       .catch((error: unknown) => {
@@ -69,7 +166,10 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
         // translator refuses English text on principle, that check could not
         // have survived anyway; the status was always the real signal.
         if (isNotFound(error)) {
-          // No medical record yet — allow creation of a new one.
+          // No medical record yet — allow creation of a new one. Arranca en
+          // edición porque no hay nada que leer: un reposo vacío con un botón
+          // «Editar» sería un paso de más para llegar al mismo formulario.
+          setEditing(true);
           setState({ status: "ready", ficha: undefined as unknown as FichaMedicaEditable, isNew: true });
         } else {
           setState({ status: "error", message: toUserMessage(error, "No se pudo cargar la ficha médica.") });
@@ -80,6 +180,35 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
       cancelled = true;
     };
   }, [personaId, reloadToken]);
+
+  function empezarEdicion(): void {
+    setSaveError(null);
+    setSaveSuccess(false);
+    setEditing(true);
+  }
+
+  /**
+   * Cancelar RESTAURA, no oculta.
+   *
+   * Sin este `camposDe`, salir de la edición dejaría los inputs con lo
+   * tipeado: el reposo mostraría el valor guardado — que se lee de
+   * `state.ficha` — pero el próximo «Editar» abriría el formulario sucio, con
+   * un cambio que el usuario ya descartó y que un guardado posterior mandaría
+   * igual. Es el modo silencioso de escribir un dato médico que nadie pidió.
+   */
+  function cancelarEdicion(): void {
+    if (state.status === "ready" && !state.isNew) {
+      const campos = camposDe(state.ficha);
+      setTipoSangre(campos.tipoSangre);
+      setEnfermedadesInput(campos.enfermedades);
+      setAlergias(campos.alergias);
+      setContactoEmergencia(campos.contactoEmergencia);
+      setTelefonoEmergencia(campos.telefonoEmergencia);
+    }
+    setSaveError(null);
+    setSaveSuccess(false);
+    setEditing(false);
+  }
 
   async function handleSave(): Promise<void> {
     setSaving(true);
@@ -158,17 +287,81 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
           </h3>
         </div>
         {state.isNew && <Badge tone="neutral">Nueva</Badge>}
+
+        {/* Las acciones viven en la banda pegada (`sticky`), no al pie del
+            formulario: es la única parte de la tarjeta que sigue en pantalla
+            cuando los campos se van scrolleando, así que guardar queda siempre
+            a mano y al lado del nombre de quien es la ficha. Al pie quedan los
+            mensajes de resultado, que se leen DESPUÉS de apretar y por lo
+            tanto no necesitan estar fijos. */}
+        {editing ? (
+          <div className="flex flex-none items-center gap-2">
+            {/* «Cancelar» sólo cuando hay algo a lo que volver. Una ficha nueva
+                no tiene estado anterior: el botón prometería descartar hacia
+                un formulario vacío que es exactamente el que ya se ve. */}
+            {!state.isNew && (
+              <Button variant="tertiary" size="sm" onClick={cancelarEdicion} disabled={saving}>
+                <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                Cancelar
+              </Button>
+            )}
+            <Button variant="primary" size="sm" onClick={() => void handleSave()} disabled={saving}>
+              {saving ? (
+                <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+              )}
+              {saving ? "Guardando…" : "Guardar"}
+            </Button>
+          </div>
+        ) : (
+          <Button variant="secondary" size="sm" onClick={empezarEdicion} className="flex-none">
+            <Pencil size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            Editar
+          </Button>
+        )}
       </header>
 
       <div className="p-3 sm:p-4">
-      {/* Two columns at every width above `sm`, never three.
+      {!editing && state.status === "ready" && !state.isNew && (
+        /* El reposo: filas etiqueta-valor, no la grilla de dos columnas de
+         * abajo. Son dos formas distintas porque dicen dos cosas distintas —
+         * una grilla de cajas invita a escribir, una lista de filas se lee de
+         * arriba abajo — y `/profile` ya resolvió el mismo par así.
+         *
+         * Sin fecha. `FichaMedicaEditable` no trae ningún timestamp, así que
+         * acá no se puede decir cuándo se cargó ni cuándo se actualizó el
+         * dato, y una línea «actualizado el…» sería inventada. */
+        <div>
+          <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
+          <FilaLectura label="Alergias" value={state.ficha.alergias ?? ""} />
+          <FilaLectura
+            label="Enfermedades"
+            value={state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", ")}
+          />
+          <FilaLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
+          <FilaLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
+        </div>
+      )}
+
+      {editing && (
+      <>
+      {state.isNew && (
+        <p className="mb-3 rounded-ctl border border-line bg-sunken px-3 py-2 text-xs text-ink-3-strong">
+          Todavía no hay una ficha médica cargada para esta persona. Complete los datos y guárdelos.
+        </p>
+      )}
+      {/* Two columns at every width above `sm`, never three. Esta grilla es
+       * la de los CONTROLES — sólo se dibuja en edición; el reposo de arriba
+       * usa filas, que es otra forma y otra decisión.
        *
        * Three across put all five controls into exactly TWO rows of 40px — a
        * strip of controls rather than a form — and it was the same two rows
        * whether the record was empty or full, because nothing here grows with
        * data. On `/student/medical-record`, drawn at the page's full measure,
        * that is a ~300px block under a 900px window: the worst dead-air
-       * reading in the product (57%, D11b).
+       * reading in the product (57%, D11b). El reposo no cambia esa medición
+       * y no pretende hacerlo: es un encargo aparte.
        *
        * Two across is also the honest shape: the pairs mean something. Blood
        * type sits beside allergies (what the club needs to know before it acts),
@@ -186,9 +379,9 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
             onChange={(e) => setTipoSangre(e.target.value as TipoSangre)}
             className="input-field w-full"
           >
-            {["A_POSITIVO", "A_NEGATIVO", "B_POSITIVO", "B_NEGATIVO", "AB_POSITIVO", "AB_NEGATIVO", "O_POSITIVO", "O_NEGATIVO", "DESCONOCIDO"].map((t) => (
+            {TIPOS_SANGRE.map((t) => (
               <option key={t} value={t}>
-                {t.replace("_", " ")}
+                {etiquetaTipoSangre(t)}
               </option>
             ))}
           </select>
@@ -247,32 +440,27 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={saving}
-          className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
-        >
-          {saving ? (
-            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+      {/* El botón de guardar se fue al encabezado pegado; acá quedan sólo los
+          mensajes de resultado. Dos botones «Guardar» — uno arriba y otro al
+          pie — serían dos afordancias para el mismo acto, y la que se lee
+          primero mandaría sobre la otra sin ningún motivo. */}
+      {(saveError || saveSuccess) && (
+        <div className="mt-4 flex items-center gap-3">
+          {saveError && (
+            <p className="text-sm text-state-bad" role="alert">
+              {saveError}
+            </p>
           )}
-          {saving ? "Guardando…" : "Guardar ficha médica"}
-        </button>
-        {saveError && (
-          <p className="text-sm text-state-bad" role="alert">
-            {saveError}
-          </p>
-        )}
-        {saveSuccess && (
-          <p className="flex items-center gap-1 text-sm text-state-ok" role="status">
-            <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Ficha médica guardada.
-          </p>
-        )}
-      </div>
+          {saveSuccess && (
+            <p className="flex items-center gap-1 text-sm text-state-ok" role="status">
+              <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+              Ficha médica guardada.
+            </p>
+          )}
+        </div>
+      )}
+      </>
+      )}
       </div>
     </div>
   );

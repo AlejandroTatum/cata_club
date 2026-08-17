@@ -52,7 +52,7 @@ describe("MedicalRecordEditor blood type", () => {
     const select = await screen.findByLabelText<HTMLSelectElement>("Tipo de sangre");
     expect(select.value).toBe("DESCONOCIDO");
 
-    fireEvent.click(screen.getByRole("button", { name: /Guardar ficha médica/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => {
       expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
@@ -84,10 +84,12 @@ describe("MedicalRecordEditor blood type", () => {
 
     render(<MedicalRecordEditor personaId={7} />);
 
-    const select = await screen.findByLabelText<HTMLSelectElement>("Tipo de sangre");
-    await waitFor(() => expect(select.value).toBe("O_POSITIVO"));
+    // Una ficha que ya existe abre en reposo: los inputs aparecen al editar.
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    const select = screen.getByLabelText<HTMLSelectElement>("Tipo de sangre");
+    expect(select.value).toBe("O_POSITIVO");
 
-    fireEvent.click(screen.getByRole("button", { name: /Guardar ficha médica/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => {
       expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
@@ -124,8 +126,10 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
 
     render(<MedicalRecordEditor personaId={7} />);
 
-    const alergias = await screen.findByLabelText<HTMLInputElement>("Alergias");
-    await waitFor(() => expect(alergias.value).toBe("Polen"));
+    // Una ficha que ya existe abre en reposo: los inputs aparecen al editar.
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    const alergias = screen.getByLabelText<HTMLInputElement>("Alergias");
+    expect(alergias.value).toBe("Polen");
     const contacto = screen.getByLabelText<HTMLInputElement>("Contacto de emergencia");
     const telefono = screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia");
 
@@ -133,7 +137,7 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
     fireEvent.change(contacto, { target: { value: "" } });
     fireEvent.change(telefono, { target: { value: "" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /Guardar ficha médica/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => {
       expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
@@ -216,5 +220,144 @@ describe("MedicalRecordEditor header hierarchy", () => {
     render(<MedicalRecordEditor personaId={7} />);
 
     expect(await screen.findByRole("heading", { name: "Ficha médica" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * El reposo de una ficha ya guardada.
+ *
+ * El reclamo del dueño: «acá en ficha médica debería estar como predeterminada
+ * guardada, o sea un botón de editar para cambiar; si no, parece que hay que
+ * llenar eso siempre». El editor SIEMPRE cargó la ficha existente — eso nunca
+ * estuvo roto — pero la dibujaba con los mismos cinco inputs existiera o no,
+ * así que la pantalla no distinguía «esto ya está guardado» de «esto hay que
+ * llenarlo». Sobre datos médicos son dos afirmaciones opuestas.
+ *
+ * Lo que este bloque NO afirma, y no puede: cuándo se actualizó el dato.
+ * `FichaMedicaEditable` no trae ningún timestamp, así que la vista de reposo
+ * muestra el valor sin fecharlo. Una línea «actualizado el…» sería inventada.
+ */
+describe("MedicalRecordEditor — ficha guardada en reposo", () => {
+  const FICHA_GUARDADA = {
+    id: 3,
+    personaId: 7,
+    tipoSangre: "O_POSITIVO",
+    enfermedades: [{ id: 1, nombreEnfermedad: "Asma" }],
+    alergias: "Polen",
+    contactoEmergencia: "Ana Torres",
+    telefonoEmergencia: "0991112233",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockActualizarFichaMedica.mockResolvedValue({});
+    mockFetchFichaMedica.mockResolvedValue(FICHA_GUARDADA);
+  });
+
+  it("monta en reposo, sin un solo input a la vista, cuando la ficha ya existe", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    expect(await screen.findByRole("button", { name: "Editar" })).toBeInTheDocument();
+
+    // Los cinco datos se leen; ninguno se edita.
+    expect(screen.getByText("O POSITIVO")).toBeInTheDocument();
+    expect(screen.getByText("Asma")).toBeInTheDocument();
+    expect(screen.getByText("Polen")).toBeInTheDocument();
+    expect(screen.getByText("Ana Torres")).toBeInTheDocument();
+    expect(screen.getByText("0991112233")).toBeInTheDocument();
+
+    expect(screen.queryByLabelText("Tipo de sangre")).toBeNull();
+    expect(screen.queryByLabelText("Alergias")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Guardar" })).toBeNull();
+    // El badge «Nueva» es de la ficha que no existe; ésta existe.
+    expect(screen.queryByText("Nueva")).toBeNull();
+  });
+
+  it("dibuja una raya en el campo vacío, en vez de dejar la fila en blanco", async () => {
+    mockFetchFichaMedica.mockResolvedValue({
+      ...FICHA_GUARDADA,
+      enfermedades: [],
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    });
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    await screen.findByRole("button", { name: "Editar" });
+    // Los cuatro campos opcionales; el tipo de sangre nunca puede faltar.
+    expect(screen.getAllByText("—")).toHaveLength(4);
+  });
+
+  it("«Editar» devuelve los inputs de siempre, ya cargados con lo guardado", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+
+    expect(screen.getByLabelText<HTMLSelectElement>("Tipo de sangre").value).toBe("O_POSITIVO");
+    expect(screen.getByLabelText<HTMLInputElement>("Alergias").value).toBe("Polen");
+    expect(
+      screen.getByLabelText<HTMLInputElement>("Enfermedades (separadas por coma)").value,
+    ).toBe("Asma");
+    expect(screen.getByLabelText<HTMLInputElement>("Contacto de emergencia").value).toBe("Ana Torres");
+    expect(screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia").value).toBe("0991112233");
+
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Guardar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+  });
+
+  it("«Cancelar» descarta lo tipeado y no deja el formulario sucio", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    fireEvent.change(screen.getByLabelText("Alergias"), { target: { value: "Maní" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    // Vuelve al reposo mostrando el valor GUARDADO, no el tipeado.
+    expect(screen.getByText("Polen")).toBeInTheDocument();
+    expect(screen.queryByText("Maní")).toBeNull();
+    expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
+
+    // Y al volver a entrar el input arranca limpio: cancelar restaura, no oculta.
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    expect(screen.getByLabelText<HTMLInputElement>("Alergias").value).toBe("Polen");
+  });
+
+  it("después de guardar vuelve al reposo mostrando lo recién guardado", async () => {
+    mockFetchFichaMedica
+      .mockResolvedValueOnce(FICHA_GUARDADA)
+      .mockResolvedValue({ ...FICHA_GUARDADA, alergias: "Maní" });
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    fireEvent.change(screen.getByLabelText("Alergias"), { target: { value: "Maní" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ alergias: "Maní" }),
+      ),
+    );
+
+    expect(await screen.findByRole("button", { name: "Editar" })).toBeInTheDocument();
+    expect(screen.getByText("Maní")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Alergias")).toBeNull();
+  });
+
+  it("sin ficha arranca en edición, conserva el badge «Nueva» y lo dice con todas las letras", async () => {
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    expect(await screen.findByLabelText("Tipo de sangre")).toBeInTheDocument();
+    expect(screen.getByText("Nueva")).toBeInTheDocument();
+    expect(screen.getByText(/todavía no.*ficha médica/i)).toBeInTheDocument();
+
+    // Nada que editar ni que cancelar: no hay un estado anterior al que volver.
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancelar" })).toBeNull();
   });
 });

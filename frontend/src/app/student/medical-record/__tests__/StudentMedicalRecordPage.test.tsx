@@ -187,7 +187,9 @@ describe("StudentMedicalRecordPage — reusing MedicalRecordEditor per represent
   it("does not repeat the page subtitle in a card of its own", async () => {
     render(<StudentMedicalRecordPage />);
 
-    await screen.findByLabelText("Tipo de sangre");
+    // El editor abre en reposo cuando la ficha ya existe, así que lo que
+    // marca "ya montó" es su botón «Editar», no el select.
+    await screen.findByRole("button", { name: "Editar" });
     expect(
       screen.queryByText(/Alergias, enfermedades, tipo de sangre y contacto de emergencia/i),
     ).toBeNull();
@@ -206,8 +208,8 @@ describe("StudentMedicalRecordPage — reusing MedicalRecordEditor per represent
   it("saves through the SAME editor the admin uses, for the selected representado", async () => {
     render(<StudentMedicalRecordPage />);
 
-    await screen.findByLabelText("Tipo de sangre");
-    fireEvent.click(screen.getByRole("button", { name: /Guardar ficha médica/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => {
       expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
@@ -224,8 +226,11 @@ describe("StudentMedicalRecordPage — reusing MedicalRecordEditor per represent
 
     render(<StudentMedicalRecordPage />);
 
-    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>("Alergias").value).toBe("Polvo"));
-    fireEvent.click(screen.getByRole("button", { name: /Guardar ficha médica/i }));
+    // En reposo el valor guardado se LEE; recién al editar vuelve a ser input.
+    expect(await screen.findByText("Polvo")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    expect(screen.getByLabelText<HTMLInputElement>("Alergias").value).toBe("Polvo");
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => {
       expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
@@ -276,7 +281,7 @@ describe("StudentMedicalRecordPage — drawn on the short measure, not the wides
   it("caps the pane at the short measure the design system reserves for pages that cannot grow", async () => {
     const { container } = render(<StudentMedicalRecordPage />);
 
-    await screen.findByLabelText("Tipo de sangre");
+    await screen.findByRole("button", { name: "Editar" });
     expect(container.querySelector(".max-w-5xl")).not.toBeNull();
     expect(container.querySelector(".max-w-8xl")).toBeNull();
   });
