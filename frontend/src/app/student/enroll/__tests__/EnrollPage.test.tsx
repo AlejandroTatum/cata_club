@@ -689,3 +689,55 @@ describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => 
     expect(window.sessionStorage.getItem("cata_enroll_draft")).toBeNull();
   });
 });
+
+describe("EnrollPage — la confirmación no manda a una acción que el rol nuevo no puede hacer (#348)", () => {
+  /** Same wizard walk as "limpia el borrador al completar la inscripción con
+   * éxito" above — needed here only to reach the confirmation screen. */
+  async function completarInscripcionPropia(): Promise<void> {
+    vi.mocked(enrollStudent).mockResolvedValueOnce({ enrolled: true });
+    render(<EnrollPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
+    fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
+
+    await screen.findByText(/inscripción completada/i);
+  }
+
+  it("no dice 'Registre el pago... desde Mis pagos' -- esa pantalla no tiene botón para el primer pago", async () => {
+    await completarInscripcionPropia();
+
+    // `membresia_pago_servicio.registrar_pago` exige una `membresia_id` ya
+    // EXISTENTE (backend/app/servicios_negocio/membresia_pago_servicio.py:323),
+    // y crear la membresía es ADMIN-only (`crear_membresia`, ROL_ADMIN). Un
+    // socio recién inscrito no tiene membresía todavía, así que "Mis pagos"
+    // no le ofrece ningún botón de alta -- student-utils.ts::
+    // describePaymentSituation ya lo dice para ese mismo estado ("El club
+    // crea la membresía al registrar el primer pago. Acérquese a
+    // administración..."). La confirmación no puede prometer una acción que
+    // esa pantalla no tiene.
+    expect(
+      screen.queryByText(/registre el pago y suba el comprobante desde mis pagos/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("dice la verdad del primer pago: acercarse al club, no una ruta que el rol nuevo no puede usar", async () => {
+    await completarInscripcionPropia();
+
+    expect(screen.getByText(/administraci[oó]n/i)).toBeInTheDocument();
+  });
+});

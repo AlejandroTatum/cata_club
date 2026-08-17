@@ -36,6 +36,19 @@ from app.soporte_transversal.resiliencia import (
 
 logger = logging.getLogger("cataclub.cloudinary")
 
+# Mensaje de cara al usuario para CUALQUIER fallo de `_subir()` (issue #347):
+# genérico a propósito porque cubre las 3 funciones públicas de este módulo
+# (comprobante PDF, voucher de transferencia, foto de perfil) y CUALQUIER
+# causa -- credencial ausente (`ValueError: Must supply api_key`), timeout,
+# circuito abierto, o cualquier otra excepción del SDK. El texto del vendor
+# NUNCA va acá: ver `_MENSAJE_ERROR_DOMINIO` en `_subir`, que lo manda a
+# `detalle_tecnico` (log), no a `mensaje` (lo que `_MAPA_EXCEPCIONES` de
+# main.py devuelve tal cual en el body de la respuesta 503).
+_MENSAJE_SUBIDA_NO_DISPONIBLE = (
+    "No se pudo subir el archivo en este momento. Vuelva a intentarlo más "
+    "tarde o acérquese al club / escríbanos por WhatsApp."
+)
+
 # Circuit breaker en proceso (degradacion-controlada, slice 2): una única
 # instancia a nivel de módulo, compartida por las 3 funciones públicas de
 # este módulo porque todas pasan por `_subir()`. Ver Decisión E del diseño:
@@ -83,7 +96,8 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
     """
     if not _circuito_cloudinary.permitir():
         raise ServicioNoDisponible(
-            f"Cloudinary no disponible (circuito abierto): {descripcion}"
+            _MENSAJE_SUBIDA_NO_DISPONIBLE,
+            detalle_tecnico=f"Cloudinary no disponible (circuito abierto): {descripcion}",
         )
 
     timeout = Timeout(
@@ -98,14 +112,25 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
     except Exception as exc:
         _circuito_cloudinary.registrar_fallo()
         logger.exception("Fallo subiendo %s a Cloudinary", descripcion)
-        raise ServicioNoDisponible(f"Error subiendo {descripcion} a Cloudinary: {exc}") from exc
+        # `mensaje` (lo que el socio lee) NUNCA lleva `{exc}`: el texto crudo
+        # del vendor -- incluido `ValueError: Must supply api_key` cuando
+        # falta la credencial -- queda en `detalle_tecnico`, solo para el
+        # log (ver el manejador de main.py y el contrato documentado en
+        # `ErrorDominio`).
+        raise ServicioNoDisponible(
+            _MENSAJE_SUBIDA_NO_DISPONIBLE,
+            detalle_tecnico=f"Error subiendo {descripcion} a Cloudinary: {exc}",
+        ) from exc
 
     url: Optional[str] = resultado.get("secure_url")
     if not url:
         # Defensive: si el SDK no devuelve secure_url (imposible con secure=True),
         # lo tratamos como una anomalía del vendor, no del caller.
         _circuito_cloudinary.registrar_fallo()
-        raise ServicioNoDisponible(f"Cloudinary no retornó `secure_url` ({descripcion})")
+        raise ServicioNoDisponible(
+            _MENSAJE_SUBIDA_NO_DISPONIBLE,
+            detalle_tecnico=f"Cloudinary no retornó `secure_url` ({descripcion})",
+        )
 
     _circuito_cloudinary.registrar_exito()
 
