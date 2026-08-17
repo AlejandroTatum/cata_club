@@ -266,6 +266,43 @@ describe("EnrollPage — error prevention on the student step", () => {
     expect(screen.queryByText(/para continuar, revise:/i)).not.toBeInTheDocument();
   });
 
+  // #312 / hallazgo #32 — the birth-date field had no min/max, no format
+  // hint, and its LIVE preview (before blur, before studentBirthDateRule's
+  // own message) showed a raw impossible age for a typo'd year.
+  it("bounds the birth-date field to plausible member ages", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+
+    const fecha = screen.getByLabelText(/fecha de nacimiento/i);
+    const thisYear = new Date().getFullYear();
+    expect(fecha).toHaveAttribute("min", `${thisYear - 75}-01-01`);
+    expect(fecha).toHaveAttribute("max", `${thisYear - 5}-12-31`);
+  });
+
+  it("hints the expected year format next to the birth-date field", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+
+    const fecha = screen.getByLabelText(/fecha de nacimiento/i);
+    expect(fecha).toHaveAttribute("aria-describedby");
+    const hintId = fecha.getAttribute("aria-describedby") as string;
+    expect(document.getElementById(hintId)?.textContent).toMatch(/año/i);
+  });
+
+  it("says 'revise el año' instead of a four-digit age while the field still has focus", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+
+    const fecha = screen.getByLabelText(/fecha de nacimiento/i);
+    // The exact repro from the audit: a typo'd year (1015 for 2015), field
+    // still focused — the moment studentBirthDateRule's own message has not
+    // fired yet.
+    fireEvent.change(fecha, { target: { value: "1015-06-15" } });
+
+    expect(screen.queryByText(/1011 años/)).not.toBeInTheDocument();
+    expect(screen.getByText(/revise el año/i)).toBeInTheDocument();
+  });
+
   it("keeps a minor from self-enrolling, with the message on the birth-date field", () => {
     render(<EnrollPage />);
     goToStudentStep();

@@ -8,7 +8,7 @@ import type { InputHTMLAttributes, KeyboardEvent, ClipboardEvent, ReactElement, 
 import { useState } from "react";
 import { User, Calendar, Hash, Phone, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { calculatePersonAge } from "@/lib/identity-validation";
+import { calculatePersonAge, isPlausibleHumanAge, studentBirthDateBounds } from "@/lib/identity-validation";
 import { Button, buttonClasses } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
@@ -95,6 +95,9 @@ interface WizardInputProps {
   pattern?: string;
   maxLength?: number;
   minLength?: number;
+  /** `<input type="date">` bounds — HTML forwards these to `min`/`max`. */
+  min?: string;
+  max?: string;
   inputMode?: string;
   /**
    * The field's own validation message, shown BESIDE the field
@@ -212,6 +215,8 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           pattern={opts.pattern}
           maxLength={opts.maxLength}
           minLength={opts.minLength}
+          min={opts.min}
+          max={opts.max}
           aria-invalid={hasError || undefined}
           aria-describedby={opts.error || limitReached || opts.hint ? messageId : undefined}
           inputMode={(opts.inputMode ?? "text") as InputHTMLAttributes<HTMLInputElement>["inputMode"]}
@@ -341,7 +346,15 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
   const errors = props.errors ?? {};
   const age = calculatePersonAge(props.fechaNacimiento);
   const ageValid = !isNaN(age);
+  // A calendrically real but implausible year (issue #312 / hallazgo #32 —
+  // "1015" typed for "2015") IS `ageValid`: `calculatePersonAge` deliberately
+  // never caps a real date (see its own docstring). `agePlausible` is the
+  // separate, presentation-only check that decides whether to show the
+  // number at all before `studentBirthDateRule`'s own message can appear —
+  // that rule only fires on blur, and this preview updates on every keystroke.
+  const agePlausible = ageValid && isPlausibleHumanAge(age);
   const cedulaTyped = digitCount(props.cedula);
+  const birthDateBounds = studentBirthDateBounds();
   return (
     <>
       <WizardInput
@@ -363,7 +376,9 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
           idPrefix={idPrefix} field="fecha-nacimiento" disabled={disabled} label="Fecha de nacimiento" value={props.fechaNacimiento}
           onChange={props.onFechaNacimientoChange} type="date" required
           icon={<Calendar size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
+          min={birthDateBounds.min} max={birthDateBounds.max}
           error={errors.fechaNacimiento} onBlur={() => props.onFieldBlur?.("fechaNacimiento")}
+          hint="Año completo, de 4 dígitos (por ejemplo, 2015)."
         />
         <WizardInput
           idPrefix={idPrefix} field="cedula" disabled={disabled} label="Cédula de identidad" value={props.cedula}
@@ -394,9 +409,9 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
           Edad calculada:{" "}
           <span className="font-semibold text-ink">
-            {ageValid ? `${age} años` : "—"}
+            {agePlausible ? `${age} años` : ageValid ? "Revise el año." : "—"}
           </span>
-          {ageValid && props.renderAgeWarning?.(age)}
+          {agePlausible && props.renderAgeWarning?.(age)}
         </div>
       )}
     </>

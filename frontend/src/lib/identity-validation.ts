@@ -295,6 +295,39 @@ export function studentBirthDateRule(value: string, today: Date = new Date()): s
   return null;
 }
 
+/**
+ * The oldest age a real, living human can plausibly hold — 120, the usual
+ * figure real-world age validators use (the verified record is 122). This is
+ * NOT `EDAD_MAXIMA_ALUMNO` (the club's own 74-year policy cutoff, enforced by
+ * `studentBirthDateRule`) — it exists only so a LIVE preview (still-focused
+ * field, before that rule's message has appeared) can tell "a typo produced
+ * an impossible age" apart from "a real age the club's policy happens to
+ * reject", issue #312 / hallazgo #32.
+ */
+export const MAX_PLAUSIBLE_HUMAN_AGE = 120;
+
+/** Whether `age` could belong to an actual living person, regardless of the club's own policy bounds. */
+export function isPlausibleHumanAge(age: number): boolean {
+  return Number.isFinite(age) && age >= 0 && age <= MAX_PLAUSIBLE_HUMAN_AGE;
+}
+
+/**
+ * `min`/`max` for the birth-date `<input type="date">`, in years around
+ * `EDAD_MINIMA_ALUMNO`/`EDAD_MAXIMA_ALUMNO` (issue #312 / hallazgo #32: the
+ * field had neither, so the browser's own date picker offered every year
+ * from 0001 to 9999). Padded to whole calendar years — Jan 1 on the old end,
+ * Dec 31 on the young end — so nobody whose birthday has not landed yet this
+ * year is excluded by an exact day-of-year boundary; `studentBirthDateRule`
+ * is still what enforces the real 5-74 cutoff precisely.
+ */
+export function studentBirthDateBounds(today: Date = new Date()): { min: string; max: string } {
+  const year = today.getFullYear();
+  return {
+    min: `${year - EDAD_MAXIMA_ALUMNO - 1}-01-01`,
+    max: `${year - EDAD_MINIMA_ALUMNO}-12-31`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Password
 // ---------------------------------------------------------------------------
