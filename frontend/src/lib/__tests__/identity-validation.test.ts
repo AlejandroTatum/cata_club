@@ -14,6 +14,8 @@ import {
   isValidCalendarDate,
   isFutureBirthDate,
   studentBirthDateRule,
+  isPlausibleHumanAge,
+  studentBirthDateBounds,
   PASSWORD_MIN_LENGTH,
   isCommonPassword,
   passwordRule,
@@ -350,6 +352,46 @@ describe("edad del alumno", () => {
       expect(studentBirthDateRule("2024-01-02", FROZEN_TODAY)).toBe(
         `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 4).`,
       );
+    });
+  });
+
+  // #312 / hallazgo #32 — the live "Edad calculada" preview (still-focused
+  // field, before studentBirthDateRule's own message appears on blur) needs
+  // to tell an impossible age (a typo'd year) apart from a real one the
+  // club's policy merely rejects.
+  describe("isPlausibleHumanAge", () => {
+    it("accepts an ordinary human age", () => {
+      expect(isPlausibleHumanAge(5)).toBe(true);
+      expect(isPlausibleHumanAge(74)).toBe(true);
+      expect(isPlausibleHumanAge(100)).toBe(true);
+    });
+
+    it("accepts 0 (born this year) and the 120-year ceiling itself", () => {
+      expect(isPlausibleHumanAge(0)).toBe(true);
+      expect(isPlausibleHumanAge(120)).toBe(true);
+    });
+
+    it("rejects a negative age", () => {
+      expect(isPlausibleHumanAge(-5)).toBe(false);
+    });
+
+    it("rejects an age past the 120-year ceiling — a typo'd year, not a real one", () => {
+      expect(isPlausibleHumanAge(121)).toBe(false);
+      // #312's own repro: typing "1015" instead of "2015".
+      expect(isPlausibleHumanAge(1011)).toBe(false);
+    });
+
+    it("rejects NaN", () => {
+      expect(isPlausibleHumanAge(NaN)).toBe(false);
+    });
+  });
+
+  describe("studentBirthDateBounds", () => {
+    it("bounds min/max a year of margin around EDAD_MINIMA_ALUMNO/EDAD_MAXIMA_ALUMNO", () => {
+      expect(studentBirthDateBounds(FROZEN_TODAY)).toEqual({
+        min: `${2029 - EDAD_MAXIMA_ALUMNO - 1}-01-01`,
+        max: `${2029 - EDAD_MINIMA_ALUMNO}-12-31`,
+      });
     });
   });
 });

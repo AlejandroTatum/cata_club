@@ -821,6 +821,96 @@ describe("TrainerAttendancePage — attendance state selector affordances", () =
 });
 
 // ---------------------------------------------------------------------------
+// #312 / hallazgos #24 y #26 — el radiogroup de asistencia no reaccionaba a
+// las flechas (5 tabulaciones por alumno) y en escritorio los cuatro estados
+// eran iconos sin rótulo visible (el texto quedaba oculto por CSS a partir de
+// 640px, sm:sr-only, y solo sobrevivía como title/tooltip).
+// ---------------------------------------------------------------------------
+describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asistencia (#312 / #24, #26)", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue([ANA_ALUMNO_HORARIO]);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+    mockRegisterAttendance.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+  });
+
+  it("gives the group a single tab stop — only the checked radio is tabbable", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+
+    const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
+    const radios = within(group).getAllByRole("radio");
+    const tabbable = radios.filter((r) => r.tabIndex === 0);
+    expect(tabbable).toHaveLength(1);
+    expect(tabbable[0]).toHaveAttribute("aria-checked", "true");
+    radios
+      .filter((r) => r !== tabbable[0])
+      .forEach((r) => expect(r.tabIndex).toBe(-1));
+  });
+
+  it("moves focus AND the checked state together with ArrowRight, without leaving the group", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+
+    const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
+    const presente = within(group).getByRole("radio", { name: "Presente" });
+    presente.focus();
+
+    fireEvent.keyDown(presente, { key: "ArrowRight" });
+
+    const ausente = within(group).getByRole("radio", { name: "Ausente" });
+    expect(ausente).toHaveAttribute("aria-checked", "true");
+    expect(document.activeElement).toBe(ausente);
+  });
+
+  it("wraps from the last state back to the first with ArrowRight", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+
+    const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
+    fireEvent.click(within(group).getByRole("radio", { name: "Justificado" }));
+    const justificado = within(group).getByRole("radio", { name: "Justificado" });
+    justificado.focus();
+
+    fireEvent.keyDown(justificado, { key: "ArrowRight" });
+
+    const presente = within(group).getByRole("radio", { name: "Presente" });
+    expect(presente).toHaveAttribute("aria-checked", "true");
+    expect(document.activeElement).toBe(presente);
+  });
+
+  it("moves backward and wraps with ArrowLeft", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+
+    const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
+    const presente = within(group).getByRole("radio", { name: "Presente" });
+    presente.focus();
+
+    fireEvent.keyDown(presente, { key: "ArrowLeft" });
+
+    const justificado = within(group).getByRole("radio", { name: "Justificado" });
+    expect(justificado).toHaveAttribute("aria-checked", "true");
+    expect(document.activeElement).toBe(justificado);
+  });
+
+  it("keeps a visible label under each icon from desktop width up, not just sm:", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+
+    const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
+    const label = within(group).getByText("Presente", { selector: "span" });
+    // Old class hid it from 640px up (`sm:sr-only`) — a laptop-width screen
+    // never saw it. It stays hidden only below `lg` (1024px, where the fiche
+    // is a narrow column with no room) and is visible from there on.
+    expect(label.className).not.toContain("sm:sr-only");
+    expect(label.className).toContain("lg:not-sr-only");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FASE 4 item 3 — the redesign, layered ON TOP of the guarantees above.
 // Prototype: `docs/archive/prototypes/prototipos/20-tomar-lista.html`.
 // ---------------------------------------------------------------------------

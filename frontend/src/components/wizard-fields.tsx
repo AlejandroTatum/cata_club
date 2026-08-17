@@ -8,7 +8,7 @@ import type { InputHTMLAttributes, KeyboardEvent, ClipboardEvent, ReactElement, 
 import { useState } from "react";
 import { User, Calendar, Hash, Phone, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { calculatePersonAge } from "@/lib/identity-validation";
+import { calculatePersonAge, isPlausibleHumanAge, studentBirthDateBounds } from "@/lib/identity-validation";
 import { Button, buttonClasses } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
@@ -95,7 +95,17 @@ interface WizardInputProps {
   pattern?: string;
   maxLength?: number;
   minLength?: number;
+  /** `<input type="date">` bounds — HTML forwards these to `min`/`max`. */
+  min?: string;
+  max?: string;
   inputMode?: string;
+  /**
+   * Standard autofill token (`given-name`, `family-name`, `bday`, `tel`,
+   * `email`, `new-password`, …) — issue #312 / hallazgo #33: without it the
+   * browser has nothing to offer back on a 17-field form spread over 5
+   * screens.
+   */
+  autoComplete?: string;
   /**
    * The field's own validation message, shown BESIDE the field
    * (`_sistema.css` `.input.err` + `.errmsg`). Passing `undefined` keeps the
@@ -212,6 +222,9 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           pattern={opts.pattern}
           maxLength={opts.maxLength}
           minLength={opts.minLength}
+          min={opts.min}
+          max={opts.max}
+          autoComplete={opts.autoComplete}
           aria-invalid={hasError || undefined}
           aria-describedby={opts.error || limitReached || opts.hint ? messageId : undefined}
           inputMode={(opts.inputMode ?? "text") as InputHTMLAttributes<HTMLInputElement>["inputMode"]}
@@ -341,21 +354,29 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
   const errors = props.errors ?? {};
   const age = calculatePersonAge(props.fechaNacimiento);
   const ageValid = !isNaN(age);
+  // A calendrically real but implausible year (issue #312 / hallazgo #32 —
+  // "1015" typed for "2015") IS `ageValid`: `calculatePersonAge` deliberately
+  // never caps a real date (see its own docstring). `agePlausible` is the
+  // separate, presentation-only check that decides whether to show the
+  // number at all before `studentBirthDateRule`'s own message can appear —
+  // that rule only fires on blur, and this preview updates on every keystroke.
+  const agePlausible = ageValid && isPlausibleHumanAge(age);
   const cedulaTyped = digitCount(props.cedula);
+  const birthDateBounds = studentBirthDateBounds();
   return (
     <>
       <WizardInput
         idPrefix={idPrefix} field="nombres" disabled={disabled} label="Nombres" value={props.nombres}
         onChange={props.onNombresChange} placeholder={example("Juan Carlos")} required
         icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-        error={errors.nombres} onBlur={() => props.onFieldBlur?.("nombres")}
+        error={errors.nombres} onBlur={() => props.onFieldBlur?.("nombres")} autoComplete="given-name"
         pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <WizardInput
         idPrefix={idPrefix} field="apellidos" disabled={disabled} label="Apellidos" value={props.apellidos}
         onChange={props.onApellidosChange} placeholder={example("Rodríguez López")} required
         icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-        error={errors.apellidos} onBlur={() => props.onFieldBlur?.("apellidos")}
+        error={errors.apellidos} onBlur={() => props.onFieldBlur?.("apellidos")} autoComplete="family-name"
         pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <div className="grid gap-4 sm:grid-cols-2">
@@ -363,7 +384,10 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
           idPrefix={idPrefix} field="fecha-nacimiento" disabled={disabled} label="Fecha de nacimiento" value={props.fechaNacimiento}
           onChange={props.onFechaNacimientoChange} type="date" required
           icon={<Calendar size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
+          min={birthDateBounds.min} max={birthDateBounds.max}
           error={errors.fechaNacimiento} onBlur={() => props.onFieldBlur?.("fechaNacimiento")}
+          hint="Año completo, de 4 dígitos (por ejemplo, 2015)."
+          autoComplete="bday"
         />
         <WizardInput
           idPrefix={idPrefix} field="cedula" disabled={disabled} label="Cédula de identidad" value={props.cedula}
@@ -385,6 +409,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         pattern="[0-9]+" inputMode="tel" numericMode="phone"
         error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
         hint={PHONE_HINT}
+        autoComplete="tel"
       />
       {/* `sunken`, not `canvas`. The surface ladder is canvas → sunken → paper,
           so `canvas` is the field the PAGE stands on; spending it on a recessed
@@ -394,9 +419,9 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
           Edad calculada:{" "}
           <span className="font-semibold text-ink">
-            {ageValid ? `${age} años` : "—"}
+            {agePlausible ? `${age} años` : ageValid ? "Revise el año." : "—"}
           </span>
-          {ageValid && props.renderAgeWarning?.(age)}
+          {agePlausible && props.renderAgeWarning?.(age)}
         </div>
       )}
     </>
@@ -485,7 +510,36 @@ interface WizardNavigationProps {
   nextBlockedReason?: string;
   /** The final step's submit button — its label/disabled condition differ per wizard, so the caller renders it. */
   submitButton: ReactNode;
+  /**
+   * Whether `submitButton` is currently disabled — the caller owns that
+   * condition (it may depend on more than field validity, e.g. a
+   * confirmation checkbox), so it is repeated here rather than re-derived.
+   */
+  submitBlocked?: boolean;
+  /**
+   * Why `submitButton` is blocked, shown under it exactly the way
+   * `nextBlockedReason` already is (#312 / hallazgo #2): the wizard's own
+   * "Siguiente" names what is missing on steps 2-4, and the final step's
+   * button was the one place that stayed silent.
+   */
+  submitBlockedReason?: string;
 }
+
+/**
+ * Why a disabled `Button` is disabled, printed right under it.
+ *
+ * `text-xs text-ink-3` (12.5px, the same grey as "10 dígitos, sin guiones.")
+ * used to carry this line too — hallazgo #10: the one sentence that tells the
+ * visitor how to get unstuck read as the LEAST important text on the screen.
+ * `text-base` (15px, the ramp's own body-copy step — see tailwind.config.ts)
+ * is the closest documented size to the audit's "16px o más" ask; a bespoke
+ * `text-[16px]` would clear that ask by one pixel but break the type ramp for
+ * a single line, which this system treats as load-bearing everywhere else.
+ * `text-cata-red-dark` clears 7.74:1 on `paper` and 7.05:1 on `sunken` (AAA),
+ * well past the audit's 7:1 floor and the reason it is not `state-bad`
+ * (4.84:1 on `canvas`, under that floor).
+ */
+const BLOCKED_REASON_CLASSES = "max-w-xs text-right text-base font-semibold text-cata-red-dark";
 
 /** Validation-errors alert + Atrás/Siguiente navigation chrome — shared by both wizards' step footer. The final step renders `submitButton` instead of "Siguiente". */
 export function WizardNavigation(props: WizardNavigationProps): ReactElement {
@@ -541,10 +595,17 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
                 <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               </Button>
               {props.nextDisabled && props.nextBlockedReason && (
-                <p className="max-w-xs text-right text-xs text-ink-3">{props.nextBlockedReason}</p>
+                <p className={BLOCKED_REASON_CLASSES}>{props.nextBlockedReason}</p>
               )}
             </>
-          ) : props.submitButton}
+          ) : (
+            <>
+              {props.submitButton}
+              {props.submitBlocked && props.submitBlockedReason && (
+                <p className={BLOCKED_REASON_CLASSES}>{props.submitBlockedReason}</p>
+              )}
+            </>
+          )}
         </div>
       </div>
     </>

@@ -209,6 +209,10 @@ describe("LoginPage", () => {
       await waitFor(() => {
         expect(mockShowError).toHaveBeenCalledWith("Credenciales incorrectas", {
           description: "Revise su correo y su contraseña, e intente nuevamente.",
+          // #312 / hallazgo #30: este es el único aviso de la pantalla que
+          // dice POR QUÉ falló el login, así que se queda arriba el piso
+          // más largo (20s) en vez del tope ordinario de 4.5-10s.
+          duration: 20000,
         });
       });
       expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
@@ -352,6 +356,32 @@ describe("LoginPage — the failed credentials leave a mark on the form", () => 
     // An error that outlives the thing it describes trains people to ignore it.
     expect(screen.queryByTestId("credentials-error")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Contraseña")).toHaveAttribute("aria-invalid", "false");
+  });
+
+  // #312 / hallazgo #30: tras el 401 el foco quedaba en <body> — el aviso
+  // aparecía donde el usuario ya no estaba mirando, y encima se autodescartaba.
+  it("returns focus to the password field, so the inline message is where the eye already is", async () => {
+    const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "invalid_credentials" });
+    mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+    render(<LoginPage />);
+    submitLoginForm();
+
+    const password = screen.getByLabelText("Contraseña");
+    await waitFor(() => expect(password).toHaveAttribute("aria-invalid", "true"));
+    expect(document.activeElement).toBe(password);
+  });
+
+  it("prints the pair-mismatch message at the body-copy size, not the 12.5px format-hint size", async () => {
+    const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "invalid_credentials" });
+    mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+    render(<LoginPage />);
+    submitLoginForm();
+
+    const message = await screen.findByTestId("credentials-error");
+    expect(message.className).toContain("text-base");
+    expect(message.className).not.toContain("text-xs");
   });
 
   it("states a field error in the state red, not in the action red", () => {

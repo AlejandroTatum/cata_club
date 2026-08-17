@@ -40,5 +40,25 @@ def _validar_telefono(valor: str) -> str:
     return valor
 
 
+def _validar_nombre(valor: str) -> str:
+    if not valor.strip():
+        raise ValueError("El nombre es obligatorio.")
+    return valor
+
+
+def _validar_apellido(valor: str) -> str:
+    if not valor.strip():
+        raise ValueError("El apellido es obligatorio.")
+    return valor
+
+
 CedulaValidada = Annotated[str, AfterValidator(_validar_cedula)]
 TelefonoValidado = Annotated[str, AfterValidator(_validar_telefono)]
+# `PersonaUpdateDTO.nombres`/`apellidos` (issue #312, hallazgo #65): antes
+# dependían del `min_length=1` propio de `Field`, cuyo mensaje de rechazo
+# ("String should have at least 1 character") es inglés de Pydantic y nunca
+# pasa el filtro `isUserFacingText` del frontend -- el mismo motivo por el que
+# cédula/teléfono ya usan un `AfterValidator` con mensaje en castellano en vez
+# de una constraint de `Field`.
+NombreValidado = Annotated[str, AfterValidator(_validar_nombre)]
+ApellidoValidado = Annotated[str, AfterValidator(_validar_apellido)]

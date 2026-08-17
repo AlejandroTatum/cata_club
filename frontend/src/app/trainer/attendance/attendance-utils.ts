@@ -122,6 +122,26 @@ export function nextAttendanceState(
 }
 
 /**
+ * Where ArrowRight/ArrowLeft (or ArrowDown/ArrowUp) move the four-state
+ * radiogroup, following `ATTENDANCE_STATES`' own left-to-right layout order
+ * rather than `nextAttendanceState`'s tap-accelerator order — the arrow keys
+ * walk the row the eye sees, wrapping at both ends (issue #312 / hallazgo
+ * #26: the group used to have no arrow-key behaviour at all, so it cost 5
+ * Tab stops per student instead of the ARIA radiogroup pattern's Tab +
+ * arrow).
+ */
+export function arrowAttendanceState(
+  current: EstadoAsistencia,
+  key: "ArrowRight" | "ArrowDown" | "ArrowLeft" | "ArrowUp",
+): EstadoAsistencia {
+  const delta = key === "ArrowRight" || key === "ArrowDown" ? 1 : -1;
+  const idx = ATTENDANCE_STATES.indexOf(current);
+  const from = idx === -1 ? 0 : idx;
+  const next = (from + delta + ATTENDANCE_STATES.length) % ATTENDANCE_STATES.length;
+  return ATTENDANCE_STATES[next];
+}
+
+/**
  * The order tapping a student's row walks through
  * (`docs/archive/prototypes/prototipos/20-tomar-lista.html`):
  *

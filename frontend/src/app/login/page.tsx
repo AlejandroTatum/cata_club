@@ -14,7 +14,7 @@
 
 "use client";
 
-import { type FormEvent, useState, useEffect } from "react";
+import { type FormEvent, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
@@ -134,6 +134,23 @@ export default function LoginPage(): React.ReactElement {
    */
   const [credentialsRejected, setCredentialsRejected] = useState(false);
   const [welcome, setWelcome] = useState<{ route: string } | null>(null);
+  /**
+   * #312 / hallazgo #30: tras un 401 el foco se quedaba en `<body>` — el
+   * único aviso visible era el toast, que además se autodescartaba en unos
+   * segundos, así que un lector lento perdía el mensaje mientras todavía lo
+   * estaba leyendo. Devolver el foco a la contraseña pone el error justo
+   * donde el usuario ya está mirando.
+   */
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  // Runs as an EFFECT, not inline in `handleSubmit`: `setSubmitting(false)`
+  // is what lifts the field's `disabled`, and a browser refuses to focus a
+  // disabled element. Calling `.focus()` synchronously in the submit handler
+  // races that re-render; the effect fires only after React has committed
+  // it, once the field is actually focusable again.
+  useEffect((): void => {
+    if (credentialsRejected) passwordRef.current?.focus();
+  }, [credentialsRejected]);
 
   // Redirect to role-appropriate page if already authenticated. Skipped
   // while a welcome is pending — a login just completed, and that effect
@@ -173,12 +190,23 @@ export default function LoginPage(): React.ReactElement {
 
     if (!result.ok) {
       const { message, description } = loginErrorFeedback(result.error);
-      toast.showError(message, { description });
+      const isCredentialsError = result.error === "invalid_credentials";
+      toast.showError(message, {
+        description,
+        // The 4500-10000ms the ordinary toast clamps to reads fine for a
+        // one-line confirmation, but a 70-year-old reading "Revise su correo
+        // y su contraseña, e intente nuevamente." at a slower pace lost the
+        // toast mid-read (measured: gone by ~9s). This is the ONE toast in
+        // the product naming the reason a login failed, so it gets the same
+        // floor `TOAST_UNDO_DURATION_MS` gives an undo offer — long enough to
+        // notice, read, and act, not indefinite.
+        duration: isCredentialsError ? 20000 : undefined,
+      });
       // ONLY for `invalid_credentials`. The other five kinds — a timeout, an
       // unreachable backend, a misconfigured server — are not the person's
       // typing, and painting their fields red would send them to re-check
       // something that was never wrong.
-      setCredentialsRejected(result.error === "invalid_credentials");
+      setCredentialsRejected(isCredentialsError);
       setSubmitting(false);
       return;
     }
@@ -273,6 +301,7 @@ export default function LoginPage(): React.ReactElement {
               aria-hidden="true"
             />
             <input
+              ref={passwordRef}
               type={showPassword ? "text" : "password"}
               id="password"
               name="password"
@@ -333,7 +362,12 @@ export default function LoginPage(): React.ReactElement {
               id={CREDENTIALS_ERROR_ID}
               data-testid="credentials-error"
               role="alert"
-              className="mt-1.5 text-xs font-semibold text-state-bad"
+              // #312 / hallazgo #30: 12.5px (`text-xs`) mide 5.91:1 — legible,
+              // pero es la misma talla que un hint decorativo para el mensaje
+              // que le dice al visitante qué falló. `text-base` (15px, el
+              // cuerpo de este sistema) le da jerarquía propia sin salirse
+              // de la escala tipográfica declarada.
+              className="mt-1.5 text-base font-semibold text-state-bad"
             >
               El correo y la contraseña no coinciden. Verifique los dos e intente nuevamente.
             </p>
