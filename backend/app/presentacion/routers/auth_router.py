@@ -1,6 +1,7 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -26,7 +27,16 @@ async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), d
     # El user-agent alimenta SOLO el registro observacional de sesiones (ver
     # `AuthServicio._registrar_sesion`). No participa de la autenticación: un
     # cliente que no lo manda entra igual.
-    return AuthServicio(db).login(
+    #
+    # `run_in_threadpool`: el freno progresivo de login (TRA-4) hace un
+    # `time.sleep` REAL dentro de `AuthServicio.login` cuando penaliza un
+    # intento fallido (`_penalizar_intento_fallido`). Llamado directo desde
+    # esta coroutine, ese sleep retiene el único hilo del event loop y
+    # bloquea a TODO otro cliente -- ni siquiera `GET /health` respondía
+    # mientras un intento penalizado dormía (issue #311). Correrlo en el
+    # threadpool de FastAPI libera el event loop durante esos segundos.
+    return await run_in_threadpool(
+        AuthServicio(db).login,
         form.username, form.password, user_agent=request.headers.get("user-agent"),
     )
 
