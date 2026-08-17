@@ -1401,6 +1401,206 @@ describe("StudentPage — the no-schedule state fills its box and offers a way o
 // estirarlo, con el sobrante cayendo dentro de la tarjeta.
 // ---------------------------------------------------------------------------
 
+/**
+ * The carnet redesign — it stops being a card with data on it and becomes the
+ * club's identity object, and print stops being the screen shrunk down.
+ *
+ * Every lock below is one of the seven defects the redesign closes. They are
+ * written against the SAME DOM the screen renders: print is a breakpoint here,
+ * not a second markup tree, so `within(carnet).getByText(...)` still finds
+ * exactly one of everything.
+ */
+describe("StudentPage — the carnet as the club's identity object", () => {
+  const FULL_MEMBERSHIP = {
+    id: 4,
+    estado: "ACTIVA",
+    personaId: 9,
+    montoAplicado: "25.00",
+    categoria: "Mensual",
+    modalidad: "MENSUAL" as const,
+    fechaActivacion: "2026-03-18",
+  };
+
+  /** A carnet with every fact the card can carry, so the grid is real. */
+  function renderFullCarnet() {
+    mockFetchStudentPortal
+      .mockReset()
+      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP } });
+    mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
+    render(<StudentPage />);
+  }
+
+  // D1 — "la regla de la acción": todo lo demás vive al pie del bloque que
+  // modifica, y ninguna acción flota en medio del contenido. The action row
+  // used to sit BETWEEN the name and the status band.
+  it("puts the carnet's actions at the foot of the card, after the fact grid", async () => {
+    renderFullCarnet();
+
+    const facts = await screen.findByTestId("carnet-facts");
+    const imprimir = screen.getByRole("button", { name: /imprimir carnet/i });
+
+    expect(facts.compareDocumentPosition(imprimir) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // "La regla del aire": the leftover height becomes deliberate air at the
+    // foot, not a hole in the middle.
+    expect(imprimir.closest("div")?.className).toMatch(/\bmt-auto\b/);
+  });
+
+  // D2 — "no agregar un cuarto vocabulario para algo que ya tiene uno"
+  // (DESIGN.md). The system already owns "the secondary action INSIDE a coal
+  // card": `Button`'s `onCoal` variant. These three hand-rolled a fifth.
+  it("builds the carnet's actions on the system's onCoal control, not on a hand-rolled capsule", async () => {
+    render(<StudentPage />);
+    await screen.findByTestId("student-carnet");
+
+    for (const name of [/imprimir carnet/i, /cambiar foto/i]) {
+      const boton = screen.getByRole("button", { name });
+      // The `onCoal` skin, verbatim from `Button.tsx`.
+      expect(boton.className).toContain("border-white/25");
+      // A capsule is a badge; a control wears the control radius at the
+      // compact control height (32px).
+      expect(boton.className).toMatch(/\brounded-ctl\b/);
+      expect(boton.className).not.toMatch(/rounded-full/);
+      expect(boton.className).toMatch(/\bh-ctl-sm\b/);
+    }
+    // The upload trigger keeps its disabled handling.
+    expect(screen.getByRole("button", { name: /cambiar foto/i }).className).toMatch(
+      /disabled:cursor-not-allowed/,
+    );
+  });
+
+  // D3 — Graduate is "lo que el club dice de sí mismo". It was absent from the
+  // club's own membership card, whose wordmark was 12.5px Barlow.
+  it("sets the club's wordmark in Graduate at its 15px floor, and leaves the student's name in Barlow", async () => {
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const wordmark = within(carnet).getByText("Cata Club");
+    expect(wordmark.className).toMatch(/\bfont-display\b/);
+    expect(wordmark.className).toMatch(/\buppercase\b/);
+    // 15px is exactly Graduate's floor — never below it, on screen or on print.
+    expect(wordmark.className).toMatch(/\btext-base\b/);
+    expect(wordmark.className).not.toMatch(/print:text-(2xs|xs|sm)\b/);
+
+    // The hard boundary: Graduate has almost no vertical range and reads as
+    // texture, so a person's name on an identity object stays in Barlow.
+    const nombre = within(carnet).getByText("Alumno Test");
+    expect(nombre.className).not.toMatch(/font-display/);
+    // "Tenis de mesa" is read as words too — Barlow, unchanged.
+    expect(within(carnet).getByText("Tenis de mesa").className).not.toMatch(/font-display/);
+  });
+
+  // D4 — the photo was avatar-sized (48px) on the one object that is about the
+  // person, and it SHRANK to 36px on the printed credential.
+  it("gives the photo the size of the subject on screen, and grows it on the printed card", async () => {
+    render(<StudentPage />);
+
+    const photo = await screen.findByTestId("carnet-photo");
+    expect(photo.className).toMatch(/\bh-16\b/);
+    expect(photo.className).toMatch(/\bw-16\b/);
+    // On the credential the photo is the largest element on the card, not a
+    // shrunk-down version of the screen's.
+    expect(photo.className).toMatch(/\bprint:h-14\b/);
+    expect(photo.className).not.toMatch(/print:h-9\b/);
+  });
+
+  // D5 — the 150px `bg-ball/[0.08]` circle was category-default glow. The club
+  // owns a texture of its own, and DESIGN.md permits it exactly here: "la trama
+  // halftone… solo va donde no hay nada que leer, o donde hay algo que
+  // celebrar".
+  it("wears the club's own halftone texture instead of a decorative glow, and never prints it", async () => {
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const halftone = carnet.querySelector(".carnet-halftone");
+    expect(halftone).not.toBeNull();
+    expect(halftone).toHaveAttribute("aria-hidden", "true");
+    expect(halftone?.className).toMatch(/pointer-events-none/);
+    expect(halftone?.className).toMatch(/print:hidden/);
+    // It sits BEHIND the content: every readable child is `relative z-10`.
+    expect(halftone?.className).not.toMatch(/\bz-10\b/);
+    // The generic glow is gone, not merely covered up.
+    expect(carnet.querySelector('[class*="bg-ball/"]')).toBeNull();
+  });
+
+  // D6 — DESIGN.md's `typography.label` is weight 800. The carnet's labels had
+  // drifted to `font-semibold` (600).
+  it("weights the fact labels at the system's label token", async () => {
+    renderFullCarnet();
+
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+    });
+    for (const cell of [...facts.children]) {
+      const label = cell.firstElementChild;
+      expect(label?.className).toMatch(/\bfont-extrabold\b/);
+      expect(label?.className).not.toMatch(/\bfont-semibold\b/);
+    }
+  });
+
+  // D7a — the printed carnet identifies BELONGING. A monthly price neither
+  // identifies the person nor survives a price change, and it is private data
+  // to carry in a wallet. It stays on screen and leaves the printed card.
+  //
+  // Declared per fact (`omitOnPrint`), never as a positional `:last-child`
+  // selector — that would silently drop whichever fact happens to be last the
+  // day the fact list changes.
+  it("drops the monthly price from the printed card only, and keeps every other fact on it", async () => {
+    renderFullCarnet();
+
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+    });
+
+    /** The fact CELL carrying a given label. */
+    function cellFor(label: string): Element {
+      const cell = within(facts).getByText(label).parentElement;
+      expect(cell).not.toBeNull();
+      return cell!;
+    }
+
+    expect(cellFor("Valor mensual").className).toMatch(/print:hidden/);
+    // Still on screen, and still in the DOM — hidden at the print breakpoint
+    // by a class, not removed from the markup.
+    expect(within(facts).getByText("$25,00")).toBeInTheDocument();
+    for (const label of ["Socio desde", "Plan", "Franja"]) {
+      expect(cellFor(label).className).not.toMatch(/print:hidden/);
+    }
+  });
+
+  // D7b — print was the screen shrunk: ~22 `print:` utilities that only moved
+  // type size and colour, over a layout identical to the screen's. It is a
+  // real breakpoint now, with its own composition, on the same DOM.
+  it("composes the printed credential instead of shrinking the screen", async () => {
+    renderFullCarnet();
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const facts = await screen.findByTestId("carnet-facts");
+    const photo = screen.getByTestId("carnet-photo");
+
+    // The card distributes its three blocks over the 85.6mm field rather than
+    // stacking them at the top, inside a credential-scale margin.
+    expect(carnet.className).toMatch(/print:justify-between/);
+    expect(carnet.className).toMatch(/print:p-\[4mm\]/);
+
+    // The header stacks and centres — it is not the screen's left-aligned row.
+    const wordmark = within(carnet).getByText("Cata Club");
+    const header = wordmark.closest("div")?.parentElement;
+    expect(header?.className).toMatch(/print:flex-col/);
+    expect(header?.className).toMatch(/print:items-center/);
+
+    // The photo leads a centred column, with the name beneath it.
+    const subject = photo.parentElement;
+    expect(subject?.className).toMatch(/print:flex-col/);
+    expect(subject?.className).toMatch(/print:items-center/);
+    expect(subject?.className).toMatch(/print:text-center/);
+
+    // The facts read as one left-aligned column at credential width.
+    expect(facts.className).toMatch(/print:grid-cols-1/);
+  });
+});
+
 describe("StudentPage — la fila de pulso", () => {
   it("usa la misma grilla de tiles que el panel de admin", async () => {
     render(<StudentPage />);

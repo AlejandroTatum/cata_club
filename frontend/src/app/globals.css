@@ -230,6 +230,45 @@
   .animate-toast-in {
     animation: toast-in 0.2s ease-out;
   }
+
+  /*
+   * THE CLUB'S HALFTONE, IN THE PRODUCT.
+   *
+   * The carnet used to carry a 150px `bg-ball/[0.08]` circle in its top-right
+   * corner: a soft glow behind a corner, which is the decorative blob every
+   * generic card ships with. The club already owns a texture instead — the
+   * halftone dot field the landing paints (`landing/landing.css`,
+   * `.landing-halftone`) — and DESIGN.md permits it precisely here: "la trama
+   * halftone… solo va donde no hay nada que leer, o donde hay algo que
+   * celebrar". The carnet's top-right corner is both.
+   *
+   * Built the same way (a `radial-gradient` dot, a `background-size` pitch and
+   * a corner `mask-image` fade) but AUTHORED HERE, on the product's own values:
+   * the dot is `ball` at 9%, the fade is drawn with `coal`. The landing class
+   * itself is deliberately NOT imported — it resolves against
+   * `--landing-surface` / `--landing-brand-black`, variables that only exist
+   * inside `.landing-page`, so importing it would either paint nothing or drag
+   * the landing's whole variable world into the authenticated product.
+   *
+   * The pitch is tighter than the landing's 15px (which fills a hero) because
+   * this field is ~340px wide rather than a full viewport.
+   *
+   * The mask is SIZED, not left at `farthest-corner`. A percentage stop on an
+   * auto-sized circle resolves against the distance to the opposite corner, so
+   * on a card this shape it would have reached ~200px inward — across the
+   * wordmark and into the name. DESIGN.md is explicit: "no poner la trama
+   * halftone detrás de datos". 150px at the top-right corner fading out by 70%
+   * keeps every dot in the corner the header leaves empty.
+   *
+   * Print never sees it — a dot screen at credential size is grey mud, and the
+   * printed carnet is white ground by decision #286.
+   */
+  .carnet-halftone {
+    background-image: radial-gradient(circle, rgba(255, 214, 0, 0.09) 1.5px, transparent 1.5px);
+    background-size: 9px 9px;
+    -webkit-mask-image: radial-gradient(150px 150px at 100% 0%, #131316, transparent 70%);
+    mask-image: radial-gradient(150px 150px at 100% 0%, #131316, transparent 70%);
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -355,11 +394,17 @@
  *
  * El truco de `visibility` no cambia el layout de pantalla en absoluto: en
  * print, `body *` se oculta y solo `#carnet-print-area` (el <section> del
- * carnet) queda visible, re-posicionado a la página. Las variantes
- * `print:*` de Tailwind en el propio componente (fondo blanco, texto coal,
- * banda de estado oculta, botones ocultos, tamaños de credencial) hacen el
- * resto. `@page size` es un hint: los navegadores que no lo soporten igual
- * imprimen el carnet a 54×85.6mm porque el área lo fuerza.
+ * carnet) queda visible, re-posicionado a la página. `@page size` es un hint:
+ * los navegadores que no lo soporten igual imprimen el carnet a 54×85.6mm
+ * porque el área lo fuerza.
+ *
+ * Esta hoja da el LIENZO; la COMPOSICIÓN la dan las variantes `print:*` del
+ * propio componente, sobre el mismo DOM. Print es un breakpoint real, no la
+ * pantalla encogida: el encabezado se apila y se centra, la foto crece y pasa
+ * a ser el sujeto, el nombre cae centrado debajo, los datos bajan a una sola
+ * columna y «Valor mensual» se va (identificar pertenencia no es publicar un
+ * precio). El carnet no se duplica en un subárbol solo-impresión: una sola
+ * fuente de verdad, dos composiciones.
  * ------------------------------------------------------------------------- */
 @media print {
   @page {

@@ -81,6 +81,30 @@ type HorariosState =
 // ---------------------------------------------------------------------------
 // The club membership card (`.carnet`, _sistema.css:291-304)
 //
+// ## The direction
+//
+// THESIS. The carnet stops being a card with data on it and becomes the club's
+// identity object — the jersey, not the table row. It refuses the category
+// default: small avatar + name + a grid of label/value pairs. And the print
+// version stops being the screen shrunk down: print is a real breakpoint with
+// its own composition, not 22 micro-overrides of type size.
+//
+// OWN-WORLD. Inherited from DESIGN.md, unchanged: coal as the material, the
+// ball rationed, Graduate for what the club says about itself, Barlow for the
+// person and the data.
+//
+// STORY. A family sees the object worth screenshotting; the club sees itself
+// named in its own face.
+//
+// FIRST VIEWPORT. Coal card. Graduate wordmark top-left beside the mark. Photo
+// enlarged as the subject, name beside it. Status band. Fact grid. Actions at
+// the FOOT, never mid-card.
+//
+// FORM. Extension of an established surface — no concept tournament, no new
+// tokens.
+//
+// ## What is on it, and what is not
+//
 // This is the one thing a parent screenshots, so it is an identity document
 // and is held to that standard: every field on it is real. The prototype's
 // "Miembro nº", "Desde" and "Renueva" are NOT rendered — see the block comment
@@ -123,15 +147,31 @@ type HorariosState =
  * `whitespace-nowrap` span so the ONLY point where a line can break is the
  * " · " between them, which stays a normal (breakable) text node — never
  * inside a window, always between two.
+ *
+ * `omitOnPrint` is declared PER FACT rather than derived from position. The
+ * printed carnet drops "Valor mensual" (see the facts list in `Carnet`), and
+ * expressing that as a `:last-child` rule would silently drop whichever fact
+ * happens to be last the day the list changes — the price is not the last
+ * fact, it is the private one.
  */
-function CarnetFact({ label, value }: { label: string; value: string }): React.ReactElement {
+function CarnetFact({
+  label,
+  value,
+  omitOnPrint = false,
+}: {
+  label: string;
+  value: string;
+  omitOnPrint?: boolean;
+}): React.ReactElement {
   const windows = value.split(" · ");
   return (
-    <div className="min-w-0">
-      <span className="mb-[3px] block text-2xs font-semibold uppercase leading-tight text-white/60 print:text-coal/60">
+    <div className={cn("min-w-0", omitOnPrint && "print:hidden")}>
+      {/* `font-extrabold` (800), not `font-semibold` — DESIGN.md's
+          `typography.label` is 800, and this had drifted two steps below it. */}
+      <span className="mb-[3px] block text-2xs font-extrabold uppercase leading-tight text-white/60 print:text-coal/60">
         {label}
       </span>
-      <b className="block text-sm font-bold leading-tight tabular-nums print:text-2xs">
+      <b className="block text-sm font-bold leading-tight tabular-nums print:text-xs">
         {windows.length > 1
           ? windows.flatMap((window, index) => {
               const nodes: React.ReactNode[] = [
@@ -269,7 +309,7 @@ function Carnet({
     }
   }
 
-  const facts: { label: string; value: string }[] = [];
+  const facts: { label: string; value: string; omitOnPrint?: boolean }[] = [];
   // "Socio desde" rather than the prototype's "MIEMBRO Nº · DESDE": the backend
   // has no member-number concept, and printing the surrogate persona id as one
   // would invent an identity-document field. The activation date IS real.
@@ -302,9 +342,17 @@ function Carnet({
     // field. The carnet used to call it "Monto", which reads as an amount
     // paid rather than the plan's price, and gave one number two names two
     // clicks apart.
+    //
+    // `omitOnPrint`: on SCREEN this is the plan's price, one click from the
+    // payment it belongs to. On the PRINTED card it is none of the things a
+    // carnet is for — it does not identify the person, it does not survive a
+    // price change, and it is private data to carry in a wallet. The printed
+    // carnet identifies belonging; the price stays on the screen that can
+    // update it.
     facts.push({
       label: "Valor mensual",
       value: formatCurrency(Number(profile.membership.montoAplicado)),
+      omitOnPrint: true,
     });
   }
 
@@ -321,16 +369,30 @@ function Carnet({
         // dimensionado 54×85.6mm vive en el bloque `@media print` de
         // globals.css, junto al truco de visibility que imprime SOLO el
         // carnet (sin navegación ni rail).
-        "print:rounded-none print:bg-none print:bg-white print:px-4 print:py-3 print:text-coal print:shadow-none print:ring-1 print:ring-coal/25",
+        //
+        // Print is a real BREAKPOINT, not the screen shrunk: it composes the
+        // same DOM differently. `justify-between` distributes the three blocks
+        // that survive (header, subject, facts) over the 85.6mm field instead
+        // of pixel-counting them, and `p-[4mm]` is a credential margin rather
+        // than a screen one.
+        "print:justify-between print:rounded-none print:bg-none print:bg-white print:p-[4mm] print:text-coal print:shadow-none print:ring-1 print:ring-coal/25",
         className,
       )}
     >
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-[46px] -top-[46px] h-[150px] w-[150px] rounded-full bg-ball/[0.08] print:hidden"
-      />
+      {/* The club's own halftone, not a decorative glow — see `.carnet-halftone`
+          in globals.css for why it is authored there instead of imported from
+          the landing. It covers the whole card and the class's own corner mask
+          keeps it off everything there is to read; every readable child is
+          `relative z-10`, so it stays behind them. */}
+      <span aria-hidden="true" className="carnet-halftone pointer-events-none absolute inset-0 print:hidden" />
 
-      <div className="relative z-10 flex items-center gap-[11px]">
+      {/* On screen: mark and wordmark in a left-aligned row, the way a card
+          signs itself. On the credential the header is the crown of a vertical
+          field, so it stacks and centres — and it carries the composition's
+          first hairline rule as its own bottom border rather than as a
+          separate element, which under `print:justify-between` would have been
+          a fourth flex child floating in the middle of a gap. */}
+      <div className="relative z-10 flex items-center gap-[11px] print:flex-col print:items-center print:gap-1 print:border-b print:border-coal/20 print:pb-[2mm] print:text-center">
         {/* `alt=""` on purpose: the mark carries no information the card does
             not already state in text — "Cata Club / Tenis de mesa" is right
             beside it, and the section is labelled "Carnet de socio de …".
@@ -340,7 +402,14 @@ function Carnet({
           <Image src="/brand/cata-club-logo.jpeg" alt="" width={30} height={30} className="h-[30px] w-[30px] object-cover print:h-[24px] print:w-[24px]" />
         </span>
         <div>
-          <b className="block text-xs font-bold leading-tight print:text-2xs">Cata Club</b>
+          {/* Graduate — "lo que el club dice de sí mismo". `text-base` is
+              exactly its 15px floor, so it does NOT shrink on print. The
+              student's NAME below stays Barlow on purpose: Graduate has almost
+              no vertical range and reads as texture, and a person's name on an
+              identity object has to read as words. */}
+          <b className="block font-display text-base uppercase leading-tight tracking-flat">
+            Cata Club
+          </b>
           <span className="block text-2xs uppercase leading-tight text-white/60 print:text-coal/60">Tenis de mesa</span>
         </div>
       </div>
@@ -348,68 +417,39 @@ function Carnet({
       {/* Name and status band are one group — the person and what the club
           currently needs from them about it — so they sit close together,
           while the header above and the fact grid below are separated by
-          18px. */}
-      <div className="relative z-10 mt-[18px] flex items-center gap-3 print:mt-3">
+          18px.
+
+          On the credential the photo is the SUBJECT, so the group turns into a
+          centred column: the enlarged photo, then the name beneath it, free to
+          wrap to two balanced lines. */}
+      <div className="relative z-10 mt-[18px] flex items-center gap-3 print:mt-[2mm] print:flex-col print:items-center print:gap-[2mm] print:text-center">
         <span
           data-testid="carnet-photo"
-          className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20 print:h-9 print:w-9 print:bg-coal/5 print:ring-coal/30"
+          className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20 print:h-14 print:w-14 print:bg-coal/5 print:ring-coal/30"
         >
           {profile.fotoUrl && !fotoFallback ? (
             <Image
               src={profile.fotoUrl}
               alt={`Foto de ${fullName}`}
-              width={48}
-              height={48}
-              className="h-12 w-12 object-cover print:h-9 print:w-9"
+              width={64}
+              height={64}
+              className="h-16 w-16 object-cover print:h-14 print:w-14"
               onError={() => setFotoFallback(true)}
             />
           ) : (
-            <span aria-hidden="true" className="text-base font-bold text-white/70 print:text-coal/70 print:text-xs">
+            <span aria-hidden="true" className="text-lg font-bold text-white/70 print:text-coal/70">
               {initial}
             </span>
           )}
         </span>
-        <p className="min-w-0 flex-1 text-balance text-xl font-extrabold print:text-xs print:leading-tight">
+        {/* Barlow on both compositions — see the wordmark above for why the
+            name never becomes Graduate. `flex-1` only bites in the screen's
+            row; in the credential's centred column the name takes the field's
+            width and `text-balance` splits it into two even lines. */}
+        <p className="min-w-0 flex-1 text-balance text-xl font-extrabold print:w-full print:flex-none print:text-sm print:leading-tight">
           {fullName}
         </p>
       </div>
-
-      <div className="relative z-10 mt-2 flex items-center gap-2 print:hidden">
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-2xs font-bold text-white/80 transition-colors hover:bg-white/15"
-        >
-          <Printer size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Imprimir carnet
-        </button>
-        {canManagePhoto && (
-          <>
-            <button
-              type="button"
-              onClick={() => fotoInputRef.current?.click()}
-              disabled={uploadingFoto}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-2xs font-bold text-white/80 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
-            </button>
-            <input
-              ref={fotoInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFotoChange}
-              className="hidden"
-              data-testid="carnet-photo-input"
-            />
-          </>
-        )}
-      </div>
-
-      {fotoError && (
-        <p role="alert" className="relative z-10 mt-2 text-2xs text-[#FF8A93] print:hidden">
-          {fotoError}
-        </p>
-      )}
 
       {/* Decisión #286 (slice 2): la banda de estado NO viaja al impreso — el
           estado cambia cada mes y un carnet plastificado con «vencido» impreso
@@ -428,17 +468,68 @@ function Carnet({
           split evenly (fix 12c, see `ActivePortalView`), that cap would leave
           an empty strip inside the card instead of filling it, which is the
           same "vacío que no se llena" fix 12b already closed once. Dropped,
-          so the grid fills the carnet the way the maquette's own does. */}
+          so the grid fills the carnet the way the maquette's own does.
+
+          On the credential it collapses to ONE left-aligned column: the field
+          is 46mm wide once the 4mm margins are taken, which is not two columns
+          of a label plus a tabular value. Its own `border-t` doubles as the
+          composition's second hairline rule. */}
       {facts.length > 0 && (
         <div
           data-testid="carnet-facts"
-          className="relative z-10 mt-[18px] grid grid-cols-2 gap-x-4 gap-y-section border-t border-white/10 pt-[15px] print:mt-3 print:gap-y-field print:border-coal/20 print:pt-2"
+          className="relative z-10 mt-[18px] grid grid-cols-2 gap-x-4 gap-y-section border-t border-white/10 pt-[15px] print:mt-[2mm] print:grid-cols-1 print:gap-y-field print:border-coal/20 print:pt-[2mm] print:text-left"
         >
           {facts.map((fact) => (
-            <CarnetFact key={fact.label} label={fact.label} value={fact.value} />
+            <CarnetFact
+              key={fact.label}
+              label={fact.label}
+              value={fact.value}
+              omitOnPrint={fact.omitOnPrint}
+            />
           ))}
         </div>
       )}
+
+      {/* "La regla de la acción" (DESIGN.md): todo lo demás vive al PIE del
+          bloque que modifica, y ninguna acción flota en medio del contenido.
+          Esta fila vivía entre el nombre y la banda de estado — justo el medio.
+          `mt-auto` es "la regla del aire": el sobrante de la tarjeta se junta
+          arriba de las acciones como aire deliberado, no como un agujero. */}
+      <div className="relative z-10 mt-auto flex flex-wrap items-center gap-2 pt-[18px] print:hidden">
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className={buttonClasses("onCoal", "sm")}
+        >
+          <Printer size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Imprimir carnet
+        </button>
+        {canManagePhoto && (
+          <>
+            <button
+              type="button"
+              onClick={() => fotoInputRef.current?.click()}
+              disabled={uploadingFoto}
+              className={buttonClasses("onCoal", "sm")}
+            >
+              {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
+            </button>
+            <input
+              ref={fotoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFotoChange}
+              className="hidden"
+              data-testid="carnet-photo-input"
+            />
+          </>
+        )}
+        {fotoError && (
+          <p role="alert" className="w-full text-2xs text-[#FF8A93]">
+            {fotoError}
+          </p>
+        )}
+      </div>
     </section>
   );
 }
