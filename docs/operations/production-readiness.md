@@ -14,7 +14,7 @@ históricos.
 >
 > **Audiencia:** operación, desarrollo y producto
 >
-> **Última verificación:** 2026-08-14 · **Verificado contra commit:** `6c56741`
+> **Última verificación:** 2026-08-17 · **Verificado contra commit:** `d6a18fe`
 >
 > **Qué se re-derivó en esa verificación:** la fila de *rate limiting de tráfico
 > anónimo* decía **Blocked** y remitía a una rama local sin mergear. El fix se
@@ -28,6 +28,14 @@ históricos.
 > documento no se equivocó, se venció. Vale la pena leerlo como aviso de que
 > **una fecha de verificación no es un sello de calidad, es una fecha de
 > vencimiento.**
+>
+> En la verificación del 2026-08-17 (contra `d6a18fe`) se borraron tres filas
+> resueltas: **A-3** (hay handler global de `RequestValidationError` en
+> `backend/main.py`, el 422 ya no llega como arreglo en inglés), **A-4**
+> (`registrado_por`/`registrado_por_nombre` presentes en `Asistencia`,
+> `backend/app/dominio/modelos.py`) y **A-2** (los `.env.example` documentan
+> todas las variables del inventario y se agregó `.env.production.example`;
+> cerrado en el mismo PR que re-verifica esta lista).
 >
 > **Revisión recomendada:** con cada cambio de Compose/CI/Makefile y antes de cada despliegue
 
@@ -73,7 +81,7 @@ del repo.
 | Rollback a imagen previa | Needs evidence | Infraestructura (nominal pendiente) | Runbook [`rollback.md`](rollback.md) | Mecanismo Ready (SHA inmutables); no hay evidencia de un rollback ejecutado. |
 | Backup y restore de Postgres | Not evaluated | Infraestructura (nominal pendiente) | [`backup-restore.md`](backup-restore.md) | **No existe mecanismo de backup automatizado ni restore probado.** Decisión pendiente; ver runbook. Crítico por datos de menores y pagos. |
 | Monitoring: métricas y trazas | Blocked | Infraestructura (nominal pendiente) | `rg -ln "prometheus|opentelemetry|statsd" backend/ frontend/src` → vacío | Solo existe correlación (`X-Request-ID`). El plan de lanzamiento lo trató como bloqueante: sin métricas, una caída se descubre porque avisa un socio. |
-| Inventario de variables de entorno | Ready (con gap) | Desarrollo | [`reference/configuration.md`](../reference/configuration.md) + ver ítem A-2 abajo | Este PR crea el inventario canónico; los `.env.example` siguen sin documentar `IMAGE_TAG`, `FRONTEND_URL` y los `SMTP_*` (ítem A-2). |
+| Inventario de variables de entorno | Ready | Desarrollo | [`reference/configuration.md`](../reference/configuration.md) + `.env.example`, `backend/.env.example`, `frontend/.env.local.example` y `.env.production.example` | A-2 cerrado (2026-08-17): las plantillas documentan todas las variables; existe plantilla dedicada de producción. |
 
 ## Hallazgos abiertos
 
@@ -103,9 +111,6 @@ contra el backend real está en el informe (la suite congela "hoy" en
 | ID | Ítem | Verificación hoy | Estado |
 |---|---|---|---|
 | A-1 | Sin métricas ni trazas | `rg -ln "prometheus|opentelemetry|statsd" backend/ frontend/src` → vacío | **Blocked** — ver matriz |
-| A-2 | `.env.example` incompletos: el raíz no documenta `IMAGE_TAG`, `FRONTEND_URL` ni los `SMTP_*`; `RESET_HOSTS_PERMITIDOS` y `TEST_DATABASE_URL` no figuran en ninguno | Lectura de `.env.example`, `backend/.env.example`, `frontend/.env.local.example` | Abierto (documental) — mitigado por [`reference/configuration.md`](../reference/configuration.md); los examples aún no se actualizaron |
-| A-3 | El 422 de Pydantic llega como arreglo en inglés | `rg -n "RequestValidationError" backend/` → sin handler global | Abierto (backend) — el BFF traduce algunos casos (ver S05 del informe de inscripción) |
-| A-4 | `Asistencia` no guarda quién tomó la lista (`registrado_por`) | `rg -n "registrado_por" backend/app/dominio/modelos.py` → ausente | Abierto (trazabilidad) |
 | A-5 | Quinto cálculo de edad sin unificar | `frontend/src/app/student/student-utils.ts` (`isMinor`) | Abierto (refactor) — los techos de `admin_cuenta_servicio.py` ya están resueltos (verificado) |
 | A-6 | Capturas del fix 23 faltantes | `docs/archive/fixes/img/23*` no existe | Abierto (evidencia visual) |
 | A-7 | Comprobantes legacy con URL pública en Cloudinary | No verificable sin credenciales reales | Abierto — requiere credenciales y migración de datos; ver `docs/archive/fixes/16-voucher-no-enumerable.md` |

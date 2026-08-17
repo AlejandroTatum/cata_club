@@ -12,13 +12,13 @@ variable no está acá, no se usa.
 >
 > **Audiencia:** desarrollo y operación
 >
-> **Última verificación:** 2026-08-13 · **Verificado contra commit:** `fd9f7be`
+> **Última verificación:** 2026-08-17 · **Verificado contra commit:** `d6a18fe`
 >
 > **Revisión recomendada:** con cada cambio en `docker-compose*.yml`, `configuracion.py`, `check-env.mjs` o los `.env.example`
 
 **Fuentes leídas:** `docker-compose.yml`, `docker-compose.prod.yml`,
 `docker-compose.override.yml`, `docker-compose.qa.yml`, `.env.example`,
-`backend/.env.example`, `frontend/.env.local.example`,
+`backend/.env.example`, `frontend/.env.local.example`, `.env.production.example`,
 `backend/app/soporte_transversal/configuracion.py`,
 `frontend/scripts/check-env.mjs`, `Caddyfile`.
 
@@ -59,10 +59,11 @@ Leído por Compose. Los defaults seguros de desarrollo viven en
 | `DOMINIO` | **prod** | — (`:?`) | no | Compose prod → Caddy | Host del certificado TLS |
 | `ACME_EMAIL` | **prod** | — (`:?`) | no | Compose prod → Caddy | Contacto de Let's Encrypt |
 
-> **Gap documentado (ítem A-2 de la lista viva):** el `.env.example` raíz no
-> lista `IMAGE_TAG`, `FRONTEND_URL`, `SMTP_*`, `RESET_HOSTS_PERMITIDOS` ni
-> `TEST_DATABASE_URL`. Este inventario es la fuente; los examples aún no se
-> actualizaron.
+> **A-2 cerrado (2026-08-17):** los `.env.example` se alinearon con este
+> inventario (`IMAGE_TAG`, `FRONTEND_URL`, `SMTP_*`, `RESET_HOSTS_PERMITIDOS`,
+> `TEST_DATABASE_URL`, `CLOUDINARY_AUTH_TOKEN_KEY`) y existe
+> `.env.production.example` como plantilla dedicada de producción (ver
+> [`operations/deployment.md`](../operations/deployment.md)).
 
 ## Backend (`Settings` — `configuracion.py`)
 
@@ -123,4 +124,5 @@ nunca pueden enviar correo ni emitir certificados reales.
 | `.env` (raíz) | no | Compose |
 | `backend/.env` | no | Settings (CWD del backend; en el contenedor las inyecta Compose) |
 | `frontend/.env.local` | no | Next.js + `check-env.mjs` |
+| `.env.production.example` | sí | Referencia; plantilla de producción (ver [`operations/deployment.md`](../operations/deployment.md)) |
 | `*.env.example` | sí | Referencia; no los consume ningún proceso |
