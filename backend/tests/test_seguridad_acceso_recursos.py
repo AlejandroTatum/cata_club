@@ -196,6 +196,30 @@ def test_el_administrador_si_lee_cualquier_persona(client, victima):
     assert respuesta.status_code == 200
 
 
+# --- Issue #358: se cierra el último hermano PII abierto a ENTRENADOR ------
+# `GET /personas/{id}` quedaba en ADMINISTRADOR_O_ENTRENADOR porque era el
+# único modo de resolver el nombre en "revisar listas" (AsistenciaResponseDTO
+# no llevaba nombre, solo `persona_id`). Ahora que el DTO lo lleva en origen
+# (`persona_nombre_completo`), se acota a SOLO_ADMINISTRADOR igual que sus
+# dos hermanos ya cerrados en #356 (`listar_representados`,
+# `obtener_antecedentes_club`).
+def test_obtener_persona_entrenador_da_403(db_session, victima):
+    with _client_como(db_session, 999, ["ENTRENADOR"]) as c:
+        respuesta = c.get(f"/api/v1/personas/{victima.id}")
+    app.dependency_overrides.clear()
+    assert respuesta.status_code == 403
+
+
+def test_obtener_persona_administrador_puro_sigue_funcionando(db_session, victima):
+    """Contracara: el recorte no le toca nada al administrador (probado con
+    un token SOLO ADMINISTRADOR, sin el ENTRENADOR combinado que trae el
+    fixture `client`)."""
+    with _client_como(db_session, 1, ["ADMINISTRADOR"]) as c:
+        respuesta = c.get(f"/api/v1/personas/{victima.id}")
+    app.dependency_overrides.clear()
+    assert respuesta.status_code == 200
+
+
 # --- Portal del alumno: el vínculo de representación, en ambos sentidos -----
 # `frontend/src/app/api/student/route.ts` arma el portal con el token del
 # propio alumno y, si la persona tiene representante, pide TAMBIÉN la ficha

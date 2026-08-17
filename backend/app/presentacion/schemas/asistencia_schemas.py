@@ -92,6 +92,12 @@ class AsistenciaResponseDTO(ResponseBase, BaseModel):
     justificativo: Optional[str] = None
     estado_justificativo: Optional[bool] = None
     persona_id: int
+    # Nombre de la persona (issue #358): reemplaza el rodeo por
+    # `GET /personas/{id}` que el BFF hacía solo para pintar este nombre en
+    # "revisar listas" -- ese endpoint exponía cédula/teléfono/fecha de
+    # nacimiento de cualquier persona con ids secuenciales. Mismo patrón que
+    # `registrado_por_nombre` (#263): se resuelve acá, nunca en el frontend.
+    persona_nombre_completo: str
     horario_id: int
     # Quién tomó la lista (#263): `registrado_por_id` es la FK a persona del
     # autor (nullable: las filas históricas no tienen autor conocido) y

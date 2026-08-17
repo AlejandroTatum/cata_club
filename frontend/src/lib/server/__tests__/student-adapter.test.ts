@@ -25,6 +25,7 @@ describe("buildRecentSessions", () => {
       fechaRegistro: "2026-07-01T10:00:00",
       estado: "PRESENTE",
       personaId: 5,
+      personaNombreCompleto: "Estudiante Test",
       horarioId: 1,
       ...overrides,
     };

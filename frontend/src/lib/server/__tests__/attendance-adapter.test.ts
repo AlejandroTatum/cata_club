@@ -1,7 +1,5 @@
 /**
  * Unit tests for the attendance/ranking adapter's pure translation functions.
- * Network-touching helpers (`fetchPersonaNameMap`) are covered indirectly
- * through the Route Handler tests, which mock `global.fetch`.
  */
 
 import { describe, it, expect } from "vitest";
@@ -10,14 +8,12 @@ import {
   DIA_SEMANA_FRONTEND_TO_BACKEND,
   ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND,
   ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND,
-  personaFullName,
   horarioLabel,
   buildTrainingSchedule,
   buildAttendanceRecord,
   buildRecentSession,
   type BackendHorario,
   type BackendAsistencia,
-  type BackendPersonaName,
   type BackendUltimaLista,
 } from "../attendance-adapter";
 
@@ -41,17 +37,6 @@ describe("ESTADO_ASISTENCIA maps", () => {
       const frontendEstado = ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND[backendEstado];
       expect(ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND[frontendEstado]).toBe(backendEstado);
     }
-  });
-});
-
-describe("personaFullName", () => {
-  it("joins nombres and apellidos", () => {
-    const persona: BackendPersonaName = { id: 1, nombres: "Sofia", apellidos: "Alumna" };
-    expect(personaFullName(persona, "fallback")).toBe("Sofia Alumna");
-  });
-
-  it("uses the fallback when persona is undefined", () => {
-    expect(personaFullName(undefined, "Persona 3")).toBe("Persona 3");
   });
 });
 
@@ -89,17 +74,15 @@ describe("buildAttendanceRecord", () => {
     justificativo: null,
     estadoJustificativo: null,
     personaId: 3,
+    personaNombreCompleto: "Sofia Alumna",
     horarioId: 1,
     registradoPorId: 7,
     registradoPorNombre: "Carlos Ruiz",
   };
   const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
-  const personas = new Map([
-    [3, { id: 3, nombres: "Sofia", apellidos: "Alumna" }],
-  ]);
 
   it("builds a fully-resolved AttendanceRecord", () => {
-    expect(buildAttendanceRecord(asistencia, horario, personas)).toEqual({
+    expect(buildAttendanceRecord(asistencia, horario)).toEqual({
       id: "1",
       fecha: "2026-07-18",
       horario: "Lunes 15:00 — 16:30",
@@ -113,14 +96,14 @@ describe("buildAttendanceRecord", () => {
   });
 
   it("carries the persisted taker (issue #263), not a browser-side name", () => {
-    const built = buildAttendanceRecord(asistencia, horario, personas);
+    const built = buildAttendanceRecord(asistencia, horario);
     expect(built.registradoPorId).toBe(7);
     expect(built.registradoPorNombre).toBe("Carlos Ruiz");
   });
 
   it("maps a null taker (legacy row) to null, not a fabricated name", () => {
     const legacy: BackendAsistencia = { ...asistencia, registradoPorId: null, registradoPorNombre: null };
-    const built = buildAttendanceRecord(legacy, horario, personas);
+    const built = buildAttendanceRecord(legacy, horario);
     expect(built.registradoPorId).toBeNull();
     expect(built.registradoPorNombre).toBeNull();
   });
@@ -129,18 +112,23 @@ describe("buildAttendanceRecord", () => {
     // The two are independent: the label needs `/asistencias/horarios` to have
     // answered, the id comes straight off the record. A failed schedule lookup
     // must not cost the caller the id it would use to address the session.
-    const built = buildAttendanceRecord(asistencia, undefined, personas);
+    const built = buildAttendanceRecord(asistencia, undefined);
     expect(built.horarioId).toBe(1);
   });
 
   it("falls back to a placeholder horario label when the schedule can't be resolved", () => {
-    const built = buildAttendanceRecord(asistencia, undefined, personas);
+    const built = buildAttendanceRecord(asistencia, undefined);
     expect(built.horario).toBe("Horario 1");
   });
 
-  it("falls back to a placeholder name when the persona is missing from the map", () => {
-    const built = buildAttendanceRecord(asistencia, horario, new Map());
-    expect(built.estudiante).toBe("Persona 3");
+  // Issue #358: the name now travels straight in the DTO (`personaNombreCompleto`,
+  // resolved by the backend join to Persona) — there is no lookup map left to
+  // fall back from, so this locks that the adapter reads it directly, without
+  // ever synthesizing a "Persona {id}" placeholder itself.
+  it("reads the student name straight off the DTO, never synthesizing a placeholder", () => {
+    const otro: BackendAsistencia = { ...asistencia, personaId: 9, personaNombreCompleto: "Mateo Rodríguez" };
+    const built = buildAttendanceRecord(otro, horario);
+    expect(built.estudiante).toBe("Mateo Rodríguez");
   });
 });
 

@@ -11,8 +11,8 @@
  * `representanteId` become its `estudiantes` (role "representante");
  * otherwise the root manages only itself (role "estudiante", self-managed).
  * Derived locally from one paginated `/personas/` fetch instead of N calls
- * to `/personas/{id}/representados` — same avoid-N+1 tradeoff already
- * documented in attendance-adapter.ts's `fetchPersonaNameMap`.
+ * to `/personas/{id}/representados` — same avoid-N+1 tradeoff as
+ * `payments-adapter.ts#buildRepresentanteNameMap`.
  *
  * Known backend gaps found while building this:
  *

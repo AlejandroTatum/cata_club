@@ -23,9 +23,7 @@ from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.antecedentes_club_servicio import AntecedentesClubServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
-from app.servicios_negocio.politica_acceso import (
-    ADMINISTRADOR_O_ENTRENADOR, SOLO_ADMINISTRADOR, PoliticaAccesoPersona,
-)
+from app.servicios_negocio.politica_acceso import SOLO_ADMINISTRADOR, PoliticaAccesoPersona
 from app.dominio.enums import TipoRol
 from pydantic import BaseModel
 from app.presentacion.schemas.base import ResponseBase
@@ -278,18 +276,17 @@ async def buscar_personas(
 # Issue #356 (decisión del dueño, "el entrenador solo toma lista y revisa
 # listas") acotó a SOLO_ADMINISTRADOR sus otros dos hermanos con PII
 # (`listar_representados`, `obtener_antecedentes_club`) pero DELIBERADAMENTE
-# NO tocó este. `frontend/src/lib/server/attendance-adapter.ts#fetchPersonaNameMap`
-# (ASI-4, candado en `frontend/src/app/api/attendance/records/__tests__/route.test.ts`)
-# depende de este endpoint como fallback per-id para resolver el nombre de
-# cada alumno en "revisar listas" del entrenador -- justo la tarea que la
-# decisión del dueño preserva -- porque `AsistenciaResponseDTO` solo lleva
-# `persona_id`, nunca el nombre. Sacar ENTRENADOR de acá degrada el 100% de
-# los registros de asistencia que ve un entrenador a "Persona {id}". Es una
-# fuga real (cualquier ENTRENADOR puede pedir cédula/teléfono/fecha de
-# nacimiento de cualquier persona por id) que sigue abierta y necesita un
-# rediseño propio -- no un simple cambio de rol -- para no romper la tarea
-# diaria: ver `docs/` o el issue #356 para la discusión de un DTO de solo
-# nombre en vez de `PersonaResponseDTO` completo.
+# NO tocó este todavía: `frontend/src/lib/server/attendance-adapter.ts
+# #fetchPersonaNameMap` dependía de este endpoint como fallback per-id para
+# resolver el nombre de cada alumno en "revisar listas" del entrenador,
+# porque `AsistenciaResponseDTO` solo llevaba `persona_id`, nunca el nombre.
+#
+# Issue #358 cierra ese hermano: `AsistenciaResponseDTO` ahora lleva
+# `persona_nombre_completo` resuelto en origen (join a Persona, ver
+# `Asistencia.persona_nombre_completo` en modelos.py), así que no hace falta
+# ninguna consulta por id para "revisar listas" -- `fetchPersonaNameMap` se
+# eliminó del BFF. Sin ese consumidor, este endpoint vuelve a
+# SOLO_ADMINISTRADOR, igual que sus dos hermanos.
 @router.get(
     "/{persona_id}",
     response_model=PersonaResponseDTO,
@@ -304,7 +301,7 @@ async def obtener_persona(
         persona_id_objetivo=persona_id,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
-        roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
+        roles_privilegiados=SOLO_ADMINISTRADOR,
         # El portal del alumno muestra quién es su representante, y para eso
         # pide la ficha del tutor con el token del propio alumno (ver
         # `frontend/src/app/api/student/route.ts`). Sin esta rama el nombre

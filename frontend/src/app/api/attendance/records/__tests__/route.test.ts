@@ -46,12 +46,12 @@ const asistencia = {
   justificativo: null,
   estadoJustificativo: null,
   personaId: 3,
+  personaNombreCompleto: "Sofia Alumna",
   horarioId: 1,
   registradoPorId: 7,
   registradoPorNombre: "Carlos Ruiz",
 };
 const horario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
-const personas = { items: [{ id: 3, nombres: "Sofia", apellidos: "Alumna" }] };
 
 beforeEach(() => {
   vi.spyOn(global, "fetch");
@@ -74,8 +74,7 @@ describe("GET /api/attendance/records", () => {
   it("translates backend Asistencias into AttendanceRecord[]", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ items: [asistencia], total: 1, skip: 0, limit: 200 }))
-      .mockResolvedValueOnce(jsonResponse([horario]))
-      .mockResolvedValueOnce(jsonResponse(personas));
+      .mockResolvedValueOnce(jsonResponse([horario]));
 
     const access = makeJwt(3600);
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
@@ -87,21 +86,22 @@ describe("GET /api/attendance/records", () => {
     ]);
   });
 
-  // ASI-4 lock: for a trainer session, the bulk `/personas/?limit=200`
-  // read 403s (personas_router.py restricts it to ADMINISTRADOR — it
-  // carries real PII). The old code swallowed that 403 into an empty
-  // name map, so `estudiante` fell back to "Persona {id}" for EVERY
-  // record a trainer viewed — not a rare failure, the 100% case. This
-  // test fails red against that old behavior (it would see "Persona
-  // 15") and stays green now that the adapter falls back to the per-id
-  // `/personas/{id}` lookup ENTRENADOR is already granted.
-  it("resolves the real student name for a trainer session, not a 'Persona {id}' placeholder", async () => {
-    const asistenciaDePersona15 = { ...asistencia, personaId: 15 };
+  // ASI-4 lock: the student's name must come straight off the
+  // `AsistenciaResponseDTO` field the backend now resolves in origin
+  // (`personaNombreCompleto`, issue #358) — never from a per-id
+  // `/personas/{id}` fallback. That fallback was the last PII leak #358
+  // closed (cédula/teléfono/fecha de nacimiento of any persona, reachable by
+  // any ENTRENADOR via sequential ids): the endpoint is SOLO_ADMINISTRADOR
+  // now, so a trainer session that still tried that fallback would get a 403
+  // and degrade every record to "Persona {id}". This test fails red against
+  // the old fallback-based adapter (it expects no /personas/ call at all,
+  // which the old code always made) and stays green now that the DTO alone
+  // supplies the name.
+  it("resolves the real student name for a trainer session straight from the DTO, without calling /personas/{id}", async () => {
+    const asistenciaDePersona15 = { ...asistencia, personaId: 15, personaNombreCompleto: "Emily Moreira Pilay" };
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ items: [asistenciaDePersona15], total: 1, skip: 0, limit: 200 }))
-      .mockResolvedValueOnce(jsonResponse([horario]))
-      .mockResolvedValueOnce(jsonResponse({ detail: "Permisos insuficientes" }, 403))
-      .mockResolvedValueOnce(jsonResponse({ id: 15, nombres: "Emily", apellidos: "Moreira Pilay" }));
+      .mockResolvedValueOnce(jsonResponse([horario]));
 
     const access = makeJwt(3600);
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
@@ -110,18 +110,15 @@ describe("GET /api/attendance/records", () => {
     expect(response.status).toBe(200);
     expect(body[0].estudiante).toBe("Emily Moreira Pilay");
     expect(body[0].estudiante).not.toBe("Persona 15");
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      4,
-      "http://localhost:8000/api/v1/personas/15",
-      expect.anything(),
-    );
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const personaCalls = vi.mocked(global.fetch).mock.calls.filter(([url]) => String(url).includes("/personas"));
+    expect(personaCalls).toHaveLength(0);
   });
 
   it("forwards fechaInicio/fechaFin as fecha_inicio/fecha_fin query params, plus skip/limit for the backend page", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 }))
-      .mockResolvedValueOnce(jsonResponse([]))
-      .mockResolvedValueOnce(jsonResponse({ items: [] }));
+      .mockResolvedValueOnce(jsonResponse([]));
 
     const access = makeJwt(3600);
     const request = new NextRequest("http://localhost/api/attendance/records?fechaInicio=2026-07-18&fechaFin=2026-07-18", {
@@ -149,8 +146,7 @@ describe("GET /api/attendance/records", () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ items: page1, total: 202, skip: 0, limit: 200 }))
       .mockResolvedValueOnce(jsonResponse({ items: page2, total: 202, skip: 200, limit: 200 }))
-      .mockResolvedValueOnce(jsonResponse([horario]))
-      .mockResolvedValueOnce(jsonResponse(personas));
+      .mockResolvedValueOnce(jsonResponse([horario]));
 
     const access = makeJwt(3600);
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
