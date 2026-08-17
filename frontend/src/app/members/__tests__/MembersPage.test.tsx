@@ -565,7 +565,18 @@ describe("MembersPage — Editar member modal", () => {
     );
   });
 
-  it("selecting a role in the modal fires asignarRol, same as the old popover", async () => {
+  // Issue #314 (K6 hallazgo #16): clicking the Admin checkbox used to fire
+  // asignarRol/quitarRol on the very first click, no confirmation, no naming
+  // of what granting or revoking total club control does. `confirmAdmin`
+  // clicks the "Admin" checkbox and then the confirmation's own "Confirmar"
+  // button — the two-step path the fix now requires. Every other role stays
+  // one click (reversible), so those keep firing directly.
+  function confirmAdmin(dialog: HTMLElement): void {
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+  }
+
+  it("clicking Admin opens a confirmation naming the account and the effect, without mutating yet", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -576,12 +587,14 @@ describe("MembersPage — Editar member modal", () => {
     const dialog = await openModalAndWaitForRoles(row);
     fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
 
-    await waitFor(() => {
-      expect(mockAsignarRol).toHaveBeenCalledWith(1, "ADMINISTRADOR");
-    });
+    const confirmDialogs = screen.getAllByRole("dialog");
+    const confirmDialog = confirmDialogs[confirmDialogs.length - 1];
+    expect(within(confirmDialog).getByText(/maría gonzález/i)).toBeInTheDocument();
+    expect(within(confirmDialog).getByText(/control total del club/i)).toBeInTheDocument();
+    expect(mockAsignarRol).not.toHaveBeenCalled();
   });
 
-  it("deselecting an already-selected role fires quitarRol", async () => {
+  it("leaves the role unchanged when the Admin confirmation is canceled", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -590,14 +603,61 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
 
     const dialog = await openModalAndWaitForRoles(row);
-    const adminCheckbox = within(dialog).getByRole("checkbox", { name: /admin/i });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
-    fireEvent.click(adminCheckbox);
+    expect(mockAsignarRol).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("checkbox", { name: /admin/i })).not.toBeChecked();
+  });
+
+  it("selecting a role in the modal fires asignarRol only after the Admin confirmation is accepted", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    confirmAdmin(dialog);
+
+    await waitFor(() => {
+      expect(mockAsignarRol).toHaveBeenCalledWith(1, "ADMINISTRADOR");
+    });
+  });
+
+  it("deselecting an already-selected Admin role fires quitarRol, also gated behind confirmation", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    confirmAdmin(dialog);
     await waitFor(() => expect(mockAsignarRol).toHaveBeenCalledWith(1, "ADMINISTRADOR"));
 
-    fireEvent.click(adminCheckbox);
+    confirmAdmin(dialog);
     await waitFor(() => {
       expect(mockQuitarRol).toHaveBeenCalledWith(1, "ADMINISTRADOR");
+    });
+  });
+
+  it("a non-Admin role still toggles on a single click, with no confirmation step", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /entrenador/i }));
+
+    expect(screen.queryByText(/control total del club/i)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockAsignarRol).toHaveBeenCalledWith(1, "ENTRENADOR");
     });
   });
 
@@ -618,7 +678,7 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
 
     const dialog = await openModalAndWaitForRoles(row);
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
+    confirmAdmin(dialog);
 
     await waitFor(() => {
       expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeChecked();
@@ -637,9 +697,9 @@ describe("MembersPage — Editar member modal", () => {
     const dialog = await openModalAndWaitForRoles(row);
     const adminCheckbox = within(dialog).getByRole("checkbox", { name: /admin/i });
 
-    // First click assigns (default mockAsignarRol success) so the checkbox
-    // is checked before we exercise the removal-reconciliation branch.
-    fireEvent.click(adminCheckbox);
+    // First round-trip assigns (default mockAsignarRol success) so the
+    // checkbox is checked before we exercise the removal-reconciliation branch.
+    confirmAdmin(dialog);
     await waitFor(() => expect(adminCheckbox).toBeChecked());
 
     // `rol_servicio.quitar_rol` raises OperacionInvalida → 400. It used to
@@ -651,7 +711,7 @@ describe("MembersPage — Editar member modal", () => {
     mockQuitarRol.mockRejectedValueOnce(
       new ApiClientError("Esta persona no tiene el rol ADMINISTRADOR", 400),
     );
-    fireEvent.click(adminCheckbox);
+    confirmAdmin(dialog);
 
     await waitFor(() => {
       expect(adminCheckbox).not.toBeChecked();
@@ -670,7 +730,7 @@ describe("MembersPage — Editar member modal", () => {
     const dialog = await openModalAndWaitForRoles(row);
     const adminCheckbox = within(dialog).getByRole("checkbox", { name: /admin/i });
 
-    fireEvent.click(adminCheckbox);
+    confirmAdmin(dialog);
     await waitFor(() => expect(adminCheckbox).toBeChecked());
 
     // Verbatim from rol_servicio._asegurar_que_queda_otro_administrador, not
@@ -683,7 +743,7 @@ describe("MembersPage — Editar member modal", () => {
       "ADMINISTRADOR a otra cuenta activa antes de continuar.";
     const { ApiClientError } = await import("@/services/api");
     mockQuitarRol.mockRejectedValueOnce(new ApiClientError(refusal, 400));
-    fireEvent.click(adminCheckbox);
+    confirmAdmin(dialog);
 
     await waitFor(() => {
       expect(within(dialog).getByRole("alert")).toHaveTextContent(/último administrador activo/i);
@@ -823,6 +883,7 @@ describe("MembersPage — Editar member modal", () => {
       expect(screen.getByRole("checkbox", { name: /admin/i })).not.toBeDisabled();
     });
     fireEvent.click(screen.getByRole("checkbox", { name: /admin/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.",
     );
