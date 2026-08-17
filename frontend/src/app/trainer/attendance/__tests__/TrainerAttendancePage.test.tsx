@@ -249,7 +249,14 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
   });
 
   it("pre-selects Presente for a student who already has an attendance record for today's date + this horario", async () => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+    // Admin, not trainer (issue #310 / #3): a session with an existing record
+    // is now a CORRECTION only an admin may edit — a trainer opening this
+    // exact roster gets the read-only gate covered by its own describe block
+    // below, with no radiogroup to pre-select into. This test is about the
+    // PREFILL logic (`buildRosterFromAlumnoHorarios`), which applies the same
+    // way regardless of role, so it moves to the role that still sees it as
+    // an editable radiogroup.
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
     ]);
@@ -1160,7 +1167,17 @@ describe("TrainerAttendancePage — draft persistence", () => {
     expect(screen.getByText("3 sin revisar")).toBeInTheDocument();
   });
 
-  it("keeps the draft when some records failed, so a retry starts from the marks", async () => {
+  /*
+   * Regression guard for issue #310 / #5: this test used to assert the
+   * OPPOSITE — that a partial failure KEPT the draft, so reopening the roster
+   * showed the trainer's REJECTED marks as if the club had them on file. That
+   * was the exact defect the audit reported: a rejected write surviving,
+   * unlabeled, as if it were real data. The fix discards the draft on any
+   * failure, full or partial — a retry re-derives its starting point from the
+   * freshly re-fetched roster (`handleRetryFailed`), never from a stale
+   * draft.
+   */
+  it("descarta el borrador incluso cuando el guardado fue parcial, en vez de reabrir con las marcas rechazadas (issue #310)", async () => {
     mockRegisterAttendance.mockResolvedValue({
       createdCount: 2,
       failed: [{ personaId: 102, message: "conflict" }],
@@ -1170,16 +1187,125 @@ describe("TrainerAttendancePage — draft persistence", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
+
+    expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).toBeNull();
+
     first.unmount();
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    // No draft, and `fetchAttendanceRecords` keeps returning `[]` in this
+    // describe block, so the roster comes back with nobody reviewed — the
+    // rejected marks do not reappear disguised as saved ones.
+    expect(screen.getByText("3 sin revisar")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #310 — the wizard did not know whether the session it just opened was
+// already registered. Two blocking findings shared this one root cause:
+//   #3 — a trainer discovered "solo el administrador puede corregir" only on
+//        the LAST click of "Confirmar asistencia", after rebuilding every
+//        state by hand.
+//   #5 — a rejected POST left its unsaved marks in `sessionStorage`, and a
+//        reopened roster showed them as if the club had them on file.
+// #22 (step 1 cannot tell a taken session from a pending one) is the same
+// family, closed alongside these two.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — la restricción de corrección se ve al abrir (issue #310)", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset();
+    mockRegisterAttendance.mockReset();
+  });
+
+  /** Every student in `buildAlumnoHorarios(3)` already has a record for TODAY. */
+  function existingRecordsForAllStudents(): unknown[] {
+    return buildAlumnoHorarios(3).map((raw) => {
+      const s = raw as { personaId: number; personaNombreCompleto: string };
+      return {
+        id: `att-${s.personaId}`,
+        fecha: "2026-07-21",
+        horario: "Martes 18:00 — 19:00",
+        horarioId: 12,
+        personaId: s.personaId,
+        estudiante: s.personaNombreCompleto,
+        estado: "present",
+        entrenador: "Coach Torres",
+      };
+    });
+  }
+
+  it("abre en modo lectura, con el motivo visible, cuando un entrenador reabre una lista ya registrada", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
 
-    expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
+    expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
+    expect(screen.getByText(/Solo un administrador puede corregirla/)).toBeInTheDocument();
+    // Nothing left that promises an edit the backend was always going to
+    // refuse — no radios, and "Siguiente" is disabled rather than silently
+    // reachable.
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeDisabled();
+  });
+
+  it("no aplica el modo lectura para un administrador, que sí puede corregir", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    expect(screen.queryByText("Esta lista ya fue registrada.")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
+  });
+
+  it("marca en el paso 1 el horario que ya tiene lista tomada hoy (issue #310 / #22)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    const scheduleButton = await screen.findByRole("button", { name: /18:00/i });
+
+    expect(await within(scheduleButton).findByText(/Lista tomada hoy · 3 registros/)).toBeInTheDocument();
+  });
+
+  it("descarta el borrador cuando el guardado es rechazado por completo, no solo cuando fue parcial (issue #310)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    // No hay registros previos, así que el gate de modo lectura no bloquea el
+    // envío — este test cubre el rechazo TOTAL en sí (defensa en profundidad
+    // ante, por ejemplo, un administrador que corrige entre la carga y el
+    // envío), no el gate del hallazgo #3.
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockRejectedValue(
+      new Error("No se pudo completar la operación."),
+    );
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+
+    await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).toBeNull();
+    });
   });
 });
 

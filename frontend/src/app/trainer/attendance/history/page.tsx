@@ -224,9 +224,21 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                         <TableHeaderCell>Sesión</TableHeaderCell>
                         <TableHeaderCell>Registró</TableHeaderCell>
                         <TableHeaderCell>Resultado</TableHeaderCell>
-                        <TableHeaderCell align="right">
-                          <span className="sr-only">Acciones</span>
-                        </TableHeaderCell>
+                        {/*
+                         * "Corregir" is the only action this column has ever
+                         * offered, and only an admin may correct an
+                         * already-registered session (the same backend rule
+                         * `renderReadOnlyReason` explains in the wizard, issue
+                         * #310 / #27). For a trainer that action never exists,
+                         * so the column itself — header included — is omitted
+                         * rather than promising one under an "ACCIONES" label
+                         * that stayed empty on every row.
+                         */}
+                        {esAdmin && (
+                          <TableHeaderCell align="right">
+                            <span className="sr-only">Acciones</span>
+                          </TableHeaderCell>
+                        )}
                       </tr>
                     </TableHead>
                     <TableBody>
@@ -260,18 +272,23 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                               />
                             </div>
                           </TableCell>
-                          {esAdmin && sessionRow.fecha >= corteCorreccion ? (
-                            <TableCell align="right">
-                              <Link
-                                href={buildCorrectionHref(sessionRow)}
-                                className={buttonClasses("secondary", "sm")}
-                              >
-                                Corregir
-                              </Link>
-                            </TableCell>
-                          ) : (
-                            <TableCell align="right" />
-                          )}
+                          {esAdmin &&
+                            (sessionRow.fecha >= corteCorreccion ? (
+                              <TableCell align="right">
+                                <Link
+                                  href={buildCorrectionHref(sessionRow)}
+                                  className={buttonClasses("secondary", "sm")}
+                                >
+                                  Corregir
+                                </Link>
+                              </TableCell>
+                            ) : (
+                              // Still an admin, so the header cell above exists —
+                              // this keeps the row's columns aligned with it even
+                              // when the 30-day window is the reason there is
+                              // nothing to offer.
+                              <TableCell align="right" />
+                            ))}
                         </TableRow>
                       ))}
                     </TableBody>
