@@ -53,6 +53,7 @@ import { ICON } from "@/lib/icon-size";
 import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
 import {
+  Button,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -99,6 +100,31 @@ const LIMITE_CORRECCION_DIAS = 30;
  */
 function buildCorrectionHref(session: SessionSummary): string {
   return `/trainer/attendance${buildWizardQuery(session.horarioId, session.fecha, "mark-attendance")}`;
+}
+
+/**
+ * El motivo del bloqueo, dicho entero (issue #373).
+ *
+ * Antes, pasados los 30 días, la celda quedaba vacía: el vencimiento se veía
+ * exactamente igual que un error de carga, y el administrador no podía
+ * distinguir "esta sesión ya no se corrige" de "algo se rompió". La regla no
+ * cambió — sigue siendo la ventana de `LIMITE_CORRECCION_DIAS` atada al ciclo
+ * de cobro (issue #262) — lo que cambió es que ahora se nombra en vez de
+ * borrarse, el mismo criterio que #312: un control bloqueado dice por qué.
+ */
+const MOTIVO_CORRECCION_VENCIDA =
+  "La ventana de corrección de 30 días ya cerró para esta sesión.";
+
+/**
+ * El ancla entre el control muerto y su motivo, una por fila.
+ *
+ * `aria-describedby` apunta a un id, así que dos filas vencidas en la misma
+ * página no pueden compartirlo o el lector de pantalla leería el motivo de
+ * otra sesión. La fecha y el horario son justamente lo que hace única a una
+ * sesión — la misma pareja con la que se arma la `key` de la fila.
+ */
+function buildReasonId(session: SessionSummary): string {
+  return `correccion-vencida-${session.fecha}-${session.horarioId}`;
 }
 
 export default function TrainerAttendanceHistoryPage(): React.ReactElement {
@@ -272,23 +298,63 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                               />
                             </div>
                           </TableCell>
-                          {esAdmin &&
-                            (sessionRow.fecha >= corteCorreccion ? (
-                              <TableCell align="right">
+                          {esAdmin && (
+                            <TableCell align="right">
+                              {sessionRow.fecha >= corteCorreccion ? (
                                 <Link
                                   href={buildCorrectionHref(sessionRow)}
                                   className={buttonClasses("secondary", "sm")}
                                 >
                                   Corregir
                                 </Link>
-                              </TableCell>
-                            ) : (
-                              // Still an admin, so the header cell above exists —
-                              // this keeps the row's columns aligned with it even
-                              // when the 30-day window is the reason there is
-                              // nothing to offer.
-                              <TableCell align="right" />
-                            ))}
+                              ) : (
+                                /*
+                                 * Vencida: la acción se queda, apagada y con el
+                                 * motivo al lado (issue #373).
+                                 *
+                                 * Deja de ser un `<Link>` a propósito. Un ancla
+                                 * deshabilitada no existe en HTML — `disabled`
+                                 * no le aplica — así que seguiría navegando al
+                                 * asistente para que el backend rechace la
+                                 * corrección al final del camino. Un `<button
+                                 * disabled>` sí se lee bloqueado, y encima no
+                                 * promete un destino que no va a cumplir.
+                                 *
+                                 * El motivo es texto visible de la celda, no un
+                                 * `title`: un `title` solo aparece al pasar el
+                                 * mouse, no existe en pantalla táctil y no todo
+                                 * lector de pantalla lo anuncia.
+                                 * `aria-describedby` lo ata al control, que es
+                                 * como el asistente ya bloquea "Revisar y
+                                 * confirmar" cuando faltan alumnos por marcar
+                                 * (`../page.tsx`, `unmarkedReasonId`).
+                                 *
+                                 * Ese par allá usa `role="status"` porque el
+                                 * motivo aparece y desaparece mientras el
+                                 * entrenador marca. Acá no: la fila nace
+                                 * vencida y no cambia sola, y diez sesiones
+                                 * viejas en una página serían diez regiones
+                                 * vivas anunciándose al cargar la tabla.
+                                 */
+                                <div className="flex flex-col items-end gap-1.5">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    disabled
+                                    aria-describedby={buildReasonId(sessionRow)}
+                                  >
+                                    Corregir
+                                  </Button>
+                                  <p
+                                    id={buildReasonId(sessionRow)}
+                                    className="max-w-[240px] text-balance text-xs text-ink-3"
+                                  >
+                                    {MOTIVO_CORRECCION_VENCIDA}
+                                  </p>
+                                </div>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
