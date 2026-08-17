@@ -78,11 +78,17 @@ vi.mock("@/lib/enrollment-session", () => ({
 beforeEach(() => {
   vi.mocked(fetchInstituciones).mockResolvedValue([]);
   resetTestHistory("/student/enroll");
+  // The wizard now persists a draft to sessionStorage (#317 / #62) — real
+  // jsdom storage, not a fixture, so a draft an earlier case left behind
+  // would otherwise get restored here and change which enrollment type this
+  // case starts from.
+  window.sessionStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
   resetTestHistory("/");
+  window.sessionStorage.clear();
   vi.unstubAllEnvs();
 });
 

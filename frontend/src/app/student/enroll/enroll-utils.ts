@@ -541,3 +541,82 @@ function isBloodType(value: string): value is BloodType {
   return Object.values(BLOOD_TYPES).includes(value as BloodType);
 }
 
+// ---------------------------------------------------------------------------
+// Draft persistence (issue #317 / hallazgo #62)
+//
+// A reload used to lose every field the visitor had already typed: `formData`
+// lived only in a `useState`, with nothing backing it. The fix mirrors
+// `attendance-utils.ts`'s `cata_attendance_draft:` contract — `sessionStorage`,
+// tab-scoped, best-effort (storage can be unavailable in private browsing or
+// SSR), and discarded WHOLESALE rather than partially trusted if malformed.
+//
+// This is not the ghost-state pattern issue #310 (K3) removed from the
+// attendance wizard. That draft outlived a REJECTED `POST` and showed a
+// trainer's unaccepted marks as if the club had them on file. This draft is
+// data the visitor typed and has never been sent anywhere — there is no
+// server fact for it to contradict. `EnrollWizard` labels it on screen as
+// unsent whenever it is restored, and clears it the moment the enrollment
+// actually succeeds (see `handleConfirm`) or the visitor starts over
+// (`handleReset`), so it can never again describe an abandoned attempt as the
+// form's current state.
+// ---------------------------------------------------------------------------
+
+const ENROLL_DRAFT_KEY = "cata_enroll_draft";
+
+function isEnrollFormData(value: unknown): value is EnrollFormData {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (record.enrollmentType !== ENROLLMENT_TYPES.SELF && record.enrollmentType !== ENROLLMENT_TYPES.CHILD) {
+    return false;
+  }
+  return Object.keys(initialFormData).every(
+    (key) => key === "enrollmentType" || typeof record[key] === "string",
+  );
+}
+
+/**
+ * Parse a stored draft. Returns `null` for anything that is not a complete,
+ * well-typed `EnrollFormData` — a corrupted or tampered-with value is dropped
+ * rather than half-applied, same rule `parseAttendanceDraft` follows.
+ */
+export function parseEnrollDraft(raw: string | null): EnrollFormData | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  return isEnrollFormData(parsed) ? parsed : null;
+}
+
+/** Persist the draft. Losing draft persistence must never take the wizard down with it. */
+export function saveEnrollDraft(data: EnrollFormData): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage?.setItem(ENROLL_DRAFT_KEY, JSON.stringify(data));
+  } catch {
+    // Best-effort: the wizard works exactly as before without it.
+  }
+}
+
+/** Read a stored draft, or `null` when there is none / storage is unavailable. */
+export function loadEnrollDraft(): EnrollFormData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return parseEnrollDraft(window.sessionStorage?.getItem(ENROLL_DRAFT_KEY) ?? null);
+  } catch {
+    return null;
+  }
+}
+
+/** Drop the draft — called once the enrollment is actually submitted, or the visitor starts over. */
+export function clearEnrollDraft(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage?.removeItem(ENROLL_DRAFT_KEY);
+  } catch {
+    // Ignore.
+  }
+}
+

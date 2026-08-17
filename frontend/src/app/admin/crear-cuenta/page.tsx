@@ -869,6 +869,38 @@ function CrearCuentaContent(): React.ReactElement {
           <p className="mb-page text-xs leading-relaxed text-ink-3">
             Las credenciales de acceso fueron creadas de forma segura.
           </p>
+
+          {/* #317 / hallazgo #36: los 5 pasos de este asistente son tipo,
+              datos, salud, acceso y confirmar — ninguno de plan, horario ni
+              cobro. Un admin que los completaba veía "Cuenta creada" y no
+              tenía forma de saber que el socio todavía no está en ningún
+              horario ni tiene un pago registrado. No es un paso nuevo del
+              wizard (sigue en 5): es la misma información, adelantada al
+              cierre en vez de callada. `text-left`, no el `text-center` del
+              resto de la tarjeta — un párrafo centrado sobre una lista es dos
+              ejes en una caja, el mismo defecto que el asistente de
+              inscripción pública ya corrigió en su propia pantalla final. */}
+          <div className="mb-page text-left">
+            <p className="mb-section text-2xs font-bold uppercase text-ink-3">
+              Qué falta para que quede activo
+            </p>
+            <ol className="space-y-section">
+              {[
+                <>
+                  Asignar un horario: en <Link href="/groups" className="font-semibold text-ink underline">Horarios</Link>, abra el grupo del estudiante y use &quot;Ver alumnos&quot; para inscribirlo.
+                </>,
+                <>
+                  Registrar el primer pago: desde la ficha del socio en Miembros.
+                </>,
+              ].map((linea, i) => (
+                <li key={i} className="flex items-start gap-3 text-sm text-ink-2">
+                  <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-ink-3" />
+                  {linea}
+                </li>
+              ))}
+            </ol>
+          </div>
+
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             {/* An `<a>`, not a `<button>` that calls `router.push`. "Lo que
                 navega no es un botón": this control changed the address bar

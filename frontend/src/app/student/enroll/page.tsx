@@ -60,10 +60,13 @@ import type { NumericFieldMode } from "@/lib/numeric-input";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
   buildEnrollmentRequest,
+  clearEnrollDraft,
   describeStepBlocker,
   ENROLLMENT_TYPES,
   getEnrollmentErrorMessage,
   isDemoQuickFillEnabled,
+  loadEnrollDraft,
+  saveEnrollDraft,
   validateEnrollFields,
   validateEnrollStep,
   validateEnrollment,
@@ -144,6 +147,22 @@ function EnrollWizard(): React.ReactElement {
   const [institucionesFailed, setInstitucionesFailed] = useState(false);
   const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
   const queryAppliedRef = useRef(false);
+  /**
+   * Whether `formData` currently holds a draft recovered from `sessionStorage`
+   * rather than what the visitor just typed this load — see `enroll-utils.ts`'s
+   * draft-persistence block for why this is safe to keep (issue #317 / #62),
+   * unlike the draft issue #310 removed. Shown on screen so a restored,
+   * NEVER-SENT form is never mistaken for something already on file.
+   */
+  const [restoredFromDraft, setRestoredFromDraft] = useState(false);
+  /**
+   * Gates the auto-save effect until the draft-restore effect below has had
+   * its one chance to run first. Without this, both effects fire in the same
+   * commit and the auto-save effect — reading `formData` as it was BEFORE the
+   * restore — would immediately overwrite a good draft with the empty
+   * `initialFormData` it started from.
+   */
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   // For self-enrollment, skip the representative step entirely.
   const effectiveSteps = STEP_ORDER.filter(
@@ -154,10 +173,22 @@ function EnrollWizard(): React.ReactElement {
    * and not one further — otherwise a shared or reloaded link would land them
    * on the summary of a form they never filled, skipping the validation the
    * wizard exists to enforce.
+   *
+   * Until the draft-restore effect above has had its one chance to run,
+   * `formData` is still `initialFormData` even when a real draft is about to
+   * land — `useWizardHistory`'s own repair effect runs in that SAME first
+   * commit and would otherwise read the not-yet-restored ceiling as final and
+   * permanently rewrite `?paso=3` down to `?paso=1` before the draft ever
+   * gets a chance to justify it (issue #317 / #62). Staying fully permissive
+   * for that one commit only matters for a URL that already names a step, and
+   * self-corrects one render later once the real data (restored or not) is
+   * known — a first-time visitor with no `?paso=` param is unaffected, since
+   * `resolveStepFromParam` returns step 1 for a missing param regardless of
+   * the ceiling.
    */
-  const maxReachableStep = furthestReachableIndex(effectiveSteps, (s) =>
-    isStepComplete(s, formData),
-  );
+  const maxReachableStep = draftHydrated
+    ? furthestReachableIndex(effectiveSteps, (s) => isStepComplete(s, formData))
+    : effectiveSteps.length - 1;
   const { step, goToStep, goBack, resetToFirstStep } = useWizardHistory(
     effectiveSteps,
     maxReachableStep,
@@ -199,6 +230,24 @@ function EnrollWizard(): React.ReactElement {
     clearLegacyEnrollmentSession();
   }, []);
 
+  // Restore a draft left by a previous load of this same tab (issue #317 /
+  // #62), then let the auto-save effect below take over. Runs once — a
+  // browser reload always remounts the wizard, so "once per mount" IS "once
+  // per reload".
+  useEffect(() => {
+    const draft = loadEnrollDraft();
+    if (draft) {
+      setFormData(draft);
+      setRestoredFromDraft(true);
+    }
+    setDraftHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    saveEnrollDraft(formData);
+  }, [formData, draftHydrated]);
+
   useEffect(() => {
     fetchInstituciones()
       .then(setInstituciones)
@@ -213,6 +262,10 @@ function EnrollWizard(): React.ReactElement {
   ): void {
     setFormData((prev) => ({ ...prev, [key]: value }));
     setFormErrors([]);
+    // The visitor is now actively working the form again — same moment the
+    // attendance wizard's own "Recuperamos las marcas…" banner drops on the
+    // first action after a restore.
+    setRestoredFromDraft(false);
   }
 
   function handleNext(): void {
@@ -269,6 +322,10 @@ function EnrollWizard(): React.ReactElement {
       await refreshSession();
       setSubmitting(false);
       setConfirmed(true);
+      // The draft did its job — the data it held is now the server's record,
+      // not an unsent attempt. Keeping it around would let a later reload of
+      // this same tab resurrect a stale form behind the confirmation screen.
+      clearEnrollDraft();
     } catch (error: unknown) {
       setSubmitting(false);
       const message = getEnrollmentErrorMessage(error);
@@ -284,6 +341,9 @@ function EnrollWizard(): React.ReactElement {
     setSummaryReviewed(false);
     setFormErrors([]);
     setTouched(new Set());
+    setRestoredFromDraft(false);
+    // A deliberate restart: nothing left to resurrect on the next reload.
+    clearEnrollDraft();
   }
 
   // ---- Demo helper — quick-fill for testing convenience ----
@@ -1153,19 +1213,29 @@ function EnrollWizard(): React.ReactElement {
                 `ink-3` only clears AA on `paper` — it measures 4.21:1 here.
                 Same reason `PageHeader` uses the companion token. */}
             <p className="mb-field text-2xs font-bold uppercase text-ink-3-strong">
-              Paso {currentIndex + 1} de {effectiveSteps.length}
+              {isFirst ? "Paso 1" : `Paso ${currentIndex + 1} de ${effectiveSteps.length}`}
             </p>
             {/* The count is read from `effectiveSteps`, not written out: this
                 copy said "Cinco pasos" while the line directly above it said
                 "Paso 1 de 4", because arriving from the landing with
-                `?type=self` already answers the first step and drops it. */}
+                `?type=self` already answers the first step and drops it.
+                #317 / hallazgo #31: on step 1 itself, `effectiveSteps.length`
+                is not yet a COMMITTED fact — the visitor can still swap
+                Jugador/Representante on the very card in front of them, and
+                doing so used to flip "Paso 1 de 4" to "Paso 1 de 5" mid-decision.
+                A promise that changes in response to the click that made it is
+                worse than a vague one, so step 1 states both possibilities and
+                the resolved count is deferred to the step that actually
+                depends on it — the same alternative the finding names. */}
             <PageHeader
               title="Inscripción de estudiante"
               subtitle={
-                `${effectiveSteps.length} pasos y queda dentro del club.` +
-                (formData.enrollmentType === "self"
-                  ? " Se inscribe usted como jugador."
-                  : " Usted actúa como representante.")
+                isFirst
+                  ? "4 o 5 pasos y queda dentro del club, según quién se inscriba."
+                  : `${effectiveSteps.length} pasos y queda dentro del club.` +
+                    (formData.enrollmentType === "self"
+                      ? " Se inscribe usted como jugador."
+                      : " Usted actúa como representante.")
               }
             />
           </div>
@@ -1175,6 +1245,17 @@ function EnrollWizard(): React.ReactElement {
             current={currentIndex + 1}
             steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
           />
+
+          {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
+              servidor — nada de esto se envió todavía. El rótulo lo dice para
+              que un dato restaurado nunca se confunda con uno ya guardado, la
+              misma distinción que #310 (K3) cerró del lado de asistencias. */}
+          {restoredFromDraft && (
+            <p className="rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
+              Recuperamos los datos que ya había completado. Todavía no se han
+              enviado — revíselos antes de continuar.
+            </p>
+          )}
 
           {/* Demo helper — quick-fill for testing convenience. The "(solo
               desarrollo)" label used to be the ONLY thing stopping this from

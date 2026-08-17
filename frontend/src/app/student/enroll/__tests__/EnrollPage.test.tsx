@@ -70,6 +70,10 @@ beforeEach(() => {
   // step from there, so a URL left by the previous case would decide where the
   // next one opens.
   resetTestHistory("/student/enroll");
+  // A draft left by a previous case would decide where THIS one opens too —
+  // sessionStorage is real jsdom storage here, not a fixture, so it survives
+  // between tests unless cleared.
+  window.sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -77,6 +81,7 @@ afterEach(() => {
   // registration order, so testing-library's cleanup would otherwise run last.
   cleanup();
   resetTestHistory("/");
+  window.sessionStorage.clear();
   vi.unstubAllEnvs();
 });
 
@@ -564,5 +569,123 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
     expect(checkbox.className).toMatch(/\bw-6\b/);
     expect(checkbox.className).not.toMatch(/\bh-4\b/);
     expect(checkbox.className).not.toMatch(/\bw-4\b/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #317 / hallazgo #31 — el asistente promete 4 pasos y pasa a 5 en cuanto el
+// visitante elige inscribir a un dependiente, TODAVÍA en el paso 1. El
+// compromiso de esfuerzo no puede cambiar en respuesta al mismo clic que lo
+// hizo empezar.
+// ---------------------------------------------------------------------------
+describe("EnrollPage — el conteo de pasos no cambia mientras se decide (#317 / #31)", () => {
+  it("no promete un número de pasos que el paso 1 todavía no puede saber", () => {
+    render(<EnrollPage />);
+
+    // Jugador es la selección por defecto — el número YA sería resoluble
+    // (4), pero el paso 1 no lo afirma como definitivo porque el visitante
+    // puede tocar la otra tarjeta a continuación.
+    expect(screen.queryByText(/^paso 1 de \d/i)).not.toBeInTheDocument();
+  });
+
+  it("el texto del paso 1 no cambia al elegir Representante, todavía en el paso 1", () => {
+    render(<EnrollPage />);
+
+    const before = screen.getByText(/4 o 5 pasos/i).textContent;
+
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+
+    const after = screen.getByText(/4 o 5 pasos/i).textContent;
+    expect(after).toBe(before);
+    expect(screen.queryByText(/^paso 1 de \d/i)).not.toBeInTheDocument();
+  });
+
+  it("resuelve el número exacto de pasos recién al avanzar del paso 1", () => {
+    render(<EnrollPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(screen.getByText("Paso 2 de 5")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #317 / hallazgo #62 — recargar el asistente perdía los datos ya cargados:
+// `formData` vivía solo en memoria, así que un F5 en el paso 3 lo vaciaba
+// entero. El borrador se persiste en `sessionStorage`, se rotula en pantalla
+// como datos SIN enviar (nunca llegó al servidor, a diferencia del borrador
+// que #310/K3 quitó de asistencias) y se limpia al completar la inscripción.
+// ---------------------------------------------------------------------------
+describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => {
+  /** Walks to the representative step (step 3 of 5) with step 2 fully filled. */
+  function reachRepresentativeStep(): void {
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "2015-06-15" } });
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1723456719" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  }
+
+  it("conserva los datos ya cargados y los rotula como sin enviar tras un reload en el paso 3", async () => {
+    const first = render(<EnrollPage />);
+    reachRepresentativeStep();
+    expect(screen.getByText("Paso 3 de 5")).toBeInTheDocument();
+
+    // A "reload" is a full remount: React state is gone, but the URL
+    // (`?paso=3`, real jsdom history) and `sessionStorage` both survive it —
+    // exactly like an actual F5.
+    first.unmount();
+    render(<EnrollPage />);
+
+    // The wizard is still standing on step 3, not bounced back to step 1 —
+    // it can only know step 3 is reachable once the restored data makes
+    // steps 1-2 look complete again.
+    expect(await screen.findByText("Paso 3 de 5")).toBeInTheDocument();
+    // The label the issue requires: this is unsent data, not a confirmed
+    // record — the same "recuperamos" pattern the attendance wizard already
+    // uses for its own (server-bound) draft.
+    expect(screen.getByText(/no se ha[n]? enviado/i)).toBeInTheDocument();
+
+    // Step 3 (representative) renders no student field, so the data that
+    // matters here — what was typed on step 2 — is checked by walking back.
+    // "Atrás" is the browser's real Back (`window.history.back()`), which
+    // resolves via `popstate` on its own tick, not synchronously with the
+    // click — and both step 2 and step 3 have a field literally labeled
+    // "Nombres", so asserting before that tick would silently match the
+    // WRONG one (the representative's, still empty) instead of failing.
+    fireEvent.click(screen.getByRole("button", { name: /^Atrás/ }));
+    expect(await screen.findByText("Paso 2 de 5")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Nombres/)).toHaveValue("Lucas");
+    expect(screen.getByLabelText(/cédula de identidad/i)).toHaveValue("1723456719");
+  });
+
+  it("limpia el borrador al completar la inscripción con éxito", async () => {
+    vi.mocked(enrollStudent).mockResolvedValueOnce({ enrolled: true });
+    render(<EnrollPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
+    fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
+
+    await screen.findByText(/inscripción completada/i);
+    expect(window.sessionStorage.getItem("cata_enroll_draft")).toBeNull();
   });
 });
