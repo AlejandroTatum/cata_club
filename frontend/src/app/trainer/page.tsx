@@ -247,9 +247,9 @@ export default function TrainerPage(): React.ReactElement {
        */}
       <AppShell
         title={`Hola, ${firstNameOf(session?.user?.name)}`}
-        subtitle="Mi día — tu próxima sesión y el resumen de asistencias."
+        subtitle="Mi día — su próxima sesión y el resumen de asistencias."
       >
-        {loading && <LoadingState label="Cargando tu día…" />}
+        {loading && <LoadingState label="Cargando su día…" />}
 
         {error && !loading && <ErrorState message={error} onRetry={() => loadData()} />}
 

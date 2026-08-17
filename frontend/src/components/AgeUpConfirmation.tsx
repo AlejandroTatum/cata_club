@@ -100,21 +100,21 @@ export default function AgeUpConfirmation({
           </h2>
         </div>
         <p className="text-sm leading-relaxed text-cata-text/65">
-          Al independizarte, te desvincularás de tu representante legal y serás
-          responsable de tu propia cuenta. Podrás inscribir dependientes y gestionar
-          tus pagos directamente.
+          Al independizarse, se desvinculará de su representante legal y será
+          responsable de su propia cuenta. Podrá inscribir dependientes y gestionar
+          sus pagos directamente.
         </p>
 
         <div className="mt-4">
           <label htmlFor="age-up-password" className="text-xs font-semibold text-ink">
-            Confirma tu contraseña
+            Confirme su contraseña
           </label>
           <input
             id="age-up-password"
             type="password"
             value={contrasenia}
             onChange={(e) => setContrasenia(e.target.value)}
-            placeholder="Tu contraseña actual"
+            placeholder="Su contraseña actual"
             className="mt-1 w-full rounded-xl border border-cata-border bg-cata-surface px-3 py-2 text-sm text-cata-text placeholder-cata-text/30 focus:border-cata-red/40 focus:outline-none focus:ring-2 focus:ring-cata-red/10"
             autoComplete="current-password"
           />

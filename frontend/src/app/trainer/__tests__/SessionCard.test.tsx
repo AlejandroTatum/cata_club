@@ -156,7 +156,7 @@ describe("SessionCard", () => {
     };
     render(<SessionCard state={state} enrolledCounts={{ 7: 12 }} />);
 
-    expect(screen.getByText("Es tu última sesión de hoy.")).toBeInTheDocument();
+    expect(screen.getByText("Es su última sesión de hoy.")).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Después, más tarde hoy" })).not.toBeInTheDocument();
   });
 

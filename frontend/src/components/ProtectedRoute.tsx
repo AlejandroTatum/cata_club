@@ -71,8 +71,8 @@ export default function ProtectedRoute({
     return (
       <div className="flex min-h-[50vh] items-center justify-center px-4">
         <ErrorState
-          title="No se pudo verificar tu sesión"
-          message="Hubo un problema de conexión. Probá de nuevo."
+          title="No se pudo verificar su sesión"
+          message="Hubo un problema de conexión. Vuelva a intentarlo."
           onRetry={retryHydration}
         />
       </div>

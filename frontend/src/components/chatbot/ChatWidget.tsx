@@ -80,13 +80,13 @@ function mensajeDeError(error: unknown): string {
   const status = error instanceof ApiClientError ? error.status : null;
   switch (status) {
     case 429:
-      return `Estás preguntando muy seguido. Espera unos segundos y vuelve a intentarlo.`;
+      return `Está preguntando muy seguido. Espere unos segundos y vuelva a intentarlo.`;
     case 504:
-      return `${BOT_NAME} tardó demasiado en responder. Vuelve a intentarlo.`;
+      return `${BOT_NAME} tardó demasiado en responder. Vuelva a intentarlo.`;
     case 503:
-      return `${BOT_NAME} no está disponible en este momento. Inténtalo más tarde.`;
+      return `${BOT_NAME} no está disponible en este momento. Inténtelo más tarde.`;
     default:
-      return `No se pudo contactar a ${BOT_NAME}. Inténtalo de nuevo en un momento.`;
+      return `No se pudo contactar a ${BOT_NAME}. Inténtelo de nuevo en un momento.`;
   }
 }
 
@@ -358,7 +358,7 @@ export default function ChatWidget({
           type="text"
           value={borrador}
           onChange={(e): void => setBorrador(e.target.value)}
-          placeholder="Escribe tu pregunta…"
+          placeholder="Escriba su pregunta…"
           aria-label={`Mensaje para ${BOT_NAME}`}
           disabled={enviando}
           className="h-ctl min-w-0 flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-sm text-ink transition-colors placeholder:text-ink-3 focus:border-cata-red disabled:cursor-not-allowed disabled:opacity-50"

@@ -44,7 +44,7 @@
  * explicit because Safari/VoiceOver drops the implicit list role once
  * `list-none` removes the bullets. One later session renders as a one-row
  * list — nothing carousel-shaped to look odd. Zero later sessions swaps the
- * list for a single line ("Es tu última sesión de hoy.") so the card still
+ * list for a single line ("Es su última sesión de hoy.") so the card still
  * says something true about the rest of the day instead of just stopping.
  */
 
@@ -73,7 +73,7 @@ export default function SessionCard({ state, enrolledCounts }: SessionCardProps)
     return (
       <section
         className="flex flex-col gap-3 rounded-card bg-coal px-7 py-6 text-white"
-        aria-label="Tu día de hoy"
+        aria-label="Su día de hoy"
       >
         <p className="m-0 flex items-center gap-2 text-sm text-white/60">
           <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
@@ -95,7 +95,7 @@ export default function SessionCard({ state, enrolledCounts }: SessionCardProps)
   return (
     <section
       className="flex flex-col gap-3 rounded-card bg-coal px-7 py-6 text-white"
-      aria-label="Tu día de hoy"
+      aria-label="Su día de hoy"
     >
       <p className="m-0 flex items-center gap-2 text-sm text-white/60">
         <span
@@ -151,7 +151,7 @@ export default function SessionCard({ state, enrolledCounts }: SessionCardProps)
         </ol>
       ) : (
         <p className="m-0 border-t border-white/10 pt-3 text-sm text-white/60">
-          Es tu última sesión de hoy.
+          Es su última sesión de hoy.
         </p>
       )}
 

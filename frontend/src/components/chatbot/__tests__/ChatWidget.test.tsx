@@ -139,7 +139,7 @@ describe("ChatWidget — error copy per failure class", () => {
   }
 
   it("tells the user to wait when they are asking too fast (429)", async () => {
-    expect(await enviarYLeerAlerta(429)).toMatch(/espera/i);
+    expect(await enviarYLeerAlerta(429)).toMatch(/espere/i);
   });
 
   it("says it took too long on a timeout (504)", async () => {

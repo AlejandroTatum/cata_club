@@ -22,6 +22,7 @@ import ProfilePage from "@/app/profile/page";
 import type { PerfilPropio } from "@/types/domain";
 import type { MembershipSummary, StudentProfileSummary } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
+import { buildUstedRegisterRegex } from "@/lib/__tests__/usted-register-lock";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -2034,33 +2035,6 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
 // ---------------------------------------------------------------------------
 
 describe("ProfilePage — usted register (issue #340)", () => {
-  /**
-   * Common voseo imperatives (2nd person singular, stressed final vowel) plus
-   * the "vos"/"tu"/"tus" pronouns that belong to "su"/"sus" in an usted
-   * register. Not exhaustive — a curated list of the shapes this audit and
-   * the issue itself named — but it is what actually regressed here, and
-   * catches the same origin resurfacing under a different sentence.
-   */
-  const VOSEO_WORDS = [
-    "revisá", "revisás", "mantené", "mantenés", "entrá", "entrás", "hacé", "hacés",
-    "poné", "ponés", "tené", "tenés", "mirá", "mirás", "elegí", "elegís",
-    "seguí", "seguís", "guardá", "guardás", "consultá", "consultás",
-    "administrá", "administrás", "escribí", "escribís", "confirmá", "confirmás",
-    "actualizá", "actualizás", "cambiá", "cambiás", "agregá", "agregás",
-    "seleccioná", "seleccionás", "ingresá", "ingresás", "recordá", "recordás",
-    "completá", "completás", "verificá", "verificás", "probá", "probás",
-  ];
-  // JS's `\b` treats accented letters as non-word characters, so `\brevisá\b`
-  // silently fails to match "Revisá " — there is no word/non-word transition
-  // between the trailing "á" and the space after it. A lookaround built on an
-  // explicit Latin-letter class (including accents) is the boundary that
-  // actually works here.
-  const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";
-  const VOSEO_RE = new RegExp(
-    `(?<![${LETTER}])(${VOSEO_WORDS.join("|")}|vos|tú|tu|tus)(?![${LETTER}])`,
-    "giu",
-  );
-
   async function renderRole(
     role: "admin" | "trainer" | "estudiante" | "representante",
   ): Promise<void> {
@@ -2114,7 +2088,9 @@ describe("ProfilePage — usted register (issue #340)", () => {
       await renderRole(role);
 
       const main = screen.getByRole("main");
-      const offenders = [...(main.textContent ?? "").matchAll(VOSEO_RE)].map((m) => m[0]);
+      const offenders = [...(main.textContent ?? "").matchAll(buildUstedRegisterRegex())].map(
+        (m) => m[0],
+      );
       expect(offenders).toEqual([]);
     },
   );

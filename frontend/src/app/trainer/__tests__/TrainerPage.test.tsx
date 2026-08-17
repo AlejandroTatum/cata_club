@@ -310,7 +310,7 @@ describe("TrainerPage — Mi día", () => {
     expect(screen.queryByText(/Pasar lista de las/)).not.toBeInTheDocument();
     // `SessionCard` still renders NOTHING for `state === null` — the guard the
     // whole component is built around is untouched.
-    expect(screen.queryByLabelText("Tu día de hoy")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Su día de hoy")).not.toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
   });
 
@@ -351,7 +351,7 @@ describe("TrainerPage — Mi día", () => {
     );
     render(<TrainerPage />);
 
-    expect(screen.getByText("Cargando tu día…")).toBeInTheDocument();
+    expect(screen.getByText("Cargando su día…")).toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
     resolveSchedules(TODAY_SCHEDULES);
     await screen.findByText("Lunes 15:00 — 16:00");
