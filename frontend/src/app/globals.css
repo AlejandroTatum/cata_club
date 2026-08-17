@@ -232,49 +232,34 @@
   }
 
   /*
-   * THE CLUB'S HALFTONE, IN THE PRODUCT.
+   * THE CREDENTIAL'S RHYTHM — three steps, declared once, scaled once.
    *
-   * The carnet used to carry a 150px `bg-ball/[0.08]` circle in its top-right
-   * corner: a soft glow behind a corner, which is the decorative blob every
-   * generic card ships with. The club already owns a texture instead — the
-   * halftone dot field the landing paints (`landing/landing.css`,
-   * `.landing-halftone`) — and DESIGN.md permits it precisely here: "la trama
-   * halftone… solo va donde no hay nada que leer, o donde hay algo que
-   * celebrar". The carnet's top-right corner is both.
+   * The carnet (`Carnet` in `app/student/page.tsx`) is the one block in this
+   * product that has to hold its spacing across a physical scale change: it is
+   * ~300px wide on screen and 54mm — about 204px — on paper, so every distance
+   * inside it is ~1.47× larger on screen than on the sheet.
    *
-   * Built the same way (a `radial-gradient` dot, a `background-size` pitch and
-   * a corner `mask-image` fade) but AUTHORED HERE, on the product's own values:
-   * the dot is `ball` at 9%, the fade is drawn with `coal`. The landing class
-   * itself is deliberately NOT imported — it resolves against
-   * `--landing-surface` / `--landing-brand-black`, variables that only exist
-   * inside `.landing-page`, so importing it would either paint nothing or drag
-   * the landing's whole variable world into the authenticated product.
+   * The pass before this one paid for that with a `print:` twin beside every
+   * margin and gap: `print:mt-[9px]`, `print:gap-[7px]`, `print:pt-[1.5mm]`,
+   * two dozen of them, each re-derived by hand. Three had drifted LARGER than
+   * the screen value they were supposed to scale down from before anyone
+   * measured the card in a real Chromium. Twenty-four numbers that must move
+   * together are not twenty-four decisions; they are one.
    *
-   * The pitch is tighter than the landing's 15px (which fills a hero) because
-   * this field is ~340px wide rather than a full viewport.
+   * So the credential declares the project's three rhythm steps as its own
+   * variables and spends nothing else. On screen they are the scale on its own
+   * 7px grid — `field` 7px between a label and what it labels, `section` 14px
+   * between the parts of the object, `page` 21px as the card's margin. On the
+   * printed sheet — the block at the foot of this file — the same three names
+   * take credential millimetres, and the whole object scales at once.
    *
-   * The mask is SIZED, not left at `farthest-corner`. A percentage stop on an
-   * auto-sized circle resolves against the distance to the opposite corner, so
-   * on a card this shape it would have reached ~200px inward — across the
-   * wordmark and into the name. DESIGN.md is explicit: "no poner la trama
-   * halftone detrás de datos". 150px at the top-right corner fading out by 70%
-   * keeps every dot in the corner the header leaves empty.
-   *
-   * Print never sees it, and that survived the printed carnet going back to
-   * coal. The original reason ("el impreso es fondo blanco") is dead, but the
-   * other one is measured and stands: at 54mm the same 9px pitch becomes a
-   * 2.4mm screen of 0.4mm dots at 9% yellow over near-black. On a home inkjet
-   * that is under what the head resolves — where it lands at all it reads as
-   * speckle on the heaviest ink field of the sheet, not as the club's texture.
-   * Judged off the rendered PDF, not off theory. The card's identity on paper
-   * is carried by the mark, the wordmark, the red rule and the ball kicker,
-   * all of which do print.
+   * Any bracketed length inside the carnet that is not one of these three is a
+   * defect, and `StudentPage.test.tsx` fails on it by name.
    */
-  .carnet-halftone {
-    background-image: radial-gradient(circle, rgba(255, 214, 0, 0.09) 1.5px, transparent 1.5px);
-    background-size: 9px 9px;
-    -webkit-mask-image: radial-gradient(150px 150px at 100% 0%, #131316, transparent 70%);
-    mask-image: radial-gradient(150px 150px at 100% 0%, #131316, transparent 70%);
+  .carnet-credential {
+    --carnet-page: 21px;
+    --carnet-section: 14px;
+    --carnet-field: 7px;
   }
 }
 
@@ -503,6 +488,21 @@
     width: 54mm;
     height: 85.6mm;
     margin: auto;
+    /* EL RITMO, EN MILÍMETROS DE CREDENCIAL.
+     *
+     * Los mismos tres pasos que `.carnet-credential` declara en píxeles de
+     * pantalla, redeclarados una sola vez para el papel: 4mm de margen, 2.6mm
+     * entre bloques, 1.3mm entre una etiqueta y su dato. Es ~0.7× la escala de
+     * pantalla, que es exactamente la relación entre los 300px del objeto en
+     * la pantalla y los 54mm de la credencial impresa.
+     *
+     * Va acá y no en el componente porque es UNA declaración: la alternativa
+     * —una variante `print:` al lado de cada margen— fue lo que se midió mal
+     * la vez pasada. Este selector es un id fuera de toda `@layer`, así que
+     * gana sin `!important` sobre la clase que trae los valores de pantalla. */
+    --carnet-page: 4mm;
+    --carnet-section: 2.6mm;
+    --carnet-field: 1.3mm;
     /* La línea de corte. Un `border` se imprime aunque «Gráficos de fondo»
        esté apagado; una sombra o un fondo, no. */
     border: 1px solid #131316;

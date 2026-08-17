@@ -84,6 +84,6 @@ export type {
 } from "./Table";
 
 export { default as WeekStrip } from "./WeekStrip";
-export type { WeekStripProps } from "./WeekStrip";
+export type { WeekStripProps, WeekStripVariant } from "./WeekStrip";
 
 export { cn } from "./cn";

@@ -37,6 +37,17 @@ export interface StudentProfileView {
   personaId: string;
   nombres: string;
   apellidos: string;
+  /**
+   * National ID, or `null` when the backend sent none.
+   *
+   * It is here for ONE reader: the carnet, which is a carried identity object
+   * and the one place in this product where a document number is the point.
+   * That is also the whole of its licence — personal data on an object a
+   * family carries belongs on the carnet and on the person's own ficha, never
+   * in a table or a list, where it would be published to everyone who can read
+   * a roster rather than to the person holding the card.
+   */
+  cedula: string | null;
   fechaNacimiento: string;
   recentSessions: StudentSessionView[];
   membership: MembershipView | null;
@@ -171,6 +182,10 @@ export function buildStudentProfileView(
     personaId: String(persona.id),
     nombres: persona.nombres,
     apellidos: persona.apellidos,
+    // `?? null`, not the raw value: the view type promises `string | null`, and
+    // an `undefined` here would reach the carnet as a row that exists with
+    // nothing in it rather than as a row the card knows to leave out.
+    cedula: persona.cedula ?? null,
     fechaNacimiento: persona.fechaNacimiento,
     recentSessions,
     membership,

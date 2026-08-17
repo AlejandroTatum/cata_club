@@ -99,6 +99,37 @@ const IDLE = "bg-sunken text-ink-3-strong";
  */
 const AVAILABLE = "bg-sunken text-ink-3-strong border border-dashed border-line-2";
 
+/**
+ * THE SAME THREE STATES ON A COAL GROUND.
+ *
+ * The strip's message is "which boxes are lit", and every value above is
+ * measured against the light surfaces a table stands on. Dropped on the
+ * carnet's coal credential, `bg-sunken` (#F4F4F7) is the BRIGHTEST thing on
+ * the card: the five days that do NOT run end up shouting louder than the two
+ * that do, which inverts the piece.
+ *
+ * So the ground gets its own skin, and it is a VARIANT of this component
+ * rather than a `[&_span]` rule reaching in from the carnet. Half of this piece
+ * is a contract — the 3:1 that makes lit tellable from unlit, and the label
+ * that carries the whole message to a reader who cannot see it — and a caller
+ * repainting the fills from outside can take the first one with it silently.
+ *
+ * Measured on `coal` (#131316), which is the only ground this variant is for:
+ *   · idle `white/5` composites to #1F1F22. Against the lit `cata-red` that is
+ *     3.13:1, clear of WCAG 1.4.11's 3:1 — the same job the light variant's
+ *     4.56:1 does. A heavier fill reads brighter and falls under it: `white/10`
+ *     measures 2.76:1 and was rejected for exactly that.
+ *   · `text-white/70` on that fill is ~8.5:1, so the seven POSITIONS are still
+ *     marked by seven letters that are comfortably legible text.
+ *   · the dashed outline moves to `white/25`; `line-2` is a light-surface
+ *     hairline and is simply invisible here.
+ */
+const ON_COAL = {
+  activo: ACTIVE,
+  inactivo: "bg-white/5 text-white/70",
+  disponible: "bg-white/5 text-white/70 border border-dashed border-white/25",
+} as const;
+
 /** Nothing lit. In words, because the strip's label is what a reader receives. */
 const NO_SCHEDULE = "Sin horario";
 
@@ -136,8 +167,17 @@ export interface WeekStripProps {
    * meet", and a track is an option, not a session.
    */
   permitidos?: readonly DiaSemana[];
+  /**
+   * The ground the strip is drawn on. `light` (the default) is every table and
+   * card in the product; `onCoal` is the carnet's credential, and nothing else
+   * today. See `ON_COAL` for the measurements.
+   */
+  variant?: WeekStripVariant;
   className?: string;
 }
+
+/** Which measured skin the boxes wear. See `IDLE` and `ON_COAL`. */
+export type WeekStripVariant = "light" | "onCoal";
 
 /** `activo` beats `disponible` beats `inactivo` — a día that runs is never merely available. */
 function dayState(
@@ -150,9 +190,17 @@ function dayState(
   return "inactivo";
 }
 
-const TONE = { activo: ACTIVE, disponible: AVAILABLE, inactivo: IDLE } as const;
+const TONE = {
+  light: { activo: ACTIVE, disponible: AVAILABLE, inactivo: IDLE },
+  onCoal: ON_COAL,
+} as const;
 
-export default function WeekStrip({ dias, permitidos, className }: WeekStripProps): ReactElement {
+export default function WeekStrip({
+  dias,
+  permitidos,
+  variant = "light",
+  className,
+}: WeekStripProps): ReactElement {
   return (
     <span
       role="img"
@@ -169,7 +217,7 @@ export default function WeekStrip({ dias, permitidos, className }: WeekStripProp
             data-state={state}
             title={DIA_SEMANA_LABELS[day]}
             aria-hidden="true"
-            className={cn(BOX, TONE[state])}
+            className={cn(BOX, TONE[variant][state])}
           >
             {DIA_SEMANA_LABELS[day].charAt(0)}
           </span>

@@ -341,16 +341,12 @@ describe("StudentPage — the club membership card (carnet)", () => {
 
     const carnet = await screen.findByTestId("student-carnet");
     expect(within(carnet).getByText("Alumno Test")).toBeInTheDocument();
-    // The carnet carries plan and amount; "Modalidad" moved off the carnet
-    // entirely (see the doc comment on `Carnet` in page.tsx) and "Membresía
-    // activa" is gone.
+    // The carnet carries the plan; "Modalidad" moved off the carnet entirely
+    // (see the doc comment on `Carnet` in page.tsx) and "Membresía activa" is
+    // gone. The PRICE left with the "Funda" pass — see the register's own lock.
     expect(within(carnet).getByText("Plan")).toBeInTheDocument();
     expect(within(carnet).queryByText("Modalidad")).not.toBeInTheDocument();
     expect(within(carnet).getByText("Mensual")).toBeInTheDocument();
-    // "Valor mensual", the same label `/student/payments` puts on the same
-    // field — the carnet used to call it "Monto".
-    expect(within(carnet).getByText("Valor mensual")).toBeInTheDocument();
-    expect(within(carnet).getByText("$25,00")).toBeInTheDocument();
     // THE VERDICT LEFT. The owner read the running card and said so in as many
     // words: «No tiene ningún pago aprobado — esa info muévala a la sección de
     // pagos, no al carnet.» A carnet is an identity document; a payment state
@@ -395,17 +391,19 @@ describe("StudentPage — the club membership card (carnet)", () => {
     });
   });
 
-  it("lays the figures out on one grid, in order, value before label, so their columns line up", async () => {
-    // Guards the alignment regression this card was polished for: as a
-    // wrapping flex row each fact was only as wide as its own value, so the
-    // labels landed at arbitrary x positions and no two rows shared a column.
-    // That rationale is untouched by the "B · Marcador" redesign — one grid,
-    // a deterministic order, columns that line up.
+  it("reads the register as label-left, value-right rows in a deterministic order", async () => {
+    // THIS LOCK INVERTS ITS OWN INVERSION. "B · Marcador" read the facts as a
+    // SCOREBOARD — value first, label under it — because the card was then a
+    // coal slab standing alone in the column, and a scoreboard is what a slab
+    // of figures wants to be. "Funda" makes the credential an object held by a
+    // system panel, and the block stops being a scoreboard: it is a REGISTER,
+    // the four lines a credential carries, read label-left / value-right the
+    // way every other data pair in this product is read.
     //
-    // What DID change is the content and the cell's internal order. The grid
-    // carries three figures, not four ("Plan" left for the kicker above the
-    // name), and each cell reads VALUE FIRST, LABEL SECOND — the inversion IS
-    // the scoreboard, so the label is now the cell's LAST element child.
+    // What survives untouched from the version this replaces is the reason the
+    // lock exists at all: as a wrapping flex row each fact was only as wide as
+    // its own value, so no two rows shared a column. A deterministic order and
+    // one alignment for every value is still the whole point.
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -422,7 +420,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
       },
     });
     mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
-    // "Franja" is one of the four cells, and it only exists when the club has
+    // "Franja" is one of the three rows, and it only exists when the club has
     // assigned a schedule to derive it from.
     mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
 
@@ -432,35 +430,100 @@ describe("StudentPage — the club membership card (carnet)", () => {
     await waitFor(() => {
       expect(within(facts).getByText("Franja")).toBeInTheDocument();
     });
-    expect(facts.className).toContain("grid");
-    expect(facts).toHaveAttribute("data-testid", "carnet-facts");
 
-    const cells = [...facts.children];
-    expect(cells).toHaveLength(3);
-    expect(cells.map((cell) => cell.lastElementChild?.textContent)).toEqual([
+    const rows = [...facts.children];
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
+      "Plan",
       "Franja",
-      "Valor mensual",
       "Socio desde",
     ]);
 
-    // The scoreboard inversion, and the thing most likely to be silently
-    // reverted later: inside a cell the figure comes first and the label
-    // reads underneath it.
-    for (const cell of cells) {
-      const value = cell.firstElementChild;
-      const label = cell.lastElementChild;
-      expect(value).not.toBe(label);
+    // The register reading, and the thing most likely to be silently reverted:
+    // the LABEL leads each row and the value is read off the right edge.
+    for (const row of rows) {
+      const label = row.firstElementChild;
+      const value = row.lastElementChild;
+      expect(label).not.toBe(value);
       expect(
-        value!.compareDocumentPosition(label!) & Node.DOCUMENT_POSITION_FOLLOWING,
+        label!.compareDocumentPosition(value!) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+      expect(value!.className).toMatch(/\btext-right\b/);
     }
 
-    // "Franja" leads because it is the figure a family consults daily. It no
-    // longer needs a `col-span-2` to take the whole row: the portrait carnet
-    // stacks its figures in ONE column on both media, so every cell is already
-    // the full width and a span would conjure an implicit second column.
-    expect(cells[0].className).not.toMatch(/\bcol-span-2\b/);
-    expect(facts.className).toMatch(/\bgrid-cols-1\b/);
+    // The price is not on the credential in either medium. It is a PRICE, it
+    // ages the moment the club changes it, and `CuotaCard` beside this panel
+    // already states it under the label the payments screen uses.
+    expect(within(facts).queryByText("Valor mensual")).not.toBeInTheDocument();
+    expect(within(facts).queryByText("$25,00")).not.toBeInTheDocument();
+  });
+
+  // A hairline BETWEEN rows, and none after the last: a rule under the final
+  // row would read as the start of a fourth row that is not there.
+  it("rules between the register's rows and never after the last one", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: {
+          id: 4,
+          estado: "ACTIVA",
+          personaId: 9,
+          montoAplicado: "25.00",
+          categoria: "Mensual",
+          modalidad: "MENSUAL",
+          fechaActivacion: "2026-03-18",
+        },
+      },
+    });
+    mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
+
+    render(<StudentPage />);
+
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+    });
+
+    const rows = [...facts.children];
+    expect(rows[0].className).not.toMatch(/\bborder-t\b/);
+    for (const row of rows.slice(1)) {
+      expect(row.className).toMatch(/\bborder-t\b/);
+      // `border-white/12` compiles to NOTHING — Tailwind's opacity scale steps
+      // by 5, and neither lint nor tsc says a word. The bracket form is the
+      // same 12%, written the way an off-scale opacity has to be.
+      expect(row.className).toMatch(/border-white\/\[0\.12\]/);
+      expect(row.className).not.toMatch(/border-white\/12\b/);
+    }
+    expect(rows[rows.length - 1].className).not.toMatch(/\bborder-b\b/);
+  });
+
+  // The plan's NAME is "Mensual Adultos" — a PRICE, not a training categoría.
+  // A student belongs to as many as three training categorías at once, and this
+  // project already corrected that confusion once (`franja_horaria`, #160). The
+  // maquettes said "Categoría"; the maquettes were wrong.
+  it("labels the plan «Plan» and never «Categoría»", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: {
+          id: 4,
+          estado: "ACTIVA",
+          personaId: 9,
+          montoAplicado: "40.00",
+          categoria: "Mensual Adultos",
+          modalidad: "MENSUAL",
+        },
+      },
+    });
+
+    render(<StudentPage />);
+
+    const facts = await screen.findByTestId("carnet-facts");
+    const label = within(facts).getByText("Plan");
+    expect(label.parentElement?.lastElementChild?.textContent).toBe("Mensual Adultos");
+    expect(within(facts).queryByText(/categor[íi]a/i)).not.toBeInTheDocument();
   });
 
   // Fix 12c: the 360px cap on the fact grid was sized for when the carnet was
@@ -587,12 +650,51 @@ describe("StudentPage — the carnet prints as a standalone credential", () => {
     expect(printSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("hides the action buttons from the printed sheet", async () => {
+  // THIS LOCK CHANGES ITS MECHANISM, not its verdict. The actions used to sit
+  // INSIDE the print area and be excluded by a `print:hidden` class on their
+  // own row. Under "Funda" they sit in the PANEL — the frame that belongs to
+  // the app — and the credential is the print area, so nothing has to opt out:
+  // anything outside `#carnet-print-area` is already invisible on paper.
+  //
+  // Asserting containment rather than a class is the stronger form: a class can
+  // be dropped and the button reappears on the sheet; being outside the printed
+  // subtree cannot be undone by a className edit.
+  it("keeps every action out of the printed sheet by keeping it out of the print area", async () => {
     render(<StudentPage />);
 
-    const imprimir = await screen.findByRole("button", { name: /imprimir carnet/i });
-    // El contenedor de acciones (Imprimir + Cambiar foto) no viaja al impreso.
-    expect(imprimir.closest("div")).toHaveClass("print:hidden");
+    const credential = await screen.findByTestId("student-carnet");
+    for (const name of [/imprimir carnet/i, /cambiar foto/i]) {
+      expect(credential.contains(screen.getByRole("button", { name }))).toBe(false);
+    }
+    // The print-size note is chrome too — it describes the object, it is not on it.
+    expect(within(credential).queryByText(/54 × 85,6 mm/)).not.toBeInTheDocument();
+  });
+
+  // The panel is a citizen of the dashboard: it carries the same header row as
+  // `CuotaCard` beside it — the title on the left, the action as a text link on
+  // the right — and it states, at its foot, the physical size of the object it
+  // holds. Neither of those is on the credential.
+  it("frames the credential in a system panel with the Cuota card's header grammar", async () => {
+    render(<StudentPage />);
+
+    const panel = await screen.findByTestId("student-carnet-panel");
+    expect(panel.className).toMatch(/\bcard\b/);
+    expect(within(panel).getByRole("heading", { name: "Carnet de socio" })).toBeInTheDocument();
+
+    // The print action reads as a destination, not as a second CTA: the exact
+    // text-link skin `CuotaCard`'s "Ver pagos" wears.
+    const imprimir = within(panel).getByRole("button", { name: /imprimir carnet/i });
+    expect(imprimir.className).toMatch(/\bunderline\b/);
+    expect(imprimir.className).not.toMatch(/\bh-ctl(-sm)?\b/);
+
+    // The size note, so the reader knows what the object on screen becomes.
+    expect(within(panel).getByText("Se imprime a 54 × 85,6 mm")).toBeInTheDocument();
+
+    // The credential rests on a SUNKEN ground inside the panel — an inset area
+    // inside paper, which is what makes the dark object read as held rather
+    // than as the panel's own surface.
+    const credential = within(panel).getByTestId("student-carnet");
+    expect(credential.parentElement?.className).toMatch(/\bbg-sunken\b/);
   });
 
   // THIS LOCK INVERTS. It used to pin the status band inside a `print:hidden`
@@ -699,9 +801,38 @@ describe("globals.css — the carnet's print sheet", () => {
     const area = printBlock.slice(printBlock.indexOf("#carnet-print-area"));
     expect(area).toMatch(/-webkit-print-color-adjust:\s*exact/);
     expect(area).toMatch(/(?<!-webkit-)print-color-adjust:\s*exact/);
-    // It has to reach the DESCENDANTS too — the halftone, the photo ring and
-    // the banner rule are painted by children, not by the card box.
+    // It has to reach the DESCENDANTS too — the paddle mark, the photo's ball
+    // edge and the red rule are painted by children, not by the card box.
     expect(printBlock).toMatch(/#carnet-print-area\s*\*[^{]*\{[^}]*print-color-adjust:\s*exact/);
+  });
+
+  // THE RHYTHM IS ONE DECLARATION PER MEDIUM, not twenty `print:` overrides.
+  //
+  // The credential is the only block in this product that has to hold its
+  // spacing across a 1.47× change of physical scale (300px on screen, 54mm on
+  // paper). The previous pass paid for that with a `print:` twin beside every
+  // margin and gap, each re-derived by hand; three of them had drifted larger
+  // than the screen value they scale from before anyone measured. The three
+  // steps are named once here and re-declared once for print, so the whole
+  // object scales together or not at all.
+  it("re-declares the credential's three spacing steps at credential scale", () => {
+    const area = printBlock.slice(printBlock.indexOf("#carnet-print-area {"));
+    expect(area).toMatch(/--carnet-page:\s*4mm/);
+    expect(area).toMatch(/--carnet-section:\s*2\.6mm/);
+    expect(area).toMatch(/--carnet-field:\s*1\.3mm/);
+
+    // And the screen values they scale FROM — 21 · 14 · 7, the project's own
+    // three steps on a 7px grid — are declared outside the print sheet.
+    const screenBlock = sheet.slice(0, sheet.indexOf("@media print"));
+    expect(screenBlock).toMatch(/\.carnet-credential\s*\{[^}]*--carnet-page:\s*21px/);
+    expect(screenBlock).toMatch(/\.carnet-credential\s*\{[^}]*--carnet-section:\s*14px/);
+    expect(screenBlock).toMatch(/\.carnet-credential\s*\{[^}]*--carnet-field:\s*7px/);
+  });
+
+  // The halftone left the card with the "Funda" pass — see the D5 lock — so its
+  // rule has no call site. A stylesheet rule nothing uses reads as if it did.
+  it("keeps no rule for a texture the carnet no longer wears", () => {
+    expect(sheet).not.toMatch(/\.carnet-halftone/);
   });
 });
 
@@ -720,35 +851,46 @@ describe("globals.css — the carnet's print sheet", () => {
  * The ink cost is real and is recorded in the component, not re-argued here.
  */
 describe("StudentPage — the printed carnet is the same object as the screen one", () => {
-  it("prints the club's mark instead of hiding it", async () => {
+  // THE MARK IS DRAWN, NOT PHOTOGRAPHED. It used to be `/brand/cata-club-logo.jpeg`
+  // on a white disc. A photographic JPEG halftones badly at credential size —
+  // that observation is #286's, and it was always true — and the answer #286
+  // reached (drop the mark) left a blank disc as the most conspicuous thing on
+  // the sheet. A paddle drawn in CSS costs nothing, prints as flat colour, and
+  // scales without a second asset.
+  it("draws the club's paddle in CSS instead of halftoning a photograph", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
-    const mark = carnet.querySelector('img[src*="cata-club-logo"]');
-    expect(mark).not.toBeNull();
-    // The mark used to leave the composition under `print:` — the wordmark
-    // beneath it was doing the naming and a JPEG was expected to smudge.
-    // With the coal ground printing, the blank white disc where the mark had
-    // been was the most conspicuous thing on the sheet.
-    expect(mark?.parentElement?.className).not.toMatch(/print:hidden/);
+    // No raster asset reaches the credential at all — not the club logo, not
+    // anything else out of `/brand/`.
+    expect(carnet.querySelector('img[src*="cata-club-logo"]')).toBeNull();
+    expect(carnet.querySelector('img[src^="/brand/"]')).toBeNull();
+
+    const paddle = within(carnet).getByTestId("carnet-paddle");
+    expect(paddle).toHaveAttribute("aria-hidden", "true");
+    expect(paddle.className).not.toMatch(/print:hidden/);
+    // The blade, the ball on it, and the handle — three boxes, no image.
+    const parts = [...paddle.children];
+    expect(parts).toHaveLength(3);
+    const [blade, ball, handle] = parts;
+    expect(blade.className).toMatch(/\bbg-ball\b/);
+    expect(blade.className).toMatch(/\brounded-full\b/);
+    expect(ball.className).toMatch(/\bbg-white\b/);
+    expect(ball.className).toMatch(/\brounded-full\b/);
+    expect(handle.className).toMatch(/\bbg-ball\b/);
+    expect(handle.className).toMatch(/\brotate-/);
   });
 
-  it("prints the plan kicker in the club's accent, not in grey", async () => {
-    mockFetchStudentPortal.mockReset().mockResolvedValue({
-      ...PORTAL,
-      self: {
-        ...PORTAL.self!,
-        membership: { id: 4, estado: "ACTIVA", personaId: 9, montoAplicado: "25.00", categoria: "Mensual", modalidad: "MENSUAL" as const },
-      },
-    });
-
+  // The mark already carries the ball. A second loose ball anywhere on the card
+  // would be the club's one accent spent twice.
+  it("carries exactly one ball, and it is the one on the paddle", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
-    const kicker = within(carnet).getByText("Mensual").parentElement!;
-    expect(kicker.className).toMatch(/\btext-ball\b/);
-    // `print:text-coal/55` was the whole of the yellow's disappearance.
-    expect(kicker.className).not.toMatch(/print:text-coal/);
+    const paddle = within(carnet).getByTestId("carnet-paddle");
+    for (const filled of carnet.querySelectorAll('[class*="bg-ball"]')) {
+      expect(paddle.contains(filled)).toBe(true);
+    }
   });
 
   it("keeps the card's one red rule and its white ink on paper", async () => {
@@ -767,23 +909,24 @@ describe("StudentPage — the printed carnet is the same object as the screen on
     await waitFor(() => {
       expect(within(carnet).getByText("Franja")).toBeInTheDocument();
     });
-    const banner = within(carnet).getByText("Cata Club").parentElement!.parentElement!;
-    expect(banner.className).toMatch(/\bborder-cata-red\b/);
-    expect(banner.className).not.toMatch(/print:border-/);
+    const header = within(carnet).getByText("Cata Club").parentElement!;
+    expect(header.className).toMatch(/\bborder-b-2\b/);
+    expect(header.className).toMatch(/\bborder-cata-red\b/);
+    expect(header.className).not.toMatch(/print:border-/);
 
-    // The scoreboard's ink and its hairline follow the ground, and the ground
+    // The register's ink and its hairline follow the ground, and the ground
     // no longer flips.
     const facts = within(carnet).getByTestId("carnet-facts");
-    expect(facts.className).not.toMatch(/print:border-coal/);
-    for (const cell of [...facts.children]) {
-      expect(cell.firstElementChild?.className).not.toMatch(/print:text-coal/);
-      expect(cell.lastElementChild?.className).not.toMatch(/print:text-coal/);
+    for (const row of [...facts.children]) {
+      expect(row.className).not.toMatch(/print:border-coal/);
+      expect(row.firstElementChild?.className).not.toMatch(/print:text-coal/);
+      expect(row.lastElementChild?.className).not.toMatch(/print:text-coal/);
     }
 
-    // The photo keeps its own ring on the coal ground rather than inverting.
+    // The photo keeps its own ball ring on the coal ground rather than inverting.
     const photo = screen.getByTestId("carnet-photo");
     expect(photo.className).not.toMatch(/print:bg-coal/);
-    expect(photo.className).not.toMatch(/print:ring-coal/);
+    expect(photo.className).not.toMatch(/print:border-coal/);
   });
 });
 
@@ -812,12 +955,12 @@ describe("StudentPage — the carnet's franja agrees with the assigned schedule"
     return { ...PORTAL, self: { ...PORTAL.self!, membership: ADULTOS_MEMBERSHIP } };
   }
 
-  // The scoreboard inverts the cell: the VALUE is the first element child and
-  // the label follows it (see the "B · Marcador" locks at the foot of this
-  // file). Only the accessor moved — every assertion below still reads the
-  // same fact off the same cell.
+  // "Funda" turns the scoreboard back into a REGISTER: the label leads the row
+  // and the value is read off the right edge, so the value is the row's LAST
+  // element child. Only the accessor moved — every assertion below still reads
+  // the same fact off the same row.
   function franjaValue(carnet: HTMLElement): string | undefined {
-    return within(carnet).getByText("Franja").parentElement?.firstElementChild?.textContent ?? undefined;
+    return within(carnet).getByText("Franja").parentElement?.lastElementChild?.textContent ?? undefined;
   }
 
   it("states the window the club assigned (21:15), not the plan's stale 21:00", async () => {
@@ -1411,12 +1554,14 @@ describe("StudentPage — the carnet keeps its own proportions instead of stretc
   it("does not force the carnet's height to match the rail's", async () => {
     render(<StudentPage />);
 
-    const carnet = await screen.findByTestId("student-carnet");
-    expect(carnet.className).not.toMatch(/\bflex-1\b/);
+    // The PANEL is the citizen of the grid now; the credential is what the
+    // panel holds. Reading the grid off the panel rather than by counting
+    // `parentElement` hops is also what stops this lock from breaking every
+    // time the card grows or loses a wrapper.
+    const panel = await screen.findByTestId("student-carnet-panel");
+    expect(panel.className).not.toMatch(/\bflex-1\b/);
 
-    // The grid that splits the carnet column from the rail — two levels up
-    // from the carnet itself (the carnet's own flex column, then the grid).
-    const rail = carnet.parentElement?.parentElement;
+    const rail = panel.parentElement?.parentElement;
     expect(rail?.className).not.toMatch(/items-stretch/);
   });
 });
@@ -1433,8 +1578,8 @@ describe("StudentPage — the carnet column is card-width and the rail takes the
   it("narrows the carnet column to the card's own width instead of splitting the row evenly", async () => {
     render(<StudentPage />);
 
-    const carnet = await screen.findByTestId("student-carnet");
-    const rail = carnet.parentElement?.parentElement;
+    const panel = await screen.findByTestId("student-carnet-panel");
+    const rail = panel.parentElement?.parentElement;
     // `PAGE_RAIL`'s own `lg:grid-cols-[…_340px]` is still present in the
     // string (`cn` concatenates, it does not deduplicate) — the `!important`
     // override wins at the CSS layer, not by removing the losing utility from
@@ -1529,8 +1674,8 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
   it("lets the content grid take the height `main` already reserved", async () => {
     render(<StudentPage />);
 
-    const carnet = await screen.findByTestId("student-carnet");
-    const grid = carnet.parentElement?.parentElement;
+    const panel = await screen.findByTestId("student-carnet-panel");
+    const grid = panel.parentElement?.parentElement;
     expect(grid?.className).toMatch(/\bflex-1\b/);
   });
 
@@ -1545,18 +1690,34 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
   it("still leaves the carnet at its natural height inside the stretched grid", async () => {
     render(<StudentPage />);
 
-    const carnet = await screen.findByTestId("student-carnet");
+    const panel = await screen.findByTestId("student-carnet-panel");
     // Fix 12b again: the grid grows, the carnet does not.
-    expect(carnet.className).not.toMatch(/\bflex-1\b/);
-    expect(carnet.parentElement?.className).not.toMatch(/self-stretch/);
-    // The card DOES declare a height of its own, and that is a different
-    // thing: 602px is ID-1's 54:85.6 at the rail's 380px, derived from the
-    // object the card is a picture of. Fix 12b's height came from the RAIL,
-    // an external number that moved whenever the panel beside it did, and
-    // that is what put a hole inside the card. A `min-h` also never clips —
-    // a three-line name still grows the card past it.
-    expect(carnet.className).toMatch(/\bmin-h-\[602px\]/);
-    expect(carnet.className).toMatch(/\bprint:min-h-0\b/);
+    expect(panel.className).not.toMatch(/\bflex-1\b/);
+    expect(panel.parentElement?.className).not.toMatch(/self-stretch/);
+
+    // The PROPORTION lock moves down a level with the object it describes. It
+    // used to read `min-h-[602px]` — ID-1's 54:85.6 taken at the rail's full
+    // 380px, when the carnet WAS the column. The credential is ~300px wide
+    // inside the panel now, so the same ratio is 476px, and the reason is
+    // unchanged: at its natural height the card measures 300×310, and a square
+    // is the one shape a credential may not be.
+    //
+    // `justify-between` is half of the lock and not decoration. Pinning the
+    // ratio alone leaves ~170px of surplus, and with an auto margin at the foot
+    // all of it pools in one band under the register — fix 12b's hole moved
+    // rather than closed. Distributed across the four blocks it reads as a
+    // laminated card, which is what it is a picture of.
+    const credential = within(panel).getByTestId("student-carnet");
+    expect(credential.className).toMatch(/\bmin-h-\[476px\]/);
+    expect(credential.className).toMatch(/\bjustify-between\b/);
+    expect(credential.className).not.toMatch(/\bmt-auto\b/);
+    // AND IT IS RELEASED ON PAPER. Measured in a real Chromium print render,
+    // not reasoned: `min-height` beats `height` in CSS, so without this the
+    // sheet's own `height: 85.6mm` lost and the credential printed 54×126mm —
+    // the right width, half again the height, under a footer that promises
+    // 54 × 85,6 mm.
+    expect(credential.className).toMatch(/\bprint:min-h-0\b/);
+    expect(within(panel).getByText("Se imprime a 54 × 85,6 mm")).toBeInTheDocument();
   });
 });
 
@@ -1675,219 +1836,229 @@ describe("StudentPage — the carnet as the club's identity object", () => {
     render(<StudentPage />);
   }
 
-  // D1 — "la regla de la acción": todo lo demás vive al pie del bloque que
-  // modifica, y ninguna acción flota en medio del contenido. The action row
-  // used to sit BETWEEN the name and the status band.
-  it("puts the carnet's actions at the foot of the card, after the fact grid", async () => {
+  // D1 — "la regla de la acción": ninguna acción flota en medio del contenido.
+  //
+  // THE RULE IS UNCHANGED; THE BLOCK IT APPLIES TO MOVED. There is no action
+  // anywhere on the credential now: the object is the thing that gets printed
+  // and a printed button is nonsense. The panel around it carries both — the
+  // print link on its header row, exactly where `CuotaCard` puts "Ver pagos",
+  // and the photo control at its foot, after the object it modifies.
+  it("leaves no action on the credential and puts the photo control at the panel's foot", async () => {
     renderFullCarnet();
 
-    const facts = await screen.findByTestId("carnet-facts");
-    const imprimir = screen.getByRole("button", { name: /imprimir carnet/i });
+    const credential = await screen.findByTestId("student-carnet");
+    expect(credential.querySelector("button")).toBeNull();
+    expect(credential.querySelector("a")).toBeNull();
 
-    expect(facts.compareDocumentPosition(imprimir) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // "La regla del aire": the leftover height becomes deliberate air at the
-    // foot, not a hole in the middle.
-    expect(imprimir.closest("div")?.className).toMatch(/\bmt-auto\b/);
+    const cambiarFoto = screen.getByRole("button", { name: /cambiar foto/i });
+    expect(
+      credential.compareDocumentPosition(cambiarFoto) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // The print link reads BEFORE the object, on the header row — a
+    // destination, not a CTA competing with the page's own.
+    const imprimir = screen.getByRole("button", { name: /imprimir carnet/i });
+    expect(
+      imprimir.compareDocumentPosition(credential) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   // D2 — "no agregar un cuarto vocabulario para algo que ya tiene uno"
-  // (DESIGN.md). The system already owns "the secondary action INSIDE a coal
-  // card": `Button`'s `onCoal` variant. These three hand-rolled a fifth.
-  it("builds the carnet's actions on the system's onCoal control, not on a hand-rolled capsule", async () => {
+  // (DESIGN.md). The controls used to sit ON the coal card, so they wore
+  // `Button`'s `onCoal` variant. They sit on the panel's `paper` now, and the
+  // system's answer for that surface is the plain `secondary` control — reusing
+  // `onCoal` off the coal would be a white-on-white ghost.
+  it("builds the photo control on the system's paper control, not on the coal one", async () => {
     render(<StudentPage />);
     await screen.findByTestId("student-carnet");
 
-    for (const name of [/imprimir carnet/i, /cambiar foto/i]) {
-      const boton = screen.getByRole("button", { name });
-      // The `onCoal` skin, verbatim from `Button.tsx`.
-      expect(boton.className).toContain("border-white/25");
-      // A capsule is a badge; a control wears the control radius at the
-      // compact control height (32px).
-      expect(boton.className).toMatch(/\brounded-ctl\b/);
-      expect(boton.className).not.toMatch(/rounded-full/);
-      expect(boton.className).toMatch(/\bh-ctl-sm\b/);
-    }
+    const boton = screen.getByRole("button", { name: /cambiar foto/i });
+    // The `secondary` skin, verbatim from `Button.tsx`.
+    expect(boton.className).toContain("border-line-2");
+    expect(boton.className).not.toContain("border-white/25");
+    // A capsule is a badge; a control wears the control radius at the compact
+    // control height (32px).
+    expect(boton.className).toMatch(/\brounded-ctl\b/);
+    expect(boton.className).not.toMatch(/rounded-full/);
+    expect(boton.className).toMatch(/\bh-ctl-sm\b/);
     // The upload trigger keeps its disabled handling.
-    expect(screen.getByRole("button", { name: /cambiar foto/i }).className).toMatch(
-      /disabled:cursor-not-allowed/,
-    );
+    expect(boton.className).toMatch(/disabled:cursor-not-allowed/);
   });
 
   // D3 — Graduate is "lo que el club dice de sí mismo". It was absent from the
   // club's own membership card, whose wordmark was 12.5px Barlow.
-  it("sets the club's wordmark in Graduate above its 15px floor, and leaves the student's name in Barlow", async () => {
+  it("sets the club's wordmark in Graduate at its 15px floor, and leaves the student's name in Barlow", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
     const wordmark = within(carnet).getByText("Cata Club");
     expect(wordmark.className).toMatch(/\bfont-display\b/);
     expect(wordmark.className).toMatch(/\buppercase\b/);
-    // "B · Marcador" lets the club speak first: the wordmark leads the banner
-    // at `text-xl` (26px) instead of the 15px floor it used to sit exactly on.
-    // The floor itself is unchanged and still holds — see the dedicated lock
-    // for it. It takes no print override, so the club signs the credential at
-    // the weight it signs the screen.
-    expect(wordmark.className).toMatch(/\btext-xl\b/);
+    // "Funda" gives the hero to the NAME, not to the wordmark: the club is the
+    // header of an object whose subject is a person. The wordmark sits on
+    // Graduate's floor — `text-base`, 15px — and takes no print override, so
+    // the club signs the credential at the weight it signs the screen.
+    expect(wordmark.className).toMatch(/\btext-base\b/);
     expect(wordmark.className).not.toMatch(/print:text-(2xs|xs|sm)\b/);
 
     // The hard boundary: Graduate has almost no vertical range and reads as
-    // texture, so a person's name on an identity object stays in Barlow.
+    // texture, so a person's name on an identity object stays in Barlow — and
+    // it is the hero, at the top of the scale the card may spend.
     const nombre = within(carnet).getByText("Alumno Test");
     expect(nombre.className).not.toMatch(/font-display/);
-    // "Tenis de mesa" is read as words too — Barlow, unchanged.
-    expect(within(carnet).getByText("Tenis de mesa").className).not.toMatch(/font-display/);
+    expect(nombre.className).toMatch(/\btext-xl\b/);
+    expect(nombre.className).toMatch(/\bfont-extrabold\b/);
+    expect(nombre.className).toMatch(/\btext-balance\b/);
   });
 
-  // D4 — the photo was avatar-sized (48px) on the one object that is about the
-  // person, and it SHRANK to 36px on the printed credential.
-  it("gives the photo the size of the subject on screen, and keeps it large on the printed card", async () => {
+  // D4 — the photo is a DOCUMENT photo, and a document photo is rectangular.
+  // The round avatar it replaces is what a table row carries; every credential
+  // this card is a picture of carries a portrait rectangle behind a ruled edge.
+  it("gives the photo a document's rectangle and an inset ball ring, on both media", async () => {
     render(<StudentPage />);
 
     const photo = await screen.findByTestId("carnet-photo");
-    // The portrait carnet makes the photo the SUBJECT on screen too, not a
-    // 56px avatar sitting beside the name: the screen composition is the
-    // credential's own centred column, so the photo leads it at 100px.
-    expect(photo.className).toMatch(/\bh-\[100px\]/);
-    expect(photo.className).toMatch(/\bw-\[100px\]/);
-    // On the credential it steps down in ABSOLUTE px and up in PROPORTION:
-    // 68px of a 46mm field is a larger share than 100px of a 380px card. That
-    // is physical scale, the one difference the two media are allowed.
-    expect(photo.className).toMatch(/\bprint:h-\[68px\]/);
-    expect(photo.className).toMatch(/\bprint:w-\[68px\]/);
-    expect(photo.className).not.toMatch(/print:h-9\b/);
+    expect(photo.className).toMatch(/\bh-\[78px\]/);
+    expect(photo.className).toMatch(/\bw-\[62px\]/);
+    expect(photo.className).not.toMatch(/\brounded-full\b/);
+    expect(photo.className).toMatch(/rounded-\[3px\]/);
+    // A real 2px border, not a `ring`: a ring is a box-shadow, and a box-shadow
+    // is the first thing Chrome drops when "Background graphics" is off.
+    expect(photo.className).toMatch(/\bborder-2\b/);
+    expect(photo.className).toMatch(/\bborder-ball\b/);
+    // It steps down in ABSOLUTE px and holds its share of the field: 49px of a
+    // 54mm card is the same proportion as 62px of a 300px one.
+    expect(photo.className).toMatch(/\bprint:h-\[62px\]/);
+    expect(photo.className).toMatch(/\bprint:w-\[49px\]/);
   });
 
-  // D5 — the 150px `bg-ball/[0.08]` circle was category-default glow. The club
-  // owns a texture of its own, and DESIGN.md permits it exactly here: "la trama
-  // halftone… solo va donde no hay nada que leer, o donde hay algo que
-  // celebrar".
-  it("wears the club's own halftone texture instead of a decorative glow, and never prints it", async () => {
+  // D5 — THE CREDENTIAL CARRIES NO DECORATIVE LAYER AT ALL, and this lock is
+  // the one that inverted hardest.
+  //
+  // It used to REQUIRE the club's halftone on the card, on DESIGN.md's licence
+  // ("la trama halftone… solo va donde no hay nada que leer, o donde hay algo
+  // que celebrar") and against the category-default `bg-ball/[0.08]` glow it
+  // replaced. That was the right call for a coal slab standing alone in a
+  // column. It is the wrong one now, and the diagnosis "Funda" is built on says
+  // why: every earlier pass made the carnet a coal object in a page of white
+  // cards, so it read as a foreign body, and each decorative layer added to it
+  // — arc, net, guilloche, pantograph, halftone — made that worse rather than
+  // better. The tension is resolved by the FRAME belonging to the app, not by
+  // one more texture on the object.
+  //
+  // The halftone also never printed (a 9% dot screen at credential size came
+  // out as speckle on the rendered PDF), and a decoration visible on screen and
+  // absent on paper is exactly the difference that makes the two read as two
+  // cards. Removing it is what lets the credential print with nothing hidden.
+  it("carries no decorative layer — no glow, no texture, nothing behind the content", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
-    const halftone = carnet.querySelector(".carnet-halftone");
-    expect(halftone).not.toBeNull();
-    expect(halftone).toHaveAttribute("aria-hidden", "true");
-    expect(halftone?.className).toMatch(/pointer-events-none/);
-    expect(halftone?.className).toMatch(/print:hidden/);
-    // It sits BEHIND the content: every readable child is `relative z-10`.
-    expect(halftone?.className).not.toMatch(/\bz-10\b/);
-    // The generic glow is gone, not merely covered up.
+    expect(carnet.querySelector(".carnet-halftone")).toBeNull();
     expect(carnet.querySelector('[class*="bg-ball/"]')).toBeNull();
+    // Nothing is stacked behind anything, so nothing needs lifting above it.
+    expect(carnet.querySelector('[class*="z-10"]')).toBeNull();
+    expect(carnet.className).not.toMatch(/\bbg-gradient/);
   });
 
   // D6 — DESIGN.md's `typography.label` is weight 800. The carnet's labels had
   // drifted to `font-semibold` (600).
-  it("weights the fact labels at the system's label token", async () => {
+  it("weights the register labels at the system's label token", async () => {
     renderFullCarnet();
 
     const facts = await screen.findByTestId("carnet-facts");
     await waitFor(() => {
       expect(within(facts).getByText("Franja")).toBeInTheDocument();
     });
-    for (const cell of [...facts.children]) {
-      // The label is the cell's LAST element child since the scoreboard
-      // inversion — the figure leads, the label reads underneath it.
-      const label = cell.lastElementChild;
+    for (const row of [...facts.children]) {
+      // The label is the row's FIRST element child again: "Funda" reads the
+      // block as a register, label left, value right.
+      const label = row.firstElementChild;
       expect(label?.className).toMatch(/\bfont-extrabold\b/);
+      expect(label?.className).toMatch(/\btext-2xs\b/);
+      expect(label?.className).toMatch(/\buppercase\b/);
       expect(label?.className).not.toMatch(/\bfont-semibold\b/);
     }
   });
 
-  // D7a — the printed carnet identifies BELONGING. A monthly price neither
-  // identifies the person nor survives a price change, and it is private data
-  // to carry in a wallet. It stays on screen and leaves the printed card.
+  // D7 — THE SPACING IS THREE NAMED STEPS AND NOTHING ELSE.
   //
-  // Declared per fact (`omitOnPrint`), never as a positional `:last-child`
-  // selector — that would silently drop whichever fact happens to be last the
-  // day the fact list changes.
-  it("drops the monthly price from the printed card only, and keeps every other fact on it", async () => {
+  // The credential is the one block in this product that has to hold its
+  // rhythm across a 1.47× physical scale change, and the previous pass paid
+  // for that with twenty-odd hand-tuned `print:mt-[9px]`/`print:gap-[7px]`
+  // pairs, each of which had to be re-derived by hand whenever anything moved.
+  // The three steps are declared ONCE as CSS variables on the credential and
+  // re-declared once for print, so every distance inside the object scales
+  // together and any number written inline is visible as the defect it is.
+  it("spaces the credential from three declared steps, never from loose numbers", async () => {
     renderFullCarnet();
 
-    const facts = await screen.findByTestId("carnet-facts");
+    const carnet = await screen.findByTestId("student-carnet");
     await waitFor(() => {
-      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+      expect(within(carnet).getByText("Franja")).toBeInTheDocument();
     });
 
-    /** The fact CELL carrying a given label. */
-    function cellFor(label: string): Element {
-      const cell = within(facts).getByText(label).parentElement;
-      expect(cell).not.toBeNull();
-      return cell!;
-    }
-
-    expect(cellFor("Valor mensual").className).toMatch(/print:hidden/);
-    // Still on screen, and still in the DOM — hidden at the print breakpoint
-    // by a class, not removed from the markup.
-    expect(within(facts).getByText("$25,00")).toBeInTheDocument();
-    // "Plan" is no longer a cell here — it is the kicker above the name — so
-    // the two figures that survive to paper are the two named below.
-    for (const label of ["Socio desde", "Franja"]) {
-      expect(cellFor(label).className).not.toMatch(/print:hidden/);
+    // The credential opts into the declared block…
+    expect(carnet.className).toMatch(/\bcarnet-credential\b/);
+    // …and every margin, padding and gap inside it names one of the three.
+    const spacing = /\b(?:[a-z]+:)?(?:[mp][trblxy]?|gap(?:-[xy])?)-\[(?!var\(--carnet-)/;
+    for (const element of [carnet, ...carnet.querySelectorAll("*")]) {
+      expect(String(element.className)).not.toMatch(spacing);
     }
   });
 
   // D7b — the owner's own read of the running app: «que igual como se ve en web
-  // que en imprimible, solo cambia el fondo blanco». Print used to be a
-  // DIFFERENT composition on the same DOM — a centred portrait column on paper,
-  // a left-aligned landscape row on screen — and the two did not look like the
-  // same object. There is ONE composition now, and the only differences the
-  // card is allowed are the ground, the ink, the physical scale, and the parts
-  // that legitimately do not print.
-  it("composes screen and print the same way, differing only in ground, ink and scale", async () => {
+  // que en imprimible, solo cambia el fondo blanco». There is ONE composition,
+  // and the only differences the card is allowed are the physical scale and the
+  // ground it is printed on.
+  it("composes screen and print the same way, differing only in physical scale", async () => {
     renderFullCarnet();
 
     const carnet = await screen.findByTestId("student-carnet");
     const facts = await screen.findByTestId("carnet-facts");
     const photo = screen.getByTestId("carnet-photo");
 
-    // The card distributes its blocks over the 85.6mm field rather than
-    // stacking them at the top, inside a credential-scale margin.
-    expect(carnet.className).toMatch(/print:justify-between/);
-    expect(carnet.className).toMatch(/print:p-\[4mm\]/);
+    // The card distributes its blocks over the field on BOTH media — one
+    // utility, no `print:` twin, because it is one composition. The credential
+    // MARGIN is the `page` step and scales with the other two, so there is no
+    // `print:p-[4mm]` to keep in sync either.
+    expect(carnet.className).toMatch(/\bjustify-between\b/);
+    expect(carnet.className).not.toMatch(/print:justify-/);
+    expect(carnet.className).toMatch(/p-\[var\(--carnet-page\)\]/);
 
-    // THE GROUND AND THE INK NO LONGER CHANGE. This pair inverts: the card
-    // used to print white with coal ink, and the owner's read of the result
-    // was «imagino imprimir el carnet y parezca paint». Only the physical
-    // scale and the parts that legitimately do not print differ now — the
-    // coal card is the same object on both media.
+    // THE GROUND AND THE INK DO NOT CHANGE. The card used to print white with
+    // coal ink, and the owner's read of the result was «imagino imprimir el
+    // carnet y parezca paint».
     expect(carnet.className).not.toMatch(/print:bg-white/);
-    expect(carnet.className).not.toMatch(/print:bg-none/);
     expect(carnet.className).not.toMatch(/print:text-coal\b/);
-    expect(carnet.className).toMatch(/\bfrom-coal\b/);
+    expect(carnet.className).toMatch(/\bbg-coal\b/);
 
-    // The banner stacks and centres on BOTH media — no `print:` prefix on the
-    // arrangement itself, or the two compositions drift apart again.
+    // The header is a ROW on both media — mark, wordmark, "Socio" — closed by
+    // the red rule it carries as its own bottom border.
     const wordmark = within(carnet).getByText("Cata Club");
-    const header = wordmark.closest("div")?.parentElement;
-    expect(header?.className).toMatch(/\bflex-col\b/);
-    expect(header?.className).toMatch(/\bitems-center\b/);
-    expect(header?.className).not.toMatch(/print:flex-col/);
+    const header = wordmark.parentElement!;
+    expect(header.className).toMatch(/\bitems-center\b/);
+    expect(header.className).not.toMatch(/print:flex-col/);
+    expect(within(header).getByText("Socio").className).toMatch(/\btext-ball\b/);
 
-    // The photo leads a centred column, with the name beneath it — on both.
-    const subject = photo.parentElement;
-    expect(subject?.className).toMatch(/\bflex-col\b/);
-    expect(subject?.className).toMatch(/\bitems-center\b/);
-    expect(subject?.className).toMatch(/\btext-center\b/);
-    expect(subject?.className).not.toMatch(/print:flex-col/);
-
-    // The facts read as one left-aligned column, screen and paper alike.
-    expect(facts.className).toMatch(/\bgrid-cols-1\b/);
-    expect(facts.className).not.toMatch(/\bgrid-cols-2\b/);
-    expect(facts.className).toMatch(/\btext-left\b/);
+    // The identity block is a ROW on both: the document photo, then the name
+    // and the number beside it.
+    const identity = photo.parentElement!;
+    expect(identity.className).toMatch(/\bflex\b/);
+    expect(identity.className).not.toMatch(/print:flex-col/);
+    expect(identity.className).not.toMatch(/\bitems-center\b/);
   });
 });
 
 /**
- * "B · Marcador" — the club speaks first, and the data reads as a scoreboard:
- * the figure, then what it measures.
+ * "Funda" — the frame belongs to the app, the object belongs to the club.
  *
- * Same DOM, two compositions. Every lock below is written against the one
- * markup tree the screen renders, so `within(carnet).getByText(...)` still
- * finds exactly one of everything whether the utility that governs it is a
- * screen one or a `print:` one.
+ * Same DOM, two media. Every lock below is written against the one markup tree
+ * the screen renders, so `within(carnet).getByText(...)` still finds exactly
+ * one of everything whether the utility that governs it is a screen one or a
+ * `print:` one.
  */
-describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () => {
+describe("StudentPage — the credential inside the panel (Funda)", () => {
   const FULL_MEMBERSHIP = {
     id: 4,
     estado: "ACTIVA",
@@ -1898,7 +2069,7 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
     fechaActivacion: "2026-03-18",
   };
 
-  /** A carnet with every figure the card can carry, so the scoreboard is real. */
+  /** A carnet with every fact the card can carry, so the register is real. */
   function renderFullCarnet() {
     mockFetchStudentPortal
       .mockReset()
@@ -1935,84 +2106,81 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
     });
   }
 
-  // The banner: the club signs the card before the card says whose it is.
-  it("leads with the wordmark in Graduate over the card's one red rule", async () => {
+  // The header: the club signs the object before the object says whose it is —
+  // one row, mark then wordmark then the word the card is FOR.
+  it("heads the credential with the mark, the wordmark and «Socio», over one red rule", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
     const wordmark = within(carnet).getByText("Cata Club");
     expect(wordmark.className).toMatch(/\bfont-display\b/);
-    // The top of the type scale below the stat and hero steps — the club
-    // leads the banner instead of captioning the mark.
-    expect(wordmark.className).toMatch(/\btext-xl\b/);
+    // Graduate's floor, and the hero goes to the name instead.
+    expect(wordmark.className).toMatch(/\btext-base\b/);
 
-    const banner = wordmark.parentElement?.parentElement;
-    expect(banner?.className).toMatch(/\bborder-b-2\b/);
-    expect(banner?.className).toMatch(/\bborder-cata-red\b/);
-    // The banner used to be a `justify-between` ROW — mark pinned to the far
-    // edge, wordmark to the near one — which is the landscape arrangement the
-    // portrait card replaces. It is a centred column on both media now.
-    expect(banner?.className).not.toMatch(/\bjustify-between\b/);
-    expect(banner?.className).toMatch(/\bflex-col\b/);
-    expect(banner?.className).toMatch(/\btext-center\b/);
+    const header = wordmark.parentElement!;
+    expect(header.className).toMatch(/\bborder-b-2\b/);
+    expect(header.className).toMatch(/\bborder-cata-red\b/);
+    // A ROW, in reading order, with "Socio" pushed to the far edge.
+    expect(header.className).not.toMatch(/\bflex-col\b/);
+    expect([...header.children].map((child) => child.textContent)).toEqual([
+      "",
+      "Cata Club",
+      "Socio",
+    ]);
+    expect(within(header).getByText("Socio").className).toMatch(/\bml-auto\b/);
 
-    // DESIGN.md rations red. The whole card spends its one appearance on the
-    // line that divides the club from the person — nowhere else.
-    expect(carnet.querySelectorAll('[class*="cata-red"]')).toHaveLength(1);
+    // DESIGN.md rations red. The credential spends its one FLAT appearance on
+    // the line that divides the club from the person. The week strip at the
+    // foot is the one other place red appears, and it is not decoration: red
+    // there is the datum — which days run — measured at 3:1 against the unlit
+    // fill for exactly that reason.
+    const reds = [...carnet.querySelectorAll('[class*="cata-red"]')];
+    const strip = within(carnet).getByTestId("week-strip");
+    expect(reds.filter((element) => !strip.contains(element))).toEqual([header]);
   });
 
-  // THIS LOCK INVERTS. It used to pin "Tenis de mesa" to the printed banner
-  // ALONE, on the argument that a reader on screen is already inside the
-  // club's own product. That argument survived until the owner put the two
-  // side by side and asked for one object, not two: a line present on paper
-  // and absent on screen is precisely the kind of difference that makes the
-  // printed card read as a different card. It is on both banners now.
-  it("renders «Tenis de mesa» on the screen banner and on the printed one", async () => {
+  // The cédula is the fact this pass had to plumb through three layers to get
+  // here. It is set in Barlow, not Graduate — Graduate has no lowercase design
+  // and reads as texture — and it is tracked WIDE so it reads as a document
+  // number rather than as a score.
+  it("prints the cédula under its own label, as a document number", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...PORTAL.self!, cedula: "1710034065", membership: FULL_MEMBERSHIP },
+    });
+
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
-    const tagline = within(carnet).getByText("Tenis de mesa");
-    expect(tagline.className).toMatch(/\bblock\b/);
-    expect(tagline.className).not.toMatch(/\bhidden\b/);
-    expect(tagline.className).not.toMatch(/\bprint:block\b/);
-    // The ground stopped changing, so the ink stops changing with it: the
-    // tagline is white on coal on paper exactly as it is on screen.
-    expect(tagline.className).not.toMatch(/print:text-coal/);
-    expect(tagline.className).toMatch(/\btext-white\/60\b/);
+    const value = within(carnet).getByText("1710034065");
+    expect(value.className).toMatch(/\btext-lg\b/);
+    expect(value.className).toMatch(/\bfont-bold\b/);
+    expect(value.className).toMatch(/\btabular-nums\b/);
+    expect(value.className).not.toMatch(/font-display/);
+    // Wide positive tracking, from a DECLARED step — a document number, not a
+    // hand-picked `tracking-[0.09em]` the ratchet would have to grow a line for.
+    expect(value.className).toMatch(/\btracking-caps\b/);
+
+    // A bare number floating under a name cannot describe itself.
+    const label = within(carnet).getByText("Cédula");
+    expect(
+      label.compareDocumentPosition(value) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  // The companion lock for `getByText("Plan")` further up this file. That
-  // assertion still passes, but for a DIFFERENT reason — the label is now
-  // `sr-only` — so the arrangement it used to describe is pinned here
-  // explicitly rather than left to be inferred from an unchanged line.
-  it("renders the plan as the kicker above the name, keeping its label for screen readers", async () => {
-    renderFullCarnet();
+  // Personal data on a CARRIED object belongs on the carnet and on the ficha,
+  // and nowhere else — never in a table or a list, where it would be published
+  // to every reader of a roster rather than to the person holding the card.
+  it("omits the whole row when the backend sent no cédula, rather than ruling a blank", async () => {
+    // `PORTAL.self` carries none.
+    render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
-    const value = within(carnet).getByText("Mensual");
-    const kicker = value.parentElement!;
-
-    // Visible: the value alone, in the club's rationed accent.
-    expect(kicker.className).toMatch(/\btext-ball\b/);
-    expect(kicker.className).toMatch(/\btext-2xs\b/);
-    expect(kicker.className).toMatch(/\bfont-extrabold\b/);
-
-    // A bare value floating above a name is ambiguous to a screen reader, so
-    // the label does not disappear — it stops being VISIBLE.
-    const srLabel = within(kicker).getByText("Plan");
-    expect(srLabel.className).toMatch(/\bsr-only\b/);
-    expect(
-      srLabel.compareDocumentPosition(value) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-
-    // It reads BEFORE the name, and it is no longer a scoreboard cell.
-    const name = within(carnet).getByText("Alumno Test");
-    expect(kicker.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const facts = within(carnet).getByTestId("carnet-facts");
-    expect(within(facts).queryByText("Plan")).not.toBeInTheDocument();
+    expect(within(carnet).queryByText("Cédula")).not.toBeInTheDocument();
+    expect(within(carnet).queryByText(/^\s*—\s*$/)).not.toBeInTheDocument();
   });
 
-  it("renders no kicker at all when the membership carries no categoría", async () => {
+  it("renders no plan row at all when the membership carries no categoría", async () => {
     // `PORTAL.self.membership` is null: no label, no placeholder, no empty row.
     render(<StudentPage />);
 
@@ -2020,31 +2188,58 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
     expect(within(carnet).queryByText("Plan")).not.toBeInTheDocument();
   });
 
-  it("sizes the photo at 100px on screen and keeps it the subject at 68px on the credential", async () => {
+  // The week strip at the foot, in the shared component's own on-coal skin —
+  // a VARIANT of the primitive, not a wrapper selector reaching into it, and
+  // not a fork. Its accessible label is half the piece and survives intact.
+  it("closes the credential with the week strip in its on-coal skin", async () => {
+    mockFetchStudentPortal
+      .mockReset()
+      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP } });
+    mockFetchHorariosPorAlumno.mockResolvedValue([
+      asignacion("MARTES", "15:00:00", "16:00:00", 1),
+      asignacion("JUEVES", "20:00:00", "21:15:00", 2),
+    ]);
+
     render(<StudentPage />);
 
-    const photo = await screen.findByTestId("carnet-photo");
-    expect(photo.className).toMatch(/\bh-\[100px\]/);
-    expect(photo.className).toMatch(/\bw-\[100px\]/);
-    expect(photo.className).toMatch(/\bprint:h-\[68px\]/);
-    expect(photo.className).toMatch(/\bprint:w-\[68px\]/);
+    const carnet = await screen.findByTestId("student-carnet");
+    let strip: HTMLElement;
+    await waitFor(() => {
+      strip = within(carnet).getByTestId("week-strip");
+    });
+    expect(strip!).toHaveAttribute("role", "img");
+    expect(strip!).toHaveAttribute("aria-label", "Martes y jueves");
+
+    const boxes = [...strip!.querySelectorAll<HTMLElement>("[data-day]")];
+    expect(boxes).toHaveLength(7);
+    // The unlit boxes take the coal skin: `bg-sunken` is the brightest thing
+    // that could land on this card, and it would make the five days that do
+    // NOT run shout louder than the two that do.
+    const monday = boxes[0];
+    expect(monday.className).not.toMatch(/\bbg-sunken\b/);
+    expect(monday.className).toMatch(/bg-white\/5\b/);
+    // And the days that run keep the club's red, which is the whole message.
+    expect(boxes[1].className).toMatch(/\bbg-cata-red\b/);
   });
 
-  it("leads the scoreboard with Franja in a single full-width column", async () => {
-    renderFullCarnet();
+  it("says it could not consult the schedule instead of drawing an empty week", async () => {
+    // Seven unlit boxes is a CLAIM — "this student trains no day of the week" —
+    // and a failed lookup has not earned it. The wording is `TrainingPanel`'s,
+    // so the screen speaks with one voice about the same failure, and it is
+    // said ONCE: the register's "Franja" row carries it, and the foot of the
+    // credential stays empty rather than repeating the same sentence.
+    mockFetchStudentPortal
+      .mockReset()
+      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP } });
+    mockFetchHorariosPorAlumno.mockRejectedValue(new Error("boom"));
 
-    const facts = await screen.findByTestId("carnet-facts");
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
     await waitFor(() => {
-      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+      expect(within(carnet).queryByTestId("week-strip")).not.toBeInTheDocument();
     });
-
-    const first = facts.children[0];
-    expect(first.lastElementChild?.textContent).toBe("Franja");
-    // The grid is ONE column on both media now, so a cell is already the full
-    // width. A `col-span-2` here would conjure an implicit second column, and
-    // a `print:col-span-1` would be undoing a span nothing declares.
-    expect(facts.className).toMatch(/\bgrid-cols-1\b/);
-    expect(first.className).not.toMatch(/col-span/);
+    expect(within(carnet).getAllByText("No se pudo consultar").length).toBeGreaterThan(0);
   });
 
   // A value that is not a figure must not be set in Graduate: "No se pudo
@@ -2067,9 +2262,10 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
     expect(value!.className).toMatch(/\bfont-sans\b/);
     expect(value!.className).not.toMatch(/font-display/);
 
-    // The figures around it are unaffected — the exception is per cell.
+    // The figures around it are unaffected — the exception is per row, driven
+    // by an explicit boolean and never by inspecting the string.
     const socioDesde = within(carnet).getByText("Socio desde").parentElement!;
-    expect(socioDesde.firstElementChild?.className).toMatch(/font-display/);
+    expect(socioDesde.lastElementChild?.className).toMatch(/font-display/);
   });
 
   // Fix 12b, carried into the new cell: the ONLY place a multi-window franja
@@ -2090,7 +2286,7 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
       expect(within(facts).getByText("Franja")).toBeInTheDocument();
     });
 
-    const value = within(facts).getByText("Franja").parentElement!.firstElementChild!;
+    const value = within(facts).getByText("Franja").parentElement!.lastElementChild!;
     expect(value.className).toMatch(/font-display/);
     const windows = [...value.querySelectorAll("span")];
     expect(windows.map((w) => w.textContent)).toEqual(["15:00 — 16:00", "20:00 — 21:15"]);
@@ -2101,20 +2297,21 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
     expect(value.textContent).toBe("15:00 — 16:00 · 20:00 — 21:15");
   });
 
-  // Identifying belonging is not publishing a price, and the price is the
-  // first thing on this card to age.
-  it("carries the print omission on Valor mensual alone", async () => {
+  // NOTHING ON THE CREDENTIAL OPTS OUT OF PRINT. The object IS the print area,
+  // so a `print:hidden` inside it would be a fact the screen shows and the
+  // paper hides — the exact drift that made the two media read as two cards.
+  // What must not print now simply lives in the panel instead.
+  it("hides nothing from the sheet, because everything on the credential prints", async () => {
     renderFullCarnet();
 
-    const facts = await screen.findByTestId("carnet-facts");
+    const carnet = await screen.findByTestId("student-carnet");
     await waitFor(() => {
-      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+      expect(within(carnet).getByText("Franja")).toBeInTheDocument();
     });
 
-    const cellFor = (label: string) => within(facts).getByText(label).parentElement!;
-    expect(cellFor("Valor mensual").className).toMatch(/print:hidden/);
-    expect(cellFor("Franja").className).not.toMatch(/print:hidden/);
-    expect(cellFor("Socio desde").className).not.toMatch(/print:hidden/);
+    for (const element of [carnet, ...carnet.querySelectorAll("*")]) {
+      expect(String(element.className)).not.toMatch(/print:hidden/);
+    }
   });
 
   // Graduate's 15px floor is a property of the FACE, not a screen convention:
@@ -2129,9 +2326,9 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
     });
 
     const graduate = [...carnet.querySelectorAll('[class*="font-display"]')];
-    // The wordmark plus the three figures — if this ever finds nothing the
-    // assertion below would pass vacuously.
-    expect(graduate.length).toBeGreaterThanOrEqual(4);
+    // The wordmark plus the two numeric register values (Franja, Socio desde)
+    // — if this ever finds nothing the assertion below would pass vacuously.
+    expect(graduate.length).toBeGreaterThanOrEqual(3);
     for (const element of graduate) {
       const sizes = declaredSizesPx(element.className);
       expect(sizes.length).toBeGreaterThan(0);
