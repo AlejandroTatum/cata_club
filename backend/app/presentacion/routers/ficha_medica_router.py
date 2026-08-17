@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.presentacion.schemas.persona_schemas import (
-    FichaMedicaCreateDTO, FichaMedicaResponseDTO, FichaMedicaUpdateDTO,
+    FichaEmergenciaResponseDTO, FichaMedicaCreateDTO, FichaMedicaResponseDTO, FichaMedicaUpdateDTO,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.ficha_medica_servicio import FichaMedicaServicio
@@ -128,3 +128,40 @@ async def actualizar_ficha_medica(
         mensaje=_MENSAJE_SIN_ACCESO,
     )
     return FichaMedicaServicio(db).actualizar_por_persona(persona_id, datos)
+
+
+# --- GET /persona/{persona_id}/emergencia -----------------------------------
+# Issue #360. Endpoint PROPIO: no reusa `obtener_ficha_por_persona` ni su
+# DTO. Esa lectura completa (arriba) es admin/representante/titular porque
+# expone la ficha entera; esta es de ROL (ADMINISTRADOR o ENTRENADOR) porque
+# el club no asigna entrenadores a horarios -- "los alumnos de este
+# entrenador" no existe -- y lo que hay que acotar es el DATO expuesto
+# (`FichaEmergenciaResponseDTO`, 7 campos enumerados a mano), no a qué
+# alumnos puede pedírselo. Sin `PoliticaAccesoPersona` a propósito: esa
+# política resuelve "es dueño o representante", que es la pregunta
+# equivocada acá.
+ROL_ADMIN_O_ENTRENADOR = ["ADMINISTRADOR", "ENTRENADOR"]
+
+
+@router.get(
+    "/persona/{persona_id}/emergencia",
+    response_model=FichaEmergenciaResponseDTO,
+)
+async def obtener_ficha_emergencia(
+    persona_id: int,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorPermisos(ROL_ADMIN_O_ENTRENADOR)),
+):
+    """Los cuatro datos de emergencia de un alumno más el respaldo de su
+    representante legal -- pensado para que un entrenador pueda actuar
+    durante un entrenamiento sin buscar a nadie en un directorio.
+
+    Sin confirmación ni compuerta adicional a propósito (issue #360: "en una
+    emergencia cada segundo cuenta y una compuerta extra es daño, no
+    protección"). La protección es el registro posterior: cada consulta
+    queda auditada en `ConsultaFichaEmergencia` con quién y cuándo.
+    """
+    consultante_persona_id = token_payload.get("persona_id")
+    return FichaMedicaServicio(db).obtener_ficha_emergencia(
+        persona_id, consultante_persona_id,
+    )

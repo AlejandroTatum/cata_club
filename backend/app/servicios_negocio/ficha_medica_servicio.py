@@ -1,14 +1,21 @@
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import FichaMedica, Enfermedades
+from app.dominio.modelos import ConsultaFichaEmergencia, FichaMedica, Enfermedades
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import FichaMedicaRepositorio
-from app.presentacion.schemas.persona_schemas import FichaMedicaCreateDTO, FichaMedicaUpdateDTO
+from app.presentacion.schemas.persona_schemas import (
+    FichaEmergenciaResponseDTO, FichaMedicaCreateDTO, FichaMedicaUpdateDTO,
+)
 
 
 class FichaMedicaServicio:
     def __init__(self, db: Session):
+        # Guardada además de los repositorios: `_registrar_consulta_emergencia`
+        # inserta `ConsultaFichaEmergencia` directamente (mismo patrón que
+        # `AuthServicio._registrar_sesion`), sin un repositorio propio para
+        # una tabla observacional de una sola escritura.
+        self.db = db
         self.repo = FichaMedicaRepositorio(db)
         self.repo_persona = PersonaRepositorio(db)
 
@@ -86,3 +93,59 @@ class FichaMedicaServicio:
         if "telefono_emergencia" in campos:
             ficha.telefono_emergencia = campos["telefono_emergencia"]
         return self.repo.guardar_cambios(ficha)
+
+    def obtener_ficha_emergencia(
+        self, persona_id: int, consultante_persona_id: int,
+    ) -> FichaEmergenciaResponseDTO:
+        """Issue #360: los cuatro datos de emergencia de un alumno, con el
+        respaldo del representante legal, para un entrenador que necesita
+        actuar YA. El control de acceso es de ROL (`GestorPermisos` en el
+        router, no `PoliticaAccesoPersona`): el club no asigna entrenadores a
+        horarios, así que "los alumnos de este entrenador" no existe como
+        concepto -- cualquier entrenador puede enfrentar la emergencia de
+        cualquier alumno. Lo que se acota es el DATO, no el universo de
+        alumnos.
+
+        Sin ficha médica cargada: NO es un error. `ficha` queda `None` y los
+        cuatro campos médicos viajan `null` -- la pantalla nunca debe quedar
+        vacía ni tirar un 404, porque el respaldo del representante (que
+        siempre existe para un menor) sigue siendo información útil.
+
+        La consulta se registra DESPUÉS de confirmar que la persona existe,
+        mismo orden que `AuthServicio._registrar_sesion`: un 404 no debe dejar
+        una fila de auditoría de una consulta que en los hechos no ocurrió.
+        """
+        persona = self.repo_persona.obtener_por_id(persona_id)
+        if not persona:
+            raise EntidadNoEncontrada("No se encontró un alumno con ese identificador")
+
+        ficha = persona.ficha_medica
+        representante = persona.representante
+
+        self._registrar_consulta_emergencia(
+            alumno_persona_id=persona_id, consultante_persona_id=consultante_persona_id,
+        )
+
+        return FichaEmergenciaResponseDTO(
+            alumno_nombre_completo=f"{persona.nombres} {persona.apellidos}",
+            tipo_sangre=ficha.tipo_sangre if ficha else None,
+            alergias=ficha.alergias if ficha else None,
+            contacto_emergencia=ficha.contacto_emergencia if ficha else None,
+            telefono_emergencia=ficha.telefono_emergencia if ficha else None,
+            representante_nombre_completo=(
+                f"{representante.nombres} {representante.apellidos}" if representante else None
+            ),
+            representante_telefono=representante.telefono if representante else None,
+        )
+
+    def _registrar_consulta_emergencia(
+        self, *, alumno_persona_id: int, consultante_persona_id: int,
+    ) -> None:
+        """Deja constancia de la consulta. Nada más -- ver el docstring de
+        `ConsultaFichaEmergencia`: esta tabla nunca decide acceso."""
+        consulta = ConsultaFichaEmergencia(
+            alumno_persona_id=alumno_persona_id,
+            consultante_persona_id=consultante_persona_id,
+        )
+        self.db.add(consulta)
+        self.db.commit()

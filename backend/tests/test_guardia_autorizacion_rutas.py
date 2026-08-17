@@ -209,6 +209,12 @@ RUTAS_ROLES_REQUERIDOS = {
     # lectura es de "cualquier autenticado".
     ("GET", "/descuentos/"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
+    # Issue #360: el club no asigna entrenadores a horarios, así que el
+    # acceso se acota por DATO (siete campos de emergencia, no la ficha
+    # completa), no por qué alumnos -- cualquier ENTRENADOR puede consultarla.
+    ("GET", "/fichas-medicas/persona/{persona_id}/emergencia"): frozenset(
+        {"ADMINISTRADOR", "ENTRENADOR"}
+    ),
     ("PATCH", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/descuentos/"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/"): frozenset({"ADMINISTRADOR"}),
