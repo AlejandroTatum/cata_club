@@ -961,6 +961,81 @@ describe("AppShell — user menu dismissal", (): void => {
 });
 
 // ---------------------------------------------------------------------------
+// Occlusion (issue #367). The account panel was `absolute bottom-full`
+// `w-full` inside the sidebar footer: ~86px growing upward over the very axis
+// where "Ayuda y soporte" and "Preguntas frecuentes" live, covering the second
+// one whole and 36 of the first one's 40px.
+//
+// jsdom loads no stylesheet and lays nothing out, so `getBoundingClientRect`
+// is all zeros here and a geometric assertion would be vacuous — it would pass
+// against the broken build too. The lock is therefore on the property the fix
+// changes: the panel must carry no out-of-flow utility while sharing the
+// footer with those two rows. Out of flow over a shared axis IS the occlusion;
+// in flow, the footer grows and nothing gets covered.
+// ---------------------------------------------------------------------------
+
+/**
+ * Utilities that take the panel off the flow and let it paint over its
+ * siblings. Matched after stripping Tailwind variant prefixes (`lg:`, `sm:`),
+ * so `lg:absolute` is caught exactly like `absolute`.
+ */
+const OUT_OF_FLOW_UTILITY =
+  /^-?(?:absolute|fixed|sticky|inset(?:$|-)|top-|bottom-|left-|right-|start-|end-)/;
+
+describe("AppShell — el menú de cuenta no tapa las salidas de ayuda", (): void => {
+  beforeEach((): void => {
+    stubViewport(true);
+    mockUseAuth.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+    vi.stubGlobal("localStorage", createMemoryStorage());
+  });
+
+  it("keeps the open panel in the footer's flow instead of over its two help rows", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
+
+    const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
+    const soporte = screen.getByRole("button", { name: "Ayuda y soporte" });
+    const faq = screen.getByRole("link", { name: "Preguntas frecuentes" });
+
+    // Same footer, same axis: the three of them stack in one column, so any
+    // out-of-flow panel is painted on top of the other two.
+    const foot = soporte.parentElement;
+    expect(foot).toBe(faq.parentElement);
+    expect(foot?.contains(panel)).toBe(true);
+
+    for (const className of panel.className.split(/\s+/).filter(Boolean)) {
+      const utility = className.split(":").pop() ?? "";
+      expect(
+        utility,
+        `«${className}» saca el panel del flujo y lo pinta sobre las filas de ayuda`,
+      ).not.toMatch(OUT_OF_FLOW_UTILITY);
+    }
+  });
+
+  it("keeps both help rows before the panel, and the panel right after its trigger", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+    const trigger = screen.getByRole("button", { name: /Menú de cuenta/i });
+    fireEvent.click(trigger);
+
+    const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
+
+    // Guards the fix from being "solved" by shuffling the footer: reading
+    // order stays help → FAQ → card → its own options, which is also the tab
+    // order, so nothing is reordered for a screen reader or a keyboard user.
+    for (const before of [
+      screen.getByRole("button", { name: "Ayuda y soporte" }),
+      screen.getByRole("link", { name: "Preguntas frecuentes" }),
+      trigger,
+    ]) {
+      expect(
+        before.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Command palette ARIA: arrow keys move a visual highlight, which used to be
 // invisible to assistive technology.
 // ---------------------------------------------------------------------------

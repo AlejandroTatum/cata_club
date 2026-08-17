@@ -144,9 +144,10 @@ test("Corregir opens that session's roll call and files the fix on its own date"
     "true",
   );
 
-  // Correct it, and file.
+  // Correct it, and file. The advance button stopped sharing the "Siguiente"
+  // label with the removed paginator in #332; it is "Revisar y confirmar".
   await stateGroup.getByRole("radio", { name: "Presente", exact: true }).click();
-  await page.getByRole("button", { name: /Siguiente/ }).click();
+  await page.getByRole("button", { name: "Revisar y confirmar" }).click();
   // Sentence case, not Title Case: the redesign normalised the product's copy
   // and these two strings came along. Written case-insensitively so the next
   // copy pass moves the words without moving the test.
