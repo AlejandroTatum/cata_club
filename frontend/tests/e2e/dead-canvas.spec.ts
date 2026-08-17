@@ -36,11 +36,12 @@
  *
  * `/discounts` and the collapsed `/groups` accordion are measured and recorded
  * but exempt from the bound. Neither is a paginated list: `/discounts` renders
- * its whole catalog with no pager at all, and the collapsed accordion is a
- * card per horario. Their canvas is a function of how many records exist, not
- * of a page size, and no rows-per-page number reaches it. They are kept in the
- * table because leaving them out would make the measurement look like it
- * covered the screen #85 opened on when it does not.
+ * its whole catalog with no pager at all, the collapsed accordion is a
+ * card per horario, and the trainer roster (since #332) lives in its own
+ * inner scroll box with no pager either. Their canvas is a function of how
+ * many records exist, not of a page size, and no rows-per-page number reaches
+ * it. They are kept in the table because leaving them out would make the
+ * measurement look like it covered the screen #85 opened on when it does not.
  *
  * Phone and tablet widths are also out of scope: below `sm` these lists are
  * card stacks, not tables, and they scroll at every row count.
@@ -390,14 +391,18 @@ const SCREENS: Screen[] = [
   },
   {
     name: "trainer roster",
-    paginated: true,
+    // #332 (issue #318) retiró la paginación del roster a propósito: la lista
+    // del paso 2 vive en su propia caja con scroll interno acotado. Su canvas
+    // es función de la cantidad de filas, no de un tamaño de página — misma
+    // clase de exención que /discounts y /groups.
+    paginated: false,
     open: async (page, n) => {
       await mockSession(page, "trainer");
       await page.route("**/api/attendance/schedules", (r) => fulfillJson(r, SCHEDULES));
       await page.route("**/api/attendance/records*", (r) => fulfillJson(r, []));
       await page.route("**/api/groups/horarios/*/alumnos*", (r) => fulfillJson(r, alumnos(n)));
       // The deep link restores the wizard straight to the roster step, which
-      // is where the paginated list lives.
+      // is where the roster list lives.
       await page.goto("/trainer/attendance?horario=11&paso=lista");
       await expect(page.getByText("Ana López 1", { exact: true })).toBeVisible({ timeout: 20_000 });
     },
