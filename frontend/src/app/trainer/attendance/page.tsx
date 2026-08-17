@@ -303,6 +303,21 @@ export default function TrainerAttendancePage(): React.ReactElement {
   /** Unfinished roll calls for today, offered on step 1 — never auto-applied. */
   const [resumableDrafts, setResumableDrafts] = useState<StoredAttendanceDraft[]>([]);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  /**
+   * True once `openRoster` finds at least one existing record for the
+   * session it just opened — the backend upsert rule (`registrar_asistencia`)
+   * treats every one of those as a CORRECTION, and only ADMINISTRADOR may
+   * make one. Without this the trainer discovered the rejection on the last
+   * click of "Confirmar asistencia" instead of on open (issue #310 / #3).
+   */
+  const [sessionAlreadyRegistered, setSessionAlreadyRegistered] = useState(false);
+  /**
+   * Per-horario count of TODAY's attendance records, fetched once the
+   * schedules land. Powers step 1's "lista tomada hoy" indicator (issue #310
+   * / #22) — without it, a horario that was just registered looked identical
+   * to one nobody has touched yet.
+   */
+  const [todaysRecordCounts, setTodaysRecordCounts] = useState<Map<number, number>>(new Map());
 
   const loadOptions = useCallback(async (): Promise<void> => {
     try {
@@ -347,6 +362,34 @@ export default function TrainerAttendancePage(): React.ReactElement {
   }, [schedules]);
 
   /**
+   * Feeds step 1's "lista tomada hoy" indicator (issue #310 / #22): without
+   * it, a horario registered minutes ago read identical to the 25 still
+   * pending, and the only way to tell them apart was opening each one.
+   * Scoped to TODAY only — step 1 offers no way to address a different date
+   * before a horario is chosen, so a count for any other day would not
+   * describe what the trainer is looking at.
+   */
+  useEffect(() => {
+    if (schedules.length === 0) return;
+    let cancelled = false;
+    fetchAttendanceRecords({ fechaInicio: clubIsoDate(), fechaFin: clubIsoDate() })
+      .then((records) => {
+        if (cancelled) return;
+        const counts = new Map<number, number>();
+        for (const record of records) {
+          counts.set(record.horarioId, (counts.get(record.horarioId) ?? 0) + 1);
+        }
+        setTodaysRecordCounts(counts);
+      })
+      .catch((err: unknown) => {
+        console.error("[trainer/attendance] fetchAttendanceRecords today-counts failed", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [schedules]);
+
+  /**
    * One feedback rule, product-wide (see `payments/page.tsx` for the other
    * half of it): the TOAST carries the outcome of an action the user just
    * took; an INLINE block carries a blocker attached to a specific control.
@@ -368,6 +411,16 @@ export default function TrainerAttendancePage(): React.ReactElement {
   const currentIndex = STEP_ORDER.indexOf(step);
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === STEP_ORDER.length - 1;
+
+  const isAdmin = session?.user?.role === "admin";
+  /**
+   * The session this wizard has open is a CORRECTION nobody but an admin can
+   * make (`registrar_asistencia`'s upsert rule, backend). Gates step 2 and
+   * step 3 into read-only — see `renderMarkAttendance` — instead of letting
+   * the trainer rebuild every state only to have the backend reject all of
+   * them on the last click (issue #310 / #3).
+   */
+  const readOnly = sessionAlreadyRegistered && !isAdmin;
 
   const selectedSchedule = schedules.find((s) => s.id === selectedScheduleId) ?? null;
 
@@ -484,6 +537,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
         const draft = loadAttendanceDraft(attendanceDraftKey(horarioId, fecha));
         const withDraft = applyAttendanceDraft(roster, draft);
 
+        // At least one record already exists for this (horario, fecha): every
+        // student in it is now a CORRECTION under the backend's upsert rule,
+        // and only an admin may make one. Read BEFORE the draft is applied —
+        // the draft can mark a student reviewed too, and that must never be
+        // mistaken for "the club already has this on file" (issue #310 / #3).
+        setSessionAlreadyRegistered(existingRecords.length > 0);
         setSessionDate(fecha);
         setRequestedDate(requestedDate);
         setRestoredFromDraft(
@@ -744,6 +803,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
     // roll call — see the `key` on the advance/submit buttons for the way that
     // actually happened.
     if (step !== "confirm") return;
+    // Defense in depth: `renderMarkAttendance`/the commit bar already keep a
+    // read-only session from reaching this step, but a direct `?paso=confirmar`
+    // deep link or a role that changed mid-visit must not get a second way in
+    // (issue #310 / #3).
+    if (readOnly) return;
     // Never file a session carrying the sentinel — `toAttendanceMarks` strips
     // it, and this refuses the batch rather than filing a short roster.
     if (countUnmarked(students) > 0) return;
@@ -764,14 +828,23 @@ export default function TrainerAttendancePage(): React.ReactElement {
       setResult(registration);
       setConfirmedAt(new Date());
       setConfirmed(true);
-      // The session is filed; the draft has nothing left to protect. Kept when
-      // some records failed, so a retry still starts from the trainer's marks.
-      if (draftKey && registration.failed.length === 0) clearAttendanceDraft(draftKey);
+      // The draft's job ends the moment a submission attempt actually reaches
+      // the server, whether or not it saved everything (issue #310 / #5): a
+      // draft kept alive past a rejection is what let a reopened roster show
+      // the trainer's UNSAVED intent as if the club had it on file. Discarding
+      // it always — never only on full success — is the fix: a retry that
+      // needs those marks re-derives them from the freshly re-fetched roster
+      // (`handleRetryFailed` → `openRoster`), not from a stale draft.
+      if (draftKey) clearAttendanceDraft(draftKey);
       // Drop the step from the URL: a filed session must not be reachable as
       // an editable roll call by reloading the page that filed it.
       writeWizardUrl(null, null, "select-session", "replace");
     } catch (err) {
       console.error("[trainer/attendance] registerAttendance failed", err);
+      // Same reasoning as the success-with-failures branch above: nothing
+      // this attempt tried to write was actually saved, so nothing of it may
+      // survive as a phantom "the club has this" draft (issue #310 / #5).
+      if (draftKey) clearAttendanceDraft(draftKey);
       setSubmitError("No se pudo registrar la asistencia. Intente nuevamente.");
     } finally {
       setSubmitting(false);
@@ -796,6 +869,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
     setSubmitError(null);
     setResult(null);
     setConfirmedAt(null);
+    setSessionAlreadyRegistered(false);
   }
 
   /**
@@ -1114,6 +1188,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
                       <div id={panelId} className="grid gap-2 border-t border-line p-3 sm:grid-cols-2">
                         {group.schedules.map((sched) => {
                           const isActive = sched.id === selectedScheduleId;
+                          // Only meaningful for TODAY's group: `todaysRecordCounts`
+                          // is fetched for today's date alone (see the effect that
+                          // builds it), so a horario from another day group has no
+                          // count to report here — asserting one either way would
+                          // describe a session nobody has opened yet (issue #310 /
+                          // #22).
+                          const recordedToday =
+                            group.day === today ? todaysRecordCounts.get(sched.id) ?? 0 : 0;
                           return (
                             <button
                               key={sched.id}
@@ -1138,6 +1220,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                   />
                                 )}
                               </span>
+                              {recordedToday > 0 && (
+                                <span className="flex items-center gap-1 text-2xs font-bold text-ink-3">
+                                  Lista tomada hoy · {recordedToday}{" "}
+                                  {recordedToday === 1 ? "registro" : "registros"}
+                                </span>
+                              )}
                             </button>
                           );
                         })}
@@ -1161,8 +1249,63 @@ export default function TrainerAttendancePage(): React.ReactElement {
     );
   }
 
+  /**
+   * The permission gate, spelled out — WHAT is blocked and WHO to ask, not
+   * just THAT it is blocked (issue #310 / #3): "el motivo y a quién
+   * pedírselo". `role="status"` rather than `alert`: this is the state of the
+   * session the trainer just opened, not the outcome of something they did.
+   */
+  function renderReadOnlyReason(): React.ReactElement {
+    return (
+      <div
+        role="status"
+        className="rounded-ctl border border-state-warn/30 bg-state-warn-bg p-4 text-sm text-state-warn"
+      >
+        <p className="font-semibold">Esta lista ya fue registrada.</p>
+        <p>Solo un administrador puede corregirla. Pídale la corrección a un administrador del club.</p>
+      </div>
+    );
+  }
+
   function renderMarkAttendance(): React.ReactElement | null {
     if (!selectedSchedule) return null;
+
+    // A correction only an admin may make (issue #310 / #3): the roster
+    // renders read-only, with the reason up front, instead of letting the
+    // trainer rebuild every state only to have the backend reject all of them
+    // on the last click. No radios, no fiche taps, no bulk action — every
+    // control that used to promise an edit the backend was always going to
+    // refuse is gone, not merely disabled.
+    if (readOnly) {
+      return (
+        <div className="flex flex-col gap-4">
+          {renderReadOnlyReason()}
+          <ul className="flex flex-col gap-2" aria-label="Asistencia registrada (solo lectura)">
+            {students.map((student) => (
+              <li
+                key={student.id}
+                className="flex h-12 items-center gap-[11px] rounded-ctl border border-line-2 bg-paper px-[13px]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-state-neutral-bg text-2xs tracking-flat font-bold text-state-neutral"
+                >
+                  {getUserInitials(student.name)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+                  {student.name}
+                </span>
+                {student.attendance !== UNMARKED && (
+                  <Badge tone={getAttendanceBadgeTone(student.attendance)} className="flex-none">
+                    {ATTENDANCE_LABELS[student.attendance as EstadoAsistencia]}
+                  </Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
 
     return (
       <div className="flex flex-col gap-4">
@@ -1468,6 +1611,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
     return (
       <div className="flex flex-col gap-4">
+        {/*
+         * Defense in depth (issue #310 / #3): the commit bar already disables
+         * "Siguiente" for a read-only session, so this step should not be
+         * reachable — except through a direct `?paso=confirmar` deep link.
+         * The reason still has to be visible from here, not only from step 2.
+         */}
+        {readOnly && renderReadOnlyReason()}
         {/* The lead-in line that used to open this step said "Revise el
             resumen antes de confirmar el registro de asistencia" — which is
             what the step is CALLED, one line above, plus the verb the button
@@ -1999,7 +2149,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               type="button"
                               variant="primary"
                               onClick={handleNext}
-                              disabled={students.length === 0 || unmarkedCount > 0}
+                              disabled={students.length === 0 || unmarkedCount > 0 || readOnly}
                               aria-describedby={unmarkedCount > 0 ? unmarkedReasonId : undefined}
                             >
                               Siguiente
@@ -2013,7 +2163,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               disabled={
                                 submitting ||
                                 students.length === 0 ||
-                                unmarkedCount > 0
+                                unmarkedCount > 0 ||
+                                readOnly
                               }
                               aria-describedby={unmarkedCount > 0 ? unmarkedReasonId : undefined}
                             >

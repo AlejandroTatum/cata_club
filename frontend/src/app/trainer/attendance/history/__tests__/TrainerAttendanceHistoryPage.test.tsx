@@ -164,9 +164,10 @@ describe("TrainerAttendanceHistoryPage", () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
-    // Header: Sesión, Registró, Resultado, acciones.
+    // Header: Sesión, Registró, Resultado — no "Acciones" for a trainer, who
+    // can never correct an already-registered session (issue #310 / #27).
     expect(within(rows[0]).getByText("Registró")).toBeInTheDocument();
-    expect(within(rows[0]).getAllByRole("columnheader")).toHaveLength(4);
+    expect(within(rows[0]).getAllByRole("columnheader")).toHaveLength(3);
 
     // The Monday session carries a persisted taker; the Friday session is
     // legacy (no author) and renders the explicit "No registrado" placeholder.
@@ -251,7 +252,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
   });
 
-  it("does not show Corregir to an admin for a session older than 30 days", async () => {
+  it("does not show Corregir to an admin for a session older than 30 days, but keeps the column's alignment", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
     const oldRecords: AttendanceRecord[] = [
       record("present", "Sofia Vera", "2026-07-15"),
@@ -260,15 +261,28 @@ describe("TrainerAttendanceHistoryPage", () => {
 
     render(<TrainerAttendanceHistoryPage />);
 
-    await screen.findAllByRole("row");
+    const rows = await screen.findAllByRole("row");
     expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
+    // The admin still HAS an "Acciones" column (it just has nothing to offer
+    // this particular row) — the header exists, so the empty cell keeps the
+    // row's columns aligned with it.
+    expect(within(rows[1]).getAllByRole("cell")).toHaveLength(4);
   });
 
-  it("keeps the table aligned with an empty action cell when Corregir is hidden", async () => {
+  /*
+   * Regression guard for issue #310 / #27: this test used to assert the
+   * OPPOSITE — that a trainer's row kept a 4th, permanently empty "Acciones"
+   * cell under a header promising an action that role can never use. That was
+   * the defect: 10/10 rows in the real audit had an empty last cell under
+   * "ACCIONES". The fix removes the column outright for a non-admin instead
+   * of padding it empty; a trainer's row now has exactly the 3 real columns.
+   */
+  it("does not render the ACCIONES column for a trainer, instead of padding it empty (issue #310)", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
-    expect(within(rows[1]).getAllByRole("cell")).toHaveLength(4);
+    expect(within(rows[0]).queryByText("Acciones")).not.toBeInTheDocument();
+    expect(within(rows[1]).getAllByRole("cell")).toHaveLength(3);
   });
 
   it("refetches with a new range when a preset is picked", async () => {
