@@ -101,6 +101,28 @@ def test_actualizar_persona(client):
     assert resp.json()["telefono"] == "0987654321"
 
 
+# --- #312 / hallazgo #65: nombre vacío daba un 422 genérico ------------------
+# `nombres`/`apellidos` en `PersonaUpdateDTO` dependían del `min_length=1` de
+# Pydantic, cuyo mensaje ("String should have at least 1 character") es
+# inglés de la librería -- lo mismo que `El teléfono solo puede tener
+# dígitos.` evita para teléfono/cédula desde PR 4b (issue #228), pero nunca se
+# extendió a nombres/apellidos.
+def test_actualizar_persona_con_nombre_vacio_da_mensaje_claro(client):
+    persona = client.post("/api/v1/personas/", json=_payload_persona()).json()
+
+    resp = client.patch(f"/api/v1/personas/{persona['id']}", json={"nombres": ""})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "El nombre es obligatorio."
+
+
+def test_actualizar_persona_con_apellido_vacio_da_mensaje_claro(client):
+    persona = client.post("/api/v1/personas/", json=_payload_persona()).json()
+
+    resp = client.patch(f"/api/v1/personas/{persona['id']}", json={"apellidos": ""})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "El apellido es obligatorio."
+
+
 # El tramo de borrado que vivía en este test murió con `DELETE /personas/{id}`:
 # la baja de una persona hoy es lógica y se prueba en
 # `test_baja_logica_persona.py`.

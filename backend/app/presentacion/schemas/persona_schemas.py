@@ -6,7 +6,12 @@ from app.dominio.enums import TipoEscuela, NivelTecnicoAlumno, TipoSangre, TipoM
 from pydantic import EmailStr
 from app.presentacion.schemas.base import ResponseBase
 from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
-from app.presentacion.schemas.validadores import CedulaValidada, TelefonoValidado
+from app.presentacion.schemas.validadores import (
+    ApellidoValidado,
+    CedulaValidada,
+    NombreValidado,
+    TelefonoValidado,
+)
 
 
 # --- Institucion ---
@@ -64,8 +69,8 @@ class VincularRepresentadoDTO(BaseModel):
 
 
 class PersonaUpdateDTO(BaseModel):
-    nombres: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    apellidos: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    nombres: Optional[NombreValidado] = Field(default=None, max_length=100)
+    apellidos: Optional[ApellidoValidado] = Field(default=None, max_length=100)
     telefono: Optional[TelefonoValidado] = Field(default=None, max_length=32)
     telefono_contacto: Optional[TelefonoValidado] = Field(default=None, max_length=32)
     foto_url: Optional[str] = None
