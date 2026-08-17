@@ -18,14 +18,28 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import TrainerPage from "@/app/trainer/page";
 import type { TrainingSchedule, AttendanceRecord } from "@/app/attendance/attendance-utils";
 import type { AlumnoHorario, RecentAttendanceSession } from "@/services/api";
-import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
+import { createAuthenticatedAuth, createLoadingAuth } from "@/components/__tests__/test-utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => createAuthenticatedAuth("trainer", "Carlos Mendoza"),
+  useAuth: vi.fn(),
+}));
+
+const mockUseAuth = vi.mocked(useAuth);
+
+const mockShowInfo = vi.fn();
+vi.mock("@/contexts/ToastContext", () => ({
+  useToast: () => ({
+    showToast: vi.fn(),
+    showError: vi.fn(),
+    showSuccess: vi.fn(),
+    showInfo: mockShowInfo,
+    showWarning: vi.fn(),
+  }),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -167,6 +181,8 @@ describe("TrainerPage — Mi día", () => {
     mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
     mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
     mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
+    mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+    mockShowInfo.mockReset();
   });
 
   afterEach(() => {
@@ -547,6 +563,8 @@ describe("TrainerPage — la anatomía del panel de admin", () => {
     mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
     mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
     mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
+    mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+    mockShowInfo.mockReset();
   });
 
   afterEach(() => {
@@ -649,5 +667,101 @@ describe("TrainerPage — la anatomía del panel de admin", () => {
     const lower = screen.getByTestId("trainer-lower");
     expect(lower.className).toBe(PAGE_RAIL);
     expect(within(lower).getByText("Distribución de asistencias")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Role-gated fetch (issue #319 hallazgo #49).
+//
+// `loadData`/`loadRecentSessions` ran from a bare mount effect, so a
+// non-trainer (e.g. a student landing on /trainer) fired
+// GET /api/attendance/records and GET /api/attendance/recent-sessions and
+// logged two 403s before ProtectedRoute's redirect effect ran. ProtectedRoute
+// is mocked to a pass-through here so the fetch gate itself is what is under
+// test.
+// ---------------------------------------------------------------------------
+
+describe("TrainerPage — defers attendance API calls until the role resolves", () => {
+  beforeEach(() => {
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
+    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
+  });
+
+  it("does not request attendance data while the session is still hydrating", async () => {
+    mockUseAuth.mockReturnValue(createLoadingAuth());
+
+    render(<TrainerPage />);
+
+    await waitFor(() => expect(mockFetchAttendanceRecords).not.toHaveBeenCalled());
+    expect(mockFetchRecentAttendanceSessions).not.toHaveBeenCalled();
+  });
+
+  it("does not request attendance data for a resolved non-trainer role", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante"));
+
+    render(<TrainerPage />);
+
+    await waitFor(() => expect(mockFetchAttendanceRecords).not.toHaveBeenCalled());
+    expect(mockFetchRecentAttendanceSessions).not.toHaveBeenCalled();
+  });
+
+  it("requests attendance data once the trainer role has resolved", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+
+    render(<TrainerPage />);
+
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
+    expect(mockFetchRecentAttendanceSessions).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Silent bounce, explained (issue #319 hallazgo #68).
+//
+// `ProtectedRoute` (mocked to a pass-through here) already redirects a
+// non-trainer session away from /trainer — but silently, with nothing in the
+// UI naming why. Same pattern as the medical-record minor bounce (#315
+// hallazgo #69): a toast at the landing spot.
+// ---------------------------------------------------------------------------
+
+describe("TrainerPage — names the reason when a non-trainer session lands here", () => {
+  beforeEach(() => {
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
+    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
+    mockShowInfo.mockReset();
+  });
+
+  it("shows no toast while the session is still hydrating", async () => {
+    mockUseAuth.mockReturnValue(createLoadingAuth());
+
+    render(<TrainerPage />);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockShowInfo).not.toHaveBeenCalled();
+  });
+
+  it("shows a visible reason for a resolved non-trainer role", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante"));
+
+    render(<TrainerPage />);
+
+    await waitFor(() =>
+      expect(mockShowInfo).toHaveBeenCalledWith(
+        expect.stringMatching(/permiso|autorizad|acceso|no corresponde/i),
+      ),
+    );
+  });
+
+  it("shows no toast for the trainer role that actually belongs here", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+
+    render(<TrainerPage />);
+
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
+    expect(mockShowInfo).not.toHaveBeenCalled();
   });
 });

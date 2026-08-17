@@ -32,6 +32,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import { ArrowRight, CalendarCheck, ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import {
@@ -77,6 +79,8 @@ import AttendanceStatusChart from "./AttendanceStatusChart";
 const ACTIVITY_LIMIT = 5;
 
 export default function DashboardPage(): React.ReactElement {
+  const { session, isLoading: authLoading } = useAuth();
+  const { showInfo } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,10 +115,27 @@ export default function DashboardPage(): React.ReactElement {
     setPayments(paymentsResult.status === "fulfilled" ? paymentsResult.value : []);
   }, []);
 
+  // Gate the fetch on the RESOLVED role — same fix as `/members` (issue #319
+  // hallazgo #49). `ProtectedRoute` redirects a non-admin away, but its
+  // redirect runs in an effect of its own; a bare mount effect here fired
+  // GET /api/dashboard (and its siblings) before that redirect landed, so a
+  // student's browser logged three 403s on its way to /student.
+  const isAdmin = !authLoading && session?.user?.role === "admin";
+
   useEffect(() => {
+    if (!isAdmin) return;
     void loadStats();
     void loadDetail();
-  }, [loadStats, loadDetail]);
+  }, [isAdmin, loadStats, loadDetail]);
+
+  // #319 hallazgo #68: `ProtectedRoute` already bounces a non-admin session
+  // away, but silently — the URL changed and nothing said why. Same pattern
+  // as the medical-record minor bounce (#315 hallazgo #69): a toast at the
+  // landing spot names the reason instead of leaving a mute redirect.
+  useEffect(() => {
+    if (authLoading || !session || session.user.role === "admin") return;
+    showInfo("No tiene permiso para acceder a esa sección.");
+  }, [authLoading, session, showInfo]);
 
   const attendanceStats: AttendanceDayStats = buildAttendanceStats(records);
   const fourWeeks = buildFourWeekAttendance(records);

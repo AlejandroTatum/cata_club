@@ -71,6 +71,7 @@ import ContextualHelp from "@/components/ContextualHelp";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   ShieldCheck,
   XCircle,
@@ -342,7 +343,8 @@ function focusQueueAction(requestId: string | null): boolean {
 // ---------------------------------------------------------------------------
 
 export default function PaymentsPage(): React.ReactElement {
-  const { showSuccess, showError, showWarning } = useToast();
+  const { session, isLoading: authLoading } = useAuth();
+  const { showSuccess, showError, showWarning, showInfo } = useToast();
   const [requests, setRequests] = useState<PaymentValidationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -421,9 +423,25 @@ export default function PaymentsPage(): React.ReactElement {
     }
   }, []);
 
+  // Gate the fetch on the RESOLVED role — same fix as `/members` and
+  // `/dashboard` (issue #319 hallazgo #49). `ProtectedRoute` redirects a
+  // non-admin away, but its redirect runs in an effect of its own; a bare
+  // mount effect here fired GET /api/payments before that redirect landed.
+  const isAdmin = !authLoading && session?.user?.role === "admin";
+
   useEffect(() => {
+    if (!isAdmin) return;
     void loadRequests();
-  }, [loadRequests]);
+  }, [isAdmin, loadRequests]);
+
+  // #319 hallazgo #68: `ProtectedRoute` already bounces a non-admin session
+  // away, but silently — the URL changed and nothing said why. Same pattern
+  // as the medical-record minor bounce (#315 hallazgo #69): a toast at the
+  // landing spot names the reason instead of leaving a mute redirect.
+  useEffect(() => {
+    if (authLoading || !session || session.user.role === "admin") return;
+    showInfo("No tiene permiso para acceder a esa sección.");
+  }, [authLoading, session, showInfo]);
 
   const selectedRequest = useMemo(
     () => requests.find((r) => r.id === selectedId) ?? null,
