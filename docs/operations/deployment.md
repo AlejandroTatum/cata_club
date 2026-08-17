@@ -75,6 +75,17 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 El backend corre `alembic upgrade head` en su entrypoint y **aborta el
 arranque** si la migración falla.
 
+```bash
+# 4. Instalar/verificar el cron del backup lógico diario (una sola vez; ver
+#    backup-restore.md para la convención de rutas /opt/cata-club)
+chmod +x /opt/cata-club/scripts/backup/*.sh
+mkdir -p /var/backups/cataclub
+(crontab -l 2>/dev/null | grep -v 'backup-db.sh' || true
+ echo '30 3 * * * cd /opt/cata-club && /opt/cata-club/scripts/backup/backup-db.sh >> /var/log/cataclub-backup.log 2>&1'
+) | crontab -
+crontab -l | grep backup-db.sh   # verificar que quedó instalado
+```
+
 ## Validación post-despliegue
 
 ```bash
@@ -96,6 +107,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backend 
 try: urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=5)
 except urllib.error.HTTPError as e: print(e.code)
 else: print('ERROR: /docs responde')"   # 404
+
+# 5. El dump lógico del día existe (backup L2)
+ls -lh /var/backups/cataclub/cataclub_$(date +%F).dump
 
 # 5. Logs sin errores de arranque (validar la rotación activa)
 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=200
@@ -123,7 +137,8 @@ y [`rollback.md`](rollback.md).
   [`production-readiness.md`](production-readiness.md) (pasa de
   *Needs evidence* a *Ready*).
 - Automatizar el despliegue en el host (script o herramienta de
-  configuración) está fuera de lo existente hoy: no hay nada en el repo que
-  lo haga; no simularlo.
+  configuración) está fuera de lo existente hoy: `scripts/backup/` ya cubre
+  el backup (ver [`backup-restore.md`](backup-restore.md)), pero el
+  `deploy.sh` de despliegue sigue pendiente; no simularlo.
 
 Rollback: [`rollback.md`](rollback.md).

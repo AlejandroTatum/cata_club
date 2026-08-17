@@ -71,7 +71,7 @@ del repo.
 | Circuit breakers de dependencias externas | Ready | Backend | `backend/main.py` (`/diagnostico/circuitos`, rol ADMINISTRADOR) + `app/soporte_transversal/circuito_breaker.py` | Cubre Cloudinary/SMTP; resumen admin en `/diagnostico/circuitos`. |
 | Despliegue real en entorno de producción | Needs evidence | Infraestructura (nominal pendiente) | Runbook [`deployment.md`](deployment.md) (creado en este PR) | El mecanismo está verificado; **no hay en el repo evidencia de un despliegue ejecutado** contra un entorno real. Ejecutar y registrar. |
 | Rollback a imagen previa | Needs evidence | Infraestructura (nominal pendiente) | Runbook [`rollback.md`](rollback.md) | Mecanismo Ready (SHA inmutables); no hay evidencia de un rollback ejecutado. |
-| Backup y restore de Postgres | Not evaluated | Infraestructura (nominal pendiente) | [`backup-restore.md`](backup-restore.md) | **No existe mecanismo de backup automatizado ni restore probado.** Decisión pendiente; ver runbook. Crítico por datos de menores y pagos. |
+| Backup y restore de Postgres | Needs evidence | Infraestructura (nominal pendiente) | [`backup-restore.md`](backup-restore.md) + `scripts/backup/backup-db.sh` y `restore-check.sh` | Mecanismo implementado y restore verificado de punta a punta en QA el 17-ago (conteos idénticos origen↔restaurado; rotación probada). RPO diario 03:30, retención 14 dumps. Falta: instalar el cron en el host de prod y repetir la verificación contra un dump real. |
 | Monitoring: métricas y trazas | Blocked | Infraestructura (nominal pendiente) | `rg -ln "prometheus|opentelemetry|statsd" backend/ frontend/src` → vacío | Solo existe correlación (`X-Request-ID`). El plan de lanzamiento lo trató como bloqueante: sin métricas, una caída se descubre porque avisa un socio. |
 | Inventario de variables de entorno | Ready (con gap) | Desarrollo | [`reference/configuration.md`](../reference/configuration.md) + ver ítem A-2 abajo | Este PR crea el inventario canónico; los `.env.example` siguen sin documentar `IMAGE_TAG`, `FRONTEND_URL` y los `SMTP_*` (ítem A-2). |
 
@@ -125,7 +125,7 @@ contra el backend real está en el informe (la suite congela "hoy" en
 
 | Decisión | Por qué importa | Dónde se resuelve |
 |---|---|---|
-| Backup/RPO/RTO de Postgres y proveedor de almacenamiento | Sin backup no hay forma de recuperar datos de menores y pagos | [`backup-restore.md`](backup-restore.md) |
+| Backup/RPO/RTO de Postgres y proveedor de almacenamiento | **Decidido el 17-ago:** RPO diario (03:30, 14 dumps), destino local + backups de disco de DO (L1); capa off-site (L3) queda abierta a elección de Spaces cuando el club crezca | [`backup-restore.md`](backup-restore.md) |
 | Monitoring y alerting (qué medir, a dónde llegan los avisos) | Sin alertas, las caídas se descubren por avisos externos | [`incident-response.md`](incident-response.md) |
 | Asignación nominal de owners (hoy solo roles) | Sin persona asignada no hay responsable real de ejecutar runbooks | [`reference/ownership.md`](../reference/ownership.md) |
 | Política de retención y borrado de datos personales | Datos de menores y salud sin política de ciclo de vida | [`security/privacy-retention.md`](../security/privacy-retention.md) |
