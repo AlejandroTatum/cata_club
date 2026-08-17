@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { backendLogin, backendMe, buildSession, forwardedForFrom, setAuthCookies, type AuthErrorCode } from "@/lib/server/auth";
+import { backendLogin, backendMe, buildSession, forwardedForFrom, userAgentFrom, setAuthCookies, type AuthErrorCode } from "@/lib/server/auth";
 
 interface LoginBody {
   email: string;
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const loginResult = await backendLogin(body.email, body.password, forwardedForFrom(request));
+  const loginResult = await backendLogin(body.email, body.password, forwardedForFrom(request), userAgentFrom(request));
   if (!loginResult.ok) {
     return NextResponse.json(
       { error: loginResult.error.code, message: loginResult.error.message },

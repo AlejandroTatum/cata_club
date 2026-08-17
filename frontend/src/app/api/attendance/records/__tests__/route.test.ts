@@ -269,7 +269,12 @@ describe("POST /api/attendance/records", () => {
     expect(body.failed).toEqual([{ personaId: 99, message: "Persona con id 99 no encontrada" }]);
   });
 
-  it("returns 502 when every student fails to register", async () => {
+  // Corrige el candado anterior de esta suite ("returns 502 when every
+  // student fails to register"), que le había enseñado a la suite a aceptar
+  // la degradación del issue #309: exigía 502 para un 404 real del backend.
+  // La ruta BFF debe propagar el status real del backend, nunca inventar uno
+  // propio a partir de si `createdCount` llegó a cero.
+  it("propaga el status real del backend cuando todos los estudiantes fallan, en vez de inventar 502", async () => {
     vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ detail: "Horario no encontrado" }, 404));
 
     const access = makeJwt(3600);
@@ -281,8 +286,44 @@ describe("POST /api/attendance/records", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(404);
     expect(body.createdCount).toBe(0);
+  });
+
+  // Candado exigido por el issue #309 (hallazgo #21 / #60): el backend
+  // levanta `PermisosInsuficientes` y `main.py` ya lo mapea a 403 — la ruta
+  // BFF no debe degradarlo a 502. Un 502 le dice al entrenador "el servidor
+  // se cayó" para una regla de permisos que reintentar jamás resuelve.
+  it("propaga un 403 del backend (regla de permisos) como 403, no como 502", async () => {
+    // `mockImplementation`, no `mockResolvedValue`: dos POST concurrentes
+    // (uno por estudiante) comparten el mismo mock, y un `Response` ya
+    // consumido por el primer `.json()` no puede leerse dos veces — cada
+    // llamada necesita su propia instancia.
+    vi.mocked(global.fetch).mockImplementation(async () =>
+      jsonResponse({ detail: "Solo el administrador puede corregir asistencias ya registradas." }, 403),
+    );
+
+    const access = makeJwt(3600);
+    const response = await POST(
+      postRequest(
+        {
+          horarioId: 1,
+          students: [
+            { personaId: 67, estado: "present" },
+            { personaId: 8, estado: "present" },
+          ],
+        },
+        `${ACCESS_TOKEN_COOKIE}=${access}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.createdCount).toBe(0);
+    expect(body.failed).toEqual([
+      { personaId: 67, message: "Solo el administrador puede corregir asistencias ya registradas." },
+      { personaId: 8, message: "Solo el administrador puede corregir asistencias ya registradas." },
+    ]);
   });
 
   it("defaults an omitted fecha_entrenamiento to the CLUB's day, not the server's", async () => {

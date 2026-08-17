@@ -210,7 +210,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
 
       if (!result.ok) {
-        return { student, ok: false as const, message: "No se pudo contactar al servidor.", registradoPorNombre: null, refreshedAccessToken: undefined };
+        return {
+          student,
+          ok: false as const,
+          status: result.status,
+          message: "No se pudo contactar al servidor.",
+          registradoPorNombre: null,
+          refreshedAccessToken: undefined,
+        };
       }
       if (!result.response.ok) {
         let message = "No se pudo registrar la asistencia.";
@@ -223,7 +230,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         } catch {
           // ignore parse errors — use fallback
         }
-        return { student, ok: false as const, message, registradoPorNombre: null, refreshedAccessToken: result.refreshedAccessToken };
+        return {
+          student,
+          ok: false as const,
+          status: result.response.status,
+          message,
+          registradoPorNombre: null,
+          refreshedAccessToken: result.refreshedAccessToken,
+        };
       }
       // The backend `POST /asistencias/` returns the created Asistencia, now
       // including `registradoPorNombre` (issue #263). Capturing it here lets the
@@ -237,17 +251,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       } catch {
         // ignore parse errors — the author name is not required
       }
-      return { student, ok: true as const, message: undefined, registradoPorNombre, refreshedAccessToken: result.refreshedAccessToken };
+      return { student, ok: true as const, status: 201, message: undefined, registradoPorNombre, refreshedAccessToken: result.refreshedAccessToken };
     }),
   );
 
   const createdCount = outcomes.filter((o) => o.ok).length;
-  const failed = outcomes
-    .filter((o) => !o.ok)
-    .map((o) => ({ personaId: o.student.personaId, message: o.message ?? "No se pudo registrar la asistencia." }));
+  const failedOutcomes = outcomes.filter((o) => !o.ok);
+  const failed = failedOutcomes.map((o) => ({
+    personaId: o.student.personaId,
+    message: o.message ?? "No se pudo registrar la asistencia.",
+  }));
   const registradoPorNombre = outcomes.find((o) => o.ok && o.registradoPorNombre != null)?.registradoPorNombre ?? null;
 
-  const response = NextResponse.json({ createdCount, failed, registradoPorNombre }, { status: failed.length > 0 && createdCount === 0 ? 502 : 201 });
+  // When every student failed, mirror the real status of the first backend
+  // failure instead of guessing "502 Bad Gateway" (issue #309 — a 403
+  // permissions rule was coming out as 502, sending the trainer into a
+  // retry loop that can never succeed). A partial success still answers 201:
+  // the batch tolerates per-student failure by design (see doc comment
+  // above), so the top-level status stays "created" either way.
+  const status = createdCount > 0 ? 201 : failedOutcomes[0].status;
+
+  const response = NextResponse.json({ createdCount, failed, registradoPorNombre }, { status });
   const refreshedAccessToken = outcomes.find((o) => o.refreshedAccessToken)?.refreshedAccessToken;
   if (refreshedAccessToken) {
     setAuthCookies(response, { accessToken: refreshedAccessToken });
