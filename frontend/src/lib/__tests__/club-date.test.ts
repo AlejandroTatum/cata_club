@@ -13,6 +13,7 @@ import {
   calendarIsoDate,
   clubIsoDate,
   clubToday,
+  lastOccurrenceOfDiaSemana,
   todayDiaSemana,
 } from "../club-date";
 
@@ -99,6 +100,37 @@ describe("todayDiaSemana", () => {
       todayDiaSemana(new Date(`2026-07-${20 + i}T17:00:00Z`)),
     );
     expect(week).toEqual(["lun", "mar", "mie", "jue", "vie", "sab", "dom"]);
+  });
+});
+
+describe("lastOccurrenceOfDiaSemana", () => {
+  // Sunday 2026-08-16, 10:00 at the club — the exact reproduction from
+  // issue #308: the empty state offers "pasar la lista de otro día" on a
+  // Sunday, and the schedules on offer are for every OTHER day of the week.
+  const SUNDAY = new Date("2026-08-16T15:00:00Z");
+
+  it("returns today when diaSemana is today's own", () => {
+    expect(lastOccurrenceOfDiaSemana("dom", SUNDAY)).toBe("2026-08-16");
+  });
+
+  it("walks back to the last real occurrence of an earlier day this week", () => {
+    // The issue's own reproduction: Miércoles 17:00 chosen on a Sunday must
+    // resolve to the Wednesday just past, not to the Sunday it was chosen on.
+    expect(lastOccurrenceOfDiaSemana("mie", SUNDAY)).toBe("2026-08-12");
+  });
+
+  it("wraps a full week back for the day right after today", () => {
+    // Monday is only ONE day ahead of Sunday on the calendar, but there is no
+    // Monday in the future to return — it must walk back a full week to the
+    // last Monday that already happened, never forward.
+    expect(lastOccurrenceOfDiaSemana("lun", SUNDAY)).toBe("2026-08-10");
+  });
+
+  it("reads the club's calendar day, not the device's", () => {
+    // 02:00Z on the 24th is Thursday at the club (see `clubIsoDate` above)
+    // but still Friday on a UTC clock. Asking for "jue" here must resolve to
+    // THAT Thursday, not walk back a further day because of a UTC read.
+    expect(lastOccurrenceOfDiaSemana("jue", new Date("2026-07-24T02:00:00Z"))).toBe("2026-07-23");
   });
 });
 

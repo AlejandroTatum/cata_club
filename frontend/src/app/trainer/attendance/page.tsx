@@ -149,7 +149,7 @@ import {
   Stepper,
 } from "@/components/ui";
 import { getUserInitials } from "@/lib/auth-utils";
-import { clubIsoDate, todayDiaSemana } from "@/lib/club-date";
+import { clubIsoDate, lastOccurrenceOfDiaSemana, todayDiaSemana } from "@/lib/club-date";
 import { formatDateTime } from "@/lib/format-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DiaSemana } from "@/types/domain";
@@ -513,10 +513,22 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   async function handleContinueToRoster(): Promise<void> {
     if (selectedScheduleId === null) return;
-    // Always today: a session picked out of the accordion is the one being
-    // taught now. Reusing `requestedDate` here would let a correction the
-    // trainer walked back out of date the NEXT session they choose.
-    await openRoster(selectedScheduleId, null, "mark-attendance", "push");
+    // A schedule on TODAY's own day needs no explicit date — `openRoster`
+    // already gives "today" via `clubIsoDate()` when `requestedDate` is
+    // `null`. A schedule from a DIFFERENT day must carry its own date
+    // explicitly: the empty state's own "puede pasar la lista de otro día"
+    // invites exactly this path, and letting it fall through to `null` here
+    // was issue #308 — every such session filed under TODAY's date instead
+    // of the day it actually happened on, corrupting the history.
+    //
+    // Not a reuse of the previous `requestedDate`: that would let a
+    // correction the trainer walked back out of date the NEXT session they
+    // choose. This is always freshly derived from the SELECTED schedule.
+    const requestedDate =
+      selectedSchedule && selectedSchedule.diaSemana !== today
+        ? lastOccurrenceOfDiaSemana(selectedSchedule.diaSemana)
+        : null;
+    await openRoster(selectedScheduleId, requestedDate, "mark-attendance", "push");
   }
 
   function handleBack(): void {

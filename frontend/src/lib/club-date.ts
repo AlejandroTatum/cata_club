@@ -146,6 +146,32 @@ export function todayDiaSemana(now: Date = new Date()): DiaSemana {
 }
 
 /**
+ * The most recent real calendar date — today included — on which
+ * `diaSemana` falls at the club, as `YYYY-MM-DD`.
+ *
+ * Exists for "pass the roll call of a different day" (issue #308): picking a
+ * schedule that meets on a day other than today has to file the attendance
+ * on THAT day's own last occurrence, never on today's date. The empty state
+ * on `/trainer` itself invites this exact flow ("puede pasar la lista de
+ * otro día si quedó pendiente"), and leaving the date to default to today
+ * silently filed the session under the wrong day — 50 of 50 sessions taken
+ * this way came back with a `fechaEntrenamiento` that disagreed with the
+ * horario's `diaSemana` in the audit that found this.
+ *
+ * When `diaSemana` IS today's, this returns today — the offset is 0, so a
+ * caller never needs to special-case "same day" before calling this.
+ */
+export function lastOccurrenceOfDiaSemana(diaSemana: DiaSemana, now: Date = new Date()): string {
+  const today = clubToday(now);
+  const todayIndex = JS_DAY_INDEX_TO_DIA_SEMANA.indexOf(todayDiaSemana(now));
+  const targetIndex = JS_DAY_INDEX_TO_DIA_SEMANA.indexOf(diaSemana);
+  const daysAgo = (todayIndex - targetIndex + 7) % 7;
+  const target = new Date(today);
+  target.setDate(today.getDate() - daysAgo);
+  return calendarIsoDate(target);
+}
+
+/**
  * Resolve a preset into `{ fechaInicio, fechaFin }`, both `YYYY-MM-DD`.
  *
  * `custom` returns empty strings — the caller owns those two pickers.

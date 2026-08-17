@@ -424,9 +424,18 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
 // students the trainer never even scrolled to were submitted as absent.
 // ---------------------------------------------------------------------------
 
+// `diaSemana: "mar"` matches `TUESDAY_IN_CLUB_TIME` (today) on purpose: the
+// bulk of this file's tests use `openRoster()` for state/UI behaviour that
+// has nothing to do with WHICH date gets filed, and issue #308 made the
+// filed date depend on whether the chosen schedule falls on today or not.
+// Keeping SCHEDULE same-day as "now" keeps every one of those tests on the
+// plain "today" path they were actually written for; the dedicated
+// different-day behaviour (choosing a schedule from another day must file
+// THAT day's own date) has its own fixtures below, in the "#308" describe
+// block.
 const SCHEDULE = {
   id: 12,
-  diaSemana: "lun",
+  diaSemana: "mar",
   horaInicio: "18:00",
   horaFin: "19:00",
   entrenadorId: 17,
@@ -439,7 +448,7 @@ function buildAlumnoHorarios(count: number): unknown[] {
     personaId: 100 + i,
     personaNombreCompleto: `Student ${String(i + 1).padStart(2, "0")}`,
     horarioId: 12,
-    horarioDia: "lun",
+    horarioDia: "mar",
     horarioHoraInicio: "18:00",
     horarioHoraFin: "19:00",
     fechaAsignacion: "2026-01-01",
@@ -460,9 +469,14 @@ async function pressBrowserBack(): Promise<void> {
   });
 }
 
-/** Walk the wizard from the schedule accordion to the mark-attendance step. */
+/**
+ * Walk the wizard from the schedule accordion to the mark-attendance step.
+ *
+ * SCHEDULE falls on today (`TUESDAY_IN_CLUB_TIME`), so today's single panel
+ * is already auto-expanded when the schedules land — no day header to click,
+ * unlike the cross-day flow exercised in the "#308" describe block below.
+ */
 async function openRoster(): Promise<void> {
-  fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
   fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
   fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
 }
@@ -833,7 +847,7 @@ describe("TrainerAttendancePage — named stepper", () => {
     await screen.findByRole("radiogroup", { name: /Ana López/ });
 
     const stepper = screen.getByRole("list", { name: "Pasos para tomar asistencia" });
-    expect(within(stepper).getByText("Horario · Lunes 18:00")).toBeInTheDocument();
+    expect(within(stepper).getByText("Horario · Martes 18:00")).toBeInTheDocument();
     // Step 2 is the current one.
     expect(within(stepper).getByText("Pasar lista")).toHaveAttribute("aria-current", "step");
   });
@@ -1105,7 +1119,8 @@ describe("TrainerAttendancePage — draft persistence", () => {
     mockFetchTrainingSchedules.mockResolvedValue([SCHEDULE, OTHER]);
 
     const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
-    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    // Both schedules fall on today, so today's panel is already expanded —
+    // same reasoning as `openRoster()`, no day header to click.
     fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText("Student 01");
@@ -1120,7 +1135,6 @@ describe("TrainerAttendancePage — draft persistence", () => {
     // not follow the trainer into the 20:00 one.
     window.history.replaceState(null, "", "/trainer/attendance");
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
-    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
     fireEvent.click(await screen.findByRole("button", { name: /20:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText("Student 01");
@@ -1942,7 +1956,7 @@ describe("TrainerAttendancePage — the picker offers an unfinished list back", 
     expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
     expect(screen.getByText("Tiene una lista sin terminar")).toBeInTheDocument();
     expect(screen.getByText(/1 alumno marcado/)).toBeInTheDocument();
-    expect(screen.getByText("Lunes 18:00 — 19:00")).toBeInTheDocument();
+    expect(screen.getByText("Martes 18:00 — 19:00")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Retomar la lista/ }));
 
@@ -2242,5 +2256,104 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
       horarioId: 12,
       fechaEntrenamiento: "2026-07-21",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #308 (audit finding #4, blocking): choosing a schedule from a
+// DIFFERENT day must file its own date, not today's.
+//
+// Reproduced live: a trainer picked "Miércoles 17:00 — 18:00" on a Sunday —
+// the exact flow `/trainer`'s own empty state recommends ("puede pasar la
+// lista de otro día si quedó pendiente") — and the POST carried today's
+// (Sunday's) date. 50 of 50 sessions taken this way came back with a
+// `fechaEntrenamiento` that disagreed with the horario's `diaSemana`.
+//
+// The clock here is the file's global Tuesday 2026-07-21; the only schedule
+// on offer is Wednesday's, so today's picker panel is empty and the trainer
+// reaches it exactly the way the empty state describes.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — a schedule from a different day keeps ITS OWN date (#308)", () => {
+  const WEDNESDAY_SCHEDULE = {
+    id: 20,
+    diaSemana: "mie",
+    horaInicio: "17:00",
+    horaFin: "18:00",
+    entrenadorId: 21,
+    entrenadorNombre: "Coach Vera",
+  };
+  /** The Wednesday just past, as club-date.ts's `lastOccurrenceOfDiaSemana`
+   * resolves it from Tuesday 2026-07-21 — never the 21st itself. */
+  const LAST_WEDNESDAY = "2026-07-15";
+
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockPush.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([WEDNESDAY_SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(2));
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 2, failed: [] });
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    window.sessionStorage.clear();
+  });
+
+  /**
+   * Today (Tuesday) has nothing scheduled, so the picker already shows the
+   * full week without needing "Ver todos los días" — same reasoning as
+   * `openRoster()`, just walking Wednesday's panel instead of today's.
+   */
+  async function openWednesdayRoster(): Promise<void> {
+    fireEvent.click(await screen.findByRole("button", { name: /^miércoles/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /17:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  }
+
+  it("addresses the roll call with that day's own date, not today's", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openWednesdayRoster();
+    await screen.findByText("Student 01");
+
+    expect(window.location.search).toBe(`?horario=20&fecha=${LAST_WEDNESDAY}&paso=lista`);
+    // The prefill of already-filed marks has to ask for the Wednesday that
+    // actually happened — asking for today (Tuesday) would silently hide any
+    // marks already on file for that session.
+    expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({
+      fechaInicio: LAST_WEDNESDAY,
+      fechaFin: LAST_WEDNESDAY,
+      horarioId: 20,
+    });
+  });
+
+  it("files the batch on the Wednesday that actually happened, never on today", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openWednesdayRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+
+    await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
+    // The whole point of #308: without the fix this would be "2026-07-21"
+    // (today), and the Wednesday session the trainer actually ran would
+    // still be wrong in the history.
+    expect(mockRegisterAttendance.mock.calls[0][0]).toMatchObject({
+      horarioId: 20,
+      fechaEntrenamiento: LAST_WEDNESDAY,
+    });
+  });
+
+  it("keys the draft by the Wednesday session, not by today", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openWednesdayRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(
+      within(screen.getByRole("radiogroup", { name: /Student 01/ })).getByRole("radio", {
+        name: "Tardanza",
+      }),
+    );
+
+    expect(window.sessionStorage.getItem(`cata_attendance_draft:20:${LAST_WEDNESDAY}`)).not.toBeNull();
+    expect(window.sessionStorage.getItem("cata_attendance_draft:20:2026-07-21")).toBeNull();
   });
 });

@@ -4,6 +4,22 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from datetime import date, timedelta
 
+_DIA_SEMANA_DE_WEEKDAY = [
+    "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO",
+]
+
+
+def _dia_semana_de(fecha: str) -> str:
+    """El `dia_semana` (mayúsculas, como lo espera la API) del `weekday()` real
+    de `fecha` (`YYYY-MM-DD`). Issue #308: el servicio ahora exige que
+    `fecha_entrenamiento` caiga en el `dia_semana` del horario, así que un
+    test que arma su propio horario para una fecha arbitraria tiene que
+    crearlo en el día que esa fecha realmente es -- de lo contrario el `POST`
+    que el test da por válido se rechaza con 400 antes de llegar a lo que el
+    test en verdad ejercita."""
+    anio, mes, dia = map(int, fecha.split("-"))
+    return _DIA_SEMANA_DE_WEEKDAY[date(anio, mes, dia).weekday()]
+
 
 def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
     return client.post(
@@ -97,6 +113,64 @@ def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client):
     ]
     assert len(registros) == 1
     assert registros[0]["estado"] == "AUSENTE"
+
+
+# --- Issue #308: la fecha registrada tiene que ser la del horario ----------
+# Candado de test del issue: pasar lista de un horario de Miércoles con la
+# fecha de un Domingo debe rechazarse -- exactamente la reproducción del
+# hallazgo #4 (auditoría 2026-08-16), donde el cliente mandaba `hoy` en vez
+# del día real del horario elegido y el backend lo aceptaba con 201.
+def test_registrar_asistencia_rechaza_fecha_que_no_coincide_con_el_dia_del_horario(client):
+    """`fecha_entrenamiento` debe caer en el `dia_semana` real del horario.
+    Sin esta invariante en el backend, el arreglo del frontend (issue #308)
+    dependía por completo de que el cliente se portara bien -- la API seguía
+    abierta a que cualquier llamador mandara cualquier fecha con cualquier
+    horario."""
+    alumno = _crear_persona_api(client, "1710034073", "Ana")
+    horario = _crear_horario_api(client, dia="MIERCOLES")
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    resp = client.post(
+        "/api/v1/asistencias/",
+        json={
+            # 2026-08-16 es domingo; el horario es de miércoles.
+            "fecha_entrenamiento": "2026-08-16", "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+    assert resp.status_code == 400
+    detalle = resp.json()["detail"].lower()
+    assert "domingo" in detalle
+    assert "miércoles" in detalle
+
+    # Nada quedó creado: el rechazo es total, no una fila corrupta más.
+    historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
+    assert historial.json()["items"] == []
+
+
+def test_registrar_asistencia_acepta_fecha_que_coincide_con_el_dia_del_horario(client):
+    """Contracara del candado de arriba: la MISMA fecha, para un horario del
+    día que realmente es, se acepta -- el candado rechaza el par
+    (fecha, horario) equivocado, no la fecha en sí."""
+    alumno = _crear_persona_api(client, cedula_valida(9001), "Bea")
+    horario = _crear_horario_api(client, dia="MIERCOLES")
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    resp = client.post(
+        "/api/v1/asistencias/",
+        json={
+            # 2026-08-19 es miércoles -- coincide con el horario.
+            "fecha_entrenamiento": "2026-08-19", "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+    assert resp.status_code == 201, resp.text
 
 
 def test_listar_alumnos_por_horario_incluye_edad_calculada(client):
@@ -454,9 +528,19 @@ def _congelar_hoy_asistencia(monkeypatch, hoy):
 
 def _preparar_asistencia_para_corregir(client, fecha):
     """Crea persona + horario + inscripción + una asistencia inicial (como
-    ADMINISTRADOR) y devuelve el payload de esa asistencia."""
+    ADMINISTRADOR) y devuelve el payload de esa asistencia.
+
+    El horario se crea en el día real de `fecha` (issue #308): estos tests
+    combinan `fecha` con deltas de antigüedad, no con un día de semana en
+    particular, así que el horario tiene que seguir a la fecha -- nunca al
+    revés. Sábado necesita COMPETITIVO (la única categoría de la siembra que
+    lo permite); el resto usa JUVENIL (Lunes-Viernes), como el resto del
+    archivo. Ninguna fecha usada acá cae en Domingo, que ninguna categoría
+    permite."""
+    dia = _dia_semana_de(fecha)
+    categoria = "COMPETITIVO" if dia == "SABADO" else "JUVENIL"
     alumno = _crear_persona_api(client)
-    horario = _crear_horario_api(client)
+    horario = _crear_horario_api(client, dia=dia, categoria=categoria)
     client.post(
         "/api/v1/asistencias/asignar-alumno",
         json={"persona_id": alumno["id"], "horario_id": horario["id"]},
@@ -526,8 +610,10 @@ def test_toma_original_por_entrenador_no_tiene_tope_de_antiguedad(client_entrena
     """La toma ORIGINAL (crear el primer registro) sigue siendo del ENTRENADOR
     y no hereda el tope de 30 días: crear un registro antiguo no se rechaza."""
     _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=45))
     alumno = _crear_persona_api(client)
-    horario = _crear_horario_api(client)
+    # El horario sigue a `fecha` (issue #308), no al default LUNES.
+    horario = _crear_horario_api(client, dia=_dia_semana_de(fecha))
     client.post(
         "/api/v1/asistencias/asignar-alumno",
         json={"persona_id": alumno["id"], "horario_id": horario["id"]},
@@ -537,7 +623,7 @@ def test_toma_original_por_entrenador_no_tiene_tope_de_antiguedad(client_entrena
     resp = client_entrenador.post(
         "/api/v1/asistencias/",
         json={
-            "fecha_entrenamiento": str(_HOY_CORRECCION - timedelta(days=45)),
+            "fecha_entrenamiento": fecha,
             "estado": "PRESENTE",
             "persona_id": alumno["id"], "horario_id": horario["id"],
         },
@@ -565,14 +651,16 @@ def test_re_tomar_mismo_dia_por_entrenador_se_rechaza_como_correccion(client_ent
 # con `registrado_por_id = NULL` (sin backfill falso) y se exponen como tal.
 
 
-def _crear_autor_y_alumno(client):
+def _crear_autor_y_alumno(client, dia="LUNES"):
     """Primera persona creada (id=1) es el AUTOR (el token admin es
     `persona_id=1`); la segunda (id=2) es el alumno al que se le toma lista.
-    Devuelve (autor, alumno, horario)."""
+    Devuelve (autor, alumno, horario). `dia` default LUNES para los llamados
+    que registran en 2026-07-13 (un lunes); un llamado con otra fecha debe
+    pasar el día real (issue #308)."""
     autor = _crear_persona_api(client, cedula_valida(146), "María")
     alumno = _crear_persona_api(client, cedula_valida(147), "Ana")
     assert autor["id"] == 1
-    horario = _crear_horario_api(client)
+    horario = _crear_horario_api(client, dia=dia)
     client.post(
         "/api/v1/asistencias/asignar-alumno",
         json={"persona_id": alumno["id"], "horario_id": horario["id"]},
@@ -623,10 +711,13 @@ def test_corregir_no_pisa_quien_tomo_la_lista(client, monkeypatch):
     # Mismo patrón que los tests de #262: congela el `hoy_club()` del
     # servicio para que la antigüedad no dependa del reloj real.
     _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
-    autor, alumno, horario = _crear_autor_y_alumno(client)
+    fecha = str(_HOY_CORRECCION - timedelta(days=1))
+    # El horario sigue a `fecha` (issue #308): HOY_CORRECCION - 1 día es
+    # viernes, no lunes.
+    autor, alumno, horario = _crear_autor_y_alumno(client, dia=_dia_semana_de(fecha))
 
     payload = {
-        "fecha_entrenamiento": str(_HOY_CORRECCION - timedelta(days=1)),
+        "fecha_entrenamiento": fecha,
         "estado": "PRESENTE",
         "persona_id": alumno["id"], "horario_id": horario["id"],
     }
