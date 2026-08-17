@@ -15,6 +15,7 @@ import {
   getBackendApiUrl,
   backendFetch,
   forwardedForFrom,
+  userAgentFrom,
   backendLogin,
   backendMe,
   backendRefresh,
@@ -258,6 +259,66 @@ describe("backendLogin — forwardedFor", () => {
 
     expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe("http://localhost:8000/api/v1/auth/login");
     expect(sentHeaders().get("x-forwarded-for")).toBe("198.51.100.20");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// backendLogin — User-Agent (issue #309 / hallazgo #18): the BFF's own
+// `fetch` to FastAPI never carried the browser's User-Agent, so
+// `auth_router.py` read Node's own outgoing request instead of the visitor's
+// browser — every login through the form landed in `GET /auth/me/sesiones`
+// as "Dispositivo desconocido" instead of "Linux · Chrome". The backend
+// already labels correctly once the header arrives (verified against
+// `describir_dispositivo()` in backend/app/soporte_transversal/dispositivo.py)
+// — the hole was entirely on this side of the boundary.
+// ---------------------------------------------------------------------------
+
+describe("backendLogin — User-Agent", () => {
+  it("forwards the browser's User-Agent to POST /auth/login", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: "a", refresh_token: "r", token_type: "bearer" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await backendLogin(
+      "admin@cataclub.com",
+      "admin123",
+      undefined,
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    );
+
+    expect(sentHeaders().get("user-agent")).toBe(
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    );
+  });
+
+  it("does not add a User-Agent header when the caller doesn't pass one (existing call sites unchanged)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: "a", refresh_token: "r", token_type: "bearer" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await backendLogin("admin@cataclub.com", "admin123");
+
+    expect(sentHeaders().has("user-agent")).toBe(false);
+  });
+});
+
+describe("userAgentFrom", () => {
+  it("reads the browser's User-Agent off the incoming request", () => {
+    const request = new Request("http://localhost/api/auth/login", {
+      headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) Chrome/151.0.0.0" },
+    });
+    expect(userAgentFrom(request)).toBe("Mozilla/5.0 (X11; Linux x86_64) Chrome/151.0.0.0");
+  });
+
+  it("returns undefined when the header is absent", () => {
+    const request = new Request("http://localhost/api/auth/login");
+    expect(userAgentFrom(request)).toBeUndefined();
   });
 });
 

@@ -393,6 +393,22 @@ export function forwardedForFrom(request: Request): string | undefined {
 }
 
 /**
+ * Extract the browser's `User-Agent` off the incoming request, so a BFF
+ * route that proxies a backend call the backend labels by device (currently
+ * only `backendLogin`, see issue #309) can forward it.
+ *
+ * Unlike `forwardedForFrom`, this is not a trust-boundary control — the
+ * backend only ever uses this value for a best-effort device label on the
+ * observational sessions table (`describir_dispositivo`, see
+ * backend/app/soporte_transversal/dispositivo.py), never for authorization
+ * or rate-limiting — so no validation beyond "is the header present" is
+ * needed here.
+ */
+export function userAgentFrom(request: Request): string | undefined {
+  return request.headers.get("user-agent") ?? undefined;
+}
+
+/**
  * The caller's headers plus `X-Forwarded-For`, without dropping any of them.
  *
  * `HeadersInit` is a union of three shapes — a plain object, a `Headers`
@@ -478,13 +494,21 @@ export async function backendLogin(
   username: string,
   password: string,
   forwardedFor?: string,
+  // Browser User-Agent to forward — see `userAgentFrom` above and issue
+  // #309. Without this, every login through the form reached auth_router.py
+  // carrying Node's own outgoing User-Agent instead of the visitor's
+  // browser, so `GET /auth/me/sesiones` labeled every real login "Dispositivo
+  // desconocido".
+  userAgent?: string,
 ): Promise<AuthResult<BackendLoginResponse>> {
   const body = new URLSearchParams({ username, password }).toString();
+  const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+  if (userAgent) headers["User-Agent"] = userAgent;
   const result = await backendFetch(
     "/auth/login",
     {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers,
       body,
     },
     { forwardedFor },
