@@ -427,3 +427,69 @@ describe("TrainerAttendanceHistoryPage", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #346 (regresión de #308 + #310): antes de K1, "la fecha de la sesión"
+// y "hoy" eran siempre el mismo valor -- separarlas en la escritura dejó
+// expuesta cualquier lectura que todavía asumiera que coinciden.
+//
+// Cada mock de `fetchAttendanceRecords` de arriba devuelve el mismo array fijo
+// sin mirar `fechaInicio`/`fechaFin`, así que ninguno de esos tests puede
+// distinguir un rango correcto de uno roto que hubiera pedido la fecha de HOY
+// en vez de la de la sesión. Este bloque mockea el fetch como se comporta el
+// backend real -- filtrando por el rango recibido -- para que la aserción
+// solo pase si la pantalla realmente pide la fecha de la sesión.
+// ---------------------------------------------------------------------------
+describe("TrainerAttendanceHistoryPage — el conteo de una sesión sale de su propia fecha, no de hoy (issue #346)", () => {
+  const SUNDAY_IN_CLUB_TIME = new Date("2026-08-16T15:00:00Z");
+  const WEDNESDAY_SESSION_DATE = "2026-08-12";
+
+  const CLOSED_WEDNESDAY_SESSION: AttendanceRecord[] = Array.from({ length: 15 }, (_, i) =>
+    record(
+      "present",
+      `Alumno ${i + 1}`,
+      WEDNESDAY_SESSION_DATE,
+      "Miércoles 17:00 — 18:00",
+      20,
+      "Coach Vera",
+    ),
+  );
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(SUNDAY_IN_CLUB_TIME);
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
+    mockSearchStudents.mockReset().mockResolvedValue([]);
+    // Un rango de verdad: solo vuelven los registros cuya PROPIA `fecha` cae
+    // dentro de [fechaInicio, fechaFin] -- lo mismo que hace
+    // `/api/attendance/records` contra `fecha_entrenamiento` en el backend.
+    // Un llamado que (por error) pidiera la fecha de hoy en vez de la de la
+    // sesión no recibiría nada.
+    mockFetchAttendanceRecords.mockReset().mockImplementation(
+      (params?: { fechaInicio?: string; fechaFin?: string; horarioId?: number }) =>
+        Promise.resolve(
+          CLOSED_WEDNESDAY_SESSION.filter((r) => {
+            if (params?.fechaInicio && r.fecha < params.fechaInicio) return false;
+            if (params?.fechaFin && r.fecha > params.fechaFin) return false;
+            if (params?.horarioId !== undefined && r.horarioId !== params.horarioId) return false;
+            return true;
+          }),
+        ),
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("agrupa los 15 registros de la sesión del miércoles, vista un domingo, con el rango por defecto (candado #346)", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    // El preset por defecto ("Este mes") tiene que alcanzar una sesión de
+    // días antes en la misma semana/mes -- nunca solo hoy.
+    const bar = await screen.findByRole("img", { name: /sobre 15 registros/ });
+    expect(bar).toBeInTheDocument();
+    expect(screen.getByText("15 presentes")).toBeInTheDocument();
+  });
+});
