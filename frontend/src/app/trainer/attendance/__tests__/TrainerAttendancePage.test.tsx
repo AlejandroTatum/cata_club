@@ -220,7 +220,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     const stateSelector = await screen.findByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
     fireEvent.click(within(stateSelector).getByRole("radio", { name: "Justificado" }));
-    fireEvent.click(screen.getByRole("button", { name: "Siguiente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Revisar y confirmar" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar asistencia" }));
 
     await waitFor(() => {
@@ -252,7 +252,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     // every student carries a real state.
     const stateSelector = screen.getByRole("radiogroup", { name: /Ana López/ });
     fireEvent.click(within(stateSelector).getByRole("radio", { name: "Presente" }));
-    fireEvent.click(screen.getByRole("button", { name: "Siguiente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Revisar y confirmar" }));
     expect(await screen.findByText("Horario")).toBeInTheDocument();
     expect(screen.getAllByText("Lunes", { exact: false }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Grupo")).not.toBeInTheDocument();
@@ -272,7 +272,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
 
     expect(await screen.findByText("Este horario no tiene alumnos asignados.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Siguiente" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
   it("pre-selects Presente for a student who already has an attendance record for today's date + this horario", async () => {
@@ -404,7 +404,13 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
     expect(await screen.findByText("Ana López")).toBeInTheDocument();
   });
 
-  it("paginates the student list 10-en-10 and shows Anterior/Siguiente controls", async () => {
+  // Issue #318 / hallazgo #58 (K9): the roster used to paginate at 10
+  // (`WIZARD_PAGE_SIZE`), which is exactly the candado the audit's own click
+  // count depended on — "marcar los 10 alumnos de la página 1 (10) → Página
+  // siguiente (1) → marcar los 5 de la página 2 (5)" only cost 22 clicks
+  // BECAUSE a 15-alumno roster could not render in one screen. This test
+  // replaces the old one that asserted that pagination as correct behaviour.
+  it("renders the full roster in one pass, with no pagination to change mid-session", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -427,24 +433,70 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
     fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
 
+    // All 25, at once — no page 2 to click into.
     await screen.findByText("Student 01");
     expect(screen.getByText("Student 10")).toBeInTheDocument();
-    expect(screen.queryByText("Student 11")).not.toBeInTheDocument();
-
-    const pageInfo = screen.getByText(/Página 1 de 3/);
-    expect(pageInfo).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
-    expect(await screen.findByText("Student 11")).toBeInTheDocument();
-    expect(screen.getByText("Student 20")).toBeInTheDocument();
-    expect(screen.queryByText("Student 01")).not.toBeInTheDocument();
-    expect(screen.getByText(/Página 2 de 3/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
-    expect(await screen.findByText("Student 21")).toBeInTheDocument();
+    expect(screen.getByText("Student 11")).toBeInTheDocument();
     expect(screen.getByText("Student 25")).toBeInTheDocument();
-    expect(screen.queryByText("Student 26")).not.toBeInTheDocument();
-    expect(screen.getByText(/Página 3 de 3/)).toBeInTheDocument();
+
+    expect(screen.queryByText(/Página \d+ de \d+/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Página siguiente" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Página anterior" })).not.toBeInTheDocument();
+  });
+
+  // Issue #318 / hallazgo #58 (K9) — the click-count half of the same lock:
+  // "un test que exija marcar 15 presentes en ≤3 interacciones". One tap on
+  // the existing bulk action (K5's `markRemainingPresent`, unchanged by this
+  // cluster) reviews the whole roster regardless of how many render on
+  // screen — the fix is that all 15 are now ON screen to begin with.
+  it("marks 15 alumnos as reviewed-present in a single interaction, honestly", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
+    ]);
+
+    const students = Array.from({ length: 15 }, (_, i) => ({
+      id: i + 1,
+      personaId: 100 + i,
+      personaNombreCompleto: `Student ${String(i + 1).padStart(2, "0")}`,
+      horarioId: 12,
+      horarioDia: "lun",
+      horarioHoraInicio: "18:00",
+      horarioHoraFin: "19:00",
+      fechaAsignacion: "2026-01-01",
+    }));
+    mockFetchAlumnosPorHorario.mockResolvedValue(students);
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText("Student 01");
+
+    // Every one of the 15 has to actually be reachable without paging —
+    // otherwise "one click marks them all" would be marking rows the trainer
+    // never saw, which is the exact silent-data-loss shape K5 closed.
+    expect(screen.getByText("Student 15")).toBeInTheDocument();
+
+    const marker = screen.getByText("0", { selector: "[aria-live]" });
+    expect(marker).toHaveTextContent("0/15");
+
+    // Interaction 1 of ≤3: the bulk action.
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+
+    // `reviewedCount`, not the raw "presente" default: this must read the
+    // truth of what the trainer actually confirmed, not what the roster
+    // defaulted to — the exact tension K5 fixed and this cluster must not
+    // reopen.
+    expect(marker).toHaveTextContent("15/15");
+    expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
+
+    // Interaction 2 of ≤3: advance to the confirmation step.
+    fireEvent.click(screen.getByRole("button", { name: "Revisar y confirmar" }));
+    expect(await screen.findByText("Horario")).toBeInTheDocument();
+    // The confirmation step must not flag anyone as unreviewed either —
+    // the bulk action's `reviewed: true` has to survive the step change.
+    expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
   });
 });
 
@@ -560,36 +612,44 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     expect(group.closest("[data-reviewed]")).toHaveAttribute("data-reviewed", "false");
   });
 
-  it("counts unreviewed students across the FULL roster, not just the visible page", async () => {
-    // 25 students → 3 pages of 10. Page 1 shows Student 01..10 only.
+  it("counts unreviewed students across the FULL roster, not just what the name filter shows", async () => {
+    // Issue #318 / hallazgo #58 (K9) removed the wizard's pagination — the
+    // roster now renders all 25 at once — but the search box still filters,
+    // and that is the same silent-data-loss shape pagination used to create:
+    // a scope-limited count would report "0 sin revisar" while a filtered-out
+    // student was about to be filed present sight unseen.
     mockFetchAlumnosPorHorario.mockResolvedValue(buildAlumnoHorarios(25));
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
 
     await screen.findByText("Student 01");
+    fireEvent.change(screen.getByRole("textbox", { name: "Filtrar alumnos" }), {
+      target: { value: "Student 01" },
+    });
     expect(screen.queryByText("Student 11")).not.toBeInTheDocument();
-    // The counter must span all 25, not the 10 rendered rows — an off-page
-    // student is exactly the one about to be filed present sight unseen.
+    // The counter must span all 25, not the 1 filtered-in row — a student
+    // the filter hides is exactly the one about to be filed present sight
+    // unseen.
     expect(screen.getByText("25 sin revisar")).toBeInTheDocument();
     expect(screen.getByText("25 alumnos sin revisar")).toBeInTheDocument();
   });
 
-  it("carries the off-page unreviewed count into the confirmation summary", async () => {
+  it("carries the unreviewed count into the confirmation summary when only some students were reviewed", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue(buildAlumnoHorarios(25));
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
 
-    // Mark every student visible on page 1 — the other 15 are never seen.
+    // Mark 10 of the 25 — the other 15 are left on the untouched default.
     for (let i = 1; i <= 10; i++) {
       const group = screen.getByRole("radiogroup", { name: new RegExp(`Student ${String(i).padStart(2, "0")}`) });
       fireEvent.click(within(group).getByRole("radio", { name: "Presente" }));
     }
     expect(screen.getByText("15 sin revisar")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
 
     // "25 presentes" on its own would read identically whether the trainer
     // went through the roster or never scrolled past page 1.
@@ -614,7 +674,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
 
     // The trainer asked for a default; a default that cannot be submitted is
     // not a default. The count is a warning, not a gate.
-    const next = screen.getByRole("button", { name: /Siguiente/ });
+    const next = screen.getByRole("button", { name: /Revisar y confirmar/ });
     expect(next).toBeEnabled();
     expect(next).not.toHaveAttribute("aria-describedby");
     expect(screen.getByText("3 alumnos sin revisar")).toBeInTheDocument();
@@ -632,7 +692,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     fireEvent.click(within(group).getByRole("radio", { name: "Ausente" }));
 
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Siguiente/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeEnabled();
   });
 
   // Setting a row to the state it already had is still a decision: the trainer
@@ -711,7 +771,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
     expect(screen.getByText("24 presentes")).toBeInTheDocument();
     expect(within(first).getByRole("radio", { name: "Justificado" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("button", { name: /Siguiente/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeEnabled();
   });
 
   it("submits a real state for every student on the roster, never the unmarked sentinel", async () => {
@@ -726,7 +786,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await screen.findByText("Student 01");
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
@@ -1024,7 +1084,7 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
       expect(row).not.toHaveAttribute("data-attendance", "unmarked");
     }
     // And the wizard therefore stays unblocked.
-    expect(screen.getByRole("button", { name: /Siguiente/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeEnabled();
   });
 
   it("keeps the four explicit controls in sync with a tap — the tap is an accelerator", async () => {
@@ -1121,7 +1181,7 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
 
     expect(await screen.findByRole("button", { name: /Confirmar asistencia/ })).toBeInTheDocument();
     expect(mockRegisterAttendance).not.toHaveBeenCalled();
@@ -1152,7 +1212,7 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
-    const bar = screen.getByRole("button", { name: /Siguiente/ }).closest("div.sticky");
+    const bar = screen.getByRole("button", { name: /Revisar y confirmar/ }).closest("div.sticky");
     expect(bar).not.toBeNull();
     expect(bar).toHaveClass("sticky", "bottom-0");
   });
@@ -1277,7 +1337,7 @@ describe("TrainerAttendancePage — draft persistence", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
     first.unmount();
@@ -1310,7 +1370,7 @@ describe("TrainerAttendancePage — draft persistence", () => {
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
@@ -1377,10 +1437,10 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
     expect(screen.getByText(/Solo un administrador puede corregirla/)).toBeInTheDocument();
     // Nothing left that promises an edit the backend was always going to
-    // refuse — no radios, and "Siguiente" is disabled rather than silently
-    // reachable.
+    // refuse — no radios, and "Revisar y confirmar" is disabled rather than
+    // silently reachable.
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Siguiente" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
   it("no aplica el modo lectura para un administrador, que sí puede corregir", async () => {
@@ -1421,7 +1481,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
@@ -1451,7 +1511,7 @@ describe("TrainerAttendancePage — partial failures name the students", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
   }
@@ -1511,7 +1571,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
   }
@@ -1551,7 +1611,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
@@ -1636,7 +1696,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
@@ -1645,7 +1705,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
 
     await screen.findByText("Student 01");
     expect(screen.queryByRole("button", { name: /Confirmar asistencia/ })).not.toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /Siguiente/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
   });
 
   // A retry whose re-fetch fails must leave the receipt standing. Tearing it
@@ -1661,7 +1721,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
@@ -1688,7 +1748,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
@@ -1712,7 +1772,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
@@ -1753,7 +1813,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
@@ -1937,7 +1997,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
         name: "Tardanza",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     await screen.findByRole("button", { name: /Confirmar asistencia/ });
   }
 
@@ -1949,7 +2009,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     await screen.findByText("Student 01");
     expect(window.location.search).toBe("?horario=12&paso=lista");
 
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     await screen.findByRole("button", { name: /Confirmar asistencia/ });
     expect(window.location.search).toBe("?horario=12&paso=confirmar");
   });
@@ -1961,7 +2021,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     await pressBrowserBack();
 
     // Step 2, not /trainer and not "Elija el horario".
-    expect(screen.getByRole("button", { name: /Siguiente/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
     expect(screen.queryByText("Elija el horario")).not.toBeInTheDocument();
     expect(window.location.search).toBe("?horario=12&paso=lista");
     expect(
@@ -1978,7 +2038,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     await reachConfirmWithOneMark();
 
     await pressBrowserBack();
-    expect(screen.getByRole("button", { name: /Siguiente/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
 
     await pressBrowserBack();
     expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
@@ -1993,7 +2053,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     // does not then push the trainer FORWARD into the step they just left.
     fireEvent.click(screen.getByRole("button", { name: /Atrás/ }));
     await waitFor(() => expect(window.location.search).toBe("?horario=12&paso=lista"));
-    expect(screen.getByRole("button", { name: /Siguiente/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
 
     await pressBrowserBack();
     expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
@@ -2078,7 +2138,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
     // The receipt's own URL carries no step: reloading it must not resurrect
@@ -2350,10 +2410,12 @@ describe("TrainerAttendancePage — undo", () => {
     expect(screen.getByRole("button", { name: /^deshacer/i })).toBeDisabled();
   });
 
-  it("offers the bulk undo in the toast too — it changes rows nobody can see", async () => {
-    // 25 students is three pages. "Marcar restantes presentes" rewrites rows on
-    // pages 2 and 3 that the trainer never scrolled to, so the confirmation of
-    // that action has to carry its own way back.
+  it("offers the bulk undo in the toast too — it changes rows nobody deliberately reviewed", async () => {
+    // 25 students, all rendered at once (#318/#58 removed the wizard's
+    // pagination). "Marcar restantes presentes" still rewrites every
+    // unreviewed row in one tap, including ones far below the fold the
+    // trainer never scrolled to, so the confirmation of that action has to
+    // carry its own way back.
     mockFetchAlumnosPorHorario.mockResolvedValue(buildAlumnoHorarios(25));
     // The toast stack is mounted by the root layout in the real app; this is
     // the one case that asserts on what the toast itself renders.
@@ -2427,7 +2489,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
@@ -2462,7 +2524,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
     await screen.findByText("Student 01");
     expect(window.location.search).toBe("?horario=12&fecha=2026-07-13&paso=lista");
 
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     await screen.findByRole("button", { name: /Confirmar asistencia/ });
     // Losing the date on Siguiente would file the batch on today after all.
     expect(window.location.search).toBe("?horario=12&fecha=2026-07-13&paso=confirmar");
@@ -2496,7 +2558,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
@@ -2578,7 +2640,7 @@ describe("TrainerAttendancePage — a schedule from a different day keeps ITS OW
     await openWednesdayRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    fireEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());

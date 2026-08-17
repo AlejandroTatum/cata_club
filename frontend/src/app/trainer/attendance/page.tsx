@@ -126,8 +126,6 @@ import {
   formatDay,
   groupSchedulesByDay,
   selectVisibleSchedules,
-  paginateRecords,
-  getTotalPages,
 } from "@/app/attendance/attendance-utils";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ContextualHelp from "@/components/ContextualHelp";
@@ -145,7 +143,6 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
-  Pagination,
   StatCard,
   Stepper,
 } from "@/components/ui";
@@ -198,9 +195,6 @@ const STEP_LABELS: Record<WizardStep, string> = {
 // ---------------------------------------------------------------------------
 // UI constants
 // ---------------------------------------------------------------------------
-
-/** Page size for the student list in the attendance registration wizard. */
-const WIZARD_PAGE_SIZE = 10;
 
 const ATTENDANCE_ICONS: Record<EstadoAsistencia, React.ReactNode> = {
   present: <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
@@ -288,7 +282,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
   const [searchFilter, setSearchFilter] = useState("");
   /** Narrows the roll call to the rows nobody has touched yet. */
   const [onlyUnreviewed, setOnlyUnreviewed] = useState(false);
-  const [studentPage, setStudentPage] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -420,11 +413,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
   useEffect(() => {
     if (submitError) showError(submitError);
   }, [submitError, showError]);
-
-  // Reset student page when either filter changes.
-  useEffect(() => {
-    setStudentPage(1);
-  }, [searchFilter, onlyUnreviewed]);
 
   const currentIndex = STEP_ORDER.indexOf(step);
   const isFirst = currentIndex === 0;
@@ -570,7 +558,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
         // A roster that just loaded has no marking actions behind it — an undo
         // here would restore a roster from a different session.
         setUndoStack([]);
-        setStudentPage(1);
         setOnlyUnreviewed(false);
         setStep(target);
         writeWizardUrl(horarioId, requestedDate, target, mode);
@@ -952,7 +939,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
     setConfirmedAt(null);
   }
 
-  // ---- Student list pagination (attendance wizard) ----
+  // ---- Student list (attendance wizard) ----
+  //
+  // Issue #318 / hallazgo #58 (K9): this used to paginate at 10 (`Pagination`
+  // + `WIZARD_PAGE_SIZE`), which forced a page change mid-session for any
+  // roster over 10 alumnos and was the single largest contributor to the
+  // 22-click walkthrough the audit measured on a 15-alumno session. The whole
+  // roster now renders in one pass — the trainer scrolls, never paginates —
+  // and "Marcar restantes presentes" (below) is the actual answer to a long
+  // roster, not a page-2 button.
 
   const filteredStudents = useMemo(() => {
     const q = searchFilter.trim().toLowerCase();
@@ -963,21 +958,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
     );
   }, [students, searchFilter, onlyUnreviewed]);
 
-  const totalStudentPages = useMemo(
-    () => getTotalPages(filteredStudents.length, WIZARD_PAGE_SIZE),
-    [filteredStudents.length],
-  );
-  const paginatedStudents = useMemo(
-    () => paginateRecords(filteredStudents, studentPage, WIZARD_PAGE_SIZE),
-    [filteredStudents, studentPage],
-  );
-
   // Deliberately computed over `students` (the FULL roster) rather than
-  // `filteredStudents`/`paginatedStudents`: the wizard paginates at 10 and
-  // the search box filters, so a page- or filter-scoped count would report
-  // "0 sin revisar" while a whole second page of students was about to be
-  // filed present sight unseen — the exact silent-data-loss path this counter
-  // exists to close.
+  // `filteredStudents`: the search box filters, so a filter-scoped count
+  // would report "0 sin revisar" while students the name filter hid were
+  // about to be filed present sight unseen — the exact silent-data-loss path
+  // this counter exists to close.
   /**
    * The four states as one record, so the confirmation step can preview the
    * session with the same figure the receipt archives it with. The whole
@@ -1527,8 +1512,49 @@ export default function TrainerAttendancePage(): React.ReactElement {
               />
             ) : (
               <>
-                <ul className="flex flex-col gap-2">
-                  {paginatedStudents.map((student) => {
+                {/*
+                 * Issue #318 / hallazgo #25 (K9), desktop only (audit
+                 * measured 1440×900; below `sm` these are card stacks, same
+                 * scope `list-page-size.test.ts` already carves out).
+                 *
+                 * The commit bar is `sticky bottom-0` over the WHOLE PAGE
+                 * scroll. A padding reserve below the last row does nothing
+                 * for a row in the MIDDLE of a long roster: at the page's
+                 * very first paint (scrollY 0, before the trainer has
+                 * touched anything) the bar already pins itself to the
+                 * viewport's bottom 74px whenever the page is taller than
+                 * the viewport — which #58 made routine, since the roster no
+                 * longer paginates — and whichever row's static position
+                 * happens to land in that band loses its tap to the bar
+                 * underneath it. Measured: `document.elementFromPoint` on
+                 * that row returned the bar's own button.
+                 *
+                 * Padding cannot fix a defect that depends on which row is
+                 * ABOVE the reserved space, only on what is below it. The
+                 * roster instead gets its OWN bounded, internally-scrolling
+                 * box, so the page itself never needs to scroll past the bar:
+                 * every row's tap target lives inside this fixed box, the bar
+                 * sits in its own space right below it, and the two can no
+                 * longer occupy the same pixels at any scroll position.
+                 *
+                 * `calc(100vh-660px)` reserves the measured height of
+                 * everything ELSE the mark-attendance step can render above
+                 * and below the roster (coal header, contextual help,
+                 * filter row, the bar itself) so the WHOLE page fits one
+                 * viewport at 1440×900 and never needs outer scroll. It is a
+                 * measured constant, not a derived one — the honest
+                 * limitation is that a step that grows new chrome above the
+                 * roster has to re-measure it, the same way `WIZARD_PAGE_SIZE`
+                 * needed watching (`list-page-size.test.ts`). `min-h-[120px]`
+                 * keeps the box from collapsing to nothing on shorter desktop
+                 * windows; sub-1440 heights may still need outer scroll, which
+                 * is the pre-existing behaviour, not a regression.
+                 */}
+                <ul
+                  data-testid="attendance-roster-scroll"
+                  className="flex flex-col gap-2 sm:max-h-[calc(100vh-660px)] sm:min-h-[120px] sm:overflow-y-auto sm:overscroll-contain sm:pr-1"
+                >
+                  {filteredStudents.map((student) => {
                     const idx = students.findIndex((s) => s.id === student.id);
                     const isUnmarked = student.attendance === UNMARKED;
                     const reviewed = isReviewed(student);
@@ -1542,7 +1568,16 @@ export default function TrainerAttendancePage(): React.ReactElement {
                         key={student.id}
                         data-attendance={student.attendance}
                         data-reviewed={reviewed}
-                        className={`flex flex-col overflow-hidden rounded-ctl border bg-paper sm:h-12 sm:flex-row sm:items-center ${
+                        // `shrink-0`: once the roster (#318/#25) got its own
+                        // bounded `overflow-y-auto` box, this `<li>` — a flex
+                        // item of the now height-constrained `<ul>` — started
+                        // shrinking to FIT the box instead of the box
+                        // scrolling past it, because `flex-shrink` defaults to
+                        // 1. Every fiche rendered squashed to ~28px with its
+                        // own 48px button overflowing it. `shrink-0` keeps
+                        // rows at their real size and makes the box the thing
+                        // that scrolls.
+                        className={`flex shrink-0 flex-col overflow-hidden rounded-ctl border bg-paper sm:h-12 sm:flex-row sm:items-center ${
                           reviewed ? "border-line-2" : "border-dashed border-ink-3/50"
                         }`}
                       >
@@ -1658,18 +1693,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
                     );
                   })}
                 </ul>
-
-                {filteredStudents.length > WIZARD_PAGE_SIZE && (
-                  <Pagination
-                    variant="footer"
-                    page={studentPage}
-                    totalPages={totalStudentPages}
-                    onPageChange={setStudentPage}
-                    totalItems={filteredStudents.length}
-                    pageSize={WIZARD_PAGE_SIZE}
-                    itemNoun="alumno"
-                  />
-                )}
               </>
             )}
           </>
@@ -1686,7 +1709,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
       <div className="flex flex-col gap-4">
         {/*
          * Defense in depth (issue #310 / #3): the commit bar already disables
-         * "Siguiente" for a read-only session, so this step should not be
+         * "Revisar y confirmar" for a read-only session, so this step should not be
          * reachable — except through a direct `?paso=confirmar` deep link.
          * The reason still has to be visible from here, not only from step 2.
          */}
@@ -1768,7 +1791,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 onClick={() => {
                   setOnlyUnreviewed(true);
                   setSearchFilter("");
-                  setStudentPage(1);
                   setStep("mark-attendance");
                 }}
               >
@@ -2132,7 +2154,10 @@ export default function TrainerAttendancePage(): React.ReactElement {
                      * the first question to the last.
                      */}
                     {(
-                      <div className="sticky bottom-0 -mx-5 mt-5 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-5 py-3.5 backdrop-blur sm:-mx-6 sm:px-6">
+                      <div
+                        data-testid="attendance-commit-bar"
+                        className="sticky bottom-0 -mx-5 mt-5 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-5 py-3.5 backdrop-blur sm:-mx-6 sm:px-6"
+                      >
                         {!isFirst && (
                           <Button type="button" variant="tertiary" onClick={handleBack} disabled={submitting}>
                             <ChevronLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
@@ -2217,6 +2242,18 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                             </Button>
                           ) : !isLast ? (
+                            /*
+                             * Issue #318 / hallazgo #59 (K9): this used to say
+                             * "Siguiente", the same visible text the roster's
+                             * own pagination "Siguiente" carried — two
+                             * controls, one label, opposite consequences (one
+                             * paged, this one closed the list and jumped to
+                             * "Confirmar y finalizar"). #58 removed the
+                             * roster's pagination in the same cluster, but
+                             * this button's own name still described nothing:
+                             * it says what happens next, not a generic "keep
+                             * going".
+                             */
                             <Button
                               key="advance"
                               type="button"
@@ -2225,7 +2262,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                               disabled={students.length === 0 || unmarkedCount > 0 || readOnly}
                               aria-describedby={unmarkedCount > 0 ? unmarkedReasonId : undefined}
                             >
-                              Siguiente
+                              Revisar y confirmar
                               <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                             </Button>
                           ) : (
