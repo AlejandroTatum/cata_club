@@ -10,6 +10,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { STAT_GRID } from "@/components/ui";
 import StudentPage from "@/app/student/page";
@@ -448,9 +450,12 @@ describe("StudentPage — the club membership card (carnet)", () => {
       ).toBeTruthy();
     }
 
-    // "Franja" leads because it is the figure a family consults daily, and it
-    // takes the whole row to do it.
-    expect(cells[0].className).toMatch(/\bcol-span-2\b/);
+    // "Franja" leads because it is the figure a family consults daily. It no
+    // longer needs a `col-span-2` to take the whole row: the portrait carnet
+    // stacks its figures in ONE column on both media, so every cell is already
+    // the full width and a span would conjure an implicit second column.
+    expect(cells[0].className).not.toMatch(/\bcol-span-2\b/);
+    expect(facts.className).toMatch(/\bgrid-cols-1\b/);
   });
 
   // Fix 12c: the 360px cap on the fact grid was sized for when the carnet was
@@ -595,6 +600,76 @@ describe("StudentPage — the carnet prints as a standalone credential", () => {
     expect(band).not.toBeNull();
     expect(band?.closest("div[class*='print:hidden']")).not.toBeNull();
     expect(band?.textContent).not.toBe("");
+  });
+});
+
+/**
+ * The print SHEET itself — `globals.css`'s `@media print` block.
+ *
+ * These read the stylesheet as text because jsdom applies no stylesheet: there
+ * is no computed geometry to assert against, and the rules below are the ones
+ * a browser measurement actually caught out. Three prior rounds shipped a
+ * carnet that printed "fine" in the DOM and wrong on paper.
+ *
+ * Two defects are pinned here, both measured in a real Chromium:
+ *
+ *   - THREE PAGES came out of a one-card print. `visibility: hidden` preserves
+ *     LAYOUT, so hiding the app left the document three pages tall with only
+ *     the carnet inked. The visibility technique stays — it is the only way to
+ *     hide arbitrary ancestors — and what gets clamped is the layout it leaves
+ *     standing.
+ *   - The card printed at x=0, y=0, flush into the sheet's corner, on a page
+ *     sized to the card itself. The owner asked for it CENTRED and BORDERED:
+ *     they print on whatever paper is in the tray and cut it out, so the sheet
+ *     is an ordinary page and the cut line has to be visible.
+ */
+describe("globals.css — the carnet's print sheet", () => {
+  const sheet = readFileSync(join(__dirname, "..", "..", "globals.css"), "utf8");
+  const printBlock = sheet.slice(sheet.indexOf("@media print"));
+
+  it("clamps the app's layout, not the document, so only one page comes out", () => {
+    // MEASURED, not reasoned: clamping the ROOT (`html, body { height: 100%;
+    // overflow: hidden }`) took it from three pages to two and stopped there —
+    // Chrome propagates the root element's overflow to the viewport and
+    // ignores it when paginating. Clamping an ordinary element does work,
+    // because its `overflow: hidden` really clips. That is why this lock reads
+    // `body > *` and deliberately does NOT accept a root clamp as the answer.
+    expect(printBlock).toMatch(/body\s*>\s*\*\s*\{[^}]*height:\s*0/);
+    expect(printBlock).toMatch(/body\s*>\s*\*\s*\{[^}]*overflow:\s*hidden/);
+    // The clamp is a HEIGHT, never a `display: none`: the carnet is a fixed
+    // descendant of these boxes, so zero height leaves it standing while
+    // `display: none` on an ancestor would take it with them.
+    expect(printBlock).not.toMatch(/body\s*>\s*\*\s*\{[^}]*display:\s*none/);
+    // `visibility` is kept on purpose — see this block's doc comment.
+    expect(printBlock).toMatch(/body\s*\*\s*\{\s*visibility:\s*hidden/);
+  });
+
+  it("prints on an ordinary sheet rather than on a card-sized page", () => {
+    // The user prints on whatever paper they have and cuts. A `size: 54mm
+    // 85.6mm` page asks the tray for card stock nobody has.
+    expect(printBlock).toMatch(/@page\s*\{[^}]*size:\s*auto/);
+    expect(printBlock).not.toMatch(/size:\s*54mm\s+85\.6mm/);
+    expect(printBlock).toMatch(/@page\s*\{[^}]*margin:\s*\d/);
+  });
+
+  it("centres the card on the sheet at credential size", () => {
+    const area = printBlock.slice(printBlock.indexOf("#carnet-print-area {"));
+    // `position: fixed` + `inset: 0` + `margin: auto` centres against the page
+    // box; `position: absolute` was what pinned it to 0,0.
+    expect(area).toMatch(/position:\s*fixed/);
+    expect(area).toMatch(/inset:\s*0/);
+    expect(area).toMatch(/margin:\s*auto/);
+    expect(area).toMatch(/width:\s*54mm/);
+    expect(area).toMatch(/height:\s*85\.6mm/);
+  });
+
+  it("draws the cut line as a real border, not as a shadow Chrome drops", () => {
+    const area = printBlock.slice(printBlock.indexOf("#carnet-print-area {"));
+    // Chrome omits backgrounds and box-shadows unless "Background graphics" is
+    // ticked, and it is off by default. A `border` prints either way, so the
+    // cut line is unambiguous on the sheet the family actually gets.
+    expect(area).toMatch(/border:\s*[\d.]+(?:px|mm)\s+solid/);
+    expect(area).toMatch(/box-shadow:\s*none/);
   });
 });
 
@@ -1221,16 +1296,15 @@ describe("StudentPage — the carnet keeps its own proportions instead of stretc
 });
 
 /**
- * Fix 12c (docs/archive/fixes/12-mi-cuenta-carnet.md): the owner's own read of the
- * screen against the maquette — "si decido eso, pues debería verse igual".
- * The chosen maquette (Propuesta 2) draws its desktop split as
- * `grid-template-columns: 1fr 1fr`. Reusing `PAGE_RAIL`'s own 340px rail
- * unmodified left the carnet at roughly three-quarters of the row and the
- * rail at one-quarter — the actual root of the "empty carnet" defect chased
- * across fix 12 and 12b, neither of which touched the column ratio.
+ * Fix 12c (docs/archive/fixes/12-mi-cuenta-carnet.md) widened the carnet column to
+ * `1fr 1fr` because the card's FOUR-cell grid could not fill the 340px rail's
+ * complement. That condition no longer holds: the card is a portrait column of
+ * three stacked figures, and a 566px-wide column is precisely what stopped it
+ * from being one. The ratio moves back — for the opposite reason, not by
+ * accident — and the rail takes the width the carnet stops needing.
  */
-describe("StudentPage — the carnet and the rail split the row evenly", () => {
-  it("matches the chosen maquette's 1fr/1fr desktop grid instead of a 340px rail", async () => {
+describe("StudentPage — the carnet column is card-width and the rail takes the rest", () => {
+  it("narrows the carnet column to the card's own width instead of splitting the row evenly", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
@@ -1240,7 +1314,8 @@ describe("StudentPage — the carnet and the rail split the row evenly", () => {
     // override wins at the CSS layer, not by removing the losing utility from
     // the class list. See the comment above this `<div>` in page.tsx for why
     // that is the established mechanism, not a workaround.
-    expect(rail?.className).toMatch(/lg:!grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)\]/);
+    expect(rail?.className).toMatch(/lg:!grid-cols-\[minmax\(0,380px\)_minmax\(0,1fr\)\]/);
+    expect(rail?.className).not.toMatch(/lg:!grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)\]/);
   });
 });
 
@@ -1525,18 +1600,20 @@ describe("StudentPage — the carnet as the club's identity object", () => {
 
   // D4 — the photo was avatar-sized (48px) on the one object that is about the
   // person, and it SHRANK to 36px on the printed credential.
-  it("gives the photo the size of the subject on screen, and grows it on the printed card", async () => {
+  it("gives the photo the size of the subject on screen, and keeps it large on the printed card", async () => {
     render(<StudentPage />);
 
     const photo = await screen.findByTestId("carnet-photo");
-    // 56px, down from 64px: "B · Marcador" moves the weight to the banner and
-    // to the figures, and the photo sits beside a kicker plus a 22px name
-    // rather than beside a name alone.
-    expect(photo.className).toMatch(/\bh-\[56px\]/);
-    expect(photo.className).toMatch(/\bw-\[56px\]/);
-    // On the credential the photo is the largest element on the card, not a
-    // shrunk-down version of the screen's — it GROWS relative to its field.
-    expect(photo.className).toMatch(/\bprint:h-\[62px\]/);
+    // The portrait carnet makes the photo the SUBJECT on screen too, not a
+    // 56px avatar sitting beside the name: the screen composition is the
+    // credential's own centred column, so the photo leads it at 100px.
+    expect(photo.className).toMatch(/\bh-\[100px\]/);
+    expect(photo.className).toMatch(/\bw-\[100px\]/);
+    // On the credential it steps down in ABSOLUTE px and up in PROPORTION:
+    // 68px of a 46mm field is a larger share than 100px of a 380px card. That
+    // is physical scale, the one difference the two media are allowed.
+    expect(photo.className).toMatch(/\bprint:h-\[68px\]/);
+    expect(photo.className).toMatch(/\bprint:w-\[68px\]/);
     expect(photo.className).not.toMatch(/print:h-9\b/);
   });
 
@@ -1610,35 +1687,47 @@ describe("StudentPage — the carnet as the club's identity object", () => {
     }
   });
 
-  // D7b — print was the screen shrunk: ~22 `print:` utilities that only moved
-  // type size and colour, over a layout identical to the screen's. It is a
-  // real breakpoint now, with its own composition, on the same DOM.
-  it("composes the printed credential instead of shrinking the screen", async () => {
+  // D7b — the owner's own read of the running app: «que igual como se ve en web
+  // que en imprimible, solo cambia el fondo blanco». Print used to be a
+  // DIFFERENT composition on the same DOM — a centred portrait column on paper,
+  // a left-aligned landscape row on screen — and the two did not look like the
+  // same object. There is ONE composition now, and the only differences the
+  // card is allowed are the ground, the ink, the physical scale, and the parts
+  // that legitimately do not print.
+  it("composes screen and print the same way, differing only in ground, ink and scale", async () => {
     renderFullCarnet();
 
     const carnet = await screen.findByTestId("student-carnet");
     const facts = await screen.findByTestId("carnet-facts");
     const photo = screen.getByTestId("carnet-photo");
 
-    // The card distributes its three blocks over the 85.6mm field rather than
-    // stacking them at the top, inside a credential-scale margin.
+    // The card distributes its blocks over the 85.6mm field rather than
+    // stacking them at the top, inside a credential-scale margin. The ground
+    // and the ink are the change print is FOR.
     expect(carnet.className).toMatch(/print:justify-between/);
     expect(carnet.className).toMatch(/print:p-\[4mm\]/);
+    expect(carnet.className).toMatch(/print:bg-white/);
+    expect(carnet.className).toMatch(/print:text-coal/);
 
-    // The header stacks and centres — it is not the screen's left-aligned row.
+    // The banner stacks and centres on BOTH media — no `print:` prefix on the
+    // arrangement itself, or the two compositions drift apart again.
     const wordmark = within(carnet).getByText("Cata Club");
     const header = wordmark.closest("div")?.parentElement;
-    expect(header?.className).toMatch(/print:flex-col/);
-    expect(header?.className).toMatch(/print:items-center/);
+    expect(header?.className).toMatch(/\bflex-col\b/);
+    expect(header?.className).toMatch(/\bitems-center\b/);
+    expect(header?.className).not.toMatch(/print:flex-col/);
 
-    // The photo leads a centred column, with the name beneath it.
+    // The photo leads a centred column, with the name beneath it — on both.
     const subject = photo.parentElement;
-    expect(subject?.className).toMatch(/print:flex-col/);
-    expect(subject?.className).toMatch(/print:items-center/);
-    expect(subject?.className).toMatch(/print:text-center/);
+    expect(subject?.className).toMatch(/\bflex-col\b/);
+    expect(subject?.className).toMatch(/\bitems-center\b/);
+    expect(subject?.className).toMatch(/\btext-center\b/);
+    expect(subject?.className).not.toMatch(/print:flex-col/);
 
-    // The facts read as one left-aligned column at credential width.
-    expect(facts.className).toMatch(/print:grid-cols-1/);
+    // The facts read as one left-aligned column, screen and paper alike.
+    expect(facts.className).toMatch(/\bgrid-cols-1\b/);
+    expect(facts.className).not.toMatch(/\bgrid-cols-2\b/);
+    expect(facts.className).toMatch(/\btext-left\b/);
   });
 });
 
@@ -1713,20 +1802,34 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
     const banner = wordmark.parentElement?.parentElement;
     expect(banner?.className).toMatch(/\bborder-b-2\b/);
     expect(banner?.className).toMatch(/\bborder-cata-red\b/);
-    expect(banner?.className).toMatch(/\bjustify-between\b/);
+    // The banner used to be a `justify-between` ROW — mark pinned to the far
+    // edge, wordmark to the near one — which is the landscape arrangement the
+    // portrait card replaces. It is a centred column on both media now.
+    expect(banner?.className).not.toMatch(/\bjustify-between\b/);
+    expect(banner?.className).toMatch(/\bflex-col\b/);
+    expect(banner?.className).toMatch(/\btext-center\b/);
 
     // DESIGN.md rations red. The whole card spends its one appearance on the
     // line that divides the club from the person — nowhere else.
     expect(carnet.querySelectorAll('[class*="cata-red"]')).toHaveLength(1);
   });
 
-  it("keeps «Tenis de mesa» off the screen banner and puts it on the printed one", async () => {
+  // THIS LOCK INVERTS. It used to pin "Tenis de mesa" to the printed banner
+  // ALONE, on the argument that a reader on screen is already inside the
+  // club's own product. That argument survived until the owner put the two
+  // side by side and asked for one object, not two: a line present on paper
+  // and absent on screen is precisely the kind of difference that makes the
+  // printed card read as a different card. It is on both banners now.
+  it("renders «Tenis de mesa» on the screen banner and on the printed one", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
     const tagline = within(carnet).getByText("Tenis de mesa");
-    expect(tagline.className).toMatch(/\bhidden\b/);
-    expect(tagline.className).toMatch(/\bprint:block\b/);
+    expect(tagline.className).toMatch(/\bblock\b/);
+    expect(tagline.className).not.toMatch(/\bhidden\b/);
+    expect(tagline.className).not.toMatch(/\bprint:block\b/);
+    // Only the ink changes with the ground.
+    expect(tagline.className).toMatch(/print:text-coal/);
   });
 
   // The companion lock for `getByText("Plan")` further up this file. That
@@ -1768,17 +1871,17 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
     expect(within(carnet).queryByText("Plan")).not.toBeInTheDocument();
   });
 
-  it("sizes the photo at 56px on screen and grows it to 62px on the credential", async () => {
+  it("sizes the photo at 100px on screen and keeps it the subject at 68px on the credential", async () => {
     render(<StudentPage />);
 
     const photo = await screen.findByTestId("carnet-photo");
-    expect(photo.className).toMatch(/\bh-\[56px\]/);
-    expect(photo.className).toMatch(/\bw-\[56px\]/);
-    expect(photo.className).toMatch(/\bprint:h-\[62px\]/);
-    expect(photo.className).toMatch(/\bprint:w-\[62px\]/);
+    expect(photo.className).toMatch(/\bh-\[100px\]/);
+    expect(photo.className).toMatch(/\bw-\[100px\]/);
+    expect(photo.className).toMatch(/\bprint:h-\[68px\]/);
+    expect(photo.className).toMatch(/\bprint:w-\[68px\]/);
   });
 
-  it("leads the scoreboard with Franja, spanning both columns", async () => {
+  it("leads the scoreboard with Franja in a single full-width column", async () => {
     renderFullCarnet();
 
     const facts = await screen.findByTestId("carnet-facts");
@@ -1788,10 +1891,11 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
 
     const first = facts.children[0];
     expect(first.lastElementChild?.textContent).toBe("Franja");
-    expect(first.className).toMatch(/\bcol-span-2\b/);
-    // On paper the grid is a single column, so the span has to stand down or
-    // it would conjure an implicit second column out of the credential.
-    expect(first.className).toMatch(/\bprint:col-span-1\b/);
+    // The grid is ONE column on both media now, so a cell is already the full
+    // width. A `col-span-2` here would conjure an implicit second column, and
+    // a `print:col-span-1` would be undoing a span nothing declares.
+    expect(facts.className).toMatch(/\bgrid-cols-1\b/);
+    expect(first.className).not.toMatch(/col-span/);
   });
 
   // A value that is not a figure must not be set in Graduate: "No se pudo

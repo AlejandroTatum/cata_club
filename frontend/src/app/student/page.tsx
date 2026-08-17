@@ -108,11 +108,12 @@ type HorariosState =
 // THESIS. The club speaks first, and the data reads as a scoreboard — the
 // figure, then what it measures.
 //
-// The club speaking first is the BANNER: the wordmark leads it at 28px with
-// the mark answering at the far edge, over a 2px red rule. That rule is the
-// card's only red. DESIGN.md rations the colour, and the card spends its one
-// appearance on the line dividing the club from the person rather than on a
-// pill, an icon or an underline somewhere in the data.
+// The club speaking first is the BANNER: the mark crowns a centred column,
+// the wordmark reads under it at 26px and "Tenis de mesa" under that, over a
+// 2px red rule. That rule is the card's only red. DESIGN.md rations the
+// colour, and the card spends its one appearance on the line dividing the
+// club from the person rather than on a pill, an icon or an underline
+// somewhere in the data.
 //
 // The data reading as a scoreboard is the CELL INVERSION: value first, label
 // second. A label-then-value pair is a form; a figure with its name under it
@@ -128,25 +129,43 @@ type HorariosState =
 //     tabular cell competing with three real figures. Its label survives as
 //     `sr-only`: a bare "Mensual Adultos" floating over a name cannot describe
 //     itself to a screen reader.
-//   - "Tenis de mesa" leaves the SCREEN banner and stays on the printed one.
-//     On screen the reader is already inside the club's own product and the
-//     line is a caption on a logo; on a credential that leaves the building it
-//     is the one line that says what the club does.
+//   - "Tenis de mesa" is on BOTH banners. It used to be print-only, on the
+//     argument that a reader on screen is already inside the club's own
+//     product. The owner put the two side by side and asked for one object
+//     («que igual como se ve en web que en imprimible, solo cambia el fondo
+//     blanco»), and a line the paper carries and the screen does not is
+//     exactly the difference that makes them read as two cards.
+//
+// ## ONE COMPOSITION, TWO MEDIA (the owner's read of the running app)
+//
+// The card is PORTRAIT on screen too. It used to be 566×380 — a landscape row
+// of banner, avatar-and-name, two-column grid — while the credential was a
+// centred portrait column, and no amount of matched type sizes was going to
+// make those look like the same object. The screen adopted the credential's
+// arrangement rather than a third one being invented, and the dashboard column
+// narrowed to 380px to let it (see the rail `<div>` in `ActivePortalView`).
+//
+// The only differences the two media are now allowed: the ground (coal
+// gradient → white), the ink, the physical scale, and the parts that
+// legitimately do not print — the status band (#286), the ACTIONS, the
+// halftone, the logo mark, and the price (below).
 //
 // THE CREDENTIAL'S VERTICAL BUDGET, and why the band and the price leave it.
 // 85.6mm is 323px at 96dpi; `print:p-[4mm]` top and bottom takes 30px, so the
 // composition has 293px. Adding up the declared utilities: the banner is 47px
-// (26px wordmark + 10.5px tagline + 8px `pb-2` + the 2px rule), the identity
-// block is 147px (13px lead-in + 62px photo + 19.5px kicker + a 13.5px name at
-// `leading-tight` wrapping to THREE lines), and the scoreboard is 92px (16px
-// of rule and padding + two 33px cells + a 10px gap). That is 286px, leaving
-// 7px in hand at three lines and 24px at two.
+// (26px wordmark + 4px `mt-1` + 10.5px tagline + 8px `pb-2` + the 2px rule),
+// the identity block is 159px (13px lead-in + 68px photo + 9px gap + 10.5px
+// kicker + 2px `mb-0.5` + a 13.5px name at `leading-tight` wrapping to THREE
+// lines, 50.6px), and the scoreboard is 92px (16px of rule and padding + two
+// 33px cells + a 10px gap). That is 298px at three lines and 281px at two:
+// it fits a two-line name with 12px in hand, and a three-line name spends the
+// 5px of slack `justify-between` would otherwise distribute.
 //
-// It only closes because two things left. The status band is ~56px and the
-// price cell ~43px, and dropping both frees ~99px — the whole of the headroom
-// a three-line name needs. Neither was cut to make room, but the room is what
-// cutting them bought, so putting either back means re-doing this sum first.
-// (Arithmetic off the declared classes, not a measurement in a browser.)
+// It only closes at all because two things left. The status band is ~56px and
+// the price cell ~43px, and dropping both frees ~99px. Neither was cut to make
+// room, but the room is what cutting them bought, so putting either back means
+// re-doing this sum first. (Arithmetic off the declared classes; the box the
+// browser actually prints is measured with the harness, not with this sum.)
 //
 // ## What is on it, and what is not
 //
@@ -444,14 +463,15 @@ function Carnet({
    */
   const figures: CarnetFigureSpec[] = [];
   if (franja) {
-    // It LEADS, and it takes the whole row: it is the one figure a family
-    // reads on a weekday morning, and a time range is the widest value here.
+    // It LEADS: it is the one figure a family reads on a weekday morning, and
+    // a time range is the widest value here. It carries no `col-span` any
+    // more — the scoreboard is a single column on both media, so every cell
+    // already takes the whole row.
     figures.push({
       label: "Franja",
       value: franja,
       isFigure: horariosState.status === "ready",
       valueClassName: "text-lg print:text-base",
-      className: "col-span-2 print:col-span-1",
     });
   }
   if (profile.membership?.montoAplicado) {
@@ -500,12 +520,21 @@ function Carnet({
         // globals.css, junto al truco de visibility que imprime SOLO el
         // carnet (sin navegación ni rail).
         //
-        // Print is a real BREAKPOINT, not the screen shrunk: it composes the
-        // same DOM differently. `justify-between` distributes the three blocks
-        // that survive (header, subject, facts) over the 85.6mm field instead
-        // of pixel-counting them, and `p-[4mm]` is a credential margin rather
+        // Print is ONE COMPOSITION with the screen, not a second one on the
+        // same DOM. What changes here is the ground (coal gradient → white),
+        // the ink (white → coal), and the physical scale — nothing about the
+        // arrangement. `justify-between` distributes the three blocks that
+        // survive (banner, subject, facts) over the 85.6mm field instead of
+        // pixel-counting them, and `p-[4mm]` is a credential margin rather
         // than a screen one.
-        "print:justify-between print:rounded-none print:bg-none print:bg-white print:p-[4mm] print:text-coal print:shadow-none print:ring-1 print:ring-coal/25",
+        //
+        // The card's printed EDGE is not drawn here. It used to be a
+        // `print:ring-1`, and a Tailwind ring is a box-shadow: Chrome drops
+        // box-shadows unless "Background graphics" is ticked, and it is off by
+        // default — so the cut line was invisible on exactly the sheet the
+        // family gets. It is a real `border` on `#carnet-print-area` in
+        // globals.css now, which prints either way.
+        "print:justify-between print:rounded-none print:bg-none print:bg-white print:p-[4mm] print:text-coal print:shadow-none",
         className,
       )}
     >
@@ -517,9 +546,9 @@ function Carnet({
       <span aria-hidden="true" className="carnet-halftone pointer-events-none absolute inset-0 print:hidden" />
 
       {/* THE BANNER — the club speaks first.
-          The wordmark leads and the mark answers at the far edge
-          (`justify-between`), so the card signs itself across its whole width
-          instead of huddling in one corner.
+          A CENTRED COLUMN, on both media: the mark crowns it, the wordmark
+          reads under the mark and "Tenis de mesa" under the wordmark, all
+          closed by the red rule.
 
           THE CARD'S ONLY RED. DESIGN.md rations the colour, and this spends
           its single appearance on the line that divides the club from the
@@ -527,13 +556,28 @@ function Carnet({
           here is red, and adding a second one spends a budget that is already
           empty.
 
-          On the credential the banner is the crown of a vertical field, so it
-          stacks and centres; the mark drops out and "Tenis de mesa" takes its
-          place under the wordmark. The rule rides as the banner's own bottom
-          border rather than as a separate element, which under
-          `print:justify-between` would have been a stray flex child floating
-          in the middle of a gap. */}
-      <div className="relative z-10 flex items-center justify-between border-b-2 border-cata-red pb-[14px] print:flex-col print:items-center print:pb-2 print:text-center">
+          It used to be a `justify-between` ROW on screen and a centred column
+          only under `print:`. That WAS the mismatch the owner reported («que
+          igual como se ve en web que en imprimible»): the two media drew two
+          different banners, and the printed one was right. The screen adopts
+          the printed arrangement rather than a third one being invented. The
+          rule rides as the banner's own bottom border rather than as a
+          separate element, which under `justify-between` would have been a
+          stray flex child floating in the middle of a gap.
+
+          The MARK is the one element that still parts company with the print
+          composition, and only by leaving: a JPEG photograph halftones into a
+          grey smudge on a home printer, and the wordmark under it already says
+          the club's name in the club's own face. */}
+      <div className="relative z-10 flex flex-col items-center border-b-2 border-cata-red pb-[14px] text-center print:pb-2">
+        {/* `alt=""` on purpose: the mark carries no information the card does
+            not already state in text — "Cata Club" is right under it, and the
+            section is labelled "Carnet de socio de …". Naming the image would
+            make a screen reader say the club's name twice in a row (WCAG
+            1.1.1: a redundant image is decorative). */}
+        <span className="mb-[9px] flex h-[44px] w-[44px] flex-none items-center justify-center overflow-hidden rounded-full bg-white print:hidden">
+          <Image src="/brand/cata-club-logo.jpeg" alt="" width={44} height={44} className="h-[44px] w-[44px] object-cover" />
+        </span>
         <div className="min-w-0">
           {/* Graduate — "lo que el club dice de sí mismo", at the size that
               lets it lead: `text-xl`, the top of the scale below the stat and
@@ -549,22 +593,16 @@ function Carnet({
           <b className="block font-display text-xl uppercase leading-none tracking-flat">
             Cata Club
           </b>
-          {/* Print only. On screen the reader is already inside the club's own
-              product, where this is a caption on a logo; on a credential that
-              leaves the building it is the one line saying what the club does.
-              Barlow, like every other line that is read as words. */}
-          <span className="hidden text-2xs uppercase leading-none text-coal/60 print:block">
+          {/* On BOTH media now. It used to be print-only, on the argument that
+              a reader on screen is already inside the club's own product — a
+              true observation that produced a false result, because a line the
+              paper carries and the screen does not is exactly what made the
+              two read as different cards. Barlow, like every other line that
+              is read as words; only the ink follows the ground. */}
+          <span className="mt-1 block text-2xs uppercase leading-none text-white/60 print:text-coal/60">
             Tenis de mesa
           </span>
         </div>
-        {/* `alt=""` on purpose: the mark carries no information the card does
-            not already state in text — "Cata Club" is right beside it, and the
-            section is labelled "Carnet de socio de …". Naming the image would
-            make a screen reader say the club's name twice in a row (WCAG
-            1.1.1: a redundant image is decorative). */}
-        <span className="flex h-[32px] w-[32px] flex-none items-center justify-center overflow-hidden rounded-full bg-white print:hidden">
-          <Image src="/brand/cata-club-logo.jpeg" alt="" width={32} height={32} className="h-[32px] w-[32px] object-cover" />
-        </span>
       </div>
 
       {/* THE IDENTITY BLOCK — who this is, under the club that says so.
@@ -572,31 +610,36 @@ function Carnet({
           status band below it because the two are one group: the person, and
           what the club currently needs from them.
 
-          On the credential the photo is the SUBJECT, so the group turns into a
-          centred column and the photo GROWS relative to its field: the enlarged
-          photo, then the kicker, then the name, free to wrap to three balanced
-          lines. */}
-      <div className="relative z-10 mt-4 flex items-center gap-[13px] print:mt-[13px] print:flex-col print:items-center print:text-center">
+          A CENTRED COLUMN on both media, and the photo is the SUBJECT on both:
+          the enlarged photo, then the kicker, then the name, free to wrap to
+          three balanced lines. The screen used to lay this out as a row with a
+          56px avatar beside the name — an avatar is what a table row carries,
+          and this card is the one object about the person.
+
+          The photo's two sizes are PHYSICAL SCALE, not two compositions: 100px
+          of a 380px card and 68px of a 46mm field are the same share of their
+          medium, and the credential's is if anything the larger one. */}
+      <div className="relative z-10 mt-4 flex flex-col items-center gap-[13px] text-center print:mt-[13px] print:gap-[9px]">
         <span
           data-testid="carnet-photo"
-          className="flex h-[56px] w-[56px] flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20 print:h-[62px] print:w-[62px] print:bg-coal/5 print:ring-coal/30"
+          className="flex h-[100px] w-[100px] flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20 print:h-[68px] print:w-[68px] print:bg-coal/5 print:ring-coal/30"
         >
           {profile.fotoUrl && !fotoFallback ? (
             <Image
               src={profile.fotoUrl}
               alt={`Foto de ${fullName}`}
-              width={56}
-              height={56}
-              className="h-[56px] w-[56px] object-cover print:h-[62px] print:w-[62px]"
+              width={100}
+              height={100}
+              className="h-[100px] w-[100px] object-cover print:h-[68px] print:w-[68px]"
               onError={() => setFotoFallback(true)}
             />
           ) : (
-            <span aria-hidden="true" className="text-lg font-bold text-white/70 print:text-coal/70">
+            <span aria-hidden="true" className="text-2xl font-bold text-white/70 print:text-coal/70">
               {initial}
             </span>
           )}
         </span>
-        <div className="min-w-0 flex-1 print:w-full print:flex-none">
+        <div className="w-full min-w-0">
           {/* THE PLAN, AS A KICKER. It is not a figure the club measures, it
               is what this person is — read above the name it says whose card
               this is; read in the scoreboard it was a fourth tabular cell
@@ -612,16 +655,15 @@ function Carnet({
               No categoría means no kicker at all: no empty label, no
               placeholder, no row reserved for a fact the club does not have. */}
           {profile.membership?.categoria && (
-            <p className="mb-1 text-2xs font-extrabold uppercase text-ball print:mb-0 print:mt-[9px] print:leading-none print:text-coal/55">
+            <p className="mb-1 text-2xs font-extrabold uppercase leading-none text-ball print:mb-0.5 print:text-coal/55">
               <span className="sr-only">Plan</span>
               <span>{profile.membership.categoria}</span>
             </p>
           )}
           {/* Barlow on both compositions — see the wordmark above for why the
-              name never becomes Graduate. In the credential's centred column
-              the name takes the field's width and `text-balance` splits it
-              into even lines. */}
-          <p className="text-balance text-lg font-extrabold leading-crisp tracking-dense print:mt-0.5 print:text-sm print:leading-tight">
+              name never becomes Graduate. In the centred column the name takes
+              the field's width and `text-balance` splits it into even lines. */}
+          <p className="text-balance text-lg font-extrabold leading-crisp tracking-dense print:text-sm print:leading-tight">
             {fullName}
           </p>
         </div>
@@ -634,25 +676,18 @@ function Carnet({
         <CarnetStatusBand situation={situation} />
       </div>
 
-      {/* THE SCOREBOARD. A fixed two-column grid, not `auto-fit`: the carnet
-          used to sit in a 340px rail, where `auto-fit` and "two columns" were
-          the same thing. `auto-fit` at the carnet's current width would spread
-          the figures across four or five columns — the chosen maquette
-          (Propuesta 2) draws exactly two, `.carnet .grid` at its own card's
-          full width. The grid used to carry `sm:max-w-[360px]` from when the
-          carnet was fix 12's ~1000px "wide" column — with the carnet and the
-          rail now split evenly (fix 12c, see `ActivePortalView`), that cap
-          would leave an empty strip inside the card instead of filling it,
-          which is the same "vacío que no se llena" fix 12b already closed
-          once. Dropped, so the grid fills the carnet the way the maquette's
-          own does.
+      {/* THE SCOREBOARD. ONE left-aligned column, full width, on both media.
 
-          On the credential it collapses to ONE left-aligned column: the field
-          is 46mm wide once the 4mm margins are taken, which is not two columns
-          of a label plus a tabular value. Its own `border-t` doubles as the
-          composition's second hairline rule. Each cell stands its `col-span-2`
-          down there (`print:col-span-1`), or the span would conjure an
-          implicit second column out of a single-column grid.
+          It was a fixed two-column grid on screen that collapsed to one under
+          `print:` — sized for the 566px landscape card. The card is a 380px
+          portrait column now, and 46mm of credential was never two columns of
+          a label plus a tabular value; the same single column serves both, so
+          the figures line up identically on the screen and on the sheet. That
+          also retires the `col-span-2`/`print:col-span-1` pair the leading
+          figure used to carry: a cell of a one-column grid is already the full
+          width, and a span would conjure an implicit second column.
+
+          Its own `border-t` doubles as the composition's second hairline rule.
 
           `border-white/[0.12]`, not `border-white/12`: Tailwind's opacity
           scale steps by 5, so a bare `/12` compiles to NOTHING and the rule
@@ -661,7 +696,7 @@ function Carnet({
       {figures.length > 0 && (
         <div
           data-testid="carnet-facts"
-          className="relative z-10 mt-4 grid grid-cols-2 gap-x-4 gap-y-section border-t border-white/[0.12] pt-[15px] print:mt-[2mm] print:grid-cols-1 print:gap-[10px] print:border-coal/20 print:pt-[2mm] print:text-left"
+          className="relative z-10 mt-4 grid grid-cols-1 gap-y-section border-t border-white/[0.12] pt-[15px] text-left print:mt-[2mm] print:gap-[10px] print:border-coal/20 print:pt-[2mm]"
         >
           {figures.map((figure) => (
             <CarnetFigure key={figure.label} {...figure} />
@@ -1248,6 +1283,18 @@ function ActivePortalView({
         // before finding stretching itself was the wrong fix — the technique
         // is fine, that one application of it was not.
         //
+        // AND THEN IT MOVED BACK, on purpose. The column is `380px 1fr` now,
+        // not `1fr 1fr`. This is not fix 12c reverted by accident: 12c widened
+        // the carnet because its FOUR-cell, two-column grid could not fill the
+        // 340px rail's complement, and widening the column was the honest fix
+        // for that shape. The card no longer has that shape. It is a PORTRAIT
+        // credential — one centred column of three stacked figures, the same
+        // composition it prints at — and the condition 12c reasoned from is
+        // gone: a 566px column is now the thing stopping the card from being
+        // a card, not the thing filling it. 380px is the card's own width, and
+        // the width it stops needing goes to the rail rather than back into
+        // the carnet as the emptiness 12, 12b and 12c each chased downstream.
+        //
         // Fix 12b tried stretching the carnet's height first —
         // `lg:!items-stretch` plus `flex-1` on the carnet, so it filled the
         // row's full height — and it traded one emptiness for another:
@@ -1288,9 +1335,10 @@ function ActivePortalView({
           lo ancho. Tiene proporciones de carnet, no de columna -- el #297
           acaba de volverlo una credencial imprimible de 54x85.6mm-- y el fix
           12b ya probó estirarlo: el sobrante terminó DENTRO de la tarjeta,
-          bajo su grilla de datos. Tampoco se toca el `1fr 1fr` del split, que
-          es el fix 12c: el riel de 340px de `PAGE_RAIL` dejaba el carnet a
-          tres cuartos de la fila, mucho más de lo que sus cuatro datos llenan.
+          bajo su grilla de datos. El split SÍ se movió después de esto: ya no
+          es el `1fr 1fr` del fix 12c sino `380px 1fr`, porque la tarjeta pasó
+          a ser vertical y una columna de 566px es justo lo que le impedía
+          serlo. El razonamiento completo está sobre el `<div>` del riel.
 
           Cada cifra sale de datos que la pantalla ya tenía, y ninguna repite
           una cifra que ya esté abajo. La de asistencia se MUDÓ: el pie de
@@ -1337,7 +1385,7 @@ function ActivePortalView({
           />
         </div>
 
-        <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,1fr)_minmax(0,1fr)]", "flex-1")}>
+        <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,380px)_minmax(0,1fr)]", "flex-1")}>
           <div className="flex flex-col gap-5">
             <Carnet
               profile={selectedProfile}

@@ -388,34 +388,73 @@
  * Carnet imprimible (#286, slice 2) — la hoja de impresión del carnet.
  *
  * Ctrl+P / «Imprimir carnet» debe sacar SOLO el carnet: vertical, tamaño
- * credencial 54×85.6mm, legible en blanco y negro (sobre blanco, texto oscuro,
- * borde fino — el gradiente oscuro de pantalla saldría como bloque de tinta
- * plano). El resto de la app (navegación, rail, paneles) no aparece.
+ * credencial 54×85.6mm, CENTRADO en la hoja y con un borde visible por donde
+ * recortar. El resto de la app (navegación, riel, paneles) no aparece.
  *
- * El truco de `visibility` no cambia el layout de pantalla en absoluto: en
- * print, `body *` se oculta y solo `#carnet-print-area` (el <section> del
- * carnet) queda visible, re-posicionado a la página. `@page size` es un hint:
- * los navegadores que no lo soporten igual imprimen el carnet a 54×85.6mm
- * porque el área lo fuerza.
+ * Esta hoja da el LIENZO; la COMPOSICIÓN la da el propio componente, y desde
+ * el rediseño vertical es UNA SOLA: pantalla e impreso arman la misma columna
+ * centrada sobre el mismo DOM, y las variantes `print:*` solo cambian el fondo
+ * (degradado coal → blanco), la tinta y la escala física. Lo único que no
+ * viaja al papel es lo que no puede viajar: la banda de estado (#286), los
+ * botones, la trama halftone, el logo y «Valor mensual» (identificar
+ * pertenencia no es publicar un precio).
  *
- * Esta hoja da el LIENZO; la COMPOSICIÓN la dan las variantes `print:*` del
- * propio componente, sobre el mismo DOM. Print es un breakpoint real, no la
- * pantalla encogida: el encabezado se apila y se centra bajo su filete rojo
- * —el logo se va y aparece «Tenis de mesa», que en pantalla no está—, la foto
- * crece y pasa a ser el sujeto, el plan y el nombre caen centrados debajo, las
- * cifras bajan a una sola columna y «Valor mensual» se va (identificar
- * pertenencia no es publicar un precio). El carnet no se duplica en un
- * subárbol solo-impresión: una sola fuente de verdad, dos composiciones.
+ * ## Tres defectos medidos en un Chromium real, y qué los arregla
+ *
+ * 1. SALÍAN TRES PÁGINAS de un carnet. `visibility: hidden` oculta pero
+ *    CONSERVA EL LAYOUT, así que el documento seguía midiendo tres páginas de
+ *    alto con una sola entintada. El truco de `visibility` se queda —es la
+ *    única forma de ocultar ancestros arbitrarios sin tocar la pantalla— y lo
+ *    que se acota es el LAYOUT: `body > *` a altura 0 con `overflow: hidden`.
+ *
+ *    Se probó primero acotar el documento (`html, body { height: 100%;
+ *    overflow: hidden }`) y se midió: bajó de tres páginas a DOS y ahí se
+ *    quedó. Chrome propaga el `overflow` del elemento raíz al viewport y lo
+ *    ignora al paginar, así que acotar la raíz no sirve; acotar un elemento
+ *    normal sí, porque su `overflow: hidden` sí recorta. Esas dos
+ *    declaraciones se borraron en vez de dejarse «por si acaso»: una regla que
+ *    no hace nada se lee como si hiciera algo.
+ *
+ *    El carnet sobrevive al recorte porque es `position: fixed` y `body > *`
+ *    es estático: un ancestro estático no es el bloque contenedor de un
+ *    elemento fijo, así que no lo recorta. Por eso el acote es de ALTURA y no
+ *    un `display: none`, que sí se lo llevaría por delante.
+ *
+ * 2. LA TARJETA SALÍA PEGADA A LA ESQUINA (x=0, y=0), sobre una página del
+ *    tamaño de la propia tarjeta. La familia imprime en el papel que tenga y
+ *    recorta: la hoja es una hoja común (`size: auto` con margen), y la
+ *    tarjeta se centra con `position: fixed` + `inset: 0` + `margin: auto`,
+ *    que centra contra la caja de página. Con `position: absolute` el
+ *    `margin: auto` no centra: ancla en la esquina.
+ *
+ * 3. NO HABÍA LÍNEA DE CORTE. El borde era un `print:ring-1` de Tailwind, o
+ *    sea un box-shadow, y Chrome descarta fondos y sombras salvo que se tilde
+ *    «Gráficos de fondo», que viene apagado. Un `border` se imprime igual, así
+ *    que el filete vive acá y no en el componente.
  * ------------------------------------------------------------------------- */
 @media print {
   @page {
-    size: 54mm 85.6mm;
-    margin: 0;
+    /* Papel común, no cartulina del tamaño del carnet: el usuario imprime en
+       lo que tenga y recorta. */
+    size: auto;
+    margin: 10mm;
   }
 
   html,
   body {
+    margin: 0;
+    padding: 0;
     background: #ffffff !important;
+  }
+
+  /* UNA SOLA PÁGINA. Acota el layout que `visibility: hidden` deja en pie —
+     medido: sin esto salen tres páginas, y acotando la raíz en su lugar salen
+     dos. El carnet no se ve afectado: es `position: fixed`. */
+  body > * {
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
   }
 
   /* Ocultar TODO el layout de la app sin tocarlo (visibility, no display:
@@ -430,11 +469,16 @@
   }
 
   #carnet-print-area {
-    position: absolute;
+    /* `fixed` + `inset: 0` + `margin: auto` = centrado contra la caja de
+       página. El tamaño es el de una credencial ID-1. */
+    position: fixed;
     inset: 0;
     width: 54mm;
     height: 85.6mm;
-    margin: 0;
+    margin: auto;
+    /* La línea de corte. Un `border` se imprime aunque «Gráficos de fondo»
+       esté apagado; una sombra o un fondo, no. */
+    border: 1px solid #131316;
     box-shadow: none !important;
   }
 }
