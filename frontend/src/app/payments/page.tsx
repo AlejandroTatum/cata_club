@@ -368,6 +368,20 @@ export default function PaymentsPage(): React.ReactElement {
   const [rejectionNote, setRejectionNote] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
+  /**
+   * Re-entrancy guard for the approve confirmation dialog (issue #313, K5
+   * hallazgo #12). `setConfirmApproveOpen(false)` unmounts the dialog, but
+   * that unmount only lands on the NEXT render — a real fast triple-click
+   * (or a script clicking faster than React repaints) can fire `onConfirm`
+   * more than once against the SAME still-mounted button before that
+   * happens. Two `decide()` calls meant two real PUTs for the same payment:
+   * the first landed, the second came back 400 ("ya está aprobado") and
+   * that error handler reverted the row and told the admin it "volvió a la
+   * cola de pendientes" — a state that never happened. A ref (synchronous,
+   * unlike state) makes every click after the first a no-op regardless of
+   * render timing.
+   */
+  const confirmApproveInFlightRef = useRef(false);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const [page, setPage] = useState(1);
   const [editStartDate, setEditStartDate] = useState("");
@@ -1141,7 +1155,10 @@ export default function PaymentsPage(): React.ReactElement {
                       <Button
                         variant="primary"
                         disabled={!checklistComplete || actionLoading !== null}
-                        onClick={() => setConfirmApproveOpen(true)}
+                        onClick={() => {
+                          confirmApproveInFlightRef.current = false;
+                          setConfirmApproveOpen(true);
+                        }}
                       >
                         {actionLoading === "approve" ? "Procesando…" : "Aprobar pago"}
                       </Button>
@@ -1294,10 +1311,15 @@ export default function PaymentsPage(): React.ReactElement {
           title="Aprobar pago"
           message="¿Confirma que aprueba este pago? La membresía pasará a activa."
           onConfirm={() => {
+            if (confirmApproveInFlightRef.current) return;
+            confirmApproveInFlightRef.current = true;
             setConfirmApproveOpen(false);
             void handleApprove();
           }}
-          onCancel={() => setConfirmApproveOpen(false)}
+          onCancel={() => {
+            confirmApproveInFlightRef.current = false;
+            setConfirmApproveOpen(false);
+          }}
         />
 
         {/* Fullscreen voucher viewer modal */}

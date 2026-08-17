@@ -762,6 +762,39 @@ describe("PaymentsPage — approve confirmation gating", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
   });
+
+  // Issue #313 (K5 hallazgo #12): en vivo, tres clics seguidos en "Confirmar"
+  // (el botón no se deshabilitaba tras el primero) mandaron DOS PUT reales
+  // para el mismo pago — 400 y 200 — dejaron tres toasts de éxito, y el 400
+  // disparó un toast de error que afirmaba "volvió a la cola de pendientes"
+  // cuando el pago seguía aprobado. Tres clics síncronos (mismo tick, sin
+  // esperar el re-render) reproducen la carrera real de un triple-click o un
+  // script más rápido que React.
+  it("un triple clic en Confirmar produce UNA sola decisión, nunca un segundo PUT ni un error falso", async () => {
+    await openPendingWithChecklistDone();
+
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+    const confirmBtn = screen.getByRole("button", { name: /^confirmar$/i });
+
+    act(() => {
+      confirmBtn.click();
+      confirmBtn.click();
+      confirmBtn.click();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(UNDO_WINDOW_MS);
+    });
+
+    await waitFor(() => {
+      expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
+    });
+    // Give any second, wrongly-scheduled commit a chance to have fired too.
+    await act(async () => {
+      vi.advanceTimersByTime(UNDO_WINDOW_MS);
+    });
+    expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("PaymentsPage — voucher preview recovery", () => {
