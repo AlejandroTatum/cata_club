@@ -1489,6 +1489,72 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
       expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).toBeNull();
     });
   });
+
+  /**
+   * Issue #352 — QA found the button re-enabling with no visible message
+   * specifically when the backend was slow enough to trip the client's own
+   * timeout, while a fully-cut network (a plain rejection) already showed a
+   * toast. Mounts `ToastContainer` — most tests in this file don't, since the
+   * toast stack is mounted by the root layout in the real app — because this
+   * is exactly the DOM-visibility question issue #352 turns on: a
+   * `submitError` that only ever changed component state, without a toast
+   * actually reaching the screen, would look identical from the assertions
+   * every other test in this describe block makes.
+   */
+  it("muestra el mismo toast visible ante un timeout que ante una red cortada (issue #352)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+
+    // A bare rejection stands in for "red totalmente cortada" — fetch itself
+    // never resolves a Response.
+    mockRegisterAttendance.mockReset().mockRejectedValue(new Error("Failed to fetch"));
+
+    render(
+      <ToastProvider>
+        <TrainerAttendancePage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+
+    const networkCutToast = await screen.findByText(
+      "No se pudo registrar la asistencia. Intente nuevamente.",
+    );
+    expect(networkCutToast).toBeInTheDocument();
+    const networkCutText = networkCutToast.textContent;
+
+    // Let the first toast fully dismiss before triggering the second — both
+    // attempts render the identical message, and two simultaneous toasts with
+    // the same text would make the next `findByText` ambiguous.
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    expect(
+      screen.queryByText("No se pudo registrar la asistencia. Intente nuevamente."),
+    ).not.toBeInTheDocument();
+
+    // A total rejection never advances `step` away from "confirm" (see
+    // `handleConfirm`'s catch) — the button that just re-enabled is right
+    // here, no need to re-walk the wizard. Simulate the OTHER branch on the
+    // SAME retry: the client's own deadline elapsed before the server
+    // answered — `ApiTimeoutError`, named "TimeoutError" (see
+    // services/api.ts), which is what `request()` throws instead of a bare
+    // `AbortError` once its 10s budget expires.
+    const timeoutError = new Error("The request exceeded its 10000 ms timeout.");
+    timeoutError.name = "TimeoutError";
+    mockRegisterAttendance.mockReset().mockRejectedValue(timeoutError);
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+
+    const timeoutToast = await screen.findByText(
+      "No se pudo registrar la asistencia. Intente nuevamente.",
+    );
+    expect(timeoutToast).toBeInTheDocument();
+    expect(timeoutToast.textContent).toBe(networkCutText);
+  });
 });
 
 describe("TrainerAttendancePage — partial failures name the students", () => {
