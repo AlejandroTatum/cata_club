@@ -435,3 +435,64 @@ describe("EnrollPage — la salida del asistente", () => {
     expect(screen.getByRole("link", { name: /^volver/i })).toHaveAttribute("href", "/student");
   });
 });
+
+// ---------------------------------------------------------------------------
+// #312 / hallazgo #2 (bloqueante) — el paso 5 apagaba "Confirmar inscripción"
+// sin decir por qué, rompiendo el patrón que los pasos 2-4 ya tienen
+// ("Para continuar, revise: ..."). Hallazgo #9 — la casilla que lo destraba
+// medía 16x16px, bajo el mínimo de 24x24 de WCAG 2.2 SC 2.5.8.
+// ---------------------------------------------------------------------------
+describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () => {
+  function reachSummaryStep(): void {
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
+    fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  }
+
+  it("names why 'Confirmar inscripción' is disabled, the same pattern steps 2-4 already use", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    const confirmButton = screen.getByRole("button", { name: /confirmar inscripción/i });
+    expect(confirmButton).toBeDisabled();
+    expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
+  });
+
+  it("enables 'Confirmar inscripción' and drops the reason once the checkbox is checked", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    fireEvent.click(screen.getByRole("checkbox"));
+
+    const confirmButton = screen.getByRole("button", { name: /confirmar inscripción/i });
+    expect(confirmButton).toBeEnabled();
+    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
+  });
+
+  it("gives the confirmation checkbox a >=24x24px target, not the old 16x16 (h-4 w-4)", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    const checkbox = screen.getByRole("checkbox");
+    // jsdom runs no layout, so it cannot report a real getBoundingClientRect
+    // (that is how the audit itself measured 16x16px, in a real browser).
+    // The equivalent, deterministic check here is the Tailwind size class —
+    // `h-6 w-6` IS 24px and `h-4 w-4` IS 16px in this design system's
+    // (un-overridden) spacing scale, see tailwind.config.ts.
+    expect(checkbox.className).toMatch(/\bh-6\b/);
+    expect(checkbox.className).toMatch(/\bw-6\b/);
+    expect(checkbox.className).not.toMatch(/\bh-4\b/);
+    expect(checkbox.className).not.toMatch(/\bw-4\b/);
+  });
+});

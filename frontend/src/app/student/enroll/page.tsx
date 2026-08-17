@@ -938,8 +938,12 @@ function EnrollWizard(): React.ReactElement {
             /* `focus:ring-ball` was inert twice over: it names a colour with
                no ring width, and `@tailwindcss/forms` (which is what would
                give a checkbox a ring at all) is not installed. Focus is marked
-               by the system indicator in `globals.css`. */
-            className="mt-0.5 h-4 w-4 rounded border-line-2 text-coal"
+               by the system indicator in `globals.css`.
+               `h-4 w-4` (16px) was hallazgo #9 (#312): the one control that
+               unlocks the whole form, and the smallest target on the screen —
+               under WCAG 2.2 SC 2.5.8's 24x24px floor. `h-6 w-6` clears it;
+               the enclosing `<label>` already makes the whole row clickable. */
+            className="mt-0.5 h-6 w-6 rounded border-line-2 text-coal"
           />
           {/* The second line under this one — "Esto evita finalizar la
               inscripción por accidente al llegar al último paso" — was the
@@ -1246,6 +1250,11 @@ function EnrollWizard(): React.ReactElement {
                     )}
                   </Button>
                 }
+                // #312 / hallazgo #2: el paso 5 apagaba este botón sin decir
+                // por qué — la MISMA falla de mensaje que `nextBlockedReason`
+                // ya arregla en los pasos 2-4, así que reusa el mismo prop.
+                submitBlocked={!submitting && !summaryReviewed}
+                submitBlockedReason="Para continuar, marque la casilla de confirmación."
               />
             </form>
           </div>

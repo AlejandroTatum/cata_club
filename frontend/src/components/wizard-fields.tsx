@@ -485,7 +485,36 @@ interface WizardNavigationProps {
   nextBlockedReason?: string;
   /** The final step's submit button — its label/disabled condition differ per wizard, so the caller renders it. */
   submitButton: ReactNode;
+  /**
+   * Whether `submitButton` is currently disabled — the caller owns that
+   * condition (it may depend on more than field validity, e.g. a
+   * confirmation checkbox), so it is repeated here rather than re-derived.
+   */
+  submitBlocked?: boolean;
+  /**
+   * Why `submitButton` is blocked, shown under it exactly the way
+   * `nextBlockedReason` already is (#312 / hallazgo #2): the wizard's own
+   * "Siguiente" names what is missing on steps 2-4, and the final step's
+   * button was the one place that stayed silent.
+   */
+  submitBlockedReason?: string;
 }
+
+/**
+ * Why a disabled `Button` is disabled, printed right under it.
+ *
+ * `text-xs text-ink-3` (12.5px, the same grey as "10 dígitos, sin guiones.")
+ * used to carry this line too — hallazgo #10: the one sentence that tells the
+ * visitor how to get unstuck read as the LEAST important text on the screen.
+ * `text-base` (15px, the ramp's own body-copy step — see tailwind.config.ts)
+ * is the closest documented size to the audit's "16px o más" ask; a bespoke
+ * `text-[16px]` would clear that ask by one pixel but break the type ramp for
+ * a single line, which this system treats as load-bearing everywhere else.
+ * `text-cata-red-dark` clears 7.74:1 on `paper` and 7.05:1 on `sunken` (AAA),
+ * well past the audit's 7:1 floor and the reason it is not `state-bad`
+ * (4.84:1 on `canvas`, under that floor).
+ */
+const BLOCKED_REASON_CLASSES = "max-w-xs text-right text-base font-semibold text-cata-red-dark";
 
 /** Validation-errors alert + Atrás/Siguiente navigation chrome — shared by both wizards' step footer. The final step renders `submitButton` instead of "Siguiente". */
 export function WizardNavigation(props: WizardNavigationProps): ReactElement {
@@ -541,10 +570,17 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
                 <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               </Button>
               {props.nextDisabled && props.nextBlockedReason && (
-                <p className="max-w-xs text-right text-xs text-ink-3">{props.nextBlockedReason}</p>
+                <p className={BLOCKED_REASON_CLASSES}>{props.nextBlockedReason}</p>
               )}
             </>
-          ) : props.submitButton}
+          ) : (
+            <>
+              {props.submitButton}
+              {props.submitBlocked && props.submitBlockedReason && (
+                <p className={BLOCKED_REASON_CLASSES}>{props.submitBlockedReason}</p>
+              )}
+            </>
+          )}
         </div>
       </div>
     </>
