@@ -400,11 +400,12 @@
  *
  * Esta hoja da el LIENZO; la COMPOSICIÓN la dan las variantes `print:*` del
  * propio componente, sobre el mismo DOM. Print es un breakpoint real, no la
- * pantalla encogida: el encabezado se apila y se centra, la foto crece y pasa
- * a ser el sujeto, el nombre cae centrado debajo, los datos bajan a una sola
- * columna y «Valor mensual» se va (identificar pertenencia no es publicar un
- * precio). El carnet no se duplica en un subárbol solo-impresión: una sola
- * fuente de verdad, dos composiciones.
+ * pantalla encogida: el encabezado se apila y se centra bajo su filete rojo
+ * —el logo se va y aparece «Tenis de mesa», que en pantalla no está—, la foto
+ * crece y pasa a ser el sujeto, el plan y el nombre caen centrados debajo, las
+ * cifras bajan a una sola columna y «Valor mensual» se va (identificar
+ * pertenencia no es publicar un precio). El carnet no se duplica en un
+ * subárbol solo-impresión: una sola fuente de verdad, dos composiciones.
  * ------------------------------------------------------------------------- */
 @media print {
   @page {

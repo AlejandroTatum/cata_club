@@ -388,10 +388,17 @@ describe("StudentPage — the club membership card (carnet)", () => {
     });
   });
 
-  it("lays the facts out on one grid, in order, so their columns line up", async () => {
+  it("lays the figures out on one grid, in order, value before label, so their columns line up", async () => {
     // Guards the alignment regression this card was polished for: as a
     // wrapping flex row each fact was only as wide as its own value, so the
     // labels landed at arbitrary x positions and no two rows shared a column.
+    // That rationale is untouched by the "B · Marcador" redesign — one grid,
+    // a deterministic order, columns that line up.
+    //
+    // What DID change is the content and the cell's internal order. The grid
+    // carries three figures, not four ("Plan" left for the kicker above the
+    // name), and each cell reads VALUE FIRST, LABEL SECOND — the inversion IS
+    // the scoreboard, so the label is now the cell's LAST element child.
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -419,12 +426,31 @@ describe("StudentPage — the club membership card (carnet)", () => {
       expect(within(facts).getByText("Franja")).toBeInTheDocument();
     });
     expect(facts.className).toContain("grid");
-    expect([...facts.children].map((cell) => cell.firstElementChild?.textContent)).toEqual([
-      "Socio desde",
-      "Plan",
+    expect(facts).toHaveAttribute("data-testid", "carnet-facts");
+
+    const cells = [...facts.children];
+    expect(cells).toHaveLength(3);
+    expect(cells.map((cell) => cell.lastElementChild?.textContent)).toEqual([
       "Franja",
       "Valor mensual",
+      "Socio desde",
     ]);
+
+    // The scoreboard inversion, and the thing most likely to be silently
+    // reverted later: inside a cell the figure comes first and the label
+    // reads underneath it.
+    for (const cell of cells) {
+      const value = cell.firstElementChild;
+      const label = cell.lastElementChild;
+      expect(value).not.toBe(label);
+      expect(
+        value!.compareDocumentPosition(label!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+
+    // "Franja" leads because it is the figure a family consults daily, and it
+    // takes the whole row to do it.
+    expect(cells[0].className).toMatch(/\bcol-span-2\b/);
   });
 
   // Fix 12c: the 360px cap on the fact grid was sized for when the carnet was
@@ -597,8 +623,12 @@ describe("StudentPage — the carnet's franja agrees with the assigned schedule"
     return { ...PORTAL, self: { ...PORTAL.self!, membership: ADULTOS_MEMBERSHIP } };
   }
 
+  // The scoreboard inverts the cell: the VALUE is the first element child and
+  // the label follows it (see the "B · Marcador" locks at the foot of this
+  // file). Only the accessor moved — every assertion below still reads the
+  // same fact off the same cell.
   function franjaValue(carnet: HTMLElement): string | undefined {
-    return within(carnet).getByText("Franja").parentElement?.lastElementChild?.textContent ?? undefined;
+    return within(carnet).getByText("Franja").parentElement?.firstElementChild?.textContent ?? undefined;
   }
 
   it("states the window the club assigned (21:15), not the plan's stale 21:00", async () => {
@@ -1470,15 +1500,19 @@ describe("StudentPage — the carnet as the club's identity object", () => {
 
   // D3 — Graduate is "lo que el club dice de sí mismo". It was absent from the
   // club's own membership card, whose wordmark was 12.5px Barlow.
-  it("sets the club's wordmark in Graduate at its 15px floor, and leaves the student's name in Barlow", async () => {
+  it("sets the club's wordmark in Graduate above its 15px floor, and leaves the student's name in Barlow", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
     const wordmark = within(carnet).getByText("Cata Club");
     expect(wordmark.className).toMatch(/\bfont-display\b/);
     expect(wordmark.className).toMatch(/\buppercase\b/);
-    // 15px is exactly Graduate's floor — never below it, on screen or on print.
-    expect(wordmark.className).toMatch(/\btext-base\b/);
+    // "B · Marcador" lets the club speak first: the wordmark leads the banner
+    // at `text-xl` (26px) instead of the 15px floor it used to sit exactly on.
+    // The floor itself is unchanged and still holds — see the dedicated lock
+    // for it. It takes no print override, so the club signs the credential at
+    // the weight it signs the screen.
+    expect(wordmark.className).toMatch(/\btext-xl\b/);
     expect(wordmark.className).not.toMatch(/print:text-(2xs|xs|sm)\b/);
 
     // The hard boundary: Graduate has almost no vertical range and reads as
@@ -1495,11 +1529,14 @@ describe("StudentPage — the carnet as the club's identity object", () => {
     render(<StudentPage />);
 
     const photo = await screen.findByTestId("carnet-photo");
-    expect(photo.className).toMatch(/\bh-16\b/);
-    expect(photo.className).toMatch(/\bw-16\b/);
+    // 56px, down from 64px: "B · Marcador" moves the weight to the banner and
+    // to the figures, and the photo sits beside a kicker plus a 22px name
+    // rather than beside a name alone.
+    expect(photo.className).toMatch(/\bh-\[56px\]/);
+    expect(photo.className).toMatch(/\bw-\[56px\]/);
     // On the credential the photo is the largest element on the card, not a
-    // shrunk-down version of the screen's.
-    expect(photo.className).toMatch(/\bprint:h-14\b/);
+    // shrunk-down version of the screen's — it GROWS relative to its field.
+    expect(photo.className).toMatch(/\bprint:h-\[62px\]/);
     expect(photo.className).not.toMatch(/print:h-9\b/);
   });
 
@@ -1532,7 +1569,9 @@ describe("StudentPage — the carnet as the club's identity object", () => {
       expect(within(facts).getByText("Franja")).toBeInTheDocument();
     });
     for (const cell of [...facts.children]) {
-      const label = cell.firstElementChild;
+      // The label is the cell's LAST element child since the scoreboard
+      // inversion — the figure leads, the label reads underneath it.
+      const label = cell.lastElementChild;
       expect(label?.className).toMatch(/\bfont-extrabold\b/);
       expect(label?.className).not.toMatch(/\bfont-semibold\b/);
     }
@@ -1564,7 +1603,9 @@ describe("StudentPage — the carnet as the club's identity object", () => {
     // Still on screen, and still in the DOM — hidden at the print breakpoint
     // by a class, not removed from the markup.
     expect(within(facts).getByText("$25,00")).toBeInTheDocument();
-    for (const label of ["Socio desde", "Plan", "Franja"]) {
+    // "Plan" is no longer a cell here — it is the kicker above the name — so
+    // the two figures that survive to paper are the two named below.
+    for (const label of ["Socio desde", "Franja"]) {
       expect(cellFor(label).className).not.toMatch(/print:hidden/);
     }
   });
@@ -1598,6 +1639,253 @@ describe("StudentPage — the carnet as the club's identity object", () => {
 
     // The facts read as one left-aligned column at credential width.
     expect(facts.className).toMatch(/print:grid-cols-1/);
+  });
+});
+
+/**
+ * "B · Marcador" — the club speaks first, and the data reads as a scoreboard:
+ * the figure, then what it measures.
+ *
+ * Same DOM, two compositions. Every lock below is written against the one
+ * markup tree the screen renders, so `within(carnet).getByText(...)` still
+ * finds exactly one of everything whether the utility that governs it is a
+ * screen one or a `print:` one.
+ */
+describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () => {
+  const FULL_MEMBERSHIP = {
+    id: 4,
+    estado: "ACTIVA",
+    personaId: 9,
+    montoAplicado: "25.00",
+    categoria: "Mensual",
+    modalidad: "MENSUAL" as const,
+    fechaActivacion: "2026-03-18",
+  };
+
+  /** A carnet with every figure the card can carry, so the scoreboard is real. */
+  function renderFullCarnet() {
+    mockFetchStudentPortal
+      .mockReset()
+      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP } });
+    mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
+    render(<StudentPage />);
+  }
+
+  /**
+   * The type scale, transcribed from `tailwind.config.ts`. A className is the
+   * only place a component's resolved size is observable in jsdom — no
+   * stylesheet is applied here — so the floor lock reads the utilities and
+   * maps them back to the px the config assigns them.
+   */
+  const FONT_SIZE_PX: Record<string, number> = {
+    "2xs": 10.5,
+    xs: 12.5,
+    sm: 13.5,
+    base: 15,
+    lg: 20,
+    xl: 26,
+    "2xl": 32,
+    display: 46,
+  };
+
+  /** Every type size an element declares, screen and `print:` alike, in px. */
+  function declaredSizesPx(className: string): number[] {
+    return className.split(/\s+/).flatMap((token) => {
+      const utility = token.replace(/^print:/, "");
+      const arbitrary = /^text-\[(\d+(?:\.\d+)?)px\]$/.exec(utility);
+      if (arbitrary) return [Number(arbitrary[1])];
+      const named = /^text-(2xs|xs|sm|base|lg|xl|2xl|display)$/.exec(utility);
+      return named ? [FONT_SIZE_PX[named[1]]] : [];
+    });
+  }
+
+  // The banner: the club signs the card before the card says whose it is.
+  it("leads with the wordmark in Graduate over the card's one red rule", async () => {
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const wordmark = within(carnet).getByText("Cata Club");
+    expect(wordmark.className).toMatch(/\bfont-display\b/);
+    // The top of the type scale below the stat and hero steps — the club
+    // leads the banner instead of captioning the mark.
+    expect(wordmark.className).toMatch(/\btext-xl\b/);
+
+    const banner = wordmark.parentElement?.parentElement;
+    expect(banner?.className).toMatch(/\bborder-b-2\b/);
+    expect(banner?.className).toMatch(/\bborder-cata-red\b/);
+    expect(banner?.className).toMatch(/\bjustify-between\b/);
+
+    // DESIGN.md rations red. The whole card spends its one appearance on the
+    // line that divides the club from the person — nowhere else.
+    expect(carnet.querySelectorAll('[class*="cata-red"]')).toHaveLength(1);
+  });
+
+  it("keeps «Tenis de mesa» off the screen banner and puts it on the printed one", async () => {
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const tagline = within(carnet).getByText("Tenis de mesa");
+    expect(tagline.className).toMatch(/\bhidden\b/);
+    expect(tagline.className).toMatch(/\bprint:block\b/);
+  });
+
+  // The companion lock for `getByText("Plan")` further up this file. That
+  // assertion still passes, but for a DIFFERENT reason — the label is now
+  // `sr-only` — so the arrangement it used to describe is pinned here
+  // explicitly rather than left to be inferred from an unchanged line.
+  it("renders the plan as the kicker above the name, keeping its label for screen readers", async () => {
+    renderFullCarnet();
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const value = within(carnet).getByText("Mensual");
+    const kicker = value.parentElement!;
+
+    // Visible: the value alone, in the club's rationed accent.
+    expect(kicker.className).toMatch(/\btext-ball\b/);
+    expect(kicker.className).toMatch(/\btext-2xs\b/);
+    expect(kicker.className).toMatch(/\bfont-extrabold\b/);
+
+    // A bare value floating above a name is ambiguous to a screen reader, so
+    // the label does not disappear — it stops being VISIBLE.
+    const srLabel = within(kicker).getByText("Plan");
+    expect(srLabel.className).toMatch(/\bsr-only\b/);
+    expect(
+      srLabel.compareDocumentPosition(value) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // It reads BEFORE the name, and it is no longer a scoreboard cell.
+    const name = within(carnet).getByText("Alumno Test");
+    expect(kicker.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const facts = within(carnet).getByTestId("carnet-facts");
+    expect(within(facts).queryByText("Plan")).not.toBeInTheDocument();
+  });
+
+  it("renders no kicker at all when the membership carries no categoría", async () => {
+    // `PORTAL.self.membership` is null: no label, no placeholder, no empty row.
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    expect(within(carnet).queryByText("Plan")).not.toBeInTheDocument();
+  });
+
+  it("sizes the photo at 56px on screen and grows it to 62px on the credential", async () => {
+    render(<StudentPage />);
+
+    const photo = await screen.findByTestId("carnet-photo");
+    expect(photo.className).toMatch(/\bh-\[56px\]/);
+    expect(photo.className).toMatch(/\bw-\[56px\]/);
+    expect(photo.className).toMatch(/\bprint:h-\[62px\]/);
+    expect(photo.className).toMatch(/\bprint:w-\[62px\]/);
+  });
+
+  it("leads the scoreboard with Franja, spanning both columns", async () => {
+    renderFullCarnet();
+
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+    });
+
+    const first = facts.children[0];
+    expect(first.lastElementChild?.textContent).toBe("Franja");
+    expect(first.className).toMatch(/\bcol-span-2\b/);
+    // On paper the grid is a single column, so the span has to stand down or
+    // it would conjure an implicit second column out of the credential.
+    expect(first.className).toMatch(/\bprint:col-span-1\b/);
+  });
+
+  // A value that is not a figure must not be set in Graduate: "No se pudo
+  // consultar" is the state of a QUERY, not a figure of the club. Driven from
+  // the real `horariosState` error path, and from an explicit per-cell flag in
+  // the component — never from sniffing the string.
+  it("sets a franja that could not be consulted in Barlow, never in Graduate", async () => {
+    mockFetchStudentPortal
+      .mockReset()
+      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP } });
+    mockFetchHorariosPorAlumno.mockRejectedValue(new Error("boom"));
+
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    let value: HTMLElement;
+    await waitFor(() => {
+      value = within(carnet).getByText("No se pudo consultar");
+    });
+    expect(value!.className).toMatch(/\bfont-sans\b/);
+    expect(value!.className).not.toMatch(/font-display/);
+
+    // The figures around it are unaffected — the exception is per cell.
+    const socioDesde = within(carnet).getByText("Socio desde").parentElement!;
+    expect(socioDesde.firstElementChild?.className).toMatch(/font-display/);
+  });
+
+  // Fix 12b, carried into the new cell: the ONLY place a multi-window franja
+  // may wrap is the " · " between windows, never inside one.
+  it("splits a multi-window franja only at the separator, each window unbreakable", async () => {
+    mockFetchStudentPortal
+      .mockReset()
+      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP } });
+    mockFetchHorariosPorAlumno.mockResolvedValue([
+      asignacion("MARTES", "15:00:00", "16:00:00", 1),
+      asignacion("JUEVES", "20:00:00", "21:15:00", 2),
+    ]);
+
+    render(<StudentPage />);
+
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+    });
+
+    const value = within(facts).getByText("Franja").parentElement!.firstElementChild!;
+    expect(value.className).toMatch(/font-display/);
+    const windows = [...value.querySelectorAll("span")];
+    expect(windows.map((w) => w.textContent)).toEqual(["15:00 — 16:00", "20:00 — 21:15"]);
+    for (const w of windows) {
+      expect(w.className).toMatch(/whitespace-nowrap/);
+    }
+    // Still one coherent fact, read in one breath.
+    expect(value.textContent).toBe("15:00 — 16:00 · 20:00 — 21:15");
+  });
+
+  // Identifying belonging is not publishing a price, and the price is the
+  // first thing on this card to age.
+  it("carries the print omission on Valor mensual alone", async () => {
+    renderFullCarnet();
+
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+    });
+
+    const cellFor = (label: string) => within(facts).getByText(label).parentElement!;
+    expect(cellFor("Valor mensual").className).toMatch(/print:hidden/);
+    expect(cellFor("Franja").className).not.toMatch(/print:hidden/);
+    expect(cellFor("Socio desde").className).not.toMatch(/print:hidden/);
+  });
+
+  // Graduate's 15px floor is a property of the FACE, not a screen convention:
+  // it holds on paper too. Barlow labels may drop to 8px on the credential —
+  // that is a different medium and a different face.
+  it("never sets Graduate below its 15px floor, print utilities included", async () => {
+    renderFullCarnet();
+
+    const carnet = await screen.findByTestId("student-carnet");
+    await waitFor(() => {
+      expect(within(carnet).getByText("Franja")).toBeInTheDocument();
+    });
+
+    const graduate = [...carnet.querySelectorAll('[class*="font-display"]')];
+    // The wordmark plus the three figures — if this ever finds nothing the
+    // assertion below would pass vacuously.
+    expect(graduate.length).toBeGreaterThanOrEqual(4);
+    for (const element of graduate) {
+      const sizes = declaredSizesPx(element.className);
+      expect(sizes.length).toBeGreaterThan(0);
+      for (const px of sizes) {
+        expect(px).toBeGreaterThanOrEqual(15);
+      }
+    }
   });
 });
 
