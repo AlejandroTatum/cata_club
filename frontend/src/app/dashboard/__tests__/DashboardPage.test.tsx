@@ -249,7 +249,7 @@ describe("DashboardPage — the three-stat pulse", () => {
     // The Miembros tile answers the other question and keeps the full padrón:
     // it is captioned "personas registradas" and there are 86 of them.
     expect(screen.getByText("86")).toBeInTheDocument();
-    expect(screen.getByText("personas registradas")).toBeInTheDocument();
+    expect(screen.getByText("personas registradas (incluye staff)")).toBeInTheDocument();
   });
 
   it("gives all three tiles the same internal grammar: label, figure, caption", async () => {
@@ -264,7 +264,7 @@ describe("DashboardPage — the three-stat pulse", () => {
     // unrelated things rather than one pulse. Every tile now closes on a plain
     // caption line — and the caption says what the widget only gestured at.
     expect(screen.queryByRole("img", { name: /asistencia por semana/i })).toBeNull();
-    expect(screen.getByText("personas registradas")).toBeInTheDocument();
+    expect(screen.getByText("personas registradas (incluye staff)")).toBeInTheDocument();
     // 17 of the 40 alumnos, not of the 44 registered personas.
     expect(screen.getByText("43% del total")).toBeInTheDocument();
   });

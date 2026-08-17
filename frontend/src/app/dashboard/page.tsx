@@ -222,7 +222,20 @@ export default function DashboardPage(): React.ReactElement {
               sparkbars' own aria-label already conceded they could not.
             */}
             <div className={STAT_GRID}>
-              <StatCard label="Miembros" value={totalPersonas} hint="personas registradas" />
+              {/*
+                  Issue #313 (K5 hallazgo #38): 103 personas registradas
+                  convivía con "21 de 101" y "80 por regularizar" (21+80=101,
+                  no 103) sin que ninguna tarjeta dijera por qué difieren. Las
+                  dos cifras miden universos distintos A PROPÓSITO — Miembros
+                  es el padrón completo, Membresías activas es solo alumnos —
+                  así que el fix nombra la diferencia en vez de forzarlas a
+                  coincidir.
+              */}
+              <StatCard
+                label="Miembros"
+                value={totalPersonas}
+                hint="personas registradas (incluye staff)"
+              />
               {/*
                   The denominator is `totalAlumnos`, not `totalPersonas`: this
                   counts membresía rows in estado ACTIVA, and administradores
