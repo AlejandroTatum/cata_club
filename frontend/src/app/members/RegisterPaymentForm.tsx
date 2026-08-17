@@ -211,7 +211,9 @@ export default function RegisterPaymentForm({
 
       {monthlyPrice > 0 && Number(monto) > 0 && (
         <p className="text-2xs tracking-flat text-ink-3">
-          {Number(monto) / monthlyPrice} meses de vigencia (precio mensual: ${monthlyPrice})
+          {Number(monto) / monthlyPrice}{" "}
+          {Number(monto) / monthlyPrice === 1 ? "mes de vigencia" : "meses de vigencia"} (precio
+          mensual: ${monthlyPrice})
         </p>
       )}
 

@@ -24,7 +24,7 @@ import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchMembresiaDeuda, regularizarDeuda } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
 
 interface RegularizarDeudaFormProps {
@@ -45,6 +45,7 @@ export default function RegularizarDeudaForm({
 
   const [open, setOpen] = useState(false);
   const [mesesAdeudados, setMesesAdeudados] = useState<number | null>(null);
+  const [ultimaCoberturaFin, setUltimaCoberturaFin] = useState<string | null>(null);
   const [deudaError, setDeudaError] = useState(false);
   const [fechaInicio, setFechaInicio] = useState<string>(() => clubIsoDate());
   const [fechaFin, setFechaFin] = useState<string>("");
@@ -59,6 +60,7 @@ export default function RegularizarDeudaForm({
     try {
       const deuda = await fetchMembresiaDeuda(membresiaId);
       setMesesAdeudados(deuda.mesesAdeudados);
+      setUltimaCoberturaFin(deuda.ultimaCoberturaFin);
       if (montoMensual <= 0) {
         setMonto(deuda.montoMensual > 0 ? String(deuda.montoMensual) : "");
       }
@@ -136,9 +138,25 @@ export default function RegularizarDeudaForm({
             <p className="text-xs font-bold uppercase tracking-wider text-ink-3">
               Regularizar deuda
             </p>
-            {!deudaError && mesesAdeudados !== null && (
+            {/*
+              Issue #313 (K5 hallazgo #15): "Membresía: Vencida" y "0 meses
+              adeudados" a la vez leían como una contradicción, aunque las
+              dos cifras son individualmente correctas — el estado se vence
+              apenas se pasa la cobertura, la deuda solo cuenta MESES
+              CALENDARIO COMPLETOS (paridad con el SQL del club, issue #284).
+              Cuando todavía no se completó un mes, este chip ya no dice
+              "0 meses adeudados" (lee como "no debe nada"): dice desde
+              cuándo está vencida, el mismo dato que ya traía esta consulta
+              y que antes se pedía y se descartaba.
+            */}
+            {!deudaError && mesesAdeudados !== null && mesesAdeudados > 0 && (
               <span className="rounded-full bg-cata-red/15 px-2 py-0.5 text-2xs font-semibold text-cata-red">
                 {mesesAdeudados} {mesesAdeudados === 1 ? "mes adeudado" : "meses adeudados"}
+              </span>
+            )}
+            {!deudaError && mesesAdeudados === 0 && ultimaCoberturaFin && (
+              <span className="rounded-full bg-state-warn-bg px-2 py-0.5 text-2xs font-semibold text-state-warn">
+                Vencida desde el {formatDate(ultimaCoberturaFin)}
               </span>
             )}
           </div>

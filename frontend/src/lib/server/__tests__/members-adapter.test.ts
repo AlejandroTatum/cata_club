@@ -50,7 +50,12 @@ const pago: BackendPagoListItem = {
   voucherFormato: null,
 };
 
-const membresia: BackendMembresia = { id: 100, estado: "ACTIVA", tipoMembresiaId: 5 };
+const membresia: BackendMembresia = {
+  id: 100,
+  estado: "ACTIVA",
+  tipoMembresiaId: 5,
+  montoAplicado: "25.00",
+};
 const tipo: BackendTipoMembresia = { id: 5, categoria: "Mensual Adultos" };
 
 describe("buildMemberAccounts", () => {
@@ -88,15 +93,22 @@ describe("buildMemberAccounts", () => {
     );
 
     const student = accounts.find((a) => a.id === "2")?.estudiantes[0];
+    // Issue #313 (K5 hallazgo #44): `membresia.monto` es el PRECIO DEL PLAN
+    // (`montoAplicado`, $25), no el monto del último pago ($50 — una
+    // renovación de dos meses en este fixture). Antes ambos números se
+    // conflaban en uno solo (`pago?.monto ?? membresia.montoAplicado`), así
+    // que la ficha mostraba el mismo importe dos veces y un admin no podía
+    // saber si el alumno debía 25 o 50.
     expect(student?.membresia).toEqual({
       id: 100,
       tipo: "Mensual Adultos",
       estado: "activa",
       fechaInicio: "2026-07-01",
       fechaFin: "2026-07-31",
-      monto: 50,
+      monto: 25,
     });
     expect(student?.ultimoPago?.estado).toBe("aprobado");
+    expect(student?.ultimoPago?.monto).toBe(50);
   });
 
   it("shows a membership that has no payment behind it, with no invented period", () => {

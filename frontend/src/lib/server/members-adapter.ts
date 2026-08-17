@@ -118,7 +118,14 @@ function buildMemberStudentSummary(
           // an invented range.
           fechaInicio: pago?.fechaInicio ?? "",
           fechaFin: pago?.fechaFin ?? "",
-          monto: Number(pago?.monto ?? membresia.montoAplicado ?? 0),
+          // Issue #313 (K5 hallazgo #44): SIEMPRE el precio del plan
+          // (`montoAplicado`), nunca el monto del último pago. Antes este
+          // campo tomaba `pago.monto` cuando había un pago, así que una
+          // renovación de dos meses ($50) hacía que la ficha leyera "precio
+          // de la membresía: $50" — el mismo importe que `ultimoPago.monto`,
+          // duplicado con otro nombre. Son dos hechos distintos: cuánto
+          // cuesta el plan por mes, y cuánto fue el último pago.
+          monto: Number(membresia.montoAplicado ?? 0),
         }
       : null,
     ultimoPago: pago
