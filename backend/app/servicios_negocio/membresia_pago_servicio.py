@@ -761,7 +761,7 @@ class PagoServicio:
             aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_APROBADO,
-                mensaje=f"Tu pago de ${pago.monto} fue aprobado. Tu membresía está activa.",
+                mensaje=f"Su pago de ${pago.monto} fue aprobado. Su membresía está activa.",
             )
             # Último paso, ya con la aprobación commiteada: si el broker está
             # caído, el método loguea y NO propaga (ver su docstring).
@@ -774,7 +774,7 @@ class PagoServicio:
             aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_RECHAZADO,
-                mensaje=f"Tu pago fue rechazado{motivo}.",
+                mensaje=f"Su pago fue rechazado{motivo}.",
             )
         # Atributo transitorio, no una columna de `Pago`: `PagoResponseDTO`
         # (from_attributes=True) lo lee por `getattr` para que el 200 que
