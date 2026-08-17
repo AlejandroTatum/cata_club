@@ -9,10 +9,14 @@ class FichaMedicaRepositorio:
     def __init__(self, db: Session):
         self.db = db
 
-    def crear(self, ficha: FichaMedica) -> FichaMedica:
+    def crear(self, ficha: FichaMedica, *, commit: bool = True) -> FichaMedica:
+        """`commit=False`: ver `PersonaRepositorio.crear` (issue #338)."""
         self.db.add(ficha)
-        self.db.commit()
-        self.db.refresh(ficha)
+        if commit:
+            self.db.commit()
+            self.db.refresh(ficha)
+        else:
+            self.db.flush()
         return ficha
 
     def guardar_cambios(self, ficha: FichaMedica) -> FichaMedica:
@@ -49,8 +53,12 @@ class UsuarioRepositorio:
             consulta = consulta.filter(Usuario.id != excluir_usuario_id)
         return consulta.count()
 
-    def crear(self, usuario: Usuario) -> Usuario:
+    def crear(self, usuario: Usuario, *, commit: bool = True) -> Usuario:
+        """`commit=False`: ver `PersonaRepositorio.crear` (issue #338)."""
         self.db.add(usuario)
-        self.db.commit()
-        self.db.refresh(usuario)
+        if commit:
+            self.db.commit()
+            self.db.refresh(usuario)
+        else:
+            self.db.flush()
         return usuario

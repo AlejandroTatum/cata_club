@@ -3,12 +3,16 @@ from datetime import date
 import pytest
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.enums import TipoNotificacion, TipoRol
-from app.dominio.modelos import Notificacion, Persona, Usuario
+from app.dominio.enums import (
+    NivelTecnicoAlumno, TipoManoDominante, TipoNotificacion, TipoRol, TipoSangre,
+)
+from app.dominio.modelos import AntecedentesClub, FichaMedica, Notificacion, Persona, Usuario
 from app.presentacion.schemas.enrollment_schemas import (
     EnrollmentAlumnoDTO,
+    EnrollmentAntecedentesDTO,
     EnrollmentCreateDTO,
     EnrollmentCredencialesDTO,
+    EnrollmentFichaMedicaDTO,
     EnrollmentRepresentanteDTO,
 )
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
@@ -405,6 +409,154 @@ def test_inscripcion_sin_credenciales_rechazada_en_dto():
         EnrollmentCreateDTO(
             alumno=_alumno_dto(cedula=cedula_valida(254), fecha_nacimiento=date(2000, 1, 1)),
         )
+
+
+# --- Atomicidad del enroll (issue #338) ------------------------------------
+# `enroll()` no era transaccional: cada `Repositorio.crear` hacía su propio
+# `commit()`. Cuando el flujo fallaba en un paso TARDÍO, lo escrito hasta ahí
+# quedaba commiteado igual -- el cliente recibía un 400 como si nada se
+# hubiera guardado, pero una cuenta huérfana (a veces 100% funcional) quedaba
+# en la base. Cada test de abajo reproduce una falla tardía real encontrada
+# en el servicio y prueba que, tras la excepción, NINGUNA escritura de ese
+# intento sobrevive.
+
+def test_inscripcion_menor_correo_duplicado_no_deja_representante_huerfano(db_session):
+    """Falla tardía #1 (la reportada en el issue): el correo del menor con
+    cuenta propia se validaba dentro de `_crear_usuario_alumno`, el ÚLTIMO
+    paso del flujo -- para entonces la Persona+Usuario+roles del
+    representante y la Persona del alumno ya estaban commiteadas."""
+    persona = Persona(
+        nombres="Existente", apellidos="Test", cedula=cedula_valida(253),
+        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+    )
+    db_session.add(persona)
+    db_session.flush()
+    usuario = Usuario(correo="ocupado@example.com", contrasenia="hash", persona_id=persona.id)
+    db_session.add(usuario)
+    db_session.commit()
+
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia-huerfano@example.com", contrasenia="password8",
+        ),
+        alumno=EnrollmentAlumnoDTO(
+            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
+            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
+            correo="ocupado@example.com", contrasenia="password8",
+        ),
+    )
+    from app.dominio.excepciones import EntidadDuplicada
+    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
+        EnrollmentServicio(db_session).enroll(datos)
+
+    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(250)).count() == 0
+    assert db_session.query(Usuario).filter(Usuario.correo == "sofia-huerfano@example.com").count() == 0
+    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(251)).count() == 0
+
+
+def test_autoinscripcion_adulto_correo_duplicado_no_deja_alumno_huerfano(db_session):
+    """Falla tardía #2 (hallada al explorar el servicio, no reportada en el
+    issue): autoinscripción de adulto (sin representante). El correo de
+    `credenciales_alumno` se validaba DESPUÉS de crear la Persona del
+    alumno (y su ficha médica/antecedentes, si venían), dejando una Persona
+    huérfana ante un correo ya ocupado."""
+    persona = Persona(
+        nombres="Existente", apellidos="Test", cedula=cedula_valida(253),
+        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+    )
+    db_session.add(persona)
+    db_session.flush()
+    usuario = Usuario(correo="jugador-ocupado@example.com", contrasenia="hash", persona_id=persona.id)
+    db_session.add(usuario)
+    db_session.commit()
+
+    datos = EnrollmentCreateDTO(
+        alumno=_alumno_dto(cedula="1798765432", fecha_nacimiento=date(2000, 1, 1)),
+        credenciales_alumno=EnrollmentCredencialesDTO(
+            correo="jugador-ocupado@example.com", contrasenia="password8",
+        ),
+    )
+    from app.dominio.excepciones import EntidadDuplicada
+    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
+        EnrollmentServicio(db_session).enroll(datos)
+
+    assert db_session.query(Persona).filter(Persona.cedula == "1798765432").count() == 0
+
+
+def test_alumno_cedula_duplicada_no_deja_representante_huerfano(db_session):
+    """Falla tardía #3 (hallada al explorar el servicio, no reportada en el
+    issue): la cédula del alumno se validaba DESPUÉS de crear la Persona del
+    representante, dejando un representante huérfano ante una cédula de
+    alumno duplicada."""
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia-cedula@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(cedula=cedula_valida(250)),  # misma cédula que representante
+    )
+    from app.dominio.excepciones import EntidadDuplicada
+    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
+        EnrollmentServicio(db_session).enroll(datos)
+
+    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(250)).count() == 0
+
+
+def test_inscripcion_completa_persiste_todo_en_una_transaccion(db_session):
+    """Camino feliz, candado obligatorio: representante + menor + roles +
+    ficha médica + antecedentes quedan TODOS escritos. Sin este test, un fix
+    de atomicidad que rompiera el camino feliz (p. ej. olvidar el `commit()`
+    final) pasaría desapercibido."""
+    datos = EnrollmentCreateDTO(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia-completa@example.com", contrasenia="password8",
+        ),
+        alumno=EnrollmentAlumnoDTO(
+            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
+            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
+            correo="lucas-completa@example.com", contrasenia="password8",
+        ),
+        ficha_medica=EnrollmentFichaMedicaDTO(
+            tipo_sangre=TipoSangre.O_POSITIVO,
+            enfermedades=["Asma"],
+            alergias="Ninguna",
+            contacto_emergencia="Mamá",
+            telefono_emergencia="0991112222",
+        ),
+        antecedentes=EnrollmentAntecedentesDTO(
+            nivel_tecnico_alumno=NivelTecnicoAlumno.NIVEL_1,
+            mano_dominante=TipoManoDominante.DIESTRO,
+        ),
+    )
+
+    resultado = EnrollmentServicio(db_session).enroll(datos)
+    # Simula el cierre de la sesión de request sin commit explícito (ver nota
+    # al inicio del archivo): solo un `commit()` real sobrevive a esto.
+    db_session.rollback()
+
+    assert resultado["access_token"]
+
+    rep = db_session.query(Persona).filter(Persona.cedula == cedula_valida(250)).one()
+    alumno = db_session.query(Persona).filter(Persona.cedula == cedula_valida(251)).one()
+    assert alumno.representante_id == rep.id
+
+    usuario_rep = db_session.query(Usuario).filter(Usuario.correo == "sofia-completa@example.com").one()
+    assert {r.tipo_rol for r in usuario_rep.roles} == {TipoRol.REPRESENTANTE, TipoRol.ALUMNO}
+
+    usuario_alumno = db_session.query(Usuario).filter(Usuario.correo == "lucas-completa@example.com").one()
+    assert {r.tipo_rol for r in usuario_alumno.roles} == {TipoRol.ALUMNO}
+
+    ficha = db_session.query(FichaMedica).filter(FichaMedica.persona_id == alumno.id).one()
+    assert ficha.tipo_sangre == TipoSangre.O_POSITIVO
+    assert [e.nombre_enfermedad for e in ficha.enfermedades] == ["Asma"]
+
+    antecedentes = db_session.query(AntecedentesClub).filter(AntecedentesClub.persona_id == alumno.id).one()
+    assert antecedentes.nivel_tecnico_alumno == NivelTecnicoAlumno.NIVEL_1
 
 
 def test_api_inscripcion_sin_credenciales_devuelve_422_y_no_persiste(client, db_session):
