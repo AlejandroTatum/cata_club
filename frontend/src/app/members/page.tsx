@@ -1109,11 +1109,41 @@ export default function MembersPage(): React.ReactElement {
           // still there in the case that needs it most — a search that found
           // nobody, where the reason may well be the cap itself.
           help={
-            <ContextualHelp title="Ayuda sobre límite de resultados">
-              <p>
-                Este listado puede incluir hasta {MEMBERS_AGGREGATE_LIMIT} registros y no confirma
-                que se hayan cargado todos los miembros.
-              </p>
+            <ContextualHelp title="Cómo funciona el listado">
+              {/* Era una sola frase, y hablaba del tope de la consulta: nunca
+                  de la pantalla. La segunda viñeta es la razón de ser de este
+                  bloque — `getAccountStatusBadge` resume a TODOS los
+                  estudiantes de la cuenta en una insignia, y ese cálculo no
+                  estaba escrito en ninguna parte de la interfaz. Se lee como
+                  lo hace el código, no como se lo supone: el estado que gana
+                  es el MEJOR. */}
+              <ul className="flex flex-col gap-field">
+                <li>
+                  Cada fila es una <b className="font-semibold text-ink">cuenta</b>: la persona que
+                  paga. «Estudiantes» son las personas a su cargo; sus nombres se leen desplegando
+                  la fila con «Ver», o dentro de «Editar».
+                </li>
+                <li>
+                  La membresía de la fila resume a todos sus estudiantes y muestra el{" "}
+                  <b className="font-semibold text-ink">mejor</b> estado, no el peor: basta con que
+                  uno tenga la membresía activa para que la cuenta figure como Activa, aunque otro
+                  la tenga vencida. Solo cuando ninguno está activo la fila muestra lo que queda,
+                  empezando por lo más accionable: un pago pendiente de validación, luego una
+                  membresía vencida y por último una cuenta suspendida.
+                </li>
+                {/* "Registros", no "cuentas": el tope es de la consulta de
+                    origen, y las cuentas salen de colapsar esos registros, así
+                    que son menos. Y el buscador filtra sobre lo ya traído
+                    (`filterAccounts` corre en el cliente), de modo que la ayuda
+                    no puede prometer que buscar alcance para traer a alguien
+                    que quedó fuera del tope. */}
+                <li>
+                  El listado se arma con hasta {MEMBERS_AGGREGATE_LIMIT} registros de origen y no
+                  confirma que se hayan cargado todos los miembros. El buscador filtra solo sobre lo
+                  ya traído — por nombre de la cuenta, correo o nombre de un estudiante —, así que
+                  si no encuentra a alguien es probable que haya quedado fuera de ese tope.
+                </li>
+              </ul>
             </ContextualHelp>
           }
         />

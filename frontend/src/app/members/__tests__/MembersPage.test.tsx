@@ -1382,9 +1382,9 @@ describe("MembersPage — capped results help", () => {
     );
     await findAccountRow();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ayuda sobre límite de resultados" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cómo funciona el listado" }));
 
-    const help = screen.getByRole("region", { name: "Ayuda sobre límite de resultados" });
+    const help = screen.getByRole("region", { name: "Cómo funciona el listado" });
     expect(help).toHaveTextContent("hasta 200 registros");
     expect(help).toHaveTextContent("no confirma que se hayan cargado todos los miembros");
   });
@@ -2231,7 +2231,7 @@ describe("MembersPage — the help is anchored (D11c)", () => {
 
     const panel = screen.getByRole("region", { name: "Filtros de miembros" });
     expect(
-      within(panel).getByRole("button", { name: "Ayuda sobre límite de resultados" }),
+      within(panel).getByRole("button", { name: "Cómo funciona el listado" }),
     ).toBeInTheDocument();
   });
 
@@ -2250,7 +2250,7 @@ describe("MembersPage — the help is anchored (D11c)", () => {
     await screen.findByText("No se encontraron miembros");
     const panel = screen.getByRole("region", { name: "Filtros de miembros" });
     expect(
-      within(panel).getByRole("button", { name: "Ayuda sobre límite de resultados" }),
+      within(panel).getByRole("button", { name: "Cómo funciona el listado" }),
     ).toBeInTheDocument();
   });
 
@@ -2262,8 +2262,8 @@ describe("MembersPage — the help is anchored (D11c)", () => {
     );
     await findAccountRow();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ayuda sobre límite de resultados" }));
-    const help = screen.getByRole("region", { name: "Ayuda sobre límite de resultados" });
+    fireEvent.click(screen.getByRole("button", { name: "Cómo funciona el listado" }));
+    const help = screen.getByRole("region", { name: "Cómo funciona el listado" });
     expect(help.textContent).not.toContain("Las cuentas que pagan");
   });
 });
@@ -2311,5 +2311,71 @@ describe("MembersPage — the empty state leaves no hole under it (D11b)", () =>
       screen.getByText("Ningún miembro coincide con la búsqueda y los filtros activos."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Limpiar búsqueda" })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// La ayuda explica la pantalla, no solo su tope.
+//
+// Decía una sola frase, sobre el límite de 200 registros: el dueño preguntó
+// para qué servía. El estándar de la casa — Pagos, Descuentos — explica cómo
+// funciona la pantalla. La viñeta del estado de membresía es la razón de ser
+// del cambio: `getAccountStatusBadge` resume a todos los estudiantes de la
+// cuenta y ese cálculo no estaba escrito en ninguna parte de la interfaz.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — la ayuda explica el listado", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+  });
+
+  /** Abre el disclosure y devuelve la región de ayuda. */
+  async function openHelp(): Promise<HTMLElement> {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+    fireEvent.click(screen.getByRole("button", { name: "Cómo funciona el listado" }));
+    return screen.getByRole("region", { name: "Cómo funciona el listado" });
+  }
+
+  it("explica en tres viñetas, como el catálogo de Descuentos", async () => {
+    const panel = await openHelp();
+    expect(within(panel).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("dice que la fila es la cuenta que paga y dónde se leen los nombres", async () => {
+    const panel = await openHelp();
+    const [primera] = within(panel).getAllByRole("listitem");
+
+    expect(primera).toHaveTextContent(/cuenta.*paga/i);
+    expect(primera).toHaveTextContent(/a su cargo/i);
+  });
+
+  it("explica el estado de la cuenta como lo calcula el código: el MEJOR, no el peor", async () => {
+    const panel = await openHelp();
+    const segunda = within(panel).getAllByRole("listitem")[1];
+
+    // `getAccountStatusBadge` devuelve "Activo" apenas UN estudiante tenga la
+    // membresía activa, sin mirar a los demás. La ayuda tiene que decir eso y
+    // no lo contrario: una cuenta se ve activa aunque otro esté vencido.
+    expect(segunda).toHaveTextContent(/mejor/i);
+    expect(segunda).toHaveTextContent(/vencid/i);
+    // Y la escalera que corre solo cuando ninguno está activo.
+    expect(segunda).toHaveTextContent(/pendiente de validación/i);
+    expect(segunda).toHaveTextContent(/suspendida/i);
+  });
+
+  it("dice el tope y qué esperar cuando alguien no aparece", async () => {
+    const panel = await openHelp();
+    const tercera = within(panel).getAllByRole("listitem")[2];
+
+    expect(tercera).toHaveTextContent(/200/);
+    // El buscador filtra sobre lo ya traído (`filterAccounts` es cliente), así
+    // que la ayuda no puede prometer que buscar alcance para traer a alguien
+    // que quedó fuera del tope.
+    expect(tercera).toHaveTextContent(/tope|fuera/i);
   });
 });
