@@ -1055,16 +1055,21 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
   });
 
-  it("shows a live presentes marker over the FULL roster", async () => {
+  it("shows a live revisados marker over the FULL roster, never a default nobody declared", async () => {
+    // Issue #313 (K5 hallazgo #23): the big counter used to read "N/N
+    // presentes" before the trainer looked at anyone, because every row
+    // starts on the PRESENTE default. A novice reading "16/16 presentes"
+    // on open concludes the list is already taken — the default is the
+    // absence of a decision, not a result. The counter now measures what
+    // was actually REVIEWED, and "sin revisar" is the same honest number.
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
 
     // 12, not 10: the marker spans every page, like the unreviewed counter.
-    // It reads 12/12 from the first second because that IS what would be
-    // filed — which is exactly why the unreviewed count sits beside it.
-    const marker = screen.getByText("12", { selector: "[aria-live]" });
-    expect(marker).toHaveTextContent("12/12");
+    // It reads 0/12 from the first second — nobody has been reviewed yet.
+    const marker = screen.getByText("0", { selector: "[aria-live]" });
+    expect(marker).toHaveTextContent("0/12");
     expect(screen.getByText("12 alumnos sin revisar")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
