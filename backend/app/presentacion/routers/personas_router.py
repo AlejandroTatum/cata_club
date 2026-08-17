@@ -274,6 +274,22 @@ async def buscar_personas(
 # del club seguía siendo recolectable de a una persona por vez desde
 # cualquier sesión (alumno incluido). Mismo criterio que `listar_representados`
 # acá abajo: dueño, su representante, o staff.
+#
+# Issue #356 (decisión del dueño, "el entrenador solo toma lista y revisa
+# listas") acotó a SOLO_ADMINISTRADOR sus otros dos hermanos con PII
+# (`listar_representados`, `obtener_antecedentes_club`) pero DELIBERADAMENTE
+# NO tocó este. `frontend/src/lib/server/attendance-adapter.ts#fetchPersonaNameMap`
+# (ASI-4, candado en `frontend/src/app/api/attendance/records/__tests__/route.test.ts`)
+# depende de este endpoint como fallback per-id para resolver el nombre de
+# cada alumno en "revisar listas" del entrenador -- justo la tarea que la
+# decisión del dueño preserva -- porque `AsistenciaResponseDTO` solo lleva
+# `persona_id`, nunca el nombre. Sacar ENTRENADOR de acá degrada el 100% de
+# los registros de asistencia que ve un entrenador a "Persona {id}". Es una
+# fuga real (cualquier ENTRENADOR puede pedir cédula/teléfono/fecha de
+# nacimiento de cualquier persona por id) que sigue abierta y necesita un
+# rediseño propio -- no un simple cambio de rol -- para no romper la tarea
+# diaria: ver `docs/` o el issue #356 para la discusión de un DTO de solo
+# nombre en vez de `PersonaResponseDTO` completo.
 @router.get(
     "/{persona_id}",
     response_model=PersonaResponseDTO,
@@ -303,8 +319,9 @@ async def obtener_persona(
 # --- GET /{persona_id}/representados: mismo chequeo de ownership que el POST
 # hermano `crear_representado` (línea ~153) — la identidad de quien consulta
 # se toma de `token_payload["persona_id"]`, nunca de la URL sola. ADMINISTRADOR
-# y ENTRENADOR quedan exceptuados porque legítimamente necesitan consultar
-# representados de cualquier persona (panel admin).
+# queda exceptuado porque legítimamente necesita consultar representados de
+# cualquier persona (panel admin). ENTRENADOR NO: decisión del dueño (issue
+# #356), solo toma lista y revisa listas -- no ve datos personales.
 # Rate-limited (D6-d): devuelve una lista de PersonaResponseDTO (PII real de
 # los representados), aunque el tamaño típico sea chico. Mismo tier 30/min
 # que las demás lecturas de lista de este lote.
@@ -330,7 +347,7 @@ async def listar_representados(
         persona_id_objetivo=persona_id,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
-        roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
+        roles_privilegiados=SOLO_ADMINISTRADOR,
     )
     return PersonaServicio(db).listar_representados(persona_id)
 
@@ -513,7 +530,9 @@ async def crear_antecedentes_club(
 
 # El historial deportivo de un alumno (nivel técnico, antigüedad, mano
 # dominante) es su dato, no del club entero: mismo criterio que el resto de
-# las lecturas por `persona_id` de este router.
+# las lecturas por `persona_id` de este router. Exigía ADMINISTRADOR_O_
+# ENTRENADOR; issue #356 (decisión del dueño) lo acota a SOLO_ADMINISTRADOR
+# -- el entrenador solo toma lista y revisa listas, no ve datos personales.
 @router.get(
     "/{persona_id}/antecedentes-club", response_model=AntecedentesClubResponseDTO,
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
@@ -527,7 +546,7 @@ async def obtener_antecedentes_club(
         persona_id_objetivo=persona_id,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
-        roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
+        roles_privilegiados=SOLO_ADMINISTRADOR,
         mensaje="No puede consultar los antecedentes de club de otra persona",
     )
     return AntecedentesClubServicio(db).obtener_por_persona(persona_id)
