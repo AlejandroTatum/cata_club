@@ -70,6 +70,20 @@ export interface AuthContextValue {
   hydrationOutage: boolean;
   /** Retry the initial session check after a hydration outage. */
   retryHydration: () => void;
+  /**
+   * True when the session was cleared INVOLUNTARILY — a refresh-and-retry
+   * from `src/services/api.ts`'s `request()` ultimately failed (401 on the
+   * refresh itself), not an explicit `logout()` and not an ordinary visit
+   * that was never authenticated (issue #353). `ProtectedRoute` reads this
+   * once, at the moment it redirects, to label that redirect
+   * (`?motivo=sesion-expirada`) so `/login` can say WHY the admin landed
+   * there instead of bouncing silently — the one resilience finding in this
+   * QA round where user-typed data was actually lost.
+   *
+   * Reset on a fresh successful `login()` so a LATER, unrelated bounce is
+   * never mislabeled by a stale flag from a session two logins ago.
+   */
+  sessionExpired: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // touched by the periodic revalidate (that one already no-ops on outage
   // without needing to say anything — a session is already on screen).
   const [hydrationOutage, setHydrationOutage] = useState(false);
+  // Issue #353 — see the field's own doc comment on AuthContextValue.
+  const [sessionExpired, setSessionExpired] = useState(false);
   const sessionRef = useRef<AuthSession | null>(null);
   sessionRef.current = session;
   // Set synchronously at the start of logout() so any revalidation already
@@ -186,6 +202,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return subscribeAuthFailure(() => {
       setSession(null);
+      // Distinguishes THIS from an ordinary unauthenticated visit or an
+      // explicit logout() — see the field's own doc comment.
+      setSessionExpired(true);
     });
   }, []);
 
@@ -194,6 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.ok) {
       loggingOutRef.current = false;
       setSession(result.session);
+      setSessionExpired(false);
     }
     return result;
   }, []);
@@ -243,6 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshSession: revalidate,
     hydrationOutage,
     retryHydration,
+    sessionExpired,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

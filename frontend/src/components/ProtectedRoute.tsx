@@ -35,7 +35,7 @@ export default function ProtectedRoute({
   allowedRoles,
   redirectTo = "/login",
 }: ProtectedRouteProps) {
-  const { isAuthenticated, session, isLoading, hydrationOutage, retryHydration } = useAuth();
+  const { isAuthenticated, session, isLoading, hydrationOutage, retryHydration, sessionExpired } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -48,14 +48,18 @@ export default function ProtectedRoute({
     if (hydrationOutage) return;
 
     if (!isAuthenticated) {
-      router.replace(redirectTo);
+      // Issue #353: an involuntary session loss (refresh-and-retry failed
+      // mid-request) names itself in the redirect so /login can say WHY —
+      // an ordinary unauthenticated visit or an explicit logout() carries no
+      // such reason and stays silent, exactly as before.
+      router.replace(sessionExpired ? `${redirectTo}?motivo=sesion-expirada` : redirectTo);
       return;
     }
 
     if (session && !canAccess(session.user.role, allowedRoles)) {
       router.replace(getDefaultRoute(session.user.role));
     }
-  }, [isLoading, hydrationOutage, isAuthenticated, session, allowedRoles, redirectTo, router]);
+  }, [isLoading, hydrationOutage, isAuthenticated, sessionExpired, session, allowedRoles, redirectTo, router]);
 
   // --- Loading state ---
   if (isLoading) {

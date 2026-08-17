@@ -23,6 +23,7 @@ const mockRouter = { replace: mockReplace };
 
 vi.mock("next/navigation", () => ({
   useRouter: () => mockRouter,
+  useSearchParams: () => useTestSearchParams(),
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -62,6 +63,7 @@ import {
   createLoadingAuth,
   createMockSession,
 } from "@/components/__tests__/test-utils";
+import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
 
 const mockUseAuth = vi.mocked(useAuth);
 
@@ -82,6 +84,7 @@ describe("LoginPage", () => {
     mockUseAuth.mockReset();
     mockShowError.mockReset();
     mockShowSuccess.mockReset();
+    resetTestHistory("/login");
   });
 
   it("shows the loading state, never the form, while session is hydrating", () => {
@@ -111,6 +114,30 @@ describe("LoginPage", () => {
     expect(screen.getByLabelText("Correo electrónico")).toBeInTheDocument();
     expect(screen.queryByText("Cargando sesión…")).not.toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Issue #353: the bounce `ProtectedRoute` fires after a failed
+   * refresh-and-retry used to land here with nothing to explain it — the
+   * admin had no way to tell a real logout from a session that quietly died
+   * mid-form. `ProtectedRoute` now names the reason in the redirect itself
+   * (`/login?motivo=sesion-expirada`); this is the other half, reading it.
+   */
+  it("names the reason when it arrives via a session-expired bounce (?motivo=sesion-expirada)", () => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
+    resetTestHistory("/login?motivo=sesion-expirada");
+
+    render(<LoginPage />);
+
+    expect(screen.getByText("Su sesión expiró. Vuelva a iniciar sesión.")).toBeInTheDocument();
+  });
+
+  it("says nothing extra on an ordinary visit to /login — there is nothing to explain", () => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
+
+    render(<LoginPage />);
+
+    expect(screen.queryByText("Su sesión expiró. Vuelva a iniciar sesión.")).not.toBeInTheDocument();
   });
 
   /**
