@@ -60,6 +60,7 @@ import type {
   RegistrarPagoInput,
 } from "@/services/api";
 import {
+  BackLink,
   Badge,
   Button,
   EmptyState,
@@ -1250,11 +1251,6 @@ function PaymentsContent({
         </section>
       )}
 
-      {/* No "← Volver a mi cuenta" here. The sidebar's "Mi cuenta" row is one
-          click away and is highlighted the whole time — the admin screens
-          dropped their own back links for exactly this reason (see the header
-          comment on `src/app/attendance/page.tsx`), and the family area was
-          the last place still carrying one. */}
     </>
   );
 }
@@ -1338,6 +1334,17 @@ function PaymentsPageContent(): React.ReactElement {
             : "Registre el pago de un dependiente, siga su validación y consulte lo que ya pagó."
       }
     >
+      {/*
+       * Issue #316 hallazgo #70: this screen and `/student/attendance` were
+       * the only two second-level screens with no way back at all — `/ayuda`
+       * and `/profile`, reached from the very same sidebar, both carry one.
+       * The comment this replaced argued the sidebar already does that job,
+       * which is the admin rail's own rule — but the admin rail has no
+       * `/ayuda` or `/profile` counter-example proving otherwise; the family
+       * portal does. Same component, same placement as `/ayuda`'s.
+       */}
+      <BackLink href="/student" />
+
       {state.status === "loading" && (
         <div className="card">
           <LoadingState label="Cargando sus pagos…" />

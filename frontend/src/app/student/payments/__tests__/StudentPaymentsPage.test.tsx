@@ -885,3 +885,17 @@ describe("StudentPaymentsPage — the history claims the page's leftover height"
     void container;
   });
 });
+
+/**
+ * Issue #316 hallazgo #70: `/student/payments` and `/student/attendance` were
+ * the only two second-level screens with no way back at all — `/ayuda` and
+ * `/profile`, reached from the very same sidebar, both carry one.
+ */
+describe("StudentPaymentsPage — the way back", () => {
+  it("offers a real BackLink to Mi cuenta, not only the sidebar", async () => {
+    render(<StudentPaymentsPage />);
+
+    const back = await screen.findByRole("link", { name: /volver a mi cuenta/i });
+    expect(back).toHaveAttribute("href", "/student");
+  });
+});

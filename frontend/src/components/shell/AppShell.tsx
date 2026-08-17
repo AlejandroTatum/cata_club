@@ -446,9 +446,24 @@ export default function AppShell({
   const showGroupHeadings = navGroups.length > 1;
   // The rail flattened: `resolveActiveHref` and the command palette both ask
   // about the whole rail, not about one group of it.
+  //
+  // PLUS the two destinations the rail never draws as a row at all — issue
+  // #316 hallazgo #53. `/ayuda` lives in the footer ("Preguntas frecuentes")
+  // and `/profile` behind the user menu ("Perfil"), both exactly as reachable
+  // as anything `navGroups` does draw, but the palette used to read `navGroups`
+  // directly and inherited the rail's shape without inheriting the footer's:
+  // searching "ayuda" or "perfil" from `/student` found nothing. Appended here
+  // rather than folded into `navGroups` — that would draw two more sidebar
+  // rows nobody asked to duplicate. `/ayuda` is public (reachable signed out,
+  // same as the footer link); `/profile` needs a session, same as the user
+  // menu it is otherwise only reachable from.
   const navLinks = useMemo<NavLinkDef[]>(
-    () => navGroups.flatMap((group) => group.links),
-    [navGroups],
+    () => [
+      ...navGroups.flatMap((group) => group.links),
+      { href: "/ayuda", label: "Preguntas frecuentes" },
+      ...(session ? [{ href: "/profile", label: "Perfil" }] : []),
+    ],
+    [navGroups, session],
   );
   const activeHref = useMemo(
     (): string | null => resolveActiveHref(navLinks, pathname),

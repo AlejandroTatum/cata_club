@@ -45,11 +45,15 @@ const SHELLS: readonly string[] = [
   "components/auth/AuthShell.tsx",
   // The public landing.
   "app/landing/LandingPage.tsx",
-  // The two public routes that reach the user through no shell at all: they
-  // used to borrow the root layout's landmark, which is precisely the wrapper
-  // that stopped being one.
+  // The public routes that reach the user through no shell at all: they used
+  // to borrow the root layout's landmark, which is precisely the wrapper that
+  // stopped being one.
   "app/unauthorized/page.tsx",
   "app/student/enroll/page.tsx",
+  // The global 404 (issue #316 hallazgo #55). `not-found.tsx` itself carries
+  // no JSX — it only exports `metadata`, which a Client Component cannot —
+  // so the landmark lives in the card it renders instead.
+  "app/NotFoundCard.tsx",
 ];
 
 function sourceFiles(dir: string): string[] {

@@ -16,7 +16,7 @@
 
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { Mail, CheckCircle2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
@@ -30,6 +30,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
   const [correo, setCorreo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const correoInputRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -50,6 +51,32 @@ export default function ForgotPasswordPage(): React.ReactElement {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  /**
+   * Issue #316 hallazgo #29: the note beside the card promises "puede pedir
+   * uno nuevo desde esta misma pantalla", but the confirmation state removed
+   * every control that could do that — `#correo` and the submit button both
+   * unmount once `submitted` is `true`, leaving "Volver a Iniciar sesión" and
+   * the help launcher as the only ways off the screen. Neither lets a reader
+   * ask for a second link without first finding `/login`'s own "¿Olvidó su
+   * contraseña?" again.
+   *
+   * The fix keeps the PROMISE rather than rewording it: the confirmation is
+   * anti-enumeration by design (the backend already can't say whether the
+   * address was even valid), so an abuelo who mistyped it has no other signal
+   * that anything went wrong — sending him back to `/login` to start over
+   * would be the worse of the two ways to close this gap. Reopening the same
+   * form, with the address he just typed still in it, requires no new screen
+   * and no new endpoint call: `solicitarRecuperacion` is exactly what the
+   * submit button already calls.
+   */
+  function handleRetry(): void {
+    setSubmitted(false);
+    // The field remounts the instant `submitted` flips, so the focus move has
+    // to wait a frame — the same pattern `payments/page.tsx`'s
+    // `handleBackToForm` uses for the same reason.
+    window.requestAnimationFrame(() => correoInputRef.current?.focus());
   }
 
   return (
@@ -77,6 +104,16 @@ export default function ForgotPasswordPage(): React.ReactElement {
             Si <strong className="font-semibold text-ink">{correo.trim()}</strong> está
             registrado, recibirá un enlace para restablecer su contraseña en unos minutos.
           </p>
+          {/* Issue #316 hallazgo #64: the confirmation named neither of the
+              two things an abuelo needs once "en unos minutos" has passed —
+              where else to look, and how to tell "me equivoqué al tipear" apart
+              from "todavía no llegó". */}
+          <p className="text-xs leading-relaxed text-ink-3">
+            Si no lo ve en unos minutos, revise la carpeta de correo no deseado.
+          </p>
+          <Button variant="tertiary" size="sm" onClick={handleRetry} className="mt-1">
+            Enviar otro enlace
+          </Button>
         </div>
       ) : (
         <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
@@ -92,6 +129,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
                 aria-hidden="true"
               />
               <input
+                ref={correoInputRef}
                 type="email"
                 id="correo"
                 name="correo"

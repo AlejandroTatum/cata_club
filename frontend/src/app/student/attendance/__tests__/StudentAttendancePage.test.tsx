@@ -337,3 +337,20 @@ describe("StudentAttendancePage — guardian with dependents", () => {
     expect(screen.queryByText("3 de 5")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * Issue #316 hallazgo #70: `/student/attendance` and `/student/payments` were
+ * the only two second-level screens with no way back at all — `/ayuda` and
+ * `/profile`, reached from the very same sidebar, both carry one.
+ */
+describe("StudentAttendancePage — the way back", () => {
+  it("offers a real BackLink to Mi cuenta, not only the sidebar", async () => {
+    mockUseAuth.mockReturnValue(sessionFor("estudiante"));
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
+
+    render(<StudentAttendancePage />);
+
+    const back = await screen.findByRole("link", { name: /volver a mi cuenta/i });
+    expect(back).toHaveAttribute("href", "/student");
+  });
+});

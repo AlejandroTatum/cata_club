@@ -52,7 +52,16 @@ import { fetchStudentPortal } from "@/services/api";
 import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api";
 import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
 import { formatDate } from "@/lib/format-utils";
-import { Badge, EmptyState, ErrorState, LoadingState, PAGE_RAIL, buttonClasses, cn } from "@/components/ui";
+import {
+  BackLink,
+  Badge,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PAGE_RAIL,
+  buttonClasses,
+  cn,
+} from "@/components/ui";
 import { breakdownAttendance, firstNameOf, summarizeRecentAttendance } from "../student-utils";
 import type { AttendanceBreakdown } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
@@ -329,6 +338,18 @@ function StudentAttendanceContent(): React.ReactElement {
       // measure. See `lib/__tests__/content-measure.test.ts`.
       measure="short"
     >
+      {/*
+       * Issue #316 hallazgo #70: this screen and `/student/payments` were the
+       * only two second-level screens with no way back at all — `/ayuda` and
+       * `/profile`, reached from the very same sidebar, both carry one. The
+       * comment this replaced argued the sidebar already does that job, which
+       * is the admin rail's own rule (`src/app/attendance/page.tsx`) — but the
+       * admin rail has no `/ayuda` or `/profile` counter-example proving
+       * otherwise; the family portal does, and it lost the argument. Same
+       * component, same placement as `/ayuda`'s.
+       */}
+      <BackLink href="/student" />
+
       {state.status === "loading" && (
         <div className="card">
           <LoadingState label="Cargando su asistencia…" />
@@ -427,9 +448,9 @@ function AttendanceView({
         </div>
       )}
 
-      {/* No back link and no "Ver mis pagos" button. The sidebar carries both
-          destinations and highlights the current one; the admin screens
-          dropped their own "← Volver al Panel" for exactly this reason. */}
+      {/* Still no "Ver mis pagos" button here — that cross-link would be a
+          second, competing way out of a screen that already has one
+          (`BackLink`, on `AppShell`) plus the sidebar's own "Pagos" row. */}
     </>
   );
 }

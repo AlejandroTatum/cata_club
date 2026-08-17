@@ -86,6 +86,47 @@ describe("ForgotPasswordPage", () => {
     expect(mockShowError).not.toHaveBeenCalled();
   });
 
+  /**
+   * Issue #316, hallazgos #29 y #64.
+   *
+   * #29: the note beside the card promises "puede pedir uno nuevo desde esta
+   * misma pantalla", but the confirmation state removed BOTH `#correo` and
+   * the submit button — there was nothing on the screen that could keep that
+   * promise. The fix keeps the promise rather than reword it: "Enviar otro
+   * enlace" reopens the same form, on the same screen, with the address
+   * still in it.
+   *
+   * #64: the confirmation never named the one place a delayed email actually
+   * hides, nor offered a way to tell "me equivoqué al tipear" apart from
+   * "todavía no llegó" — both of which "Enviar otro enlace" also answers.
+   */
+  describe("the confirmation screen keeps its own promise", () => {
+    it('offers "Enviar otro enlace", reopening the form on the same screen', async () => {
+      mockSolicitarRecuperacion.mockResolvedValue({ mensaje: "ok" });
+
+      render(<ForgotPasswordPage />);
+      submitForgotPasswordForm("abuelo.audit@ejemplo.com");
+      await screen.findByText(/revise su correo/i);
+
+      fireEvent.click(screen.getByRole("button", { name: /enviar otro enlace/i }));
+
+      // Back on the form — same screen, the address still there to correct or resend.
+      const field = await screen.findByLabelText("Correo electrónico");
+      expect(field).toHaveValue("abuelo.audit@ejemplo.com");
+      expect(screen.queryByText(/revise su correo/i)).not.toBeInTheDocument();
+    });
+
+    it("tells the reader to check the spam folder (hallazgo #64)", async () => {
+      mockSolicitarRecuperacion.mockResolvedValue({ mensaje: "ok" });
+
+      render(<ForgotPasswordPage />);
+      submitForgotPasswordForm();
+      await screen.findByText(/revise su correo/i);
+
+      expect(screen.getByText(/correo no deseado/i)).toBeInTheDocument();
+    });
+  });
+
   describe("failed submission", () => {
     it("shows the mapped API error via toast.showError instead of an inline alert", async () => {
       // A 5xx from /auth/recuperar-contrasenia: the mail leg failed on the
