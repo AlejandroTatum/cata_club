@@ -20,11 +20,18 @@
  * nothing at either viewport the issue was written about.
  *
  * So the rule this file keeps is that the number stays one number. Four of the
- * nine constants were already pinned beside their own screen; three — the
- * groups roster, the trainer wizard and the trainer history — were bare
- * module-local `const`s with nothing watching them at all, which is how a
- * product ends up paginating six ways. A source scan is what reaches those:
- * they are not exported, so no unit test can import them.
+ * eight constants were already pinned beside their own screen; two — the
+ * groups roster and the trainer history — were bare module-local `const`s
+ * with nothing watching them at all, which is how a product ends up
+ * paginating six ways. A source scan is what reaches those: they are not
+ * exported, so no unit test can import them.
+ *
+ * The trainer attendance wizard's roster used to be the ninth (`WIZARD_PAGE_SIZE`)
+ * and is gone on purpose (issue #318 / hallazgo #58): pagination there forced a
+ * page change mid-session on any roster over 10 alumnos, which the audit
+ * measured as the single largest contributor to a 22-click walkthrough on a
+ * 15-alumno session. That roster does not paginate at all any more, so it is
+ * not a candidate for "the same number on every screen" — there is no number.
  *
  * ## What this deliberately does NOT check
  *
@@ -94,20 +101,23 @@ describe("a paginated list shows ten rows", () => {
   });
 
   it("watches every list that paginates", () => {
-    // The canary. Nine declarations across seven screens is what the audit
-    // found; if this drops, the walk stopped finding files and the assertion
-    // above is passing over an empty set.
-    expect(DECLARATIONS.length).toBeGreaterThanOrEqual(9);
+    // The canary. Eight declarations across six screens is what remains
+    // after issue #318/#58 removed the trainer wizard's page size constant
+    // (see the module docstring); if this drops further, the walk stopped
+    // finding files and the assertion above is passing over an empty set.
+    expect(DECLARATIONS.length).toBeGreaterThanOrEqual(8);
 
-    // …including the three that no unit test can reach, because they are
+    // …including the two that no unit test can reach, because they are
     // module-local and unexported. They are the reason this is a source scan.
     const scanned = new Set(DECLARATIONS.map(({ path }) => path));
     expect([...scanned]).toEqual(
       expect.arrayContaining([
         "groups/page.tsx",
-        "trainer/attendance/page.tsx",
         "trainer/attendance/history/page.tsx",
       ]),
     );
+    // Locks in #318/#58: the wizard roster must not silently regain a
+    // `…PAGE_SIZE` constant — that is exactly how it got repaginated once.
+    expect(scanned.has("trainer/attendance/page.tsx")).toBe(false);
   });
 });
