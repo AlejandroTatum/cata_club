@@ -23,6 +23,12 @@ from app.servicios_negocio.politica_acceso import (
 
 router = APIRouter(prefix="/asistencias", tags=["Asistencias"])
 
+# Las columnas viven fuera del endpoint, como sus hermanas
+# `_COLUMNAS_PERSONAS_PDF` y `_COLUMNAS_PAGOS_PDF`, para que el candado de
+# ancho de página pueda medir las columnas REALES del reporte y no una copia
+# escrita a mano en el test, que envejecería sin que nadie se entere.
+_COLUMNAS_ASISTENCIA_PDF = ["Fecha", "Horario", "Estudiante", "Estado"]
+
 
 def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[date]) -> None:
     """Rechaza un rango invertido con el MISMO 422 y el mismo texto que los
@@ -214,7 +220,6 @@ async def reporte_asistencia_pdf(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
     )
-    columnas = ["Fecha", "Horario", "Estudiante", "Estado"]
     filas = [
         [
             r.fecha_entrenamiento.strftime("%d/%m/%Y"),
@@ -228,7 +233,7 @@ async def reporte_asistencia_pdf(
     pdf_bytes = await run_in_threadpool(
         generar_reporte_pdf,
         titulo="Reporte de Asistencia",
-        columnas=columnas,
+        columnas=_COLUMNAS_ASISTENCIA_PDF,
         filas=filas,
     )
     # Día del CLUB: la fecha del nombre de archivo es la que un humano lee
