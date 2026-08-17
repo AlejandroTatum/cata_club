@@ -731,7 +731,7 @@ describe("PaymentsPage — approve confirmation gating", () => {
     expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
   });
 
-  it("mutates the payment status only after the confirm control is activated", async () => {
+  it("mutates the payment status only after the confirm control is activated, saving the exact requested period", async () => {
     await openPendingWithChecklistDone();
 
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
@@ -746,10 +746,15 @@ describe("PaymentsPage — approve confirmation gating", () => {
     await waitFor(() => {
       expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
     });
+    // Issue #314 (K6 hallazgo #11): this used to be the false lock — it
+    // asserted `endDate: "2026-08-01"` as correct even though PENDING_REQUEST
+    // requests "2026-07-31". That was the seeding bug's lossy calendar-month
+    // recompute leaking into the assertion: with no admin edit to the
+    // period, approving must save EXACTLY what was requested.
     expect(mockUpdatePaymentValidation).toHaveBeenCalledWith("req-1", {
       action: "approved",
       startDate: "2026-07-01",
-      endDate: "2026-08-01",
+      endDate: "2026-07-31",
     });
   });
 
@@ -794,6 +799,113 @@ describe("PaymentsPage — approve confirmation gating", () => {
       vi.advanceTimersByTime(UNDO_WINDOW_MS);
     });
     expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #314 (K6 hallazgo #17) — the undo window has to be announced BEFORE
+// the click, not discoverable two clicks away in /ayuda.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — approving announces the undo window before it happens", () => {
+  it("states the undo window and its expiry next to the 'Aprobar pago' button", async () => {
+    await openPendingWithChecklistDone();
+
+    expect(
+      screen.getByText(/unos segundos para deshacerlo/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ya no se puede revertir/i)).toBeInTheDocument();
+  });
+
+  it("repeats the irreversibility warning in the confirmation dialog itself", async () => {
+    await openPendingWithChecklistDone();
+
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/no se puede revertir/i)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #314 (K6 hallazgos #11/#46) — the vigencia editor used to seed itself
+// from a lossy calendar-month approximation of the real requested period and
+// submit THAT on approve, silently shortening (or lengthening) what the
+// backend had already derived from the amount paid. See PENDING_REQUEST's
+// own July 1 → July 31 fixture, and the "saving the exact requested period"
+// test above for the same bug caught in the default flow.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — la vigencia de aprobación coincide con el período pedido", () => {
+  // 1 ago → 5 sep is 35 days, not a whole number of months from Aug 1 — the
+  // exact shape verified live in the audit (pagos 50/62/58/46/36).
+  const SKEWED_PERIOD_REQUEST: PaymentValidationRequest = {
+    ...PENDING_REQUEST,
+    id: "req-skewed",
+    startDate: "2026-08-01",
+    endDate: "2026-09-05",
+  };
+
+  it("previews the exact requested end date, not the lossy months recompute", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([SKEWED_PERIOD_REQUEST]);
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    // The buggy recompute would show "05/09/2026" as "01/09/2026" instead.
+    expect(screen.getByText(/vence el 05\/09\/2026/i)).toBeInTheDocument();
+  });
+
+  it("saves the exact requested endDate on approve when the admin never touched the period fields", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([SKEWED_PERIOD_REQUEST]);
+    renderPage();
+    await openRequest("Juan Pérez");
+    completeChecklist();
+
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+    await act(async () => {
+      vi.advanceTimersByTime(UNDO_WINDOW_MS);
+    });
+
+    await waitFor(() => {
+      expect(mockUpdatePaymentValidation).toHaveBeenCalledWith("req-skewed", {
+        action: "approved",
+        startDate: "2026-08-01",
+        endDate: "2026-09-05",
+      });
+    });
+  });
+
+  it("warns explicitly, naming both values, once the admin edits Meses away from the requested period", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([SKEWED_PERIOD_REQUEST]);
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    const mesesInput = screen.getByLabelText(/^meses$/i);
+    fireEvent.change(mesesInput, { target: { value: "2" } });
+
+    const warning = screen.getByText(/no coincide con el/i);
+    expect(warning).toHaveAttribute("role", "alert");
+    expect(warning.textContent).toMatch(/05\/09\/2026/);
+  });
+
+  it("shows no mismatch warning when the admin's edit still lands on the requested date", async () => {
+    // A genuinely whole-month period (unlike PENDING_REQUEST's 30-day one):
+    // editing Meses back to its own seeded value must not falsely alarm.
+    const WHOLE_MONTH_REQUEST: PaymentValidationRequest = {
+      ...PENDING_REQUEST,
+      id: "req-whole-month",
+      startDate: "2026-07-01",
+      endDate: "2026-08-01",
+    };
+    mockFetchPaymentValidations.mockResolvedValue([WHOLE_MONTH_REQUEST]);
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    const mesesInput = screen.getByLabelText(/^meses$/i);
+    fireEvent.change(mesesInput, { target: { value: "1" } });
+
+    expect(screen.queryByText(/no coincide con el/i)).not.toBeInTheDocument();
   });
 });
 
