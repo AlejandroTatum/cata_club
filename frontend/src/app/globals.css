@@ -260,8 +260,15 @@
    * halftone detrás de datos". 150px at the top-right corner fading out by 70%
    * keeps every dot in the corner the header leaves empty.
    *
-   * Print never sees it — a dot screen at credential size is grey mud, and the
-   * printed carnet is white ground by decision #286.
+   * Print never sees it, and that survived the printed carnet going back to
+   * coal. The original reason ("el impreso es fondo blanco") is dead, but the
+   * other one is measured and stands: at 54mm the same 9px pitch becomes a
+   * 2.4mm screen of 0.4mm dots at 9% yellow over near-black. On a home inkjet
+   * that is under what the head resolves — where it lands at all it reads as
+   * speckle on the heaviest ink field of the sheet, not as the club's texture.
+   * Judged off the rendered PDF, not off theory. The card's identity on paper
+   * is carried by the mark, the wordmark, the red rule and the ball kicker,
+   * all of which do print.
    */
   .carnet-halftone {
     background-image: radial-gradient(circle, rgba(255, 214, 0, 0.09) 1.5px, transparent 1.5px);
@@ -463,9 +470,29 @@
     visibility: hidden;
   }
 
+  /* LA TARJETA IMPRIME SU PROPIO COLOR.
+   *
+   * Chrome descarta TODO fondo — degradados, rellenos, sombras — salvo que el
+   * usuario tilde «Gráficos en segundo plano», que viene APAGADO y estaba
+   * apagado en el diálogo del dueño. Con eso, el carnet coal salía blanco: la
+   * versión «parece Paint» que motivó este cambio.
+   *
+   * `print-color-adjust: exact` es el único mecanismo que lo anula, y el
+   * prefijo `-webkit-` NO es decorativo: Chrome implementó primero la
+   * propiedad prefijada y la sigue honrando, y Safari no conoce otra. Van las
+   * dos, y van también sobre los DESCENDIENTES, porque el aro de la foto, la
+   * regla roja y la trama los pintan los hijos, no la caja de la tarjeta.
+   *
+   * Costo de tinta, dicho de frente: una tarjeta coal maciza de 54×85.6mm son
+   * ~46cm² de cobertura casi negra. En una inyección de tinta hogareña sobre
+   * papel común eso pesa — puede salir embarrada y ondular la hoja. Es la
+   * decisión del dueño: identidad antes que tinta. La hoja alrededor sigue
+   * blanca justamente para no gastar de más. */
   #carnet-print-area,
   #carnet-print-area * {
     visibility: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   #carnet-print-area {

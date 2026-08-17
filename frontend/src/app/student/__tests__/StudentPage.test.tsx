@@ -328,7 +328,7 @@ describe("StudentPage — dual-role account (REPRESENTANTE + ALUMNO)", () => {
 });
 
 describe("StudentPage — the club membership card (carnet)", () => {
-  it("shows the student's name, plan and payment status band", async () => {
+  it("shows the student's name and plan, and no payment state at all", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -343,7 +343,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
     expect(within(carnet).getByText("Alumno Test")).toBeInTheDocument();
     // The carnet carries plan and amount; "Modalidad" moved off the carnet
     // entirely (see the doc comment on `Carnet` in page.tsx) and "Membresía
-    // activa" is gone — the band below states the PAYMENT situation instead.
+    // activa" is gone.
     expect(within(carnet).getByText("Plan")).toBeInTheDocument();
     expect(within(carnet).queryByText("Modalidad")).not.toBeInTheDocument();
     expect(within(carnet).getByText("Mensual")).toBeInTheDocument();
@@ -351,7 +351,12 @@ describe("StudentPage — the club membership card (carnet)", () => {
     // field — the carnet used to call it "Monto".
     expect(within(carnet).getByText("Valor mensual")).toBeInTheDocument();
     expect(within(carnet).getByText("$25,00")).toBeInTheDocument();
-    expect(within(carnet).getByTestId("carnet-status-band")).toBeInTheDocument();
+    // THE VERDICT LEFT. The owner read the running card and said so in as many
+    // words: «No tiene ningún pago aprobado — esa info muévala a la sección de
+    // pagos, no al carnet.» A carnet is an identity document; a payment state
+    // is not an identity fact. It lives in `CuotaCard` now.
+    expect(within(carnet).queryByTestId("carnet-status-band")).not.toBeInTheDocument();
+    expect(screen.getByTestId("student-cuota-card")).toBeInTheDocument();
   });
 
   it("never prints a member number or a join date — neither reaches this client", async () => {
@@ -590,16 +595,25 @@ describe("StudentPage — the carnet prints as a standalone credential", () => {
     expect(imprimir.closest("div")).toHaveClass("print:hidden");
   });
 
-  it("keeps the payment status band off the printed sheet (#286 decision)", async () => {
+  // THIS LOCK INVERTS. It used to pin the status band inside a `print:hidden`
+  // wrapper — on the sound argument that a plasticised card printed «vencido»
+  // ages badly. The owner then read the same argument back one step further:
+  // if a payment state is too perishable to print on an identity document, it
+  // is not an identity fact on screen either. The band does not hide on print
+  // any more; it is not on the carnet at all, in either medium.
+  it("renders no payment state on the carnet, on screen or on paper", async () => {
+    mockFetchPagosDePersona.mockResolvedValue([]);
+
     render(<StudentPage />);
 
-    // La banda vive dentro de un wrapper print:hidden — el estado cambia cada
-    // mes y un carnet plastificado con «vencido» impreso envejece mal.
     const carnet = await screen.findByTestId("student-carnet");
-    const band = carnet.querySelector('[data-testid="carnet-status-band"]');
-    expect(band).not.toBeNull();
-    expect(band?.closest("div[class*='print:hidden']")).not.toBeNull();
-    expect(band?.textContent).not.toBe("");
+    // Wait for the situation to settle, so this is not passing merely because
+    // the payment history is still in flight.
+    await screen.findByTestId("student-cuota-card");
+    expect(carnet.querySelector('[data-testid="carnet-status-band"]')).toBeNull();
+    // Not the testid alone: the wording itself must not be anywhere on the
+    // card, however it might be re-dressed.
+    expect(within(carnet).queryByText(/pago aprobado|al día|venció|validando/i)).toBeNull();
   });
 });
 
@@ -670,6 +684,106 @@ describe("globals.css — the carnet's print sheet", () => {
     // cut line is unambiguous on the sheet the family actually gets.
     expect(area).toMatch(/border:\s*[\d.]+(?:px|mm)\s+solid/);
     expect(area).toMatch(/box-shadow:\s*none/);
+  });
+
+  // THE CRUX OF THE IDENTITY PRINT. Chrome omits every background and every
+  // background-derived colour unless "Gráficos en segundo plano" is ticked,
+  // and it is OFF by default — it is off in the owner's own print dialog.
+  // A coal carnet that only appears when the reader finds that checkbox is
+  // not a coal carnet; it is the Paint card with extra steps.
+  //
+  // `print-color-adjust: exact` is the one mechanism that overrides it, and
+  // the `-webkit-` prefix is not optional: Chrome shipped the prefixed
+  // property first and still honours it, and Safari knows nothing else.
+  it("forces the card's own colours through Chrome's background-graphics default", () => {
+    const area = printBlock.slice(printBlock.indexOf("#carnet-print-area"));
+    expect(area).toMatch(/-webkit-print-color-adjust:\s*exact/);
+    expect(area).toMatch(/(?<!-webkit-)print-color-adjust:\s*exact/);
+    // It has to reach the DESCENDANTS too — the halftone, the photo ring and
+    // the banner rule are painted by children, not by the card box.
+    expect(printBlock).toMatch(/#carnet-print-area\s*\*[^{]*\{[^}]*print-color-adjust:\s*exact/);
+  });
+});
+
+/**
+ * R2 — the printed carnet carries the club's identity.
+ *
+ * This reverses decision #286 slice 2, which made print a white sheet with
+ * grey ink and no mark on the reasoning that a home printer halftones a
+ * photograph into a smudge and that a solid dark card is heavy ink. Both
+ * observations were true; the conclusion was not. The owner printed it and
+ * said «el pdf aún está verde… imagino imprimir el carnet y parezca paint,
+ * tenemos que darle identidad del club». A credential with no colour, no
+ * mark and no rule is not a cheaper version of the club's card — it is a
+ * different, blanker object.
+ *
+ * The ink cost is real and is recorded in the component, not re-argued here.
+ */
+describe("StudentPage — the printed carnet is the same object as the screen one", () => {
+  it("prints the club's mark instead of hiding it", async () => {
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const mark = carnet.querySelector('img[src*="cata-club-logo"]');
+    expect(mark).not.toBeNull();
+    // The mark used to leave the composition under `print:` — the wordmark
+    // beneath it was doing the naming and a JPEG was expected to smudge.
+    // With the coal ground printing, the blank white disc where the mark had
+    // been was the most conspicuous thing on the sheet.
+    expect(mark?.parentElement?.className).not.toMatch(/print:hidden/);
+  });
+
+  it("prints the plan kicker in the club's accent, not in grey", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: { id: 4, estado: "ACTIVA", personaId: 9, montoAplicado: "25.00", categoria: "Mensual", modalidad: "MENSUAL" as const },
+      },
+    });
+
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const kicker = within(carnet).getByText("Mensual").parentElement!;
+    expect(kicker.className).toMatch(/\btext-ball\b/);
+    // `print:text-coal/55` was the whole of the yellow's disappearance.
+    expect(kicker.className).not.toMatch(/print:text-coal/);
+  });
+
+  it("keeps the card's one red rule and its white ink on paper", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: { id: 4, estado: "ACTIVA", personaId: 9, montoAplicado: "25.00", categoria: "Mensual", modalidad: "MENSUAL" as const, fechaActivacion: "2026-03-18" },
+      },
+    });
+    mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
+
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    await waitFor(() => {
+      expect(within(carnet).getByText("Franja")).toBeInTheDocument();
+    });
+    const banner = within(carnet).getByText("Cata Club").parentElement!.parentElement!;
+    expect(banner.className).toMatch(/\bborder-cata-red\b/);
+    expect(banner.className).not.toMatch(/print:border-/);
+
+    // The scoreboard's ink and its hairline follow the ground, and the ground
+    // no longer flips.
+    const facts = within(carnet).getByTestId("carnet-facts");
+    expect(facts.className).not.toMatch(/print:border-coal/);
+    for (const cell of [...facts.children]) {
+      expect(cell.firstElementChild?.className).not.toMatch(/print:text-coal/);
+      expect(cell.lastElementChild?.className).not.toMatch(/print:text-coal/);
+    }
+
+    // The photo keeps its own ring on the coal ground rather than inverting.
+    const photo = screen.getByTestId("carnet-photo");
+    expect(photo.className).not.toMatch(/print:bg-coal/);
+    expect(photo.className).not.toMatch(/print:ring-coal/);
   });
 });
 
@@ -1040,7 +1154,7 @@ describe("StudentPage — training panel", () => {
  * (the facts and the action) — see the doc comments on `CarnetStatusBand` and
  * `CuotaCard`.
  */
-describe("StudentPage — the Cuota card and the carnet's status band", () => {
+describe("StudentPage — the Cuota card carries the whole payment reading", () => {
   const MEMBERSHIP = {
     id: 3,
     estado: "ACTIVA",
@@ -1101,12 +1215,15 @@ describe("StudentPage — the Cuota card and the carnet's status band", () => {
 
     render(<StudentPage />);
 
-    // The sentence now leads the carnet's own status band (this state is
-    // urgent — no approved payment at all), not the Cuota card.
-    const carnet = await screen.findByTestId("student-carnet");
+    // The owner's own words: «esa info muévala a la sección de pagos, no al
+    // carnet». The sentence leads the Cuota card — this screen's payments
+    // block — and appears nowhere on the identity card.
+    const cuota = await screen.findByTestId("student-cuota-card");
     await waitFor(() => {
-      expect(within(carnet).getByText(/no tiene ningún pago aprobado/i)).toBeInTheDocument();
+      expect(within(cuota).getByText(/no tiene ningún pago aprobado/i)).toBeInTheDocument();
     });
+    const carnet = screen.getByTestId("student-carnet");
+    expect(within(carnet).queryByText(/no tiene ningún pago aprobado/i)).toBeNull();
   });
 
   it("states the plan's monthly price as a price, and never an amount owed", async () => {
@@ -1132,11 +1249,10 @@ describe("StudentPage — the Cuota card and the carnet's status band", () => {
 
     render(<StudentPage />);
 
-    const carnet = await screen.findByTestId("student-carnet");
+    const cuota = await screen.findByTestId("student-cuota-card");
     await waitFor(() => {
-      expect(within(carnet).getByText(/el club está validando/i)).toBeInTheDocument();
+      expect(within(cuota).getByText(/el club está validando/i)).toBeInTheDocument();
     });
-    const cuota = screen.getByTestId("student-cuota-card");
     expect(within(cuota).queryByText("Registrar un pago")).not.toBeInTheDocument();
   });
 
@@ -1196,18 +1312,22 @@ describe("StudentPage — the Cuota card and the carnet's status band", () => {
     await waitFor(() => {
       expect(within(cuota).getByText("Registrar un pago")).toBeInTheDocument();
     });
-    // …and the carnet's own band names the child, because the reader is not
-    // the student.
-    expect(await screen.findByText(/Sofía no tiene ningún pago aprobado/i)).toBeInTheDocument();
+    // …and the Cuota card's verdict names the child, because the reader is
+    // not the student.
+    expect(within(cuota).getByText(/Sofía no tiene ningún pago aprobado/i)).toBeInTheDocument();
   });
 });
 
 /**
  * The candado for the redesign's own stated risk ("pesa mucho cuando no hay
  * nada que resolver", docs/archive/fixes/12-mi-cuenta-carnet.md): an overdue family
- * and an up-to-date one must not render the same amount of carnet.
+ * and an up-to-date one must not render the same amount of card.
+ *
+ * The subject moved with the verdict. It used to be the CARNET that had to
+ * earn its space, because the carnet carried the status band; the band is on
+ * the Cuota card now, so the weight — and this lock — belongs there.
  */
-describe("StudentPage — the carnet earns its space when the cuota is up to date", () => {
+describe("StudentPage — the Cuota card earns its space when the cuota is up to date", () => {
   const MEMBERSHIP = {
     id: 7,
     estado: "ACTIVA",
@@ -1228,20 +1348,25 @@ describe("StudentPage — the carnet earns its space when the cuota is up to dat
 
     render(<StudentPage />);
 
-    const band = await screen.findByTestId("carnet-status-band");
+    // The verdict LEADS the Cuota card, carrying the urgency the carnet's
+    // band used to carry — same `paymentBandTone`, same wording, a payments
+    // block instead of an identity document.
+    const verdict = await screen.findByTestId("cuota-verdict");
     await waitFor(() => {
-      expect(band).toHaveAttribute("data-urgent", "true");
+      expect(verdict).toHaveAttribute("data-urgent", "true");
     });
-    expect(band).toHaveAttribute("data-tone", "bad");
-    expect(within(band).getByText(/venció/i)).toBeInTheDocument();
+    expect(verdict).toHaveAttribute("data-tone", "bad");
+    expect(within(verdict).getByText(/venció/i)).toBeInTheDocument();
 
     const cuota = screen.getByTestId("student-cuota-card");
     expect(cuota).toHaveAttribute("data-compact", "false");
-    expect(within(cuota).getByText("A pagar")).toBeInTheDocument();
+    // The verdict reads FIRST, before the evidence and the action.
+    const detalle = within(cuota).getByText("A pagar");
+    expect(verdict.compareDocumentPosition(detalle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(cuota).getByText("Registrar un pago")).toBeInTheDocument();
   });
 
-  it("renders a compact pill and a one-line Cuota card when the cuota is up to date", async () => {
+  it("states the al día verdict itself and stays compact when the cuota is up to date", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership());
     // Coverage stretches well past today plus the "ending soon" window.
     mockFetchPagosDePersona.mockResolvedValue([
@@ -1250,17 +1375,18 @@ describe("StudentPage — the carnet earns its space when the cuota is up to dat
 
     render(<StudentPage />);
 
-    // Not `findByTestId` first: while the payment history is still loading
-    // the band renders as the (non-compact) strip — a `<div>` — and once it
-    // settles into "covered" it swaps to the pill `<span>`. Capturing the
-    // element before that swap would hold a reference to the detached old
-    // node, so wait for the settled text first and query fresh afterwards.
-    await screen.findByText("Al día");
-    const band = screen.getByTestId("carnet-status-band");
-    expect(band).toHaveAttribute("data-urgent", "false");
-    expect(band).toHaveAttribute("data-tone", "ok");
+    // THE COMPACT BRANCH STATES THE VERDICT ITSELF. It used to lean on the
+    // carnet's pill ("no button — the carnet's own pill already said 'Al
+    // día'"); with the pill gone, a compact card that only says "Cubierta
+    // hasta 31/12/2026" leaves the reader to infer the verdict from a date.
+    await screen.findByText(/está al día con el club/i);
+    const verdict = screen.getByTestId("cuota-verdict");
+    expect(verdict).toHaveAttribute("data-urgent", "false");
+    expect(verdict).toHaveAttribute("data-tone", "ok");
 
     const cuota = screen.getByTestId("student-cuota-card");
+    expect(verdict.closest('[data-testid="student-cuota-card"]')).toBe(cuota);
+    // Still compact: the verdict is one line, not a reason to reopen the card.
     expect(cuota).toHaveAttribute("data-compact", "true");
     // The compressed card gives up the amount row and the full-width button
     // an overdue family still needs — that is the whole point of compressing
@@ -1353,12 +1479,16 @@ describe("StudentPage — the training panel", () => {
  * on `Carnet` in page.tsx for why: the two could disagree, and the maquette
  * draws exactly one band, worded for whether the family can act on it.
  */
-describe("StudentPage — the carnet's band reads the payment situation, not Membresia.estado", () => {
+describe("StudentPage — the verdict reads the payment situation, not Membresia.estado", () => {
+  // The HOST moved — carnet band to Cuota card — and the reading did not.
+  // `describeMembershipState` stays retired: there is still exactly one
+  // wording of the money on this screen, and it is derived from coverage
+  // rather than from an admin-set `estado` that can disagree with it.
   it("says the account has no membership yet when there is no membership row", async () => {
     render(<StudentPage />);
 
-    const carnet = await screen.findByTestId("student-carnet");
-    expect(within(carnet).getByText(/todavía no tiene una membresía/i)).toBeInTheDocument();
+    const cuota = await screen.findByTestId("student-cuota-card");
+    expect(within(cuota).getByText(/todavía no tiene una membresía/i)).toBeInTheDocument();
   });
 
   it("says no payment has been approved for an INACTIVA membership with nothing on file", async () => {
@@ -1369,8 +1499,10 @@ describe("StudentPage — the carnet's band reads the payment situation, not Mem
 
     render(<StudentPage />);
 
-    const carnet = await screen.findByTestId("student-carnet");
-    expect(within(carnet).getByText(/no tiene ningún pago aprobado/i)).toBeInTheDocument();
+    const cuota = await screen.findByTestId("student-cuota-card");
+    await waitFor(() => {
+      expect(within(cuota).getByText(/no tiene ningún pago aprobado/i)).toBeInTheDocument();
+    });
   });
 });
 
@@ -1417,6 +1549,14 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
     // Fix 12b again: the grid grows, the carnet does not.
     expect(carnet.className).not.toMatch(/\bflex-1\b/);
     expect(carnet.parentElement?.className).not.toMatch(/self-stretch/);
+    // The card DOES declare a height of its own, and that is a different
+    // thing: 602px is ID-1's 54:85.6 at the rail's 380px, derived from the
+    // object the card is a picture of. Fix 12b's height came from the RAIL,
+    // an external number that moved whenever the panel beside it did, and
+    // that is what put a hole inside the card. A `min-h` also never clips —
+    // a three-line name still grows the card past it.
+    expect(carnet.className).toMatch(/\bmin-h-\[602px\]/);
+    expect(carnet.className).toMatch(/\bprint:min-h-0\b/);
   });
 });
 
@@ -1702,12 +1842,19 @@ describe("StudentPage — the carnet as the club's identity object", () => {
     const photo = screen.getByTestId("carnet-photo");
 
     // The card distributes its blocks over the 85.6mm field rather than
-    // stacking them at the top, inside a credential-scale margin. The ground
-    // and the ink are the change print is FOR.
+    // stacking them at the top, inside a credential-scale margin.
     expect(carnet.className).toMatch(/print:justify-between/);
     expect(carnet.className).toMatch(/print:p-\[4mm\]/);
-    expect(carnet.className).toMatch(/print:bg-white/);
-    expect(carnet.className).toMatch(/print:text-coal/);
+
+    // THE GROUND AND THE INK NO LONGER CHANGE. This pair inverts: the card
+    // used to print white with coal ink, and the owner's read of the result
+    // was «imagino imprimir el carnet y parezca paint». Only the physical
+    // scale and the parts that legitimately do not print differ now — the
+    // coal card is the same object on both media.
+    expect(carnet.className).not.toMatch(/print:bg-white/);
+    expect(carnet.className).not.toMatch(/print:bg-none/);
+    expect(carnet.className).not.toMatch(/print:text-coal\b/);
+    expect(carnet.className).toMatch(/\bfrom-coal\b/);
 
     // The banner stacks and centres on BOTH media — no `print:` prefix on the
     // arrangement itself, or the two compositions drift apart again.
@@ -1828,8 +1975,10 @@ describe("StudentPage — the carnet reads as a scoreboard (B · Marcador)", () 
     expect(tagline.className).toMatch(/\bblock\b/);
     expect(tagline.className).not.toMatch(/\bhidden\b/);
     expect(tagline.className).not.toMatch(/\bprint:block\b/);
-    // Only the ink changes with the ground.
-    expect(tagline.className).toMatch(/print:text-coal/);
+    // The ground stopped changing, so the ink stops changing with it: the
+    // tagline is white on coal on paper exactly as it is on screen.
+    expect(tagline.className).not.toMatch(/print:text-coal/);
+    expect(tagline.className).toMatch(/\btext-white\/60\b/);
   });
 
   // The companion lock for `getByText("Plan")` further up this file. That

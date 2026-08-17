@@ -38,7 +38,6 @@ import ManagedStudentPicker, {
 } from "./ManagedStudentPicker";
 import CuotaCard from "./CuotaCard";
 import {
-  compactPaymentLabel,
   derivePortalMode,
   isRepresentative,
   isMinor,
@@ -47,15 +46,13 @@ import {
   describePaymentSituation,
   findNextTrainingSessions,
   firstNameOf,
-  paymentBandTone,
   resolveCoverageEnd,
   summarizeRecentAttendance,
   contarEntrenamientosSemanales,
   daysUntil,
-  type PaymentSituation,
   type UpcomingTraining,
 } from "./student-utils";
-import { AlertTriangle, CalendarDays, Printer, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
+import { CalendarDays, Printer, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -145,27 +142,44 @@ type HorariosState =
 // arrangement rather than a third one being invented, and the dashboard column
 // narrowed to 380px to let it (see the rail `<div>` in `ActivePortalView`).
 //
-// The only differences the two media are now allowed: the ground (coal
-// gradient → white), the ink, the physical scale, and the parts that
-// legitimately do not print — the status band (#286), the ACTIONS, the
-// halftone, the logo mark, and the price (below).
+// AND THE GROUND STOPPED CHANGING TOO. The list above used to open with "the
+// ground (coal gradient → white)" and "the ink", and to count the logo mark
+// among the parts that legitimately do not print. The owner printed that card
+// and reported the result in five words: it looks like Paint. #286's premises
+// were sound — a dark ground is heavy ink, a JPEG halftones badly — and its
+// conclusion still produced an object with none of the club on it.
 //
-// THE CREDENTIAL'S VERTICAL BUDGET, and why the band and the price leave it.
-// 85.6mm is 323px at 96dpi; `print:p-[4mm]` top and bottom takes 30px, so the
-// composition has 293px. Adding up the declared utilities: the banner is 47px
-// (26px wordmark + 4px `mt-1` + 10.5px tagline + 8px `pb-2` + the 2px rule),
-// the identity block is 159px (13px lead-in + 68px photo + 9px gap + 10.5px
-// kicker + 2px `mb-0.5` + a 13.5px name at `leading-tight` wrapping to THREE
-// lines, 50.6px), and the scoreboard is 92px (16px of rule and padding + two
-// 33px cells + a 10px gap). That is 298px at three lines and 281px at two:
-// it fits a two-line name with 12px in hand, and a three-line name spends the
-// 5px of slack `justify-between` would otherwise distribute.
+// So the only differences the two media are now allowed are the PHYSICAL
+// SCALE and the parts that legitimately do not print: the ACTIONS (nothing to
+// click on paper), the halftone (a 9% dot screen at credential size is below
+// what a home printer resolves), and the price (below). The ground, the ink,
+// the mark, the red rule and the ball kicker are the same on both.
 //
-// It only closes at all because two things left. The status band is ~56px and
-// the price cell ~43px, and dropping both frees ~99px. Neither was cut to make
-// room, but the room is what cutting them bought, so putting either back means
-// re-doing this sum first. (Arithmetic off the declared classes; the box the
-// browser actually prints is measured with the harness, not with this sum.)
+// THE CREDENTIAL'S VERTICAL BUDGET, re-done after the mark came back, and
+// MEASURED rather than added up. The previous version of this paragraph was
+// arithmetic off the declared classes and it was wrong by more than it was
+// right, so these are numbers a real Chromium reported under `media: print`
+// for a one-line name (`el.scrollHeight` against `el.clientHeight`):
+//
+//   content box 306.9px (322px client − 2×15.1px of `print:p-[4mm]`)
+//   banner 79.5 + 9 lead-in + identity 104.4 + 7.6 lead-in + scoreboard 87.7
+//   = 288.2px of content ending at 307.5px, i.e. flush with the margin.
+//
+// The mark costs 29px of that (24px + `print:mb-[5px]`), and 24px is not a
+// hedge — 24/204 is the same share of the credential's width that its 44/380
+// is of the screen card's, so the mark keeps its proportion and only changes
+// scale, like the photo. The 29px was paid for by bringing three lead-ins
+// back to their own proportional values (`print:mt-[9px]`, `print:gap-[7px]`,
+// `print:pt-[1.5mm]`), each of which had been set larger than the screen
+// value it scales from.
+//
+// WHAT STILL DOES NOT FIT, stated rather than hidden: a name that wraps to
+// three lines adds ~34px and is clipped by the card's `overflow-hidden`. That
+// is not new — before the mark returned the same card overflowed by 13.6px on
+// a ONE-line name, so a long name was already being cut — and it is 13.6px
+// better than what it replaces. It is a real limit of a 46mm-wide field, and
+// the honest fix is a name that shrinks with its length, not another 5px
+// shaved off a gap. Not done here.
 //
 // ## What is on it, and what is not
 //
@@ -174,32 +188,41 @@ type HorariosState =
 // "Miembro nº", "Desde" and "Renueva" are NOT rendered — see the block comment
 // above `resolveCoverageEnd` in student-utils.ts for where each one dies.
 //
-// ## "El carnet manda" (docs/archive/fixes/12-mi-cuenta-carnet.md)
+// ## "El carnet manda" (docs/archive/fixes/12-mi-cuenta-carnet.md), AND WHAT SURVIVED IT
 //
-// The redesign folds the payment situation into the carnet as a status band,
-// in the position the chosen maquette draws it — over the card, not beside
-// it — and trims the grid to the facts the maquette asks for: Socio desde,
-// Plan, Franja, Valor mensual. (Plan has since left the grid for the kicker;
-// see "B · Marcador" above.) Two facts the OLD grid carried move or drop:
+// THE STATUS BAND IS GONE. The redesign folded the payment situation into the
+// carnet as a band over the card, and the owner read the running screen and
+// asked for it back out: «No tiene ningún pago aprobado — esa info muévala a
+// la sección de pagos, no al carnet.» The verdict lives in `CuotaCard` now
+// (see its header for the full argument). The short form: this card is an
+// identity document, belonging is an identity fact and this month's coverage
+// is not — the same reasoning #286 already used to keep the state off the
+// PRINTED card, which was never a claim about the medium.
+//
+// What the redesign trimmed still holds: the grid carries the facts the
+// maquette asks for — Socio desde, Plan, Franja, Valor mensual. (Plan has
+// since left the grid for the kicker; see "B · Marcador" above.) Two facts the
+// OLD grid carried move or drop:
 //
 //   - "Cobertura hasta" moves to the "Cuota" card (`CuotaCard`) beside the
-//     carnet — it is payment information, and the band above now states the
-//     payment verdict already; repeating the date on the carnet too would be
-//     the same fact stated twice two inches apart.
+//     carnet — it is payment information, and the Cuota card now states the
+//     whole payment reading, verdict included. Nothing about payment is
+//     stated on this card at all.
 //   - "Modalidad" (Mensual/Personalizada) is dropped. Nothing in the chosen
 //     maquette draws it, and the brief is explicit that an unlisted field
 //     gets left out rather than kept "just in case" — the whole point of this
 //     pass is that the carnet stops carrying everything it can.
 //
-// The band ALSO replaces the old `describeMembershipState` badge
-// ("Membresía activa/pendiente/vencida"). That badge and the payment
-// situation used to be able to disagree — an admin-set `estado` is not
-// derived from coverage — and the maquette draws exactly one band, worded
-// for "can this family act on it", which `describePaymentSituation` already
-// is. The one case this trades away: an admin who marks a membership
-// `INACTIVA` with no payment consequence no longer gets a distinct carnet
-// reading for that — `never-paid`'s "no tiene ningún pago aprobado" covers
-// it, and it is the more actionable of the two.
+// The band had ALSO replaced the old `describeMembershipState` badge
+// ("Membresía activa/pendiente/vencida"), and that retirement outlives the
+// band. The badge and the payment situation could disagree — an admin-set
+// `estado` is not derived from coverage — and there is now exactly ONE
+// reading of the money on this screen, worded for "can this family act on
+// it", stated once, on the Cuota card. The case this trades away is
+// unchanged: an admin who marks a membership `INACTIVA` with no payment
+// consequence gets no distinct carnet reading for it — `never-paid`'s "no
+// tiene ningún pago aprobado" covers it, and it is the more actionable of
+// the two.
 // ---------------------------------------------------------------------------
 
 /** One cell of the carnet's scoreboard. See `CarnetFigure`. */
@@ -282,14 +305,14 @@ function CarnetFigure({
       {isFigure ? (
         <b
           className={cn(
-            "mb-[5px] block font-display leading-none tracking-dense tabular-nums print:text-coal",
+            "mb-[5px] block font-display leading-none tracking-dense tabular-nums",
             valueClassName,
           )}
         >
           {content}
         </b>
       ) : (
-        <b className="mb-[5px] block font-sans text-sm font-bold leading-tight print:text-coal">
+        <b className="mb-[5px] block font-sans text-sm font-bold leading-tight">
           {content}
         </b>
       )}
@@ -297,102 +320,21 @@ function CarnetFigure({
           `typography.label` is 800, and this had drifted two steps below it.
           8px on the credential: Barlow is a different face from Graduate and
           its floor is not Graduate's. */}
-      <span className="block text-2xs font-extrabold uppercase leading-tight text-white/60 print:text-coal/60">
+      <span className="block text-2xs font-extrabold uppercase leading-tight text-white/60">
         {label}
       </span>
     </div>
   );
 }
 
-/**
- * The carnet's own reading of the payment situation.
- *
- * Two shapes, not one-per-tone: `kind === "covered"` — a family that is up to
- * date, the majority of visits in a club where most people pay on time — is
- * the ONLY state that renders as the small pill the membership badge this
- * replaces already used. This is the direct answer to the maquette's own
- * recorded cost, "pesa mucho cuando no hay nada que resolver": that sentence
- * is about the up-to-date case specifically, not about every non-urgent one.
- *
- * Every other state — urgent (`bad`) or not (`awaiting-validation`,
- * `minor-blocked`, `no-membership`) — still has something to explain (why
- * there is nothing to act on yet, or who acts instead), so it keeps the
- * full-weight strip with `situation.headline` stated in full. Only the color
- * tells those two groups apart: red for urgent, the same neutral white the
- * old badge's inactive state used otherwise.
- *
- * Colors are literal hex, not the `state-*` tokens `Badge` uses: those are
- * tuned for text on the light `paper`/`canvas` surfaces, and this band sits
- * on the carnet's own coal gradient. The pattern (a translucent `state-*`
- * wash plus a light, hand-picked foreground) is the one the membership badge
- * this replaces already established for `ok` (`bg-state-ok/20
- * text-[#7BE8A4]`); `bad` follows the same recipe.
- */
-function CarnetStatusBand({ situation }: { situation: PaymentSituation }): React.ReactElement {
-  const tone = paymentBandTone(situation);
-  const compact = situation.kind === "covered";
-
-  if (!compact) {
-    return (
-      <div
-        data-testid="carnet-status-band"
-        data-urgent={String(situation.urgent)}
-        data-tone={tone}
-        className={cn(
-          "relative z-10 mt-3 flex items-start gap-2.5 rounded-ctl px-3.5 py-2.5",
-          tone === "bad" ? "bg-state-bad/20" : "bg-white/[0.11]",
-        )}
-      >
-        {tone === "bad" && (
-          <AlertTriangle
-            size={ICON.sm}
-            strokeWidth={2}
-            className="mt-0.5 flex-none text-[#FF8A93]"
-            aria-hidden="true"
-          />
-        )}
-        <div className="min-w-0">
-          <p
-            className={cn(
-              "text-sm font-bold leading-tight",
-              tone === "bad" ? "text-[#FF8A93]" : "text-white",
-            )}
-          >
-            {situation.headline}
-          </p>
-          {situation.figure && (
-            <p className="mt-0.5 text-2xs font-semibold uppercase tracking-flat text-white/60">
-              {situation.figure.value} {situation.figure.unit}
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <span
-      data-testid="carnet-status-band"
-      data-urgent="false"
-      data-tone={tone}
-      className="relative z-10 mt-3 inline-flex h-badge w-fit items-center gap-1.5 rounded-full bg-state-ok/20 px-[11px] text-2xs tracking-flat font-bold text-[#7BE8A4]"
-    >
-      <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-current" />
-      {compactPaymentLabel(situation)}
-    </span>
-  );
-}
-
 function Carnet({
   profile,
-  situation,
   horariosState,
   className,
   canManagePhoto,
   onPhotoUploaded,
 }: {
   profile: StudentProfileSummary;
-  situation: PaymentSituation;
   /** The same assignments the training panel reads — see `franja` below. */
   horariosState: HorariosState;
   className?: string;
@@ -513,28 +455,64 @@ function Carnet({
       id="carnet-print-area"
       className={cn(
         "relative flex flex-col overflow-hidden rounded-card bg-gradient-to-br from-coal to-[#2A2A33] px-6 py-[22px] text-white",
-        // #286 slice 2 — impresión: sobre blanco, texto oscuro y borde fino
-        // (legible en B/N); el gradiente oscuro saldría como bloque de tinta
-        // plano. La banda de estado y los botones se ocultan abajo. El
-        // dimensionado 54×85.6mm vive en el bloque `@media print` de
-        // globals.css, junto al truco de visibility que imprime SOLO el
-        // carnet (sin navegación ni rail).
+        // THE CARD IS PORTRAIT, AND STAYS PORTRAIT. ID-1 is 54×85.6mm — a
+        // 0.631 ratio — and at the rail's 380px that is 602px tall. When the
+        // status band left, the card lost ~68px and drifted toward a square,
+        // which is the one shape a credential may not be. `min-h` states the
+        // proportion instead of leaving it to whatever the content happens to
+        // add up to, and it is a MINIMUM: a three-line name still grows the
+        // card rather than being clipped by it.
         //
-        // Print is ONE COMPOSITION with the screen, not a second one on the
-        // same DOM. What changes here is the ground (coal gradient → white),
-        // the ink (white → coal), and the physical scale — nothing about the
-        // arrangement. `justify-between` distributes the three blocks that
-        // survive (banner, subject, facts) over the 85.6mm field instead of
-        // pixel-counting them, and `p-[4mm]` is a credential margin rather
-        // than a screen one.
+        // This is not fix 12b's `lg:!items-stretch` returning. That stretched
+        // the card to the RAIL's height — an external, variable number — and
+        // the slack landed inside the card as a hole. This height is the
+        // card's own, derived from the object it is a picture of, and it does
+        // not move when the panel beside it does.
+        "min-h-[602px]",
+        //
+        // PRINT: THE SAME OBJECT, NOT A CHEAPER ONE.
+        //
+        // #286 slice 2 printed the carnet on white with coal ink, no mark, no
+        // accent — the reasoning being that a dark ground is a flat block of
+        // ink and a JPEG halftones into a smudge. The owner printed it:
+        // «imagino imprimir el carnet y parezca paint, tenemos que darle
+        // identidad del club». Both observations behind #286 were true and the
+        // conclusion was still wrong — an identity document with no colour, no
+        // mark and no rule is not a thriftier version of the club's card, it
+        // is a blank one.
+        //
+        // So the ground, the ink, the mark, the red rule and the ball kicker
+        // all print, and the ONLY differences left between the two media are
+        // the physical scale and the parts that legitimately do not print (the
+        // actions, the halftone, the price). The mechanism that makes it real
+        // is `print-color-adjust: exact` in globals.css — without it Chrome
+        // drops every background and this whole paragraph describes a white
+        // card. See that block for why the `-webkit-` prefix is not optional.
+        //
+        // THE INK COST, recorded rather than re-argued. A solid #131316 card
+        // at 54×85.6mm is ~46cm² of near-black coverage. On a home inkjet on
+        // plain paper that is heavy: it can look muddy where the gradient is
+        // darkest, it can cockle the sheet, and it costs real cartridge. The
+        // owner was shown the white version and chose identity over ink. That
+        // is the trade; it is not a defect to be re-fixed by draining the
+        // colour back out.
+        //
+        // `justify-between` distributes the blocks that survive over the
+        // 85.6mm field instead of pixel-counting them, and `p-[4mm]` is a
+        // credential margin rather than a screen one. `min-h-[602px]` is
+        // overridden by the sheet's own `height: 85.6mm`, so the screen's
+        // proportion lock never reaches paper.
         //
         // The card's printed EDGE is not drawn here. It used to be a
         // `print:ring-1`, and a Tailwind ring is a box-shadow: Chrome drops
         // box-shadows unless "Background graphics" is ticked, and it is off by
         // default — so the cut line was invisible on exactly the sheet the
         // family gets. It is a real `border` on `#carnet-print-area` in
-        // globals.css now, which prints either way.
-        "print:justify-between print:rounded-none print:bg-none print:bg-white print:p-[4mm] print:text-coal print:shadow-none",
+        // globals.css now, which prints either way. It is KEPT even though the
+        // coal ground now draws its own edge: the ground is the edge only
+        // while `print-color-adjust` is honoured, and the border is what still
+        // marks the cut on a driver that ignores it.
+        "print:justify-between print:rounded-none print:min-h-0 print:p-[4mm] print:shadow-none",
         className,
       )}
     >
@@ -575,8 +553,8 @@ function Carnet({
             section is labelled "Carnet de socio de …". Naming the image would
             make a screen reader say the club's name twice in a row (WCAG
             1.1.1: a redundant image is decorative). */}
-        <span className="mb-[9px] flex h-[44px] w-[44px] flex-none items-center justify-center overflow-hidden rounded-full bg-white print:hidden">
-          <Image src="/brand/cata-club-logo.jpeg" alt="" width={44} height={44} className="h-[44px] w-[44px] object-cover" />
+        <span className="mb-[9px] flex h-[44px] w-[44px] flex-none items-center justify-center overflow-hidden rounded-full bg-white print:mb-[5px] print:h-[24px] print:w-[24px]">
+          <Image src="/brand/cata-club-logo.jpeg" alt="" width={44} height={44} className="h-[44px] w-[44px] object-cover print:h-[24px] print:w-[24px]" />
         </span>
         <div className="min-w-0">
           {/* Graduate — "lo que el club dice de sí mismo", at the size that
@@ -599,7 +577,7 @@ function Carnet({
               paper carries and the screen does not is exactly what made the
               two read as different cards. Barlow, like every other line that
               is read as words; only the ink follows the ground. */}
-          <span className="mt-1 block text-2xs uppercase leading-none text-white/60 print:text-coal/60">
+          <span className="mt-1 block text-2xs uppercase leading-none text-white/60">
             Tenis de mesa
           </span>
         </div>
@@ -619,10 +597,10 @@ function Carnet({
           The photo's two sizes are PHYSICAL SCALE, not two compositions: 100px
           of a 380px card and 68px of a 46mm field are the same share of their
           medium, and the credential's is if anything the larger one. */}
-      <div className="relative z-10 mt-4 flex flex-col items-center gap-[13px] text-center print:mt-[13px] print:gap-[9px]">
+      <div className="relative z-10 mt-4 flex flex-col items-center gap-[13px] text-center print:mt-[9px] print:gap-[7px]">
         <span
           data-testid="carnet-photo"
-          className="flex h-[100px] w-[100px] flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20 print:h-[68px] print:w-[68px] print:bg-coal/5 print:ring-coal/30"
+          className="flex h-[100px] w-[100px] flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20 print:h-[68px] print:w-[68px]"
         >
           {profile.fotoUrl && !fotoFallback ? (
             <Image
@@ -634,7 +612,7 @@ function Carnet({
               onError={() => setFotoFallback(true)}
             />
           ) : (
-            <span aria-hidden="true" className="text-2xl font-bold text-white/70 print:text-coal/70">
+            <span aria-hidden="true" className="text-2xl font-bold text-white/70">
               {initial}
             </span>
           )}
@@ -655,7 +633,7 @@ function Carnet({
               No categoría means no kicker at all: no empty label, no
               placeholder, no row reserved for a fact the club does not have. */}
           {profile.membership?.categoria && (
-            <p className="mb-1 text-2xs font-extrabold uppercase leading-none text-ball print:mb-0.5 print:text-coal/55">
+            <p className="mb-1 text-2xs font-extrabold uppercase leading-none text-ball print:mb-0.5">
               <span className="sr-only">Plan</span>
               <span>{profile.membership.categoria}</span>
             </p>
@@ -667,13 +645,6 @@ function Carnet({
             {fullName}
           </p>
         </div>
-      </div>
-
-      {/* Decisión #286 (slice 2): la banda de estado NO viaja al impreso — el
-          estado cambia cada mes y un carnet plastificado con «vencido» impreso
-          envejece mal. Solo pantalla. */}
-      <div className="print:hidden">
-        <CarnetStatusBand situation={situation} />
       </div>
 
       {/* THE SCOREBOARD. ONE left-aligned column, full width, on both media.
@@ -696,7 +667,7 @@ function Carnet({
       {figures.length > 0 && (
         <div
           data-testid="carnet-facts"
-          className="relative z-10 mt-4 grid grid-cols-1 gap-y-section border-t border-white/[0.12] pt-[15px] text-left print:mt-[2mm] print:gap-[10px] print:border-coal/20 print:pt-[2mm]"
+          className="relative z-10 mt-4 grid grid-cols-1 gap-y-section border-t border-white/[0.12] pt-[15px] text-left print:mt-[2mm] print:gap-[8px] print:pt-[1.5mm]"
         >
           {figures.map((figure) => (
             <CarnetFigure key={figure.label} {...figure} />
@@ -1212,10 +1183,12 @@ function ActivePortalView({
 
   /**
    * The one thing this screen exists to answer, resolved once and rendered
-   * twice — as the carnet's own status band and as the "Cuota" card's detail
-   * (see `CarnetStatusBand` and `CuotaCard`). `describePaymentSituation` owns
-   * every word of it, so the carnet, the rail card and `/student/payments`
-   * can never word the same `estado` differently again.
+   * in ONE place — the "Cuota" card (`CuotaCard`), which leads with the
+   * verdict and states the evidence under it. It used to be rendered twice,
+   * as the carnet's own status band as well; the owner moved the verdict off
+   * the identity card entirely, so there is one host again.
+   * `describePaymentSituation` still owns every word, so the rail card and
+   * `/student/payments` can never word the same `estado` differently.
    */
   const paymentSituation = selectedProfile
     ? describePaymentSituation({
@@ -1389,7 +1362,6 @@ function ActivePortalView({
           <div className="flex flex-col gap-5">
             <Carnet
               profile={selectedProfile}
-              situation={paymentSituation}
               horariosState={horariosState}
               canManagePhoto={canManagePhoto}
               onPhotoUploaded={onPhotoUploaded}
