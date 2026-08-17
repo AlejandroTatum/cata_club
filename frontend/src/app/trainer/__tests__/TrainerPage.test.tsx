@@ -570,6 +570,29 @@ describe("TrainerPage — la anatomía del panel de admin", () => {
     expect(tile.closest("[data-testid='stat-card']") ?? tile.parentElement).toHaveTextContent("3");
   });
 
+  // Issue #313 (K5 hallazgo #56): "SESIONES HOY 0" convivía con una lista de
+  // hoy con registros reales en la misma pantalla, sin decir su alcance —
+  // este tile cuenta lo PROGRAMADO por horario semanal, no lo REGISTRADO.
+  // Las dos cosas son legítimamente distintas; el fix nombra cuál es cuál.
+  it("names the tile's own scope — sesiones PROGRAMADAS, no listas tomadas", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const tile = within(screen.getByTestId("trainer-pulse")).getByText("Sesiones hoy");
+    const card = tile.closest("[data-testid='stat-card']") ?? tile.parentElement;
+    expect(card).toHaveTextContent(/programadas para hoy/i);
+  });
+
+  it("names the enrolled-today tile's own scope once the roster arrives", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+
+    const pulse = within(screen.getByTestId("trainer-pulse"));
+    await waitFor(() => {
+      expect(pulse.getByText(/alumnos en las sesiones programadas para hoy/i)).toBeInTheDocument();
+    });
+  });
+
   it("adds the enrolments across today's sessions, empty classes included", async () => {
     // ROSTER is 12 in horario 1 and 3 in horario 2; horario 3 has nobody, and
     // an empty class counts as 0 rather than dropping out of the sum.
@@ -595,16 +618,18 @@ describe("TrainerPage — la anatomía del panel de admin", () => {
     expect(pulse.queryByText("15")).not.toBeInTheDocument();
   });
 
-  it("reads the month's attendance as presentes over all records", async () => {
-    // MONTH_RECORDS is 2 present out of 7 — 29%, the same reading
-    // /dashboard's four-week tile gives its own figure.
+  it("reads the month's attendance as quienes entrenaron — presentes MAS tardanzas — over all records", async () => {
+    // MONTH_RECORDS is 2 present + 1 late out of 7 — 43%. Issue #313 (K5
+    // hallazgo #57): a trainer who only counted presentes read 29% here
+    // while the same screen's own distribution table implied 43%, and
+    // "asistencia" for a trainer means "vino a entrenar" — tardanza incluida.
     render(<TrainerPage />);
     await screen.findByText("Lunes 15:00 — 16:00");
 
     const pulse = within(screen.getByTestId("trainer-pulse"));
     expect(pulse.getByText("Asistencia del mes")).toBeInTheDocument();
-    expect(pulse.getByText("29")).toBeInTheDocument();
-    expect(pulse.getByText("2 de 7 presentes")).toBeInTheDocument();
+    expect(pulse.getByText("43")).toBeInTheDocument();
+    expect(pulse.getByText("3 de 7 entrenaron")).toBeInTheDocument();
   });
 
   it("counts the lists taken as sessions, not as records", async () => {
