@@ -172,3 +172,28 @@ class FichaMedicaResponseDTO(ResponseBase, BaseModel):
     alergias: Optional[str] = None
     contacto_emergencia: Optional[str] = None
     telefono_emergencia: Optional[str] = None
+
+
+class FichaEmergenciaResponseDTO(ResponseBase, BaseModel):
+    """DTO propio del issue #360, deliberadamente chico.
+
+    NO hereda de `FichaMedicaResponseDTO` ni sale de un `model_dump()`
+    completo: cada campo está enumerado a mano para que si `FichaMedica` gana
+    columnas nuevas mañana, este DTO no las herede solo. Es exactamente lo que
+    un entrenador necesita para actuar ante una emergencia y nada del resto de
+    la ficha (sin cédula, fecha de nacimiento, dirección, ni enfermedades no
+    relacionadas).
+
+    Los cuatro campos médicos son `Optional`: un alumno puede no tener ficha
+    médica cargada todavía, y ese caso no es un error -- ver
+    `FichaMedicaServicio.obtener_ficha_emergencia`. El respaldo del
+    representante siempre debería estar presente para un menor.
+    """
+
+    alumno_nombre_completo: str
+    tipo_sangre: Optional[TipoSangre] = None
+    alergias: Optional[str] = None
+    contacto_emergencia: Optional[str] = None
+    telefono_emergencia: Optional[str] = None
+    representante_nombre_completo: Optional[str] = None
+    representante_telefono: Optional[str] = None

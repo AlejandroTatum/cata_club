@@ -777,6 +777,46 @@ class Enfermedades(Base):
     ficha_medica: Mapped["FichaMedica"] = relationship(back_populates="enfermedades")
 
 
+class ConsultaFichaEmergencia(Base):
+    """Registro OBSERVACIONAL de una consulta a la ficha de emergencia
+    (issue #360). No decide nada -- igual que `Sesion` (#303), a la que este
+    modelo copia el patrón a propósito.
+
+    El club no asigna entrenadores a horarios (modelo líneas 597-598,
+    `docs/product/concepto-alcance-modelo.md §4`), así que cualquier
+    ENTRENADOR puede consultar la ficha de emergencia de cualquier alumno: el
+    acceso se acota por QUÉ DATO expone el DTO, no por a quién se le permite
+    pedirlo. Esta tabla es la protección posterior -- quién miró el dato de
+    quién, y cuándo -- no una compuerta previa: el issue pide explícitamente
+    "sin fricción" para no perder segundos en una emergencia real.
+
+    Nunca se lee para autorizar nada: si algún día se consultara para decidir
+    acceso, se habría movido un control de seguridad a una tabla que nació
+    para auditar.
+    """
+
+    __tablename__ = "consulta_ficha_emergencia"
+    __table_args__ = (
+        # El acceso esperado es "quién consultó a este alumno, más reciente
+        # primero" -- mismo criterio que `ix_sesion_usuario_iniciada`.
+        Index("ix_consulta_ficha_emergencia_alumno_consultada", "alumno_persona_id", "consultada_en"),
+        # Cobertura de la segunda FK (`test_indices_fk.py`, guardia de índices
+        # de cobertura de FK del proyecto): sin esta, un borrado o consulta
+        # por `consultante_persona_id` hace table scan.
+        Index("ix_consulta_ficha_emergencia_consultante_persona_id", "consultante_persona_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    alumno_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    consultante_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    consultada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc, nullable=False,
+    )
+
+    alumno: Mapped["Persona"] = relationship(foreign_keys=[alumno_persona_id])
+    consultante: Mapped["Persona"] = relationship(foreign_keys=[consultante_persona_id])
+
+
 # ---------------------------------------------------------------------------
 # Notificación in-app. Genérica a propósito: no se acopla a un único flujo,
 # para poder reutilizarse en otros procesos del sistema (ej. vencimiento de
