@@ -955,13 +955,20 @@ describe("MembersPage — Registrar pago inline form", () => {
   async function openMemberDialog(
     options: {
       membresia?: Membresia;
+      ultimoPago?: MemberStudentSummary["ultimoPago"];
       descuentos?: DescuentoCatalogo[];
       registrarPagoRejects?: Error;
     } = {},
   ): Promise<HTMLElement> {
     const cuentaConMembresia: MemberAccount = {
       ...ACCOUNT,
-      estudiantes: [{ ...ACCOUNT.estudiantes[0], membresia: options.membresia ?? MEMBRESIA_VENCIDA }],
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: options.membresia ?? MEMBRESIA_VENCIDA,
+          ...(options.ultimoPago !== undefined ? { ultimoPago: options.ultimoPago } : {}),
+        },
+      ],
     };
     mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
     mockFetchDescuentos.mockResolvedValue(options.descuentos ?? []);
@@ -1016,6 +1023,27 @@ describe("MembersPage — Registrar pago inline form", () => {
 
     const registrarBtn = await within(dialog).findByRole("button", { name: /registrar pago/i });
     expect(registrarBtn).toBeInTheDocument();
+  });
+
+  // Issue #313 (K5 hallazgo #67): "1 meses de vigencia" — concordancia de
+  // número rota, igual que "1 resultados mostrados" en el listado.
+  it("says '1 mes de vigencia' in singular when the monto covers exactly one month", async () => {
+    const dialog = await openMemberDialog({
+      membresia: {
+        tipo: "Mensual (Tarde)",
+        estado: "activa",
+        fechaInicio: "2026-07-01",
+        fechaFin: "2026-07-31",
+        monto: 85,
+        id: 42,
+      },
+    });
+    await openPaymentForm(dialog);
+
+    // El monto se prellena con el precio mensual (85/85 = 1 mes).
+    expect(
+      await within(dialog).findByText(/1 mes de vigencia \(precio mensual: \$85\)/i),
+    ).toBeInTheDocument();
   });
 
   /**
@@ -1198,6 +1226,73 @@ describe("MembersPage — Registrar pago inline form", () => {
     });
   });
 
+  // Issue #313 (K5 hallazgo #15): "Membresía: Vencida" y "0 meses adeudados"
+  // a la vez, en el mismo recuadro. Las dos cifras son individualmente
+  // correctas — el estado se vence apenas vence la cobertura, la deuda
+  // solo cuenta MESES CALENDARIO COMPLETOS — pero un admin lee "0" como
+  // "no debe nada" al lado de "Vencida" y son lecturas opuestas. Cuando
+  // faltan menos de 30 días para completar el primer mes, el formulario
+  // ahora reporta la fecha de vencimiento real en vez del "0" que se leía
+  // como un cierre.
+  it("no dice '0 meses adeudados' cuando la membresía está vencida pero aún no completa un mes: dice desde cuándo", async () => {
+    mockFetchMembresiaDeuda.mockResolvedValue({
+      mesesAdeudados: 0,
+      ultimaCoberturaFin: "2026-07-20",
+      montoMensual: 85,
+    });
+    const dialog = await openMemberDialog({
+      membresia: {
+        tipo: "Mensual (Tarde)",
+        estado: "vencida",
+        fechaInicio: "2026-06-20",
+        fechaFin: "2026-07-20",
+        monto: 85,
+        id: 42,
+      },
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+
+    expect(await within(dialog).findByText(/vencida desde el 20\/07\/2026/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/0 meses adeudados/i)).not.toBeInTheDocument();
+  });
+
+  // Issue #313 (K5 hallazgo #44): la ficha mostraba seis datos sueltos sin
+  // rótulo, con el período repetido dos veces en formatos distintos
+  // (dd/mm/aaaa y aaaa-mm-dd) y el importe repetido tres veces — porque
+  // `membresia.monto` Y `ultimoPago.periodo` duplicaban, con otro nombre y
+  // otro formato, datos que ya estaban en pantalla. El fix borra la
+  // duplicación (el período ya no se imprime dos veces) y rotula lo que
+  // queda: precio del plan, monto del último pago y vigencia son tres
+  // hechos distintos y ahora se leen como tres hechos distintos.
+  it("labels the plan price, the last payment's amount and the period separately, and prints the period only once", async () => {
+    const dialog = await openMemberDialog({
+      membresia: {
+        tipo: "Mensual Infantil",
+        estado: "activa",
+        fechaInicio: "2026-08-01",
+        fechaFin: "2026-09-05",
+        monto: 25,
+        id: 42,
+      },
+      ultimoPago: {
+        estado: "rechazado",
+        fechaPago: "2026-08-01",
+        monto: 50,
+        periodo: "2026-08-01 — 2026-09-05",
+      },
+    });
+
+    expect(within(dialog).getByText("Precio del plan")).toBeInTheDocument();
+    expect(within(dialog).getByText("$25,00")).toBeInTheDocument();
+    expect(within(dialog).getByText("Monto del último pago")).toBeInTheDocument();
+    expect(within(dialog).getByText("$50,00")).toBeInTheDocument();
+    expect(within(dialog).getByText("Vigencia")).toBeInTheDocument();
+
+    // El período aparece UNA sola vez — nunca la forma cruda "aaaa-mm-dd".
+    expect(within(dialog).queryByText(/2026-08-01 — 2026-09-05/)).not.toBeInTheDocument();
+  });
+
   it("does NOT render a 'Registrar pago' button when the student has no membership", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
 
@@ -1242,8 +1337,10 @@ describe("MembersPage — honest aggregate coverage", () => {
       </ToastProvider>,
     );
 
+    // Issue #313 (K5 hallazgo #67): "1 resultados mostrados" — concordancia
+    // de número rota. Con un solo resultado el contador debe leer singular.
     expect(await screen.findByRole("status", { name: "Resultados mostrados" })).toHaveTextContent(
-      "1 resultados mostrados",
+      "1 resultado mostrado",
     );
     expect(screen.getByRole("alert")).toHaveTextContent(
       "puede estar incompleto",

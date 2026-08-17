@@ -295,12 +295,21 @@ export default function TrainerPage(): React.ReactElement {
               instead of a partial sum for the reason its own doc gives — a
               partial sum is not a smaller number, it is a wrong one — and the
               tile has to state that absence rather than paper over it.
+
+              Issue #313 (K5 hallazgo #56): "SESIONES HOY 0" convivía con
+              "ÚLTIMAS LISTAS" mostrando una lista de hoy con registros
+              reales — no es una contradicción (uno cuenta el horario
+              SEMANAL programado para hoy, el otro las listas que de hecho
+              se tomaron, y un entrenador puede tomar lista de un día
+              distinto al programado), pero los dos tiles no decían su
+              propio alcance. Los hints ahora nombran "programadas", no
+              "hoy" a secas.
             */}
             <div data-testid="trainer-pulse" className={STAT_GRID}>
               <StatCard
                 label="Sesiones hoy"
                 value={todaySchedules.length}
-                hint={formatDay(todayDiaSemana()).toLowerCase()}
+                hint={`programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}`}
               />
               <StatCard
                 label="Inscritos hoy"
@@ -308,7 +317,7 @@ export default function TrainerPage(): React.ReactElement {
                 hint={
                   enrolledToday === null
                     ? "no se pudo leer el padrón"
-                    : "alumnos en las sesiones de hoy"
+                    : "alumnos en las sesiones programadas para hoy"
                 }
               />
               <StatCard
@@ -318,7 +327,7 @@ export default function TrainerPage(): React.ReactElement {
                 hint={
                   <span className="flex flex-col gap-y-field">
                     <StatTrack value={monthRate.present} total={monthRate.total} />
-                    <span>{`${monthRate.present} de ${monthRate.total} presentes`}</span>
+                    <span>{`${monthRate.present} de ${monthRate.total} entrenaron`}</span>
                   </span>
                 }
               />

@@ -487,12 +487,14 @@ export interface MonthAttendanceRate {
 }
 
 /**
- * The month's attendance as a proportion — presentes over all records.
+ * The month's attendance as a proportion — quien entrenó over all records.
  *
- * Deliberately NOT present + tardanza + justificado. `/dashboard`'s own
- * four-week tile reads "N de M presentes", and a rate here that quietly
- * folded three states into one would print beside it on the same screen
- * grammar while measuring something else.
+ * "Vino a entrenar" incluye la tardanza (issue #313, K5 hallazgo #57): quien
+ * llegó tarde entrenó igual, y un tile llamado "Asistencia del mes" que solo
+ * contaba `totalPresent` subdeclaraba la asistencia real en 16 puntos frente
+ * a la propia tabla "Distribución de asistencias" de la misma pantalla (60%
+ * vs 73% sobre el mismo mes). Justificado y ausente siguen fuera: ninguno de
+ * los dos es "entrenó".
  *
  * A month with no records is 0%, not NaN: this runs on the first day of every
  * month, before anyone has taken a list.
@@ -501,9 +503,10 @@ export function buildMonthAttendanceRate(stats: AttendanceDayStats): MonthAttend
   const total = stats.totalStudents;
   if (total <= 0) return { percent: 0, present: 0, total: 0 };
 
+  const present = stats.totalPresent + stats.totalLate;
   return {
-    percent: Math.round((stats.totalPresent / total) * 100),
-    present: stats.totalPresent,
+    percent: Math.round((present / total) * 100),
+    present,
     total,
   };
 }

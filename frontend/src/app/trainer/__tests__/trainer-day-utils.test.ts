@@ -561,23 +561,24 @@ describe("sumEnrolledToday", () => {
 });
 
 describe("buildMonthAttendanceRate", () => {
-  const stats = (present: number, total: number): AttendanceDayStats => ({
+  const stats = (present: number, total: number, late = 0): AttendanceDayStats => ({
     totalPresent: present,
-    totalAbsent: total - present,
-    totalLate: 0,
+    totalAbsent: total - present - late,
+    totalLate: late,
     totalJustified: 0,
     totalUnknown: 0,
     totalStudents: total,
   });
 
-  it("reads the rate as presentes over all records, like the admin four-week tile", () => {
-    // Deliberately NOT present + tardanza + justificado: the admin panel's own
-    // tile says "N de M presentes", and folding three states into one here
-    // would produce a number that cannot be compared with it.
-    expect(buildMonthAttendanceRate(stats(135, 262))).toEqual({
-      percent: 52,
-      present: 135,
-      total: 262,
+  // Issue #313 (K5, hallazgo #57): "vino a entrenar" incluye a quien llegó
+  // tarde. El tile decía "presentes sobre el total" y subdeclaraba la
+  // asistencia real en 16 puntos frente a la propia tabla de distribución de
+  // la misma pantalla (Presente 207, Tardanza 46 sobre 346 -> 60% vs 73%).
+  it("reads the rate as quienes entrenaron — presentes MAS tardanzas — sobre el total", () => {
+    expect(buildMonthAttendanceRate(stats(207, 346, 46))).toEqual({
+      percent: 73,
+      present: 253,
+      total: 346,
     });
   });
 

@@ -139,6 +139,7 @@ import SessionsCard from "./SessionsCard";
 import { Badge, Button, DataBox, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
+import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
 // Reused as-is (not duplicated) for consistency — this is the same
 // backend-estado -> frontend-estado mapping `members-adapter.ts` reuses;
 // it's a pure value object with no server-only APIs, safe in a client bundle.
@@ -406,7 +407,7 @@ interface IdentityPanelProps {
   roleLabel: string;
   /** Rendered ONLY when there is a real status to report — see the module docstring. */
   statusBadge: { label: string; tone: BadgeTone } | null;
-  /** Pre-formatted ("Miembro desde 10/03/2024"), or `null` when there is no date. */
+  /** Pre-formatted ("Cuenta creada el 10/03/2024"), or `null` when there is no date. */
   memberSince: string | null;
   correo: string;
   uploadingFoto: boolean;
@@ -534,9 +535,9 @@ function IdentityPanel({
             </div>
           )}
           {/*
-            Account metadata, not personal data — "Miembro desde" lives HERE
+            Account metadata, not personal data — "Cuenta creada el" lives HERE
             only, and only when there is a date to state. It used to fall back
-            to "Miembro desde —", which is `DESIGN.md`'s Identity cell rule
+            to "Cuenta creada el —", which is `DESIGN.md`'s Identity cell rule
             broken in four characters: *"Nunca nombra una ausencia."*
 
             The photo-state line that sat under it is gone for the same reason.
@@ -721,42 +722,38 @@ function RecentSessionsCard({
         <p className="text-xs text-ink-3">Lo que registró el club</p>
       </div>
       <ul className="divide-y divide-line">
-        {sessions.map((session) => {
-          const estado = ATTENDANCE_STATE[session.estado] ?? null;
-          return (
-            <li
-              key={`${session.fecha}-${session.horario}`}
-              className="flex flex-wrap items-center gap-x-4 gap-y-field px-5 py-3"
-            >
-              {/* Tabular figures: a column of dates is only comparable when
-                  the digits sit on the same rails. */}
-              <span className="w-[86px] flex-none text-xs tabular-nums text-ink-3">
-                {formatDate(session.fecha)}
-              </span>
-              <span className="min-w-0 flex-1 text-sm font-semibold text-ink">
-                {session.horario}
-              </span>
-              {estado && <Badge tone={estado.tone}>{estado.label}</Badge>}
-            </li>
-          );
-        })}
+        {sessions.map((session) => (
+          <li
+            key={`${session.fecha}-${session.horario}`}
+            className="flex flex-wrap items-center gap-x-4 gap-y-field px-5 py-3"
+          >
+            {/* Tabular figures: a column of dates is only comparable when
+                the digits sit on the same rails. */}
+            <span className="w-[86px] flex-none text-xs tabular-nums text-ink-3">
+              {formatDate(session.fecha)}
+            </span>
+            <span className="min-w-0 flex-1 text-sm font-semibold text-ink">
+              {session.horario}
+            </span>
+            {/* Issue #313 (K5 hallazgo #19): esta tarjeta reinventaba su
+                propia tabla de estados ("PRESENTE"/"AUSENTE"/"TARDE"), con
+                claves que nunca calzaban con la forma real que manda
+                `ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND` (minúscula, en
+                inglés). El resultado: NINGÚN estado coincidía nunca y las
+                21 sesiones se veían indistinguibles, faltas y tardanzas
+                incluidas. La fuente única es la misma que ya usa
+                /student/attendance para el mismo dato. */}
+            {session.estado && (
+              <Badge tone={getAttendanceBadgeTone(session.estado)}>
+                {getAttendanceLabel(session.estado)}
+              </Badge>
+            )}
+          </li>
+        ))}
       </ul>
     </section>
   );
 }
-
-/**
- * The four `EstadoAsistencia` values as the badge vocabulary, and nothing
- * else: an unknown estado draws NO badge rather than a fifth tone invented on
- * the spot. `Record` would force this file to guess at values the backend may
- * add; the lookup is deliberately partial and the caller handles the miss.
- */
-const ATTENDANCE_STATE: Record<string, { label: string; tone: BadgeTone }> = {
-  PRESENTE: { label: "Presente", tone: "ok" },
-  AUSENTE: { label: "Ausente", tone: "bad" },
-  JUSTIFICADO: { label: "Justificado", tone: "warn" },
-  TARDE: { label: "Tarde", tone: "warn" },
-};
 
 // ---------------------------------------------------------------------------
 // The page body — one tree, whose content branches by `kind`.
@@ -974,9 +971,15 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     props.kind === "staff" ? props.perfil.telefono : (props.perfil?.telefono ?? "");
   const fechaCreacion =
     props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
-  // `null`, not "Miembro desde —": the identity cell never names an absence,
+  // `null`, not "Cuenta creada el —": the identity cell never names an absence,
   // so a missing `fechaCreacion` draws no line rather than a labelled dash.
-  const memberSince = fechaCreacion ? `Miembro desde ${formatDate(fechaCreacion)}` : null;
+  // Issue #313 (K5 hallazgo #50): esto es la fecha de creación de la CUENTA
+  // (`Usuario.fecha_creacion`, /api/auth/me), no la afiliación al club — esa
+  // es "Socio desde" (`TU MEMBRESÍA`, fechaActivacion), un hecho distinto que
+  // puede legítimamente diferir en semanas. Antes ambos se llamaban "Miembro
+  // desde X" con fechas distintas en la misma pantalla; el rótulo ahora nombra
+  // lo que de verdad mide, en vez de forzar que las dos fechas coincidan.
+  const memberSince = fechaCreacion ? `Cuenta creada el ${formatDate(fechaCreacion)}` : null;
 
   // The two payload fields this screen used to fetch and discard. Both are
   // read straight off `self` — no second request, and no default when the

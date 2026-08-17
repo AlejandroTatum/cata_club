@@ -183,6 +183,25 @@ interface StudentRowProps {
   onDebtRegularized: () => void;
 }
 
+/**
+ * A `DataBox` with its own small caption above it — issue #313 (K5 hallazgo
+ * #44): the ficha's membership/payment figures had no label at all, so an
+ * admin could not tell a plan's price from a payment's amount at a glance.
+ */
+function LabeledDataBox({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <span className="inline-flex flex-col items-start gap-0.5">
+      <span className="text-2xs text-ink-3">{label}</span>
+      <DataBox>{children}</DataBox>
+    </span>
+  );
+}
 
 function StudentEditPanel({ student, onMembershipCreated, onDebtRegularized }: StudentRowProps): React.ReactElement {
   const [showMedical, setShowMedical] = useState(false);
@@ -258,21 +277,35 @@ function StudentEditPanel({ student, onMembershipCreated, onDebtRegularized }: S
       </dl>
 
       {/* Each figure is a value that matters (a plan, a period, an amount),
-          so each gets its own box rather than one run-on sentence stitched
-          together with middots. */}
+          so each gets its own labeled box rather than one run-on sentence
+          stitched together with middots.
+
+          Issue #313 (K5 hallazgo #44): estas seis fichas no llevaban rótulo
+          y el período se imprimía DOS veces en formatos distintos —
+          `formatMembershipPeriod` (dd/mm/aaaa) aquí Y `ultimoPago.periodo`
+          (aaaa-mm-dd, sin formatear) abajo, la misma fecha con otra cara.
+          `ultimoPago.periodo` se borra: no agrega ningún dato que "Vigencia"
+          no diga ya. Lo que sí es un hecho aparte es cuándo se REGISTRÓ el
+          pago (`fechaPago`) — eso no vivía en ningún lado de la ficha. */}
       {student.membresia && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <DataBox>{student.membresia.tipo}</DataBox>
-          <DataBox>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <LabeledDataBox label="Plan">{student.membresia.tipo}</LabeledDataBox>
+          <LabeledDataBox label="Vigencia">
             {formatMembershipPeriod(student.membresia.fechaInicio, student.membresia.fechaFin)}
-          </DataBox>
-          <DataBox>{formatCurrency(student.membresia.monto)}</DataBox>
+          </LabeledDataBox>
+          <LabeledDataBox label="Precio del plan">
+            {formatCurrency(student.membresia.monto)}
+          </LabeledDataBox>
         </div>
       )}
       {student.ultimoPago && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <DataBox>{formatCurrency(student.ultimoPago.monto)}</DataBox>
-          <DataBox>{student.ultimoPago.periodo}</DataBox>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <LabeledDataBox label="Monto del último pago">
+            {formatCurrency(student.ultimoPago.monto)}
+          </LabeledDataBox>
+          <LabeledDataBox label="Pago registrado">
+            {formatDate(student.ultimoPago.fechaPago)}
+          </LabeledDataBox>
         </div>
       )}
 
@@ -1001,7 +1034,8 @@ export default function MembersPage(): React.ReactElement {
           <div className="card overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 text-xs text-ink-2">
               <p role="status" aria-label="Resultados mostrados">
-                {filteredAccounts.length} resultados mostrados
+                {filteredAccounts.length}{" "}
+                {filteredAccounts.length === 1 ? "resultado mostrado" : "resultados mostrados"}
               </p>
               {aggregateIsCapped && (
                 <p role="alert" className="max-w-md text-state-bad">

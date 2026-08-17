@@ -978,7 +978,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
   );
   const unreviewedCount = useMemo(() => countUnreviewed(students), [students]);
   const unmarkedCount = useMemo(() => countUnmarked(students), [students]);
-  const presentCount = useMemo(() => countByState(students, "present"), [students]);
   const unmarkedReasonId = "attendance-unmarked-reason";
 
   /**
@@ -1346,15 +1345,24 @@ export default function TrainerAttendancePage(): React.ReactElement {
          * it belongs to, and the one-tap shortcut for the common case.
          */}
         <div className="flex flex-wrap items-center gap-5 rounded-card bg-coal px-[22px] py-[18px] text-white">
+          {/*
+           * Revisados, no presentes (issue #313, K5 hallazgo #23): el roster
+           * arranca en PRESENTE por defecto, así que el conteo crudo de
+           * "presentes" daba "16/16" antes de que el entrenador mirara a
+           * nadie — un novato lo lee como lista ya tomada. El número grande
+           * ahora mide lo que de verdad se decidió; `unreviewedCount` (la
+           * misma fuente que ya alimentaba el aviso de abajo) es lo que
+           * falta para llegar al total.
+           */}
           <span
             aria-live="polite"
             className="text-display font-extrabold leading-none tabular-nums"
           >
-            {presentCount}
+            {reviewedCount}
             <span className="text-lg text-white/50">/{students.length}</span>
           </span>
           <span className="flex min-w-[170px] flex-1 flex-col gap-1">
-            <b className="text-base font-bold">presentes</b>
+            <b className="text-base font-bold">revisados</b>
             <span className="flex flex-wrap items-center gap-1.5 text-sm text-white/60">
               {/* Kept as its own node: "Lunes" is the day, the range is the
                   time, and they are two different facts. */}

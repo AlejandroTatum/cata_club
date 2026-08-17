@@ -7,7 +7,7 @@
  * ProtectedRoute.test.tsx (ProtectedRoute passthrough, next/navigation,
  * AuthContext, @/services/api all stubbed).
  *
- * Some display values (full name, correo, "miembro desde" date) intentionally
+ * Some display values (full name, correo, "cuenta creada el" date) intentionally
  * appear in more than one place in the new layout (hero card AND the
  * "Información personal" column) — tests scope those queries with `within`
  * or assert exact counts via `getAllByText` rather than assuming a single
@@ -234,12 +234,12 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     const hero = screen.getByTestId("profile-hero");
     expect(within(hero).getByText("Administrador")).toBeInTheDocument();
     expect(within(main).queryByText("ADMINISTRADOR")).not.toBeInTheDocument();
-    // "Miembro desde" now lives on the member card's own fact, as one string
+    // "Cuenta creada el" now lives on the member card's own fact, as one string
     // — not a separate label/value pair, and not duplicated by a
     // "Fecha de registro" row saying the same thing.
-    expect(screen.getByText(/miembro desde/i)).toBeInTheDocument();
+    expect(screen.getByText(/cuenta creada el/i)).toBeInTheDocument();
     expect(screen.queryByText(/fecha de registro/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText("Miembro desde 10/03/2024").length).toBe(1);
+    expect(screen.getAllByText("Cuenta creada el 10/03/2024").length).toBe(1);
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -321,7 +321,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     expect(within(screen.getByTestId("profile-hero")).getByText("Entrenador")).toBeInTheDocument();
     // Different fechaCreacion than the admin fixture — proves the date is
     // computed from `perfil.fechaCreacion`, not hardcoded.
-    expect(screen.getAllByText("Miembro desde 02/11/2025").length).toBe(1);
+    expect(screen.getAllByText("Cuenta creada el 02/11/2025").length).toBe(1);
   });
 
   it("does not render nombres/apellidos/roles as editable inputs", async () => {
@@ -1300,7 +1300,7 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(within(hero).getByText("Ana Admin")).toBeInTheDocument();
     expect(within(hero).getByText("ana.admin@cataclub.com")).toBeInTheDocument();
     expect(within(hero).getByText("Administrador")).toBeInTheDocument();
-    expect(within(hero).getByText("Miembro desde 10/03/2024")).toBeInTheDocument();
+    expect(within(hero).getByText("Cuenta creada el 10/03/2024")).toBeInTheDocument();
     // Contact data still belongs to the rows below, not to the card.
     expect(within(hero).queryByText("099111222")).not.toBeInTheDocument();
   });
@@ -1310,7 +1310,7 @@ describe("ProfilePage — the redesigned account layout", () => {
    * rather than disappeared.
    *
    * What it guarded was real: `text-ink` on `cata-red` is 3.6:1 and the grey
-   * "Miembro desde" beside it ~1.1:1, so the 100px red field needed 112px of
+   * "Cuenta creada el" beside it ~1.1:1, so the 100px red field needed 112px of
    * padding above the identity block to keep any text off it. What it never
    * asked was whether the field should exist. `DESIGN.md` answers that by
    * name — *"Don't dibujar una barra de color al borde de una tarjeta. Es el
@@ -1376,9 +1376,9 @@ describe("ProfilePage — the redesigned account layout", () => {
     for (const label of ["Nombres", "Correo de cuenta", "Teléfono", "Rol"]) {
       expect(within(info).getByText(label)).toBeInTheDocument();
     }
-    // "Miembro desde" is account metadata, not personal data: it lives on the
+    // "Cuenta creada el" is account metadata, not personal data: it lives on the
     // member card and must NOT also be repeated as a row.
-    expect(within(info).queryByText("Miembro desde")).not.toBeInTheDocument();
+    expect(within(info).queryByText("Cuenta creada el")).not.toBeInTheDocument();
   });
 
   it("keeps row labels legible without shouting — no bold uppercase caps competing with the value", async () => {
@@ -1429,7 +1429,7 @@ describe("ProfilePage — the redesigned account layout", () => {
   /**
    * The inverse of what this test used to assert, and the reason is a rule
    * rather than a taste: *"La celda de identidad ... nunca nombra una
-   * ausencia"* (`DESIGN.md`, Identity cell). "Miembro desde —" is an absence
+   * ausencia"* (`DESIGN.md`, Identity cell). "Cuenta creada el —" is an absence
    * given a line of its own, a label, and a dash to stare at.
    *
    * The old assertion was defending against something real — an `undefined`
@@ -1449,15 +1449,15 @@ describe("ProfilePage — the redesigned account layout", () => {
     await waitForStaffProfile();
 
     const hero = screen.getByTestId("profile-hero");
-    expect(within(hero).queryByText(/Miembro desde/)).not.toBeInTheDocument();
+    expect(within(hero).queryByText(/Cuenta creada el/)).not.toBeInTheDocument();
     expect(hero.textContent).not.toContain("undefined");
   });
 
-  it("still states 'Miembro desde' when there IS a date — the rule is against dashes, not against the fact", async () => {
+  it("still states 'Cuenta creada el' when there IS a date — the rule is against dashes, not against the fact", async () => {
     await renderAdmin();
 
     const hero = screen.getByTestId("profile-hero");
-    expect(within(hero).getByText("Miembro desde 10/03/2024")).toBeInTheDocument();
+    expect(within(hero).getByText("Cuenta creada el 10/03/2024")).toBeInTheDocument();
   });
 
   it("never shows a cédula row — no endpoint the account itself can call returns one", async () => {
@@ -1902,9 +1902,15 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: {
         ...STUDENT_SELF,
+        // Issue #313 (K5 hallazgo #19): la forma REAL que manda
+        // `ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND` (student-adapter.ts) es
+        // minúscula en inglés — "present"/"absent"/"late"/"justified" —
+        // nunca "PRESENTE"/"AUSENTE". Un fixture con la forma equivocada
+        // hacía pasar el test aunque la tabla de la pantalla nunca
+        // reconociera el estado real y ninguna fila mostrara badge.
         recentSessions: [
-          { fecha: "2026-08-10", horario: "Lunes 16:00 - 17:30", estado: "PRESENTE" },
-          { fecha: "2026-08-07", horario: "Jueves 16:00 - 17:30", estado: "AUSENTE" },
+          { fecha: "2026-08-10", horario: "Lunes 16:00 - 17:30", estado: "present" },
+          { fecha: "2026-08-07", horario: "Jueves 16:00 - 17:30", estado: "absent" },
         ],
       },
       representados: [],
