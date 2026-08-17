@@ -9,13 +9,13 @@
  * BFF Route Handlers: role enforcement (ADMINISTRADOR/ENTRENADOR for both
  * read and write) is the backend's job via `GestorPermisos` — these handlers
  * just proxy whatever status FastAPI returns. GET enriches each Asistencia
- * with the student's name and a "Día HH:mm — HH:mm" schedule label
- * (resolved via `/asistencias/horarios` + `fetchPersonaNameMap`, see
- * src/lib/server/attendance-adapter.ts — that helper falls back to per-id
- * `/personas/{id}` lookups when the bulk roster read 403s, which is every
- * ENTRENADOR call, ASI-4) since the DTO only carries bare ids. Consumed by
- * the admin `/attendance` overview, `/reports`, `/dashboard`, the trainer
- * dashboard/history pages, and the trainer panel's "última lista".
+ * with a "Día HH:mm — HH:mm" schedule label (resolved via
+ * `/asistencias/horarios`, see src/lib/server/attendance-adapter.ts); the
+ * student's name travels straight in `AsistenciaResponseDTO` (issue #358,
+ * `personaNombreCompleto`), so there is no per-id `/personas/{id}` lookup
+ * here anymore. Consumed by the admin `/attendance` overview, `/reports`,
+ * `/dashboard`, the trainer dashboard/history pages, and the trainer
+ * panel's "última lista".
  *
  * POST replaces the old frontend-only prototype in `/trainer/attendance`
  * (previously "no data is persisted") — it issues one real
@@ -29,7 +29,6 @@ import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import {
   buildAttendanceRecord,
-  fetchPersonaNameMap,
   ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND,
   type BackendAsistencia,
   type BackendHorario,
@@ -103,16 +102,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const asistencias = reportesResult.items;
 
-  const [horariosResult, personas] = await Promise.all([
-    backendFetchAuthed(request, "/asistencias/horarios"),
-    fetchPersonaNameMap(request, asistencias.map((a) => a.personaId)),
-  ]);
+  const horariosResult = await backendFetchAuthed(request, "/asistencias/horarios");
   const horarios: BackendHorario[] =
     horariosResult.ok && horariosResult.response.ok ? await horariosResult.response.json() : [];
   const horariosById = new Map(horarios.map((h) => [h.id, h]));
 
   const records = asistencias.map((asistencia) =>
-    buildAttendanceRecord(asistencia, horariosById.get(asistencia.horarioId), personas),
+    buildAttendanceRecord(asistencia, horariosById.get(asistencia.horarioId)),
   );
 
   const response = NextResponse.json(records);

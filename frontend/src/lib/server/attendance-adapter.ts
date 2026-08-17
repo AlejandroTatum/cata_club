@@ -40,17 +40,14 @@ export interface BackendAsistencia {
   justificativo?: string | null;
   estadoJustificativo?: boolean | null;
   personaId: number;
+  /** The student's display name, resolved by the backend (issue #358) —
+   *  replaces the per-id `/personas/{id}` fan-out this adapter used to do. */
+  personaNombreCompleto: string;
   horarioId: number;
   /** Who took the list (issue #263) — nullable for legacy rows. */
   registradoPorId?: number | null;
   /** The taker's display name, already resolved by the backend. */
   registradoPorNombre?: string | null;
-}
-
-export interface BackendPersonaName {
-  id: number;
-  nombres: string;
-  apellidos: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,58 +100,10 @@ export function trimSeconds(hhmmss: string): string {
   return hhmmss.slice(0, 5);
 }
 
-export function personaFullName(persona: BackendPersonaName | undefined, fallback: string): string {
-  return persona ? `${persona.nombres} ${persona.apellidos}`.trim() : fallback;
-}
-
 /** "Lunes 15:00 — 16:30" — used as AttendanceRecord.horario, since Horario has no name/court to label a session by. */
 export function horarioLabel(horario: Pick<BackendHorario, "diaSemana" | "horaInicio" | "horaFin">): string {
   const dia = DIA_SEMANA_LABELS[DIA_SEMANA_BACKEND_TO_FRONTEND[horario.diaSemana]] ?? horario.diaSemana;
   return `${dia} ${trimSeconds(horario.horaInicio)} — ${trimSeconds(horario.horaFin)}`;
-}
-
-/**
- * Fetch every Persona referenced by `personaIds` and index by id.
- *
- * Tries the bulk roster first (`GET /personas/?limit=200`, one call) — works
- * for ADMINISTRADOR, who is the only role that endpoint is granted to:
- * `PersonaResponseDTO` carries real PII (cédula, teléfono, fecha de
- * nacimiento), so `personas_router.py` deliberately keeps the full-roster
- * read off-limits to ENTRENADOR (see the router's own comment at that
- * route). For a trainer session the bulk call 403s every time — the old
- * code swallowed that into an empty map, which made every attendance record
- * a trainer viewed fall back to the generic "Persona {id}" placeholder:
- * not a rare degradation but the 100% case for that role (ASI-4).
- *
- * ENTRENADOR already has a real, narrower grant: `GET /personas/{id}`
- * privileges ADMINISTRADOR_O_ENTRENADOR (personas_router.py, `obtener_persona`)
- * — the same per-id access the "pasar lista" roster already relies on. So on
- * a 403 this falls back to resolving each distinct id individually instead
- * of degrading in silence. `personaIds` is the distinct set already present
- * in the records being enriched (one page of attendance history), never the
- * whole club roster, so the fallback stays small.
- */
-export async function fetchPersonaNameMap(
-  request: NextRequest,
-  personaIds: Iterable<number>,
-): Promise<Map<number, BackendPersonaName>> {
-  const bulkResult = await backendFetchAuthed(request, "/personas/?limit=200");
-  if (bulkResult.ok && bulkResult.response.ok) {
-    const body = (await bulkResult.response.json()) as { items: BackendPersonaName[] };
-    return new Map(body.items.map((p) => [p.id, p]));
-  }
-
-  const ids = [...new Set(personaIds)];
-  const lookups = await Promise.all(
-    ids.map(async (id): Promise<BackendPersonaName | null> => {
-      const result = await backendFetchAuthed(request, `/personas/${id}`);
-      if (!result.ok || !result.response.ok) return null;
-      return (await result.response.json()) as BackendPersonaName;
-    }),
-  );
-  return new Map(
-    lookups.filter((p): p is BackendPersonaName => p !== null).map((p) => [p.id, p]),
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +122,6 @@ export function buildTrainingSchedule(horario: BackendHorario): TrainingSchedule
 export function buildAttendanceRecord(
   asistencia: BackendAsistencia,
   horario: BackendHorario | undefined,
-  personas: Map<number, BackendPersonaName>,
 ): AttendanceRecord {
   return {
     id: String(asistencia.id),
@@ -184,7 +132,10 @@ export function buildAttendanceRecord(
     // pretty name but never the ability to address the session.
     horarioId: asistencia.horarioId,
     personaId: asistencia.personaId,
-    estudiante: personaFullName(personas.get(asistencia.personaId), `Persona ${asistencia.personaId}`),
+    // Resolved by the backend (issue #358) — no more per-id `/personas/{id}`
+    // fan-out, which was the last PII leak that endpoint had left open to
+    // ENTRENADOR (cédula, teléfono, fecha de nacimiento of any persona).
+    estudiante: asistencia.personaNombreCompleto,
     estado: ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND[asistencia.estado],
     registradoPorId: asistencia.registradoPorId ?? null,
     registradoPorNombre: asistencia.registradoPorNombre ?? null,

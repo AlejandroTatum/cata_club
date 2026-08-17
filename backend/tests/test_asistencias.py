@@ -795,3 +795,76 @@ def test_asistencia_historica_sin_autor_expone_null(client, db_session):
     items = historial.json()["items"]
     assert items[0]["registradoPorId"] is None
     assert items[0]["registradoPorNombre"] is None
+
+
+# --- Issue #358: el DTO lleva el nombre de la persona en origen ------------
+# Reemplaza el rodeo por `GET /personas/{id}` que el BFF hacía SOLO para
+# pintar el nombre en "revisar listas" (`fetchPersonaNameMap`,
+# attendance-adapter.ts) -- ese endpoint exponía cédula/teléfono/fecha de
+# nacimiento con ids secuenciales, y ahora vuelve a ser SOLO_ADMINISTRADOR.
+
+def test_registrar_asistencia_expone_nombre_de_la_persona(client):
+    """El DTO de creación expone `personaNombreCompleto` resuelto (join a
+    Persona), mismo patrón que `registrado_por_nombre` (#263)."""
+    autor, alumno, horario = _crear_autor_y_alumno(client)
+
+    resp = client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": str(date(2026, 7, 13)), "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["personaNombreCompleto"] == "Ana Torres"
+
+
+def test_historial_expone_nombre_de_la_persona(client):
+    """El listado por persona (`GET /asistencias/persona/{id}`) también lleva
+    el nombre en cada item, con el mismo criterio."""
+    autor, alumno, horario = _crear_autor_y_alumno(client)
+
+    client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": str(date(2026, 7, 13)), "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+
+    historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
+    assert historial.status_code == 200
+    items = historial.json()["items"]
+    assert items[0]["personaNombreCompleto"] == "Ana Torres"
+
+
+def test_historial_no_agrega_n_mas_uno_al_exponer_el_nombre(client, db_session, contar_selects):
+    """`listar_por_persona` ya hace joinedload de `persona` (asistencia_
+    repositorio.py) para `registrado_por_nombre` -- este test fija que
+    `persona_nombre_completo` reutiliza ese mismo eager-load y no dispara un
+    SELECT extra por fila al crecer la cantidad de registros."""
+    from app.infraestructura.repositorios.asistencia_repositorio import AsistenciaRepositorio
+
+    autor, alumno, horario = _crear_autor_y_alumno(client)
+    for fecha in ["2026-07-13", "2026-07-20", "2026-07-27"]:
+        resp = client.post(
+            "/api/v1/asistencias/",
+            json={
+                "fecha_entrenamiento": fecha, "estado": "PRESENTE",
+                "persona_id": alumno["id"], "horario_id": horario["id"],
+            },
+        )
+        assert resp.status_code == 201
+    db_session.expire_all()  # fuerza recarga real desde la BD
+
+    repo = AsistenciaRepositorio(db_session)
+    with contar_selects() as sentencias:
+        resultado = repo.listar_por_persona(alumno["id"])
+        nombres = [a.persona_nombre_completo for a in resultado]
+
+    assert len(resultado) == 3
+    assert nombres == ["Ana Torres", "Ana Torres", "Ana Torres"]
+    selects = [s for s in sentencias if s.strip().upper().startswith("SELECT")]
+    assert len(selects) == 1, (
+        f"Se esperaba 1 sola sentencia SELECT (persona ya joinedloaded), se ejecutaron {len(selects)}: {selects}"
+    )

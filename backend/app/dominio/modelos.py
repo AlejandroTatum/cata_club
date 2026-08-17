@@ -694,6 +694,19 @@ class Asistencia(Base):
             return None
         return f"{autor.nombres} {autor.apellidos}".strip()
 
+    @property
+    def persona_nombre_completo(self) -> str:
+        """Nombre completo de la persona, expuesto como `personaNombreCompleto`
+        en `AsistenciaResponseDTO` (issue #358). Reemplaza el rodeo que hacía
+        el BFF (`fetchPersonaNameMap`, attendance-adapter.ts): pedir la ficha
+        completa por `GET /personas/{id}` -- cédula, teléfono, fecha de
+        nacimiento incluidos -- solo para pintar este nombre en "revisar
+        listas". `persona_id` es FK NOT NULL, así que `self.persona` siempre
+        resuelve. Mismo criterio de eager-load que `registrado_por_nombre`:
+        va joinedloaded en los listados del repositorio (evita N+1); en la
+        creación (una sola fila) se resuelve por lazy load."""
+        return f"{self.persona.nombres} {self.persona.apellidos}".strip()
+
 
 # ---------------------------------------------------------------------------
 # Asignación directa Alumno ↔ Horario (muchos a muchos)

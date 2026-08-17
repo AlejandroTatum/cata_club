@@ -119,8 +119,7 @@ export interface BackendPersonaWithRepresentante extends BackendPersona {
  * representante's name when the persona is represented, otherwise the
  * persona's own name (self-managed). Derived locally from one paginated
  * `/personas/` fetch — same avoid-N+1 tradeoff as
- * `members-adapter.ts#buildMemberAccounts` and
- * `attendance-adapter.ts#fetchPersonaNameMap`. A dangling `representanteId`
+ * `members-adapter.ts#buildMemberAccounts`. A dangling `representanteId`
  * (representante not present in the fetched batch) falls back to the
  * persona's own name rather than a placeholder.
  */
