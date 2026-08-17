@@ -52,7 +52,7 @@ test("members disclose visible results and essential membership information at 3
 
   await page.goto("/members");
 
-  await expect(page.getByRole("status", { name: "Resultados mostrados" })).toHaveText("1 resultados mostrados");
+  await expect(page.getByRole("status", { name: "Resultados mostrados" })).toHaveText("1 resultado mostrado");
 
   /*
    * Below `sm` an account is now a card (members/page.tsx `AccountCard`), not
@@ -98,7 +98,7 @@ test("members show an incomplete-coverage notice when 200 personas collapse into
 
   await page.goto("/members");
 
-  await expect(page.getByRole("status", { name: "Resultados mostrados" })).toHaveText("1 resultados mostrados");
+  await expect(page.getByRole("status", { name: "Resultados mostrados" })).toHaveText("1 resultado mostrado");
   await expect(page.getByText(/La fuente devuelve hasta 200 registros/)).toContainText("puede estar incompleto");
   await expect(page.getByRole("navigation", { name: /paginación/i })).toHaveCount(0);
 });
