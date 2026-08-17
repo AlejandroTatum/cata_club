@@ -34,7 +34,6 @@
 import type { ReactElement } from "react";
 import type { BackendTipoRol } from "@/types/domain";
 import { getUserInitials } from "@/lib/auth-utils";
-import { joinWithY } from "@/lib/format-utils";
 import DataBox from "./DataBox";
 import { cn } from "./cn";
 
@@ -78,11 +77,27 @@ export type MemberRole = BackendTipoRol;
 export const MEMBER_ROLE_LABELS: Record<MemberRole, (represents: readonly string[]) => string> = {
   ALUMNO: () => "Jugador",
   REPRESENTANTE: (represents) => {
-    const names = joinWithY(represents);
-    // The relationship without its object. A representative row whose players
-    // the caller does not hold is still a representative — the degraded label
-    // is the role alone, never a guess and never an absence.
-    return names ? `Representante de ${names}` : "Representante";
+    // CUÁNTOS, no quiénes. Nombrarlos a todos hacía crecer la celda con la
+    // familia: una cuenta de siete entraba a la grilla como siete nombres
+    // unidos por comas en una sola línea, y la fila se amontonaba. El conteo
+    // ocupa lo mismo con uno que con siete.
+    //
+    // El resumen NO reemplaza a los nombres, los aplaza: la fila de la grilla
+    // se despliega y los nombra a todos, enteros, y el diálogo de la cuenta
+    // los lista en "Estudiantes a cargo". La excepción a la regla de las
+    // palabras está escrita en `docs/ux/rediseno-visual-2026-08.md`, al lado
+    // de la de las siete letras de los días.
+    //
+    // Un solo formato para la columna, también con un jugador: alternar
+    // "Representante de Sofía González" en una fila y
+    // "Representante · 7 jugadores" en la de al lado es exactamente lo que la
+    // regla del formato prohíbe.
+    const count = represents.length;
+    // La relación sin su objeto. Una fila cuyos representados el llamador no
+    // tiene sigue siendo un representante — la etiqueta degradada es el rol
+    // solo, nunca una suposición y nunca una ausencia.
+    if (count === 0) return "Representante";
+    return `Representante · ${count} ${count === 1 ? "jugador" : "jugadores"}`;
   },
   ENTRENADOR: () => "Entrenador",
   ADMINISTRADOR: () => "Administrador",
@@ -113,8 +128,18 @@ export interface IdentityCellProps {
    * A list, because `MemberAccount.estudiantes` is a list: the members screen's
    * own mock fixtures already carry accounts with two and three players under
    * one representative, so a single-name prop would have been a field that is
-   * wrong for a third of the real rows. All of them are named — D9's rule of
-   * words spends width on the truth rather than on "Ana y 2 más".
+   * wrong for a third of the real rows.
+   *
+   * La celda ya NO los nombra: cuenta. Este comentario decía que la regla de
+   * las palabras gasta ancho en la verdad antes que en "Ana y 2 más", y esa
+   * afirmación dejó de ser cierta el día que la fila pasó a resumir — una
+   * familia de siete llenaba la celda de nombres. Sigue recibiendo la lista
+   * entera porque el conteo sale de ella, y porque el largo es lo único que
+   * decide si la cuenta representa a alguien.
+   *
+   * Los nombres no se perdieron: quien los necesita despliega la fila
+   * (`members/page.tsx`, `AccountRow`) o abre el diálogo de la cuenta. La
+   * excepción está escrita en `docs/ux/rediseno-visual-2026-08.md`.
    */
   represents?: readonly string[];
   className?: string;

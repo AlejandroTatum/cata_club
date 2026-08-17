@@ -164,8 +164,12 @@ function ModalSection({
 // ---------------------------------------------------------------------------
 // Student edit panel — rendered inside the account's edit modal, one per
 // `account.estudiantes` entry. Was previously a `<tr>` shown by expanding
-// the account row; the row no longer expands, so all of this content
-// (and its editing actions) now lives exclusively in the modal.
+// the account row.
+//
+// La fila volvió a desplegarse (`AccountRow`), así que conviene ser exacto: lo
+// que despliega son los NOMBRES de los representados y nada más. Todo lo
+// editable — ficha médica, membresía, pagos — sigue viviendo solo en el modal,
+// que es de donde se lo sacó.
 // ---------------------------------------------------------------------------
 
 interface StudentRowProps {
@@ -432,8 +436,17 @@ function EditAccountButton({ account, onEdit }: AccountListItemProps): React.Rea
 function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
   const { roles, represents } = getAccountIdentity(account);
+  const [playersOpen, setPlayersOpen] = useState(false);
+
+  const fullName = `${account.nombres} ${account.apellidos}`;
+  // Sin representados no hay nada que desplegar: una raíz que se sostiene a sí
+  // misma no prueba ninguna relación, y un disclosure vacío es un control que
+  // se puede accionar y no hace nada.
+  const canExpand = represents.length > 0;
+  const panelId = `jugadores-cuenta-${account.id}`;
 
   return (
+    <>
     <TableRow>
       {/* D9's shared identity cell, not a second drawing of the same layout.
           What it says comes from `getAccountIdentity`, and what it does NOT say
@@ -447,11 +460,25 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
           edit dialog. The companion line survives only where `estudiantes`
           proves a relationship — see `getAccountIdentity`'s own doc. */}
       <TableCell>
-        <IdentityCell
-          name={`${account.nombres} ${account.apellidos}`}
-          roles={roles}
-          represents={represents}
-        />
+        <div className="flex items-center gap-2">
+          <IdentityCell name={fullName} roles={roles} represents={represents} />
+          {/* El disclosure vive pegado a la identidad porque lo que despliega
+              es la identidad: la celda dice CUÁNTOS y este control dice
+              quiénes. `tertiary` por la misma razón que "Editar" — una fila no
+              gana un segundo contorno. */}
+          {canExpand && (
+            <Button
+              variant="tertiary"
+              size="sm"
+              aria-expanded={playersOpen}
+              aria-controls={panelId}
+              aria-label={`${playersOpen ? "Ocultar" : "Ver"} jugadores de ${fullName}`}
+              onClick={() => setPlayersOpen((open) => !open)}
+            >
+              {playersOpen ? "Ocultar" : "Ver"}
+            </Button>
+          )}
+        </div>
       </TableCell>
       <TableCell type="number">{account.estudiantes.length}</TableCell>
       <TableCell type="badge">
@@ -461,6 +488,26 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
         <EditAccountButton account={account} onEdit={onEdit} />
       </TableCell>
     </TableRow>
+    {/* La verdad completa que la fila colapsada aplaza. Fila aparte porque un
+        `<tr>` no anida: es la única forma de que los nombres ocupen el ancho
+        de la tabla en vez de ensanchar la columna de identidad, que es
+        justamente lo que se vino a arreglar. Todos, enteros y sin `truncate`. */}
+    {canExpand && playersOpen && (
+      <TableRow>
+        <TableCell colSpan={4}>
+          <ul
+            id={panelId}
+            aria-label={`Jugadores de ${fullName}`}
+            className="flex flex-wrap gap-x-6 gap-y-1 py-1 text-sm text-ink"
+          >
+            {represents.map((nombre) => (
+              <li key={nombre}>{nombre}</li>
+            ))}
+          </ul>
+        </TableCell>
+      </TableRow>
+    )}
+    </>
   );
 }
 

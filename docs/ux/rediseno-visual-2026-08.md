@@ -149,9 +149,28 @@ Tres reglas, y las tres valen para todo el producto:
   nunca una palabra cortada. Nada de "Rep.", "Cat." ni "Hor.". Y ninguna etiqueta que se deduzca de
   otra: si está el representante, sobra decir "menor".
 
-Única excepción declarada a la regla de las palabras: las siete letras de la franja de días, que
-**no son palabras abreviadas sino posiciones de una escala** —se lee el dibujo, no el texto— y
-llevan el nombre completo del día para el lector de pantalla.
+Excepciones declaradas a la regla de las palabras (dos, y ninguna más):
+
+1. Las siete letras de la franja de días, que **no son palabras abreviadas sino posiciones de una
+   escala** —se lee el dibujo, no el texto— y llevan el nombre completo del día para el lector de
+   pantalla.
+2. El resumen de representados en la grilla de Miembros: `Representante · 7 jugadores` en lugar de
+   los siete nombres. **Qué cubre:** solo la fila colapsada de `/members`, solo la lista de personas
+   a cargo de una cuenta; ninguna otra columna puede invocarla. **Por qué la regla general no
+   aplica:** la regla protege a la palabra de ser cortada —"Rep.", "Cat."— y aquí no se corta
+   ninguna; se cambia de dato. La fila deja de responder *quiénes* y responde *cuántos*, que es una
+   verdad entera, no una verdad recortada. La regla del formato manda sobre la lista completa: el
+   conteo se usa **también con un solo jugador**, porque alternar un nombre en una fila y un número
+   en la de al lado es la inconsistencia que esa regla prohíbe. **Dónde sigue estando la verdad
+   completa:** los nombres no se fueron a ningún lado inaccesible — la fila **se despliega** y los
+   nombra a todos, enteros y sin truncar (`AccountRow`, `members/page.tsx`), y el diálogo de la
+   cuenta los lista en «Estudiantes a cargo». Bajo `sm`, donde la tarjeta no despliega, el diálogo
+   es la única casa del dato y por eso no puede dejar de listarlos.
+
+El motivo de la enmienda: `getAccountIdentity` mapea a todos los representados y `joinWithY` los une
+sin tope, así que una familia de siete entraba a la grilla como siete nombres con comas en una sola
+línea. La regla estaba bien escrita y aun así producía una fila ilegible; se enmienda a la vista, no
+se incumple en silencio.
 
 **Vocabulario.** El producto tenía **tres palabras para la misma persona**: *Jugador* al inscribirse
 y al crear la cuenta, *alumno* en la tabla y en las direcciones, *estudiante* en el rol y en la

@@ -45,14 +45,14 @@ describe("IdentityCell — the companion line is a LIST", () => {
     render(
       <IdentityCell name="Marta Salas" roles={["ALUMNO", "REPRESENTANTE"]} represents={["Ana Pérez"]} />,
     );
-    expect(roleLine()).toEqual(["Jugador", "Representante de Ana Pérez"]);
+    expect(roleLine()).toEqual(["Jugador", "Representante · 1 jugador"]);
   });
 
   it("draws the roles in one fixed order, whatever order they arrive in", () => {
     render(
       <IdentityCell name="Marta Salas" roles={["REPRESENTANTE", "ALUMNO"]} represents={["Ana Pérez"]} />,
     );
-    expect(roleLine()).toEqual(["Jugador", "Representante de Ana Pérez"]);
+    expect(roleLine()).toEqual(["Jugador", "Representante · 1 jugador"]);
   });
 
   it("collapses a role the caller sent twice", () => {
@@ -64,7 +64,7 @@ describe("IdentityCell — the companion line is a LIST", () => {
 describe("IdentityCell — one map owns the words", () => {
   it("spells the four roles the way the club says them", () => {
     expect(MEMBER_ROLE_LABELS.ALUMNO([])).toBe("Jugador");
-    expect(MEMBER_ROLE_LABELS.REPRESENTANTE(["Ana Pérez"])).toBe("Representante de Ana Pérez");
+    expect(MEMBER_ROLE_LABELS.REPRESENTANTE(["Ana Pérez"])).toBe("Representante · 1 jugador");
     expect(MEMBER_ROLE_LABELS.ENTRENADOR([])).toBe("Entrenador");
     expect(MEMBER_ROLE_LABELS.ADMINISTRADOR([])).toBe("Administrador");
   });
@@ -87,13 +87,21 @@ describe("IdentityCell — one map owns the words", () => {
   });
 });
 
-describe("IdentityCell — the representative names who they represent", () => {
-  it("names one player", () => {
+/**
+ * Estos candados decían los NOMBRES. Se cambian a conciencia, no se borran:
+ * la celda pasó a contar porque una familia de siete llenaba la fila de la
+ * grilla con siete nombres en una línea. Los nombres siguen existiendo, pero
+ * ya no acá — la fila de `/members` se despliega y los muestra enteros.
+ * Excepción escrita en `docs/ux/rediseno-visual-2026-08.md`.
+ */
+describe("IdentityCell — the representative counts who they represent", () => {
+  it("counts one player", () => {
     render(<IdentityCell name="Marta Salas" roles={["REPRESENTANTE"]} represents={["Ana Pérez"]} />);
-    expect(roleLine()).toEqual(["Representante de Ana Pérez"]);
+    // Con uno también cuenta: un formato por columna, sin excepciones.
+    expect(roleLine()).toEqual(["Representante · 1 jugador"]);
   });
 
-  it("names two with the club's own grammar", () => {
+  it("counts two without naming either", () => {
     render(
       <IdentityCell
         name="Marta Salas"
@@ -101,10 +109,10 @@ describe("IdentityCell — the representative names who they represent", () => {
         represents={["Ana Pérez", "Luis Pérez"]}
       />,
     );
-    expect(roleLine()).toEqual(["Representante de Ana Pérez y Luis Pérez"]);
+    expect(roleLine()).toEqual(["Representante · 2 jugadores"]);
   });
 
-  it("names three, because a member account really does hold several players", () => {
+  it("keeps one width whatever the family size, because that was the whole point", () => {
     render(
       <IdentityCell
         name="Marta Salas"
@@ -112,7 +120,9 @@ describe("IdentityCell — the representative names who they represent", () => {
         represents={["Ana Pérez", "Luis Pérez", "Sofía Pérez"]}
       />,
     );
-    expect(roleLine()).toEqual(["Representante de Ana Pérez, Luis Pérez y Sofía Pérez"]);
+    expect(roleLine()).toEqual(["Representante · 3 jugadores"]);
+    // El reclamo del dueño, como candado: los nombres no entran en la celda.
+    expect(screen.queryByText(/Ana Pérez/)).not.toBeInTheDocument();
   });
 
   it("says the role alone when no name came with it", () => {
