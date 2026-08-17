@@ -15,10 +15,14 @@ class AntecedentesClubRepositorio:
             .first()
         )
 
-    def crear(self, antecedentes: AntecedentesClub) -> AntecedentesClub:
+    def crear(self, antecedentes: AntecedentesClub, *, commit: bool = True) -> AntecedentesClub:
+        """`commit=False`: ver `PersonaRepositorio.crear` (issue #338)."""
         self.db.add(antecedentes)
-        self.db.commit()
-        self.db.refresh(antecedentes)
+        if commit:
+            self.db.commit()
+            self.db.refresh(antecedentes)
+        else:
+            self.db.flush()
         return antecedentes
 
     def guardar_cambios(self, antecedentes: AntecedentesClub) -> AntecedentesClub:

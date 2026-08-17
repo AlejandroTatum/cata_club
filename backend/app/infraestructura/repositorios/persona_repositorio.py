@@ -69,10 +69,17 @@ class PersonaRepositorio:
     # `contar_por_rol` se eliminaron junto con el ranking competitivo: su
     # único consumidor era `RankingServicio.listar_alumnos_con_nivel`.
 
-    def crear(self, persona: Persona) -> Persona:
+    def crear(self, persona: Persona, *, commit: bool = True) -> Persona:
+        """`commit=False` deja la fila en un `flush()` (con `id` ya asignado)
+        sin cerrar la transacción -- lo usa `EnrollmentServicio.enroll` para
+        que representante + menor + roles + inscripción se escriban en una
+        sola transacción atómica (issue #338): todo o nada."""
         self.db.add(persona)
-        self.db.commit()
-        self.db.refresh(persona)
+        if commit:
+            self.db.commit()
+            self.db.refresh(persona)
+        else:
+            self.db.flush()
         return persona
 
     def actualizar(self, persona: Persona, cambios: dict) -> Persona:
