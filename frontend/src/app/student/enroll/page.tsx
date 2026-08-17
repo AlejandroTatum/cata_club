@@ -356,6 +356,7 @@ function EnrollWizard(): React.ReactElement {
       inputMode?: string;
       hint?: string;
       numericMode?: NumericFieldMode;
+      autoComplete?: string;
     },
   ): React.ReactElement {
     return (
@@ -594,6 +595,7 @@ function EnrollWizard(): React.ReactElement {
             type: "email",
             required: isSelf,
             placeholder: example("correo@ejemplo.com"),
+            autoComplete: "email",
           })}
           {renderField("contrasenia", {
             label: "Contraseña",
@@ -602,6 +604,7 @@ function EnrollWizard(): React.ReactElement {
             type: "password",
             required: isSelf,
             hint: "Al menos 8 caracteres.",
+            autoComplete: "new-password",
           })}
         </div>
       </div>
@@ -627,6 +630,7 @@ function EnrollWizard(): React.ReactElement {
           placeholder: example("María Fernanda"),
           required: true,
           icon: <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+          autoComplete: "given-name",
         })}
 
         {renderField("apellidosRepresentante", {
@@ -636,6 +640,7 @@ function EnrollWizard(): React.ReactElement {
           placeholder: example("Mora Salas"),
           required: true,
           icon: <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+          autoComplete: "family-name",
         })}
 
         {renderField("cedulaRepresentante", {
@@ -657,6 +662,7 @@ function EnrollWizard(): React.ReactElement {
           onChange: (v) => updateField("fechaNacimientoRepresentante", v),
           type: "date",
           required: true,
+          autoComplete: "bday",
         })}
 
         {renderField("telefonoRepresentante", {
@@ -668,6 +674,7 @@ function EnrollWizard(): React.ReactElement {
           numericMode: "phone",
           required: true,
           hint: PHONE_HINT,
+          autoComplete: "tel",
         })}
 
         <div className="my-page h-px bg-line" />
@@ -679,6 +686,7 @@ function EnrollWizard(): React.ReactElement {
           type: "email",
           placeholder: example("correo@ejemplo.com"),
           required: true,
+          autoComplete: "email",
         })}
 
         {renderField("contraseniaRepresentante", {
@@ -688,6 +696,7 @@ function EnrollWizard(): React.ReactElement {
           type: "password",
           required: true,
           hint: "Al menos 8 caracteres.",
+          autoComplete: "new-password",
         })}
 
         <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-page text-xs text-state-warn">

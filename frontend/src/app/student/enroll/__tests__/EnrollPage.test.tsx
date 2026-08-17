@@ -151,6 +151,25 @@ describe("EnrollPage — the named stepper", () => {
   });
 });
 
+// #312 / hallazgo #33 — same gap on the representative step (paso 3).
+describe("EnrollPage — autocomplete on the representative step", () => {
+  it("declares autocomplete on the representative's own fields", () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    // The representative step's own fields carry PLAIN labels ("Nombres",
+    // not "Nombres del representante") — the card title says whose data
+    // this is, so only one "Nombres" field exists on screen at a time.
+    expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("autoComplete", "given-name");
+    expect(screen.getByLabelText(/^Apellidos/)).toHaveAttribute("autoComplete", "family-name");
+    expect(screen.getByLabelText(/fecha de nacimiento/i)).toHaveAttribute("autoComplete", "bday");
+    expect(screen.getByLabelText(/^Teléfono/)).toHaveAttribute("autoComplete", "tel");
+    expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("autoComplete", "email");
+    expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("autoComplete", "new-password");
+  });
+});
+
 describe("EnrollPage — choice cards", () => {
   it("marks the selected type with the coal + ball pill, never a red one", () => {
     render(<EnrollPage />);
@@ -301,6 +320,20 @@ describe("EnrollPage — error prevention on the student step", () => {
 
     expect(screen.queryByText(/1011 años/)).not.toBeInTheDocument();
     expect(screen.getByText(/revise el año/i)).toBeInTheDocument();
+  });
+
+  // #312 / hallazgo #33 — ningún campo declaraba autocomplete, así que el
+  // navegador no podía ofrecer nada guardado en un formulario de 17 campos.
+  it("declares autocomplete on every field the browser can actually fill", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+
+    expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("autoComplete", "given-name");
+    expect(screen.getByLabelText(/^Apellidos/)).toHaveAttribute("autoComplete", "family-name");
+    expect(screen.getByLabelText(/fecha de nacimiento/i)).toHaveAttribute("autoComplete", "bday");
+    expect(screen.getByLabelText(/^Teléfono/)).toHaveAttribute("autoComplete", "tel");
+    expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("autoComplete", "email");
+    expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("autoComplete", "new-password");
   });
 
   it("keeps a minor from self-enrolling, with the message on the birth-date field", () => {

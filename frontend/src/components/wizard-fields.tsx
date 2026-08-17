@@ -100,6 +100,13 @@ interface WizardInputProps {
   max?: string;
   inputMode?: string;
   /**
+   * Standard autofill token (`given-name`, `family-name`, `bday`, `tel`,
+   * `email`, `new-password`, …) — issue #312 / hallazgo #33: without it the
+   * browser has nothing to offer back on a 17-field form spread over 5
+   * screens.
+   */
+  autoComplete?: string;
+  /**
    * The field's own validation message, shown BESIDE the field
    * (`_sistema.css` `.input.err` + `.errmsg`). Passing `undefined` keeps the
    * field in its resting state — callers surface an error only once the
@@ -217,6 +224,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           minLength={opts.minLength}
           min={opts.min}
           max={opts.max}
+          autoComplete={opts.autoComplete}
           aria-invalid={hasError || undefined}
           aria-describedby={opts.error || limitReached || opts.hint ? messageId : undefined}
           inputMode={(opts.inputMode ?? "text") as InputHTMLAttributes<HTMLInputElement>["inputMode"]}
@@ -361,14 +369,14 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         idPrefix={idPrefix} field="nombres" disabled={disabled} label="Nombres" value={props.nombres}
         onChange={props.onNombresChange} placeholder={example("Juan Carlos")} required
         icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-        error={errors.nombres} onBlur={() => props.onFieldBlur?.("nombres")}
+        error={errors.nombres} onBlur={() => props.onFieldBlur?.("nombres")} autoComplete="given-name"
         pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <WizardInput
         idPrefix={idPrefix} field="apellidos" disabled={disabled} label="Apellidos" value={props.apellidos}
         onChange={props.onApellidosChange} placeholder={example("Rodríguez López")} required
         icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-        error={errors.apellidos} onBlur={() => props.onFieldBlur?.("apellidos")}
+        error={errors.apellidos} onBlur={() => props.onFieldBlur?.("apellidos")} autoComplete="family-name"
         pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <div className="grid gap-4 sm:grid-cols-2">
@@ -379,6 +387,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
           min={birthDateBounds.min} max={birthDateBounds.max}
           error={errors.fechaNacimiento} onBlur={() => props.onFieldBlur?.("fechaNacimiento")}
           hint="Año completo, de 4 dígitos (por ejemplo, 2015)."
+          autoComplete="bday"
         />
         <WizardInput
           idPrefix={idPrefix} field="cedula" disabled={disabled} label="Cédula de identidad" value={props.cedula}
@@ -400,6 +409,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         pattern="[0-9]+" inputMode="tel" numericMode="phone"
         error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
         hint={PHONE_HINT}
+        autoComplete="tel"
       />
       {/* `sunken`, not `canvas`. The surface ladder is canvas → sunken → paper,
           so `canvas` is the field the PAGE stands on; spending it on a recessed
