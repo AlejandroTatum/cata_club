@@ -747,6 +747,37 @@ export default function TrainerAttendancePage(): React.ReactElement {
     );
   }
 
+  /**
+   * Arrow-key navigation for the four-state radiogroup (issue #312 /
+   * hallazgo #26): the ARIA radiogroup pattern moves both focus and the
+   * checked state together, like a native `<input type="radio">` group.
+   * Extracted out of the JSX (rather than inlined in the `onKeyDown` prop)
+   * so the touch-target-floor marker on that button stays close enough to
+   * its `min-h-[44px]` class for `touch-target-usage.test.ts`'s static scan.
+   */
+  function handleAttendanceRadioKeyDown(
+    e: React.KeyboardEvent<HTMLButtonElement>,
+    studentIndex: number,
+    state: EstadoAsistencia,
+  ): void {
+    if (
+      e.key !== "ArrowRight" &&
+      e.key !== "ArrowLeft" &&
+      e.key !== "ArrowDown" &&
+      e.key !== "ArrowUp"
+    ) {
+      return;
+    }
+    e.preventDefault();
+    const nextState = arrowAttendanceState(state, e.key);
+    handleDirectAttendanceSet(studentIndex, nextState);
+    // Move focus WITH the checked state — the roving tabindex below only
+    // works if focus actually lands on the newly-checked radio.
+    const group = e.currentTarget.closest('[role="radiogroup"]');
+    const next = group?.querySelector<HTMLButtonElement>(`[role="radio"][data-state="${nextState}"]`);
+    next?.focus();
+  }
+
   /** The whole fiche is tappable — one target for the common case. */
   function handleCycleAttendance(studentIndex: number): void {
     commitStudents(
@@ -1560,45 +1591,23 @@ export default function TrainerAttendancePage(): React.ReactElement {
                           </span>
                           {ATTENDANCE_STATES.map((state) => {
                             const isActive = student.attendance === state;
+                            // Roving tabindex (issue #312 / hallazgo #26): the
+                            // ARIA radiogroup pattern is ONE tab stop per
+                            // group. Before this, all four buttons sat in tab
+                            // order — 5 Tab presses per student.
                             return (
-                              /* @touch-target Marked standing up, phone in hand — 44px at
-                                 every width, not only below `lg`. */
                               <button
                                 key={state}
                                 type="button"
                                 role="radio"
                                 onClick={() => handleDirectAttendanceSet(idx, state)}
-                                // Roving tabindex (issue #312 / hallazgo #26):
-                                // the ARIA radiogroup pattern is ONE tab stop
-                                // per group, not one per option. Before this,
-                                // all four buttons sat in tab order — 5 Tab
-                                // presses per student (fiche + 4 radios).
                                 tabIndex={isActive ? 0 : -1}
-                                onKeyDown={(e) => {
-                                  if (
-                                    e.key !== "ArrowRight" &&
-                                    e.key !== "ArrowLeft" &&
-                                    e.key !== "ArrowDown" &&
-                                    e.key !== "ArrowUp"
-                                  ) {
-                                    return;
-                                  }
-                                  e.preventDefault();
-                                  const nextState = arrowAttendanceState(state, e.key);
-                                  handleDirectAttendanceSet(idx, nextState);
-                                  // Move focus WITH the checked state, same as
-                                  // a native <input type="radio"> group — the
-                                  // roving tabindex above only works if focus
-                                  // actually lands on the newly-checked radio.
-                                  const group = e.currentTarget.closest('[role="radiogroup"]');
-                                  const next = group?.querySelector<HTMLButtonElement>(
-                                    `[role="radio"][data-state="${nextState}"]`,
-                                  );
-                                  next?.focus();
-                                }}
+                                onKeyDown={(e) => handleAttendanceRadioKeyDown(e, idx, state)}
                                 aria-checked={isActive}
                                 title={ATTENDANCE_LABELS[state]}
                                 data-state={state}
+                                /* @touch-target Marked standing up, phone in hand — 44px at
+                                   every width, not only below `lg`. */
                                 className={`inline-flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-2xs tracking-flat font-semibold leading-tight transition-colors ${
                                   isActive
                                     ? `border-transparent ${getAttendanceBadgeTokens(state).badgeClass}`
