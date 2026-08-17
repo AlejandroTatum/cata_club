@@ -417,6 +417,29 @@ describe("TrainerAttendanceHistoryPage", () => {
     );
   });
 
+  // La paridad con `/attendance` incluye el EJE del panel, no solo los tres
+  // controles. `/attendance` pasa `layout="row"` (page.tsx:178) y el historial
+  // no pasaba nada, o sea el default `column`, contra los 1408px del `measure`
+  // por defecto del shell: tres controles amontonados a la izquierda y la mitad
+  // derecha de la tarjeta vacía (issue #375).
+  //
+  // jsdom no calcula layout, así que no se puede medir el ancho. Lo que sí se
+  // puede afirmar es lo que el componente EXPRESA: `FilterPanel` traduce
+  // `layout` a `AXIS[layout]` (FilterPanel.tsx:127), y esas dos entradas no
+  // comparten ninguna clase — `column` es `flex flex-col`, `row` es una grilla.
+  // Espeja la forma de "flows the control slots across the width when asked
+  // to" en `components/ui/__tests__/FilterPanel.test.tsx`.
+  it("dibuja el panel de filtros sobre el eje horizontal, como `/attendance` (issue #375)", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+    await screen.findAllByRole("row");
+
+    const panel = screen.getByRole("region", { name: "Filtros de registros" });
+    const classes = panel.className.split(" ");
+
+    expect(classes).not.toContain("flex-col");
+    expect(classes).toContain("grid");
+  });
+
   it("leads back to Mi día", async () => {
     render(<TrainerAttendanceHistoryPage />);
 

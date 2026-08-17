@@ -114,11 +114,16 @@ export interface AttendanceFiltersProps {
   /** Populates the horario select. Pass `[]` while they are still loading. */
   schedules: TrainingSchedule[];
   /**
-   * Forwarded to `FilterPanel`. Two screens draw this component at two very
-   * different widths — `/attendance` gives it the whole page, the trainer's
-   * history gives it the left third — and the axis has to follow the column it
-   * is standing in, not a default chosen for one of them. Stacked stays the
-   * default because the narrow case is the one that breaks if it guesses wrong.
+   * Forwarded to `FilterPanel`. Both screens that draw this component —
+   * `/attendance` and the trainer's history — give it the WHOLE page, and both
+   * pass `row`. Neither has ever stood it in a rail; the note that said the
+   * history did was wrong, and the history spent that time stacked across
+   * 1408px because of it (issue #375).
+   *
+   * The prop stays anyway, because the axis belongs to the screen and not to
+   * this component. What decides it is written once, on `AXIS` in
+   * `ui/FilterPanel.tsx`; `column` is the default there, so it is the default
+   * here.
    */
   layout?: FilterPanelLayout;
   className?: string;

@@ -127,8 +127,10 @@ describe("FilterGroup", () => {
  * for a full-width page: `/attendance` spent 254px of a 900px viewport on three
  * controls stacked in the left 320px, with the whole right half of the card
  * empty — a quarter of the screen to ask three questions. The trainer's history
- * draws the same component in the left third of its layout, where stacking is
- * the only thing that fits.
+ * drew the same component the same way, at a wider measure still, and was fixed
+ * later (issue #375) — no caller has ever stood this panel in a rail. What the
+ * default protects is the panel with a SINGLE slot, which a grid would pin to
+ * one track with nothing beside it; see the note on `AXIS` in `FilterPanel.tsx`.
  *
  * So the axis becomes the caller's declaration, and only the axis: the slot
  * SEQUENCE — search, chips, fields, help — is unchanged in both, because "a
