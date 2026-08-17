@@ -1416,6 +1416,33 @@ describe("StudentPage — la fila de pulso", () => {
     expect(pulso.getByText("por semana")).toBeInTheDocument();
   });
 
+  // Issue #313 (K5 hallazgo #52): el tile decía "5 por semana" y la tarjeta
+  // "Esta semana" — que se llama a sí misma "el horario semanal" — listaba
+  // solo 3 días, con un tope fijo (`findNextTrainingSessions(..., 3)`) que
+  // no tenía nada que ver con cuántos entrenamientos el propio tile contaba.
+  // Ambas cifras ahora salen de la MISMA lista de ventanas semanales.
+  it("lista TODOS los entrenamientos de la semana en 'Esta semana', no un tope fijo de 3", async () => {
+    mockFetchHorariosPorAlumno.mockResolvedValue([
+      asignacion("LUNES", "17:00:00", "18:00:00", 1),
+      asignacion("MARTES", "17:00:00", "18:00:00", 2),
+      asignacion("MIERCOLES", "17:00:00", "18:00:00", 3),
+      asignacion("JUEVES", "17:00:00", "18:00:00", 4),
+      asignacion("VIERNES", "17:00:00", "18:00:00", 5),
+    ]);
+
+    render(<StudentPage />);
+
+    const pulso = within(await screen.findByTestId("student-pulse"));
+    await waitFor(() => {
+      expect(pulso.getByText("5")).toBeInTheDocument();
+    });
+
+    const panel = await screen.findByTestId("student-situation");
+    await waitFor(() => {
+      expect(within(panel).getAllByRole("listitem")).toHaveLength(5);
+    });
+  });
+
   it("dice que no sabe en vez de decir cero cuando el horario no cargó", async () => {
     // Un horario que falló no es un alumno sin entrenamientos, y un 0 se
     // dibujaría con la misma confianza que una cifra real.

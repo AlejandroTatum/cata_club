@@ -555,12 +555,23 @@ function TrainingPanel({
   viewingOwnProfile: boolean;
   studentName: string;
 }): React.ReactElement {
-  const sessions = useMemo(
+  // Issue #313 (K5 hallazgo #52): el tile "Entrenamientos" cuenta
+  // `buildWeeklyTrainingSchedule(...).length` — la MISMA lista de ventanas
+  // semanales — y esta tarjeta se llama a sí misma "Esta semana" / "el
+  // horario semanal". Un tope fijo de 3 (`findNextTrainingSessions(..., 3)`)
+  // hacía que el tile dijera 5 mientras la tarjeta solo listaba 3 días. El
+  // límite ahora es el largo real de esa misma lista: nunca corta lo que el
+  // tile ya prometió mostrar completo.
+  const weeklySlots = useMemo(
     () =>
       horariosState.status === "ready"
-        ? findNextTrainingSessions(buildWeeklyTrainingSchedule(horariosState.asignaciones), 3)
+        ? buildWeeklyTrainingSchedule(horariosState.asignaciones)
         : [],
     [horariosState],
+  );
+  const sessions = useMemo(
+    () => findNextTrainingSessions(weeklySlots, weeklySlots.length),
+    [weeklySlots],
   );
 
   const recap = summarizeRecentAttendance(profile.recentSessions);
