@@ -1573,8 +1573,13 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
+    // Scoped to `.toast-error` (issue #352's fix): `submitError` now ALSO
+    // renders inline in the confirmation step, so an unscoped `findByText`
+    // would match either node — this test is about the TOAST specifically,
+    // the one that is allowed to disappear on its own clock.
     const networkCutToast = await screen.findByText(
       "No se pudo registrar la asistencia. Intente nuevamente.",
+      { selector: ".toast-error p" },
     );
     expect(networkCutToast).toBeInTheDocument();
     const networkCutText = networkCutToast.textContent;
@@ -1586,7 +1591,9 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
       vi.advanceTimersByTime(15_000);
     });
     expect(
-      screen.queryByText("No se pudo registrar la asistencia. Intente nuevamente."),
+      screen.queryByText("No se pudo registrar la asistencia. Intente nuevamente.", {
+        selector: ".toast-error p",
+      }),
     ).not.toBeInTheDocument();
 
     // A total rejection never advances `step` away from "confirm" (see
@@ -1603,9 +1610,60 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
 
     const timeoutToast = await screen.findByText(
       "No se pudo registrar la asistencia. Intente nuevamente.",
+      { selector: ".toast-error p" },
     );
     expect(timeoutToast).toBeInTheDocument();
     expect(timeoutToast.textContent).toBe(networkCutText);
+  });
+
+  /**
+   * Issue #352, the actual gap: the test above proves the toast EXISTS, never
+   * that it PERSISTS — and it passed in green in PR #354 without fixing
+   * anything, because the toast dismisses itself in `TOAST_DURATION_MS`
+   * (4500ms, `ToastContext.tsx`) while the trainer's own wait for the
+   * timeout is `DEFAULT_TIMEOUT_MS` (10000ms, `services/api.ts`). By the
+   * time the failure lands, nobody is looking at the corner where the toast
+   * already came and went. This test advances past that window and demands
+   * the screen still say the save failed, next to the button the trainer
+   * would tap to retry.
+   */
+  it("el aviso de guardado fallido sigue en pantalla después de que el toast se autodescarta (issue #352)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockRejectedValue(new Error("Failed to fetch"));
+
+    render(
+      <ToastProvider>
+        <TrainerAttendancePage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+
+    // The persistent, inline copy — distinct from the toast's own `<p>`, and
+    // the one this test is actually about.
+    await screen.findByText("No se pudo registrar la asistencia. Intente nuevamente.", {
+      selector: ".alert-error",
+    });
+
+    // Past the toast's own dismissal window — the toast is gone, but the
+    // failure it reported has not stopped being true.
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    expect(
+      screen.getByText("No se pudo registrar la asistencia. Intente nuevamente.", {
+        selector: ".alert-error",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Confirmar asistencia/ }),
+    ).toBeInTheDocument();
   });
 });
 
