@@ -17,10 +17,19 @@ import ToastContainer from "@/components/ToastContainer";
 const mockReplace = vi.fn();
 /** Stable, so the "asks before leaving" test can see where it was sent. */
 const mockPush = vi.fn();
+/**
+ * #334: real `next/navigation` returns a referentially stable router object
+ * across renders. Building `{ push, replace }` inline inside `useRouter()`
+ * broke that — a fresh object every call fed `ProtectedRoute`'s effect
+ * dependency array, which combined with an unstable `allowedRoles` reference
+ * to refire the effect (and its toast call) every render, hanging the suite
+ * in a synchronous loop. Hoisting it here restores the real contract.
+ */
+const mockRouter = { push: mockPush, replace: mockReplace };
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/trainer/attendance",
-  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useRouter: () => mockRouter,
 }));
 
 vi.mock("next/link", () => ({

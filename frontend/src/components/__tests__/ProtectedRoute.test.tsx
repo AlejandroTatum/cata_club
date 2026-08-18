@@ -10,7 +10,10 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { ToastProvider } from "@/contexts/ToastContext";
+import ToastContainer from "@/components/ToastContainer";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -43,6 +46,22 @@ const mockUseAuth = vi.mocked(useAuth);
 
 const CONTENT = <p>Protected content</p>;
 
+const ROLE_REJECTION_TOAST = "No tiene permiso para acceder a esa sección.";
+
+/**
+ * Renders inside a REAL `ToastProvider` (+ `ToastContainer` to surface the
+ * live toast text) rather than a mock — `ProtectedRoute` now calls
+ * `useToast()` on role rejection, so it needs an actual provider in the tree.
+ */
+function renderProtected(ui: ReactNode) {
+  return render(
+    <ToastProvider>
+      {ui}
+      <ToastContainer />
+    </ToastProvider>,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -60,7 +79,7 @@ describe("ProtectedRoute", () => {
   it("shows loading skeleton while session is hydrating", () => {
     mockUseAuth.mockReturnValue(createLoadingAuth());
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -74,7 +93,7 @@ describe("ProtectedRoute", () => {
   it("does NOT redirect to /login when the initial session check hits an outage", () => {
     mockUseAuth.mockReturnValue(createHydrationOutageAuth());
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -85,7 +104,7 @@ describe("ProtectedRoute", () => {
   it("shows a retry prompt instead of silently doing nothing on outage", () => {
     mockUseAuth.mockReturnValue(createHydrationOutageAuth());
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -97,7 +116,7 @@ describe("ProtectedRoute", () => {
     const retryHydration = vi.fn();
     mockUseAuth.mockReturnValue({ ...createHydrationOutageAuth(), retryHydration });
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -110,7 +129,7 @@ describe("ProtectedRoute", () => {
   it("redirects unauthenticated users to the default /login", () => {
     mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -122,7 +141,7 @@ describe("ProtectedRoute", () => {
   it("redirects unauthenticated users to a custom redirectTo", () => {
     mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
 
-    render(
+    renderProtected(
       <ProtectedRoute
         allowedRoles={["admin"]}
         redirectTo="/custom-login"
@@ -139,7 +158,7 @@ describe("ProtectedRoute", () => {
   it("names the reason when the bounce follows a failed refresh-and-retry, not an ordinary unauthenticated visit", () => {
     mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false, true));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -149,7 +168,7 @@ describe("ProtectedRoute", () => {
   it("stays silent for an ordinary unauthenticated visit — nothing expired, there is nothing to explain", () => {
     mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false, false));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -159,7 +178,7 @@ describe("ProtectedRoute", () => {
   it("carries the reason onto a custom redirectTo too", () => {
     mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false, true));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]} redirectTo="/custom-login">
         {CONTENT}
       </ProtectedRoute>,
@@ -173,7 +192,7 @@ describe("ProtectedRoute", () => {
   it("redirects users with an insufficient role to their default route", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer"));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -181,12 +200,23 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
   });
 
+  it("shows an informational toast naming the reason for the bounce on role rejection", () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer"));
+
+    renderProtected(
+      <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
+    );
+
+    expect(mockReplace).toHaveBeenCalledWith("/trainer");
+    expect(screen.getByText(ROLE_REJECTION_TOAST)).toBeInTheDocument();
+  });
+
   it("redirects estudiante to /student when page requires admin", () => {
     mockUseAuth.mockReturnValue(
       createAuthenticatedAuth("estudiante"),
     );
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -196,7 +226,7 @@ describe("ProtectedRoute", () => {
   it("redirects representante to /student when page requires admin", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("representante"));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -208,7 +238,7 @@ describe("ProtectedRoute", () => {
   it("redirects a user with an unsupported role to /unauthorized instead of any real role's page", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("unsupported"));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -219,7 +249,7 @@ describe("ProtectedRoute", () => {
   it("the /unauthorized page itself renders for an unsupported-role user (terminates the redirect chain)", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("unsupported"));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["unsupported"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -230,7 +260,7 @@ describe("ProtectedRoute", () => {
   it("a real-role user who navigates to /unauthorized directly is bounced to their own default route, not shown the forbidden page", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin"));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["unsupported"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -241,7 +271,7 @@ describe("ProtectedRoute", () => {
   // --- Authorized ---
 
   it("renders children when the user has an allowed role", () => {
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -252,7 +282,7 @@ describe("ProtectedRoute", () => {
   it("accepts multiple allowed roles and renders for any match", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer"));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin", "trainer"]}>
         {CONTENT}
       </ProtectedRoute>,
@@ -265,7 +295,7 @@ describe("ProtectedRoute", () => {
   it("renders nothing while in redirect transition for unauthenticated users", () => {
     mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
 
-    const { container } = render(
+    const { container } = renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
@@ -276,11 +306,13 @@ describe("ProtectedRoute", () => {
   it("renders nothing while in redirect transition for wrong-role users", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer"));
 
-    const { container } = render(
+    renderProtected(
       <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
     );
 
-    expect(container.textContent).toBe("");
+    // Component's own children slot renders nothing — the only text in the
+    // tree is the role-rejection toast, not the protected content.
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
   });
 
   // --- Boundary: empty allowed roles ---
@@ -288,7 +320,7 @@ describe("ProtectedRoute", () => {
   it("redirects when allowedRoles is empty even for an authorized role", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin"));
 
-    render(
+    renderProtected(
       <ProtectedRoute allowedRoles={[]}>{CONTENT}</ProtectedRoute>,
     );
 
