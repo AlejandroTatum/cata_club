@@ -156,6 +156,32 @@ def test_fetch_served_sha_con_fallo_de_red_levanta_error_claro():
             raise AssertionError("se esperaba RuntimeError ante un fallo de red")
 
 
+def test_fetch_served_sha_con_esquema_no_http_levanta_error_sin_llamar_a_urlopen():
+    """S5144: una URL con esquema `ftp://` (u otro no http/https) viene de un
+    argumento de CLI sin validar; debe rechazarse antes de tocar la red."""
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        try:
+            guard.fetch_served_sha("ftp://localhost:3000/api/health")
+        except RuntimeError as exc:
+            assert "ftp://localhost:3000/api/health" in str(exc)
+        else:
+            raise AssertionError("se esperaba RuntimeError ante un esquema no http/https")
+    mock_urlopen.assert_not_called()
+
+
+def test_fetch_served_sha_sin_esquema_levanta_error_sin_llamar_a_urlopen():
+    """Una URL sin esquema/host (no absoluta) también debe rechazarse antes
+    de invocar `urlopen`, no fallar silenciosamente más adelante."""
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        try:
+            guard.fetch_served_sha("localhost:3000/api/health")
+        except RuntimeError as exc:
+            assert "localhost:3000/api/health" in str(exc)
+        else:
+            raise AssertionError("se esperaba RuntimeError ante una URL no absoluta")
+    mock_urlopen.assert_not_called()
+
+
 class _RespuestaFalsa:
     """Doble mínimo de la respuesta de `urllib.request.urlopen` como context manager."""
 

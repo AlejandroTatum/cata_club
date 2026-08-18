@@ -21,6 +21,22 @@ import sys
 import urllib.request
 from collections.abc import Callable
 from urllib.error import URLError
+from urllib.parse import urlparse
+
+
+def validate_served_url(url: str) -> None:
+    """Raise RuntimeError if `url` isn't a safe absolute http(s) URL.
+
+    Guards `fetch_served_sha` against S5144 (SSRF): the URL comes from an
+    unvalidated CLI argument, so its scheme and host must be checked before
+    it's ever passed to `urlopen`."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise RuntimeError(
+            f"--served-url inválida ({url!r}): el esquema debe ser http o https"
+        )
+    if not parsed.netloc:
+        raise RuntimeError(f"--served-url inválida ({url!r}): falta el host")
 
 
 def fetch_served_sha(url: str) -> str:
@@ -28,10 +44,11 @@ def fetch_served_sha(url: str) -> str:
 
     Raises RuntimeError with a message naming the URL/field on any failure —
     a bad response or a missing field must be loud, never a silent pass."""
+    validate_served_url(url)
     try:
         with urllib.request.urlopen(url, timeout=10) as response:  # noqa: S310
             payload = response.read()
-    except (URLError, OSError, TimeoutError) as exc:
+    except (URLError, OSError) as exc:
         raise RuntimeError(f"no se pudo consultar {url}: {exc}") from exc
 
     try:
