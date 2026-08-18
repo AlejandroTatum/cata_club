@@ -1180,7 +1180,7 @@ describe("registrarPago — no descuentoIds (issue #398)", () => {
     );
 
     await registrarPago({
-      monto: 35,
+      meses: 1,
       tipoPago: "EFECTIVO",
       personaId: 9,
       membresiaId: 4,
@@ -1189,7 +1189,7 @@ describe("registrarPago — no descuentoIds (issue #398)", () => {
     const body = JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body));
     // The whole key set, not `objectContaining` — that would still pass even
     // if `descuentoIds` came back on the payload.
-    expect(Object.keys(body).sort()).toEqual(["membresiaId", "monto", "personaId", "tipoPago"].sort());
+    expect(Object.keys(body).sort()).toEqual(["membresiaId", "meses", "personaId", "tipoPago"].sort());
   });
 });
 

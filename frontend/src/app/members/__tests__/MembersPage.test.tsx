@@ -1145,7 +1145,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     expect(mockRegistrarPago.mock.calls[0][0]).toMatchObject({
       personaId: 10,
       membresiaId: 42,
-      monto: 85,
+      meses: 1,
       tipoPago: "TRANSFERENCIA",
     });
     await waitFor(() => {
@@ -1186,21 +1186,36 @@ describe("MembersPage — Registrar pago inline form", () => {
     // The whole key set, not `objectContaining` — that would still pass even
     // if `descuentoIds` came back on the payload.
     expect(Object.keys(mockRegistrarPago.mock.calls[0][0] as Record<string, unknown>).sort()).toEqual(
-      ["membresiaId", "monto", "personaId", "tipoPago"].sort(),
+      ["membresiaId", "meses", "personaId", "tipoPago"].sort(),
     );
   });
 
+  /**
+   * "El monto no coincide con la cuota mensual" used to be the example
+   * here, but that backend rule is GONE (issue #400/4b: `PagoCreateDTO`
+   * takes `meses`, an integer -- there is no monto left to validate
+   * against the cuota). The protection this test guards -- an arbitrary
+   * backend 400 surfaces verbatim as a form error, not swallowed or
+   * replaced with a generic message -- still needs a message this exact
+   * flow can actually produce: registering a payment while the membership
+   * already has one PENDIENTE_VALIDACION.
+   */
   it("surfaces an arbitrary backend 400 message as a normal form error", async () => {
     const { ApiClientError } = await import("@/services/api");
     const dialog = await openMemberDialog({
-      registrarPagoRejects: new ApiClientError("El monto no coincide con la cuota mensual", 400),
+      registrarPagoRejects: new ApiClientError(
+        "Esta membresía ya tiene un pago pendiente de validación. Espere a que sea validado antes de registrar uno nuevo.",
+        400,
+      ),
     });
     await openPaymentForm(dialog);
 
     submitPaymentWithVoucher(dialog);
 
     expect(
-      await within(dialog).findByText("El monto no coincide con la cuota mensual"),
+      await within(dialog).findByText(
+        "Esta membresía ya tiene un pago pendiente de validación. Espere a que sea validado antes de registrar uno nuevo.",
+      ),
     ).toBeInTheDocument();
   });
 

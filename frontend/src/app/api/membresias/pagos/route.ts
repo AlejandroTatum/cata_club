@@ -10,13 +10,22 @@
  * Accepts camelCase JSON from the frontend and translates to the
  * snake_case `PagoCreateDTO` the backend expects.
  *
+ * `meses` replaces `monto` (issue #400): the user picks a whole number of
+ * months, never a free-form amount — `PagoCreateDTO.meses` (`gt=0, le=12`)
+ * is what the backend validates now, and it computes
+ * `monto_base = tarifa_vigente * meses` itself. This handler only checks
+ * that the field is a `number` (a stale client sending a decimal string
+ * would still be caught downstream by Pydantic's `int` coercion, but this
+ * gate exists so a malformed request fails fast with the same 400 shape as
+ * every other required-field check here, not a raw backend 422).
+ *
  * Fix período de cobertura (PAG-5): `fechaInicio`/`fechaFin` are no longer
  * read from the body or forwarded. The backend now derives the coverage
- * period itself from `monto` and the membership's monthly price — the old
- * contract let the client hand it ANY range regardless of `monto` (a
- * one-month payment could ask for a year of coverage; reproduced live
- * against QA, see docs/archive/fixes/06-periodo-de-cobertura.md). Forwarding a
- * field the backend now ignores would just be the next confusion.
+ * period itself from `meses` — the old contract let the client hand it ANY
+ * range regardless of the amount (a one-month payment could ask for a year
+ * of coverage; reproduced live against QA, see
+ * docs/archive/fixes/06-periodo-de-cobertura.md). Forwarding a field the
+ * backend now ignores would just be the next confusion.
  *
  * Same reasoning killed `descuentoIds` (issue #398): the backend resolves a
  * payment's discount from the persona's ASSIGNED benefit
@@ -43,19 +52,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (
     typeof body !== "object"
     || body === null
-    || typeof (body as Record<string, unknown>).monto !== "number"
+    || typeof (body as Record<string, unknown>).meses !== "number"
     || typeof (body as Record<string, unknown>).tipoPago !== "string"
     || typeof (body as Record<string, unknown>).personaId !== "number"
     || typeof (body as Record<string, unknown>).membresiaId !== "number"
   ) {
     return NextResponse.json(
-      { message: "Faltan campos obligatorios (monto, tipoPago, personaId, membresiaId)." },
+      { message: "Faltan campos obligatorios (meses, tipoPago, personaId, membresiaId)." },
       { status: 400 },
     );
   }
 
   const payload = body as {
-    monto: number;
+    meses: number;
     tipoPago: string;
     personaId: number;
     membresiaId: number;
@@ -65,7 +74,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      monto: payload.monto,
+      meses: payload.meses,
       tipo_pago: payload.tipoPago,
       persona_id: payload.personaId,
       membresia_id: payload.membresiaId,

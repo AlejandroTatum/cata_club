@@ -109,8 +109,22 @@ class PagoCreateDTO(BaseModel):
     persona) nunca cambia el descuento que termina aplicado.
 
     El `monto` de arriba sigue siendo el monto BASE (sin descontar): el
-    servicio congela el valor del beneficio y calcula el monto final."""
-    monto: Decimal = Field(..., gt=0)
+    servicio congela el valor del beneficio y calcula el monto final.
+
+    `monto` se quitó a propósito (issue #400): el usuario elige una cantidad
+    ENTERA de meses, nunca un monto libre. `PagoServicio.registrar_pago`
+    calcula `monto_base = tarifa_vigente * meses` -- el número con el que el
+    club cobra deja de viajar por la red editable, igual que
+    `monto_aplicado` en `MembresiaCreateDTO`: el cliente dice QUÉ quiere
+    (cuántos meses), nunca CUÁNTO cuesta eso. `gt=0` descarta 0 y negativos;
+    `le=12` es un techo defensivo, no una regla de producto -- doce es la
+    cobertura más larga que el club vende hoy (la membresía anual con
+    descuento del catálogo, ver `test_cobertura_se_calcula_sobre_el_
+    monto_base_no_el_descontado`). Subir el techo es un cambio de una línea
+    el día que el club venda algo más largo; no ponerlo dejaba que un valor
+    de miles de meses pasara la validación y solo reventara mucho más abajo,
+    en `_sumar_meses` (year/month overflow) o en el precio total."""
+    meses: int = Field(..., gt=0, le=12)
     tipo_pago: TipoPago
     persona_id: int
     membresia_id: int

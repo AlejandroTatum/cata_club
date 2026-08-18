@@ -362,7 +362,7 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
     const clientBody = {
       ...((await captureBody(() =>
         registrarPago({
-          monto: 35,
+          meses: 1,
           tipoPago: "EFECTIVO",
           personaId: 9,
           membresiaId: 4,

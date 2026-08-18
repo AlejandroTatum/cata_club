@@ -176,8 +176,10 @@ def test_autor_congelado_es_el_admin_que_asigno_no_el_pagador(client, db_session
 
     _autenticar_como(beneficiario.id, ["ALUMNO"])
     # `crear_tipo_membresia_orm` siembra precio $30.00 (no $35.00, el
-    # default de `registrar_pago_api` pensado para el catálogo vía API).
-    respuesta = registrar_pago_api(client, beneficiario.id, membresia.id, monto="30.00")
+    # default de `registrar_pago_api` pensado para el catálogo vía API) --
+    # pero `meses=1` (el default) alcanza igual: es la cantidad, no el
+    # precio, la que este factory recibe desde issue #400/4b.
+    respuesta = registrar_pago_api(client, beneficiario.id, membresia.id)
     assert respuesta.status_code == 201, respuesta.text
     pago = respuesta.json()
 

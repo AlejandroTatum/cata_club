@@ -45,7 +45,7 @@ def test_registrar_pago_ajeno_da_403(client_sin_permisos):
     resp = client_sin_permisos.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": 999, "membresia_id": 1,
         },
@@ -59,7 +59,7 @@ def test_registrar_pago_propio_no_requiere_admin(client_sin_permisos):
     resp = client_sin_permisos.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": 1, "membresia_id": 999999,
         },
@@ -81,7 +81,7 @@ def test_pago_aprobado_activa_membresia(client):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "TRANSFERENCIA",
+            "meses": 1, "tipo_pago": "TRANSFERENCIA",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -111,7 +111,7 @@ def test_rechazar_pago_sin_motivo_falla(client):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -137,7 +137,7 @@ def test_rechazar_pago_con_motivo_solo_espacios_falla(client):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -163,7 +163,7 @@ def test_rechazar_pago_con_motivo_valido_persiste(client):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -192,7 +192,7 @@ def test_aprobar_pago_sin_motivo_rechazo_funciona(client):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -221,7 +221,7 @@ def test_pago_rechazado_no_reutiliza_estado_de_membresia(client):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -251,7 +251,7 @@ def test_listar_pagos_incluye_nombre_de_persona(client):
     client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -279,7 +279,7 @@ def test_listar_pagos_filtra_por_estado(client):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -317,7 +317,7 @@ def test_estadisticas_membresias_cuenta_solo_activas(client):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO", "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
+            "meses": 1, "tipo_pago": "EFECTIVO", "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia_activa["id"],
         },
     ).json()
@@ -418,7 +418,7 @@ def test_alumno_ve_su_propio_historial_de_pagos_incluyendo_rechazado_con_motivo(
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -462,7 +462,7 @@ def test_representante_ve_los_pagos_de_su_representado(client_sin_permisos, clie
     client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": alumno["id"], "membresia_id": membresia["id"],
         },
@@ -493,7 +493,7 @@ def test_admin_puede_listar_pagos_de_cualquier_persona(client):
     client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },
@@ -707,7 +707,7 @@ def _crear_membresia_activa(client, persona_id, tipo_membresia_id):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona_id, "membresia_id": membresia["id"],
         },

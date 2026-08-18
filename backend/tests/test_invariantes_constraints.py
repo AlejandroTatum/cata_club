@@ -307,7 +307,7 @@ def test_pago_pendiente_duplicado_responde_igual_por_chequeo_o_por_constraint(
         },
     ).json()
     payload_pago = {
-        "monto": "35.00", "tipo_pago": "EFECTIVO",
+        "meses": 1, "tipo_pago": "EFECTIVO",
         "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
         "persona_id": persona["id"], "membresia_id": membresia["id"],
     }

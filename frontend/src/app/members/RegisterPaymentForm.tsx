@@ -20,6 +20,7 @@ import { registrarPago } from "@/services/api";
 import type { RegistrarPagoInput } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { toUserMessage } from "@/lib/error-message";
+import { addMonthsIso, wholeMonthsFor } from "@/app/student/payments/payments-utils";
 import type { MemberStudentSummary } from "./members-utils";
 
 interface RegisterPaymentFormProps {
@@ -45,11 +46,19 @@ export default function RegisterPaymentForm({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
 
+  /**
+   * `wholeMonthsFor`/`addMonthsIso` (`student/payments/payments-utils.ts`)
+   * replace the float division this used to do (`fin.setMonth(fin.getMonth()
+   * + amount / monthlyPrice)`, which truncates a fraction the same way the
+   * bug documented on `wholeMonthsFor` describes) with the same exact,
+   * cents-safe month count the student portal already uses — one clock for
+   * "how many months does this amount buy", not two that can quietly
+   * disagree.
+   */
   function calcEndDate(baseDate: Date, amount: number): string {
-    if (monthlyPrice <= 0 || amount <= 0) return "";
-    const fin = new Date(baseDate);
-    fin.setMonth(fin.getMonth() + amount / monthlyPrice);
-    return calendarIsoDate(fin);
+    const months = wholeMonthsFor(amount, monthlyPrice);
+    if (months === null) return "";
+    return addMonthsIso(calendarIsoDate(baseDate), months);
   }
 
   function handleMontoChange(value: string): void {
@@ -71,10 +80,23 @@ export default function RegisterPaymentForm({
     setFechaFin(amount > 0 ? calcEndDate(hoy, amount) : "");
   }
 
+  /**
+   * `montoNum % monthlyPrice` used to mirror a backend check
+   * (`PagoServicio.registrar_pago`'s old "múltiplo exacto" rule). That
+   * backend rule is GONE (issue #400/4b: `PagoCreateDTO` takes `meses`, an
+   * integer, so there is nothing left to divide). This check survives for a
+   * different reason now: this form still collects an AMOUNT from the admin
+   * (the month-picker UX is a later phase — see `student/payments/page.tsx`),
+   * and `meses` has to come from somewhere. `wholeMonthsFor` is that
+   * derivation, and a `null` result means the typed amount cannot become a
+   * whole month count, which this form has no way to send.
+   */
   function validate(montoNum: number): string | null {
     if (!montoNum || montoNum <= 0) return "El monto debe ser mayor a 0.";
-    if (monthlyPrice > 0 && montoNum % monthlyPrice !== 0) {
-      return `El monto debe ser múltiplo de $${monthlyPrice}.`;
+    if (wholeMonthsFor(montoNum, monthlyPrice) === null) {
+      return monthlyPrice > 0
+        ? `El monto debe ser múltiplo de $${monthlyPrice}: registre uno o más meses completos.`
+        : "No se pudo calcular a cuántos meses equivale este monto.";
     }
     if (!fechaInicio || !fechaFin) return "Las fechas son obligatorias.";
     if (fechaInicio >= fechaFin) return "La fecha de inicio debe ser anterior a la fecha de fin.";
@@ -98,11 +120,15 @@ export default function RegisterPaymentForm({
         // The discount, if any, is no longer chosen here (issue #398): the
         // backend resolves it from the persona's assigned benefit
         // (see BeneficioSection) — this is always just the plain amount.
-        monto: montoNum,
+        //
+        // `meses` replaces `monto` (issue #400/4b): `validate()` above
+        // already confirmed this typed amount is a whole number of months,
+        // so the derivation cannot be `null` here.
+        meses: wholeMonthsFor(montoNum, monthlyPrice) as number,
         tipoPago: "TRANSFERENCIA",
         // No fechaInicio/fechaFin (fix período de cobertura, PAG-5): el backend
-        // las calcula del monto y la cuota. Las de acá existen solo para la
-        // vista previa "Inicio: / Fin:" de más abajo.
+        // las calcula de `meses`. Las de acá existen solo para la vista
+        // previa "Inicio: / Fin:" de más abajo.
         personaId,
         membresiaId: membresia.id,
       };
@@ -146,6 +172,13 @@ export default function RegisterPaymentForm({
     );
   }
 
+  // Same derivation as `validate()`/`handleSubmit()`, for the "N meses de
+  // vigencia" preview below — `null` (not a whole month count, or no
+  // monthlyPrice to divide by) simply hides the line instead of printing a
+  // fraction, which is exactly the bug `wholeMonthsFor`'s docstring
+  // describes the old float division as having caused.
+  const previewMonths = wholeMonthsFor(Number(monto) || 0, monthlyPrice);
+
   return (
     <div className="space-y-field rounded-ctl border border-line bg-sunken p-3">
       <div className="grid grid-cols-2 gap-2">
@@ -182,10 +215,10 @@ export default function RegisterPaymentForm({
         </div>
       </div>
 
-      {monthlyPrice > 0 && Number(monto) > 0 && (
+      {previewMonths !== null && (
         <p className="text-2xs tracking-flat text-ink-3">
-          {Number(monto) / monthlyPrice}{" "}
-          {Number(monto) / monthlyPrice === 1 ? "mes de vigencia" : "meses de vigencia"} (precio
+          {previewMonths}{" "}
+          {previewMonths === 1 ? "mes de vigencia" : "meses de vigencia"} (precio
           mensual: ${monthlyPrice})
         </p>
       )}

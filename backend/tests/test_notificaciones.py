@@ -292,7 +292,7 @@ def _crear_pago_pendiente(client, persona_id, membresia_id):
     return client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona_id, "membresia_id": membresia_id,
         },

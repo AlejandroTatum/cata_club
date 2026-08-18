@@ -399,7 +399,7 @@ def test_enviar_descuento_ids_no_tiene_efecto_sin_ser_admin(client_sin_permisos,
 
     respuesta = registrar_pago_api(
         client_sin_permisos, persona.id, membresia.id,
-        monto="30.00", descuento_ids=[descuento.id],
+        descuento_ids=[descuento.id],
     )
     assert respuesta.status_code == 201
     assert respuesta.json()["descuentoId"] is None

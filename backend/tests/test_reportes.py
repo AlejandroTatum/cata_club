@@ -40,7 +40,14 @@ def _crear_tipo_membresia(client, modalidad="MENSUAL"):
 def _crear_pago(client, cedula, estado_pago=None, monto="35.00"):
     """Crea persona + tipo de membresía + membresía + pago (flujo reutilizado
     de test_membresias_pagos.py). Si `estado_pago` se pasa, valida el pago
-    con ese estado tras crearlo."""
+    con ese estado tras crearlo.
+
+    `monto` sigue siendo el nombre del parámetro porque sigue fijando el
+    precio del catálogo (`monto_aplicado`, columna de `Membresia`); el pago
+    en sí ya no lo recibe (issue #400/4b, `PagoCreateDTO.meses`). Ningún
+    call site de este archivo pasa `monto` distinto del default, así que
+    siempre compra exactamente 1 mes -- no hace falta derivar `meses` del
+    parámetro."""
     persona = _crear_persona(client, cedula)
     tipo = _crear_tipo_membresia(client)
     membresia = client.post(
@@ -53,7 +60,7 @@ def _crear_pago(client, cedula, estado_pago=None, monto="35.00"):
     pago = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": monto, "tipo_pago": "TRANSFERENCIA",
+            "meses": 1, "tipo_pago": "TRANSFERENCIA",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": persona["id"], "membresia_id": membresia["id"],
         },

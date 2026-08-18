@@ -138,7 +138,7 @@ def registrar_pago_api(
     persona_id: int,
     membresia_id: int,
     *,
-    monto: str = "35.00",
+    meses: int = 1,
     tipo_pago: str = "TRANSFERENCIA",
     descuento_ids: Optional[list[int]] = None,
 ):
@@ -148,9 +148,15 @@ def registrar_pago_api(
 
     Sin `fecha_inicio`/`fecha_fin` en el payload (fix período de cobertura,
     PAG-5): el backend las calcula y ya no las acepta del cliente -- ver
-    `PagoServicio.registrar_pago` y docs/archive/fixes/06-periodo-de-cobertura.md."""
+    `PagoServicio.registrar_pago` y docs/archive/fixes/06-periodo-de-cobertura.md.
+
+    `meses` reemplaza a `monto` (issue #400/4b): el usuario elige una
+    cantidad entera de meses, no un monto libre -- el backend calcula
+    `monto_base = tarifa_vigente * meses`. El default `1` alcanza para casi
+    todos los call sites (el catálogo sembrado por `crear_tipo_membresia_api`
+    es mensual); los que necesitan más de un mes lo pasan explícito."""
     payload = {
-        "monto": monto, "tipo_pago": tipo_pago,
+        "meses": meses, "tipo_pago": tipo_pago,
         "persona_id": persona_id, "membresia_id": membresia_id,
     }
     if descuento_ids is not None:

@@ -8,9 +8,13 @@ usarlos. Este archivo fija que ahora se congelan en el `Pago`, con los
 mismos valores que el propio método ya usa para lo demás -- no una
 recomputación paralela que pueda divergir.
 
-Deliberadamente FUERA de este slice (ver docstring del servicio):
-`PagoCreateDTO` sigue recibiendo `monto`, no `meses`; ese cambio de
-contrato es el slice siguiente.
+Nota (issue #400, slice 4b): `PagoCreateDTO` cambió de `monto` a `meses`
+después de que este archivo se escribió -- ya no hay ninguna división que
+"derive" `meses`, el cliente lo pide directo y el servicio multiplica
+(`monto_base = tarifa_vigente * meses`). Los call sites de acá pasan por
+`registrar_pago_api` (`meses=`, no `monto=`), pero lo que este archivo fija
+-- que el snapshot se escribe con los mismos valores que el método ya usa
+para lo demás -- no cambió.
 """
 from decimal import Decimal
 
@@ -46,11 +50,11 @@ def _crear_descuento_api(client, nombre="Beca", *, porcentaje=None, monto=None):
 
 def test_un_pago_normal_escribe_las_tres_columnas(client, db_session):
     """El caso base: sin beneficio, un mes. La tarifa congelada es la de la
-    membresía, los meses son los que el monto compra, y el monto base
+    membresía, los meses son los que el cliente pidió, y el monto base
     coincide con el final porque no hay descuento que reste."""
     persona, membresia = escenario_membresia_sin_pago_api(client)  # tipo a $35.00
 
-    respuesta = registrar_pago_api(client, persona["id"], membresia["id"], monto="35.00")
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"])
     assert respuesta.status_code == 201, respuesta.text
     pago = respuesta.json()
 
@@ -69,7 +73,7 @@ def test_un_pago_con_beneficio_activo_congela_el_monto_base_previo_al_descuento(
     asignacion = asignar_beneficio_api(client, persona["id"], descuento["id"])
     assert asignacion.status_code == 201, asignacion.text
 
-    respuesta = registrar_pago_api(client, persona["id"], membresia["id"], monto="35.00")
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"])
     assert respuesta.status_code == 201, respuesta.text
     pago = respuesta.json()
 
@@ -85,11 +89,11 @@ def test_un_pago_con_beneficio_activo_congela_el_monto_base_previo_al_descuento(
 
 
 def test_un_pago_de_varios_meses_registra_los_meses_comprados(client, db_session):
-    """Un monto múltiplo de la tarifa compra más de un mes; el snapshot debe
-    decir cuántos, no asumir siempre 1."""
+    """Pedir varios meses compra más de uno; el snapshot debe decir
+    cuántos, no asumir siempre 1."""
     persona, membresia = escenario_membresia_sin_pago_api(client)  # tipo a $35.00
 
-    respuesta = registrar_pago_api(client, persona["id"], membresia["id"], monto="105.00")
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"], meses=3)
     assert respuesta.status_code == 201, respuesta.text
     pago = respuesta.json()
 
@@ -101,17 +105,14 @@ def test_un_pago_de_varios_meses_registra_los_meses_comprados(client, db_session
 
 def test_un_pago_contra_tarifa_cero_no_inventa_snapshot(client, db_session):
     """Caso `precio_mensual == 0` (hoy, solo alcanzable por la gratuidad
-    familiar E04-RF002: `membresia.monto_aplicado` en 0.00). El fallback
-    `meses = 1` que usa `registrar_pago` en esa rama NO es una división
-    real -- es una guardia para no partir por cero, y el chequeo de
-    múltiplo también se saltea ahí, así que el monto que llega no tiene
-    ninguna relación aritmética con "1 mes".
-
-    Decisión de este slice: en vez de congelar tarifa=0.00/meses=1/
-    monto_base=<lo enviado> (que tiene forma de hecho histórico y no lo
-    es), se deja el snapshot AUSENTE -- las tres columnas NULL, que
-    `ck_pago_snapshot_completo_o_ausente` permite. Ver el comentario en
-    `PagoServicio.registrar_pago` para el razonamiento completo."""
+    familiar E04-RF002: `membresia.monto_aplicado` en 0.00). Desde issue
+    #400/4b, `meses` ya no es un valor de guardia -- es lo que el cliente
+    pidió, y `monto_base = precio_mensual * meses` es aritmética real
+    incluso acá (0.00 * meses = 0.00, siempre exacto). Aun así el servicio
+    sigue dejando el snapshot AUSENTE en vez de escribir tarifa=0.00: ver
+    el comentario en `PagoServicio.registrar_pago` para el razonamiento
+    completo (una tarifa $0.00 con forma de dato bueno sobre una membresía
+    que en los hechos no tiene ninguna)."""
     persona = crear_persona_orm(db_session, "1710034065")
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("35.00"))
     membresia = crear_membresia_orm(
@@ -119,7 +120,7 @@ def test_un_pago_contra_tarifa_cero_no_inventa_snapshot(client, db_session):
     )
     db_session.commit()
 
-    respuesta = registrar_pago_api(client, persona.id, membresia.id, monto="35.00")
+    respuesta = registrar_pago_api(client, persona.id, membresia.id)
     assert respuesta.status_code == 201, respuesta.text
     pago = respuesta.json()
 
@@ -138,7 +139,7 @@ def test_el_snapshot_sobrevive_a_un_cambio_posterior_de_tarifa(client, db_sessio
     persona, membresia = escenario_membresia_sin_pago_api(client)
     tipo_id = membresia["tipoMembresiaId"]
 
-    pago = registrar_pago_api(client, persona["id"], membresia["id"], monto="35.00").json()
+    pago = registrar_pago_api(client, persona["id"], membresia["id"]).json()
     fila_antes = db_session.get(Pago, pago["id"])
     assert fila_antes.tarifa_mensual_aplicada == Decimal("35.00")
     assert fila_antes.meses_comprados == 1

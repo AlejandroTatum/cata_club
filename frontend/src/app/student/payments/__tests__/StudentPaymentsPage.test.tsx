@@ -628,7 +628,7 @@ describe("StudentPaymentsPage — the checkpoint before the money moves", () => 
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
     });
     expect(mockRegistrarPago).toHaveBeenCalledWith(
-      expect.objectContaining({ monto: 25, tipoPago: "EFECTIVO", personaId: 9, membresiaId: 3 }),
+      expect.objectContaining({ meses: 1, tipoPago: "EFECTIVO", personaId: 9, membresiaId: 3 }),
     );
 
     // No "Deshacer": there is no endpoint behind one. The toast says what the
