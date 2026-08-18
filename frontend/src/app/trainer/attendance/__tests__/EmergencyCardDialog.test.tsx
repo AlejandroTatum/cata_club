@@ -130,6 +130,71 @@ describe("EmergencyCardDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  /*
+   * Issue #362 lo midió contra la base de QA: de 66 alumnos con horario, 24 no
+   * tienen ni ficha médica ni representante legal. Para esos 24 el DTO llega
+   * con los seis campos en null y la tarjeta salía en blanco — seis renglones
+   * que dicen "No registra" y nada que explique por qué ni a quién reclamarle.
+   *
+   * Eso es peor que inútil: el entrenador abre la ficha en el minuto en que ya
+   * es tarde y tiene que deducir solo que el hueco es del club, no del sistema.
+   * El diálogo es el único lugar donde se puede decir, porque el padrón no
+   * trae bandera de "tiene ficha" y no se va a inventar una.
+   */
+  it("dice qué falta y a quién pedírselo cuando la ficha llega completamente vacía", async () => {
+    vi.mocked(fetchFichaEmergencia).mockResolvedValue({
+      alumnoNombreCompleto: "Iker Solís",
+      tipoSangre: null,
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+      representanteNombreCompleto: null,
+      representanteTelefono: null,
+    });
+
+    render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
+
+    const vacio = await screen.findByTestId("emergency-card-empty");
+    expect(vacio.textContent).toMatch(/ficha médica/i);
+    expect(vacio.textContent).toMatch(/representante legal/i);
+    // A quién pedírselo. Sin esto el estado vacío solo describe el problema.
+    expect(vacio.textContent).toMatch(/secretaría/i);
+  });
+
+  it("no confunde el hueco del club con una falla de carga", async () => {
+    vi.mocked(fetchFichaEmergencia).mockResolvedValue({
+      alumnoNombreCompleto: "Iker Solís",
+      tipoSangre: null,
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+      representanteNombreCompleto: null,
+      representanteTelefono: null,
+    });
+
+    render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
+
+    await screen.findByTestId("emergency-card-empty");
+    // Ni `role="alert"` ni oferta de reintentar: reintentar no trae un dato que
+    // nadie cargó, y ofrecerlo manda al entrenador a golpear un botón inútil.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
+    // Y no quedan seis "No registra" sueltos detrás del mensaje.
+    expect(screen.queryByText("No registra")).not.toBeInTheDocument();
+  });
+
+  it("sigue mostrando la tarjeta normal mientras quede un solo dato cargado", async () => {
+    // El estado vacío es para el vacío TOTAL. Un alumno sin ficha médica pero
+    // con representante tiene por dónde avisar, y taparlo con un cartel de
+    // "falta todo" sería mentirle al entrenador en la dirección peligrosa.
+    vi.mocked(fetchFichaEmergencia).mockResolvedValue(fichaSinFichaMedica);
+
+    render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
+
+    await screen.findByText("Marta Solís");
+    expect(screen.queryByTestId("emergency-card-empty")).not.toBeInTheDocument();
+  });
+
   it("never renders a field the DTO does not carry (id, cédula, fecha de nacimiento, dirección)", async () => {
     vi.mocked(fetchFichaEmergencia).mockResolvedValue(fichaCompleta);
 

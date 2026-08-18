@@ -61,6 +61,11 @@ const EXPECTED_PHRASES: Record<string, string> = {
   "/trainer": "Volver a Mi día",
   "/trainer/attendance": "Volver a Pasar lista",
   "/trainer/attendance/history": "Volver al Historial",
+  // Plural común, sin artículo: la preposición es "a", igual que "Volver a
+  // Miembros". El nombre dice "del club" a propósito — el club no asigna
+  // entrenadores a horarios, así que "Sus alumnos" sería una promesa que el
+  // dato no respalda (ver `ficha_medica_router.py`).
+  "/trainer/students": "Volver a Alumnos del club",
   "/student": "Volver a Mi cuenta",
   "/student/payments": "Volver a Pagos",
   "/student/attendance": "Volver a Asistencias",

@@ -91,6 +91,17 @@ export const DESTINATIONS: Record<string, Destination> = {
   "/trainer": { label: "Mi día", preposition: "a" },
   "/trainer/attendance": { label: "Pasar lista", preposition: "a" },
   "/trainer/attendance/history": { label: "Historial", preposition: "al" },
+  /**
+   * "Alumnos del club", no "Sus alumnos" ni "Mis alumnos".
+   *
+   * El club NO asigna entrenadores a horarios —
+   * `backend/app/presentacion/routers/ficha_medica_router.py` lo deja escrito:
+   * cualquier entrenador puede pasar lista de cualquier sesión, y por eso el
+   * permiso de la ficha de emergencia es por DATO, no por "sus" alumnos. Un
+   * posesivo acá prometería un recorte que el backend no hace y que el padrón
+   * no trae: la pantalla muestra el club entero porque eso es lo que hay.
+   */
+  "/trainer/students": { label: "Alumnos del club", preposition: "a" },
 
   // --- Alumno / representante ----------------------------------------------
   "/student": { label: "Mi cuenta", preposition: "a" },

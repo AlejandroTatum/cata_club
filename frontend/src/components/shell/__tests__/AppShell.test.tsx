@@ -1083,6 +1083,7 @@ describe("AppShell — the rail of a person with several roles", (): void => {
       "/trainer",
       "/trainer/attendance",
       "/trainer/attendance/history",
+      "/trainer/students",
       "/student",
       "/student/payments",
       "/student/attendance",

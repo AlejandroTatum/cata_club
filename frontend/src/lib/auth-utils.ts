@@ -130,6 +130,13 @@ function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] 
         // "Pasar lista" (longest-prefix wins, and this href is the longer one
         // as soon as it exists).
         row("/trainer/attendance/history"),
+        // Última, y no por menos importante: las tres de arriba son la
+        // secuencia de una sesión —mirar el día, pasar lista, revisar lo
+        // pasado— y el padrón es consulta, no trabajo del día. Existe porque
+        // la ficha de emergencia vivía SOLO dentro del paso 2 del asistente:
+        // para ver a quién llamar había que entrar a un horario y ponerse a
+        // tomar asistencia.
+        row("/trainer/students"),
       );
       break;
     case "representante":
