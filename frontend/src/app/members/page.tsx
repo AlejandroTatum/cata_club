@@ -63,6 +63,7 @@ import {
   Pencil,
   X,
   UserPlus,
+  AlertTriangle,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchMembers, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
@@ -410,6 +411,22 @@ function EditAccountButton({ account, onEdit }: AccountListItemProps): React.Rea
   );
 }
 
+/**
+ * Issue #362's per-row signal: no legal representative at all AND no ficha
+ * médica (`MemberAccount.sinDatosEmergencia`, computed in
+ * `members-adapter.ts`). Same icon+text idiom as every other inline warning
+ * in the product (`wizard-fields.tsx`, `ErrorState.tsx`) — `text-state-warn`
+ * paired with `AlertTriangle`, never a bespoke color or shape.
+ */
+function EmergencyDataWarning(): React.ReactElement {
+  return (
+    <span className="flex items-center gap-1 text-2xs font-semibold text-state-warn">
+      <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+      Sin datos de emergencia
+    </span>
+  );
+}
+
 /** One account as a table row (`sm` and up). */
 function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
@@ -426,6 +443,11 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
           roles are read one account at a time, in the edit dialog. */}
       <TableCell>
         <IdentityCell name={fullName} />
+        {account.sinDatosEmergencia ? (
+          <div className="mt-1">
+            <EmergencyDataWarning />
+          </div>
+        ) : null}
       </TableCell>
       <TableCell>{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">
@@ -457,6 +479,7 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
           {account.representadoPor ? (
             <DataBox>Representado por {account.representadoPor}</DataBox>
           ) : null}
+          {account.sinDatosEmergencia ? <EmergencyDataWarning /> : null}
         </>
       }
       status={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
@@ -993,6 +1016,16 @@ export default function MembersPage(): React.ReactElement {
             value={stats.pendingPayments}
             hint="por validar"
             variant="hot"
+          />
+          {/* Issue #362. `default` variant, not `hot`: `hot` is reserved for
+              the one tile that is a queue of work to clear
+              (`StatCard.tsx`'s own doc comment), and this is a state of the
+              roster, not a queue — the same reasoning that keeps "Cuentas"
+              and "Estudiantes" quiet above. */}
+          <StatCard
+            label="Sin datos de emergencia"
+            value={stats.sinDatosEmergencia}
+            hint="sin representante ni ficha médica"
           />
         </div>
 

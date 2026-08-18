@@ -179,3 +179,35 @@ def test_upsert_sin_tipo_sangre_es_400_y_no_nombra_el_campo_interno(client):
     detalle = resp.json()["detail"]
     assert "tipo_sangre" not in detalle
     assert "tipo de sangre" in detalle.lower()
+
+
+# --- GET /existe (issue #362) ------------------------------------------------
+
+def test_existe_ficha_medica_distingue_quien_tiene_ficha_de_quien_no(client):
+    con_ficha = _crear_persona(client, cedula="1703620011")
+    sin_ficha = _crear_persona(client, cedula="1703620029")
+    client.post(
+        "/api/v1/fichas-medicas/",
+        json={"tipo_sangre": "O_POSITIVO", "persona_id": con_ficha["id"], "enfermedades": []},
+    )
+
+    resp = client.get(
+        "/api/v1/fichas-medicas/existe",
+        params={"persona_ids": [con_ficha["id"], sin_ficha["id"]]},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["personaIdsConFicha"] == [con_ficha["id"]]
+
+
+def test_existe_ficha_medica_sin_persona_ids_no_rompe(client):
+    resp = client.get("/api/v1/fichas-medicas/existe")
+
+    assert resp.status_code == 200
+    assert resp.json()["personaIdsConFicha"] == []
+
+
+def test_existe_ficha_medica_requiere_admin(client_sin_permisos):
+    resp = client_sin_permisos.get("/api/v1/fichas-medicas/existe", params={"persona_ids": [1]})
+
+    assert resp.status_code == 403

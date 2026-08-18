@@ -38,6 +38,7 @@ describe("buildMemberStats", () => {
       totalStudents: 0,
       activeMemberships: 0,
       pendingPayments: 0,
+      sinDatosEmergencia: 0,
     });
   });
 
@@ -87,6 +88,39 @@ describe("buildMemberStats", () => {
     expect(stats.totalAccounts).toBe(15);
     expect(stats.totalStudents).toBe(14); // original 14 students
     expect(stats.activeMemberships).toBe(4);
+  });
+
+  // Issue #362: the "sin datos de emergencia" aggregate.
+  it("counts accounts flagged sinDatosEmergencia and ignores the rest", () => {
+    const flagged: MemberAccount = {
+      id: "gap-001",
+      role: "representante",
+      nombres: "Gap",
+      apellidos: "Case",
+      telefono: "+593 00 000 0001",
+      sinDatosEmergencia: true,
+      estudiantes: [],
+    };
+    const notFlagged: MemberAccount = {
+      id: "ok-001",
+      role: "representante",
+      nombres: "Ok",
+      apellidos: "Case",
+      telefono: "+593 00 000 0002",
+      sinDatosEmergencia: false,
+      estudiantes: [],
+    };
+    const unset: MemberAccount = {
+      id: "unset-001",
+      role: "representante",
+      nombres: "Unset",
+      apellidos: "Case",
+      telefono: "+593 00 000 0003",
+      estudiantes: [],
+    };
+
+    const stats = buildMemberStats([flagged, notFlagged, unset]);
+    expect(stats.sinDatosEmergencia).toBe(1);
   });
 });
 

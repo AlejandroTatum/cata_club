@@ -176,4 +176,60 @@ describe("buildMemberAccounts", () => {
     expect(accounts[0].email).toBeUndefined();
     expect(accounts[1].email).toBeUndefined();
   });
+
+  // Issue #362: "sin datos de emergencia" — no representative at all AND no
+  // ficha médica.
+  describe("sinDatosEmergencia", () => {
+    it("flags a root persona with no representative and no ficha médica", () => {
+      const accounts = buildMemberAccounts(
+        [admin],
+        new Map(),
+        new Map(),
+        new Map(),
+        new Map(),
+        new Set(), // nobody has a ficha médica
+      );
+
+      const account = accounts.find((a) => a.id === "1");
+      expect(account?.sinDatosEmergencia).toBe(true);
+    });
+
+    it("does NOT flag a represented persona (has representanteId), even with no ficha médica of their own", () => {
+      // Sofia (child) has `representanteId: 2` (Carlos) and no ficha médica
+      // recorded — the gap is "no representative at all", never "the
+      // representative's own contact fields are blank" (that's
+      // EmergencyCardDialog.tsx's estaCompletamenteVacia, a different,
+      // wider question this feature deliberately does not ask).
+      const accounts = buildMemberAccounts(
+        [parent, child],
+        new Map(),
+        new Map(),
+        new Map(),
+        new Map(),
+        new Set(), // nobody has a ficha médica
+      );
+
+      const sofia = accounts.find((a) => a.id === "3");
+      expect(sofia?.sinDatosEmergencia).toBe(false);
+    });
+
+    it("does NOT flag a root persona who has a ficha médica on file", () => {
+      const accounts = buildMemberAccounts(
+        [admin],
+        new Map(),
+        new Map(),
+        new Map(),
+        new Map(),
+        new Set([admin.id]), // admin has a ficha médica
+      );
+
+      const account = accounts.find((a) => a.id === "1");
+      expect(account?.sinDatosEmergencia).toBe(false);
+    });
+
+    it("defaults to an empty ficha set when the parameter is omitted, so every root reads as flagged", () => {
+      const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map());
+      expect(accounts[0].sinDatosEmergencia).toBe(true);
+    });
+  });
 });

@@ -95,6 +95,14 @@ export interface MemberAccount {
    * never guessed.
    */
   representadoPor?: string;
+  /**
+   * Issue #362: this person has no legal representative at all
+   * (`representanteId === null`) AND no ficha médica on file. Optional (not
+   * required) for the same reason `representadoPor` is — fixtures and tests
+   * that don't exercise the emergency-data gap can omit it and it reads as
+   * falsy, same as a persona the adapter never flagged.
+   */
+  sinDatosEmergencia?: boolean;
 }
 
 /** Aggregate statistics for the members overview. */
@@ -103,6 +111,8 @@ export interface MemberStats {
   totalStudents: number;
   activeMemberships: number;
   pendingPayments: number;
+  /** Issue #362: count of accounts with `sinDatosEmergencia: true`. */
+  sinDatosEmergencia: number;
 }
 
 /** Maximum number of records returned by the upstream member aggregate. */
@@ -196,8 +206,12 @@ export function buildMemberStats(accounts: MemberAccount[]): MemberStats {
   let totalStudents = 0;
   let activeMemberships = 0;
   let pendingPayments = 0;
+  let sinDatosEmergencia = 0;
 
   for (const account of accounts) {
+    if (account.sinDatosEmergencia) {
+      sinDatosEmergencia++;
+    }
     for (const estudiante of account.estudiantes) {
       totalStudents++;
       if (estudiante.membresia?.estado === "activa") {
@@ -214,6 +228,7 @@ export function buildMemberStats(accounts: MemberAccount[]): MemberStats {
     totalStudents,
     activeMemberships,
     pendingPayments,
+    sinDatosEmergencia,
   };
 }
 
