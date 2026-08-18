@@ -7,6 +7,14 @@
  *
  * Do NOT add business logic here. This file is mock data only — pure
  * functions belong in src/lib/*-utils.ts or the respective *-utils.ts files.
+ *
+ * Issue #388 — one row per PERSON, not one row per paying root. Every
+ * persona (root or represented) gets its own `MemberAccount` with its own
+ * membership/payment status; a represented persona's row also carries
+ * `representadoPor` (their representative's full name), and a self-managed
+ * root's row leaves it `undefined`. This mirrors the real
+ * `buildMemberAccounts` shape (src/lib/server/members-adapter.ts) instead of
+ * the old grouped-by-root shape it replaced.
  */
 
 import type { MemberAccount } from "@/app/members/members-utils";
@@ -16,6 +24,7 @@ import type { MemberAccount } from "@/app/members/members-utils";
 // ---------------------------------------------------------------------------
 
 export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
+  // --- Carlos Martínez and the three players he represents ------------------
   {
     id: "rp-001",
     role: "representante",
@@ -23,6 +32,26 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
     apellidos: "Martínez",
     email: "carlos.martinez@email.com",
     telefono: "+593 99 123 4567",
+    estudiantes: [
+      {
+        id: "rp-001",
+        nombres: "Carlos",
+        apellidos: "Martínez",
+        email: "carlos.martinez@email.com",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  },
+  {
+    id: "stu-001",
+    role: "representante",
+    nombres: "Sofía",
+    apellidos: "Martínez",
+    email: "sofia.martinez@email.com",
+    telefono: "+593 99 123 4567",
+    representadoPor: "Carlos Martínez",
     estudiantes: [
       {
         id: "stu-001",
@@ -46,6 +75,17 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
           periodo: "Julio 2026",
         },
       },
+    ],
+  },
+  {
+    id: "stu-002",
+    role: "representante",
+    nombres: "Mateo",
+    apellidos: "Martínez",
+    email: "mateo.martinez@email.com",
+    telefono: "+593 99 123 4567",
+    representadoPor: "Carlos Martínez",
+    estudiantes: [
       {
         id: "stu-002",
         nombres: "Mateo",
@@ -68,6 +108,17 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
           periodo: "Julio 2026",
         },
       },
+    ],
+  },
+  {
+    id: "stu-003",
+    role: "representante",
+    nombres: "Emilia",
+    apellidos: "Martínez",
+    email: "emilia.martinez@email.com",
+    telefono: "+593 99 123 4567",
+    representadoPor: "Carlos Martínez",
+    estudiantes: [
       {
         id: "stu-003",
         nombres: "Emilia",
@@ -92,6 +143,8 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
       },
     ],
   },
+
+  // --- Ana López and the player she represents -------------------------------
   {
     id: "rp-002",
     role: "representante",
@@ -99,6 +152,26 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
     apellidos: "López",
     email: "ana.lopez@email.com",
     telefono: "+593 98 765 4321",
+    estudiantes: [
+      {
+        id: "rp-002",
+        nombres: "Ana",
+        apellidos: "López",
+        email: "ana.lopez@email.com",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  },
+  {
+    id: "stu-004",
+    role: "representante",
+    nombres: "Valentina",
+    apellidos: "López",
+    email: "valentina.lopez@email.com",
+    telefono: "+593 98 765 4321",
+    representadoPor: "Ana López",
     estudiantes: [
       {
         id: "stu-004",
@@ -124,6 +197,8 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
       },
     ],
   },
+
+  // --- Diego Flores and the player he represents ------------------------------
   {
     id: "rp-003",
     role: "representante",
@@ -131,6 +206,26 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
     apellidos: "Flores",
     email: "diego.flores@email.com",
     telefono: "+593 97 654 3210",
+    estudiantes: [
+      {
+        id: "rp-003",
+        nombres: "Diego",
+        apellidos: "Flores",
+        email: "diego.flores@email.com",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  },
+  {
+    id: "stu-005",
+    role: "representante",
+    nombres: "Camila",
+    apellidos: "Flores",
+    email: "camila.flores@email.com",
+    telefono: "+593 97 654 3210",
+    representadoPor: "Diego Flores",
     estudiantes: [
       {
         id: "stu-005",
@@ -151,6 +246,8 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
       },
     ],
   },
+
+  // --- Nicolás Acosta, self-managed (no representative) -----------------------
   {
     id: "rp-004",
     role: "estudiante",
@@ -160,7 +257,7 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
     telefono: "+593 96 543 2109",
     estudiantes: [
       {
-        id: "stu-006",
+        id: "rp-004",
         nombres: "Nicolás",
         apellidos: "Acosta",
         email: "nicolas.acosta@email.com",
@@ -182,6 +279,8 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
       },
     ],
   },
+
+  // --- Carlos Ramírez and the two players he represents ------------------------
   {
     id: "rp-005",
     role: "representante",
@@ -189,6 +288,26 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
     apellidos: "Ramírez",
     email: "carlos.ramirez@email.com",
     telefono: "+593 95 432 1098",
+    estudiantes: [
+      {
+        id: "rp-005",
+        nombres: "Carlos",
+        apellidos: "Ramírez",
+        email: "carlos.ramirez@email.com",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  },
+  {
+    id: "stu-007",
+    role: "representante",
+    nombres: "Santiago",
+    apellidos: "Ramírez",
+    email: "santiago.ramirez@email.com",
+    telefono: "+593 95 432 1098",
+    representadoPor: "Carlos Ramírez",
     estudiantes: [
       {
         id: "stu-007",
@@ -212,6 +331,17 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
           periodo: "Julio 2026",
         },
       },
+    ],
+  },
+  {
+    id: "stu-008",
+    role: "representante",
+    nombres: "Isabella",
+    apellidos: "Morales",
+    email: "isabella.morales@email.com",
+    telefono: "+593 95 432 1098",
+    representadoPor: "Carlos Ramírez",
+    estudiantes: [
       {
         id: "stu-008",
         nombres: "Isabella",
@@ -231,6 +361,8 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
       },
     ],
   },
+
+  // --- Lucía Mendoza and the player she represents ------------------------------
   {
     id: "rp-006",
     role: "representante",
@@ -238,6 +370,26 @@ export const MOCK_MEMBER_ACCOUNTS: MemberAccount[] = [
     apellidos: "Mendoza",
     email: "lucia.mendoza@email.com",
     telefono: "+593 94 321 0987",
+    estudiantes: [
+      {
+        id: "rp-006",
+        nombres: "Lucía",
+        apellidos: "Mendoza",
+        email: "lucia.mendoza@email.com",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  },
+  {
+    id: "stu-009",
+    role: "representante",
+    nombres: "Joaquín",
+    apellidos: "Mendoza",
+    email: "joaquin.mendoza@email.com",
+    telefono: "+593 94 321 0987",
+    representadoPor: "Lucía Mendoza",
     estudiantes: [
       {
         id: "stu-009",

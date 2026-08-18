@@ -93,7 +93,12 @@ describe("GET /api/members", () => {
     expect(body.personasCapped).toBe(false);
   });
 
-  it("preserves the upstream cap when 200 personas collapse into fewer accounts", async () => {
+  it("preserves the upstream cap when 200 personas expand into one row each", async () => {
+    // Issue #388: `buildMemberAccounts` no longer collapses a root and its
+    // represented personas into one grouped account — every persona gets its
+    // own row now. `personasCapped` has to keep reflecting the raw upstream
+    // `total` regardless: it is not derived from `accounts.length`, so this
+    // still has to hold even though the shape it counts changed underneath it.
     const personas = Array.from({ length: 200 }, (_, index) => ({
       ...persona,
       id: index + 1,
@@ -108,8 +113,14 @@ describe("GET /api/members", () => {
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
 
-    expect(body.accounts).toHaveLength(1);
-    expect(body.accounts[0].estudiantes).toHaveLength(199);
+    // One row per persona now — no more collapsing into a single grouped account.
+    expect(body.accounts).toHaveLength(200);
+    // A represented persona's own row carries `representadoPor`, naming the
+    // root persona (id 1) it points at via `representanteId`.
+    const represented = body.accounts.find((account: { id: string }) => account.id === "2");
+    expect(represented.representadoPor).toBe(`${persona.nombres} ${persona.apellidos}`);
+    // The cap flag still derives from the raw upstream `total` (200 >=
+    // PERSONAS_PAGE_LIMIT), independent of how many account rows come out.
     expect(body.personasCapped).toBe(true);
   });
 

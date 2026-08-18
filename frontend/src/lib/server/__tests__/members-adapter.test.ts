@@ -59,7 +59,7 @@ const membresia: BackendMembresia = {
 const tipo: BackendTipoMembresia = { id: 5, categoria: "Mensual Adultos" };
 
 describe("buildMemberAccounts", () => {
-  it("groups a representante with their representados as one account", () => {
+  it("returns one row per persona, not just per root — a representative and their representado both get their own row", () => {
     const accounts = buildMemberAccounts(
       [admin, parent, child],
       new Map([[3, pago]]),
@@ -68,10 +68,30 @@ describe("buildMemberAccounts", () => {
       new Map([[5, tipo]]),
     );
 
+    // Three personas in, three rows out — a represented persona is no longer
+    // nested inside their representative's row and excluded from the top-level
+    // list.
+    expect(accounts).toHaveLength(3);
+
     const carlos = accounts.find((a) => a.id === "2");
     expect(carlos?.role).toBe("representante");
+    // Carlos' own row carries only himself — his own (empty) membership/payment
+    // status, not Sofia's.
     expect(carlos?.estudiantes).toHaveLength(1);
-    expect(carlos?.estudiantes[0].id).toBe("3");
+    expect(carlos?.estudiantes[0].id).toBe("2");
+    expect(carlos?.estudiantes[0].membresia).toBeNull();
+    // A root with no representative of their own has no `representadoPor`.
+    expect(carlos?.representadoPor).toBeUndefined();
+
+    const sofia = accounts.find((a) => a.id === "3");
+    expect(sofia?.estudiantes).toHaveLength(1);
+    expect(sofia?.estudiantes[0].id).toBe("3");
+    // Sofia's row names her representative by full name.
+    expect(sofia?.representadoPor).toBe("Carlos Martinez");
+    // Her own membership/payment status comes through on her own row, not
+    // aggregated into or hidden behind Carlos'.
+    expect(sofia?.estudiantes[0].membresia?.estado).toBe("activa");
+    expect(sofia?.estudiantes[0].ultimoPago?.estado).toBe("aprobado");
   });
 
   it("treats a root persona with no representados as a representante account (all root personas are adults)", () => {
@@ -81,6 +101,7 @@ describe("buildMemberAccounts", () => {
     expect(account?.role).toBe("representante");
     expect(account?.estudiantes).toHaveLength(1);
     expect(account?.estudiantes[0].id).toBe("1");
+    expect(account?.representadoPor).toBeUndefined();
   });
 
   it("resolves membership + latest payment from the pago/membresia/tipo maps", () => {
@@ -92,7 +113,7 @@ describe("buildMemberAccounts", () => {
       new Map([[5, tipo]]),
     );
 
-    const student = accounts.find((a) => a.id === "2")?.estudiantes[0];
+    const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
     // Issue #313 (K5 hallazgo #44): `membresia.monto` es el PRECIO DEL PLAN
     // (`montoAplicado`, $25), no el monto del último pago ($50 — una
     // renovación de dos meses en este fixture). Antes ambos números se
@@ -145,9 +166,14 @@ describe("buildMemberAccounts", () => {
     expect(student.activo).toBe(true);
   });
 
-  it("returns no email field (Persona has none) and no accounts for non-root personas outside their group", () => {
+  it("returns no email field (Persona has none), and one row for EVERY persona including non-root ones", () => {
     const accounts = buildMemberAccounts([parent, child], new Map(), new Map(), new Map(), new Map());
-    expect(accounts).toHaveLength(1);
+    // Both the root and its represented persona get their own row now — this
+    // used to collapse to 1 (only the root), which is exactly the bug #388
+    // reports: a represented persona's own status was invisible outside the
+    // group.
+    expect(accounts).toHaveLength(2);
     expect(accounts[0].email).toBeUndefined();
+    expect(accounts[1].email).toBeUndefined();
   });
 });

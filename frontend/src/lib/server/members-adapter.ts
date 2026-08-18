@@ -6,10 +6,15 @@
  * src/app/api/members/route.ts. Mirrors src/lib/server/payments-adapter.ts
  * and attendance-adapter.ts.
  *
- * Domain mapping (per the Fase 4 plan): a `MemberAccount` is a root Persona
- * (`representanteId === null`). Personas that point to it via
- * `representanteId` become its `estudiantes` (role "representante");
- * otherwise the root manages only itself (role "estudiante", self-managed).
+ * Domain mapping (issue #388): a `MemberAccount` is ONE Persona, root or
+ * represented — not a root with its represented personas nested inside it.
+ * Every persona in the input gets its own row with its OWN membership/payment
+ * status; a represented persona's row also carries `representadoPor` (its
+ * representative's full name), read off `representanteId` via a
+ * `personaById` lookup. This used to group by root and nest every represented
+ * persona inside the root's `estudiantes[]`, which hid a represented person's
+ * own status behind the group's best status (see `getAccountStatusBadge`) and
+ * excluded a root WITH dependants from its own `estudiantes[]` entirely.
  * Derived locally from one paginated `/personas/` fetch instead of N calls
  * to `/personas/{id}/representados` — same avoid-N+1 tradeoff as
  * `payments-adapter.ts#buildRepresentanteNameMap`.
@@ -153,6 +158,10 @@ function buildMemberStudentSummary(
  * no fetching (that happens in the route handler, same split as
  * payments-adapter.ts).
  *
+ * One row per persona (issue #388) — not one row per root with its
+ * represented personas nested inside. Each row's `estudiantes` is always a
+ * single-element array holding that exact persona's own summary.
+ *
  * @param personas — every Persona (`GET /personas/`).
  * @param latestPagoByPersona — each persona's most recent Pago, keyed by `personaId`.
  * @param membresiaById — `Membresia` lookups keyed by `membresiaId`.
@@ -166,33 +175,28 @@ export function buildMemberAccounts(
   membresiaByPersona: Map<number, BackendMembresia>,
   tipoById: Map<number, BackendTipoMembresia>,
 ): MemberAccount[] {
-  const childrenByRepresentante = new Map<number, BackendPersonaFull[]>();
-  for (const persona of personas) {
-    if (persona.representanteId !== null) {
-      const list = childrenByRepresentante.get(persona.representanteId) ?? [];
-      list.push(persona);
-      childrenByRepresentante.set(persona.representanteId, list);
-    }
-  }
+  const personaById = new Map<number, BackendPersonaFull>(
+    personas.map((persona) => [persona.id, persona]),
+  );
 
-  const roots = personas.filter((persona) => persona.representanteId === null);
-
-  return roots.map((root) => {
-    const children = childrenByRepresentante.get(root.id) ?? [];
-    const estudiantesSource = children.length > 0 ? children : [root];
+  return personas.map((persona) => {
+    const representante =
+      persona.representanteId != null ? personaById.get(persona.representanteId) : undefined;
 
     // All root personas are adults (minors always have representanteId set),
     // and self-enrollment now assigns the REPRESENTANTE role to every adult
     // self-enrollee. Without a bulk roles endpoint (gap #1 in the module
-    // docstring), we label every root as "representante" — the admin edit
-    // modal already shows/toggles the actual backend roles.
+    // docstring), we label every row as "representante" — the admin edit
+    // modal already shows/toggles the actual backend roles. This is a
+    // pre-existing, separately-tracked gap; not fixed here.
     return {
-      id: String(root.id),
+      id: String(persona.id),
       role: "representante" as const,
-      nombres: root.nombres,
-      apellidos: root.apellidos,
-      telefono: root.telefono,
-      estudiantes: estudiantesSource.map((persona) =>
+      nombres: persona.nombres,
+      apellidos: persona.apellidos,
+      telefono: persona.telefono,
+      representadoPor: representante ? `${representante.nombres} ${representante.apellidos}` : undefined,
+      estudiantes: [
         buildMemberStudentSummary(
           persona,
           latestPagoByPersona.get(persona.id),
@@ -200,7 +204,7 @@ export function buildMemberAccounts(
           membresiaByPersona,
           tipoById,
         ),
-      ),
+      ],
     };
   });
 }
