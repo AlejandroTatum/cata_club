@@ -63,9 +63,25 @@ const PANEL = "gap-4 card p-[18px]";
  * component full width and stacked: 254px of a 900px viewport spent on three
  * controls crammed into the left 320px, with the entire right half of the card
  * empty — the "espacios vacíos" reproche, inside the block that is supposed to
- * be dense. The trainer's attendance history draws the SAME component in the
- * left third of its layout, where the column is the only thing that fits, which
- * is why this could not be fixed by simply changing the default.
+ * be dense. The trainer's attendance history drew the SAME component the SAME
+ * way and kept that defect a while longer, at a wider measure: it too is a
+ * full-width child of the shell, on the default `max-w-8xl`, with no rail and
+ * no grid anywhere in the file. It asks for `row` now (issue #375).
+ *
+ * So the axis is not a prop because some screen has a narrow column to fit —
+ * as of this writing NO caller renders this panel inside one. It is a prop
+ * because the right axis follows how many slots a screen fills, and only the
+ * screen knows that. `/student/payments` fills exactly one (`chips`): flowed,
+ * a lone chip row is confined to one track of a `sm:grid-cols-2` grid with
+ * nothing beside it — the same emptiness `row` exists to remove, reached from
+ * the other side. Stacked, one slot just takes the width it needs. That is why
+ * `column` stays the default: it is the axis that cannot be wrong for the
+ * panel with the least in it, and a screen that fills three slots is the one
+ * in a position to say so.
+ *
+ * Mobile is NOT a reason to reach for `column`. `row` is a grid that starts
+ * single-track and only splits at `sm` (640px), so it already stacks itself on
+ * a phone.
  *
  * What moves is the axis. What does not move is the sequence — search, chips,
  * fields, then the caveat — because "a screen cannot express the wrong order"

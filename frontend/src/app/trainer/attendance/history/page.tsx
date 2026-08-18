@@ -189,7 +189,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
       >
         <BackLink href="/trainer" className="mb-6" />
 
-        <AttendanceFilters filters={filters} schedules={schedules} />
+        <AttendanceFilters filters={filters} schedules={schedules} layout="row" />
 
         {loading && <LoadingState label="Cargando historial…" />}
 
