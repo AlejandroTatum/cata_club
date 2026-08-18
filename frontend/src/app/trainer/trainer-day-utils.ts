@@ -375,6 +375,136 @@ export function buildEnrolledCountsByHorario(
 }
 
 // ---------------------------------------------------------------------------
+// The day rail — geometry for the hero band
+//
+// El reclamo del dueño sobre la banda fue de TAMAÑO: "me ponen un rectángulo
+// negro gigante". La banda listaba el resto del día como una fila por sesión,
+// que es justamente la forma que responde a una queja de alto CRECIENDO — tres
+// sesiones costaban ~100px de banda y seis costaban el doble.
+//
+// Así que el día se dibuja a lo ANCHO. Todo lo de aquí abajo es geometría: cada
+// sesión de hoy es un bloque ubicado y dimensionado por sus propias horas
+// dentro de una ventana que va del primer inicio al último fin. La banda deja
+// de crecer con la agenda, y el riel contesta la pregunta que la lista no
+// contestaba — dónde está parado el entrenador dentro de su día.
+//
+// Los porcentajes salen sin redondear, como los de `buildSessionBarSegments`:
+// son anchos de CSS, no cifras que alguien lea.
+// ---------------------------------------------------------------------------
+
+/** Dónde cae un bloque respecto del reloj. Nada de esto viene del backend. */
+export type DayRailPhase = "past" | "live" | "upcoming";
+
+export interface DayRailBlock {
+  schedule: TrainingSchedule;
+  /** 0–100: dónde arranca el bloque dentro de la ventana del riel. */
+  leftPercent: number;
+  /** 0–100: cuánto de la ventana ocupa, o sea su duración. */
+  widthPercent: number;
+  phase: DayRailPhase;
+  /**
+   * Fila del riel. Siempre 0 salvo que la sesión se pise con otra ya colocada:
+   * `fetchTrainingSchedules` devuelve TODOS los horarios del club para el día,
+   * no los de un entrenador, así que dos categorías a la misma hora son un
+   * caso real y no una hipótesis. Apiladas ocupan una fila más; superpuestas
+   * una taparía a la otra.
+   */
+  lane: number;
+}
+
+export interface DayRail {
+  blocks: DayRailBlock[];
+  /** Cuántas filas necesita el riel — 1 mientras nada se pise. */
+  lanes: number;
+  /**
+   * 0–100 para el minuto actual, o `null` cuando el reloj cae fuera del día.
+   *
+   * Fuera de la ventana no hay marcador en vez de uno pegado al borde: a las
+   * 03:20 de un día que empieza a las 15:00, un marcador en 0% diría que la
+   * primera sesión está empezando. La línea de soporte ya dice cuánto falta.
+   */
+  nowPercent: number | null;
+  /** Las dos puntas de la ventana, en "HH:mm" — la escala del riel. */
+  startHora: string;
+  endHora: string;
+}
+
+/** "09:05" — con las dos mitades rellenadas, para que las dos puntas midan igual. */
+export function formatMinutesAsHora(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
+
+/**
+ * El riel del día: un bloque por sesión de hoy, ubicado por su hora real.
+ *
+ * La ventana va del primer inicio al último fin, y no se estira hasta `now`:
+ * un día que empieza a las 15:00 mirado a las 03:20 aplastaría todas las
+ * sesiones contra el borde derecho para dejar doce horas de mañana vacía, que
+ * es gastar el ancho justo en lo único que no pasa nada.
+ *
+ * `null` cuando no queda ni una sesión dibujable. Una fila que no se puede
+ * dibujar —`horaInicio` llega como string de la API, y un fin anterior al
+ * inicio no tiene ancho— se descarta sola: una fila mala no puede costarle el
+ * riel al día entero, que es la misma defensa que toma `parseHoraToMinutes`.
+ */
+export function buildDayRail(
+  todaySchedules: TrainingSchedule[],
+  now: Date = new Date(),
+): DayRail | null {
+  const drawable = todaySchedules
+    .map((schedule) => ({
+      schedule,
+      start: parseHoraToMinutes(schedule.horaInicio),
+      end: parseHoraToMinutes(schedule.horaFin),
+    }))
+    .filter(
+      (row): row is { schedule: TrainingSchedule; start: number; end: number } =>
+        row.start !== null && row.end !== null && row.end > row.start,
+    )
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  if (drawable.length === 0) return null;
+
+  const windowStart = drawable[0].start;
+  const windowEnd = drawable.reduce((latest, row) => Math.max(latest, row.end), drawable[0].end);
+  const span = windowEnd - windowStart;
+  const nowMinutes = minutesSinceMidnight(now);
+
+  // El fin de la última sesión colocada en cada fila. Un bloque entra en la
+  // PRIMERA fila que ya se liberó, así que las filas solo crecen cuando de
+  // verdad hay simultaneidad, y una vez que el cruce pasa el riel vuelve a una.
+  const laneEnds: number[] = [];
+
+  const blocks = drawable.map(({ schedule, start, end }): DayRailBlock => {
+    const free = laneEnds.findIndex((laneEnd) => laneEnd <= start);
+    const lane = free === -1 ? laneEnds.length : free;
+    laneEnds[lane] = end;
+
+    return {
+      schedule,
+      leftPercent: ((start - windowStart) / span) * 100,
+      widthPercent: ((end - start) / span) * 100,
+      // Terminada solo cuando TERMINÓ, no cuando la siguiente quedó más cerca
+      // — el mismo criterio con el que `selectTodaySessions` elige la próxima.
+      phase: end <= nowMinutes ? "past" : start <= nowMinutes ? "live" : "upcoming",
+      lane,
+    };
+  });
+
+  const inside = nowMinutes >= windowStart && nowMinutes <= windowEnd;
+
+  return {
+    blocks,
+    lanes: laneEnds.length,
+    nowPercent: inside ? ((nowMinutes - windowStart) / span) * 100 : null,
+    startHora: formatMinutesAsHora(windowStart),
+    endHora: formatMinutesAsHora(windowEnd),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // "Últimas listas" proportional bar (issue #211)
 //
 // Color is reserved for badges and pills — four loose colored counts per row

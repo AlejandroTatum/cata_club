@@ -87,6 +87,7 @@ import { todayDiaSemana } from "@/lib/club-date";
 import {
   buildEnrolledCountsByHorario,
   buildMonthAttendanceRate,
+  buildDayRail,
   buildSessionCardState,
   findAbsenceAlert,
   formatAbsenceCount,
@@ -180,6 +181,11 @@ export default function TrainerPage(): React.ReactElement {
   }, [schedules]);
 
   const sessionCardState = useMemo(() => buildSessionCardState(todaySchedules), [todaySchedules]);
+  // El día entero, no solo lo que falta: el riel de la banda dibuja también las
+  // sesiones ya terminadas, que es lo que le deja al entrenador ver dónde está
+  // parado. La geometría se calcula acá, junto al resto del estado derivado,
+  // para que `SessionCard` no tenga que leer el reloj por su cuenta.
+  const dayRail = useMemo(() => buildDayRail(todaySchedules), [todaySchedules]);
   const absenceAlert = useMemo(() => findAbsenceAlert(monthRecords), [monthRecords]);
   const attendanceStats = useMemo(() => buildAttendanceStats(monthRecords), [monthRecords]);
 
@@ -280,7 +286,11 @@ export default function TrainerPage(): React.ReactElement {
               `fill`: there is no equal-height sibling left to match.
             */}
             {sessionCardState ? (
-              <SessionCard state={sessionCardState} enrolledCounts={enrolledCounts} />
+              <SessionCard
+                state={sessionCardState}
+                rail={dayRail}
+                enrolledCounts={enrolledCounts}
+              />
             ) : (
               <EmptyState
                 icon={<CalendarOff size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
