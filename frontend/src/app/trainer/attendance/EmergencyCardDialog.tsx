@@ -27,6 +27,19 @@
  * alumno has no ficha médica registered yet. The screen must never go blank
  * or show an error for that; the representative's contact (always present
  * for a menor) is what carries the emergency instead.
+ *
+ * ## Cuando tampoco hay representante — issue #362
+ *
+ * "Always present for a menor" resultó ser falso, y está medido: de 66 alumnos
+ * con horario, 24 no tienen NI ficha médica NI representante legal. Para esos
+ * 24 los seis campos llegan en null y la tarjeta salía en blanco — seis
+ * renglones que dicen "No registra" y nada más.
+ *
+ * Eso es peor que inútil. El entrenador abre esta tarjeta en el minuto en que
+ * ya es tarde, y una lista de vacíos lo deja deduciendo solo si el hueco es del
+ * sistema o del club. El padrón no trae bandera de "tiene ficha" y no se va a
+ * inventar una, así que este diálogo es el único lugar donde se puede decir qué
+ * falta y a quién pedírselo. Ver `estaCompletamenteVacia` abajo.
  */
 
 "use client";
@@ -37,6 +50,7 @@ import { fetchFichaEmergencia, type FichaEmergencia } from "@/services/api";
 import { ICON } from "@/lib/icon-size";
 import Button from "@/components/ui/Button";
 import DataBox from "@/components/ui/DataBox";
+import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import LoadingState from "@/components/ui/LoadingState";
 
@@ -73,6 +87,26 @@ function Campo({
       )}
     </div>
   );
+}
+
+/**
+ * Los SEIS campos accionables en null — no hay a quién llamar ni qué decirle a
+ * un paramédico.
+ *
+ * `alumnoNombreCompleto` queda fuera a propósito: lo trae siempre y no sirve
+ * para nada en una emergencia, así que contarlo haría que la tarjeta nunca se
+ * declare vacía. La cadena en blanco cuenta como ausente igual que el null: un
+ * `contacto_emergencia` con un espacio no es un teléfono.
+ */
+function estaCompletamenteVacia(ficha: FichaEmergencia): boolean {
+  return [
+    ficha.tipoSangre,
+    ficha.alergias,
+    ficha.contactoEmergencia,
+    ficha.telefonoEmergencia,
+    ficha.representanteNombreCompleto,
+    ficha.representanteTelefono,
+  ].every((valor) => !valor?.trim());
 }
 
 export default function EmergencyCardDialog({
@@ -178,7 +212,24 @@ export default function EmergencyCardDialog({
             </div>
           )}
 
-          {estado.tipo === "lista" && (
+          {/*
+           * El vacío total se dice, no se deja deducir. Sin `role="alert"` y
+           * sin botón de reintentar: no es una falla de carga, y reintentar no
+           * trae un dato que nadie cargó — ofrecerlo mandaría al entrenador a
+           * golpear un botón inútil en el peor momento posible.
+           */}
+          {estado.tipo === "lista" && estaCompletamenteVacia(estado.ficha) && (
+            <div data-testid="emergency-card-empty">
+              <EmptyState
+                surface="inset"
+                icon={<AlertTriangle size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                title="Sin datos de emergencia"
+                description={`El club no tiene cargada la ficha médica de ${student.name} ni un representante legal, así que esta tarjeta no puede decirle a quién llamar. Pídalos en secretaría antes del próximo entrenamiento.`}
+              />
+            </div>
+          )}
+
+          {estado.tipo === "lista" && !estaCompletamenteVacia(estado.ficha) && (
             <div className="flex flex-col">
               <Campo etiqueta="Tipo de sangre" valor={estado.ficha.tipoSangre} />
               <Campo etiqueta="Alergias" valor={estado.ficha.alergias} />
