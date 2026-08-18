@@ -165,7 +165,8 @@ describe("Pagination — where it sits", () => {
       "src/app/reports/page.tsx",
       "src/app/members/page.tsx",
       "src/app/groups/page.tsx",
-      "src/app/trainer/attendance/page.tsx",
+      // El asistente del entrenador también paginaba su nómina; se borró
+      // mientras se rehace dentro de Miembros, y su renglón se fue con él.
       "src/app/trainer/attendance/history/page.tsx",
     ];
 

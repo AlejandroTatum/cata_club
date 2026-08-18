@@ -116,8 +116,10 @@ describe("a paginated list shows ten rows", () => {
         "trainer/attendance/history/page.tsx",
       ]),
     );
-    // Locks in #318/#58: the wizard roster must not silently regain a
-    // `…PAGE_SIZE` constant — that is exactly how it got repaginated once.
-    expect(scanned.has("trainer/attendance/page.tsx")).toBe(false);
+    // There used to be a lock here asserting the wizard's `page.tsx` carried
+    // no `…PAGE_SIZE` constant (#318/#58). The wizard was deleted while it is
+    // rebuilt inside the Members area, so the lock now guards a file that
+    // cannot exist and would pass no matter what anyone wrote. When the roster
+    // comes back inside Members, it gets a lock naming its real path.
   });
 });

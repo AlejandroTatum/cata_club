@@ -68,13 +68,13 @@ const NO_HEADER_ACTION: Record<string, string> = {
   "app/attendance/page.tsx": "el único verbo que tenía apuntaba al asistente retirado",
   "app/trainer/attendance/history/page.tsx":
     "el único verbo que tenía apuntaba al asistente retirado",
-  // --- The five family screens, decided in #43 -----------------------------
-  // A wizard. Its buttons are "Continuar" and "Confirmar asistencia": they move
-  // through the steps rather than act on the page, and which one is showing is
-  // the step's business. A header slot would name whichever verb happened to be
-  // live, or a third one that is neither.
-  "app/trainer/attendance/page.tsx": "wizard — the buttons are step navigation",
-  // Same shape, same reason.
+  // --- The family screens, decided in #43 ----------------------------------
+  // A wizard. Its buttons are "Continuar" and "Confirmar": they move through
+  // the steps rather than act on the page, and which one is showing is the
+  // step's business. A header slot would name whichever verb happened to be
+  // live, or a third one that is neither. The trainer's roll-call wizard was
+  // the other entry with this reason; it was deleted while it is rebuilt
+  // inside the Members area, so only this one is left carrying it.
   "app/student/add-dependent/page.tsx": "wizard — the buttons are step navigation",
   // The action depends on the state of the account — finish an enrolment, cover
   // a membership, nothing at all — and it is the band naming that state that
