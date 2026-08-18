@@ -378,6 +378,52 @@ class Membresia(Base):
     pagos: Mapped[List["Pago"]] = relationship(back_populates="membresia")
 
 
+class HistorialEstadoMembresia(Base):
+    """Huella auditable de cada transición de estado de una membresía (#400).
+
+    Por qué existe: sin esto, suspender una membresía sería un cambio de
+    estado sin autor y sin motivo. Es exactamente el defecto que #389
+    documenta del otro lado del sistema, donde una asistencia corregida
+    quedaba acreditada a quien no la escribió. Acá se registra quién, cuándo,
+    desde qué estado y por qué -- y el original nunca se sobrescribe: cada
+    transición es una fila nueva.
+
+    `fecha_efectiva` (desde cuándo rige el estado nuevo) es distinta de
+    `fecha_registro` (cuándo se escribió la fila). Separarlas permite
+    registrar una suspensión con fecha efectiva pasada sin que la auditoría
+    mienta sobre cuándo se decidió.
+    """
+
+    __tablename__ = "historial_estado_membresia"
+    __table_args__ = (
+        Index("ix_historial_estado_membresia_membresia_id", "membresia_id"),
+        Index("ix_historial_estado_membresia_actor_persona_id", "actor_persona_id"),
+        # Una transición de ACTIVA a ACTIVA no es una transición: es ruido que
+        # ensucia la auditoría y hace que un conteo de suspensiones mienta.
+        CheckConstraint(
+            "estado_anterior <> estado_nuevo",
+            name="ck_historial_estado_cambia",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    membresia_id: Mapped[int] = mapped_column(ForeignKey("membresia.id"))
+    estado_anterior: Mapped[EstadoMembresia] = mapped_column(SAEnum(EstadoMembresia))
+    estado_nuevo: Mapped[EstadoMembresia] = mapped_column(SAEnum(EstadoMembresia))
+    fecha_efectiva: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    fecha_registro: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc
+    )
+    # Nullable a propósito: el vencimiento lo dispara el sistema, no una
+    # persona. Que TODA transición administrativa lleve actor y motivo lo
+    # exige el servicio, que es quien conoce la diferencia; la tabla no puede
+    # distinguir un actor ausente legítimo de uno olvidado.
+    actor_persona_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    motivo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
 class Pago(Base):
     __tablename__ = "pago"
     # Invariante de negocio EN LA BASE (auditoría hallazgo 7, issue #8): un
