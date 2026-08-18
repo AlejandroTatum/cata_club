@@ -37,6 +37,12 @@ class FichaMedicaServicio:
             ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
         return self.repo.crear(ficha)
 
+    def listar_personas_con_ficha(self, persona_ids: list[int]) -> set[int]:
+        """Issue #362: de `persona_ids`, cuáles YA tienen ficha médica. Solo
+        delega -- ver `FichaMedicaRepositorio.listar_persona_ids_con_ficha`
+        para la consulta y por qué es una sola `IN`, no un loop."""
+        return self.repo.listar_persona_ids_con_ficha(persona_ids)
+
     def obtener_por_persona(self, persona_id: int) -> FichaMedica:
         persona = self.repo_persona.obtener_por_id(persona_id)
         if not persona or not persona.ficha_medica:

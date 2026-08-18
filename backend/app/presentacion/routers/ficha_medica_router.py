@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends
+from typing import List
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.presentacion.schemas.persona_schemas import (
-    FichaEmergenciaResponseDTO, FichaMedicaCreateDTO, FichaMedicaResponseDTO, FichaMedicaUpdateDTO,
+    FichaEmergenciaResponseDTO, FichaMedicaCreateDTO, FichaMedicaExistenciaResponseDTO,
+    FichaMedicaResponseDTO, FichaMedicaUpdateDTO,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.ficha_medica_servicio import FichaMedicaServicio
@@ -72,6 +75,34 @@ _MENSAJE_SIN_ACCESO = (
 )
 async def crear_ficha_medica(datos: FichaMedicaCreateDTO, db: Session = Depends(obtener_sesion)):
     return FichaMedicaServicio(db).crear_ficha_medica(datos)
+
+
+# --- GET /existe ------------------------------------------------------------
+# Issue #362. Existencia en bloque para el admin `/members`: "cuáles de estas
+# N personas tienen ficha médica" para marcar el hueco "sin datos de
+# emergencia" fila por fila más un conteo agregado. ADMIN_ONLY (no
+# ADMIN_O_ENTRENADOR como la ruta de emergencia de abajo): esto no es una
+# emergencia en curso, es una pantalla de gestión, y `/members` ya está
+# `allowedRoles={["admin"]}` en el frontend.
+#
+# `persona_ids` es una lista nativa de FastAPI (`?persona_ids=1&persona_ids=2`),
+# no una string separada por comas parseada a mano: FastAPI ya valida/convierte
+# cada valor a `int` y devuelve 422 solo en el elemento roto, en vez de que un
+# `"1,x,3".split(",")` casero explote entero o, peor, trague el error.
+@router.get(
+    "/existe",
+    response_model=FichaMedicaExistenciaResponseDTO,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+async def existe_ficha_medica(
+    persona_ids: List[int] = Query(default=[]),
+    db: Session = Depends(obtener_sesion),
+):
+    return FichaMedicaExistenciaResponseDTO(
+        persona_ids_con_ficha=sorted(
+            FichaMedicaServicio(db).listar_personas_con_ficha(persona_ids)
+        )
+    )
 
 
 @router.get(

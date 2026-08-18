@@ -47,6 +47,7 @@ from app.dominio.modelos import (
     HorarioEntrenamiento,
     Asistencia,
     AlumnoHorario,
+    FichaMedica,
 )
 from app.dominio.enums import (
     TipoRol,
@@ -55,6 +56,7 @@ from app.dominio.enums import (
     TipoPago,
     EstadoAsistencia,
     DiaSemana,
+    TipoSangre,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.dominio.cedula import cedula_valida
@@ -452,6 +454,27 @@ def main() -> None:
         db.flush()
 
         # ------------------------------------------------------------------
+        # 2.5. Fichas médicas (issue #362 QA seed coverage). Antes este seed
+        #      no creaba NINGUNA fila en ficha_medica, así que `/members`
+        #      siempre mostraba el fallback degradado ("sin datos de
+        #      emergencia" en todos o en ninguno, según el bug). La mitad de
+        #      los estudiantes (índice par) queda con ficha médica cargada,
+        #      la otra mitad sin -- así el hueco tiene casos reales de ambos
+        #      lados para revisar en QA.
+        # ------------------------------------------------------------------
+        fichas_creadas = 0
+        for f_idx, (persona, _) in enumerate(estudiantes):
+            if f_idx % 2 != 0:
+                continue
+            _, es_nueva_ficha = _obtener_o_crear(
+                db, FichaMedica, FichaMedica.persona_id == persona.id,
+                {"persona_id": persona.id, "tipo_sangre": TipoSangre.O_POSITIVO},
+            )
+            if es_nueva_ficha:
+                fichas_creadas += 1
+        db.flush()
+
+        # ------------------------------------------------------------------
         # 3. Inscripción por categoría + asistencia histórica.
         #
         #    Cada alumno entra a UNA categoría y queda inscrito en TODOS sus
@@ -550,6 +573,7 @@ def main() -> None:
         print(f"[seed] Hijos gestionados creados en esta corrida: {hijos_creados}")
         print(f"[seed] Alumnos auto-gestionados creados en esta corrida: {autogestionados_creados}")
         print(f"[seed] Total de estudiantes conocidos (nuevos + ya existentes): {total_estudiantes}")
+        print(f"[seed] Fichas médicas creadas en esta corrida: {fichas_creadas}")
         print(f"[seed] Inscripciones a horarios creadas: {inscripciones_creadas}")
         print(f"[seed] Registros de asistencia creados: {asistencias_creadas}")
         print(f"[seed] Contraseña compartida para TODAS las cuentas de este seed: {CONTRASENIA_COMPARTIDA}")

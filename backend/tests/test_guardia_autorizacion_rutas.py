@@ -215,6 +215,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/fichas-medicas/persona/{persona_id}/emergencia"): frozenset(
         {"ADMINISTRADOR", "ENTRENADOR"}
     ),
+    # Issue #362: existencia en bloque para el admin `/members`. ADMIN_ONLY
+    # (no ADMIN_O_ENTRENADOR como la ruta de emergencia de arriba) -- es una
+    # pantalla de gestión, no una emergencia en curso.
+    ("GET", "/fichas-medicas/existe"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/descuentos/"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/"): frozenset({"ADMINISTRADOR"}),

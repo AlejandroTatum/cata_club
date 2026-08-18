@@ -25,6 +25,21 @@ class FichaMedicaRepositorio:
         self.db.refresh(ficha)
         return ficha
 
+    def listar_persona_ids_con_ficha(self, persona_ids: list[int]) -> set[int]:
+        """Issue #362: existencia en bloque, no el contenido de la ficha. El
+        admin `/members` necesita saber CUÁLES de N personas tienen ficha
+        médica para marcar el hueco "sin datos de emergencia" -- una fila de
+        `SELECT persona_id ... WHERE persona_id IN (...)`, nunca N consultas
+        (ver el docstring del router para el N+1 que esto evita)."""
+        if not persona_ids:
+            return set()
+        filas = (
+            self.db.query(FichaMedica.persona_id)
+            .filter(FichaMedica.persona_id.in_(persona_ids))
+            .all()
+        )
+        return {fila[0] for fila in filas}
+
 
 class UsuarioRepositorio:
     def __init__(self, db: Session):

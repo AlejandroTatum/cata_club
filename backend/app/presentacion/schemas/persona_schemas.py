@@ -174,6 +174,16 @@ class FichaMedicaResponseDTO(ResponseBase, BaseModel):
     telefono_emergencia: Optional[str] = None
 
 
+class FichaMedicaExistenciaResponseDTO(ResponseBase, BaseModel):
+    """Respuesta de `GET /fichas-medicas/existe` (issue #362): de los
+    `persona_ids` pedidos, cuáles YA tienen una ficha médica cargada.
+    Bulk-existence, no bulk-fetch -- el admin `/members` solo necesita saber
+    SI existe, no su contenido, para marcar el hueco "sin datos de
+    emergencia" sin traer N fichas completas."""
+
+    persona_ids_con_ficha: List[int] = []
+
+
 class FichaEmergenciaResponseDTO(ResponseBase, BaseModel):
     """DTO propio del issue #360, deliberadamente chico.
 
