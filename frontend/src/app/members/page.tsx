@@ -33,16 +33,13 @@ import {
   FilterPill,
   IdentityCell,
   LoadingState,
-  MEMBER_ROLE_LABELS,
   Pagination,
+  ResponsiveListTable,
   SearchInput,
   STAT_GRID,
   StatCard,
   StatTrack,
-  Table,
-  TableBody,
   TableCell,
-  TableHead,
   TableHeaderCell,
   TableRow,
 } from "@/components/ui";
@@ -74,7 +71,6 @@ import {
   buildMemberStats,
   formatMembershipPeriod,
   filterAccounts,
-  getAccountIdentity,
   accountMatchesFlag,
   countAccountsMatchingFlag,
   getAccountStatusBadge,
@@ -385,24 +381,6 @@ const ROLE_ICONS: Record<BackendTipoRol, typeof ShieldCheck> = {
 };
 
 /**
- * The words the identity of one account resolves to, in the club's own
- * vocabulary — `MEMBER_ROLE_LABELS` is the single place any of them is spelled.
- *
- * It exists because this screen draws the same account TWICE, as a table row
- * above `sm` and as a card below it. Two call sites deriving the same sentence
- * are two call sites that can disagree about who an account is, and the
- * disagreement only shows up when somebody resizes a window.
- *
- * Frequently EMPTY, and that is the normal case rather than a failure: an
- * account whose dependants are unknown has nothing provable to say about who
- * its holder is, so both renderings say nothing. See `getAccountIdentity`.
- */
-function accountRoleLabels(account: MemberAccount): string[] {
-  const { roles, represents } = getAccountIdentity(account);
-  return roles.map((role) => MEMBER_ROLE_LABELS[role](represents));
-}
-
-/**
  * The trigger every row carries, at D5's THIRD level.
  *
  * It used to be `secondary` — `bg-paper` on a `line-2` border — which is the
@@ -435,52 +413,21 @@ function EditAccountButton({ account, onEdit }: AccountListItemProps): React.Rea
 /** One account as a table row (`sm` and up). */
 function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
-  const { roles, represents } = getAccountIdentity(account);
-  const [playersOpen, setPlayersOpen] = useState(false);
-
   const fullName = `${account.nombres} ${account.apellidos}`;
-  // Sin representados no hay nada que desplegar: una raíz que se sostiene a sí
-  // misma no prueba ninguna relación, y un disclosure vacío es un control que
-  // se puede accionar y no hace nada.
-  const canExpand = represents.length > 0;
-  const panelId = `jugadores-cuenta-${account.id}`;
 
   return (
-    <>
     <TableRow>
       {/* D9's shared identity cell, not a second drawing of the same layout.
-          What it says comes from `getAccountIdentity`, and what it does NOT say
-          is the point: this row shows NO ROLE. `account.role` is not one —
-          `lib/server/members-adapter.ts:173` stamps `role: "representante" as
-          const` on every root account because the DTO carries no roles and the
-          only role endpoints mutate, so the field says the same word about a
-          representative, a lone player and a member who also coaches. Boxed in
-          the cell it read as information. It comes back when the backend can be
-          asked; until then the real roles are read one account at a time, in the
-          edit dialog. The companion line survives only where `estudiantes`
-          proves a relationship — see `getAccountIdentity`'s own doc. */}
+          Issue #388 removed the row's disclosure along with the group it used
+          to expand: `estudiantes` is now always this exact person, so there is
+          no relationship left to name or count here. `account.role` is still
+          not a role — see `lib/server/members-adapter.ts`'s module doc for why
+          — so this cell draws the name and nothing else; the account's real
+          roles are read one account at a time, in the edit dialog. */}
       <TableCell>
-        <div className="flex items-center gap-2">
-          <IdentityCell name={fullName} roles={roles} represents={represents} />
-          {/* El disclosure vive pegado a la identidad porque lo que despliega
-              es la identidad: la celda dice CUÁNTOS y este control dice
-              quiénes. `tertiary` por la misma razón que "Editar" — una fila no
-              gana un segundo contorno. */}
-          {canExpand && (
-            <Button
-              variant="tertiary"
-              size="sm"
-              aria-expanded={playersOpen}
-              aria-controls={panelId}
-              aria-label={`${playersOpen ? "Ocultar" : "Ver"} jugadores de ${fullName}`}
-              onClick={() => setPlayersOpen((open) => !open)}
-            >
-              {playersOpen ? "Ocultar" : "Ver"}
-            </Button>
-          )}
-        </div>
+        <IdentityCell name={fullName} />
       </TableCell>
-      <TableCell type="number">{account.estudiantes.length}</TableCell>
+      <TableCell>{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">
         <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
       </TableCell>
@@ -488,26 +435,6 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
         <EditAccountButton account={account} onEdit={onEdit} />
       </TableCell>
     </TableRow>
-    {/* La verdad completa que la fila colapsada aplaza. Fila aparte porque un
-        `<tr>` no anida: es la única forma de que los nombres ocupen el ancho
-        de la tabla en vez de ensanchar la columna de identidad, que es
-        justamente lo que se vino a arreglar. Todos, enteros y sin `truncate`. */}
-    {canExpand && playersOpen && (
-      <TableRow>
-        <TableCell colSpan={4}>
-          <ul
-            id={panelId}
-            aria-label={`Jugadores de ${fullName}`}
-            className="flex flex-wrap gap-x-6 gap-y-field py-1 text-sm text-ink"
-          >
-            {represents.map((nombre) => (
-              <li key={nombre}>{nombre}</li>
-            ))}
-          </ul>
-        </TableCell>
-      </TableRow>
-    )}
-    </>
   );
 }
 
@@ -520,19 +447,16 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
       name={`${account.nombres} ${account.apellidos}`}
       meta={
         <>
-          {/* The same sentence the table's identity cell draws, in the box
-              this row's metadata is made of. `DataRow` renders `name` inside a
-              `<p>`, so `IdentityCell` — a div holding a list — cannot go
-              there; what travels between the two renderings is the WORDS, out
-              of one function. */}
-          {accountRoleLabels(account).map((label) => (
-            <DataBox key={label}>{label}</DataBox>
-          ))}
           <DataBox>{account.telefono}</DataBox>
           {account.email ? (
             <DataBox className="max-w-[10rem] truncate">{account.email}</DataBox>
           ) : null}
-          <DataBox variant="numeric">{account.estudiantes.length}</DataBox>
+          {/* Same omit-rather-than-invent convention as `email` above: a
+              self-managed account has nothing to say here, so it says
+              nothing rather than printing a placeholder. */}
+          {account.representadoPor ? (
+            <DataBox>Representado por {account.representadoPor}</DataBox>
+          ) : null}
         </>
       }
       status={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
@@ -1110,38 +1034,37 @@ export default function MembersPage(): React.ReactElement {
           // nobody, where the reason may well be the cap itself.
           help={
             <ContextualHelp title="Cómo funciona el listado">
-              {/* Era una sola frase, y hablaba del tope de la consulta: nunca
-                  de la pantalla. La segunda viñeta es la razón de ser de este
-                  bloque — `getAccountStatusBadge` resume a TODOS los
-                  estudiantes de la cuenta en una insignia, y ese cálculo no
-                  estaba escrito en ninguna parte de la interfaz. Se lee como
-                  lo hace el código, no como se lo supone: el estado que gana
-                  es el MEJOR. */}
+              {/* Issue #388 rewrote both bullets below. La fila ya no es un
+                  grupo: cada persona representada dejó de vivir anidada
+                  dentro de la fila de su representante y pasó a tener la
+                  suya propia, así que la primera viñeta ya no puede hablar de
+                  desplegar una fila para leer nombres — no hay nada que
+                  desplegar. La segunda viñeta describía `getAccountStatusBadge`
+                  resumiendo a TODOS los estudiantes de una cuenta en una sola
+                  insignia con el MEJOR estado; ese cálculo ya no existe
+                  porque cada fila es una sola persona. */}
               <ul className="flex flex-col gap-field">
                 <li>
-                  Cada fila es una <b className="font-semibold text-ink">cuenta</b>: la persona que
-                  paga. «Estudiantes» son las personas a su cargo; sus nombres se leen desplegando
-                  la fila con «Ver», o dentro de «Editar».
+                  Cada fila es una <b className="font-semibold text-ink">persona</b>: su nombre,
+                  su membresía y su estado de pago. Cuando alguien más paga por ella, la fila lo
+                  dice en «Representado por».
                 </li>
                 <li>
-                  La membresía de la fila resume a todos sus estudiantes y muestra el{" "}
-                  <b className="font-semibold text-ink">mejor</b> estado, no el peor: basta con que
-                  uno tenga la membresía activa para que la cuenta figure como Activa, aunque otro
-                  la tenga vencida. Solo cuando ninguno está activo la fila muestra lo que queda,
-                  empezando por lo más accionable: un pago pendiente de validación, luego una
-                  membresía vencida y por último una cuenta suspendida.
+                  El estado de la fila es el de esa persona, y de nadie más: no se mezcla con el
+                  de quien la representa ni con el de otras personas a cargo de la misma cuenta.
                 </li>
-                {/* "Registros", no "cuentas": el tope es de la consulta de
-                    origen, y las cuentas salen de colapsar esos registros, así
-                    que son menos. Y el buscador filtra sobre lo ya traído
-                    (`filterAccounts` corre en el cliente), de modo que la ayuda
-                    no puede prometer que buscar alcance para traer a alguien
-                    que quedó fuera del tope. */}
+                {/* "Registros", no "personas": el tope es de la consulta de
+                    origen, y el listado sale de traducir esos registros uno a
+                    uno, así que ya coinciden en cantidad. Y el buscador filtra
+                    sobre lo ya traído (`filterAccounts` corre en el cliente),
+                    de modo que la ayuda no puede prometer que buscar alcance
+                    para traer a alguien que quedó fuera del tope. */}
                 <li>
                   El listado se arma con hasta {MEMBERS_AGGREGATE_LIMIT} registros de origen y no
                   confirma que se hayan cargado todos los miembros. El buscador filtra solo sobre lo
-                  ya traído — por nombre de la cuenta, correo o nombre de un estudiante —, así que
-                  si no encuentra a alguien es probable que haya quedado fuera de ese tope.
+                  ya traído — por nombre de la persona, su correo o el nombre de quien la
+                  representa —, así que si no encuentra a alguien es probable que haya quedado
+                  fuera de ese tope.
                 </li>
               </ul>
             </ContextualHelp>
@@ -1155,17 +1078,6 @@ export default function MembersPage(): React.ReactElement {
           </div>
         ) : filteredAccounts.length > 0 ? (
           <div className="card overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 text-xs text-ink-2">
-              <p role="status" aria-label="Resultados mostrados">
-                {filteredAccounts.length}{" "}
-                {filteredAccounts.length === 1 ? "resultado mostrado" : "resultados mostrados"}
-              </p>
-              {aggregateIsCapped && (
-                <p role="alert" className="max-w-md text-state-bad">
-                  La fuente devuelve hasta {MEMBERS_AGGREGATE_LIMIT} registros; este listado puede estar incompleto.
-                </p>
-              )}
-            </div>
             {/* Below `sm` the table used to hide Contacto/Estudiantes/Estado
                 /Editar behind `hidden sm:table-cell`, leaving a one-column
                 list with a second, duplicated edit button crammed under each
@@ -1175,69 +1087,83 @@ export default function MembersPage(): React.ReactElement {
                 rather than a hand-rolled `<li>` card. Divider hairlines are
                 applied directly (instead of via `DataRowList`) because this
                 list already sits inside the card's own border below — a
-                second border here would nest a box inside a box. */}
-            <ul className="divide-y divide-line sm:hidden">
-              {paginatedAccounts.map((account) => (
-                <AccountCard
-                  key={account.id}
-                  account={account}
-                  onEdit={() => toggleEditModal(account.id)}
-                />
-              ))}
-            </ul>
+                second border here would nest a box inside a box.
 
-            <div className="hidden overflow-x-auto sm:block">
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell>Responsable de pago</TableHeaderCell>
-                    <TableHeaderCell type="number">Estudiantes</TableHeaderCell>
-                    <TableHeaderCell type="badge">Membresía</TableHeaderCell>
-                    {/* Named for what the column HOLDS, not for the button
-                        inside it — a column called "Editar" is a heading that
-                        reads the label of the control under it back to you.
-                        D9's rule of words also forbids a label deducible from
-                        another, and every trigger in this column already
-                        announces itself as "Editar <nombre>".
+                The mobile/desktop split itself, and the footer pager below,
+                are `ResponsiveListTable`'s shared shell — see that
+                component's doc comment for why the surrounding card and the
+                loading/empty states stayed page-owned. */}
+            <ResponsiveListTable
+              items={paginatedAccounts}
+              getKey={(account) => account.id}
+              header={
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 text-xs text-ink-2">
+                  <p role="status" aria-label="Resultados mostrados">
+                    {filteredAccounts.length}{" "}
+                    {filteredAccounts.length === 1 ? "resultado mostrado" : "resultados mostrados"}
+                  </p>
+                  {aggregateIsCapped && (
+                    <p role="alert" className="max-w-md text-state-bad">
+                      La fuente devuelve hasta {MEMBERS_AGGREGATE_LIMIT} registros; este listado puede estar
+                      incompleto.
+                    </p>
+                  )}
+                </div>
+              }
+              renderCard={(account) => (
+                <AccountCard account={account} onEdit={() => toggleEditModal(account.id)} />
+              )}
+              renderRow={(account) => (
+                <AccountRow account={account} onEdit={() => toggleEditModal(account.id)} />
+              )}
+              tableHead={
+                <TableRow>
+                  {/* "Miembro", not "Responsable de pago" — issue #388 made
+                      the person the row's unit, not the paying root. A
+                      represented person's row holds THEIR identity, not
+                      their representative's; who pays for them is the
+                      adjacent "Representado por" column, not this one. */}
+                  <TableHeaderCell>Miembro</TableHeaderCell>
+                  <TableHeaderCell>Representado por</TableHeaderCell>
+                  <TableHeaderCell type="badge">Membresía</TableHeaderCell>
+                  {/* Named for what the column HOLDS, not for the button
+                      inside it — a column called "Editar" is a heading that
+                      reads the label of the control under it back to you.
+                      D9's rule of words also forbids a label deducible from
+                      another, and every trigger in this column already
+                      announces itself as "Editar <nombre>".
 
-                        Kept off the screen rather than renamed in place: over
-                        a column of 32px triggers a printed heading is one more
-                        word to skip past, and "Acciones" tells a sighted
-                        reader nothing the buttons underneath do not. It stays
-                        in the accessibility tree because a `<th>` with no name
-                        is a column a screen reader announces as blank. */}
-                    <TableHeaderCell type="action">
-                      <span className="sr-only">Acciones</span>
-                    </TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {paginatedAccounts.map((account) => (
-                    <AccountRow
-                      key={account.id}
-                      account={account}
-                      onEdit={() => toggleEditModal(account.id)}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            {/* INSIDE the card, not after it. This pager used to be a sibling
-                of the card it paginates, so it floated on the canvas while
-                every other list in the product carried its pager welded to the
-                foot of the card. The `footer` variant owns that placement now,
-                so the move is a nesting change and no classes travel with it. */}
-            {totalPages > 1 && (
-              <Pagination
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                totalItems={filteredAccounts.length}
-                pageSize={MEMBERS_PAGE_SIZE}
-                itemNoun="miembro"
-                variant="footer"
-              />
-            )}
+                      Kept off the screen rather than renamed in place: over
+                      a column of 32px triggers a printed heading is one more
+                      word to skip past, and "Acciones" tells a sighted
+                      reader nothing the buttons underneath do not. It stays
+                      in the accessibility tree because a `<th>` with no name
+                      is a column a screen reader announces as blank. */}
+                  <TableHeaderCell type="action">
+                    <span className="sr-only">Acciones</span>
+                  </TableHeaderCell>
+                </TableRow>
+              }
+              // INSIDE the card, not after it. This pager used to be a sibling
+              // of the card it paginates, so it floated on the canvas while
+              // every other list in the product carried its pager welded to
+              // the foot of the card. The `footer` variant owns that
+              // placement now, so the move is a nesting change and no
+              // classes travel with it.
+              footer={
+                totalPages > 1 ? (
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    onPageChange={setPage}
+                    totalItems={filteredAccounts.length}
+                    pageSize={MEMBERS_PAGE_SIZE}
+                    itemNoun="miembro"
+                    variant="footer"
+                  />
+                ) : undefined
+              }
+            />
           </div>
         ) : null}
 

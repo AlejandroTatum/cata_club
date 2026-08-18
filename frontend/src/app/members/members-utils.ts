@@ -6,7 +6,6 @@
  */
 
 import type {
-  BackendTipoRol,
   TipoMembresia,
   EstadoMembresia,
 } from "@/types/domain";
@@ -70,11 +69,15 @@ export interface MemberStudentSummary {
 }
 
 /**
- * An account-owner row — a `Usuario` with `role: "representante"` or a
- * self-managed `role: "estudiante"` (`representanteId: null`) — with its
- * managed students. `estudiantes` is the derived list of `UsuarioEstudiante`
- * accounts whose `representanteId` points to this account (self-managed
- * accounts include themselves).
+ * One row per PERSON (issue #388) — not one row per paying root with the
+ * people they represent nested inside. `estudiantes` is always a
+ * single-element array holding this exact person's own summary; it stays an
+ * array (rather than a scalar field) because `buildMemberStudentSummary`
+ * (`lib/server/members-adapter.ts`) already returns `MemberStudentSummary`
+ * and every consumer here (`buildMemberStats`, `getAccountStatusBadge`,
+ * `accountMatchesFlag`, …) already reduces over "this account's students" —
+ * reusing that shape on a 1-element array cost nothing and avoided touching
+ * every one of those call sites.
  */
 export interface MemberAccount {
   id: string;
@@ -85,6 +88,13 @@ export interface MemberAccount {
   email?: string;
   telefono: string;
   estudiantes: MemberStudentSummary[];
+  /**
+   * The full name of this person's representative — `undefined` when they
+   * manage their own account (a root persona with no `representanteId`).
+   * Read directly off `Persona.representanteId` in `members-adapter.ts`,
+   * never guessed.
+   */
+  representadoPor?: string;
 }
 
 /** Aggregate statistics for the members overview. */
@@ -234,75 +244,6 @@ export function getPayerTypeLabel(role: PayerType): string {
   return PAYER_TYPE_LABELS[role];
 }
 
-/** What `IdentityCell` needs to draw one account row. */
-export interface AccountIdentity {
-  roles: BackendTipoRol[];
-  represents: string[];
-}
-
-/**
- * What this row can honestly say about who the account holder IS.
- *
- * D9 makes the identity cell a shared piece — initial, name above, what the
- * person IS at the club below — and `IdentityCell` takes the roles a person
- * holds plus the players they represent. This function is where the row admits
- * how little of that it actually knows.
- *
- * ## `account.role` is not a role, and this function must not read it as one
- *
- * `PersonaResponseDTO` carries no `roles` field, and no bulk "roles by persona"
- * endpoint exists — the only two are `POST`/`DELETE /personas/{id}/roles`, and
- * both MUTATE, so there is nothing to read in bulk (gap #1 in
- * `lib/server/members-adapter.ts`). To fill the shape anyway, that adapter
- * writes `role: "representante" as const` on every root account
- * (`members-adapter.ts:191`). It is a constant, not an observation: it says the
- * same thing about a person who represents three players, a person who
- * represents none, and a person who also coaches. It cannot distinguish them
- * because it never looked.
- *
- * That literal used to arrive here as `["REPRESENTANTE"]` and leave as a boxed
- * "Representante" on all forty-five rows — a `DataBox`, which is the product's
- * box for a standalone VALUE, so the invention was drawn with the weight of a
- * fact. A datum that is not a datum may not look like information.
- *
- * So: no role is derived from `account.role`, in either spelling. It is not a
- * gap to be filled in later at this call site — when the backend grows a
- * readable roles list, the row can read THAT. Until then the account's real
- * roles are read one account at a time by `useAccountRolesAndStatus`, inside
- * the edit dialog, which is the only place in this screen that asks.
- *
- * ## What survives is what `estudiantes` proves
- *
- * `estudiantes` is the set of personas whose `representanteId` points at this
- * account. Holding one IS representing them, in the backend's own model, so a
- * row with dependants may say so and name them. What leaves here is the NAMES;
- * the row then spends them in two places, because #379 split saying-how-many
- * from saying-who: `IdentityCell` collapses the list to a count
- * ("Representante · 2 jugadores", so a family of seven stops widening the
- * identity column) and `AccountRow`'s expandable row lists them whole. The word
- * is carried by the relationship the data proves, not by the stamped field,
- * which is why it may stay while the field may not.
- *
- * The one correction it makes is the self-reference. A root persona with no
- * dependants comes back holding ITSELF as its only `estudiantes` entry
- * (`estudiantesSource = children.length > 0 ? children : [root]`), so passing
- * the list through untouched would count Marta Salas as her own dependant and
- * print "Representante · 1 jugador" on Marta Salas' own row. Dropped — and with
- * it goes the last proof of the relationship, so such a row states no role at
- * all, `IdentityCell` draws no companion line, and there is nothing left for
- * the row to expand.
- */
-export function getAccountIdentity(account: MemberAccount): AccountIdentity {
-  const represents = account.estudiantes
-    .filter((estudiante) => estudiante.id !== account.id)
-    .map((estudiante) => `${estudiante.nombres} ${estudiante.apellidos}`);
-
-  return {
-    roles: represents.length > 0 ? ["REPRESENTANTE"] : [],
-    represents,
-  };
-}
-
 /**
  * Normalize text for accent-insensitive comparison.
  *
@@ -325,7 +266,13 @@ export function normalizeText(text: string): string {
 /**
  * Filter member accounts by a search term.
  *
- * Matches against account full name, email, and any associated student names.
+ * Matches against the person's own full name, email, their own student
+ * summary name (kept for symmetry — `estudiantes` is always this same
+ * person), and — issue #388 — their representative's full name
+ * (`representadoPor`). That last check matters because a represented person
+ * is now their own row rather than nested under their representative's: an
+ * admin who types the representative's name still has to find the people
+ * that representative pays for.
  * Uses accent-insensitive comparison — "Martinez" matches "Martínez".
  * Returns a shallow copy of the input array when the search term is empty or blank.
  */
@@ -341,6 +288,9 @@ export function filterAccounts(
       return true;
     }
     if (account.email && normalizeText(account.email).includes(term)) {
+      return true;
+    }
+    if (normalizeText(account.representadoPor ?? "").includes(term)) {
       return true;
     }
     return account.estudiantes.some((a) =>

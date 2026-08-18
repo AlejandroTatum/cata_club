@@ -30,10 +30,8 @@ import {
   ErrorState,
   LoadingState,
   PAGE_RAIL,
-  Table,
-  TableBody,
+  ResponsiveListTable,
   TableCell,
-  TableHead,
   TableHeaderCell,
   TableNameCell,
   TableRow,
@@ -502,82 +500,70 @@ export default function DiscountsPage(): React.ReactElement {
                   }
                 />
             ) : descuentos.length > 0 ? (
-              <>
-                {/*
-                 * Below `sm` a four-column table does not fit the viewport at
-                 * all (issue #339): at 320/375px the old single `overflow-x-auto`
-                 * wrapper left 522px of content scrolling the BODY sideways,
-                 * with Acciones (Editar/Desactivar) off-screen and no affordance
-                 * that anything was cut off. `/members` solves the same problem
-                 * by reflowing to one `DataRow` card per account below `sm` —
-                 * same data, actions inside the card instead of scrolled away —
-                 * and this list now follows that exact pattern instead of
-                 * inventing a scrolling-table variant of its own.
-                 */}
-                <ul data-testid="discounts-cards" className="divide-y divide-line sm:hidden">
-                  {descuentos.map((descuento) => (
-                    <DataRow
-                      key={descuento.id}
-                      name={descuento.nombre}
-                      meta={<DataBox>{descuentoValorLabel(descuento)}</DataBox>}
-                      status={
-                        <Badge tone={descuento.activo ? "ok" : "neutral"}>
-                          {descuento.activo ? "Activo" : "Inactivo"}
-                        </Badge>
-                      }
-                      actions={renderRowActions(descuento)}
-                      className={descuento.activo ? undefined : "opacity-60"}
-                    />
-                  ))}
-                </ul>
-
-                {/*
-                 * `ui/Table`, not a `<ul>` of `<li>`, at `sm` and up.
-                 *
-                 * This list was already a table — four aligned facts per row, the
-                 * same four every time — written as a flex list with its own `px-5
-                 * py-4`. That padding is why a discount row was a different height
-                 * from a member row and from an attendance row: three lists, three
-                 * answers, none of them the `h-row` token.
-                 *
-                 * There was no header at all, so the value column ("100%", "$5") had
-                 * nothing naming it. It has one now.
-                 */}
-                <div data-testid="discounts-table" className="hidden overflow-x-auto sm:block">
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableHeaderCell>Descuento</TableHeaderCell>
-                        <TableHeaderCell>Valor</TableHeaderCell>
-                        <TableHeaderCell>Estado</TableHeaderCell>
-                        <TableHeaderCell align="right">
-                          <span className="sr-only">Acciones</span>
-                        </TableHeaderCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {descuentos.map((descuento) => (
-                        <TableRow
-                          key={descuento.id}
-                          data-inactivo={descuento.activo ? undefined : "true"}
-                          className={descuento.activo ? undefined : "opacity-60"}
-                        >
-                          <TableNameCell name={descuento.nombre} />
-                          <TableCell>{descuentoValorLabel(descuento)}</TableCell>
-                          <TableCell>
-                            <Badge tone={descuento.activo ? "ok" : "neutral"}>
-                              {descuento.activo ? "Activo" : "Inactivo"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell align="right">
-                            <div className="flex justify-end gap-2">{renderRowActions(descuento)}</div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
+              // Below `sm` a four-column table does not fit the viewport at
+              // all (issue #339): at 320/375px the old single `overflow-x-auto`
+              // wrapper left 522px of content scrolling the BODY sideways,
+              // with Acciones (Editar/Desactivar) off-screen and no affordance
+              // that anything was cut off. `/members` solves the same problem
+              // by reflowing to one `DataRow` card per account below `sm` —
+              // same data, actions inside the card instead of scrolled away —
+              // and this list follows that exact pattern too, through the
+              // shared `ResponsiveListTable` shell (see its doc comment).
+              //
+              // `ui/Table`, not a `<ul>` of `<li>`, at `sm` and up. This list
+              // was already a table — four aligned facts per row, the same
+              // four every time — written as a flex list with its own
+              // `px-5 py-4`. That padding is why a discount row was a
+              // different height from a member row and from an attendance
+              // row: three lists, three answers, none of them the `h-row`
+              // token. There was no header at all, so the value column
+              // ("100%", "$5") had nothing naming it. It has one now.
+              <ResponsiveListTable
+                items={descuentos}
+                getKey={(descuento) => descuento.id}
+                mobileListTestId="discounts-cards"
+                desktopTableTestId="discounts-table"
+                renderCard={(descuento) => (
+                  <DataRow
+                    name={descuento.nombre}
+                    meta={<DataBox>{descuentoValorLabel(descuento)}</DataBox>}
+                    status={
+                      <Badge tone={descuento.activo ? "ok" : "neutral"}>
+                        {descuento.activo ? "Activo" : "Inactivo"}
+                      </Badge>
+                    }
+                    actions={renderRowActions(descuento)}
+                    className={descuento.activo ? undefined : "opacity-60"}
+                  />
+                )}
+                tableHead={
+                  <TableRow>
+                    <TableHeaderCell>Descuento</TableHeaderCell>
+                    <TableHeaderCell>Valor</TableHeaderCell>
+                    <TableHeaderCell>Estado</TableHeaderCell>
+                    <TableHeaderCell align="right">
+                      <span className="sr-only">Acciones</span>
+                    </TableHeaderCell>
+                  </TableRow>
+                }
+                renderRow={(descuento) => (
+                  <TableRow
+                    data-inactivo={descuento.activo ? undefined : "true"}
+                    className={descuento.activo ? undefined : "opacity-60"}
+                  >
+                    <TableNameCell name={descuento.nombre} />
+                    <TableCell>{descuentoValorLabel(descuento)}</TableCell>
+                    <TableCell>
+                      <Badge tone={descuento.activo ? "ok" : "neutral"}>
+                        {descuento.activo ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell align="right">
+                      <div className="flex justify-end gap-2">{renderRowActions(descuento)}</div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              />
             ) : null}
             </section>
           </div>

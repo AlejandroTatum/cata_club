@@ -269,7 +269,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("shows contact, student count and membership on the phone card instead of hiding them", async () => {
+  it("shows contact and membership on the phone card instead of hiding them", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -279,7 +279,6 @@ describe("MembersPage — Editar member modal", () => {
 
     // The audit's finding: below `sm` these were all `hidden sm:table-cell`.
     expect(within(card).getByText(ACCOUNT.telefono)).toBeInTheDocument();
-    expect(within(card).getByText(String(ACCOUNT.estudiantes.length))).toBeInTheDocument();
     expect(within(card).getByText(/activo|sin membresía|vencida|pendiente/i)).toBeInTheDocument();
   });
 
@@ -287,7 +286,7 @@ describe("MembersPage — Editar member modal", () => {
   // Visual system: table column set/alignment, DataRow/DataBox adoption.
   // -------------------------------------------------------------------------
 
-  it("drops the Contacto column and keeps Responsable de pago / Estudiantes / Membresía / Editar", async () => {
+  it("drops the Contacto column and keeps Miembro / Representado por / Membresía / Editar", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -300,24 +299,15 @@ describe("MembersPage — Editar member modal", () => {
       .map((header) => header.textContent?.trim());
 
     expect(headers).not.toContain("Contacto");
-    expect(headers[0]).toBe("Responsable de pago");
-  });
-
-  it("right-aligns the Estudiantes column (header and body alike) and boxes the count", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    const table = row.closest("table") as HTMLElement;
-    const header = within(table).getByRole("columnheader", { name: "Estudiantes" });
-    expect(header.className).toContain("text-right");
-
-    const countText = within(row).getByText(String(ACCOUNT.estudiantes.length));
-    // `TableCell type="number"` boxes the value in a numeric `DataBox`.
-    expect(countText.closest("span")?.className).toContain("font-mono");
-    expect(countText.closest("td")?.className).toContain("text-right");
+    // Issue #388 made the person the row's unit, not the paying root — a
+    // represented person's row is THEIR identity, not their representative's,
+    // so "Responsable de pago" is no longer an accurate header for every row.
+    expect(headers[0]).toBe("Miembro");
+    expect(headers).not.toContain("Responsable de pago");
+    // Issue #388 also replaced the old "Estudiantes" count column — always 1
+    // once every row is a single person — with who (if anyone) represents them.
+    expect(headers).toContain("Representado por");
+    expect(headers).not.toContain("Estudiantes");
   });
 
   it("aligns Membresía left and Editar right, matching header to body — never centered", async () => {
@@ -1949,8 +1939,38 @@ describe("MembersPage — the identity cell (D9)", () => {
     expect(initials).toHaveAttribute("aria-hidden", "true");
     expect(within(row).getByText("María González")).toBeInTheDocument();
   });
+});
 
-  it("counts the players the account actually holds", async () => {
+// ---------------------------------------------------------------------------
+// Issue #388 — one row per person: "Representado por" replaces the old
+// disclosure/expand mechanic entirely.
+//
+// The row used to collapse a representative and everyone they represent into
+// one group, with a "Representante · N jugadores" summary and a "Ver
+// jugadores" disclosure to name them. That mechanic assumed `estudiantes` held
+// several people; now every row is exactly one person (`estudiantes` is
+// always that one person), so there is nothing left to count or disclose.
+// "Representado por" says the same thing a different way: who, if anyone,
+// pays for THIS row.
+// ---------------------------------------------------------------------------
+
+describe('MembersPage — "Representado por" (issue #388)', () => {
+  const REPRESENTED: MemberAccount = {
+    ...ACCOUNT,
+    id: "10",
+    representadoPor: "Carlos Martínez",
+  };
+
+  const SELF_MANAGED: MemberAccount = {
+    ...ACCOUNT,
+    id: "1",
+    nombres: "María",
+    apellidos: "González",
+    representadoPor: undefined,
+  };
+
+  it("shows the representative's name in the row when the person is represented", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [REPRESENTED] });
     render(
       <ToastProvider>
         <MembersPage />
@@ -1958,45 +1978,11 @@ describe("MembersPage — the identity cell (D9)", () => {
     );
     const row = await findAccountRow();
 
-    // Antes decía "Representante de Sofía González": la fila gastaba el ancho
-    // en nombrarlos, y con una familia de siete la celda crecía hasta
-    // amontonar la grilla. Ahora cuenta, y un solo formato para toda la
-    // columna — también con un jugador, que es el caso de esta cuenta.
-    // Los nombres se leen desplegando la fila.
-    expect(within(row).getByText("Representante · 1 jugador")).toBeInTheDocument();
-    expect(within(row).queryByText("Sofía González")).not.toBeInTheDocument();
+    expect(within(row).getByText("Carlos Martínez")).toBeInTheDocument();
   });
 
-  it("says nothing about the role of an account that holds nobody but itself", async () => {
-    // The adapter hands a childless root persona ITSELF as its only student.
-    mockFetchMembers.mockReset().mockResolvedValue({
-      accounts: [
-        {
-          ...ACCOUNT,
-          id: "7",
-          estudiantes: [{ ...ACCOUNT.estudiantes[0], id: "7", nombres: "María", apellidos: "González" }],
-        },
-      ],
-    });
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-
-    // It used to read a boxed "Representante" here, and the word was a
-    // constant: `lib/server/members-adapter.ts:173` stamps
-    // `role: "representante" as const` on every root account. With no dependant
-    // to prove the relationship the row has nothing left to say about who this
-    // person is, so the cell draws the name and stops. The account's real roles
-    // are read one account at a time, in the edit dialog.
-    expect(within(row).getByText("María González")).toBeInTheDocument();
-    expect(within(row).queryByText(/Representante/)).not.toBeInTheDocument();
-  });
-
-  it("says the same thing on the phone rendering as in the table", async () => {
+  it("shows the representative's name on the phone card too", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [REPRESENTED] });
     render(
       <ToastProvider>
         <MembersPage />
@@ -2004,57 +1990,11 @@ describe("MembersPage — the identity cell (D9)", () => {
     );
     const card = await findAccountCard();
 
-    // Two renderings of one account that disagree about who that account is
-    // are two bugs waiting for someone to resize a window.
-    expect(within(card).getByText("Representante · 1 jugador")).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// D9 — la fila resume, el despliegue nombra.
-//
-// Una familia de siete entraba a la grilla como siete nombres unidos por comas
-// en una sola línea: `getAccountIdentity` mapea a todos los representados y
-// `joinWithY` no trunca, así que la celda crecía con la familia y la fila se
-// amontonaba. La fila pasa a decir CUÁNTOS, y los nombres — todos, enteros —
-// se leen al desplegarla. La excepción está escrita en
-// `docs/ux/rediseno-visual-2026-08.md`, junto a la de las siete letras.
-// ---------------------------------------------------------------------------
-
-/** Los siete de la familia grande: acentos y apellido compuesto a propósito. */
-const JUGADORES = [
-  "Sofía González",
-  "Mateo González",
-  "Valentina González",
-  "Sebastián González",
-  "Emilia González",
-  "Joaquín Andrés González",
-  "Antonella González",
-];
-
-/** La cuenta que motivó el cambio: un representante con siete a cargo. */
-const FAMILIA_DE_SIETE: MemberAccount = {
-  ...ACCOUNT,
-  estudiantes: JUGADORES.map((nombreCompleto, index) => {
-    const [apellidos, ...nombres] = [
-      nombreCompleto.split(" ").slice(-1)[0],
-      ...nombreCompleto.split(" ").slice(0, -1),
-    ];
-    return {
-      ...ACCOUNT.estudiantes[0],
-      id: String(20 + index),
-      nombres: nombres.join(" "),
-      apellidos,
-    };
-  }),
-};
-
-describe("MembersPage — la fila de la cuenta se despliega (D9)", () => {
-  beforeEach(() => {
-    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [FAMILIA_DE_SIETE] });
+    expect(within(card).getByText(/Carlos Martínez/)).toBeInTheDocument();
   });
 
-  it("resume a la familia en la fila colapsada, sin nombrar a nadie", async () => {
+  it("shows no representative for a self-managed account", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [SELF_MANAGED] });
     render(
       <ToastProvider>
         <MembersPage />
@@ -2062,88 +2002,28 @@ describe("MembersPage — la fila de la cuenta se despliega (D9)", () => {
     );
     const row = await findAccountRow();
 
-    expect(within(row).getByText("Representante · 7 jugadores")).toBeInTheDocument();
-    // Ni uno solo de los siete: el reclamo del dueño era exactamente ver los
-    // siete nombres apilados en la fila.
-    for (const nombre of JUGADORES) {
-      expect(screen.queryByText(nombre)).not.toBeInTheDocument();
-    }
-  });
-
-  it("nombra a los siete, completos y sin cortar, al desplegar la fila", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-
-    fireEvent.click(
-      within(row).getByRole("button", { name: "Ver jugadores de María González" }),
-    );
-
-    const panel = screen.getByRole("list", { name: "Jugadores de María González" });
-    const items = within(panel).getAllByRole("listitem");
-
-    // El conteo del resumen es el mismo que la cantidad de nombres desplegados:
-    // si divergen, la fila miente sobre lo que esconde.
-    expect(items).toHaveLength(7);
-    expect(items.map((item) => item.textContent)).toEqual(JUGADORES);
-
-    // "Sin truncar" se verifica en el DOM, no de palabra: `truncate` es la clase
-    // que corta con puntos suspensivos y aquí no puede estar.
-    for (const item of items) {
-      expect(item.className).not.toMatch(/truncate/);
-      expect(item.textContent).not.toMatch(/…/);
-    }
-  });
-
-  it("vuelve a esconder los nombres al plegar la fila", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-
-    const trigger = within(row).getByRole("button", {
-      name: "Ver jugadores de María González",
-    });
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-
-    fireEvent.click(trigger);
-    expect(
-      within(row).getByRole("button", { name: "Ocultar jugadores de María González" }),
-    ).toHaveAttribute("aria-expanded", "true");
-
-    fireEvent.click(
-      within(row).getByRole("button", { name: "Ocultar jugadores de María González" }),
-    );
-    expect(screen.queryByText("Joaquín Andrés González")).not.toBeInTheDocument();
-  });
-
-  it("no ofrece despliegue a una cuenta que no representa a nadie", async () => {
-    // La raíz sin dependientes vuelve sosteniéndose a sí misma: no hay relación
-    // que probar, no hay nada que desplegar.
-    mockFetchMembers.mockReset().mockResolvedValue({
-      accounts: [
-        {
-          ...ACCOUNT,
-          estudiantes: [
-            { ...ACCOUNT.estudiantes[0], id: "1", nombres: "María", apellidos: "González" },
-          ],
-        },
-      ],
-    });
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-
+    expect(within(row).queryByText(/Carlos Martínez/)).not.toBeInTheDocument();
+    // No disclosure trigger survives either — there is no group left to expand.
     expect(within(row).queryByRole("button", { name: /jugadores de/i })).not.toBeInTheDocument();
+  });
+
+  it("opens the edit dialog for the exact represented person, not their representative", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [REPRESENTED] });
+    mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("María González")).toBeInTheDocument();
+    // `useAccountRolesAndStatus` is keyed by the row's OWN id (10), never her
+    // representative's — editing a represented person must never silently
+    // target the representative's account instead.
+    expect(mockObtenerRolesDePersona).toHaveBeenCalledWith(10);
   });
 });
 
@@ -2346,26 +2226,29 @@ describe("MembersPage — la ayuda explica el listado", () => {
     expect(within(panel).getAllByRole("listitem")).toHaveLength(3);
   });
 
-  it("dice que la fila es la cuenta que paga y dónde se leen los nombres", async () => {
+  it("dice que la fila es una persona y dónde se lee quién la representa", async () => {
     const panel = await openHelp();
     const [primera] = within(panel).getAllByRole("listitem");
 
-    expect(primera).toHaveTextContent(/cuenta.*paga/i);
-    expect(primera).toHaveTextContent(/a su cargo/i);
+    // Issue #388: la fila dejó de ser un grupo que se despliega — ya no hay
+    // nombres que "leer desplegando la fila", solo la persona y, si aplica,
+    // quién paga por ella.
+    expect(primera).toHaveTextContent(/persona/i);
+    expect(primera).toHaveTextContent(/representado por/i);
   });
 
-  it("explica el estado de la cuenta como lo calcula el código: el MEJOR, no el peor", async () => {
+  it("explica que el estado de la fila es el de esa persona, nunca una mezcla (issue #388)", async () => {
     const panel = await openHelp();
     const segunda = within(panel).getAllByRole("listitem")[1];
 
-    // `getAccountStatusBadge` devuelve "Activo" apenas UN estudiante tenga la
-    // membresía activa, sin mirar a los demás. La ayuda tiene que decir eso y
-    // no lo contrario: una cuenta se ve activa aunque otro esté vencido.
-    expect(segunda).toHaveTextContent(/mejor/i);
-    expect(segunda).toHaveTextContent(/vencid/i);
-    // Y la escalera que corre solo cuando ninguno está activo.
-    expect(segunda).toHaveTextContent(/pendiente de validación/i);
-    expect(segunda).toHaveTextContent(/suspendida/i);
+    // La vieja copia describía `getAccountStatusBadge` resumiendo a TODOS los
+    // estudiantes de un grupo en el MEJOR estado. Ese cálculo ya no existe:
+    // cada fila es una sola persona, así que la ayuda no puede seguir
+    // hablando de "mejor, no el peor" — no hay nada que comparar dentro de la
+    // fila.
+    expect(segunda).not.toHaveTextContent(/mejor/i);
+    expect(segunda).not.toHaveTextContent(/peor/i);
+    expect(segunda).toHaveTextContent(/esa persona/i);
   });
 
   it("dice el tope y qué esperar cuando alguien no aparece", async () => {

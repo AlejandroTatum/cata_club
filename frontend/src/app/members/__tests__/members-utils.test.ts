@@ -10,7 +10,6 @@ import { MOCK_MEMBER_ACCOUNTS } from "@/mocks/members";
 import {
   buildMemberStats,
   formatMembershipPeriod,
-  getAccountIdentity,
   getPayerTypeLabel,
   countActiveStudents,
   filterAccounts,
@@ -44,7 +43,9 @@ describe("buildMemberStats", () => {
 
   it("computes correct stats from mock data", () => {
     const stats = buildMemberStats(MOCK_MEMBER_ACCOUNTS);
-    expect(stats.totalAccounts).toBe(6);
+    // Issue #388: one row per persona now, not one row per paying root — the
+    // mock carries 6 roots plus 8 people they represent.
+    expect(stats.totalAccounts).toBe(14);
     expect(stats.totalStudents).toBeGreaterThan(0);
     // Validate counts are consistent: every student is counted once
     const expectedStudents = MOCK_MEMBER_ACCOUNTS.reduce(
@@ -52,19 +53,19 @@ describe("buildMemberStats", () => {
       0,
     );
     expect(stats.totalStudents).toBe(expectedStudents);
+    // Every row is exactly one person now, so the two totals coincide.
+    expect(stats.totalStudents).toBe(stats.totalAccounts);
   });
 
   it("counts active memberships correctly", () => {
-    // Memberships known to be active: Sofia (rp-001 stu-001),
-    // Mateo (rp-001 stu-002), Valentina (rp-002 stu-004),
-    // Nicolas (rp-004 stu-006)
+    // Memberships known to be active: Sofía (stu-001), Mateo (stu-002),
+    // Valentina (stu-004), Nicolás (rp-004, self-managed).
     const stats = buildMemberStats(MOCK_MEMBER_ACCOUNTS);
     expect(stats.activeMemberships).toBe(4);
   });
 
   it("counts pending payments correctly", () => {
-    // Pending payments: Mateo (rp-001 stu-002), Emilia (rp-001 stu-003),
-    // Santiago (rp-005 stu-007)
+    // Pending payments: Mateo (stu-002), Emilia (stu-003), Santiago (stu-007).
     const stats = buildMemberStats(MOCK_MEMBER_ACCOUNTS);
     expect(stats.pendingPayments).toBe(3);
   });
@@ -83,8 +84,8 @@ describe("buildMemberStats", () => {
       ...MOCK_MEMBER_ACCOUNTS,
     ];
     const stats = buildMemberStats(accounts);
-    expect(stats.totalAccounts).toBe(7);
-    expect(stats.totalStudents).toBe(9); // original 9 students
+    expect(stats.totalAccounts).toBe(15);
+    expect(stats.totalStudents).toBe(14); // original 14 students
     expect(stats.activeMemberships).toBe(4);
   });
 });
@@ -237,15 +238,16 @@ describe("MEMBERSHIP_TYPE_LABELS", () => {
 // ---------------------------------------------------------------------------
 
 describe("countActiveStudents", () => {
-  it("counts active memberships for an account", () => {
-    // rp-001 (Carlos Martinez): Sofia (activa), Mateo (activa), Emilia (vencida)
-    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-001")!;
-    expect(countActiveStudents(account)).toBe(2);
+  it("counts an active membership on a member's own single-element row", () => {
+    // Issue #388: each row is one person now, so this counts 0 or 1 — Sofía
+    // (stu-001) has an activa membership on her own row.
+    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "stu-001")!;
+    expect(countActiveStudents(account)).toBe(1);
   });
 
-  it("returns 0 when no students have active membership", () => {
-    // rp-005 (Carlos Ramirez): both students have vencida
-    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-005")!;
+  it("returns 0 when the row's own membership is not active", () => {
+    // Camila (stu-005) has a vencida membership on her own row.
+    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "stu-005")!;
     expect(countActiveStudents(account)).toBe(0);
   });
 
@@ -268,27 +270,28 @@ describe("countActiveStudents", () => {
 // ---------------------------------------------------------------------------
 
 describe("getAccountStatusBadge", () => {
-  it('returns "Activo" + the ok tone when account has active students', () => {
-    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-001")!;
+  it('returns "Activo" + the ok tone for a member with their own active membership', () => {
+    // Sofía (stu-001) — her own row, her own activa membership.
+    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "stu-001")!;
     expect(getAccountStatusBadge(account)).toEqual({
       label: "Activo",
       tone: "ok",
     });
   });
 
-  it('returns "Pago pendiente de validación" + the warn tone when no active memberships but pending validation', () => {
-    // rp-005 (Carlos Ramirez): both students have vencida memberships,
-    // but Santiago (stu-007) has pendiente_validacion payment
-    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-005")!;
+  it('returns "Pago pendiente de validación" + the warn tone when not active but a payment awaits validation', () => {
+    // Santiago (stu-007): vencida membership, pendiente_validacion payment —
+    // on his own row, not aggregated with anyone else's.
+    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "stu-007")!;
     expect(getAccountStatusBadge(account)).toEqual({
       label: "Pago pendiente de validación",
       tone: "warn",
     });
   });
 
-  it('returns "Membresía vencida" + the bad tone when no active and no pending validation but expired', () => {
-    // rp-003 (Diego Flores): Camila has vencida membership, no payments at all
-    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-003")!;
+  it('returns "Membresía vencida" + the bad tone when not active and no pending validation but expired', () => {
+    // Camila (stu-005): vencida membership, no payments at all.
+    const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "stu-005")!;
     expect(getAccountStatusBadge(account)).toEqual({
       label: "Membresía vencida",
       tone: "bad",
@@ -365,7 +368,7 @@ describe("normalizeText", () => {
 
 describe("filterAccounts", () => {
   it("returns all accounts when search term is empty", () => {
-    expect(filterAccounts(MOCK_MEMBER_ACCOUNTS, "")).toHaveLength(6);
+    expect(filterAccounts(MOCK_MEMBER_ACCOUNTS, "")).toHaveLength(14);
   });
 
   it("returns a new array reference on empty search (immutable)", () => {
@@ -374,12 +377,18 @@ describe("filterAccounts", () => {
   });
 
   it("returns all accounts when search term is only whitespace", () => {
-    expect(filterAccounts(MOCK_MEMBER_ACCOUNTS, "   ")).toHaveLength(6);
+    expect(filterAccounts(MOCK_MEMBER_ACCOUNTS, "   ")).toHaveLength(14);
   });
 
-  it("filters by account name (case-insensitive)", () => {
+  it("filters by account name (case-insensitive), and by representative name (issue #388)", () => {
     const result = filterAccounts(MOCK_MEMBER_ACCOUNTS, "Carlos");
-    expect(result).toHaveLength(2); // Carlos Martínez (rp-001), Carlos Ramírez (rp-005)
+    // Two rows named Carlos (Martínez, Ramírez) plus the five people they
+    // represent — issue #388's `representadoPor` match means a search by a
+    // representative's own name also surfaces every row they pay for.
+    expect(result).toHaveLength(7);
+    expect(result.map((a) => a.id).sort()).toEqual(
+      ["rp-001", "rp-005", "stu-001", "stu-002", "stu-003", "stu-007", "stu-008"].sort(),
+    );
   });
 
   it("filters by email", () => {
@@ -388,10 +397,18 @@ describe("filterAccounts", () => {
     expect(result[0].id).toBe("rp-002");
   });
 
-  it("filters by student name", () => {
+  it("filters by a person's own name — Sofía is her own row now, not nested under Carlos'", () => {
     const result = filterAccounts(MOCK_MEMBER_ACCOUNTS, "Sofía");
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("rp-001");
+    expect(result[0].id).toBe("stu-001");
+  });
+
+  it("matches a represented person's row by their representative's name (issue #388)", () => {
+    // Searching "Ana López" (Valentina's representative) has to surface
+    // Valentina's row — she is no longer nested inside Ana's, she is her own
+    // row with `representadoPor: "Ana López"`.
+    const result = filterAccounts(MOCK_MEMBER_ACCOUNTS, "Ana López");
+    expect(result.map((a) => a.id).sort()).toEqual(["rp-002", "stu-004"].sort());
   });
 
   it("returns empty array when no match is found", () => {
@@ -584,110 +601,27 @@ describe("getTotalPages", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getAccountIdentity
+// representadoPor (issue #388)
 //
-// D9 makes the identity cell a shared piece, and `IdentityCell` takes the roles
-// a person holds plus the players they represent. This row does not carry the
-// roles array: `PersonaResponseDTO` has no `roles` field and no bulk "roles by
-// persona" endpoint exists (gap #1 in `lib/server/members-adapter.ts`), so the
-// adapter labels every root `role: "representante"` as a hardcoded literal and
-// the real roles are only read one account at a time, inside the edit dialog.
-//
-// So this function draws what the row HAS and nothing more: the payer type it
-// declares, and the names of the dependants it actually holds. It never
-// promotes a hunch to a role, and it never lets an account represent itself.
+// `getAccountIdentity` used to live here — it derived a "Representante · N
+// jugadores" role from `estudiantes`, the group's list of dependants. Once
+// every row is exactly one person (`estudiantes` always length 1, holding
+// only that person), there is no dependant list left for it to summarize: it
+// would always return `{ roles: [], represents: [] }`. Removed together with
+// the row-disclosure UI it fed in `page.tsx` rather than kept as dead code.
+// `representadoPor` — a plain optional string set directly from
+// `Persona.representanteId` in `members-adapter.ts` — replaces it as the way
+// a row says who, if anyone, pays for this person.
 // ---------------------------------------------------------------------------
 
-describe("getAccountIdentity", () => {
-  function account(overrides: Partial<MemberAccount> = {}): MemberAccount {
-    return {
-      id: "rp-1",
-      role: "representante",
-      nombres: "Marta",
-      apellidos: "Salas",
-      telefono: "0999999999",
-      estudiantes: [],
-      ...overrides,
-    };
-  }
-
-  function student(id: string, nombres: string, apellidos: string) {
-    return {
-      id,
-      nombres,
-      apellidos,
-      activo: true,
-      membresia: null,
-      ultimoPago: null,
-    };
-  }
-
-  it("reads no role out of `account.role`, whichever way it is spelled", () => {
-    // `lib/server/members-adapter.ts:173` writes `role: "representante" as const`
-    // on every root persona, so the field is a constant and not an observation.
-    // Both spellings therefore describe the same absence of knowledge, and
-    // neither may reach the cell as a role.
-    expect(getAccountIdentity(account({ role: "representante" })).roles).toEqual([]);
-    expect(getAccountIdentity(account({ role: "estudiante" })).roles).toEqual([]);
+describe("MemberAccount.representadoPor", () => {
+  it("is present with the representative's full name for a represented person", () => {
+    const sofia = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "stu-001")!;
+    expect(sofia.representadoPor).toBe("Carlos Martínez");
   });
 
-  it("says REPRESENTANTE only when a dependant proves it", () => {
-    // The proof is `estudiantes`: those personas point at this account through
-    // `representanteId`, which is what representing someone IS in the backend.
-    // It holds whichever way `account.role` happens to be stamped.
-    const holding = { estudiantes: [student("stu-1", "Ana", "Pérez")] };
-    expect(getAccountIdentity(account({ role: "representante", ...holding })).roles).toEqual([
-      "REPRESENTANTE",
-    ]);
-    expect(getAccountIdentity(account({ role: "estudiante", ...holding })).roles).toEqual([
-      "REPRESENTANTE",
-    ]);
-  });
-
-  it("names every player the account holds, because a representative holds several", () => {
-    const identity = getAccountIdentity(
-      account({
-        estudiantes: [
-          student("stu-1", "Ana", "Pérez"),
-          student("stu-2", "Luis", "Pérez"),
-          student("stu-3", "Sofía", "Pérez"),
-        ],
-      }),
-    );
-    expect(identity.represents).toEqual(["Ana Pérez", "Luis Pérez", "Sofía Pérez"]);
-  });
-
-  it("never lets an account represent itself", () => {
-    // A root persona with no dependants comes back from the adapter holding
-    // ITSELF as its only "estudiante" (`estudiantesSource = children.length > 0
-    // ? children : [root]`). Passing that straight through would print
-    // "Representante de Marta Salas" on Marta Salas' own row.
-    const identity = getAccountIdentity(
-      account({ id: "42", estudiantes: [student("42", "Marta", "Salas")] }),
-    );
-    expect(identity.represents).toEqual([]);
-    // And with the self-reference dropped there is no dependant left to prove
-    // the relationship, so the role goes with it.
-    expect(identity.roles).toEqual([]);
-  });
-
-  it("says nothing rather than degrading to a role it cannot prove", () => {
-    // This used to answer `["REPRESENTANTE"]` with an empty `represents`, which
-    // `IdentityCell` draws as a boxed "Representante" — the stamped literal,
-    // given the visual weight of a fact. An empty roles list draws no companion
-    // line at all, which is the honest shape of "not known here".
-    const identity = getAccountIdentity(account({ estudiantes: [] }));
-    expect(identity.roles).toEqual([]);
-    expect(identity.represents).toEqual([]);
-  });
-
-  it("keeps the other dependants when one of them is the account itself", () => {
-    const identity = getAccountIdentity(
-      account({
-        id: "42",
-        estudiantes: [student("42", "Marta", "Salas"), student("7", "Ana", "Pérez")],
-      }),
-    );
-    expect(identity.represents).toEqual(["Ana Pérez"]);
+  it("is undefined for a self-managed root", () => {
+    const carlos = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-001")!;
+    expect(carlos.representadoPor).toBeUndefined();
   });
 });
