@@ -54,6 +54,7 @@ import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
 import {
   Button,
+  DataBox,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -76,13 +77,14 @@ import {
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
 import { formatDate } from "@/lib/format-utils";
-import { calendarIsoDate, clubToday } from "@/lib/club-date";
+import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { groupRecordsBySession, type SessionSummary } from "../../trainer-day-utils";
 import {
   SessionCompositionBar,
   SessionCompositionCounts,
 } from "../../SessionComposition";
 import { buildWizardQuery } from "../attendance-utils";
+import { summarizePeriodCoverage } from "./history-utils";
 
 /** Sessions per page. */
 const PAGE_SIZE = 10;
@@ -125,6 +127,60 @@ const MOTIVO_CORRECCION_VENCIDA =
  */
 function buildReasonId(session: SessionSummary): string {
   return `correccion-vencida-${session.fecha}-${session.horarioId}`;
+}
+
+/**
+ * La advertencia que convierte una cifra en una estimación.
+ *
+ * "Sin lista" no sale del backend: se deriva expandiendo el horario semanal
+ * sobre el rango del filtro (ver `history-utils.ts` para las tres formas en que
+ * eso miente hacia arriba, y para por qué el modelo no puede hacerlo exacto).
+ *
+ * Va escrita, entera y al lado de la cifra, en vez de un asterisco: un
+ * asterisco solo avisa a quien ya sospecha. Y por el mismo motivo la cifra no
+ * se pinta de rojo — el rojo afirma un problema confirmado, y acá lo confirmado
+ * es únicamente que el horario semanal dice una cosa y las listas dicen otra.
+ */
+const AVISO_ESTIMACION =
+  "Estimación: se compara contra el horario semanal, que no contempla feriados, " +
+  "cancelaciones ni desde cuándo rige cada horario.";
+
+/**
+ * Por qué el cruce desaparece al elegir un alumno.
+ *
+ * Con un alumno filtrado, "listas tomadas" pasa a significar "listas donde
+ * figura esa persona", mientras que el horario semanal sigue siendo el del club
+ * entero. Restar uno del otro daría un hueco enorme y falso, así que la resta no
+ * se hace — y se dice, porque un bloque que se esfuma sin explicación se lee
+ * como un error de carga (el mismo criterio de #373 una pantalla más allá).
+ */
+const AVISO_FILTRO_ALUMNO =
+  "El período no se compara contra el horario semanal al filtrar por alumno: las listas " +
+  "donde figura una persona y las sesiones programadas del club no son la misma medida.";
+
+interface PeriodFigureProps {
+  label: string;
+  value: number;
+  /** Aclaración bajo la cifra, cuando la cifra necesita una. */
+  note?: string;
+}
+
+/**
+ * Una de las tres cifras del período.
+ *
+ * La figura va en el `DataBox` numérico que el producto ya usa para todo valor
+ * suelto, y el color —cuando lo haya— vive en el rótulo, nunca en el número:
+ * es la regla que `StatCard` y `StatGrid` ya declaran. Acá los tres rótulos son
+ * neutros a propósito; ninguna de las tres cifras carga un juicio.
+ */
+function PeriodFigure({ label, value, note }: PeriodFigureProps): React.ReactElement {
+  return (
+    <div className="flex max-w-[320px] flex-col items-start gap-1.5">
+      <DataBox variant="numeric">{value}</DataBox>
+      <span className="text-2xs font-bold uppercase tracking-flat text-ink-2">{label}</span>
+      {note ? <p className="text-xs text-ink-3">{note}</p> : null}
+    </div>
+  );
 }
 
 export default function TrainerAttendanceHistoryPage(): React.ReactElement {
@@ -195,6 +251,23 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
   const totalPages = getTotalPages(sessions.length, PAGE_SIZE);
   const visible = useMemo(() => paginateRecords(sessions, page, PAGE_SIZE), [sessions, page]);
 
+  // El cruce del período. Se recalcula con el rango porque el rango ES la
+  // pregunta: "de lo que tocaba en estas fechas, ¿cuánto quedó registrado?".
+  const coverage = useMemo(
+    () =>
+      summarizePeriodCoverage({
+        sessions,
+        schedules,
+        desde: query?.fechaInicio ?? "",
+        hasta: query?.fechaFin ?? "",
+        // El techo real: un rango personalizado puede terminar en el futuro, y
+        // una sesión que todavía no ocurrió no es una lista que falte.
+        hoy: clubIsoDate(),
+        horarioId: query?.horarioId ?? null,
+      }),
+    [sessions, schedules, query],
+  );
+
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
       <AppShell
@@ -216,6 +289,37 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
         <BackLink href="/trainer" className="mb-6" />
 
         <AttendanceFilters filters={filters} schedules={schedules} layout="row" />
+
+        {/*
+          Las tres cifras del período, arriba de la tabla.
+          Con 54 sesiones repartidas en páginas, "cuántas listas se tomaron" era
+          una pregunta que solo se contestaba sumando a mano; y la que de verdad
+          importa —cuántas sesiones quedaron SIN lista— no se contestaba de
+          ninguna manera, porque una lista que nadie pasó no deja fila.
+
+          Se dibujan también cuando el período no tiene ni una lista: ese es
+          justamente el momento en que el hueco es toda la información que hay.
+        */}
+        {!loading && !error && query !== null && (
+          <div className="card flex flex-wrap items-start gap-x-10 gap-y-section px-4 py-3">
+            {filters.student ? (
+              <p className="max-w-[560px] text-xs text-ink-3">{AVISO_FILTRO_ALUMNO}</p>
+            ) : (
+              <>
+                <PeriodFigure label="Listas tomadas" value={coverage.listasTomadas} />
+                <PeriodFigure
+                  label="Sesiones programadas"
+                  value={coverage.sesionesProgramadas}
+                />
+                <PeriodFigure
+                  label="Sin lista (estimado)"
+                  value={coverage.sinLista}
+                  note={AVISO_ESTIMACION}
+                />
+              </>
+            )}
+          </div>
+        )}
 
         {loading && <LoadingState label="Cargando historial…" />}
 
@@ -247,9 +351,19 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                   <Table>
                     <TableHead>
                       <tr>
-                        <TableHeaderCell>Sesión</TableHeaderCell>
+                        {/*
+                          Densidad: cada columna pide el ancho de lo que
+                          realmente lleva. "Sesión" es una fecha y una etiqueta
+                          de horario — mide siempre lo mismo, así que `w-px`
+                          (el idioma de "encogé hasta el contenido" en una tabla
+                          al 100%) le da eso y ni un píxel más. Lo que sobra se
+                          lo lleva "Resultado", que es la única columna donde el
+                          ancho es legibilidad y no aire: ahí vive la barra de
+                          composición.
+                        */}
+                        <TableHeaderCell className="w-px">Sesión</TableHeaderCell>
                         <TableHeaderCell>Registró</TableHeaderCell>
-                        <TableHeaderCell>Resultado</TableHeaderCell>
+                        <TableHeaderCell className="w-full">Resultado</TableHeaderCell>
                         {/*
                          * "Corregir" is the only action this column has ever
                          * offered, and only an admin may correct an
@@ -271,11 +385,34 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                       {visible.map((sessionRow: SessionSummary) => (
                         <TableRow key={`${sessionRow.fecha}|${sessionRow.horario}`}>
                           <TableNameCell
+                            className="w-px whitespace-nowrap"
                             name={formatDate(sessionRow.fecha)}
                             sub={sessionRow.horario}
                           />
                           <TableCell>
-                            {sessionRow.registradoPorNombre ?? "No registrado"}
+                            {/*
+                              Un nombre completo ecuatoriano son cuatro palabras
+                              y se comía el ancho de la columna de al lado. Se
+                              topa y se trunca — pero truncar no puede PERDER el
+                              dato: el `title` conserva el nombre entero, que es
+                              lo que el navegador muestra al pasar el mouse y lo
+                              que un lector de pantalla anuncia junto al texto
+                              recortado.
+
+                              El `title` solo cuelga del nombre real. "No
+                              registrado" es un marcador de posición: repetirlo
+                              en un tooltip no agrega nada que la celda no diga.
+                            */}
+                            {sessionRow.registradoPorNombre ? (
+                              <span
+                                className="block max-w-[240px] truncate"
+                                title={sessionRow.registradoPorNombre}
+                              >
+                                {sessionRow.registradoPorNombre}
+                              </span>
+                            ) : (
+                              "No registrado"
+                            )}
                           </TableCell>
                           <TableCell>
                             {/*
@@ -287,7 +424,15 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                               force every reader to memorize what each color
                               meant.
                             */}
-                            <div className="flex min-w-[220px] max-w-[420px] flex-col gap-2">
+                            {/*
+                              Sin techo: la barra mide una proporción, y una
+                              proporción de cuatro estados dibujada en 220px
+                              deja tramos de dos píxeles que no se distinguen
+                              entre sí. El mínimo sube y el máximo se va, para
+                              que la columna se quede con todo el ancho que las
+                              otras dos no reclamaron.
+                            */}
+                            <div className="flex w-full min-w-[320px] flex-col gap-2">
                               <SessionCompositionBar
                                 counts={sessionRow.counts}
                                 total={sessionRow.total}

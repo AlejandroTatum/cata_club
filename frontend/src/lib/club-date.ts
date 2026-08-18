@@ -146,6 +146,29 @@ export function todayDiaSemana(now: Date = new Date()): DiaSemana {
 }
 
 /**
+ * El `DiaSemana` de una fecha de calendario ya escrita, `"YYYY-MM-DD"`.
+ *
+ * `todayDiaSemana` responde por un INSTANTE y por eso pasa por la zona del
+ * club; esto responde por una fecha que ya es una fecha — la que viene de un
+ * filtro, de un registro o de recorrer un rango día por día. Convertirla a la
+ * zona del club la correría un día, exactamente el mismo motivo por el que
+ * `calendarIsoDate` lee componentes locales y no la zona.
+ *
+ * Ancla al mediodía por lo mismo que `clubToday`: la medianoche puede resbalar
+ * al día anterior cruzando un cambio de hora en la zona del dispositivo.
+ *
+ * Devuelve `null` — y no un lunes por defecto — cuando el texto no es una
+ * fecha: quien recorre un calendario prefiere saltear un día imposible antes
+ * que contar uno inventado.
+ */
+export function diaSemanaOfCalendarDate(isoDate: string): DiaSemana | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null;
+  const parsed = new Date(`${isoDate}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return JS_DAY_INDEX_TO_DIA_SEMANA[parsed.getDay()] ?? null;
+}
+
+/**
  * The most recent real calendar date — today included — on which
  * `diaSemana` falls at the club, as `YYYY-MM-DD`.
  *
