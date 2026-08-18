@@ -1149,14 +1149,15 @@ export default function PaymentsPage(): React.ReactElement {
                     {checklist.items.length - remainingChecks} de {checklist.items.length}
                   </Badge>
                 </div>
-                {/* Why THIS list: the questions changed with the payment, and
-                    an admin who saw three transfer questions yesterday is owed
-                    the reason they are seeing two today. */}
-                {checklist.note && (
-                  <p className="border-b border-line bg-canvas px-[18px] py-2.5 text-xs text-ink-2">
-                    {checklist.note}
-                  </p>
-                )}
+                {/* `checklist.note` ya no se dibuja acá. Explica POR QUÉ esta
+                    lista trae estas preguntas y no otras — procedimiento, no
+                    dato — y era la mitad del texto que el dueño leyó como
+                    «demasiado». Se mudó, entera, al desplegable «Cómo se
+                    decide» de la tarjeta de Decisión, junto al aviso del
+                    deshacer: los dos contestan la misma pregunta, y contestarla
+                    en dos lugares distintos era parte del amontonamiento.
+                    Los checkboxes se quedan enteros: son los que habilitan el
+                    botón de aprobar. */}
                 <div
                   role="group"
                   aria-labelledby="antes-de-aprobar"
@@ -1184,7 +1185,25 @@ export default function PaymentsPage(): React.ReactElement {
 
             {isPending && (
               <section className="flex flex-col gap-3 card p-[18px]">
-                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
+                {/* El título y su desplegable comparten fila. El desplegable
+                    junta TODO el procedimiento de esta pantalla —cómo se arma
+                    la lista de verificación, y qué pasa después de aprobar— y
+                    deja a la vista solo lo que es dato o riesgo.
+                    En modo rechazo no se ofrece: lo que explica adentro es del
+                    camino de aprobación, y un desplegable que contesta otra
+                    pregunta es peor que ninguno. */}
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
+                  {!showRejectForm && (
+                    <ContextualHelp title="Cómo se decide">
+                      {checklist.note && <p className="text-xs text-ink-2">{checklist.note}</p>}
+                      <p className="text-xs text-ink-2">
+                        Tras aprobar va a tener unos segundos para deshacerlo con &quot;Deshacer&quot;.
+                        Pasado ese momento el pago queda registrado y ya no se puede revertir.
+                      </p>
+                    </ContextualHelp>
+                  )}
+                </div>
 
                 {!showRejectForm ? (
                   <>
@@ -1262,14 +1281,21 @@ export default function PaymentsPage(): React.ReactElement {
                         Rechazar pago…
                       </Button>
                     </div>
-                    {/* Issue #314 (K6 hallazgo #17): this fact lived only in
-                        /ayuda, two clicks and a different screen away from the
-                        button that needs it. It has to be visible BEFORE that
-                        click, not discoverable after. */}
-                    <p className="text-xs text-ink-3">
-                      Tras aprobar va a tener unos segundos para deshacerlo con &quot;Deshacer&quot;.
-                      Pasado ese momento el pago queda registrado y ya no se puede revertir.
-                    </p>
+                    {/* El aviso del deshacer se movió al desplegable «Cómo se
+                        decide», arriba en el encabezado de esta misma tarjeta.
+
+                        Esto matiza el issue #314 (K6 hallazgo #17), que lo
+                        había traído desde /ayuda porque allá estaba «a dos
+                        clics y otra pantalla» del botón que lo necesita. Lo que
+                        ese issue pedía sigue en pie: el dato está en la MISMA
+                        tarjeta que el botón, a un clic que no navega ni pierde
+                        el contexto. Lo que cambia es que ya no compite por la
+                        mirada con la fecha de vigencia y el contador de puntos,
+                        que es lo que el dueño leyó como «demasiado texto».
+
+                        Lo que NO se plegó, a propósito: la alerta de vigencia
+                        divergente y la línea de puntos faltantes. Son riesgo y
+                        estado, no procedimiento — se leen sin abrir nada. */}
                     {!checklistComplete && (
                       <p className="text-xs text-ink-3">
                         {remainingChecks === 1
