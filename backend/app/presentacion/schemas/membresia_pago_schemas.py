@@ -34,7 +34,17 @@ class TipoMembresiaResponseDTO(ResponseBase, TipoMembresiaCreateDTO):
 
 # --- Membresia ---
 class MembresiaCreateDTO(BaseModel):
-    monto_aplicado: Decimal = Field(..., gt=0)
+    """Asignar un plan dice a QUIÉN y CUÁL, nunca CUÁNTO (issue #400).
+
+    `monto_aplicado` se quitó a propósito: lo enviaba el cliente y el servicio
+    lo copiaba sin mirar `TipoMembresia.precio`, así que el número con el que
+    el club cobra viajaba por la red editable. Ahora lo resuelve el backend.
+
+    Un `monto_aplicado` que llegue igual se IGNORA en silencio, que es el
+    comportamiento por defecto de Pydantic para campos de más. Se elige
+    ignorar y no rechazar para no romper a un cliente viejo durante la cadena;
+    el candado de `tests/test_tarifa_resuelta_server_side.py` demuestra que
+    ignorar significa ignorar y no "aceptar sin querer"."""
     persona_id: int
     tipo_membresia_id: int
 

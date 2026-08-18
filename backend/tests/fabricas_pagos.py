@@ -123,12 +123,13 @@ def crear_tipo_membresia_api(client) -> dict:
 
 
 def crear_membresia_api(client, persona_id: int, tipo_id: int) -> dict:
+    """Sin `monto_aplicado` ni `fecha_activacion` en el payload (#400): la
+    tarifa la resuelve el backend desde `TipoMembresia.precio`, y el estado y
+    la fecha de activación los pone el servicio. Mandarlos acá haría que las
+    fábricas enseñaran un contrato que ya no existe."""
     return client.post(
         "/api/v1/membresias/",
-        json={
-            "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
-            "persona_id": persona_id, "tipo_membresia_id": tipo_id,
-        },
+        json={"persona_id": persona_id, "tipo_membresia_id": tipo_id},
     ).json()
 
 

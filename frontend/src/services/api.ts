@@ -1331,18 +1331,24 @@ export async function fetchTiposMembresia(): Promise<TipoMembresiaCatalogo[]> {
   return request<TipoMembresiaCatalogo[]>(apiEndpoint("/membresias/tipos"));
 }
 
-/** Create and assign a membership to a persona — `POST /api/membresias/`. */
+/**
+ * Create and assign a membership to a persona — `POST /api/membresias/`.
+ *
+ * Deliberately carries no price. The client used to read the catalogue price
+ * and send it back as `monto_aplicado`, which made the number the club
+ * charges with editable in transit. The backend now resolves the current
+ * `TipoMembresia.precio` from `tipoMembresiaId` alone (issue #400), so this
+ * request says only WHO and WHICH PLAN — never HOW MUCH.
+ */
 export async function crearMembresia(data: {
   personaId: number;
   tipoMembresiaId: number;
-  montoAplicado: number;
 }): Promise<MembresiaPorPersona> {
   return request<MembresiaPorPersona>(apiEndpoint("/membresias/"), {
     method: "POST",
     body: JSON.stringify({
       persona_id: data.personaId,
       tipo_membresia_id: data.tipoMembresiaId,
-      monto_aplicado: data.montoAplicado,
     }),
   });
 }

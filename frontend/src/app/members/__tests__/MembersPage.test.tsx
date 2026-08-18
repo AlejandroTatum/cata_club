@@ -1665,6 +1665,43 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     expect(screen.queryByText(/recarga para verla/i)).not.toBeInTheDocument();
   });
 
+  it("assigns a plan without sending any price to the backend", async () => {
+    // Issue #400: the client used to read the catalogue price and echo it back
+    // as `montoAplicado`, which made the number the club charges with editable
+    // in transit. The request must now say only WHO and WHICH PLAN — the
+    // backend resolves the current tariff from `tipoMembresiaId`.
+    //
+    // The assertion is on the ABSENCE of a key, so it is written against the
+    // whole payload rather than a subset: `objectContaining` would pass even
+    // if the price came back.
+    mockFetchTiposMembresia.mockResolvedValue([
+      { id: 5, categoria: "Mensual", precio: 25, modalidad: "mensual" },
+    ]);
+    mockCrearMembresia.mockResolvedValue({ id: 77 });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
+    const combobox = await within(dialog).findByRole("combobox");
+    fireEvent.change(combobox, { target: { value: "5" } });
+
+    const form = combobox.parentElement as HTMLElement;
+    fireEvent.click(within(form).getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => expect(mockCrearMembresia).toHaveBeenCalled());
+
+    const payload = mockCrearMembresia.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(["personaId", "tipoMembresiaId"]);
+    expect(payload).not.toHaveProperty("montoAplicado");
+  });
+
   it("keeps the edit dialog open while the post-creation refresh is in flight", async () => {
     mockFetchTiposMembresia.mockResolvedValue([
       { id: 5, categoria: "Mensual", precio: 25, modalidad: "mensual" },

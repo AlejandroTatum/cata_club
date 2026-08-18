@@ -141,7 +141,8 @@ class MembresiaServicio:
     def crear_membresia(self, datos: MembresiaCreateDTO) -> Membresia:
         if not self.repo_persona.obtener_por_id(datos.persona_id):
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
-        if not self.repo_tipo.obtener_por_id(datos.tipo_membresia_id):
+        tipo = self.repo_tipo.obtener_por_id(datos.tipo_membresia_id)
+        if not tipo:
             raise EntidadNoEncontrada(f"Tipo de membresía con id {datos.tipo_membresia_id} no encontrado")
         existentes = self.repo.listar_por_persona(datos.persona_id)
         if any(m.estado == EstadoMembresia.ACTIVA for m in existentes):
@@ -151,10 +152,15 @@ class MembresiaServicio:
         # fecha_activacion intermedia es necesaria porque la columna es NOT
         # NULL en el esquema existente; el valor real lo sobreescribe
         # `validar_pago` al aprobar.
+        # La tarifa la resuelve el BACKEND desde el catálogo vigente, no el
+        # cliente (#400). Se copia, no se referencia: a partir de acá la
+        # membresía tiene su propio monto y un cambio posterior del catálogo
+        # no la toca. Las dos mitades de esa regla las fija
+        # `tests/test_tarifa_resuelta_server_side.py`.
         from datetime import datetime, timezone
         membresia = Membresia(
             estado=EstadoMembresia.INACTIVA,
-            monto_aplicado=datos.monto_aplicado,
+            monto_aplicado=tipo.precio,
             fecha_activacion=datetime.now(timezone.utc),
             persona_id=datos.persona_id,
             tipo_membresia_id=datos.tipo_membresia_id,
