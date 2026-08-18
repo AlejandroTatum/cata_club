@@ -130,9 +130,6 @@ import {
 } from "@/app/attendance/attendance-utils";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ContextualHelp from "@/components/ContextualHelp";
-import EmergencyCardDialog, {
-  type EmergencyCardStudent,
-} from "@/app/trainer/attendance/EmergencyCardDialog";
 import {
   SessionCompositionBar,
   SessionCompositionCounts,
@@ -327,15 +324,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
   /** Unfinished roll calls for today, offered on step 1 — never auto-applied. */
   const [resumableDrafts, setResumableDrafts] = useState<StoredAttendanceDraft[]>([]);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
-  /**
-   * Issue #360: the roster row the trainer tapped "Ficha de emergencia" on,
-   * or `null` when the dialog is closed. Deliberately NOT part of the roster
-   * fetch — `EmergencyCardDialog` fetches on open, one alumno at a time, so
-   * there is nothing here to N+1.
-   */
-  const [emergencyCardStudent, setEmergencyCardStudent] = useState<EmergencyCardStudent | null>(
-    null,
-  );
   /**
    * True once `openRoster` finds at least one existing record for the
    * session it just opened — the backend upsert rule (`registrar_asistencia`)
@@ -1727,26 +1715,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
                         </button>
 
                         {/*
-                         * Issue #360. Sibling of the fiche button, not nested
-                         * inside it — same reason the radiogroup below is a
-                         * sibling too. `stopPropagation` keeps this tap from
-                         * also cycling the attendance state via the parent
-                         * `<li>`'s row semantics.
-                         */}
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setEmergencyCardStudent({ id: Number(student.id), name: student.name });
-                          }}
-                          aria-label={`Ficha de emergencia de ${student.name}`}
-                          data-testid={`emergency-card-trigger-${student.id}`}
-                          className="flex h-11 w-11 flex-none items-center justify-center border-t border-line text-state-bad transition-colors hover:bg-state-bad-bg sm:h-full sm:border-l sm:border-t-0"
-                        >
-                          <AlertTriangle size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
-                        </button>
-
-                        {/*
                          * A radiogroup, not a fieldset of `aria-pressed`
                          * toggles: the four states are mutually exclusive, and
                          * toggle buttons announce as four independent switches
@@ -1996,10 +1964,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
         }
         onConfirm={handleConfirmPending}
         onCancel={() => setPendingConfirmation(null)}
-      />
-      <EmergencyCardDialog
-        student={emergencyCardStudent}
-        onClose={() => setEmergencyCardStudent(null)}
       />
       {confirmed ? (
         // The receipt (issue #213): a record of what got archived, in the

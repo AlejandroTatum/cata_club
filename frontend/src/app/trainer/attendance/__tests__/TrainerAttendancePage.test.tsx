@@ -99,11 +99,6 @@ const mockFetchTrainingSchedules = vi.fn().mockResolvedValue([]);
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchAttendanceRecords = vi.fn().mockResolvedValue([]);
 const mockRegisterAttendance = vi.fn();
-// Issue #360: `EmergencyCardDialog` imports `fetchFichaEmergencia` from this
-// same module, so it needs its own mock even though it is never opened by
-// most tests in this file — an unmocked call would throw `undefined is not
-// a function` the moment a test DOES tap the trigger.
-const mockFetchFichaEmergencia = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
@@ -112,7 +107,6 @@ vi.mock("@/services/api", () => ({
   registerAttendance: (request: unknown) => mockRegisterAttendance(request),
   fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
-  fetchFichaEmergencia: (personaId: number) => mockFetchFichaEmergencia(personaId),
 }));
 
 // camelCase — mirrors the real backend contract (`AlumnoHorarioDetalleDTO`
@@ -1050,7 +1044,6 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     mockFetchAlumnosPorHorario.mockReset().mockResolvedValue([ANA_ALUMNO_HORARIO]);
     mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
     mockRegisterAttendance.mockReset();
-    mockFetchFichaEmergencia.mockReset();
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
   });
 
@@ -1060,9 +1053,10 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
     const row = group.closest("[data-attendance]") as HTMLElement;
-    // Anchored on the fiche's own aria-label prefix -- issue #360 added a
-    // second, name-bearing control ("Ficha de emergencia de Ana López") in
-    // the same row, which an unanchored /Ana López/ would also match.
+    // Anchored on the fiche's own aria-label prefix (`"${name}: …"`, set in
+    // page.tsx): the row's accessible names all start with the student, so an
+    // unanchored /Ana López/ stops being unambiguous the moment the row grows
+    // a second name-bearing control.
     const fiche = within(row).getByRole("button", { name: /^Ana López:/ });
 
     expect(row).toHaveAttribute("data-attendance", "present");
@@ -1087,9 +1081,10 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
     const row = group.closest("[data-attendance]") as HTMLElement;
-    // Anchored on the fiche's own aria-label prefix -- issue #360 added a
-    // second, name-bearing control ("Ficha de emergencia de Ana López") in
-    // the same row, which an unanchored /Ana López/ would also match.
+    // Anchored on the fiche's own aria-label prefix (`"${name}: …"`, set in
+    // page.tsx): the row's accessible names all start with the student, so an
+    // unanchored /Ana López/ stops being unambiguous the moment the row grows
+    // a second name-bearing control.
     const fiche = within(row).getByRole("button", { name: /^Ana López:/ });
 
     for (let i = 0; i < 9; i++) {
@@ -1106,10 +1101,8 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
     // Anchored on the fiche's own aria-label prefix (`"${name}: …"`, set in
-    // page.tsx) — issue #360 added a second control in the same row whose
-    // accessible name also contains the student's name ("Ficha de
-    // emergencia de Ana López"), so an unanchored /Ana López/ now matches
-    // both.
+    // page.tsx) — see the note above: an unanchored /Ana López/ only stays
+    // unambiguous while the fiche is the row's one name-bearing control.
     const fiche = within(group.closest("[data-attendance]") as HTMLElement).getByRole("button", {
       name: /^Ana López:/,
     });
@@ -1129,38 +1122,24 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     );
   });
 
-  // Issue #360: the emergency-card trigger sits in the same row as the fiche
-  // and the radiogroup — a sibling of both, not nested inside either.
-  it("opens the emergency card for exactly the tapped student, without cycling their attendance", async () => {
-    mockFetchFichaEmergencia.mockResolvedValue({
-      alumnoNombreCompleto: "Ana López",
-      tipoSangre: "O_POSITIVO",
-      alergias: "Polen",
-      contactoEmergencia: "María López",
-      telefonoEmergencia: "0987654321",
-      representanteNombreCompleto: "María López",
-      representanteTelefono: "0987654321",
-    });
+  // The emergency card lives on `/trainer/students`, the screen whose whole
+  // purpose is that ficha. Not here: taking attendance is marking states, and
+  // the trigger put a SECOND name-bearing control in every row — two
+  // destinations for one tap, on the screen used standing up, phone in hand.
+  it("offers no emergency-card trigger inside the roster row", async () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
     const row = group.closest("[data-attendance]") as HTMLElement;
-    const attendanceBefore = row.getAttribute("data-attendance");
 
-    fireEvent.click(within(row).getByRole("button", { name: "Ficha de emergencia de Ana López" }));
-
-    // `personaId` (9 on `ANA_ALUMNO_HORARIO`), not the roster row index.
-    await waitFor(() => expect(mockFetchFichaEmergencia).toHaveBeenCalledWith(9));
-    expect(await screen.findByRole("dialog", { name: "Ficha de emergencia" })).toBeInTheDocument();
-    expect(screen.getByText("O_POSITIVO")).toBeInTheDocument();
-    // The tap opened the card, not a state cycle on the row behind it.
-    expect(row).toHaveAttribute("data-attendance", attendanceBefore ?? "");
-
-    fireEvent.keyDown(document, { key: "Escape" });
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: "Ficha de emergencia" })).not.toBeInTheDocument(),
-    );
+    expect(
+      within(row).queryByRole("button", { name: /Ficha de emergencia/ }),
+    ).not.toBeInTheDocument();
+    // What the row still carries: the fiche that cycles the state, and the
+    // radiogroup's four explicit controls.
+    expect(within(row).getByRole("button", { name: /^Ana López:/ })).toBeInTheDocument();
+    expect(within(row).getAllByRole("radio")).toHaveLength(4);
   });
 
   it("names the tap target with the student, their current state, and whether it is anybody's answer", async () => {

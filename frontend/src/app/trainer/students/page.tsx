@@ -58,7 +58,7 @@ import { fetchRosterDeTodosLosHorarios, type AlumnoHorario } from "@/services/ap
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import EmergencyCardDialog, {
   type EmergencyCardStudent,
-} from "@/app/trainer/attendance/EmergencyCardDialog";
+} from "@/app/trainer/students/EmergencyCardDialog";
 import { agruparAlumnosDelPadron, filtrarPorNombre } from "./students-utils";
 
 /** Diez, como toda lista paginada del producto — ver `list-page-size.test.ts`. */

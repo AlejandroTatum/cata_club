@@ -126,7 +126,7 @@ export default function EmergencyCardDialog({
         if (!cancelado) setEstado({ tipo: "lista", ficha });
       })
       .catch((err: unknown) => {
-        console.error("[trainer/attendance] fetchFichaEmergencia failed", err);
+        console.error("[trainer/students] fetchFichaEmergencia failed", err);
         if (!cancelado) setEstado({ tipo: "error" });
       });
     return (): void => {
@@ -165,7 +165,7 @@ export default function EmergencyCardDialog({
     fetchFichaEmergencia(student!.id)
       .then((ficha) => setEstado({ tipo: "lista", ficha }))
       .catch((err: unknown) => {
-        console.error("[trainer/attendance] fetchFichaEmergencia retry failed", err);
+        console.error("[trainer/students] fetchFichaEmergencia retry failed", err);
         setEstado({ tipo: "error" });
       });
   }
