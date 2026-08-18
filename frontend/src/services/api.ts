@@ -1522,6 +1522,49 @@ export async function actualizarDescuento(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Beneficio del club — asignación/retiro de un descuento personal (issue #398)
+// ---------------------------------------------------------------------------
+
+/**
+ * `AsignacionDescuentoResponseDTO` (backend beneficio_schemas.py). The
+ * discount travels NESTED, not just its id — same reasoning the backend
+ * docstring gives: the "beneficio vigente" admin screen needs its
+ * nombre/porcentaje/monto without a second catalog read. `descuento` reuses
+ * `DescuentoCatalogo`, whose money fields are already strings.
+ */
+export interface BeneficioAsignado {
+  id: number;
+  personaId: number;
+  descuento: DescuentoCatalogo;
+  asignadoPorPersonaId: number;
+  asignadoEn: string;
+  retiradoPorPersonaId: number | null;
+  retiradoEn: string | null;
+}
+
+/** Admin-only: the persona's active club benefit, or `null` if none — `GET /api/personas/:id/beneficio`. */
+export async function fetchBeneficio(personaId: number): Promise<BeneficioAsignado | null> {
+  return request<BeneficioAsignado | null>(apiEndpoint(`/personas/${personaId}/beneficio`), {
+    method: "GET",
+  });
+}
+
+/** Admin-only: assign a catalog discount as the persona's benefit — `POST /api/personas/:id/beneficio`. */
+export async function asignarBeneficio(personaId: number, descuentoId: number): Promise<BeneficioAsignado> {
+  return request<BeneficioAsignado>(apiEndpoint(`/personas/${personaId}/beneficio`), {
+    method: "POST",
+    body: JSON.stringify({ descuentoId }),
+  });
+}
+
+/** Admin-only: retire the persona's active benefit — `DELETE /api/personas/:id/beneficio`. */
+export async function retirarBeneficio(personaId: number): Promise<BeneficioAsignado> {
+  return request<BeneficioAsignado>(apiEndpoint(`/personas/${personaId}/beneficio`), {
+    method: "DELETE",
+  });
+}
+
 /** Admin-only: read a persona's current roles + activo without mutating anything. */
 export async function obtenerRolesDePersona(personaId: number): Promise<RolesResponse> {
   return request<RolesResponse>(apiEndpoint(`/personas/${personaId}/roles`), {
