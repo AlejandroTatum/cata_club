@@ -76,6 +76,7 @@ const APP_SHELL_PREFIXES = [
   "/payments",
   "/attendance",
   "/discounts",
+  "/tarifas",
   "/trainer",
   "/reports",
   "/student",

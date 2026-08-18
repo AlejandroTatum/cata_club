@@ -97,6 +97,7 @@ const SHORT_SCREENS = SHELL_SCREENS.filter(({ code }) => /measure="short"/.test(
  * | Screen                     | Why it qualifies                          | Reading |
  * |----------------------------|-------------------------------------------|---------|
  * | `/discounts`               | renders the whole catalog, no pager        | #85/#96 |
+ * | `/tarifas`                 | renders the whole catalog, no pager — same shape as `/discounts` | #394/#400 |
  * | `/groups`                  | a card per categoría, no pager             | #85/#96 |
  * | `/student/medical-record`  | five controls that never grow with data    | D11b    |
  * | `/student/payments`        | the family's own history, no pager         | D11b    |
@@ -135,6 +136,7 @@ const SHORT_MEASURE_SCREENS = [
   "student/attendance/page.tsx",
   "student/medical-record/page.tsx",
   "student/payments/page.tsx",
+  "tarifas/page.tsx",
 ];
 
 /** A screen answering the shell's question in its own markup. */
