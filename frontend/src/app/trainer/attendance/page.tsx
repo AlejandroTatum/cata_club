@@ -423,14 +423,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
   }, [schedules]);
 
   /**
-   * One feedback rule, product-wide (see `payments/page.tsx` for the other
-   * half of it): the TOAST carries the outcome of an action the user just
-   * took; an INLINE block carries a blocker attached to a specific control.
-   *
-   * `submitError` is an outcome — the registration failed — with no control
-   * left to attach it to, so it toasts. `rosterError` blocks the "Continuar"
-   * button it renders directly above, so it stays inline and does NOT also
-   * toast.
+   * Issue #352: a toast alone left this outcome to a 4500ms window
+   * (`TOAST_DURATION_MS`, `ToastContext.tsx`) that closes long before the
+   * trainer notices — the client's own timeout budget is 10000ms
+   * (`DEFAULT_TIMEOUT_MS`, `services/api.ts`), so the toast can dismiss
+   * itself before the failure it announces even lands. The toast still
+   * fires, for whoever IS looking right when it fails; `renderConfirmation`
+   * also renders `submitError` inline, directly above "Confirmar
+   * asistencia" — the button that stays on screen, re-enabled, ready to
+   * retry — so the notice survives past the toast's own clock.
    */
   useEffect(() => {
     if (submitError) showError(submitError);
@@ -1917,6 +1918,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
           Se registrará la asistencia de {students.length}{" "}
           {students.length === 1 ? "estudiante" : "estudiantes"}.
         </p>
+
+        {/* Directly above "Confirmar asistencia", the control this error
+            blocks — same inline pattern as `rosterError` above. */}
+        {submitError && (
+          <div className="alert-error" role="alert">
+            {submitError}
+          </div>
+        )}
       </div>
     );
   }
