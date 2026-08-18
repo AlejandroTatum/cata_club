@@ -6,18 +6,21 @@
  * straight out of an open dropdown into the page behind it, Escape did
  * nothing, and clicking elsewhere left the panel open on screen.
  *
- * The focus mechanics are deliberately the same ones `ConfirmDialog.tsx`
- * already implements (query the focusable descendants, cycle with
- * Tab/Shift+Tab, restore focus to the trigger on close) so the app has one
- * pattern instead of two.
+ * The Tab cycle wraps at both edges — Shift+Tab on the first focusable goes to
+ * the last, Tab on the last goes back to the first — and only those two edges
+ * are intercepted; the browser walks the steps in between. `FOCUSABLE_SELECTOR`
+ * comes from `focus-trap.ts`, which is where the modal version of this lives:
+ * one definition of "what counts as focusable" for both.
+ *
+ * Focus returns to the trigger on Escape only. An outside click already put the
+ * focus wherever the user clicked, and yanking it back to the trigger would
+ * override a choice the user just made with the pointer.
  */
 
 "use client";
 
 import { useEffect, type RefObject } from "react";
-
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+import { FOCUSABLE_SELECTOR } from "./focus-trap";
 
 export interface DismissablePopupOptions {
   open: boolean;

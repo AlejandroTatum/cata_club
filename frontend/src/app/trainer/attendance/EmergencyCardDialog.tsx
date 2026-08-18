@@ -47,6 +47,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { fetchFichaEmergencia, type FichaEmergencia } from "@/services/api";
+import { useModalFocusTrap } from "@/lib/focus-trap";
 import { ICON } from "@/lib/icon-size";
 import Button from "@/components/ui/Button";
 import DataBox from "@/components/ui/DataBox";
@@ -61,8 +62,8 @@ export interface EmergencyCardStudent {
 
 export interface EmergencyCardDialogProps {
   /** The tapped roster row, or `null` when the dialog is closed. */
-  student: EmergencyCardStudent | null;
-  onClose: () => void;
+  readonly student: EmergencyCardStudent | null;
+  readonly onClose: () => void;
 }
 
 type CargaEstado =
@@ -74,8 +75,8 @@ function Campo({
   etiqueta,
   valor,
 }: {
-  etiqueta: string;
-  valor: string | null;
+  readonly etiqueta: string;
+  readonly valor: string | null;
 }): React.ReactElement {
   return (
     <div className="flex flex-col gap-1 border-b border-line px-5 py-3 last:border-b-0">
@@ -115,7 +116,7 @@ export default function EmergencyCardDialog({
 }: EmergencyCardDialogProps): React.ReactElement | null {
   const [estado, setEstado] = useState<CargaEstado>({ tipo: "cargando" });
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const triggerElementRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!student) return;
@@ -138,25 +139,20 @@ export default function EmergencyCardDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student?.id]);
 
-  // Focus the close control on open, Escape closes, focus returns to the
-  // trigger on close — same pattern as `ConfirmDialog`, minus the second
-  // (confirm) button: viewing this data is not an action to confirm.
-  useEffect(() => {
-    if (!student) return;
-    triggerElementRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeButtonRef.current?.focus();
-
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") onClose();
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return (): void => {
-      document.removeEventListener("keydown", handleKeyDown);
-      triggerElementRef.current?.focus();
-    };
-  }, [student, onClose]);
+  /*
+   * Focus lands on Cerrar when the card opens, Escape closes it, Tab and
+   * Shift+Tab cycle inside the panel, and focus returns to the roster row that
+   * opened it. The trap is `useModalFocusTrap` rather than a local effect
+   * because the focusable set here is not fixed: the error state adds a
+   * Reintentar button above Cerrar, and the loaded card has Cerrar alone. It
+   * reads the panel's focusables at each keypress instead of holding refs.
+   */
+  useModalFocusTrap({
+    open: student !== null,
+    onClose,
+    panelRef,
+    initialFocusRef: closeButtonRef,
+  });
 
   if (!student) return null;
 
@@ -176,6 +172,7 @@ export default function EmergencyCardDialog({
       onClick={onClose}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="emergency-card-title"
