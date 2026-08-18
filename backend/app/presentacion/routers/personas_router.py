@@ -20,6 +20,10 @@ from app.servicios_negocio.persona_servicio import PersonaServicio
 from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
+from app.presentacion.schemas.beneficio_schemas import (
+    AsignacionDescuentoCreateDTO, AsignacionDescuentoResponseDTO,
+)
+from app.servicios_negocio.beneficio_servicio import BeneficioServicio
 from app.servicios_negocio.antecedentes_club_servicio import AntecedentesClubServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
@@ -347,6 +351,62 @@ async def listar_representados(
         roles_privilegiados=SOLO_ADMINISTRADOR,
     )
     return PersonaServicio(db).listar_representados(persona_id)
+
+
+# --- Beneficio del club (issue #398): asignación/retiro de un descuento ----
+# personal, ADMINISTRADOR-only las tres. El actor (`asignado_por`/`retirado_
+# por`) sale SIEMPRE de `token_payload["persona_id"]` -- nunca del cuerpo del
+# request -- así un usuario nunca puede concederse un beneficio a sí mismo
+# (invariante de seguridad firmado en el issue). `GestorPermisos` se usa como
+# dependencia de PARÁMETRO (no en `dependencies=[]`) porque además de exigir
+# el rol necesitamos el `token_payload` para leer ese actor -- mismo patrón
+# que `vincular_representado` más abajo.
+@router.get(
+    "/{persona_id}/beneficio",
+    response_model=Optional[AsignacionDescuentoResponseDTO],
+)
+async def obtener_beneficio(
+    persona_id: int,
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    """Beneficio VIGENTE de la persona, o `null` si no tiene ninguno --
+    ausencia de beneficio no es un error (ver `BeneficioServicio.obtener_activo`)."""
+    servicio = BeneficioServicio(db)
+    activo = servicio.obtener_activo(persona_id)
+    return servicio.a_response_dto(activo) if activo is not None else None
+
+
+@router.post(
+    "/{persona_id}/beneficio",
+    response_model=AsignacionDescuentoResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+)
+async def asignar_beneficio(
+    persona_id: int,
+    datos: AsignacionDescuentoCreateDTO,
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    servicio = BeneficioServicio(db)
+    asignacion = servicio.asignar(
+        persona_id, datos.descuento_id, token_payload.get("persona_id")
+    )
+    return servicio.a_response_dto(asignacion)
+
+
+@router.delete(
+    "/{persona_id}/beneficio",
+    response_model=AsignacionDescuentoResponseDTO,
+)
+async def retirar_beneficio(
+    persona_id: int,
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    servicio = BeneficioServicio(db)
+    asignacion = servicio.retirar(persona_id, token_payload.get("persona_id"))
+    return servicio.a_response_dto(asignacion)
 
 
 # --- Autoservicio del portal: representante agrega un dependiente ----------

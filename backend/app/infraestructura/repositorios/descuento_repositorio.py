@@ -3,7 +3,7 @@ from typing import List, Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Descuento
+from app.dominio.modelos import AsignacionDescuento, Descuento
 
 
 class DescuentoRepositorio:
@@ -45,3 +45,37 @@ class DescuentoRepositorio:
         self.db.commit()
         self.db.refresh(descuento)
         return descuento
+
+
+class AsignacionDescuentoRepositorio:
+    """Acceso a datos de `AsignacionDescuento` (issue #398). Deliberadamente
+    fino: la decisión de qué constituye "vigente", quién puede asignar/
+    retirar, y la traducción del `IntegrityError` de la carrera al error de
+    dominio amigable viven en `BeneficioServicio`, no acá -- mismo reparto de
+    responsabilidades que `DescuentoRepositorio`/`MembresiaServicio` arriba."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def obtener_activa_por_persona(self, persona_id: int) -> Optional[AsignacionDescuento]:
+        """La asignación VIGENTE de una persona, si tiene una. "Vigente" es
+        `retirado_en IS NULL` -- el mismo criterio que el índice único
+        parcial `uq_asignacion_descuento_activa_por_persona` (ver su
+        docstring en `modelos.py`), así esta lectura y la red de seguridad de
+        la base nunca pueden divergir sobre qué cuenta como "activa"."""
+        stmt = select(AsignacionDescuento).where(
+            AsignacionDescuento.persona_id == persona_id,
+            AsignacionDescuento.retirado_en.is_(None),
+        )
+        return self.db.execute(stmt).scalars().first()
+
+    def crear(self, asignacion: AsignacionDescuento) -> AsignacionDescuento:
+        self.db.add(asignacion)
+        self.db.commit()
+        self.db.refresh(asignacion)
+        return asignacion
+
+    def guardar_cambios(self, asignacion: AsignacionDescuento) -> AsignacionDescuento:
+        self.db.commit()
+        self.db.refresh(asignacion)
+        return asignacion
