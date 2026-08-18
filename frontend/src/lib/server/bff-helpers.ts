@@ -13,7 +13,8 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_TOKEN_COOKIE, getBackendApiUrl } from "@/lib/server/auth";
+import { ACCESS_TOKEN_COOKIE, getBackendApiUrl, setAuthCookies } from "@/lib/server/auth";
+import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 
 /** Default backend timeout for proxied requests. */
 export const BACKEND_TIMEOUT_MS = 10_000;
@@ -171,4 +172,71 @@ export async function proxyToBackend(path: string, init: ProxyToBackendInit): Pr
   } finally {
     done();
   }
+}
+
+interface PatchCatalogResourceOptions<Field extends string> {
+  /** Raw `[id]` route param — validated as digits-only before anything else runs. */
+  id: string;
+  /** Build the backend path from the already-validated id (e.g. `(id) => \`/descuentos/${id}\``). */
+  buildPath: (id: string) => string;
+  /** Whitelist of body keys forwarded to the backend; every other key is dropped. */
+  updatableFields: readonly Field[];
+  /** 400 message when `id` fails the numeric-id check. */
+  invalidIdMessage: string;
+  /** Message used both as the fallback backend-error text and when the auth proxy itself fails. */
+  failureMessage: string;
+}
+
+/**
+ * Shared PATCH algorithm for admin catalog resources (issue #400): validate a
+ * numeric id, parse JSON, forward only a whitelisted set of body fields — an
+ * explicit `null` still travels (it can carry meaning, e.g. clearing a
+ * discount's other modality), only `undefined` is dropped — reject an empty
+ * payload, PATCH the backend, relay its error verbatim, and refresh the auth
+ * cookie on success. `/api/descuentos/[id]` and `/api/membresias/tipos/[id]`
+ * were a near-literal copy of exactly this sequence; extracted here so a
+ * third catalog PATCH route doesn't copy it a third time.
+ */
+export async function patchCatalogResource<Field extends string>(
+  request: NextRequest,
+  options: PatchCatalogResourceOptions<Field>,
+): Promise<NextResponse> {
+  const { id, buildPath, updatableFields, invalidIdMessage, failureMessage } = options;
+
+  if (!/^\d+$/.test(id)) {
+    return badRequestResponse(invalidIdMessage);
+  }
+
+  const [body, parseError] = await parseJsonBody(request);
+  if (parseError) return parseError;
+
+  const parsed = (typeof body === "object" && body !== null ? body : {}) as Record<Field, unknown>;
+  const payload: Record<string, unknown> = {};
+  for (const field of updatableFields) {
+    if (parsed[field] !== undefined) payload[field] = parsed[field];
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return badRequestResponse("No hay campos para actualizar.");
+  }
+
+  const result = await backendFetchAuthed(request, buildPath(id), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!result.ok) {
+    return NextResponse.json({ message: failureMessage }, { status: result.status });
+  }
+  if (!result.response.ok) {
+    return passthroughBackendError(result.response, failureMessage);
+  }
+
+  const data = await result.response.json();
+  const response = NextResponse.json(data);
+  if (result.refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  }
+  return response;
 }
