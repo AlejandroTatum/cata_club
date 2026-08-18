@@ -26,11 +26,34 @@ Tres clases de anomalía:
   A1 -- `monto_aplicado` != `precio` VIGENTE del plan, sin contar gratuidad
         familiar (eso es A2). El plan pudo subir de precio después de la
         activación, o cargarse mal a mano: plata "flotando" sin explicar.
-  A2 -- Importes en cero y gratuidad familiar, en TRES subclases separadas
-        porque significan cosas distintas: `gratuidad_coherente` (cero
-        explicado, benigno), `cero_inexplicado` (cero SIN la bandera, plata
-        ambigua que no se auto-repara) y `gratuidad_incoherente` (bandera
-        dice "gratis", monto no es cero -- la bandera miente).
+  A2 -- Gratuidad familiar y ceros inexplicados, en TRES subclases
+        separadas porque significan cosas distintas:
+          * `gratuidad` -- `es_gratuidad_familiar = True`, CUALQUIER
+            tarifa. Hasta el slice 4c-b de #400 la gratuidad zereaba
+            `monto_aplicado`, así que la bandera y el cero viajaban
+            siempre juntos; desde ese slice la membresía conserva su
+            tarifa real y la bandera es la única señal de "no paga" (ver
+            `PagoServicio.registrar_pago`) -- una tarifa real con la
+            bandera en `True` es ahora el caso NORMAL de cada membresía
+            gratuita, no una incoherencia.
+          * `cero_inexplicado` -- `monto_aplicado == 0` SIN la bandera:
+            sigue significando lo mismo que antes, plata ambigua que
+            ningún camino conocido del código produce (ni la gratuidad,
+            que ya no zerea, ni la creación server-side, que copia
+            `tipo.precio`; solo llega acá una fila con `tipo.precio == 0`
+            en el catálogo, o una carga manual).
+          * `gratuidad_incoherente` -- redefinida en este slice. Ya no
+            puede significar "bandera True, monto != 0" (eso es lo
+            esperado ahora). La única precondición que
+            `_aplicar_regla_familiar_si_corresponde` exige ANTES de poner
+            la bandera es que la persona representada tenga
+            `representante_id`; la bandera nunca vuelve a `False` una vez
+            puesta. Por lo tanto la única forma de que la bandera esté
+            en `True` sin que la regla de negocio la explique es que la
+            persona NO tenga representante -- eso solo puede pasar por
+            fuera del camino normal (una corrección manual, una
+            migración, un dato cargado directo). Esa es la nueva
+            definición de "la bandera miente".
   A4 -- Más de una membresía no-ACTIVA por persona. El índice único parcial
         `uq_membresia_activa_por_persona` (`app/dominio/modelos.py`) solo
         guarda `estado = 'ACTIVA'`; en cualquier otro estado los duplicados
@@ -59,7 +82,7 @@ _RAIZ_BACKEND = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_RAIZ_BACKEND))
 
 from app.dominio.enums import EstadoMembresia  # noqa: E402
-from app.dominio.modelos import Membresia, TipoMembresia  # noqa: E402
+from app.dominio.modelos import Membresia, Persona, TipoMembresia  # noqa: E402
 from app.soporte_transversal.configuracion import settings  # noqa: E402
 
 
@@ -86,36 +109,46 @@ def detectar_deriva_de_tarifa(session: Session) -> list[dict]:
 
 
 def detectar_importes_cero(session: Session) -> dict[str, list[dict]]:
-    """A2: separa las tres subclases de cero/gratuidad -- NUNCA se
+    """A2: separa las tres subclases de gratuidad/cero -- NUNCA se
     fusionan, porque significan cosas distintas (ver docstring del
-    módulo)."""
-    coherente: list[dict] = []
+    módulo). Se une `Persona` (no solo `Membresia`/`TipoMembresia`) porque
+    la subclase `incoherente` redefinida en el slice 4c-b necesita
+    `representante_id`, la única precondición que
+    `_aplicar_regla_familiar_si_corresponde` exige antes de poner la
+    bandera."""
+    gratuidad: list[dict] = []
     inexplicado: list[dict] = []
     incoherente: list[dict] = []
 
     with session.no_autoflush:
-        pares = session.query(Membresia, TipoMembresia).join(
+        filas_db = session.query(Membresia, TipoMembresia, Persona).join(
             TipoMembresia, Membresia.tipo_membresia_id == TipoMembresia.id
+        ).join(
+            Persona, Membresia.persona_id == Persona.id
         ).all()
-    for membresia, tipo in pares:
+    for membresia, tipo, persona in filas_db:
         fila = {
             "membresia_id": membresia.id, "tipo_membresia_id": tipo.id,
             "estado": membresia.estado.value, "monto_aplicado": membresia.monto_aplicado,
             "es_gratuidad_familiar": membresia.es_gratuidad_familiar,
             "precio_vigente": tipo.precio,
         }
-        if membresia.monto_aplicado == 0 and membresia.es_gratuidad_familiar:
-            coherente.append(fila)
+        if membresia.es_gratuidad_familiar and persona.representante_id is None:
+            # La única precondición de negocio para que la bandera exista
+            # es "la persona representada tiene representante_id" -- si no
+            # la cumple, ningún camino conocido del código pudo haberla
+            # puesto en `True`.
+            incoherente.append(fila)
+        elif membresia.es_gratuidad_familiar:
+            gratuidad.append(fila)
         elif membresia.monto_aplicado == 0:
             inexplicado.append(fila)
-        elif membresia.es_gratuidad_familiar:
-            incoherente.append(fila)
 
-    for lista in (coherente, inexplicado, incoherente):
+    for lista in (gratuidad, inexplicado, incoherente):
         lista.sort(key=lambda f: f["membresia_id"])
 
     return {
-        "a2_gratuidad_coherente": coherente,
+        "a2_gratuidad": gratuidad,
         "a2_cero_inexplicado": inexplicado,
         "a2_gratuidad_incoherente": incoherente,
     }
@@ -190,9 +223,9 @@ def formatear_texto(inventario: dict) -> str:
     ]
 
     etiquetas = {
-        "a2_gratuidad_coherente": "A2 - Gratuidad coherente (cero explicado)",
+        "a2_gratuidad": "A2 - Gratuidad familiar (tarifa real, no paga)",
         "a2_cero_inexplicado": "A2 - Cero inexplicado (dinero ambiguo)",
-        "a2_gratuidad_incoherente": "A2 - Gratuidad incoherente (bandera dice gratis, monto no)",
+        "a2_gratuidad_incoherente": "A2 - Gratuidad incoherente (bandera sin representante)",
     }
     for clave, etiqueta in etiquetas.items():
         bloque = inventario["a2_importes_cero"][clave]

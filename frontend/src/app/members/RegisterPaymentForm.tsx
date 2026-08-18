@@ -150,6 +150,21 @@ export default function RegisterPaymentForm({
     }
   }
 
+  // Issue #400 (slice 4c-b): `membresia.monto` stays the real, nonzero
+  // tariff even when `esGratuidadFamiliar` is `true` (E04-RF002 stopped
+  // zeroing it) — the amount-driven form below (typed monto → derived
+  // months, validated as a multiple of `monthlyPrice`) has no honest monto
+  // to collect from an admin for a membership that charges $0 regardless.
+  // Blocked here, before any hook-dependent branch, so an admin can never
+  // register a real charge against a gratuitous membership.
+  if (membresia.esGratuidadFamiliar) {
+    return (
+      <p className="text-xs text-ink-3">
+        Gratuidad familiar: esta membresía no genera ningún cobro. No hay ningún pago que registrar.
+      </p>
+    );
+  }
+
   if (registered) {
     return (
       <p className="flex items-center gap-1 text-xs text-state-ok">

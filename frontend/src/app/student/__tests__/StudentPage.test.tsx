@@ -1568,6 +1568,41 @@ describe("StudentPage — the Cuota card earns its space when the cuota is up to
   });
 });
 
+// Issue #400 (slice 4c-b): E04-RF002 stopped zeroing `montoAplicado`, so a
+// gratuitous membership now carries a real, nonzero price. Before this gate,
+// `CuotaCard` printed that price under "A pagar" regardless of the flag —
+// exactly the false charge this slice exists to stop showing.
+describe("StudentPage — the Cuota card states gratuity, never a real price for it", () => {
+  const GRATUITOUS_MEMBERSHIP = {
+    id: 8,
+    estado: "ACTIVA",
+    personaId: 9,
+    montoAplicado: "35.00",
+    categoria: "Mensual",
+    modalidad: "MENSUAL" as const,
+    esGratuidadFamiliar: true,
+  };
+
+  it("shows the gratuity verdict instead of 'A pagar $35,00', and blocks registration", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...PORTAL.self!, membership: GRATUITOUS_MEMBERSHIP },
+    });
+    mockFetchPagosDePersona.mockResolvedValue([PAGO_APROBADO]);
+
+    render(<StudentPage />);
+
+    const verdict = await screen.findByTestId("cuota-verdict");
+    expect(within(verdict).getByText(/gratuidad familiar/i)).toBeInTheDocument();
+    expect(verdict).toHaveAttribute("data-urgent", "false");
+
+    const cuota = screen.getByTestId("student-cuota-card");
+    expect(within(cuota).queryByText("A pagar")).not.toBeInTheDocument();
+    expect(within(cuota).queryByText("$35,00")).not.toBeInTheDocument();
+    expect(within(cuota).queryByText("Registrar un pago")).not.toBeInTheDocument();
+  });
+});
+
 /**
  * Fix 12b (docs/archive/fixes/12-mi-cuenta-carnet.md): stretching the carnet to match
  * the rail's height ("lg:!items-stretch" + the carnet's own `flex-1`) left the

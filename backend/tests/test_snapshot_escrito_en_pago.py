@@ -103,16 +103,22 @@ def test_un_pago_de_varios_meses_registra_los_meses_comprados(client, db_session
     assert fila.monto_base == Decimal("105.00")
 
 
-def test_un_pago_contra_tarifa_cero_no_inventa_snapshot(client, db_session):
-    """Caso `precio_mensual == 0` (hoy, solo alcanzable por la gratuidad
-    familiar E04-RF002: `membresia.monto_aplicado` en 0.00). Desde issue
-    #400/4b, `meses` ya no es un valor de guardia -- es lo que el cliente
-    pidió, y `monto_base = precio_mensual * meses` es aritmética real
-    incluso acá (0.00 * meses = 0.00, siempre exacto). Aun así el servicio
-    sigue dejando el snapshot AUSENTE en vez de escribir tarifa=0.00: ver
-    el comentario en `PagoServicio.registrar_pago` para el razonamiento
-    completo (una tarifa $0.00 con forma de dato bueno sobre una membresía
-    que en los hechos no tiene ninguna)."""
+def test_un_pago_contra_tarifa_cero_SI_escribe_snapshot(client, db_session):
+    """Caso `precio_mensual == 0` SIN gratuidad familiar (una membresía cuyo
+    `monto_aplicado` es genuinamente $0 -- catálogo a precio cero, o una
+    carga manual; ver A2 `cero_inexplicado` en
+    `scripts/inventario_anomalias_membresias.py`).
+
+    Hasta el slice 4c-b (issue #400) el servicio dejaba el snapshot AUSENTE
+    acá a propósito: la única forma conocida de llegar con `precio_mensual
+    == 0` era la gratuidad familiar zereando la tarifa, y escribir
+    `tarifa_mensual_aplicada = 0.00` tenía forma de tarifa vigente real
+    sobre una membresía que en los hechos no tenía ninguna. Ese slice
+    quitó esa zereada: la gratuidad ya NO toca `monto_aplicado`, así que
+    un precio en cero vuelve a significar, sin ambigüedad, "esta membresía
+    cotiza cero" -- un hecho tan honesto como cualquier otro precio, y el
+    snapshot se escribe igual que para cualquier pago (ver el comentario
+    en `PagoServicio.registrar_pago`)."""
     persona = crear_persona_orm(db_session, "1710034065")
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("35.00"))
     membresia = crear_membresia_orm(
@@ -125,9 +131,9 @@ def test_un_pago_contra_tarifa_cero_no_inventa_snapshot(client, db_session):
     pago = respuesta.json()
 
     fila = db_session.get(Pago, pago["id"])
-    assert fila.tarifa_mensual_aplicada is None
-    assert fila.meses_comprados is None
-    assert fila.monto_base is None
+    assert fila.tarifa_mensual_aplicada == Decimal("0.00")
+    assert fila.meses_comprados == 1
+    assert fila.monto_base == Decimal("0.00")
 
 
 def test_el_snapshot_sobrevive_a_un_cambio_posterior_de_tarifa(client, db_session):

@@ -525,6 +525,28 @@ describe("StudentPaymentsPage — registering a payment", () => {
     expect(screen.queryByText(/no registra pagos desde su propia cuenta/i)).not.toBeInTheDocument();
   });
 
+  // Issue #400 (slice 4c-b): gratuity stopped zeroing `montoAplicado` — the
+  // membership below carries a real, nonzero price ($35,00) AND
+  // `esGratuidadFamiliar: true`, exactly the combination that would have
+  // walked a family through paying a real amount before this slice's gate.
+  it("blocks the renewal form for a gratuitous membership and explains why, without showing its real price as owed", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: {
+        ...SELF,
+        membership: { ...SELF.membership!, montoAplicado: "35.00", esGratuidadFamiliar: true },
+      },
+    });
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText(/gratuidad familiar/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
+    const card = await screen.findByTestId("membership-status");
+    expect(within(card).queryByText("$35,00")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Valor mensual")).not.toBeInTheDocument();
+  });
+
   it("blocks a second registration while one is still awaiting validation", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "PENDIENTE_VALIDACION" }),

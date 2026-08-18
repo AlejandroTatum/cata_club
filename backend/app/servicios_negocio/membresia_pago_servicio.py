@@ -67,7 +67,10 @@ def _meses_enteros_desde(fin: date, hoy: date) -> int:
 # --- Regla Familiar E04-RF002 -----------------------------------------------
 # Si una familia (mismos representados bajo el mismo representante_id) ya
 # tiene 3 membresías ACTIVAS en el mismo periodo, el 4to miembro recibe
-# gratuidad automática: su `monto_aplicado` se lleva a 0.
+# gratuidad automática: `es_gratuidad_familiar` pasa a `True`. Desde el
+# slice 4c-b (issue #400) esto YA NO zerea `monto_aplicado` -- la tarifa
+# real se conserva y la bandera es la única señal autorizada de "no paga"
+# (ver `registrar_pago`).
 FAMILIA_UMBRAL_GRATUIDAD = 3
 
 
@@ -391,16 +394,42 @@ class PagoServicio:
         ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
         fecha_inicio, fecha_fin = ancla, _sumar_meses(ancla, meses)
 
-        # Issue #398/3c: resolver la asignación VIGENTE del PAGADOR
-        # (`datos.persona_id`, no `persona_id_solicitante` -- un representante
-        # o un admin pueden registrar el pago de otra persona), congelarla y
-        # descontar el monto base. Las columnas congeladas se asignan al MISMO
-        # `Pago` (issue #11 colapsado a columnas: un pago lleva un solo
-        # descuento) para que el INSERT sea una sola transacción: no puede
-        # quedar un pago descontado sin su detalle.
-        descuento_congelado, monto_final = self._congelar_beneficio_activo(
-            datos.persona_id, monto_base,
-        )
+        # Gratuidad familiar (E04-RF002, issue #400 slice 4c-b): el gate del
+        # cobro es `membresia.es_gratuidad_familiar`, NUNCA
+        # `precio_mensual == 0`. Antes de este slice ambas cosas coincidían
+        # porque la gratuidad zereaba la tarifa; desde que
+        # `_aplicar_regla_familiar_si_corresponde` deja la tarifa real
+        # intacta, `precio_mensual == 0` deja de significar "gratuito" (puede
+        # ser, simplemente, un plan cuyo catálogo cotiza $0) y la gratuidad
+        # deja de significar "precio cero" (la membresía sigue teniendo una
+        # tarifa real, solo que este socio no la paga). Un socio gratuito NO
+        # pasa por `_congelar_beneficio_activo`: un descuento sobre un cobro
+        # que ya es cero no aporta nada y esa función asume un monto base
+        # potencialmente positivo para su chequeo de tope del 100%.
+        #
+        # Esta rama SOLO cubre el caso en que la membresía YA es gratuita al
+        # momento de REGISTRAR el pago (una renovación). El pago que recién
+        # cruza el umbral (el 4to miembro) todavía no tiene la bandera acá --
+        # `es_gratuidad_familiar` se determina más tarde, al APROBAR (ver
+        # `_aplicar_regla_familiar_si_corresponde`), que es quien completa
+        # esta garantía zereando el `monto` de ESE MISMO pago cuando
+        # corresponde. Ningún pago gratuito llega a APROBADO con un cobro
+        # real: lo impide este gate (renovaciones) o el de ahí (el que
+        # dispara la gratuidad).
+        if membresia.es_gratuidad_familiar:
+            descuento_congelado, monto_final = None, Decimal("0.00")
+        else:
+            # Issue #398/3c: resolver la asignación VIGENTE del PAGADOR
+            # (`datos.persona_id`, no `persona_id_solicitante` -- un
+            # representante o un admin pueden registrar el pago de otra
+            # persona), congelarla y descontar el monto base. Las columnas
+            # congeladas se asignan al MISMO `Pago` (issue #11 colapsado a
+            # columnas: un pago lleva un solo descuento) para que el INSERT
+            # sea una sola transacción: no puede quedar un pago descontado
+            # sin su detalle.
+            descuento_congelado, monto_final = self._congelar_beneficio_activo(
+                datos.persona_id, monto_base,
+            )
 
         # `Pago(**datos.model_dump(), ...)` ya no alcanza: `PagoCreateDTO`
         # perdió `monto` (la columna) y ganó `meses` (que NO es columna de
@@ -428,31 +457,22 @@ class PagoServicio:
         # de una futura re-derivación contra un catálogo que puede cambiar
         # (ver docstring de `actualizar_tipo_membresia`). `monto_base` es
         # `precio_mensual * meses`, el monto ANTES de
-        # `_congelar_beneficio_activo` -- `pago.monto` ya quedó con el
-        # final, descontado, arriba.
+        # `_congelar_beneficio_activo`/de la gratuidad -- `pago.monto` ya
+        # quedó con el final (descontado, o cero si es gratuito) arriba.
         #
-        # Caso `precio_mensual == 0`: hoy la ÚNICA forma de llegar acá es la
-        # gratuidad familiar E04-RF002 (`_aplicar_regla_familiar_si_corresponde`
-        # deja `membresia.monto_aplicado` en 0.00). Antes de este slice
-        # (#400/4b), `meses` era un valor de guardia fijo (`meses = 1`) sin
-        # relación aritmética con lo que mandaba el cliente -- congelar un
-        # snapshot con eso habría inventado un hecho histórico. Desde este
-        # slice `datos.meses` SÍ es lo que el cliente pidió, así que
-        # `monto_base = precio_mensual * meses` es aritmética real incluso
-        # acá (0.00 * meses = 0.00, siempre exacto). Aun así se mantiene el
-        # mismo criterio conservador de dejar el snapshot AUSENTE: una
-        # `tarifa_mensual_aplicada` de $0.00 tiene forma de tarifa vigente
-        # real cuando en los hechos esta membresía no tiene ninguna, y
-        # `monto_base` en $0.00 no distingue "1 mes gratuito" de "12 meses
-        # gratuitos" -- la única columna que sí lo haría (`meses_comprados`)
-        # no vale la pena escribirla sola, a medias, contra las otras dos
-        # ausentes. Se deja el snapshot AUSENTE (las tres columnas NULL, que
-        # `ck_pago_snapshot_completo_o_ausente` permite) en vez de mentir
-        # con un 0.00 que tiene forma de dato bueno y no lo es.
-        if precio_mensual > 0:
-            pago.tarifa_mensual_aplicada = precio_mensual
-            pago.meses_comprados = meses
-            pago.monto_base = monto_base
+        # Slice 4c-b: se escribe SIEMPRE, incluso para un socio gratuito. La
+        # condición vieja (`if precio_mensual > 0`) partía de una premisa que
+        # esta misma rebanada rompe: que la ÚNICA forma de llegar con
+        # `precio_mensual == 0` era la gratuidad familiar zereando la
+        # tarifa. Desde que esa zereada no existe más, `tarifa_mensual_
+        # aplicada`, `meses_comprados` y `monto_base` son, para CUALQUIER
+        # pago (gratuito o no), el mismo hecho honesto: qué tarifa vigente,
+        # cuántos meses y qué monto habría correspondido -- el cobro real
+        # (`pago.monto`) es una columna aparte que sí puede ser $0 sin que
+        # eso vuelva ambiguo o falso a este snapshot.
+        pago.tarifa_mensual_aplicada = precio_mensual
+        pago.meses_comprados = meses
+        pago.monto_base = monto_base
         # Red de seguridad del invariante 1 (issue #8): si otra petición
         # concurrente registró su pendiente ENTRE el chequeo de arriba y este
         # INSERT, el índice `uq_pago_pendiente_por_membresia` lo rechaza y se
@@ -873,13 +893,60 @@ class PagoServicio:
         Si la persona representada (alumno) tiene un representante, y ese
         representante ya tiene 3 membresías activas en el mismo periodo (solapa
         la fecha_fin de este pago), entonces este pago activa la gratuidad:
-        monto_aplicado -> 0.
+        `es_gratuidad_familiar` pasa a `True`.
 
         La propia membresía que acabamos de activar queda incluida en el conteo
         (ya está ACTIVA y solapa), de modo que si el total familiar llega a 4
         (es el 4to miembro) aplicamos gratuidad a ESTA membresía en concreto.
         Solo aplica a personas con representante; una persona sin representante
         no entra en la regla familiar.
+
+        Issue #400 (slice 4c-b): `monto_aplicado` YA NO se lleva a cero acá.
+        La membresía conserva su tarifa real, resuelta server-side del
+        catálogo (`crear_membresia`) -- es el hecho de "cuánto vale este
+        plan", y sigue siéndolo aunque esta familia no lo pague. La bandera
+        es ahora la ÚNICA señal autorizada de "no paga" (ver
+        `registrar_pago`, que gatea el cobro por la bandera y NUNCA por
+        `precio_mensual == 0`): zerear el precio acá rompía esa separación,
+        porque un precio en cero deja de significar "sin tarifa" y empieza a
+        significar "gratis", que son hechos distintos y ninguno debe
+        inferirse del otro (ver `scripts/inventario_anomalias_membresias.py`,
+        A2).
+
+        Fix (hallazgo del revisor, reproducido contra Postgres real): el
+        `pago` recibido acá es el MISMO que se está aprobando -- si es el que
+        recién cruza el umbral (el 4to miembro), `registrar_pago` lo congeló
+        ANTES, cuando la bandera todavía era `False`, así que su `monto` es
+        la tarifa real completa. Sin este fix, ese pago -- justo el que le
+        DA la gratuidad a la familia -- era el único que la cobraba en vez de
+        respetarla; `registrar_pago` nunca vuelve a tocarlo después de
+        aprobado, así que nada más lo corregía. La corrección es zerear
+        `pago.monto` ACÁ, sin condición extra ("recién aplica" vs. "ya
+        aplicaba"): esta función corre en CADA aprobación de una familia con
+        4+ miembros activos, y el pago que se está aprobando SIEMPRE
+        pertenece a esa familia y a ese período -- no hay ningún caso donde
+        deba cobrarse. Para una renovación (bandera ya `True` desde antes),
+        `registrar_pago` ya lo había registrado en $0 (ver el gate de más
+        arriba), así que volver a asignar `Decimal("0.00")` acá es un no-op;
+        no hace falta distinguir "recién aplica" de "ya aplicaba" para que el
+        resultado sea correcto en los dos casos.
+
+        Cualquier descuento personal que `_congelar_beneficio_activo` ya
+        hubiera congelado en ESTE pago (posible SOLO en el caso que recién
+        cruza el umbral: al registrarse, la bandera todavía era `False`, así
+        que `registrar_pago` sí pasó por esa función) queda ANULADO acá, no
+        conservado como registro histórico. Motivo: a diferencia de la beca
+        del 100% de `_congelar_beneficio_activo` (`monto_base - valor_
+        aplicado == 0`, donde las columnas de descuento SÍ se conservan
+        porque son la explicación completa y suficiente del cero), acá el
+        cero lo explica la gratuidad familiar, no el descuento -- dejar
+        `descuento_valor_aplicado` con un monto positivo junto a `monto =
+        0.00` describiría un beneficio que en los hechos nunca se aplicó (la
+        familia no pagó nada por él, y `AsignacionDescuento` -- la concesión
+        del beneficio en sí -- no se toca, así que la persona lo conserva
+        para su próximo pago no gratuito). Conservar esas columnas
+        "por las dudas" inventaría un hecho contable que no ocurrió, el
+        mismo error que este slice completo existe para eliminar.
         """
         persona = self.repo_persona.obtener_por_id(membresia.persona_id)
         if not persona or not persona.representante_id:
@@ -891,8 +958,12 @@ class PagoServicio:
         )
 
         if activas_familia >= FAMILIA_UMBRAL_GRATUIDAD + 1:
-            membresia.monto_aplicado = Decimal("0.00")
             membresia.es_gratuidad_familiar = True
+            pago.monto = Decimal("0.00")
+            pago.descuento_id = None
+            pago.descuento_valor_aplicado = None
+            pago.descuento_porcentaje_aplicado = None
+            pago.descuento_autorizado_por_persona_id = None
         return None
 
     def _crear_notificacion_pago(self, pago: Pago, tipo: TipoNotificacion, mensaje: str) -> bool:

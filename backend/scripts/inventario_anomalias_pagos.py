@@ -17,14 +17,24 @@ destino sale SIEMPRE de `settings.database_url`, nunca de `argv`.
 
 LO MÁS IMPORTANTE DE ESTE ARCHIVO -- qué significa un hallazgo:
 
-    A3b y A5 se calculan contra el `monto_aplicado` VIGENTE de la membresía,
-    porque hoy no existe ningún snapshot histórico de la tarifa: esa
-    ausencia es justamente lo que #400 agrega más adelante en la cadena.
-    Por lo tanto un hallazgo significa UNA DE DOS COSAS -- datos realmente
-    rotos, o un cambio de tarifa legítimo que nadie registró -- y este
-    reporte NO PUEDE distinguirlas. Por eso no dice que la fila esté mal:
-    dice que la fila no es reconstruible. Ninguna plata histórica ambigua
-    se repara automáticamente.
+    Desde el slice 4c-b (#400), `registrar_pago` congela SIEMPRE el
+    snapshot (`tarifa_mensual_aplicada`/`meses_comprados`/`monto_base`) de
+    cada pago nuevo, gratuito o no -- A3b y A5 lo PREFIEREN cuando existe
+    (ver `_monto_base`/`_meses_para_cobertura` más abajo), porque es el
+    hecho histórico real y punto, sin necesidad de reconstruir nada. Solo
+    los pagos ANTERIORES a ese slice (o cualquiera sin snapshot) caen al
+    camino viejo: reconstruir contra el `monto_aplicado` VIGENTE de la
+    membresía, que no distingue datos rotos de un cambio de tarifa legítimo
+    que nadie registró. Por eso, para esos pagos sin snapshot, un hallazgo
+    no dice que la fila esté mal: dice que la fila no es reconstruible.
+    Ninguna plata histórica ambigua se repara automáticamente.
+
+    Advertencia previa a este slice, todavía vigente para un pago
+    GRATUITO sin snapshot (legado): reconstruir su base como
+    `pago.monto + descuento` daría 0 (el cobro real, correcto), no la
+    tarifa que en los hechos correspondía -- por eso un pago gratuito sin
+    snapshot cae, correctamente, en A5 como "no derivable" en vez de
+    fingir una cobertura de cero meses.
 
 Tres clases:
   A3a -- Coberturas APROBADAS superpuestas sobre la misma membresía.
@@ -71,16 +81,23 @@ def _pagos_con_membresia(session: Session, *, solo_aprobados: bool) -> list:
 def _monto_base(pago: Pago) -> Decimal:
     """Monto ANTES del descuento, que es sobre el que se cuentan los meses.
 
-    `pago.monto` NO es el monto base: `registrar_pago` guarda ahí el monto
-    FINAL, ya descontado (`pago.monto = monto_final`), mientras deriva los
-    meses de cobertura del monto base, antes de congelar el descuento. Contar
-    meses sobre `pago.monto` marcaría como anomalía todo pago con descuento
-    -- la membresía anual se vende justamente así ($300 -> $270).
+    Snapshot-aware (issue #400, slice 4c-b): si `pago.monto_base` ya está
+    congelado, ESE es el hecho -- se usa directo, sin reconstruir nada.
+    Reconstruir con la fórmula vieja (`monto + descuento`) es SOLO el
+    fallback para un pago anterior a este slice (sin snapshot): ahí
+    `pago.monto` NO es el monto base, porque `registrar_pago` guarda el
+    monto FINAL ya descontado (`pago.monto = monto_final`) mientras deriva
+    los meses del monto base, antes de congelar el descuento. Contar meses
+    sobre `pago.monto` marcaría como anomalía todo pago con descuento -- la
+    membresía anual se vende justamente así ($300 -> $270) -- y, desde este
+    slice, marcaría TAMBIÉN como anomalía todo pago gratuito (`pago.monto
+    == 0` con una tarifa real detrás), que es exactamente el falso positivo
+    que este slice corrige preferiendo el snapshot.
 
-    La base se reconstruye sin pérdida porque el valor descontado quedó
-    congelado en su propia columna: `monto_final = base - valor_aplicado`.
-    Que haya que reconstruirla en vez de leerla ES el problema que #400
-    resuelve más adelante agregando una columna de monto base explícita."""
+    El fallback reconstruye sin pérdida porque el valor descontado quedó
+    congelado en su propia columna: `monto_final = base - valor_aplicado`."""
+    if pago.monto_base is not None:
+        return pago.monto_base
     return pago.monto + (pago.descuento_valor_aplicado or Decimal("0"))
 
 
@@ -91,6 +108,25 @@ def _meses_derivados(monto_base: Decimal, precio_mensual: Decimal) -> int | None
     if precio_mensual <= 0 or monto_base % precio_mensual != 0:
         return None
     return int(monto_base // precio_mensual)
+
+
+def _meses_para_cobertura(pago: Pago, membresia: Membresia) -> tuple[Decimal, int | None]:
+    """(monto_base, meses) para un pago, preferido SIEMPRE desde el
+    snapshot cuando existe (issue #400, slice 4c-b).
+
+    `pago.meses_comprados` es el hecho congelado en el momento del pago --
+    ni una reconstrucción ni una anomalía posible, así que si está presente
+    se devuelve tal cual, sin pasar por `_meses_derivados`. Esto es lo que
+    evita el falso positivo de A3b sobre un pago gratuito: reconstruir
+    meses de `_monto_base(pago) == 0` contra la tarifa real de la
+    membresía daría SIEMPRE 0 meses (cualquier cobertura real de un pago
+    gratuito, aunque sean 3 meses, no calzaría con eso). Solo un pago SIN
+    snapshot (anterior a este slice) cae al camino viejo de derivar contra
+    `membresia.monto_aplicado` VIGENTE."""
+    base = _monto_base(pago)
+    if pago.meses_comprados is not None:
+        return base, pago.meses_comprados
+    return base, _meses_derivados(base, membresia.monto_aplicado)
 
 
 def detectar_coberturas_superpuestas(session: Session) -> list[dict]:
@@ -133,13 +169,20 @@ def detectar_cobertura_incompatible(session: Session) -> list[dict]:
     retroactivas explícitas a propósito (#284), así que reportarlas sería
     llamar defecto a lo intencional. Excluye también los pagos sin meses
     derivables: ahí la cobertura no es incompatible, es indecidible, y eso
-    lo reporta A5."""
+    lo reporta A5.
+
+    Meses vía `_meses_para_cobertura` (snapshot-aware, slice 4c-b): un pago
+    GRATUITO real (`pago.monto == 0`, tarifa de la membresía real y
+    distinta de cero) tiene `meses_comprados` congelado desde
+    `registrar_pago`, así que este detector usa ESE número en vez de
+    derivarlo de `monto_base / precio_mensual` -- derivarlo daría 0 meses
+    (monto_base también es 0 sin snapshot) y marcaría como incompatible
+    hasta la cobertura correcta de un socio que no paga."""
     filas = []
     for pago, membresia in _pagos_con_membresia(session, solo_aprobados=True):
         if pago.tipo_pago == TipoPago.REGULARIZACION:
             continue
-        base = _monto_base(pago)
-        meses = _meses_derivados(base, membresia.monto_aplicado)
+        base, meses = _meses_para_cobertura(pago, membresia)
         if meses is None:
             continue
         esperada = _sumar_meses(pago.fecha_inicio, meses)
@@ -160,17 +203,22 @@ def detectar_meses_no_derivables(session: Session) -> list[dict]:
     """A5: pagos -- en CUALQUIER estado -- de los que hoy no se puede
     reconstruir cuántos meses compraron. Ver la advertencia del docstring del
     módulo: un hallazgo acá puede ser dato roto o una tarifa que cambió sin
-    que nadie la registrara, y el reporte no puede distinguirlas."""
+    que nadie la registrara, y el reporte no puede distinguirlas.
+
+    Snapshot-aware (slice 4c-b): si `pago.meses_comprados` está congelado,
+    los meses SON un hecho conocido -- ni "no derivable" ni ninguna otra
+    cosa que evaluar acá, gratuito o no. Solo un pago SIN snapshot
+    (anterior a este slice) cae al camino viejo: reconstruir contra
+    `membresia.monto_aplicado` VIGENTE, que sigue sin poder distinguir
+    dato roto de tarifa cambiada."""
     filas = []
     for pago, membresia in _pagos_con_membresia(session, solo_aprobados=False):
+        _, meses = _meses_para_cobertura(pago, membresia)
+        if meses is not None:
+            continue
         precio = membresia.monto_aplicado
         base = _monto_base(pago)
-        if precio <= 0:
-            motivo = "precio_mensual_cero"
-        elif base % precio != 0:
-            motivo = "monto_no_multiplo"
-        else:
-            continue
+        motivo = "precio_mensual_cero" if precio <= 0 else "monto_no_multiplo"
         filas.append({
             "pago_id": pago.id, "membresia_id": pago.membresia_id,
             "estado_pago": pago.estado_pago.value, "tipo_pago": pago.tipo_pago.value,

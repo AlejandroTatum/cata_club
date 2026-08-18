@@ -58,6 +58,13 @@
  * backend has no debt concept. "A pagar" reads the plan's monthly price
  * (`Membresia.montoAplicado`) directly, stated as a price like the rest of
  * the product does, never as a balance.
+ *
+ * Issue #400 (slice 4c-b) added one more thing "A pagar" must never state: a
+ * real price for a membership that does not charge one. `montoAplicado`
+ * stays the real tariff even when `Membresia.esGratuidadFamiliar` is `true`
+ * (the flag stopped zeroing it), so this card reads THAT flag through
+ * `situation.kind === "gratuitous"` and drops the row entirely rather than
+ * printing a price next to a verdict that already says "no paga".
  */
 
 "use client";
@@ -158,7 +165,15 @@ export default function CuotaCard({
   viewPagosHref,
 }: CuotaCardProps): React.ReactElement {
   const compact = situation.kind === "covered";
-  const monthlyPriceLabel = monthlyPrice ? formatCurrency(monthlyPrice) : null;
+  // Issue #400 (slice 4c-b): a gratuitous membership keeps its real,
+  // nonzero `monthlyPrice` — the price is no longer zeroed, only flagged
+  // (`Membresia.esGratuidadFamiliar`, read by `describePaymentSituation`
+  // into `situation.kind === "gratuitous"`). Showing "A pagar $35,00" next
+  // to a verdict that already says "no paga" would contradict it, so this
+  // row is suppressed for that kind — the verdict above already states the
+  // gratuity, in full, as `situation.headline`/`situation.detail`.
+  const isGratuitous = situation.kind === "gratuitous";
+  const monthlyPriceLabel = monthlyPrice && !isGratuitous ? formatCurrency(monthlyPrice) : null;
 
   return (
     <section

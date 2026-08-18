@@ -737,7 +737,11 @@ def test_e04_rf002_primera_membresia_familiar_sin_gratuidad(client):
 
 def test_e04_rf002_cuarta_membresia_familiar_con_gratuidad(client):
     """4to miembro de la familia (mismo representante, mismo periodo):
-    monto_aplicado debe quedar en 0 por gratuidad familiar E04-RF002."""
+    E04-RF002 debe marcar `esGratuidadFamiliar = True` SIN zerear
+    `montoAplicado` (issue #400, slice 4c-b) -- la membresía conserva su
+    tarifa real, resuelta server-side del catálogo; la bandera es la única
+    señal de que este socio no paga (ver `PagoServicio.registrar_pago`,
+    que gatea el cobro por la bandera y nunca por el precio)."""
     from decimal import Decimal
 
     representante = _crear_persona(client, cedula=cedula_valida(410))
@@ -755,8 +759,8 @@ def test_e04_rf002_cuarta_membresia_familiar_con_gratuidad(client):
     assert resp.status_code == 200
     membresia_4_actualizada = client.get(f"/api/v1/membresias/{membresia_4['id']}").json()
     assert membresia_4_actualizada["estado"] == "ACTIVA"
-    # La 4ta membresía debe tener monto 0 por gratuidad familiar E04-RF002
-    assert Decimal(membresia_4_actualizada["montoAplicado"]) == Decimal("0.00")
+    # La 4ta membresía CONSERVA su tarifa real: la gratuidad ya no la zerea.
+    assert Decimal(membresia_4_actualizada["montoAplicado"]) == Decimal("35.00")
     assert membresia_4_actualizada["esGratuidadFamiliar"] is True
 
 
