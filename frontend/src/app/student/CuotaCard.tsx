@@ -9,6 +9,29 @@
  * whether they owe anything — until when they are covered, and what the plan
  * costs — plus the one action.
  *
+ * ## AND IT CAME BACK, on the argument that already governed the paper card
+ *
+ * The paragraph above is history, not the current shape. The owner read the
+ * running screen and said it in one line: «No tiene ningún pago aprobado —
+ * esa info muévala a la sección de pagos, no al carnet.» The verdict leads
+ * THIS card now, and the carnet renders no payment state in either medium.
+ *
+ * What flipped is not a preference, it is the scope of an argument the
+ * codebase had already accepted. Decision #286 kept the status band off the
+ * PRINTED carnet because a payment state is perishable and an identity
+ * document is not — a plasticised card reading «vencido» ages badly. That
+ * argument never depended on the medium. A carnet is an identity document on
+ * screen too; belonging is an identity fact and this month's coverage is not.
+ * So the same reasoning that kept the state off the paper card now keeps it
+ * off the screen card, and the payments block is where it belongs.
+ *
+ * The tone comes from `paymentBandTone` — the band's own function, unchanged
+ * and unmoved. What was carnet-specific was the band's HOST, never its reading
+ * of the situation. What did NOT come across is the coal-surface palette: the
+ * band sat on the carnet's gradient and hand-picked its foregrounds, while
+ * this card sits on `paper`, where the `state-*` tokens `Badge` already uses
+ * are the measured pairs (`color-contrast.test.ts`).
+ *
  * ## The compact mode
  *
  * The maquette's own recorded cost for "El carnet manda" is that it is heavy
@@ -17,9 +40,12 @@
  * concentrated: cubierta hasta, a pagar, a whole paragraph and a full-width
  * button, for a state whose entire content is "you're fine".
  *
- * So the `covered` state compresses to a single line — cubierta hasta, and a
- * small text link, no paragraph, no button — and the vertical room it gives
- * up is what lets "Esta semana" carry more weight below it. Every other
+ * So the `covered` state compresses to the verdict plus a single line —
+ * cubierta hasta, and a small text link, no paragraph, no button — and the
+ * vertical room it gives up is what lets "Esta semana" carry more weight
+ * below it. The verdict is the one thing compression may not take: it used to
+ * be free because the carnet's pill was saying it, and once that pill left,
+ * dropping it here left the state stated nowhere at all. Every other
  * `PaymentSituation.kind` still needs the full card: `awaiting-validation`,
  * `no-membership` and `minor-blocked` all have a real explanation to give
  * (who acts, or why there is nothing to act on yet), and every urgent kind
@@ -37,11 +63,11 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, CreditCard } from "lucide-react";
+import { AlertTriangle, ArrowRight, CreditCard } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { buttonClasses, DataBox } from "@/components/ui";
+import { buttonClasses, cn, DataBox } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
-import type { PaymentSituation } from "./student-utils";
+import { paymentBandTone, type PaymentSituation } from "./student-utils";
 
 export interface CuotaCardProps {
   situation: PaymentSituation;
@@ -53,6 +79,65 @@ export interface CuotaCardProps {
   action: { href: string; label: string } | null;
   /** The plain "see the history" destination, always available. */
   viewPagosHref: string;
+}
+
+/**
+ * THE VERDICT — what is true right now, stated before any evidence.
+ *
+ * It is the carnet's old status band, rehoused. One shape for every state,
+ * because this card is the payments block and a family reading it is reading
+ * it for exactly this: the tone tells the three groups apart, not the layout.
+ * (The band needed two shapes because it also had to stop weighing down an
+ * identity card in the majority case. That constraint left with the band.)
+ *
+ * The palette is the `state-*` token pairs `Badge` uses and
+ * `color-contrast.test.ts` measures, NOT the band's hand-picked `#FF8A93` and
+ * `#7BE8A4`. Those two were chosen to sit on the carnet's coal gradient; this
+ * card is on `paper`, where the tokens are the measured answer and a
+ * transcribed coal foreground would be a fresh unmeasured pair.
+ */
+function CuotaVerdict({ situation }: { situation: PaymentSituation }): React.ReactElement {
+  const tone = paymentBandTone(situation);
+
+  return (
+    <div
+      data-testid="cuota-verdict"
+      data-urgent={String(situation.urgent)}
+      data-tone={tone}
+      className={cn(
+        "flex items-start gap-2.5 border-b border-line px-5 py-3",
+        tone === "bad" && "bg-state-bad-bg",
+        tone === "ok" && "bg-state-ok-bg",
+        tone === "neutral" && "bg-sunken",
+      )}
+    >
+      {tone === "bad" ? (
+        <AlertTriangle
+          size={ICON.sm}
+          strokeWidth={2}
+          className="mt-0.5 flex-none text-state-bad"
+          aria-hidden="true"
+        />
+      ) : null}
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "text-sm font-bold leading-tight",
+            tone === "bad" && "text-state-bad",
+            tone === "ok" && "text-state-ok",
+            tone === "neutral" && "text-ink",
+          )}
+        >
+          {situation.headline}
+        </p>
+        {situation.figure && (
+          <p className="mt-0.5 text-2xs font-extrabold uppercase tracking-flat text-ink-3">
+            {situation.figure.value} {situation.figure.unit}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** One label/value line — "Cubierta hasta" / "27/07/2026" — the value in its own `DataBox`. */
@@ -92,22 +177,33 @@ export default function CuotaCard({
         </Link>
       </div>
 
+      <CuotaVerdict situation={situation} />
+
       {compact ? (
-        // One line: the fact that still matters once there is nothing to
-        // resolve, and a quiet way back to the form for a family paying
-        // ahead. No paragraph, no button — the carnet's own pill already
-        // said "Al día".
+        // One line UNDER the verdict: the date that still matters once there
+        // is nothing to resolve, and a quiet way back to the form for a family
+        // paying ahead. Still no paragraph and no button — that is what
+        // compact means — but the verdict above is not optional any more.
+        //
+        // It used to read "no button — the carnet's own pill already said 'Al
+        // día'", and it leaned on that pill for the whole verdict: the card
+        // itself said only "Cubierta hasta 31/12/2026", leaving the reader to
+        // infer "al día" from a date in the future. With the pill gone that
+        // inference had no source at all, so `CuotaVerdict` above states
+        // `situation.headline` — "Está al día con el club" — in every branch.
+        //
+        // The guard is not defensive noise: with both the date and the action
+        // gone the row would be an empty band of padding under the verdict,
+        // and `covered` without a `coverageEnd` is unreachable today only
+        // because `describePaymentSituation` derives the kind FROM the date.
+        (coverageEnd || action) && (
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-          <p className="text-sm text-ink-2">
-            {coverageEnd ? (
-              <>
-                Cubierta hasta{" "}
-                <b className="font-semibold tabular-nums text-ink">{formatDate(coverageEnd)}</b>
-              </>
-            ) : (
-              situation.headline
-            )}
-          </p>
+          {coverageEnd && (
+            <p className="text-sm text-ink-2">
+              Cubierta hasta{" "}
+              <b className="font-semibold tabular-nums text-ink">{formatDate(coverageEnd)}</b>
+            </p>
+          )}
           {action && (
             <Link
               href={action.href}
@@ -118,6 +214,7 @@ export default function CuotaCard({
             </Link>
           )}
         </div>
+        )
       ) : (
         <div className="flex flex-col gap-3 px-5 py-4">
           {(coverageEnd || monthlyPriceLabel) && (

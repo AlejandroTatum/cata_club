@@ -199,3 +199,66 @@ describe("WeekStrip — the días a caller is allowed to use", () => {
     expect(box("sab")).toHaveAttribute("data-state", "activo");
   });
 });
+
+/**
+ * The strip on a coal ground.
+ *
+ * The idle box is `bg-sunken` — a near-white fill measured against `paper` and
+ * `canvas`, the two surfaces a table stands on. Dropped on the carnet's coal
+ * credential that same fill is the BRIGHTEST thing on the card, so seven unlit
+ * days shout louder than the two that run: the strip's whole message inverts.
+ *
+ * It is a VARIANT on the component rather than a wrapper selector overriding it
+ * from outside, for the reason the file's header already gives about the label:
+ * half of this piece is a contract, and a caller repainting it from a parent
+ * `[&_span]` rule can silently take the contrast with it. The default is
+ * untouched, so `/groups` renders exactly as it did.
+ *
+ * The measurements, on the coal the credential is drawn in (#131316):
+ *   · idle fill `white/5` composites to #1F1F22 — 3.13:1 against the lit red,
+ *     clear of WCAG 1.4.11's 3:1, which is what makes "which boxes are lit"
+ *     readable at all.
+ *   · `text-white/70` on that fill is ~8.5:1, well past AA for a 10.5px bold.
+ */
+describe("WeekStrip — the same seven boxes on a coal ground", () => {
+  it("keeps the club's red for a día that runs, whatever the ground", () => {
+    const { container } = render(<WeekStrip dias={["mar"]} variant="onCoal" />);
+    expect(boxes(container)[1]).toHaveClass("bg-cata-red", "text-white");
+  });
+
+  it("replaces the near-white idle fill instead of shouting off the coal", () => {
+    const { container } = render(<WeekStrip dias={["mar"]} variant="onCoal" />);
+    const monday = boxes(container)[0];
+    expect(monday).not.toHaveClass("bg-sunken");
+    expect(monday).not.toHaveClass("text-ink-3-strong");
+    expect(monday).toHaveClass("bg-white/5", "text-white/70");
+  });
+
+  it("leaves the light-ground strip exactly as `/groups` renders it today", () => {
+    const { container } = render(<WeekStrip dias={["mar"]} />);
+    expect(boxes(container)[0]).toHaveClass("bg-sunken", "text-ink-3-strong");
+  });
+
+  it("keeps the whole-word label and the role a screen reader receives", () => {
+    render(<WeekStrip dias={["mar", "jue"]} variant="onCoal" />);
+    const strip = screen.getByRole("img");
+    expect(strip).toHaveAttribute("aria-label", "Martes y jueves");
+    expect(strip).toHaveAttribute("data-testid", "week-strip");
+  });
+
+  it("says the empty case in words on coal too, never in silence", () => {
+    render(<WeekStrip dias={[]} variant="onCoal" />);
+    expect(screen.getByRole("img")).toHaveAttribute("aria-label", "Sin horario");
+  });
+
+  it("still tells an available día from an unlit one on the dark ground", () => {
+    const { container } = render(
+      <WeekStrip dias={["lun"]} permitidos={["lun", "mar"]} variant="onCoal" />,
+    );
+    const [, tuesday] = boxes(container);
+    expect(tuesday).toHaveAttribute("data-state", "disponible");
+    expect(tuesday).toHaveClass("border-dashed");
+    // `line-2` is a light-surface hairline; on coal it is invisible.
+    expect(tuesday).not.toHaveClass("border-line-2");
+  });
+});

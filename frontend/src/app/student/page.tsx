@@ -28,9 +28,14 @@ import {
   STAT_GRID,
   StatCard,
   StatTrack,
+  WeekStrip,
   buttonClasses,
   cn,
 } from "@/components/ui";
+// The one translation between the backend's weekday keys and the shared
+// strip's, already owned by `/groups` — see `toStripDia`'s own comment for why
+// the two tables are joined by the WORD they both print and not by position.
+import { toStripDias } from "@/app/groups/groups-page-utils";
 import AgeUpConfirmation from "@/components/AgeUpConfirmation";
 import ManagedStudentPicker, {
   useManagedProfiles,
@@ -38,7 +43,6 @@ import ManagedStudentPicker, {
 } from "./ManagedStudentPicker";
 import CuotaCard from "./CuotaCard";
 import {
-  compactPaymentLabel,
   derivePortalMode,
   isRepresentative,
   isMinor,
@@ -47,15 +51,13 @@ import {
   describePaymentSituation,
   findNextTrainingSessions,
   firstNameOf,
-  paymentBandTone,
   resolveCoverageEnd,
   summarizeRecentAttendance,
   contarEntrenamientosSemanales,
   daysUntil,
-  type PaymentSituation,
   type UpcomingTraining,
 } from "./student-utils";
-import { AlertTriangle, CalendarDays, Printer, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
+import { CalendarDays, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -79,164 +81,247 @@ type HorariosState =
   | { status: "ready"; asignaciones: AlumnoHorario[] };
 
 // ---------------------------------------------------------------------------
-// The club membership card (`.carnet`, _sistema.css:291-304)
+// The club membership card — "Funda"
 //
-// This is the one thing a parent screenshots, so it is an identity document
-// and is held to that standard: every field on it is real. The prototype's
-// "Miembro nº", "Desde" and "Renueva" are NOT rendered — see the block comment
-// above `resolveCoverageEnd` in student-utils.ts for where each one dies.
+// ## The insight this arrangement came out of
 //
-// ## "El carnet manda" (docs/archive/fixes/12-mi-cuenta-carnet.md)
+// Every earlier pass made the carnet A COAL SLAB IN A PAGE OF WHITE CARDS. On
+// a dashboard whose every other block is `paper` with a hairline and a header
+// row, a full-bleed dark card is a foreign body — and each decorative layer
+// added to it to make it feel more like a credential (a corner arc, a security
+// net, a guilloche, a pantograph, a halftone) made that worse rather than
+// better, because it made the object MORE unlike its neighbours while leaving
+// the mismatch that caused the problem exactly where it was.
 //
-// The redesign folds the payment situation into the carnet as a status band,
-// in the position the chosen maquette draws it — over the card, not beside
-// it — and trims the fact grid to the four the maquette asks for: Socio
-// desde, Plan, Franja, Valor mensual. Two facts the OLD grid carried move or
-// drop:
+// "Funda" resolves the tension instead of picking a side: THE FRAME BELONGS TO
+// THE APP, THE OBJECT BELONGS TO THE CLUB. The carnet becomes an ordinary
+// system panel — same `.card` surface, same header grammar as `CuotaCard` and
+// "Esta semana" beside it, same text-link action — and that panel HOLDS a coal
+// credential on a sunken ground. The dark object stops being a card that fails
+// to look like the others and becomes, unmistakably, the thing that gets
+// printed. The panel is the citizen of the dashboard; the credential is what
+// it is a panel about.
 //
-//   - "Cobertura hasta" moves to the "Cuota" card (`CuotaCard`) beside the
-//     carnet — it is payment information, and the band above now states the
-//     payment verdict already; repeating the date on the carnet too would be
-//     the same fact stated twice two inches apart.
-//   - "Modalidad" (Mensual/Personalizada) is dropped. Nothing in the chosen
-//     maquette draws it, and the brief is explicit that an unlisted field
-//     gets left out rather than kept "just in case" — the whole point of this
-//     pass is that the carnet stops carrying everything it can.
+// Two consequences follow from that split and are worth stating, because both
+// look like omissions:
 //
-// The band ALSO replaces the old `describeMembershipState` badge
-// ("Membresía activa/pendiente/vencida"). That badge and the payment
-// situation used to be able to disagree — an admin-set `estado` is not
-// derived from coverage — and the maquette draws exactly one band, worded
-// for "can this family act on it", which `describePaymentSituation` already
-// is. The one case this trades away: an admin who marks a membership
-// `INACTIVA` with no payment consequence no longer gets a distinct carnet
-// reading for that — `never-paid`'s "no tiene ningún pago aprobado" covers
-// it, and it is the more actionable of the two.
+//   - NOTHING ON THE CREDENTIAL OPTS OUT OF PRINT. The object IS the print
+//     area (`#carnet-print-area`), so a `print:hidden` inside it would be a
+//     fact the screen shows and the sheet hides — precisely the drift that
+//     made the two media read as two different cards through three passes.
+//     Everything that must not print (the actions, the size note, the panel
+//     itself) lives OUTSIDE the object now, where the print sheet already
+//     hides it without anything having to opt out.
+//   - THE CREDENTIAL CARRIES NO DECORATION. No glow, no texture, no gradient.
+//     See the paragraph above for why: the decoration was an answer to the
+//     wrong diagnosis. What identifies the club here is the mark, the wordmark
+//     and the red rule — three things that are the club rather than three
+//     things that look expensive.
+//
+// ## Typography — one hero, real jumps
+//
+// The scale is the project's own (`tailwind.config.ts`) and nothing falls
+// outside it:
+//
+//   · the NAME is the hero — `text-xl` (26px), `font-extrabold`, balanced. It
+//     is an identity object about a person, so the person is the largest thing
+//     on it. It stays in BARLOW: Graduate has almost no vertical range and no
+//     lowercase design intent, so a name set in it reads as texture rather
+//     than as words.
+//   · the CÉDULA is second — `text-lg` (20px), `tabular-nums`, and tracked
+//     WIDE (`tracking-caps`, the project's own +0.12em step). The tracking is
+//     the whole difference between a document number and a score.
+//   · the WORDMARK takes Graduate at `text-base` (15px), the face's floor, on
+//     both media. It heads the object; it does not lead it.
+//   · register values are `text-sm`, except the two NUMERIC ones, which take
+//     Graduate — the club counting — and therefore sit at `text-base`, because
+//     15px is a property of the FACE and not a screen convention. That is the
+//     one place the register's own size step yields, and it yields to the
+//     floor rather than the other way round.
+//   · labels, "Socio" and the panel's size note are `text-2xs` uppercase 800.
+//
+// ## Spacing
+//
+// Three steps, declared as CSS variables on `.carnet-credential`
+// (`globals.css`) and re-declared once for print — `page` 21px, `section`
+// 14px, `field` 7px, on the project's own 7px grid. Nothing inside the
+// credential may write any other length, and `StudentPage.test.tsx` fails by
+// name on one that does. See the CSS for why twenty-four hand-tuned `print:`
+// twins were not a workable alternative.
+//
+// ## What is on it, and what is not
+//
+// This is the one thing a parent screenshots and the one thing they carry, so
+// every field on it is real. The prototype's "Miembro nº", "Desde" and
+// "Renueva" are NOT rendered — see the block comment above `resolveCoverageEnd`
+// in student-utils.ts for where each one dies. Three more decisions:
+//
+//   - NO PAYMENT STATE, in either medium. The owner moved the verdict off this
+//     card in as many words («esa info muévala a la sección de pagos, no al
+//     carnet») and `CuotaCard` beside it owns the whole payment reading. A
+//     carnet is an identity document: belonging is an identity fact, this
+//     month's coverage is not.
+//   - NO PRICE either, and that is new. It used to ride the fact grid as
+//     "Valor mensual" and hide itself under `print:` — which was the shape of
+//     an unresolved argument, not a decision. A price identifies nobody, ages
+//     the day the club changes it, and `CuotaCard` already states it under the
+//     label the payments screen uses.
+//   - "Modalidad" (Mensual/Personalizada) stays dropped. Nothing in the chosen
+//     arrangement draws it, and an unlisted field gets left out rather than
+//     kept "just in case".
 // ---------------------------------------------------------------------------
 
 /**
- * A "Franja" value with two or more windows ("15:00 — 16:00 · 20:00 —
- * 21:15") used to be one plain string in a 172px-wide grid cell, so the
- * browser wrapped wherever it found a space — including inside a single
- * window, splitting "20:00 —" from "21:15" (fix 12b,
- * docs/archive/fixes/12-mi-cuenta-carnet.md). Each window is wrapped in its own
- * `whitespace-nowrap` span so the ONLY point where a line can break is the
- * " · " between them, which stays a normal (breakable) text node — never
- * inside a window, always between two.
+ * THE CLUB'S MARK, DRAWN RATHER THAN PHOTOGRAPHED.
+ *
+ * It used to be `/brand/cata-club-logo.jpeg` on a white disc. The observation
+ * behind #286 was right — a photographic JPEG halftones into a smudge at
+ * credential size — and the conclusion it reached (drop the mark on print) left
+ * a blank white disc as the most conspicuous thing on the sheet.
+ *
+ * Three boxes cost nothing, print as flat colour at any size, and need no
+ * second asset: a `ball` disc for the blade, a white dot on its upper right —
+ * that dot IS the ball, which is why no second loose ball appears anywhere else
+ * on this card — and a rounded bar rotated 45° for the handle.
+ *
+ * `aria-hidden`, because the object states the club's name in text immediately
+ * beside it and the whole credential is labelled "Carnet de socio de …".
+ * Naming this image would make a screen reader say the club's name twice
+ * (WCAG 1.1.1: a redundant image is decorative).
  */
-function CarnetFact({ label, value }: { label: string; value: string }): React.ReactElement {
-  const windows = value.split(" · ");
+function ClubPaddleMark(): React.ReactElement {
   return (
-    <div className="min-w-0">
-      <span className="mb-[3px] block text-2xs font-semibold uppercase leading-tight text-white/60 print:text-coal/60">
-        {label}
-      </span>
-      <b className="block text-sm font-bold leading-tight tabular-nums print:text-2xs">
-        {windows.length > 1
-          ? windows.flatMap((window, index) => {
-              const nodes: React.ReactNode[] = [
-                <span key={window} className="whitespace-nowrap">
-                  {window}
-                </span>,
-              ];
-              if (index < windows.length - 1) nodes.push(" · ");
-              return nodes;
-            })
-          : value}
-      </b>
-    </div>
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      data-testid="carnet-paddle"
+      viewBox="0 0 26 24"
+      className="h-[24px] w-[26px] flex-none print:h-[18px] print:w-[19px]"
+    >
+      {/* Tilted the way a hand holds it. The blade and the handle rotate
+          together; the ball does not, because a ball in flight is not attached
+          to the racket. */}
+      <g transform="rotate(-24 11 10)">
+        {/* The handle leaves the BOTTOM of the blade, short and thick. Its top
+            sits inside the ellipse so the two shapes merge into one silhouette
+            rather than reading as a disc with a stick beside it. */}
+        <path
+          d="M8.9 15.2h4.2l.55 5.1a1.85 1.85 0 0 1-1.84 2.05h-1.62a1.85 1.85 0 0 1-1.84-2.05z"
+          className="fill-ball"
+        />
+        {/* Red, because a paddle's rubber is red or black — never yellow. */}
+        <ellipse cx="11" cy="9.1" rx="7.4" ry="7.7" className="fill-cata-red" />
+      </g>
+      {/* UPPER-RIGHT, and the position was measured at the 30px this mark
+          actually renders at. Beside the handle at lower-right the ball and the
+          handle are two yellow shapes a pixel apart and they merge into one
+          blob with a notch; across the blade they read as two objects. */}
+      <circle cx="22.6" cy="4.6" r="3.1" className="fill-ball" />
+    </svg>
   );
 }
 
-/**
- * The carnet's own reading of the payment situation.
- *
- * Two shapes, not one-per-tone: `kind === "covered"` — a family that is up to
- * date, the majority of visits in a club where most people pay on time — is
- * the ONLY state that renders as the small pill the membership badge this
- * replaces already used. This is the direct answer to the maquette's own
- * recorded cost, "pesa mucho cuando no hay nada que resolver": that sentence
- * is about the up-to-date case specifically, not about every non-urgent one.
- *
- * Every other state — urgent (`bad`) or not (`awaiting-validation`,
- * `minor-blocked`, `no-membership`) — still has something to explain (why
- * there is nothing to act on yet, or who acts instead), so it keeps the
- * full-weight strip with `situation.headline` stated in full. Only the color
- * tells those two groups apart: red for urgent, the same neutral white the
- * old badge's inactive state used otherwise.
- *
- * Colors are literal hex, not the `state-*` tokens `Badge` uses: those are
- * tuned for text on the light `paper`/`canvas` surfaces, and this band sits
- * on the carnet's own coal gradient. The pattern (a translucent `state-*`
- * wash plus a light, hand-picked foreground) is the one the membership badge
- * this replaces already established for `ok` (`bg-state-ok/20
- * text-[#7BE8A4]`); `bad` follows the same recipe.
- */
-function CarnetStatusBand({ situation }: { situation: PaymentSituation }): React.ReactElement {
-  const tone = paymentBandTone(situation);
-  const compact = situation.kind === "covered";
+/** One line of the credential's register. See `CarnetRegisterRow`. */
+type CarnetRegisterSpec = {
+  label: string;
+  value: string;
+  /**
+   * Whether `value` is a FIGURE OF THE CLUB — something the club counts and
+   * asserts — or the state of a query about one.
+   *
+   * It drives the face. A figure is set in Graduate, which is what the club
+   * says about itself; "Consultando…" and "No se pudo consultar" are the state
+   * of a network call and take Barlow, because setting them in the club's
+   * display face would dress a failed lookup as a fact the club stated. A plan
+   * NAME is not a figure either — it is a word, and words are Barlow.
+   *
+   * It is an explicit per-row boolean and never a test on the string. The
+   * wording of those two states belongs to `TrainingPanel`'s vocabulary and is
+   * free to change; sniffing for it here would make a copy edit silently
+   * repaint a value in the wrong face.
+   */
+  isFigure: boolean;
+};
 
-  if (!compact) {
-    return (
-      <div
-        data-testid="carnet-status-band"
-        data-urgent={String(situation.urgent)}
-        data-tone={tone}
-        className={cn(
-          "relative z-10 mt-3 flex items-start gap-2.5 rounded-ctl px-3.5 py-2.5",
-          tone === "bad" ? "bg-state-bad/20" : "bg-white/[0.11]",
-        )}
-      >
-        {tone === "bad" && (
-          <AlertTriangle
-            size={ICON.sm}
-            strokeWidth={2}
-            className="mt-0.5 flex-none text-[#FF8A93]"
-            aria-hidden="true"
-          />
-        )}
-        <div className="min-w-0">
-          <p
-            className={cn(
-              "text-sm font-bold leading-tight",
-              tone === "bad" ? "text-[#FF8A93]" : "text-white",
-            )}
-          >
-            {situation.headline}
-          </p>
-          {situation.figure && (
-            <p className="mt-0.5 text-2xs font-semibold uppercase tracking-flat text-white/60">
-              {situation.figure.value} {situation.figure.unit}
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
+/**
+ * LABEL LEFT, VALUE RIGHT — the register of a credential, not a scoreboard.
+ *
+ * The arrangement this replaces inverted the pair (value first, label under
+ * it) to make the block read as something being MEASURED. That was right for a
+ * coal slab standing alone in a column, where a stack of figures is what the
+ * object mostly is. Held inside a system panel, the same block is one of four
+ * label/value pairs on the screen, and reading it in the opposite order from
+ * the three beside it buys nothing and costs the reader the comparison.
+ *
+ * A "Franja" value with two or more windows ("15:00 — 16:00 · 20:00 — 21:15")
+ * used to be one plain string, so the browser wrapped wherever it found a
+ * space — including inside a single window, splitting "20:00 —" from "21:15"
+ * (fix 12b, docs/archive/fixes/12-mi-cuenta-carnet.md). Each window is wrapped
+ * in its own `whitespace-nowrap` span so the ONLY point where a line can break
+ * is the " · " between them, which stays a normal (breakable) text node.
+ */
+function CarnetRegisterRow({
+  label,
+  value,
+  isFigure,
+  ruled,
+}: CarnetRegisterSpec & { ruled: boolean }): React.ReactElement {
+  const windows = value.split(" · ");
+  const content =
+    windows.length > 1
+      ? windows.flatMap((window, index) => {
+          const nodes: React.ReactNode[] = [
+            <span key={window} className="whitespace-nowrap">
+              {window}
+            </span>,
+          ];
+          if (index < windows.length - 1) nodes.push(" · ");
+          return nodes;
+        })
+      : value;
 
   return (
-    <span
-      data-testid="carnet-status-band"
-      data-urgent="false"
-      data-tone={tone}
-      className="relative z-10 mt-3 inline-flex h-badge w-fit items-center gap-1.5 rounded-full bg-state-ok/20 px-[11px] text-2xs tracking-flat font-bold text-[#7BE8A4]"
+    <div
+      className={cn(
+        "flex items-baseline justify-between gap-[var(--carnet-field)] py-[var(--carnet-field)]",
+        // A hairline BETWEEN rows and none after the last: a rule under the
+        // final row reads as the top of a fourth row that is not there.
+        //
+        // `border-white/[0.12]`, not `border-white/12`: Tailwind's opacity
+        // scale steps by 5, so a bare `/12` compiles to NOTHING and the rule
+        // would vanish with neither lint nor tsc saying a word. The bracket
+        // form is the same 12%, written the way an off-scale opacity has to be.
+        ruled && "border-t border-white/[0.12]",
+      )}
     >
-      <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-current" />
-      {compactPaymentLabel(situation)}
-    </span>
+      <span className="flex-none text-2xs font-extrabold uppercase leading-none text-white/60">
+        {label}
+      </span>
+      {/* Two elements rather than one with a ternary inside its `className`:
+          `display-face-usage.test.ts` reads whole JSX opening tags, so a single
+          tag carrying both branches puts `font-display` and the other branch's
+          `text-sm` in the same string and the floor guard reads it as Graduate
+          at 13.5px. Split, each tag states one face and the guard can check the
+          one that is actually Graduate. The content is built once above. */}
+      {isFigure ? (
+        <b className="min-w-0 text-right font-display text-base leading-none tracking-flat tabular-nums">
+          {content}
+        </b>
+      ) : (
+        <b className="min-w-0 text-right font-sans text-sm font-bold leading-tight">{content}</b>
+      )}
+    </div>
   );
 }
 
 function Carnet({
   profile,
-  situation,
   horariosState,
   className,
   canManagePhoto,
   onPhotoUploaded,
 }: {
   profile: StudentProfileSummary;
-  situation: PaymentSituation;
   /** The same assignments the training panel reads — see `franja` below. */
   horariosState: HorariosState;
   className?: string;
@@ -269,14 +354,6 @@ function Carnet({
     }
   }
 
-  const facts: { label: string; value: string }[] = [];
-  // "Socio desde" rather than the prototype's "MIEMBRO Nº · DESDE": the backend
-  // has no member-number concept, and printing the surrogate persona id as one
-  // would invent an identity-document field. The activation date IS real.
-  if (profile.membership?.fechaActivacion) {
-    facts.push({ label: "Socio desde", value: formatDate(profile.membership.fechaActivacion) });
-  }
-  if (profile.membership?.categoria) facts.push({ label: "Plan", value: profile.membership.categoria });
   // Derived from the assignments, never from the plan: the membership type is
   // a price, and the `franja_horaria` column it used to be read from was a
   // hand-typed String(80) that drifted from the club's real hours — an Adultos
@@ -296,100 +373,285 @@ function Carnet({
       : horariosState.status === "loading"
         ? "Consultando…"
         : "No se pudo consultar";
-  if (franja) facts.push({ label: "Franja", value: franja });
-  if (profile.membership?.montoAplicado) {
-    // "Valor mensual", the same label `/student/payments` puts on the same
-    // field. The carnet used to call it "Monto", which reads as an amount
-    // paid rather than the plan's price, and gave one number two names two
-    // clicks apart.
-    facts.push({
-      label: "Valor mensual",
-      value: formatCurrency(Number(profile.membership.montoAplicado)),
+
+  /**
+   * The register, in reading order: what the club sells this family, when they
+   * train, and since when they have belonged.
+   *
+   * "Plan" and not "Categoría", and the difference is not a wording
+   * preference. `membership.categoria` holds the PLAN's name — "Mensual
+   * Adultos" — which is a price; a training categoría is a group a student
+   * meets with, and a student can belong to three of them at once (four of the
+   * club's seven do). Labelling a price "Categoría" here would re-make, on the
+   * one object a family carries, exactly the confusion #160 already retired
+   * once when it deleted `franja_horaria`.
+   *
+   * "Socio desde" rather than the prototype's "MIEMBRO Nº · DESDE": the backend
+   * has no member-number concept, and printing the surrogate persona id as one
+   * would invent an identity-document field. The activation date IS real.
+   */
+  const register: CarnetRegisterSpec[] = [];
+  if (profile.membership?.categoria) {
+    register.push({ label: "Plan", value: profile.membership.categoria, isFigure: false });
+  }
+  if (franja) {
+    register.push({
+      label: "Franja",
+      value: franja,
+      isFigure: horariosState.status === "ready",
+    });
+  }
+  if (profile.membership?.fechaActivacion) {
+    register.push({
+      label: "Socio desde",
+      value: formatDate(profile.membership.fechaActivacion),
+      isFigure: true,
     });
   }
 
+  // The week the club assigned, as the shared seven-box strip rather than as a
+  // fourth line of prose. It is fed from the SAME `buildWeeklyTrainingSchedule`
+  // the "Esta semana" panel and the "Entrenamientos" tile read, so the three
+  // readings on this screen cannot disagree; `toStripDias` is the translation
+  // `/groups` already owns between the backend's weekday keys and the strip's.
+  const stripDias =
+    horariosState.status === "ready"
+      ? toStripDias(buildWeeklyTrainingSchedule(horariosState.asignaciones).map((slot) => slot.dia))
+      : [];
+
   return (
+    // THE PANEL — an ordinary citizen of the dashboard.
+    //
+    // `.card` grammar, `CuotaCard`'s header row (title left, action as a text
+    // link right), and a footer that states what the object inside becomes on
+    // paper. Nothing here prints: the print sheet keeps only
+    // `#carnet-print-area` visible, and that id is on the credential below.
     <section
-      data-testid="student-carnet"
-      aria-label={`Carnet de socio de ${fullName}`}
-      id="carnet-print-area"
-      className={cn(
-        "relative flex flex-col overflow-hidden rounded-card bg-gradient-to-br from-coal to-[#2A2A33] px-6 py-[22px] text-white",
-        // #286 slice 2 — impresión: sobre blanco, texto oscuro y borde fino
-        // (legible en B/N); el gradiente oscuro saldría como bloque de tinta
-        // plano. La banda de estado y los botones se ocultan abajo. El
-        // dimensionado 54×85.6mm vive en el bloque `@media print` de
-        // globals.css, junto al truco de visibility que imprime SOLO el
-        // carnet (sin navegación ni rail).
-        "print:rounded-none print:bg-none print:bg-white print:px-4 print:py-3 print:text-coal print:shadow-none print:ring-1 print:ring-coal/25",
-        className,
-      )}
+      data-testid="student-carnet-panel"
+      aria-label="Su carnet"
+      className={cn("card overflow-hidden", className)}
     >
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-[46px] -top-[46px] h-[150px] w-[150px] rounded-full bg-ball/[0.08] print:hidden"
-      />
-
-      <div className="relative z-10 flex items-center gap-[11px]">
-        {/* `alt=""` on purpose: the mark carries no information the card does
-            not already state in text — "Cata Club / Tenis de mesa" is right
-            beside it, and the section is labelled "Carnet de socio de …".
-            Naming the image would make a screen reader say the club's name
-            twice in a row (WCAG 1.1.1: a redundant image is decorative). */}
-        <span className="flex h-[30px] w-[30px] flex-none items-center justify-center overflow-hidden rounded-full bg-white print:h-[24px] print:w-[24px] print:ring-1 print:ring-coal/20">
-          <Image src="/brand/cata-club-logo.jpeg" alt="" width={30} height={30} className="h-[30px] w-[30px] object-cover print:h-[24px] print:w-[24px]" />
-        </span>
-        <div>
-          <b className="block text-xs font-bold leading-tight print:text-2xs">Cata Club</b>
-          <span className="block text-2xs uppercase leading-tight text-white/60 print:text-coal/60">Tenis de mesa</span>
-        </div>
-      </div>
-
-      {/* Name and status band are one group — the person and what the club
-          currently needs from them about it — so they sit close together,
-          while the header above and the fact grid below are separated by
-          18px. */}
-      <div className="relative z-10 mt-[18px] flex items-center gap-3 print:mt-3">
-        <span
-          data-testid="carnet-photo"
-          className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20 print:h-9 print:w-9 print:bg-coal/5 print:ring-coal/30"
-        >
-          {profile.fotoUrl && !fotoFallback ? (
-            <Image
-              src={profile.fotoUrl}
-              alt={`Foto de ${fullName}`}
-              width={48}
-              height={48}
-              className="h-12 w-12 object-cover print:h-9 print:w-9"
-              onError={() => setFotoFallback(true)}
-            />
-          ) : (
-            <span aria-hidden="true" className="text-base font-bold text-white/70 print:text-coal/70 print:text-xs">
-              {initial}
-            </span>
-          )}
-        </span>
-        <p className="min-w-0 flex-1 text-balance text-xl font-extrabold print:text-xs print:leading-tight">
-          {fullName}
-        </p>
-      </div>
-
-      <div className="relative z-10 mt-2 flex items-center gap-2 print:hidden">
+      <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+        <h2 className="flex-1 text-sm font-bold text-ink">Carnet de socio</h2>
+        {/* A TEXT LINK, not a button — the same skin `CuotaCard` gives "Ver
+            pagos" one panel down. Printing is a destination, not a second CTA
+            competing with the page's own; it was a filled control only while
+            it had to hold its own against a whole coal card around it. */}
         <button
           type="button"
           onClick={() => window.print()}
-          className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-2xs font-bold text-white/80 transition-colors hover:bg-white/15"
+          className="text-xs font-semibold text-ink-2 underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
         >
-          <Printer size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Imprimir carnet
         </button>
+      </div>
+
+      {/* THE SUNKEN GROUND. `sunken` is the product's "inset area INSIDE
+          paper", and it is what makes the coal object read as HELD by the
+          panel rather than as the panel's own surface. On white the same card
+          reads as a hole cut in the page. */}
+      <div className="flex justify-center bg-sunken px-5 py-5">
+        {/* THE CREDENTIAL — the object, and the only thing that prints.
+            `role="group"` rather than a second `<section>`: the panel around it
+            is already a landmark, and two nested regions announce twice for one
+            block. The label still names whose card this is, which is what lets
+            the mark inside stay `aria-hidden`. */}
+        <div
+          id="carnet-print-area"
+          data-testid="student-carnet"
+          role="group"
+          aria-label={`Carnet de socio de ${fullName}`}
+          className={cn(
+            "carnet-credential my-section w-full max-w-[284px] rounded-ctl bg-coal p-[var(--carnet-page)] text-white shadow-elevated",
+            // THE CREDENTIAL IS SQUARE ON PURPOSE, AND THE FUNDA IS THE
+            // VERTICAL OBJECT. This reverses what stood here before.
+            //
+            // It used to carry `min-h-[476px]` — ID-1's 54:85.6 taken at its own
+            // 300px — so the card would look like a card. Measured in the
+            // running app, that opened THREE holes: after the red rule, after
+            // the cédula and before the week strip, about 170px of empty coal
+            // that `justify-between` spread around instead of removing.
+            //
+            // The cause is arithmetic, not spacing. The name's wrapping was
+            // measured at 252 / 268 / 284 / 300px, and at EVERY width where
+            // "Pedro Salgado" stays on one line the card lands at 0.92–0.97 —
+            // square. Six data points do not fill a portrait at this width.
+            //
+            // So the object is dense (284×310 measured) and the panel around it
+            // is the portrait one: 336×483, a ratio of 0.70. That is NOT ID-1's
+            // 0.63 and it is not pinned to be — the funda's height is whatever
+            // the credential plus the panel's own chrome comes to. Pinning it
+            // would re-open the hole this pass just closed, one level up.
+            // A card holder is card-shaped; the card inside it need not be. The
+            // `my-section` above is what makes it read as HELD by the sunken
+            // band rather than as a fill of it.
+            //
+            // No `min-h` and no `aspect-ratio` at all now, which also retires a
+            // print bug this file paid for once: `min-height` beats `height`, so
+            // the old pin overrode the sheet's own `height: 85.6mm` and printed
+            // the credential at 54×126mm until `print:min-h-0` was added.
+            "flex flex-col",
+            // ITS OWN SHADOW, so it rests ON the sunken ground instead of being
+            // painted into it. The print sheet drops it (`box-shadow: none`),
+            // where an ink shadow would be a smudge along the cut line.
+            //
+            // PRINT: the sheet's `#carnet-print-area` rule owns the geometry
+            // (54×85.6mm, centred, a real border for the cut) and beats these
+            // utilities on specificity, so no `print:w-*`/`print:h-*` twin is
+            // written here, and `justify-between` above already governs both
+            // media — ONE composition, which is the whole point.
+            "print:rounded-none print:shadow-none",
+          )}
+        >
+          {/* 1 · THE HEADER — the club signs the object, and says what it is.
+              A row, on both media: the mark, the wordmark, and "Socio" pushed
+              to the far edge. The 2px red rule is the row's own bottom border
+              rather than a separate element — a stray flex child in a
+              `justify-between` row is how the old banner grew a floating rule.
+
+              THE CARD'S ONE FLAT RED. DESIGN.md rations the colour and this
+              spends its single decorative appearance on the line dividing the
+              club from the person. The week strip at the foot is red too, and
+              that is not a second spend: there the colour is the DATUM — which
+              days run — measured at 3:1 against the unlit fill for that job. */}
+          <div className="flex items-center gap-[var(--carnet-field)] border-b-2 border-cata-red pb-[var(--carnet-field)]">
+            <ClubPaddleMark />
+            {/* Graduate at its 15px floor, on screen and on paper alike — the
+                floor is a property of the face (no vertical range, no lowercase
+                design intent), not a screen convention print may relax. The
+                hero is the NAME below; the club heads the object, it does not
+                lead it. */}
+            <b className="font-display text-base uppercase leading-none tracking-flat">Cata Club</b>
+            <span className="ml-auto text-2xs font-extrabold uppercase leading-none text-ball">
+              Socio
+            </span>
+          </div>
+
+          {/* 2 · THE IDENTITY — who this is, under the club that says so.
+              A row on both media: the document photo, then the name and the
+              number beside it. */}
+          <div className="mt-[var(--carnet-section)] flex items-start gap-[var(--carnet-field)]">
+            {/* A RECTANGLE, not a disc. A round avatar is what a table row
+                carries; every credential this object is a picture of carries a
+                portrait rectangle behind a ruled edge, and the shape is most of
+                what makes a photo read as a document photo.
+
+                The edge is a real 2px `border`, not a Tailwind `ring`: a ring
+                is a `box-shadow`, and a box-shadow is the first thing Chrome
+                drops when "Background graphics" is off — which is its default,
+                and which is why the cut line in `globals.css` is a border too.
+                `border-box` sizing means the 2px comes out of the box rather
+                than growing it, so the ring is inset by construction. */}
+            <span
+              data-testid="carnet-photo"
+              className="flex h-[78px] w-[62px] flex-none items-center justify-center overflow-hidden rounded-[3px] border-2 border-ball bg-white/10 print:h-[62px] print:w-[49px]"
+            >
+              {profile.fotoUrl && !fotoFallback ? (
+                <Image
+                  src={profile.fotoUrl}
+                  alt={`Foto de ${fullName}`}
+                  width={62}
+                  height={78}
+                  className="h-full w-full object-cover"
+                  onError={() => setFotoFallback(true)}
+                />
+              ) : (
+                <span aria-hidden="true" className="text-2xl font-bold text-white/70">
+                  {initial}
+                </span>
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              {/* THE HERO. Barlow, at the top of the scale this card may spend:
+                  it is an identity object about a person, so the person is the
+                  largest thing on it. `text-balance` splits a long name into
+                  even lines instead of leaving one word on the last. */}
+              <p className="text-balance text-xl font-extrabold leading-crisp tracking-dense print:text-lg">
+                {fullName}
+              </p>
+              {/* THE CÉDULA — the one field this pass had to plumb through
+                  three layers to get here, and the reason it is on this card
+                  and on no other screen: it is personal data on an object a
+                  family CARRIES. It belongs on the credential and on the
+                  person's own ficha; it does not belong in a table or a list,
+                  where it would be published to every reader of a roster.
+
+                  Absent means the row is not drawn. A blank beside "Cédula" on
+                  an identity document reads as a document with a missing field
+                  rather than as a card that never claimed one. */}
+              {profile.cedula && (
+                <div className="mt-[var(--carnet-field)]">
+                  <span className="block text-2xs font-extrabold uppercase leading-none text-white/60">
+                    Cédula
+                  </span>
+                  {/* Barlow, and tracked WIDE. `tracking-caps` (+0.12em) is the
+                      project's own step for exactly this and is what separates
+                      a document number from a score: at the default negative
+                      tracking `text-lg` carries, ten digits close up into one
+                      run and read as a quantity. */}
+                  <b className="mt-[var(--carnet-field)] block text-lg font-bold leading-none tracking-caps tabular-nums print:text-base">
+                    {profile.cedula}
+                  </b>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 3 · THE REGISTER — three label/value lines, ruled between. */}
+          {register.length > 0 && (
+            <div data-testid="carnet-facts" className="mt-[var(--carnet-section)]">
+              {register.map((row, index) => (
+                <CarnetRegisterRow key={row.label} {...row} ruled={index > 0} />
+              ))}
+            </div>
+          )}
+
+          {/* 4 · THE WEEK, at the foot.
+              It takes no `mt-auto`: the card's `justify-between` already spreads
+              the four blocks over the field, and an auto margin here would
+              swallow the whole surplus into one band above the strip instead —
+              measured, and it is fix 12b's hole with a different address.
+
+              Seven fixed boxes rather than a fourth line of prose, and they are
+              fed from the same weekly schedule as the panel and the tile beside
+              them. The strip only appears when the lookup ANSWERED: seven unlit
+              boxes are a claim — "this student trains no day of the week" — and
+              a failed or pending lookup has not earned it.
+
+              And when it has not answered, the foot stays EMPTY rather than
+              saying so a second time: the "Franja" row above already carries
+              "Consultando…" or "No se pudo consultar" in `TrainingPanel`'s own
+              words, and repeating one sentence twice on a 300px card reads as
+              two failures rather than as one. */}
+          {horariosState.status === "ready" && (
+            <div className="pt-[var(--carnet-section)]">
+              <WeekStrip dias={stripDias} variant="onCoal" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* THE FOOTER — what the object becomes, and the one control that
+          changes it. Both are panel chrome: neither is on the credential, so
+          neither reaches the sheet. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3">
+        {/* The size note is why the credential needs no on-screen proportion
+            lock: the object on screen is a preview, and this line states, in
+            words, the physical thing it prints as. */}
+        <span className="text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">
+          Se imprime a 54 × 85,6 mm
+        </span>
         {canManagePhoto && (
           <>
             <button
               type="button"
               onClick={() => fotoInputRef.current?.click()}
               disabled={uploadingFoto}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-2xs font-bold text-white/80 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+              // `secondary`, not `onCoal`: the control sits on the panel's
+              // `paper` now. `onCoal` is white-on-translucent and would be a
+              // ghost here — a variant is a measured pair with its ground, not
+              // a style that travels with the button.
+              className={buttonClasses("secondary", "sm")}
             >
               {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
             </button>
@@ -403,42 +665,12 @@ function Carnet({
             />
           </>
         )}
+        {fotoError && (
+          <p role="alert" className="w-full text-2xs text-state-bad">
+            {fotoError}
+          </p>
+        )}
       </div>
-
-      {fotoError && (
-        <p role="alert" className="relative z-10 mt-2 text-2xs text-[#FF8A93] print:hidden">
-          {fotoError}
-        </p>
-      )}
-
-      {/* Decisión #286 (slice 2): la banda de estado NO viaja al impreso — el
-          estado cambia cada mes y un carnet plastificado con «vencido» impreso
-          envejece mal. Solo pantalla. */}
-      <div className="print:hidden">
-        <CarnetStatusBand situation={situation} />
-      </div>
-
-      {/* A fixed two-column grid, not `auto-fit`: the carnet used to sit in a
-          340px rail, where `auto-fit` and "two columns" were the same thing.
-          `auto-fit` at the carnet's current width would spread four facts
-          across four or five columns — the chosen maquette (Propuesta 2)
-          draws exactly two, `.carnet .grid` at its own card's full width.
-          The grid used to carry `sm:max-w-[360px]` from when the carnet was
-          fix 12's ~1000px "wide" column — with the carnet and the rail now
-          split evenly (fix 12c, see `ActivePortalView`), that cap would leave
-          an empty strip inside the card instead of filling it, which is the
-          same "vacío que no se llena" fix 12b already closed once. Dropped,
-          so the grid fills the carnet the way the maquette's own does. */}
-      {facts.length > 0 && (
-        <div
-          data-testid="carnet-facts"
-          className="relative z-10 mt-[18px] grid grid-cols-2 gap-x-4 gap-y-section border-t border-white/10 pt-[15px] print:mt-3 print:gap-y-field print:border-coal/20 print:pt-2"
-        >
-          {facts.map((fact) => (
-            <CarnetFact key={fact.label} label={fact.label} value={fact.value} />
-          ))}
-        </div>
-      )}
     </section>
   );
 }
@@ -907,10 +1139,12 @@ function ActivePortalView({
 
   /**
    * The one thing this screen exists to answer, resolved once and rendered
-   * twice — as the carnet's own status band and as the "Cuota" card's detail
-   * (see `CarnetStatusBand` and `CuotaCard`). `describePaymentSituation` owns
-   * every word of it, so the carnet, the rail card and `/student/payments`
-   * can never word the same `estado` differently again.
+   * in ONE place — the "Cuota" card (`CuotaCard`), which leads with the
+   * verdict and states the evidence under it. It used to be rendered twice,
+   * as the carnet's own status band as well; the owner moved the verdict off
+   * the identity card entirely, so there is one host again.
+   * `describePaymentSituation` still owns every word, so the rail card and
+   * `/student/payments` can never word the same `estado` differently.
    */
   const paymentSituation = selectedProfile
     ? describePaymentSituation({
@@ -978,6 +1212,18 @@ function ActivePortalView({
         // before finding stretching itself was the wrong fix — the technique
         // is fine, that one application of it was not.
         //
+        // AND THEN IT MOVED BACK, on purpose. The column is `380px 1fr` now,
+        // not `1fr 1fr`. This is not fix 12c reverted by accident: 12c widened
+        // the carnet because its FOUR-cell, two-column grid could not fill the
+        // 340px rail's complement, and widening the column was the honest fix
+        // for that shape. The card no longer has that shape. It is a PORTRAIT
+        // credential — one centred column of three stacked figures, the same
+        // composition it prints at — and the condition 12c reasoned from is
+        // gone: a 566px column is now the thing stopping the card from being
+        // a card, not the thing filling it. 380px is the card's own width, and
+        // the width it stops needing goes to the rail rather than back into
+        // the carnet as the emptiness 12, 12b and 12c each chased downstream.
+        //
         // Fix 12b tried stretching the carnet's height first —
         // `lg:!items-stretch` plus `flex-1` on the carnet, so it filled the
         // row's full height — and it traded one emptiness for another:
@@ -1018,9 +1264,10 @@ function ActivePortalView({
           lo ancho. Tiene proporciones de carnet, no de columna -- el #297
           acaba de volverlo una credencial imprimible de 54x85.6mm-- y el fix
           12b ya probó estirarlo: el sobrante terminó DENTRO de la tarjeta,
-          bajo su grilla de datos. Tampoco se toca el `1fr 1fr` del split, que
-          es el fix 12c: el riel de 340px de `PAGE_RAIL` dejaba el carnet a
-          tres cuartos de la fila, mucho más de lo que sus cuatro datos llenan.
+          bajo su grilla de datos. El split SÍ se movió después de esto: ya no
+          es el `1fr 1fr` del fix 12c sino `380px 1fr`, porque la tarjeta pasó
+          a ser vertical y una columna de 566px es justo lo que le impedía
+          serlo. El razonamiento completo está sobre el `<div>` del riel.
 
           Cada cifra sale de datos que la pantalla ya tenía, y ninguna repite
           una cifra que ya esté abajo. La de asistencia se MUDÓ: el pie de
@@ -1067,11 +1314,10 @@ function ActivePortalView({
           />
         </div>
 
-        <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,1fr)_minmax(0,1fr)]", "flex-1")}>
+        <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,336px)_minmax(0,1fr)]", "flex-1")}>
           <div className="flex flex-col gap-5">
             <Carnet
               profile={selectedProfile}
-              situation={paymentSituation}
               horariosState={horariosState}
               canManagePhoto={canManagePhoto}
               onPhotoUploaded={onPhotoUploaded}

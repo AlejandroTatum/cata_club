@@ -9,7 +9,6 @@ import {
   isMinor,
   describeMembershipState,
   breakdownAttendance,
-  compactPaymentLabel,
   daysUntil,
   paymentBandTone,
   personInitials,
@@ -491,7 +490,17 @@ describe("describePaymentSituation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The carnet's status band ("El carnet manda" — docs/archive/fixes/12-mi-cuenta-carnet.md)
+// The payment verdict's tone
+//
+// It was the CARNET's status band ("El carnet manda" —
+// docs/archive/fixes/12-mi-cuenta-carnet.md). The band left the identity card and
+// the tone went with it: `CuotaCard` reads it now. The function is unchanged
+// — the reading of the situation was never carnet-specific, only its host was.
+//
+// `compactPaymentLabel` used to live beside it and no longer exists. Its whole
+// job was abbreviating "Está al día con el club" to "Al día" so a pill on the
+// carnet could hold it; with the pill gone, the Cuota card has room for the
+// sentence and a second, shorter wording of one state is a second wording.
 // ---------------------------------------------------------------------------
 
 describe("paymentBandTone", () => {
@@ -525,28 +534,6 @@ describe("paymentBandTone", () => {
         ),
       ),
     ).toBe("neutral"); // no-membership
-  });
-});
-
-describe("compactPaymentLabel", () => {
-  it('is the short "Al día" only for the covered case', () => {
-    const covered = describePaymentSituation(situation({ coverageEnd: "2026-08-30" }), TODAY);
-    expect(covered.kind).toBe("covered");
-    expect(compactPaymentLabel(covered)).toBe("Al día");
-  });
-
-  it("falls back to the full headline for every other kind — those still need explaining", () => {
-    const awaitingValidation = describePaymentSituation(situation({ pendingCount: 1 }), TODAY);
-    expect(compactPaymentLabel(awaitingValidation)).toBe(awaitingValidation.headline);
-
-    const expired = describePaymentSituation(situation({ coverageEnd: "2026-07-01" }), TODAY);
-    expect(compactPaymentLabel(expired)).toBe(expired.headline);
-
-    const noMembership = describePaymentSituation(
-      situation({ hasMembership: false, monthlyPrice: null, planName: null, coverageEnd: null }),
-      TODAY,
-    );
-    expect(compactPaymentLabel(noMembership)).toBe(noMembership.headline);
   });
 });
 

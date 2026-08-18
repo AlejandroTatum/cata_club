@@ -53,6 +53,15 @@ export interface BackendPersonaFull {
   id: number;
   nombres: string;
   apellidos: string;
+  /**
+   * National ID. `PersonaResponseDTO` declares it required and the column is
+   * NOT NULL, so every real response carries one — but it is OPTIONAL here on
+   * purpose. A consumer that treats it as guaranteed renders a blank where a
+   * document number belongs the day a fixture, an older deployment or a
+   * partial DTO omits it, and a credential with an empty field is worse than a
+   * credential with one field fewer.
+   */
+  cedula?: string | null;
   telefono: string;
   fechaNacimiento: string;
   representanteId: number | null;

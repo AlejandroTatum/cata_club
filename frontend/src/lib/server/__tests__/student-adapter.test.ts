@@ -87,6 +87,7 @@ describe("buildStudentProfileView", () => {
       personaId: "5",
       nombres: "Sofia",
       apellidos: "Alumna",
+      cedula: null,
       fechaNacimiento: "1995-01-01",
       representante: null,
       representanteId: null,
@@ -94,6 +95,21 @@ describe("buildStudentProfileView", () => {
       membership: null,
       fotoUrl: null,
     });
+  });
+
+  // The carnet prints the cédula, so the adapter has to stop dropping it.
+  // `PersonaResponseDTO` has carried it all along (it is NOT NULL in the DB and
+  // seeded for every persona); this layer simply never copied it across.
+  it("carries the cédula through instead of dropping the one field the carnet prints", () => {
+    const profile = buildStudentProfileView({ ...persona, cedula: "1710034065" }, []);
+    expect(profile.cedula).toBe("1710034065");
+  });
+
+  // Optional in the TYPE even though the column is NOT NULL: a backend that
+  // omits it must produce an absent row on the carnet, never a blank one.
+  it("reports an absent cédula as null rather than as an empty string", () => {
+    expect(buildStudentProfileView(persona, []).cedula).toBeNull();
+    expect(buildStudentProfileView({ ...persona, cedula: undefined }, []).cedula).toBeNull();
   });
 
   it("passes the backend photo URL through instead of dropping it", () => {

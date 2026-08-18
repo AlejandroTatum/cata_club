@@ -846,6 +846,16 @@ export interface StudentProfileSummary {
   personaId: string;
   nombres: string;
   apellidos: string;
+  /**
+   * National ID, as the BFF's `StudentProfileView` resolves it. Optional here
+   * because a client should render the row only when it has one — an absent
+   * cédula is a row the carnet leaves out, never a blank one it rules.
+   *
+   * The one screen that reads it is the carnet, and that is deliberate: it is
+   * personal data on a CARRIED object, so it belongs on the credential and on
+   * the person's own ficha, and never in a table or a list.
+   */
+  cedula?: string | null;
   fechaNacimiento: string;
   recentSessions: StudentSessionSummary[];
   membership: MembershipSummary | null;

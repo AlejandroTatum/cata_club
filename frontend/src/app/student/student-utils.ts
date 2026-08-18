@@ -731,47 +731,39 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
 }
 
 // ---------------------------------------------------------------------------
-// The carnet's status band ("El carnet manda" — docs/archive/fixes/12-mi-cuenta-carnet.md)
+// The payment verdict's tone
 //
-// The redesigned `/student` carnet carries the payment situation as a band
-// over the card itself, rather than a separate `Membresia.estado` badge next
-// to it. Reading `situation.urgent`/`situation.kind` instead of introducing a
-// THIRD independent wording of the same state keeps the "one reading, spoken
-// once" rule `describePaymentSituation`'s own header comment establishes —
-// there is no `describeMembershipState` badge left on this screen to disagree
-// with it (see the doc comment on `Carnet` in page.tsx for the one case this
-// trades away: an admin-set `Membresia.estado` with no payment consequence).
+// It began as the carnet's status band ("El carnet manda" —
+// docs/archive/fixes/12-mi-cuenta-carnet.md). The band has since left the carnet —
+// a payment state is not an identity fact — and `CuotaCard` is its host. The
+// function did not have to change to follow it: what was carnet-specific was
+// where the band was drawn, never its reading of the situation.
+//
+// Reading `situation.urgent`/`situation.kind` instead of introducing a THIRD
+// independent wording of the same state keeps the "one reading, spoken once"
+// rule `describePaymentSituation`'s own header comment establishes — there is
+// no `describeMembershipState` badge left on this screen to disagree with it
+// (see the doc comment on `Carnet` in page.tsx for the one case this trades
+// away: an admin-set `Membresia.estado` with no payment consequence).
 // ---------------------------------------------------------------------------
 
 /**
- * The band's weight: `"bad"` gets the full-width strip (something to
- * resolve), `"ok"` and `"neutral"` get the small pill the badge already used
- * — the whole point being that a family that is up to date is not shown the
- * same amount of carnet as one that is not.
+ * The verdict's weight: `"bad"` is something to resolve now, `"ok"` is a
+ * family that is up to date, `"neutral"` is a state with something to explain
+ * but nothing to act on.
+ *
+ * It maps to a colour, not to a layout. It used to select the band's SHAPE as
+ * well — full-width strip for `"bad"`, a pill otherwise — because the band was
+ * weighing down an identity card and the up-to-date majority had to be cheap.
+ * On the Cuota card that constraint is gone: a family reading the payments
+ * block is reading it for exactly this, so every tone gets the same shape and
+ * only the colour differs.
  */
 export function paymentBandTone(situation: PaymentSituation): "bad" | "ok" | "neutral" {
   if (situation.urgent) return "bad";
   if (situation.kind === "covered") return "ok";
   return "neutral";
 }
-
-/**
- * The compact pill's own label, for the ONE state the carnet compresses.
- *
- * Only `"covered"` renders as the small pill (see `CarnetStatusBand` in
- * page.tsx) — the maquette's own recorded cost, "pesa mucho cuando no hay
- * nada que resolver", is specifically about the majority case where a family
- * is up to date, not about every non-urgent state. `awaiting-validation`,
- * `minor-blocked` and `no-membership` still need their full sentence (who
- * acts, or why there is nothing to act on) and keep the full-weight strip —
- * see `paymentBandTone`. "Al día" is a short pill's own wording of the same
- * `kind`, not a second reading of it; every other `kind` renders
- * `situation.headline` verbatim.
- */
-export function compactPaymentLabel(situation: PaymentSituation): string {
-  return situation.kind === "covered" ? "Al día" : situation.headline;
-}
-
 
 // ---------------------------------------------------------------------------
 // The pulse row (issue "el dashboard de alumno en base al de admin")

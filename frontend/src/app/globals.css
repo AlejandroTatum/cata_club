@@ -230,6 +230,37 @@
   .animate-toast-in {
     animation: toast-in 0.2s ease-out;
   }
+
+  /*
+   * THE CREDENTIAL'S RHYTHM — three steps, declared once, scaled once.
+   *
+   * The carnet (`Carnet` in `app/student/page.tsx`) is the one block in this
+   * product that has to hold its spacing across a physical scale change: it is
+   * ~300px wide on screen and 54mm — about 204px — on paper, so every distance
+   * inside it is ~1.47× larger on screen than on the sheet.
+   *
+   * The pass before this one paid for that with a `print:` twin beside every
+   * margin and gap: `print:mt-[9px]`, `print:gap-[7px]`, `print:pt-[1.5mm]`,
+   * two dozen of them, each re-derived by hand. Three had drifted LARGER than
+   * the screen value they were supposed to scale down from before anyone
+   * measured the card in a real Chromium. Twenty-four numbers that must move
+   * together are not twenty-four decisions; they are one.
+   *
+   * So the credential declares the project's three rhythm steps as its own
+   * variables and spends nothing else. On screen they are the scale on its own
+   * 7px grid — `field` 7px between a label and what it labels, `section` 14px
+   * between the parts of the object, `page` 21px as the card's margin. On the
+   * printed sheet — the block at the foot of this file — the same three names
+   * take credential millimetres, and the whole object scales at once.
+   *
+   * Any bracketed length inside the carnet that is not one of these three is a
+   * defect, and `StudentPage.test.tsx` fails on it by name.
+   */
+  .carnet-credential {
+    --carnet-page: 21px;
+    --carnet-section: 14px;
+    --carnet-field: 7px;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -349,27 +380,73 @@
  * Carnet imprimible (#286, slice 2) — la hoja de impresión del carnet.
  *
  * Ctrl+P / «Imprimir carnet» debe sacar SOLO el carnet: vertical, tamaño
- * credencial 54×85.6mm, legible en blanco y negro (sobre blanco, texto oscuro,
- * borde fino — el gradiente oscuro de pantalla saldría como bloque de tinta
- * plano). El resto de la app (navegación, rail, paneles) no aparece.
+ * credencial 54×85.6mm, CENTRADO en la hoja y con un borde visible por donde
+ * recortar. El resto de la app (navegación, riel, paneles) no aparece.
  *
- * El truco de `visibility` no cambia el layout de pantalla en absoluto: en
- * print, `body *` se oculta y solo `#carnet-print-area` (el <section> del
- * carnet) queda visible, re-posicionado a la página. Las variantes
- * `print:*` de Tailwind en el propio componente (fondo blanco, texto coal,
- * banda de estado oculta, botones ocultos, tamaños de credencial) hacen el
- * resto. `@page size` es un hint: los navegadores que no lo soporten igual
- * imprimen el carnet a 54×85.6mm porque el área lo fuerza.
+ * Esta hoja da el LIENZO; la COMPOSICIÓN la da el propio componente, y desde
+ * el rediseño vertical es UNA SOLA: pantalla e impreso arman la misma columna
+ * centrada sobre el mismo DOM, y las variantes `print:*` solo cambian el fondo
+ * (degradado coal → blanco), la tinta y la escala física. Lo único que no
+ * viaja al papel es lo que no puede viajar: la banda de estado (#286), los
+ * botones, la trama halftone, el logo y «Valor mensual» (identificar
+ * pertenencia no es publicar un precio).
+ *
+ * ## Tres defectos medidos en un Chromium real, y qué los arregla
+ *
+ * 1. SALÍAN TRES PÁGINAS de un carnet. `visibility: hidden` oculta pero
+ *    CONSERVA EL LAYOUT, así que el documento seguía midiendo tres páginas de
+ *    alto con una sola entintada. El truco de `visibility` se queda —es la
+ *    única forma de ocultar ancestros arbitrarios sin tocar la pantalla— y lo
+ *    que se acota es el LAYOUT: `body > *` a altura 0 con `overflow: hidden`.
+ *
+ *    Se probó primero acotar el documento (`html, body { height: 100%;
+ *    overflow: hidden }`) y se midió: bajó de tres páginas a DOS y ahí se
+ *    quedó. Chrome propaga el `overflow` del elemento raíz al viewport y lo
+ *    ignora al paginar, así que acotar la raíz no sirve; acotar un elemento
+ *    normal sí, porque su `overflow: hidden` sí recorta. Esas dos
+ *    declaraciones se borraron en vez de dejarse «por si acaso»: una regla que
+ *    no hace nada se lee como si hiciera algo.
+ *
+ *    El carnet sobrevive al recorte porque es `position: fixed` y `body > *`
+ *    es estático: un ancestro estático no es el bloque contenedor de un
+ *    elemento fijo, así que no lo recorta. Por eso el acote es de ALTURA y no
+ *    un `display: none`, que sí se lo llevaría por delante.
+ *
+ * 2. LA TARJETA SALÍA PEGADA A LA ESQUINA (x=0, y=0), sobre una página del
+ *    tamaño de la propia tarjeta. La familia imprime en el papel que tenga y
+ *    recorta: la hoja es una hoja común (`size: auto` con margen), y la
+ *    tarjeta se centra con `position: fixed` + `inset: 0` + `margin: auto`,
+ *    que centra contra la caja de página. Con `position: absolute` el
+ *    `margin: auto` no centra: ancla en la esquina.
+ *
+ * 3. NO HABÍA LÍNEA DE CORTE. El borde era un `print:ring-1` de Tailwind, o
+ *    sea un box-shadow, y Chrome descarta fondos y sombras salvo que se tilde
+ *    «Gráficos de fondo», que viene apagado. Un `border` se imprime igual, así
+ *    que el filete vive acá y no en el componente.
  * ------------------------------------------------------------------------- */
 @media print {
   @page {
-    size: 54mm 85.6mm;
-    margin: 0;
+    /* Papel común, no cartulina del tamaño del carnet: el usuario imprime en
+       lo que tenga y recorta. */
+    size: auto;
+    margin: 10mm;
   }
 
   html,
   body {
+    margin: 0;
+    padding: 0;
     background: #ffffff !important;
+  }
+
+  /* UNA SOLA PÁGINA. Acota el layout que `visibility: hidden` deja en pie —
+     medido: sin esto salen tres páginas, y acotando la raíz en su lugar salen
+     dos. El carnet no se ve afectado: es `position: fixed`. */
+  body > * {
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
   }
 
   /* Ocultar TODO el layout de la app sin tocarlo (visibility, no display:
@@ -378,17 +455,57 @@
     visibility: hidden;
   }
 
+  /* LA TARJETA IMPRIME SU PROPIO COLOR.
+   *
+   * Chrome descarta TODO fondo — degradados, rellenos, sombras — salvo que el
+   * usuario tilde «Gráficos en segundo plano», que viene APAGADO y estaba
+   * apagado en el diálogo del dueño. Con eso, el carnet coal salía blanco: la
+   * versión «parece Paint» que motivó este cambio.
+   *
+   * `print-color-adjust: exact` es el único mecanismo que lo anula, y el
+   * prefijo `-webkit-` NO es decorativo: Chrome implementó primero la
+   * propiedad prefijada y la sigue honrando, y Safari no conoce otra. Van las
+   * dos, y van también sobre los DESCENDIENTES, porque el aro de la foto, la
+   * regla roja y la trama los pintan los hijos, no la caja de la tarjeta.
+   *
+   * Costo de tinta, dicho de frente: una tarjeta coal maciza de 54×85.6mm son
+   * ~46cm² de cobertura casi negra. En una inyección de tinta hogareña sobre
+   * papel común eso pesa — puede salir embarrada y ondular la hoja. Es la
+   * decisión del dueño: identidad antes que tinta. La hoja alrededor sigue
+   * blanca justamente para no gastar de más. */
   #carnet-print-area,
   #carnet-print-area * {
     visibility: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   #carnet-print-area {
-    position: absolute;
+    /* `fixed` + `inset: 0` + `margin: auto` = centrado contra la caja de
+       página. El tamaño es el de una credencial ID-1. */
+    position: fixed;
     inset: 0;
     width: 54mm;
     height: 85.6mm;
-    margin: 0;
+    margin: auto;
+    /* EL RITMO, EN MILÍMETROS DE CREDENCIAL.
+     *
+     * Los mismos tres pasos que `.carnet-credential` declara en píxeles de
+     * pantalla, redeclarados una sola vez para el papel: 4mm de margen, 2.6mm
+     * entre bloques, 1.3mm entre una etiqueta y su dato. Es ~0.7× la escala de
+     * pantalla, que es exactamente la relación entre los 300px del objeto en
+     * la pantalla y los 54mm de la credencial impresa.
+     *
+     * Va acá y no en el componente porque es UNA declaración: la alternativa
+     * —una variante `print:` al lado de cada margen— fue lo que se midió mal
+     * la vez pasada. Este selector es un id fuera de toda `@layer`, así que
+     * gana sin `!important` sobre la clase que trae los valores de pantalla. */
+    --carnet-page: 4mm;
+    --carnet-section: 2.6mm;
+    --carnet-field: 1.3mm;
+    /* La línea de corte. Un `border` se imprime aunque «Gráficos de fondo»
+       esté apagado; una sombra o un fondo, no. */
+    border: 1px solid #131316;
     box-shadow: none !important;
   }
 }
