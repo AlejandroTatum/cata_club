@@ -160,6 +160,17 @@ function completeChecklist(): void {
   }
 }
 
+/**
+ * Abre el desplegable de procedimiento del bloque «Decisión».
+ *
+ * Se busca por rol y nombre accesible —«Cómo se decide», el `aria-label` que
+ * `ContextualHelp` pone en su toggle— y no por el texto visible «Ver ayuda»,
+ * que se repite en cada desplegable de la app.
+ */
+function openComoSeDecide(): void {
+  fireEvent.click(screen.getByRole("button", { name: /cómo se decide/i }));
+}
+
 async function openPendingWithChecklistDone(): Promise<void> {
   renderPage();
   await openRequest("Juan Pérez");
@@ -632,6 +643,9 @@ describe("PaymentsPage — the checklist adapts to the payment method", () => {
       "La transferencia de $50,00 está acreditada en la cuenta del club",
       "El período de vigencia que se va a activar es el correcto",
     ]);
+    // La nota explica POR QUÉ la lista cambió, que es procedimiento: vive en
+    // «Cómo se decide». Los ítems, que son el control, siguen a la vista.
+    openComoSeDecide();
     expect(screen.getByText(/verifíquela en la cuenta del club/i)).toBeInTheDocument();
   });
 });
@@ -804,12 +818,17 @@ describe("PaymentsPage — approve confirmation gating", () => {
 // ---------------------------------------------------------------------------
 
 describe("PaymentsPage — approving announces the undo window before it happens", () => {
-  it("states the undo window and its expiry next to the 'Aprobar pago' button", async () => {
+  // El aviso del deshacer dejó de estar suelto bajo los botones: ahora vive
+  // dentro de «Cómo se decide», en la misma tarjeta. La garantía que este test
+  // sostiene no es «está a la vista» sino «se alcanza sin salir de la pantalla».
+  it("keeps the undo window one disclosure away, not one screen away", async () => {
     await openPendingWithChecklistDone();
 
-    expect(
-      screen.getByText(/unos segundos para deshacerlo/i),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/unos segundos para deshacerlo/i)).not.toBeInTheDocument();
+
+    openComoSeDecide();
+
+    expect(screen.getByText(/unos segundos para deshacerlo/i)).toBeInTheDocument();
     expect(screen.getByText(/ya no se puede revertir/i)).toBeInTheDocument();
   });
 
@@ -820,6 +839,164 @@ describe("PaymentsPage — approving announces the undo window before it happens
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/no se puede revertir/i)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// La prosa de procedimiento se pliega; el dato y el riesgo se quedan
+//
+// El reclamo era «demasiado texto, es hasta confuso leerlo». Contando los
+// bloques, el de «Detalle de la solicitud» tiene ocho campos y CERO texto de
+// ayuda: todo el texto estaba en «Decisión», mezclado con los controles. Así
+// que no se movieron cajas —esta pantalla ya se reestructuró una vez—, se
+// separó la prosa del control.
+//
+// El corte es por naturaleza del texto, no por longitud: lo que explica un
+// PROCEDIMIENTO se pliega, y lo que informa un DATO o un RIESGO se queda a la
+// vista. Estos tests fijan ese corte en los dos sentidos, porque plegar de más
+// esconde un riesgo y plegar de menos no arregla nada.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — «Cómo se decide» pliega el procedimiento, no el riesgo", () => {
+  it("no muestra el aviso del deshacer al cargar la decisión", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    expect(screen.queryByText(/unos segundos para deshacerlo/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cómo se decide/i })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("despliega el aviso del deshacer al abrir «Cómo se decide», y lo vuelve a plegar", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    openComoSeDecide();
+    expect(screen.getByText(/unos segundos para deshacerlo/i)).toBeInTheDocument();
+
+    openComoSeDecide();
+    expect(screen.queryByText(/unos segundos para deshacerlo/i)).not.toBeInTheDocument();
+  });
+
+  // El riesgo no es una explicación. Esta alerta dice que se va a grabar una
+  // vigencia distinta de la que pidió el socio: si hiciera falta un clic para
+  // verla, el error que previene ya estaría cometido.
+  it("deja la alerta de vigencia divergente a la vista, sin desplegar nada", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([
+      { ...PENDING_REQUEST, id: "req-skew", startDate: "2026-08-01", endDate: "2026-09-05" },
+    ]);
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    fireEvent.change(screen.getByLabelText(/^meses$/i), { target: { value: "2" } });
+
+    const alerta = screen.getByRole("alert");
+    expect(alerta.textContent).toMatch(/no coincide con el/i);
+    expect(screen.getByRole("button", { name: /cómo se decide/i })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  // Los datos y el estado del bloque siguen siendo datos: nada de esto entra al
+  // desplegable.
+  it("deja a la vista el período de vigencia, la fecha derivada y el contador de puntos", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    expect(screen.getByLabelText(/fecha de inicio/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^meses$/i)).toBeInTheDocument();
+    expect(screen.getByText(/vence el 31\/07\/2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/faltan 3 puntos de la lista/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeInTheDocument();
+  });
+
+  // LO QUE NO SE TOCA. Los tres checkboxes existen porque un pago se podía
+  // aprobar sin haber mirado nunca el monto. Plegar prosa no puede aflojar eso,
+  // ni con el desplegable abierto.
+  it("sigue bloqueando «Aprobar pago» hasta confirmar los tres puntos", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    const approve = await screen.findByRole("button", { name: /aprobar pago/i });
+
+    expect(approve).toBeDisabled();
+
+    openComoSeDecide();
+    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeDisabled();
+
+    const group = screen.getByRole("group", { name: /antes de aprobar/i });
+    const boxes = within(group).getAllByRole("checkbox");
+    expect(boxes).toHaveLength(3);
+
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[1]);
+    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeDisabled();
+
+    fireEvent.click(boxes[2]);
+    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeEnabled();
+  });
+
+  it("deja «Antes de aprobar» como un encabezado de una línea: título y badge, sin prosa", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([CASH_REQUEST]);
+    renderPage();
+    await openRequest("Sofía Vera");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    const bloque = screen.getByRole("region", { name: /antes de aprobar/i });
+    expect(within(bloque).getByText("0 de 2")).toBeInTheDocument();
+    expect(bloque.textContent).not.toMatch(/se confirma la entrega del dinero/i);
+  });
+});
+
+// La `note` la arma `buildApprovalChecklist` y CAMBIA con el método de pago, así
+// que plegarla se verifica variante por variante y no con un texto fijo. La
+// cuarta —transferencia con comprobante— no tiene `note` en absoluto: es el caso
+// más común y el que rompería un desplegable que diera por hecho que siempre hay
+// algo que mostrar.
+describe("PaymentsPage — la nota del checklist se pliega en sus tres variantes", () => {
+  const CASH_WITH_RECEIPT: PaymentValidationRequest = {
+    ...CASH_REQUEST,
+    id: "req-cash-receipt",
+    proofFileName: "recibo.pdf",
+    proofPreviewUrl: "https://files.example/recibo.pdf",
+  };
+  const TRANSFER_NO_PROOF: PaymentValidationRequest = {
+    ...PENDING_REQUEST,
+    id: "req-transfer-bare",
+    proofPreviewUrl: undefined,
+  };
+
+  it.each([
+    ["efectivo con recibo", CASH_WITH_RECEIPT, "Sofía Vera", /con recibo adjunto/i],
+    ["efectivo sin recibo", CASH_REQUEST, "Sofía Vera", /sin comprobante que revisar/i],
+    ["transferencia sin comprobante", TRANSFER_NO_PROOF, "Juan Pérez", /verifíquela en la cuenta del club/i],
+  ])("pliega la nota de %s detrás de «Cómo se decide»", async (_name, fixture, student, nota) => {
+    mockFetchPaymentValidations.mockResolvedValue([fixture]);
+    renderPage();
+    await openRequest(student);
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    expect(screen.queryByText(nota)).not.toBeInTheDocument();
+
+    openComoSeDecide();
+
+    expect(screen.getByText(nota)).toBeInTheDocument();
+  });
+
+  it("abre igual para una transferencia con comprobante, que no tiene nota", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    openComoSeDecide();
+
+    // Sin `note` el panel sigue teniendo algo que decir: el aviso del deshacer.
+    expect(screen.getByText(/unos segundos para deshacerlo/i)).toBeInTheDocument();
   });
 });
 
