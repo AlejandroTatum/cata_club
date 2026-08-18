@@ -423,6 +423,35 @@ class PagoServicio:
             pago.descuento_valor_aplicado = descuento_congelado.valor_aplicado
             pago.descuento_porcentaje_aplicado = descuento_congelado.porcentaje_aplicado
             pago.descuento_autorizado_por_persona_id = descuento_congelado.autorizado_por_persona_id
+
+        # Snapshot de tarifa (issue #400, migración c1f4b8e2a706): congelar
+        # acá los tres valores que este método YA calculó arriba, para que
+        # el historial no dependa de `membresia.monto_aplicado` (mutable) ni
+        # de una futura re-derivación contra un catálogo que puede cambiar
+        # (ver docstring de `actualizar_tipo_membresia`). `monto_base` es
+        # `datos.monto`, el monto ANTES de `_congelar_beneficio_activo` --
+        # `pago.monto` ya quedó con el final, descontado, arriba.
+        #
+        # Caso `precio_mensual == 0`: hoy la ÚNICA forma de llegar acá es la
+        # gratuidad familiar E04-RF002 (`_aplicar_regla_familiar_si_corresponde`
+        # deja `membresia.monto_aplicado` en 0.00). El `meses = 1` de la
+        # línea de arriba NO es una división real -- es un valor de guardia
+        # para no partir por cero, y el chequeo de múltiplo también se
+        # saltea en esa rama, así que un pago contra una membresía gratuita
+        # puede llegar con CUALQUIER monto positivo (el DTO exige `gt=0`)
+        # sin que exista ninguna aritmética que vincule ese monto con "1
+        # mes". Congelar tarifa=0.00/meses=1/monto_base=<lo enviado>
+        # inventaría un hecho histórico que la ejecución real no produjo --
+        # exactamente la "corrección automática de plata ambigua" que la
+        # migración prohíbe (ver docstring de
+        # tests/test_snapshot_de_pago.py). Se deja el snapshot AUSENTE (las
+        # tres columnas NULL, que `ck_pago_snapshot_completo_o_ausente`
+        # permite) en vez de mentir con un 0.00/1 que tiene forma de dato
+        # bueno y no lo es.
+        if precio_mensual > 0:
+            pago.tarifa_mensual_aplicada = precio_mensual
+            pago.meses_comprados = meses
+            pago.monto_base = datos.monto
         # Red de seguridad del invariante 1 (issue #8): si otra petición
         # concurrente registró su pendiente ENTRE el chequeo de arriba y este
         # INSERT, el índice `uq_pago_pendiente_por_membresia` lo rechaza y se

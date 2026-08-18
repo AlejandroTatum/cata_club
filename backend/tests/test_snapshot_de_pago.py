@@ -48,10 +48,15 @@ def membresia(db_session):
 
 
 def test_un_pago_sin_snapshot_sigue_siendo_valido(db_session, membresia):
-    """Compatibilidad hacia atrás, y no es un detalle: mientras dure la
-    cadena de #400 el código viejo sigue insertando pagos sin snapshot. Si
-    estas columnas fueran NOT NULL, esta migración partiría la aplicación en
-    el momento de aplicarse."""
+    """Compatibilidad hacia atrás, y no es un detalle: aunque desde el
+    slice 04a `PagoServicio.registrar_pago` SÍ escribe el snapshot en el
+    camino normal, esta fábrica (`crear_pago_orm`) inserta directo por
+    SQLAlchemy, saltándose el servicio a propósito -- el mismo camino que
+    toman los pagos históricos de antes de la migración `c1f4b8e2a706` y el
+    caso `precio_mensual == 0` (gratuidad familiar), donde el propio
+    servicio decide dejar el snapshot ausente en vez de inventarlo. Si estas
+    columnas fueran NOT NULL, esta migración partiría la aplicación en el
+    momento de aplicarse."""
     persona, memb = membresia
     pago = crear_pago_orm(db_session, persona, memb, EstadoPago.APROBADO)
 
