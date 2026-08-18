@@ -20,6 +20,8 @@ valor.
 Los dos tests de "no toca el pasado" son, entonces, el motivo real de este
 archivo; el resto es el CRUD alrededor.
 """
+import pytest
+
 from tests.fabricas_pagos import (
     crear_membresia_api,
     crear_pago_api,
@@ -113,6 +115,36 @@ def test_un_patch_vacio_no_rompe_ni_cambia_nada(client):
 
     assert respuesta.status_code == 200
     assert respuesta.json() == tipo
+
+
+@pytest.mark.parametrize("campo", ["categoria", "precio", "modalidad"])
+def test_un_null_explicito_es_rechazado_con_422(client, campo):
+    """Hallazgo de review adversarial (issue #400): `categoria`, `precio` y
+    `modalidad` son NOT NULL en la base, pero el DTO las declaraba
+    `Optional[...] = Field(None, ...)` -- la misma forma que
+    `DescuentoUpdateDTO`, donde SÍ es correcta porque ahí un null explícito es
+    una señal válida ("cambiar de porcentual a monto fijo"). Acá no hay
+    ninguna modalidad "nula" del campo: un null explícito es simplemente un
+    dato inválido.
+
+    `exclude_unset` en el servicio solo descarta claves OMITIDAS del JSON;
+    una clave presente con valor `null` cuenta como "seteada" y llegaba
+    intacta hasta `setattr(tipo, campo, None)`, violando el NOT NULL de la
+    columna. Eso reventaba como `IntegrityError` en el commit y el handler
+    global de `main.py` lo traducía a un 409 de conflicto -- un status que no
+    describe el problema real (dato inválido) ni nombra el campo. Debe
+    rechazarse en la capa de validación, antes de tocar la base, con un 422
+    que sí nombra el campo."""
+    tipo = crear_tipo_membresia_api(client)
+
+    respuesta = client.patch(f"{RUTA_TIPOS}/{tipo['id']}", json={campo: None})
+
+    assert respuesta.status_code == 422
+    assert campo in respuesta.text
+
+    listado = client.get(RUTA_TIPOS).json()
+    actual = next(t for t in listado if t["id"] == tipo["id"])
+    assert actual[campo] == tipo[campo]
 
 
 def test_una_tarifa_inexistente_da_404(client):

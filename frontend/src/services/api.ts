@@ -1411,6 +1411,35 @@ export async function fetchTiposMembresia(): Promise<TipoMembresiaCatalogo[]> {
   return request<TipoMembresiaCatalogo[]>(apiEndpoint("/membresias/tipos"));
 }
 
+/** Fields an admin may change on a catalog tariff. All optional: the backend
+ *  applies the update with `exclude_unset`, so only what is sent changes. */
+export interface ActualizarTipoMembresiaInput {
+  categoria?: string;
+  precio?: string;
+  modalidad?: "PERSONALIZADA" | "MENSUAL";
+}
+
+/**
+ * Admin-only: edit a catalog tariff — `PATCH /api/membresias/tipos/:id`.
+ *
+ * `precio` is a string, not a number, deliberately: it is money, it crosses
+ * the wire as a decimal string end to end (`Numeric(10,2)` in Postgres), and
+ * routing it through a JS number would introduce binary-float rounding into
+ * the one value the club charges with.
+ *
+ * There is no delete: `TipoMembresia` has no soft-delete column, so retiring
+ * a plan is not available (out of scope for #394 as written).
+ */
+export async function actualizarTipoMembresia(
+  id: number,
+  data: ActualizarTipoMembresiaInput,
+): Promise<TipoMembresiaCatalogo> {
+  return request<TipoMembresiaCatalogo>(apiEndpoint(`/membresias/tipos/${id}`), {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 /**
  * Create and assign a membership to a persona — `POST /api/membresias/`.
  *
