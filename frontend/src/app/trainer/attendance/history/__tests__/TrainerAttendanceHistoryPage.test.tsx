@@ -583,3 +583,105 @@ describe("TrainerAttendanceHistoryPage — el conteo de una sesión sale de su p
   });
 });
 
+// ---------------------------------------------------------------------------
+// Las tres cifras del período: listas tomadas, sesiones programadas y la resta.
+//
+// La tercera cifra es la delicada, y estos tests existen sobre todo por ella.
+// No sale del backend: se deriva expandiendo el horario semanal sobre el rango
+// del filtro. No existen feriados, ni cancelaciones, ni vigencia de horario en
+// el modelo (`HorarioEntrenamiento` guarda categoría, día y horas, nada más),
+// así que un horario dado de alta el mes pasado se expande hacia atrás e
+// inventa huecos. Encima, issue #313 / hallazgo #56 ya dejó anotado que el
+// horario semanal programado y las listas efectivamente tomadas no son el mismo
+// universo.
+//
+// De ahí los dos candados que importan: la palabra que declara la estimación
+// tiene que estar en pantalla, y la cifra no puede pintarse como un problema
+// confirmado. Un número rojo AFIRMA; este número supone.
+// ---------------------------------------------------------------------------
+describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => {
+  // Agosto de 2026 con "Este mes" mirado el día 15: el rango es 01..15, y ahí
+  // caen los lunes 3 y 10 (horario 7) y los viernes 7 y 14 (horario 9). Cuatro
+  // sesiones programadas.
+  const AUGUST_MIDMONTH = new Date("2026-08-15T15:00:00Z");
+
+  const THREE_LISTS: AttendanceRecord[] = [
+    record("present", "Sofia Vera", "2026-08-03", "Lunes 15:00 — 16:00", 7, "Carlos Mendoza"),
+    record("present", "Ana Garcia", "2026-08-07", "Viernes 17:00 — 18:00", 9, "Carlos Mendoza"),
+    record("late", "Luis Lopez", "2026-08-10", "Lunes 15:00 — 16:00", 7, "Carlos Mendoza"),
+  ];
+
+  /** La tarjeta entera a partir de su rótulo — rótulo, cifra y aclaración. */
+  function tile(label: string): HTMLElement {
+    const rotulo = screen.getByText(label);
+    expect(rotulo.parentElement).not.toBeNull();
+    return rotulo.parentElement as HTMLElement;
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(AUGUST_MIDMONTH);
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue(THREE_LISTS);
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
+    mockSearchStudents.mockReset().mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("cruza las listas tomadas contra el horario semanal y nombra el hueco", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    expect(tile("Listas tomadas")).toHaveTextContent("3");
+    expect(tile("Sesiones programadas")).toHaveTextContent("4");
+    // El viernes 14: programado y sin lista.
+    expect(tile("Sin lista (estimado)")).toHaveTextContent("1");
+  });
+
+  it("declara la estimación con una palabra que se lee, no con un asterisco", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    const estimado = tile("Sin lista (estimado)");
+    // La palabra, entera, en el rótulo Y en la aclaración de la tarjeta.
+    expect(estimado).toHaveTextContent(/Estimación/);
+    expect(estimado).toHaveTextContent(/feriados/);
+    expect(estimado).toHaveTextContent(/cancelaciones/);
+  });
+
+  it("no pinta el hueco como un problema confirmado", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    const estimado = tile("Sin lista (estimado)");
+    // Ni la tarjeta ni nada adentro toma el rojo de estado: ese color afirma un
+    // problema, y esta cifra todavía no lo es.
+    expect(estimado.className).not.toMatch(/state-bad/);
+    expect(estimado.querySelector('[class*="state-bad"]')).toBeNull();
+  });
+
+  it("no cruza nada cuando el período se filtra por un alumno", async () => {
+    // Filtrando por Ana, "listas tomadas" pasa a ser "listas donde figura Ana",
+    // y el horario semanal sigue siendo el del club entero: restar uno del otro
+    // daría un hueco enorme y falso. Los dos universos dejan de ser comparables,
+    // así que la comparación no se hace — y se dice por qué.
+    mockSearchStudents.mockResolvedValue([{ id: 42, nombres: "Ana", apellidos: "García" }]);
+    render(<TrainerAttendanceHistoryPage />);
+    await screen.findAllByRole("row");
+    expect(screen.getByText("Sesiones programadas")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana" } });
+    fireEvent.click(await screen.findByRole("option", { name: /Ana García/ }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Sesiones programadas")).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText("Sin lista (estimado)")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/no se compara contra el horario semanal al filtrar por alumno/i),
+    ).toBeInTheDocument();
+  });
+});
