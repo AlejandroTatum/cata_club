@@ -42,6 +42,11 @@
  *     reuses the admin payment queue (`GET /membresias/pagos`, the same
  *     endpoint payments-adapter.ts consumes) and takes each persona's most
  *     recent payment as their current membership signal.
+ *
+ * Issue #362 closed a fifth gap: there was no bulk "who has a ficha médica"
+ * signal, so `sinDatosEmergencia` (below) always read `false`. `GET
+ * /fichas-medicas/existe` now answers that in one query — see
+ * `personaIdsConFicha` below and `backend/app/presentacion/routers/ficha_medica_router.py`.
  */
 
 import type { EstadoMembresia } from "@/types/domain";
@@ -167,6 +172,11 @@ function buildMemberStudentSummary(
  * @param membresiaById — `Membresia` lookups keyed by `membresiaId`.
  * @param membresiaByPersona — fallback `Membresia` for personas with no Pago, keyed by `personaId`.
  * @param tipoById — `TipoMembresia` catalog keyed by `tipoMembresiaId`.
+ * @param personaIdsConFicha — issue #362: persona ids that HAVE a ficha
+ *   médica, from `GET /fichas-medicas/existe`. Optional (defaults to an empty
+ *   set) so existing fixtures/tests that don't care about the emergency-data
+ *   gap don't need to thread it through — every row simply reads
+ *   `sinDatosEmergencia: false` until it's supplied.
  */
 export function buildMemberAccounts(
   personas: BackendPersonaFull[],
@@ -174,6 +184,7 @@ export function buildMemberAccounts(
   membresiaById: Map<number, BackendMembresia>,
   membresiaByPersona: Map<number, BackendMembresia>,
   tipoById: Map<number, BackendTipoMembresia>,
+  personaIdsConFicha: Set<number> = new Set(),
 ): MemberAccount[] {
   const personaById = new Map<number, BackendPersonaFull>(
     personas.map((persona) => [persona.id, persona]),
@@ -196,6 +207,13 @@ export function buildMemberAccounts(
       apellidos: persona.apellidos,
       telefono: persona.telefono,
       representadoPor: representante ? `${representante.nombres} ${representante.apellidos}` : undefined,
+      // Issue #362's exact gap: no legal representative at all AND no ficha
+      // médica. A represented persona (has `representanteId`) is NEVER in the
+      // gap here, even with no ficha médica of their own — this deliberately
+      // does not check the representative's own contact data (that's a wider
+      // question `EmergencyCardDialog.tsx`'s `estaCompletamenteVacia` asks,
+      // not this one).
+      sinDatosEmergencia: persona.representanteId == null && !personaIdsConFicha.has(persona.id),
       estudiantes: [
         buildMemberStudentSummary(
           persona,

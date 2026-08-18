@@ -108,12 +108,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const tipoById = new Map(tipos.map((tipo) => [tipo.id, tipo]));
 
+  /*
+   * Issue #362: "who has a ficha médica" — a fifth backend call, and
+   * necessarily SEQUENTIAL after the `Promise.all` above rather than folded
+   * into it, because it needs `personasBody.items` (the persona ids) which
+   * only exist once that batch has resolved. It stays a single bulk call —
+   * `?persona_ids=1&persona_ids=2&...` — never a per-persona fetch; see
+   * members-adapter.ts's module docstring and
+   * `backend/app/presentacion/routers/ficha_medica_router.py` for why a
+   * per-row loop here would reintroduce the exact N+1 this route's other
+   * four sources were rewritten to avoid.
+   *
+   * Best-effort, same fallback shape as `membresiasDegraded`/`pagosFetch.ok`
+   * above: a failed lookup degrades to "nobody has a ficha médica" rather
+   * than failing the whole page.
+   */
+  const personaIdsQuery = personasBody.items.map((p) => `persona_ids=${p.id}`).join("&");
+  const fichasFetch = await backendFetchAuthed(request, `/fichas-medicas/existe?${personaIdsQuery}`);
+  const personaIdsConFicha = new Set<number>(
+    fichasFetch.ok && fichasFetch.response.ok
+      ? ((await fichasFetch.response.json()) as { personaIdsConFicha?: number[] }).personaIdsConFicha ?? []
+      : [],
+  );
+
   const accounts = buildMemberAccounts(
     personasBody.items,
     latestPagoByPersona,
     membresiaById,
     membresiaByPersona,
     tipoById,
+    personaIdsConFicha,
   );
 
   const personasCapped = personasBody.total >= PERSONAS_PAGE_LIMIT;
