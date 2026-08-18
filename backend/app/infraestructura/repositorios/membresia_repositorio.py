@@ -23,6 +23,14 @@ class TipoMembresiaRepositorio:
         self.db.refresh(tipo)
         return tipo
 
+    def guardar_cambios(self, tipo: TipoMembresia) -> TipoMembresia:
+        """Persiste una tarifa ya mutada por el servicio (issue #394). Mismo
+        patrón que `DescuentoRepositorio.guardar_cambios`: quién decide QUÉ
+        cambia es el servicio; el repositorio solo confirma."""
+        self.db.commit()
+        self.db.refresh(tipo)
+        return tipo
+
 
 class MembresiaRepositorio:
     def __init__(self, db: Session):

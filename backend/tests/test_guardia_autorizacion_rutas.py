@@ -244,6 +244,9 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/pagos/{pago_id}/comprobante"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/tipos"): frozenset({"ADMINISTRADOR"}),
+    # Issue #394: editar una tarifa es escribir sobre el número con el que el
+    # club cobra, así que lleva el mismo rol que crearla.
+    ("PATCH", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/admin/cuentas"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),

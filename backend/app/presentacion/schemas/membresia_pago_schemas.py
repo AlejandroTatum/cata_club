@@ -14,6 +14,20 @@ class TipoMembresiaCreateDTO(BaseModel):
     modalidad: TipoModalidad
 
 
+class TipoMembresiaUpdateDTO(BaseModel):
+    """PATCH parcial del catálogo de tarifas (issue #394): solo los campos
+    enviados se aplican (`exclude_unset` en el servicio). Mismo `gt=0` que el
+    POST -- una tarifa en cero o negativa no describe ningún plan comercial, y
+    además rompería la cuenta de meses, que divide por este número.
+
+    No hay campo para retirar un tipo del catálogo: `TipoMembresia` no tiene
+    columna `activo` y agregarla es una migración aparte. #394 pide poder
+    EDITAR el precio; retirar un plan queda fuera de este alcance."""
+    categoria: Optional[str] = Field(None, min_length=1, max_length=80)
+    precio: Optional[Decimal] = Field(None, gt=0)
+    modalidad: Optional[TipoModalidad] = None
+
+
 class TipoMembresiaResponseDTO(ResponseBase, TipoMembresiaCreateDTO):
     id: int
 
