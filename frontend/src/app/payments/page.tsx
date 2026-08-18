@@ -1151,11 +1151,19 @@ export default function PaymentsPage(): React.ReactElement {
                 </div>
                 {/* `checklist.note` ya no se dibuja acá. Explica POR QUÉ esta
                     lista trae estas preguntas y no otras — procedimiento, no
-                    dato — y era la mitad del texto que el dueño leyó como
-                    «demasiado». Se mudó, entera, al desplegable «Cómo se
-                    decide» de la tarjeta de Decisión, junto al aviso del
-                    deshacer: los dos contestan la misma pregunta, y contestarla
-                    en dos lugares distintos era parte del amontonamiento.
+                    dato — y se mudó, entera, al desplegable «Cómo se decide» de
+                    la tarjeta de Decisión, junto al aviso del deshacer: los dos
+                    contestan la misma pregunta, y contestarla en dos lugares
+                    distintos era parte del amontonamiento que el dueño leyó
+                    como «demasiado».
+
+                    Cuánto texto saca de acá depende del caso, y en el más
+                    común no saca ninguno: `buildApprovalChecklist` solo pone
+                    `note` cuando el pago es en efectivo o cuando es una
+                    transferencia SIN comprobante adjunto. Una transferencia
+                    CON comprobante — la que llena esta cola — nunca trajo
+                    nota, así que en esa tarjeta lo que se aliviana es el
+                    encabezado, no la prosa.
                     Los checkboxes se quedan enteros: son los que habilitan el
                     botón de aprobar. */}
                 <div
@@ -1186,12 +1194,22 @@ export default function PaymentsPage(): React.ReactElement {
             {isPending && (
               <section className="flex flex-col gap-3 card p-[18px]">
                 {/* El título y su desplegable comparten fila. El desplegable
-                    junta TODO el procedimiento de esta pantalla —cómo se arma
-                    la lista de verificación, y qué pasa después de aprobar— y
-                    deja a la vista solo lo que es dato o riesgo.
-                    En modo rechazo no se ofrece: lo que explica adentro es del
-                    camino de aprobación, y un desplegable que contesta otra
-                    pregunta es peor que ninguno. */}
+                    junta el procedimiento de LA DECISIÓN —por qué la lista de
+                    verificación trae estas preguntas, cuando hay nota que lo
+                    diga, y qué pasa después de aprobar— y deja a la vista solo
+                    lo que es dato o riesgo.
+
+                    No junta el procedimiento de toda la pantalla, y no es la
+                    intención que lo haga: el alcance de la cola se explica en
+                    su propia ayuda, arriba de la lista, y lo que implica
+                    rechazar lo dice el aviso del formulario de rechazo, unas
+                    líneas más abajo. Cada explicación vive pegada a la
+                    decisión que explica; juntarlas acá sería el amontonamiento
+                    otra vez, con otra dirección.
+                    En modo rechazo este desplegable no se ofrece: lo que
+                    explica adentro es del camino de aprobación, y un
+                    desplegable que contesta otra pregunta es peor que
+                    ninguno. */}
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
                   {!showRejectForm && (

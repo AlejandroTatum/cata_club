@@ -255,7 +255,7 @@ export interface AccountIdentity {
  * both MUTATE, so there is nothing to read in bulk (gap #1 in
  * `lib/server/members-adapter.ts`). To fill the shape anyway, that adapter
  * writes `role: "representante" as const` on every root account
- * (`members-adapter.ts:173`). It is a constant, not an observation: it says the
+ * (`members-adapter.ts:191`). It is a constant, not an observation: it says the
  * same thing about a person who represents three players, a person who
  * represents none, and a person who also coaches. It cannot distinguish them
  * because it never looked.
@@ -275,18 +275,22 @@ export interface AccountIdentity {
  *
  * `estudiantes` is the set of personas whose `representanteId` points at this
  * account. Holding one IS representing them, in the backend's own model, so a
- * row with dependants may say so and name them — `IdentityCell` renders that as
- * "Representante de Ana Pérez y Luis Pérez". The word is carried by the
- * relationship the data proves, not by the stamped field, which is why it may
- * stay while the field may not.
+ * row with dependants may say so and name them. What leaves here is the NAMES;
+ * the row then spends them in two places, because #379 split saying-how-many
+ * from saying-who: `IdentityCell` collapses the list to a count
+ * ("Representante · 2 jugadores", so a family of seven stops widening the
+ * identity column) and `AccountRow`'s expandable row lists them whole. The word
+ * is carried by the relationship the data proves, not by the stamped field,
+ * which is why it may stay while the field may not.
  *
  * The one correction it makes is the self-reference. A root persona with no
  * dependants comes back holding ITSELF as its only `estudiantes` entry
  * (`estudiantesSource = children.length > 0 ? children : [root]`), so passing
- * the list through untouched would print "Representante de Marta Salas" on
- * Marta Salas' own row. Dropped — and with it goes the last proof of the
- * relationship, so such a row states no role at all and `IdentityCell` draws no
- * companion line.
+ * the list through untouched would count Marta Salas as her own dependant and
+ * print "Representante · 1 jugador" on Marta Salas' own row. Dropped — and with
+ * it goes the last proof of the relationship, so such a row states no role at
+ * all, `IdentityCell` draws no companion line, and there is nothing left for
+ * the row to expand.
  */
 export function getAccountIdentity(account: MemberAccount): AccountIdentity {
   const represents = account.estudiantes

@@ -149,10 +149,20 @@ export function formatDateRange(startStr: string, endStr: string): string {
  *
  * It lives here for the same reason `formatDate` does: the product had already
  * grown one private copy of this grammar (`joinWithY` in
- * `app/groups/groups-page-utils.ts:159`, which builds a categoría's day line),
- * and the two shared primitives that arrived with D9 — the identity cell's
- * "Representante de …" and the week strip's accessible label — would have made
- * three. A separator is a format, and formats live in one file.
+ * `app/groups/groups-page-utils.ts:192`, which builds a categoría's day line
+ * and is still uncollapsed — the standing reminder of what this file is
+ * against), and D9 was about to grow more. Two callers landed here instead:
+ * the week strip's accessible label (`ui/WeekStrip.tsx`) and the groups
+ * dialog's day list (`app/groups/page.tsx`), which is why a week reads
+ * identically wherever it is spelled out. A separator is a format, and formats
+ * live in one file.
+ *
+ * A third caller LEFT, and that is not an argument for inlining this back. The
+ * identity cell enumerated the players an account represents through here until
+ * #379 turned that line into a count ("Representante · 2 jugadores") so the
+ * column would stop growing with the family; the names moved to an expandable
+ * row, which lists them and needs no conjunction. Two callers in two features
+ * still outnumber the private copy that started this.
  *
  * Blank entries are dropped rather than joined, because the visible failure of
  * an enumeration is never a missing item: it is the ", y" or the " y " with
