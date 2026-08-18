@@ -592,6 +592,20 @@ export default function TrainerAttendancePage(): React.ReactElement {
         // the draft can mark a student reviewed too, and that must never be
         // mistaken for "the club already has this on file" (issue #310 / #3).
         setSessionAlreadyRegistered(existingRecords.length > 0);
+        // Set HERE, in the same batch as `setStep`/`setStudents` below, not
+        // only by the callers.
+        //
+        // The deep-link restore used to set it just before calling this, from
+        // inside a passive effect — so React scheduled that update through the
+        // Scheduler while THESE updates land in the microtask after the awaits
+        // above. Microtasks win, which produced a real render with
+        // `step === "confirm"` and a full roster but `selectedScheduleId ===
+        // null`: `renderConfirmation` bails on `!selectedSchedule`, so the
+        // trainer got the commit bar ("Faltan N alumnos por marcar", submit
+        // disabled) with no summary above it. Batching the three together
+        // means the step, its roster and the schedule it belongs to can never
+        // be on screen without each other.
+        setSelectedScheduleId(horarioId);
         setSessionDate(fecha);
         setRequestedDate(requestedDate);
         setRestoredFromDraft(

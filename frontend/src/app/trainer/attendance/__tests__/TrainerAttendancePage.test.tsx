@@ -685,9 +685,24 @@ describe("TrainerAttendancePage — nothing is decided until a human decides it"
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    // It really is step 3, reached without ever touching the advance button.
+    // Await the async chain ONCE, on the commit bar: schedules fetch →
+    // `pendingRestore` → `openRoster` → roster + records fetches.
     const submit = await screen.findByRole("button", { name: /Confirmar asistencia/ });
-    expect(screen.getByText("Horario")).toBeInTheDocument();
+
+    // Then check the BODY synchronously, on purpose. This pair is the
+    // regression lock: the summary has to be in the SAME render as the bar.
+    // It was not — `openRoster`'s updates landed in a microtask while the
+    // restore effect's `setSelectedScheduleId` went through React's Scheduler,
+    // so one render had `step === "confirm"` with a full roster and a null
+    // `selectedSchedule`, and `renderConfirmation` bailed. Awaiting these two
+    // would wait that frame out and hide it again.
+    //
+    // Both strings come from `renderConfirmation` and nowhere else. "Horario"
+    // does NOT: the stepper renders it too, and bare "Horario" is exactly what
+    // the stepper shows when `selectedSchedule` is null — so asserting on it
+    // passed while the summary was missing entirely.
+    expect(screen.getByText(/Se registrará la asistencia de/)).toBeInTheDocument();
+    expect(screen.getByText("Resultado")).toBeInTheDocument();
 
     // Nothing is fileable, and the button says why.
     expect(submit).toBeDisabled();
