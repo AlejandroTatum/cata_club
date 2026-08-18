@@ -191,20 +191,33 @@ type HorariosState =
  */
 function ClubPaddleMark(): React.ReactElement {
   return (
-    <span
+    <svg
       aria-hidden="true"
+      focusable="false"
       data-testid="carnet-paddle"
-      className="relative block h-[22px] w-[22px] flex-none print:h-[17px] print:w-[17px]"
+      viewBox="0 0 26 24"
+      className="h-[24px] w-[26px] flex-none print:h-[18px] print:w-[19px]"
     >
-      <span className="absolute left-0 top-0 h-[15px] w-[15px] rounded-full bg-ball print:h-[12px] print:w-[12px]" />
-      <span className="absolute left-[9px] top-[2px] h-[4px] w-[4px] rounded-full bg-white print:left-[7px] print:h-[3px] print:w-[3px]" />
-      {/* The handle's UPPER end sits inside the blade, not against it. Measured
-          at 6× on the running card: anchored to the box's corner the rotated
-          bar cleared the disc by about a pixel, and a detached stick beside a
-          circle is a circle and a stick. Both are `bg-ball`, so the overlap is
-          invisible and the two boxes merge into one silhouette. */}
-      <span className="absolute left-[13px] top-[9px] h-[12px] w-[3px] rotate-45 rounded-full bg-ball print:left-[10px] print:top-[7px] print:h-[9px]" />
-    </span>
+      {/* Tilted the way a hand holds it. The blade and the handle rotate
+          together; the ball does not, because a ball in flight is not attached
+          to the racket. */}
+      <g transform="rotate(-24 11 10)">
+        {/* The handle leaves the BOTTOM of the blade, short and thick. Its top
+            sits inside the ellipse so the two shapes merge into one silhouette
+            rather than reading as a disc with a stick beside it. */}
+        <path
+          d="M8.9 15.2h4.2l.55 5.1a1.85 1.85 0 0 1-1.84 2.05h-1.62a1.85 1.85 0 0 1-1.84-2.05z"
+          className="fill-ball"
+        />
+        {/* Red, because a paddle's rubber is red or black — never yellow. */}
+        <ellipse cx="11" cy="9.1" rx="7.4" ry="7.7" className="fill-cata-red" />
+      </g>
+      {/* UPPER-RIGHT, and the position was measured at the 30px this mark
+          actually renders at. Beside the handle at lower-right the ball and the
+          handle are two yellow shapes a pixel apart and they merge into one
+          blob with a notch; across the blade they read as two objects. */}
+      <circle cx="22.6" cy="4.6" r="3.1" className="fill-ball" />
+    </svg>
   );
 }
 
@@ -449,30 +462,35 @@ function Carnet({
           role="group"
           aria-label={`Carnet de socio de ${fullName}`}
           className={cn(
-            "carnet-credential w-full max-w-[300px] rounded-ctl bg-coal p-[var(--carnet-page)] text-white shadow-elevated",
-            // ID-1's OWN PROPORTION, ON SCREEN TOO — 54:85.6 taken at the
-            // object's 300px is 476px, and this is the one number on the card
-            // that is not one of the three steps because it is not spacing: it
-            // is the shape of the physical thing.
+            "carnet-credential my-section w-full max-w-[284px] rounded-ctl bg-coal p-[var(--carnet-page)] text-white shadow-elevated",
+            // THE CREDENTIAL IS SQUARE ON PURPOSE, AND THE FUNDA IS THE
+            // VERTICAL OBJECT. This reverses what stood here before.
             //
-            // MEASURED, not assumed. At its natural height the credential came
-            // out 300×310 — square, which is the one shape a credential may not
-            // be, and the panel's column ended 300px short of the rail beside
-            // it. Pinning the ratio and leaving `mt-auto` on the week strip was
-            // measured next and was worse: the whole 170px surplus pooled in one
-            // band under the register, which is fix 12b's hole moved rather than
-            // closed. `justify-between` distributes it across the four blocks
-            // instead, and that is what reads as a laminated card.
+            // It used to carry `min-h-[476px]` — ID-1's 54:85.6 taken at its own
+            // 300px — so the card would look like a card. Measured in the
+            // running app, that opened THREE holes: after the red rule, after
+            // the cédula and before the week strip, about 170px of empty coal
+            // that `justify-between` spread around instead of removing.
             //
-            // `min-h`, never a height or an `aspect-ratio`: a three-line name
-            // has to grow the card, not be clipped by it.
+            // The cause is arithmetic, not spacing. The name's wrapping was
+            // measured at 252 / 268 / 284 / 300px, and at EVERY width where
+            // "Pedro Salgado" stays on one line the card lands at 0.92–0.97 —
+            // square. Six data points do not fill a portrait at this width.
             //
-            // AND IT IS RELEASED ON PRINT, which is not housekeeping — it was
-            // MEASURED in a real Chromium print render. `min-height` beats
-            // `height` in CSS, so the sheet's `height: 85.6mm` lost to this and
-            // the credential came out 54×126mm: the right width, half again the
-            // height, on a sheet whose own footer promises 54 × 85,6 mm.
-            "flex min-h-[476px] flex-col justify-between print:min-h-0",
+            // So the object is dense (284×310 measured) and the panel around it
+            // is the portrait one: 336×483, a ratio of 0.70. That is NOT ID-1's
+            // 0.63 and it is not pinned to be — the funda's height is whatever
+            // the credential plus the panel's own chrome comes to. Pinning it
+            // would re-open the hole this pass just closed, one level up.
+            // A card holder is card-shaped; the card inside it need not be. The
+            // `my-section` above is what makes it read as HELD by the sunken
+            // band rather than as a fill of it.
+            //
+            // No `min-h` and no `aspect-ratio` at all now, which also retires a
+            // print bug this file paid for once: `min-height` beats `height`, so
+            // the old pin overrode the sheet's own `height: 85.6mm` and printed
+            // the credential at 54×126mm until `print:min-h-0` was added.
+            "flex flex-col",
             // ITS OWN SHADOW, so it rests ON the sunken ground instead of being
             // painted into it. The print sheet drops it (`box-shadow: none`),
             // where an ink shadow would be a smudge along the cut line.
@@ -1296,7 +1314,7 @@ function ActivePortalView({
           />
         </div>
 
-        <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,380px)_minmax(0,1fr)]", "flex-1")}>
+        <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,336px)_minmax(0,1fr)]", "flex-1")}>
           <div className="flex flex-col gap-5">
             <Carnet
               profile={selectedProfile}

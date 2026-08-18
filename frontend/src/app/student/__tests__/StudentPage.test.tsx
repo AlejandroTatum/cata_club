@@ -857,7 +857,7 @@ describe("StudentPage — the printed carnet is the same object as the screen on
   // reached (drop the mark) left a blank disc as the most conspicuous thing on
   // the sheet. A paddle drawn in CSS costs nothing, prints as flat colour, and
   // scales without a second asset.
-  it("draws the club's paddle in CSS instead of halftoning a photograph", async () => {
+  it("draws a paddle that is actually a paddle, in vector and not in boxes", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
@@ -868,26 +868,49 @@ describe("StudentPage — the printed carnet is the same object as the screen on
 
     const paddle = within(carnet).getByTestId("carnet-paddle");
     expect(paddle).toHaveAttribute("aria-hidden", "true");
-    expect(paddle.className).not.toMatch(/print:hidden/);
-    // The blade, the ball on it, and the handle — three boxes, no image.
-    const parts = [...paddle.children];
-    expect(parts).toHaveLength(3);
-    const [blade, ball, handle] = parts;
-    expect(blade.className).toMatch(/\bbg-ball\b/);
-    expect(blade.className).toMatch(/\brounded-full\b/);
-    expect(ball.className).toMatch(/\bbg-white\b/);
-    expect(ball.className).toMatch(/\brounded-full\b/);
-    expect(handle.className).toMatch(/\bbg-ball\b/);
-    expect(handle.className).toMatch(/\brotate-/);
+    expect(paddle.tagName.toLowerCase()).toBe("svg");
+    expect(paddle).toHaveAttribute("focusable", "false");
+
+    // WHAT THIS LOCK IS REALLY FOR. The mark it replaces was a disc with a bar
+    // rotated 45° off its RIM and a white highlight inside: at 30px that reads
+    // as a magnifying glass, because no paddle is held diagonally from its
+    // edge. The three assertions below are the three things that make it a
+    // paddle instead: a red blade (a rubber is red or black, never yellow), a
+    // handle leaving the BOTTOM of the blade, and the whole thing tilted the
+    // way a hand holds it.
+    const blade = paddle.querySelector("ellipse");
+    const handle = paddle.querySelector("path");
+    expect(blade?.getAttribute("class")).toMatch(/\bfill-cata-red\b/);
+    expect(handle?.getAttribute("class")).toMatch(/\bfill-ball\b/);
+    expect(paddle.querySelector("g")?.getAttribute("transform")).toMatch(/rotate\(-24/);
+
+    // The blade's centre and the handle's top must overlap on the SAME axis —
+    // the handle hangs below the blade, it does not sprout from its side.
+    const bladeCx = Number(blade?.getAttribute("cx"));
+    const handleStartX = Number(handle?.getAttribute("d")?.match(/M([\d.]+)/)?.[1]);
+    expect(Math.abs(bladeCx - handleStartX)).toBeLessThan(3);
   });
 
-  // The mark already carries the ball. A second loose ball anywhere on the card
-  // would be the club's one accent spent twice.
-  it("carries exactly one ball, and it is the one on the paddle", async () => {
+  // The ball sits UPPER-RIGHT, clear of the handle, and that position is not a
+  // preference. Measured at the 30px the mark actually renders at: with the
+  // ball beside the handle at lower-right the two yellow shapes merge into one
+  // blob with a notch in it. Moved across the blade they read as two objects.
+  it("keeps the ball clear of the handle so both survive at mark size", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
     const paddle = within(carnet).getByTestId("carnet-paddle");
+
+    const ball = paddle.querySelector("circle");
+    expect(ball?.getAttribute("class")).toMatch(/\bfill-ball\b/);
+    // Upper half of the 24-unit viewBox, and to the right of the blade.
+    expect(Number(ball?.getAttribute("cy"))).toBeLessThan(12);
+    expect(Number(ball?.getAttribute("cx"))).toBeGreaterThan(
+      Number(paddle.querySelector("ellipse")?.getAttribute("cx")),
+    );
+
+    // And it is still the card's ONLY ball: the club's one accent, spent once.
+    expect(paddle.querySelectorAll("circle")).toHaveLength(1);
     for (const filled of carnet.querySelectorAll('[class*="bg-ball"]')) {
       expect(paddle.contains(filled)).toBe(true);
     }
@@ -1585,7 +1608,10 @@ describe("StudentPage — the carnet column is card-width and the rail takes the
     // override wins at the CSS layer, not by removing the losing utility from
     // the class list. See the comment above this `<div>` in page.tsx for why
     // that is the established mechanism, not a workaround.
-    expect(rail?.className).toMatch(/lg:!grid-cols-\[minmax\(0,380px\)_minmax\(0,1fr\)\]/);
+    // 336px, not 380: the funda is the portrait object now (336 × 483 measured,
+    // a ratio of 0.70), so the column is the width that produces it. Only the
+    // WIDTH is decided here — the height is the content's.
+    expect(rail?.className).toMatch(/lg:!grid-cols-\[minmax\(0,336px\)_minmax\(0,1fr\)\]/);
     expect(rail?.className).not.toMatch(/lg:!grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)\]/);
   });
 });
@@ -1695,28 +1721,35 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
     expect(panel.className).not.toMatch(/\bflex-1\b/);
     expect(panel.parentElement?.className).not.toMatch(/self-stretch/);
 
-    // The PROPORTION lock moves down a level with the object it describes. It
-    // used to read `min-h-[602px]` — ID-1's 54:85.6 taken at the rail's full
-    // 380px, when the carnet WAS the column. The credential is ~300px wide
-    // inside the panel now, so the same ratio is 476px, and the reason is
-    // unchanged: at its natural height the card measures 300×310, and a square
-    // is the one shape a credential may not be.
+    // THE PROPORTION IS THE FUNDA'S, NOT THE CREDENTIAL'S — and this reversal
+    // is the whole lock.
     //
-    // `justify-between` is half of the lock and not decoration. Pinning the
-    // ratio alone leaves ~170px of surplus, and with an auto margin at the foot
-    // all of it pools in one band under the register — fix 12b's hole moved
-    // rather than closed. Distributed across the four blocks it reads as a
-    // laminated card, which is what it is a picture of.
+    // The credential used to carry `min-h-[476px]`: ID-1's 54:85.6 taken at its
+    // own 300px, pinned so the card would look like a card. Measured in the
+    // running app, that opened THREE holes — after the red rule, after the
+    // cédula and before the week strip — about 170px of empty coal that
+    // `justify-between` spread around rather than removed.
+    //
+    // The cause is not spacing, it is arithmetic. The name's wrapping was
+    // measured at 252 / 268 / 284 / 300px, and at EVERY width where "Pedro
+    // Salgado" stays on one line the card comes out 0.92–0.97 — square. Six
+    // data points do not fill a portrait at this width; forcing them to is what
+    // made the holes.
+    //
+    // So the credential is square and dense (284 × 310 measured), and the FUNDA
+    // is the vertical object: 336 × 483, a ratio of 0.70. Portrait like ID-1,
+    // but NOT equal to its 0.63 — and deliberately not pinned to be. The
+    // funda's height is the credential plus the panel's own chrome; forcing it
+    // to 0.63 would re-open, one level up, the hole this lock just closed.
+    // A card holder is card-shaped; the card inside it does not have to be.
     const credential = within(panel).getByTestId("student-carnet");
-    expect(credential.className).toMatch(/\bmin-h-\[476px\]/);
-    expect(credential.className).toMatch(/\bjustify-between\b/);
+    expect(credential.className).toMatch(/\bmax-w-\[284px\]/);
+    expect(credential.className).not.toMatch(/\bmin-h-\[/);
+    expect(credential.className).not.toMatch(/\bjustify-between\b/);
     expect(credential.className).not.toMatch(/\bmt-auto\b/);
-    // AND IT IS RELEASED ON PAPER. Measured in a real Chromium print render,
-    // not reasoned: `min-height` beats `height` in CSS, so without this the
-    // sheet's own `height: 85.6mm` lost and the credential printed 54×126mm —
-    // the right width, half again the height, under a footer that promises
-    // 54 × 85,6 mm.
-    expect(credential.className).toMatch(/\bprint:min-h-0\b/);
+    // The air that makes it read as HELD rather than as a fill: one `section`
+    // step above and below, on top of the sunken band's own `page` padding.
+    expect(credential.className).toMatch(/\bmy-section\b/);
     expect(within(panel).getByText("Se imprime a 54 × 85,6 mm")).toBeInTheDocument();
   });
 });
@@ -2022,7 +2055,6 @@ describe("StudentPage — the carnet as the club's identity object", () => {
     // utility, no `print:` twin, because it is one composition. The credential
     // MARGIN is the `page` step and scales with the other two, so there is no
     // `print:p-[4mm]` to keep in sync either.
-    expect(carnet.className).toMatch(/\bjustify-between\b/);
     expect(carnet.className).not.toMatch(/print:justify-/);
     expect(carnet.className).toMatch(/p-\[var\(--carnet-page\)\]/);
 
@@ -2134,9 +2166,18 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
     // foot is the one other place red appears, and it is not decoration: red
     // there is the datum — which days run — measured at 3:1 against the unlit
     // fill for exactly that reason.
+    //
+    // The paddle's blade is the third and last exemption, and it is the same
+    // kind as the strip's: red there is not an accent, it is what the object
+    // IS. A table tennis rubber is red or black, so a yellow blade would be the
+    // depiction being wrong rather than the palette being obeyed. Anything red
+    // outside these three is decoration and this lock should catch it.
     const reds = [...carnet.querySelectorAll('[class*="cata-red"]')];
     const strip = within(carnet).getByTestId("week-strip");
-    expect(reds.filter((element) => !strip.contains(element))).toEqual([header]);
+    const paddle = within(carnet).getByTestId("carnet-paddle");
+    expect(
+      reds.filter((element) => !strip.contains(element) && !paddle.contains(element)),
+    ).toEqual([header]);
   });
 
   // The cédula is the fact this pass had to plumb through three layers to get
