@@ -166,6 +166,33 @@ def test_fallo_por_credencial_ausente_no_filtra_el_error_crudo_del_vendor(nombre
     assert "Must supply api_key" in exc.detalle_tecnico
 
 
+# --- 4c. Guardia (issue #355): los 3 `raise ServicioNoDisponible(...)` de
+# `_subir()` -- circuito abierto, fallo del SDK, `secure_url` ausente --
+# marcan `seguro_mostrar=True`. Es el único mensaje de todo el backend
+# marcado así: `main.py::_MAPA_EXCEPCIONES` lo usa para decidir si el 503
+# puede llevar `mensaje` tal cual en el body (`mensaje_seguro`), en vez del
+# genérico que descarta cualquier otro 5xx por defecto.
+def test_los_3_sitios_de_servicio_no_disponible_marcan_seguro_mostrar():
+    with _parchear_upload() as mock_upload:
+        mock_upload.side_effect = Exception("Cloudinary caído")
+        with pytest.raises(ServicioNoDisponible) as exc_fallo_vendor:
+            _subir_pdf()
+    assert exc_fallo_vendor.value.seguro_mostrar is True
+
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {}
+        with pytest.raises(ServicioNoDisponible) as exc_sin_url:
+            _subir_pdf()
+    assert exc_sin_url.value.seguro_mostrar is True
+
+    for _ in range(CIRCUITO_CLOUDINARY_UMBRAL_FALLOS):
+        cc._circuito_cloudinary.registrar_fallo()
+    with _parchear_upload() as mock_upload:
+        with pytest.raises(ServicioNoDisponible) as exc_circuito_abierto:
+            _subir_pdf()
+    assert exc_circuito_abierto.value.seguro_mostrar is True
+
+
 # --- 5. Guardia: el timeout viene de resiliencia.py, no de un literal futuro
 def test_timeout_viene_de_resiliencia_no_de_un_literal(monkeypatch):
     monkeypatch.setattr(cc, "TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS", 99.0)

@@ -960,7 +960,7 @@ describe("ProfilePage — change password", () => {
     fireEvent.click(screen.getByRole("button", { name: /cambiar contraseña/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "El servidor no pudo completar la operación. Intente nuevamente en unos minutos.",
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619",
     );
   });
 });

@@ -77,6 +77,6 @@ describe("getEnrollmentErrorMessage", () => {
     // status), so the only status-less error this catch can see is fetch
     // itself rejecting — and its message is the browser's, not the product's.
     expect(getEnrollmentErrorMessage(new TypeError("Failed to fetch")))
-      .toBe("No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.");
+      .toBe("No pudimos conectar. Revise su conexión a internet e intente nuevamente.");
   });
 });

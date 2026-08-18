@@ -222,7 +222,7 @@ test.describe("Back navigation + toasts", () => {
      * reads the same generic sentence a 500 would produce anywhere else.
      */
     await expect(
-      page.getByRole("alert").filter({ hasText: /el servidor no pudo completar la operación/i }).first(),
+      page.getByRole("alert").filter({ hasText: /problema de nuestro lado/i }).first(),
     ).toBeVisible({ timeout: 20_000 });
 
     // And it names the payment that came back, so the admin knows what to redo.

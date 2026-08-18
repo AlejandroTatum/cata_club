@@ -142,7 +142,7 @@ describe("ForgotPasswordPage", () => {
 
       await waitFor(() => {
         expect(mockShowError).toHaveBeenCalledWith(
-          "El servidor no pudo completar la operación. Intente nuevamente en unos minutos.",
+          "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619",
         );
       });
       expect(document.querySelector(".alert-error")).not.toBeInTheDocument();

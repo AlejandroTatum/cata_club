@@ -31,10 +31,25 @@ class ErrorDominio(Exception):
 
     Lo registra el manejador global de `main.py`, así ningún servicio tiene
     que acordarse de loguear.
+
+    `seguro_mostrar` (issue #355) es el candado que abre la excepción,
+    keyword-only para que nadie lo pase por accidente en la posición de
+    `detalle_tecnico`. Por defecto es `False`: el manejador global de
+    `main.py` descarta `mensaje` en cualquier 5xx salvo que el sitio que
+    lanza la excepción marque explícitamente que ESE texto es seguro para
+    mostrar tal cual -- fail closed, así una excepción nueva no puede filtrar
+    nada por omisión.
     """
-    def __init__(self, mensaje: str, detalle_tecnico: str | None = None):
+    def __init__(
+        self,
+        mensaje: str,
+        detalle_tecnico: str | None = None,
+        *,
+        seguro_mostrar: bool = False,
+    ):
         self.mensaje = mensaje
         self.detalle_tecnico = detalle_tecnico
+        self.seguro_mostrar = seguro_mostrar
         super().__init__(mensaje)
 
 

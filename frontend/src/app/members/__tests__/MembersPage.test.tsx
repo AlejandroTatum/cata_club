@@ -553,7 +553,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /guardar nombre, apellido y teléfono/i }));
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "El servidor no pudo completar la operación. Intente nuevamente en unos minutos.",
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619",
     );
   });
 
@@ -822,7 +822,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(alerts.length).toBeGreaterThan(0);
     for (const alert of alerts) {
       expect(alert).toHaveTextContent(
-        "No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.",
+        "No pudimos conectar. Revise su conexión a internet e intente nuevamente.",
       );
     }
     expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeDisabled();
@@ -877,7 +877,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /admin/i }));
     fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.",
+      "No pudimos conectar. Revise su conexión a internet e intente nuevamente.",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));

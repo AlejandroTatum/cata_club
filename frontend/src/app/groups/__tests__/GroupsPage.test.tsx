@@ -1142,7 +1142,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     // was fiction is the assertion: a 5xx `detail` describes the server's
     // failure, so the row reports the server, not the body of the 500.
     expect(
-      await screen.findByText("El servidor no pudo completar la operación. Intente nuevamente en unos minutos."),
+      await screen.findByText("Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/asignado correctamente/i)).not.toBeInTheDocument();
   });
@@ -1183,7 +1183,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
       expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(1);
     });
     expect(
-      await screen.findByText("El servidor no pudo completar la operación. Intente nuevamente en unos minutos."),
+      await screen.findByText("Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Alumno desasignado del horario.")).not.toBeInTheDocument();
   });

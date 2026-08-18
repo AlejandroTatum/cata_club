@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 
 import main
+from app.dominio.excepciones import EntidadNoEncontrada, ServicioNoDisponible
 from app.soporte_transversal.circuito_breaker import CircuitoBreaker, resumen_circuitos
 from app.soporte_transversal.configuracion import settings
 from main import app
@@ -167,6 +168,59 @@ def test_integrity_error_loguea_el_request_id_de_correlacion(
     assert registros, "se esperaba al menos un registro del logger 'main'"
     mensaje = registros[-1].getMessage()
     assert f"[request_id={id_de_correlacion}]" in mensaje
+
+
+# --- `mensaje_seguro` en el body de error (issue #355) ----------------------
+# El frontend descarta CUALQUIER `detail` de un 5xx por defecto (fail
+# closed): la única excepción es una `ErrorDominio` que marque
+# `seguro_mostrar=True` explícitamente, y el body tiene que reflejarlo con
+# `mensaje_seguro`. Este par de rutas descartables fija ambos extremos del
+# manejador de `_MAPA_EXCEPCIONES`: la excepción marcada y cualquier otra
+# (default `False`, fail closed).
+_RUTA_MENSAJE_SEGURO = "/__prueba__/mensaje-seguro"
+_RUTA_MENSAJE_NO_SEGURO = "/__prueba__/mensaje-no-seguro"
+
+
+@pytest.fixture()
+def rutas_de_mensaje_seguro():
+    rutas_previas = list(app.router.routes)
+
+    @app.get(_RUTA_MENSAJE_SEGURO, include_in_schema=False)
+    async def _lanzar_seguro():
+        raise ServicioNoDisponible("Mensaje verificado como seguro para el socio", seguro_mostrar=True)
+
+    @app.get(_RUTA_MENSAJE_NO_SEGURO, include_in_schema=False)
+    async def _lanzar_no_seguro():
+        raise EntidadNoEncontrada("recurso de prueba no encontrado")
+
+    try:
+        yield
+    finally:
+        app.router.routes[:] = rutas_previas
+        app.openapi_schema = None
+
+
+def test_mensaje_seguro_true_cuando_la_excepcion_lo_marca_explicitamente(rutas_de_mensaje_seguro):
+    with TestClient(app) as cliente:
+        respuesta = cliente.get(_RUTA_MENSAJE_SEGURO)
+
+    assert respuesta.status_code == 503
+    cuerpo = respuesta.json()
+    assert cuerpo["mensaje_seguro"] is True
+    assert cuerpo["message"] == "Mensaje verificado como seguro para el socio"
+
+
+def test_mensaje_seguro_false_por_defecto_en_cualquier_otra_excepcion_de_dominio(
+    rutas_de_mensaje_seguro,
+):
+    """Fail closed: `EntidadNoEncontrada` no pasa `seguro_mostrar`, así que
+    hereda el default `False` de `ErrorDominio.__init__` -- ninguna excepción
+    de dominio queda marcada como segura salvo que lo pida explícitamente."""
+    with TestClient(app) as cliente:
+        respuesta = cliente.get(_RUTA_MENSAJE_NO_SEGURO)
+
+    assert respuesta.status_code == 404
+    assert respuesta.json()["mensaje_seguro"] is False
 
 
 # --- GET /health/ready: sonda de readiness (PR2, sdd/borde-http-observable) --

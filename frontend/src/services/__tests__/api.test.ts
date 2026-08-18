@@ -17,6 +17,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  ApiClientError,
   enrollStudent,
   fetchPaymentValidations,
   updatePaymentValidation,
@@ -48,6 +49,12 @@ import {
 import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
 import { GENERIC_FAILURE, toUserMessage } from "@/lib/error-message";
+import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
+
+/** The copy `TIMED_OUT` (module-private in `lib/error-message.ts`) answers with. */
+const TIMED_OUT_TEXT =
+  "Esto está tardando más de lo normal y no pudimos terminarlo. " +
+  `Escríbanos por WhatsApp y lo ayudamos: ${toWhatsAppLink(landingConfig.contact.whatsapp[0])}`;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -242,6 +249,64 @@ describe("error handling", () => {
 });
 
 // ---------------------------------------------------------------------------
+// ApiClientError.safe (issue #355) — the backend's "safe to show" marker
+// ---------------------------------------------------------------------------
+
+describe("ApiClientError.safe", () => {
+  it("is true when the body's mensaje_seguro is strictly true", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(503, { message: "mensaje verificado", mensaje_seguro: true }),
+    );
+
+    try {
+      await fetchPaymentValidations();
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiClientError);
+      expect((error as ApiClientError).safe).toBe(true);
+    }
+  });
+
+  it.each([
+    ["absent", {}],
+    ["false", { mensaje_seguro: false }],
+    ["a truthy non-boolean string", { mensaje_seguro: "true" }],
+    ["a truthy non-boolean number", { mensaje_seguro: 1 }],
+    ["null", { mensaje_seguro: null }],
+  ])("is false when mensaje_seguro is %s", async (_label, extra) => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(503, { message: "mensaje", ...extra }),
+    );
+
+    try {
+      await fetchPaymentValidations();
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect((error as ApiClientError).safe).toBe(false);
+    }
+  });
+
+  it("defaults to false on the two synthetic ApiClientError sites that build no body at all", async () => {
+    // enrollStudent's own `new ApiClientError("...", 502)` (api.ts) never
+    // reads a response body — there is nothing for a backend to have marked.
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ enrolled: true, unexpected: "unsafe field" }, { status: 201 }),
+    );
+
+    try {
+      await enrollStudent({
+        alumno: { nombres: "Ana", apellidos: "Pérez", cedula: "1712345678", fechaNacimiento: "2000-01-15", telefono: "0991234567" },
+        credencialesAlumno: { correo: "ana@example.com", contrasenia: "password8" },
+        fichaMedica: { tipoSangre: "O_POSITIVO", condicionesSalud: "", alergias: "", contactoEmergencia: "María", telefonoEmergencia: "0997654321" },
+      });
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect((error as ApiClientError).safe).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Header merging
 // ---------------------------------------------------------------------------
 
@@ -348,7 +413,7 @@ describe("timeout / abort", () => {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).name).toBe("TimeoutError");
       expect(toUserMessage(error, "No se pudo cargar la lista.")).toBe(
-        "La operación tardó demasiado. Intente nuevamente.",
+        TIMED_OUT_TEXT,
       );
     } finally {
       vi.useRealTimers();
@@ -418,7 +483,7 @@ describe("timeout / abort", () => {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).name).toBe("TimeoutError");
       expect(toUserMessage(error, "No se pudo generar el PDF del reporte.")).toBe(
-        "La operación tardó demasiado. Intente nuevamente.",
+        TIMED_OUT_TEXT,
       );
     } finally {
       vi.useRealTimers();
