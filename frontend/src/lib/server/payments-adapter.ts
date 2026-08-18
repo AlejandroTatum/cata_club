@@ -87,6 +87,21 @@ export interface BackendMembresia {
   montoAplicado?: string | null;
   /** Owner of the membership. Only present on `GET /membresias/` list items — used to group the bulk list by persona in `/api/members`. */
   personaId?: number;
+  /**
+   * `MembresiaResponseDTO.es_gratuidad_familiar` (issue #400, slice 4c-a) —
+   * the AUTHORITATIVE gratuity signal. A zero `montoAplicado` is NOT the
+   * same thing: the backend's anomaly inventory
+   * (`scripts/inventario_anomalias_membresias.py`) deliberately tracks a
+   * zero price with this flag false as an "unexplained zero", distinct from
+   * gratuity-coherent (flag true) and gratuity-incoherent (flag true,
+   * nonzero) — nothing at the DB level enforces the pairing.
+   *
+   * Optional and normalized to `false` at each adapter boundary that builds
+   * its own view type (never left `undefined`) so an older backend that
+   * omits this field, or a hand-built test fixture, still type-checks and
+   * behaves as "no gratuity" instead of throwing.
+   */
+  esGratuidadFamiliar?: boolean;
 }
 
 export interface BackendTipoMembresia {

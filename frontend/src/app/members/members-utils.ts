@@ -59,6 +59,15 @@ export interface MemberStudentSummary {
     /** Backend `Membresia.id` — surfaced here so the admin can register
      *  a new payment (renewal) against the right membership. */
     id: number;
+    /**
+     * `Membresia.es_gratuidad_familiar` (issue #400, slice 4c-a) — plumbing
+     * only, not yet read by rendering. The authoritative gratuity signal;
+     * `monto === 0` alone is NOT gratuity (see `BackendMembresia`'s doc
+     * comment in payments-adapter.ts). Optional so the ~existing hand-built
+     * fixtures across the admin test suite keep type-checking; the adapter
+     * normalizes it to `false` when the backend omits it.
+     */
+    esGratuidadFamiliar?: boolean;
   } | null;
   ultimoPago: {
     estado: PaymentStatus;

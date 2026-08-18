@@ -80,6 +80,16 @@ class MembresiaResponseDTO(ResponseBase, BaseModel):
     fecha_activacion: datetime
     persona_id: int
     tipo_membresia_id: int
+    # Issue #400 (slice 4c-a): expone el flag ya persistido (`Membresia.
+    # es_gratuidad_familiar`, ver `_aplicar_regla_familiar_si_corresponde`) sin
+    # cambiar nada de lo que se persiste. El frontend hoy INFIERE gratuidad de
+    # `monto_aplicado == 0`, y una próxima rebanada deja de poner ese monto en
+    # cero -- si el flag no llega ANTES, esas pantallas se rompen en silencio.
+    # Es la señal autorizada de gratuidad; un precio en cero NO lo es por sí
+    # solo (`scripts/inventario_anomalias_membresias.py` distingue "cero
+    # coherente" de "cero sin explicar" -- nada en la base obliga que ambos
+    # coincidan).
+    es_gratuidad_familiar: bool
 
 
 class MembresiaEstadisticasResponseDTO(ResponseBase, BaseModel):
@@ -214,6 +224,12 @@ class DeudaMembresiaResponseDTO(ResponseBase, BaseModel):
     meses_adeudados: int = Field(..., examples=[4])
     ultima_cobertura_fin: Optional[date] = Field(default=None, examples=["2026-03-31"])
     monto_mensual: Decimal = Field(..., examples=["30.00"])
+    # Issue #400 (slice 4c-a): mismo motivo que en `MembresiaResponseDTO` --
+    # el frontend infiere gratuidad de un precio en cero, y esta vista NO es
+    # ORM pass-through (`PagoServicio.obtener_deuda` arma un dict a mano), así
+    # que hay que agregar la clave ahí también o el campo llega None/ausente
+    # aunque el modelo lo tenga.
+    es_gratuidad_familiar: bool = Field(..., examples=[False])
 
 
 class RegularizacionDeudaDTO(BaseModel):

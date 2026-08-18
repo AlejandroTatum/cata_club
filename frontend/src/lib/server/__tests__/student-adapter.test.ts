@@ -9,6 +9,8 @@ import {
   buildRecentSessions,
   buildStudentProfileView,
   buildMembershipPlans,
+  buildMembershipView,
+  type BackendMembresiaPropia,
   type BackendTipoMembresiaCatalogo,
 } from "../student-adapter";
 import type { BackendAsistencia, BackendHorario } from "../attendance-adapter";
@@ -135,5 +137,32 @@ describe("buildMembershipPlans", () => {
 
   it("returns an empty array for an empty catalog", () => {
     expect(buildMembershipPlans([])).toEqual([]);
+  });
+});
+
+// Issue #400 (slice 4c-a): plumbing-only — `esGratuidadFamiliar` must survive
+// the translation from `BackendMembresiaPropia` and default to `false` when
+// the backend omits it, so an older backend (or a fixture missing the field)
+// never leaves the view's field `undefined`.
+describe("buildMembershipView", () => {
+  const mem: BackendMembresiaPropia = {
+    id: 4,
+    estado: "ACTIVA",
+    personaId: 9,
+    montoAplicado: "0.00",
+    tipoMembresiaId: 1,
+  };
+  const tiposById = new Map<number, BackendTipoMembresiaCatalogo>([
+    [1, { id: 1, categoria: "Mensual Adultos", precio: "35.00", modalidad: "MENSUAL" }],
+  ]);
+
+  it("passes esGratuidadFamiliar through when the backend membership is flagged", () => {
+    const view = buildMembershipView({ ...mem, esGratuidadFamiliar: true }, tiposById);
+    expect(view.esGratuidadFamiliar).toBe(true);
+  });
+
+  it("defaults esGratuidadFamiliar to false when the backend omits it", () => {
+    const view = buildMembershipView(mem, tiposById);
+    expect(view.esGratuidadFamiliar).toBe(false);
   });
 });

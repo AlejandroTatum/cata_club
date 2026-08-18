@@ -558,6 +558,10 @@ class PagoServicio:
             "meses_adeudados": self.calcular_meses_adeudados(membresia_id),
             "ultima_cobertura_fin": ultimo_fin,
             "monto_mensual": membresia.monto_aplicado,
+            # Issue #400 (slice 4c-a): este dict alimenta DeudaMembresiaResponseDTO,
+            # que NO es ORM pass-through -- sin esta clave el campo llegaría
+            # ausente aunque la columna exista en `membresia`.
+            "es_gratuidad_familiar": membresia.es_gratuidad_familiar,
         }
 
     def regularizar_deuda(self, membresia_id: int, datos: RegularizacionDeudaDTO, persona_id_admin: int) -> Pago:

@@ -108,6 +108,21 @@ def test_get_deuda_sin_rol_admin_da_403(client_sin_permisos, db_session, monkeyp
     assert resp.status_code == 403
 
 
+def test_get_deuda_incluye_es_gratuidad_familiar(client, db_session, monkeypatch):
+    """`DeudaMembresiaResponseDTO` no es ORM pass-through (issue #400, slice
+    4c-a): `PagoServicio.obtener_deuda` arma un dict a mano, así que el flag
+    necesita su propia cobertura además de la de `MembresiaResponseDTO`."""
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    membresia.es_gratuidad_familiar = True
+    db_session.flush()
+    _crear_pago_aprobado(db_session, persona, membresia, date(2026, 3, 31))
+
+    resp = client.get(f"/api/v1/membresias/{membresia.id}/deuda")
+    assert resp.status_code == 200
+    assert resp.json()["esGratuidadFamiliar"] is True
+
+
 # --- Regularización -----------------------------------------------------------
 
 def test_regularizacion_total(client, db_session, monkeypatch):
