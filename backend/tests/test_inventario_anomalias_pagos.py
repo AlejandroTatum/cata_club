@@ -30,7 +30,8 @@ from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_t
 
 
 def _pago(sesion, persona, membresia, inicio, fin, *,
-          estado=EstadoPago.APROBADO, monto=Decimal("30.00"), tipo_pago=TipoPago.EFECTIVO):
+          estado=EstadoPago.APROBADO, monto=Decimal("30.00"), tipo_pago=TipoPago.EFECTIVO,
+          descuento_valor_aplicado=None):
     """`crear_pago_orm` fija `fecha_inicio`/`fecha_fin` a un período propio y
     no las parametriza; acá la cobertura ES lo que se prueba, así que se
     ajustan después del `add` y se flushea. Envolver la fábrica compartida
@@ -38,6 +39,7 @@ def _pago(sesion, persona, membresia, inicio, fin, *,
     pago = Pago(
         monto=monto, estado_pago=estado, tipo_pago=tipo_pago,
         fecha_inicio=inicio, fecha_fin=fin,
+        descuento_valor_aplicado=descuento_valor_aplicado,
         persona_id=persona.id, membresia_id=membresia.id,
     )
     sesion.add(pago)
@@ -184,6 +186,30 @@ def test_no_derivables_no_flaggea_un_multiplo_exacto(db_session, escenario):
     assert detectar_meses_no_derivables(db_session) == []
 
 
+def test_no_derivables_no_flaggea_un_pago_con_descuento(db_session, escenario):
+    """`pago.monto` guarda el monto FINAL, ya descontado, mientras los meses
+    se derivan del BASE. Contar sobre `monto` marcaría como anomalía todo
+    pago con descuento -- la membresía anual se vende justamente así. El base
+    se reconstruye sumando el valor congelado del descuento."""
+    persona, membresia = escenario
+    _pago(db_session, persona, membresia, date(2026, 1, 1), date(2026, 2, 1),
+          monto=Decimal("27.00"), descuento_valor_aplicado=Decimal("3.00"))
+
+    assert detectar_meses_no_derivables(db_session) == []
+
+
+def test_incompatible_deriva_los_meses_del_monto_base_no_del_final(db_session, escenario):
+    """Doce meses con descuento anual: base 360 sobre tarifa 30 son 12 meses,
+    y la cobertura de un ano esta bien. Si se contara sobre el monto final
+    (324) no seria multiplo y el pago ni se evaluaria."""
+    persona, membresia = escenario
+    _pago(db_session, persona, membresia, date(2026, 1, 1), date(2027, 1, 1),
+          monto=Decimal("324.00"), descuento_valor_aplicado=Decimal("36.00"))
+
+    assert detectar_cobertura_incompatible(db_session) == []
+    assert detectar_meses_no_derivables(db_session) == []
+
+
 def test_incompatible_no_evalua_un_pago_sin_meses_derivables(db_session, escenario):
     """A3b y A5 no se solapan: si los meses no se pueden derivar, la cobertura
     no es 'incompatible', es indecidible -- y eso lo dice A5."""
@@ -199,7 +225,7 @@ def test_incompatible_no_evalua_un_pago_sin_meses_derivables(db_session, escenar
 
 _CLAVES_PERMITIDAS = {
     "membresia_id", "pago_id", "pago_id_a", "pago_id_b", "estado_pago", "tipo_pago",
-    "monto", "precio_mensual", "meses_derivados", "motivo",
+    "monto", "monto_base", "precio_mensual", "meses_derivados", "motivo",
     "fecha_inicio", "fecha_fin", "fecha_fin_esperada",
     "fecha_inicio_a", "fecha_fin_a", "fecha_inicio_b", "fecha_fin_b",
 }

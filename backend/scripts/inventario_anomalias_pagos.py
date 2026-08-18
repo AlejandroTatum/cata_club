@@ -68,13 +68,29 @@ def _pagos_con_membresia(session: Session, *, solo_aprobados: bool) -> list:
         return consulta.all()
 
 
-def _meses_derivados(monto: Decimal, precio_mensual: Decimal) -> int | None:
-    """Meses que el monto compra, o `None` si no se pueden derivar. El cero
-    se chequea ANTES del módulo: `monto % 0` revienta, y un precio en cero es
-    justamente una de las anomalías que este reporte busca."""
-    if precio_mensual <= 0 or monto % precio_mensual != 0:
+def _monto_base(pago: Pago) -> Decimal:
+    """Monto ANTES del descuento, que es sobre el que se cuentan los meses.
+
+    `pago.monto` NO es el monto base: `registrar_pago` guarda ahí el monto
+    FINAL, ya descontado (`pago.monto = monto_final`), mientras deriva los
+    meses de cobertura del monto base, antes de congelar el descuento. Contar
+    meses sobre `pago.monto` marcaría como anomalía todo pago con descuento
+    -- la membresía anual se vende justamente así ($300 -> $270).
+
+    La base se reconstruye sin pérdida porque el valor descontado quedó
+    congelado en su propia columna: `monto_final = base - valor_aplicado`.
+    Que haya que reconstruirla en vez de leerla ES el problema que #400
+    resuelve más adelante agregando una columna de monto base explícita."""
+    return pago.monto + (pago.descuento_valor_aplicado or Decimal("0"))
+
+
+def _meses_derivados(monto_base: Decimal, precio_mensual: Decimal) -> int | None:
+    """Meses que el monto base compra, o `None` si no se pueden derivar. El
+    cero se chequea ANTES del módulo: `monto % 0` revienta, y un precio en
+    cero es justamente una de las anomalías que este reporte busca."""
+    if precio_mensual <= 0 or monto_base % precio_mensual != 0:
         return None
-    return int(monto // precio_mensual)
+    return int(monto_base // precio_mensual)
 
 
 def detectar_coberturas_superpuestas(session: Session) -> list[dict]:
@@ -122,7 +138,8 @@ def detectar_cobertura_incompatible(session: Session) -> list[dict]:
     for pago, membresia in _pagos_con_membresia(session, solo_aprobados=True):
         if pago.tipo_pago == TipoPago.REGULARIZACION:
             continue
-        meses = _meses_derivados(pago.monto, membresia.monto_aplicado)
+        base = _monto_base(pago)
+        meses = _meses_derivados(base, membresia.monto_aplicado)
         if meses is None:
             continue
         esperada = _sumar_meses(pago.fecha_inicio, meses)
@@ -130,7 +147,8 @@ def detectar_cobertura_incompatible(session: Session) -> list[dict]:
             continue
         filas.append({
             "pago_id": pago.id, "membresia_id": pago.membresia_id,
-            "monto": pago.monto, "precio_mensual": membresia.monto_aplicado,
+            "monto": pago.monto, "monto_base": base,
+            "precio_mensual": membresia.monto_aplicado,
             "meses_derivados": meses, "fecha_inicio": pago.fecha_inicio,
             "fecha_fin": pago.fecha_fin, "fecha_fin_esperada": esperada,
         })
@@ -146,16 +164,18 @@ def detectar_meses_no_derivables(session: Session) -> list[dict]:
     filas = []
     for pago, membresia in _pagos_con_membresia(session, solo_aprobados=False):
         precio = membresia.monto_aplicado
+        base = _monto_base(pago)
         if precio <= 0:
             motivo = "precio_mensual_cero"
-        elif pago.monto % precio != 0:
+        elif base % precio != 0:
             motivo = "monto_no_multiplo"
         else:
             continue
         filas.append({
             "pago_id": pago.id, "membresia_id": pago.membresia_id,
             "estado_pago": pago.estado_pago.value, "tipo_pago": pago.tipo_pago.value,
-            "monto": pago.monto, "precio_mensual": precio, "motivo": motivo,
+            "monto": pago.monto, "monto_base": base,
+            "precio_mensual": precio, "motivo": motivo,
         })
     filas.sort(key=lambda f: f["pago_id"])
     return filas
@@ -203,7 +223,7 @@ def formatear_texto(inventario: dict) -> str:
     a3b = inventario["a3b_cobertura_incompatible"]
     lineas.append(f"A3b - Cobertura incompatible con los meses pagados: {a3b['cantidad']}")
     lineas += [
-        f"  pago={f['pago_id']} membresia={f['membresia_id']} monto={f['monto']} "
+        f"  pago={f['pago_id']} membresia={f['membresia_id']} base={f['monto_base']} "
         f"precio={f['precio_mensual']} meses={f['meses_derivados']} "
         f"fin={f['fecha_fin']} esperado={f['fecha_fin_esperada']}"
         for f in a3b["filas"]
@@ -213,7 +233,7 @@ def formatear_texto(inventario: dict) -> str:
     lineas.append(f"A5 - Meses no derivables (falta snapshot): {a5['cantidad']}")
     lineas += [
         f"  pago={f['pago_id']} membresia={f['membresia_id']} estado={f['estado_pago']} "
-        f"monto={f['monto']} precio={f['precio_mensual']} motivo={f['motivo']}"
+        f"base={f['monto_base']} precio={f['precio_mensual']} motivo={f['motivo']}"
         for f in a5["filas"]
     ]
 
