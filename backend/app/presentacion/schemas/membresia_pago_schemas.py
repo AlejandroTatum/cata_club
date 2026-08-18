@@ -88,17 +88,32 @@ class MembresiaEstadisticasResponseDTO(ResponseBase, BaseModel):
 
 # --- Pago ---
 class PagoCreateDTO(BaseModel):
+    """Registrar un pago dice CUÁNTO y CÓMO, nunca CON QUÉ DESCUENTO
+    (issue #398/#400).
+
+    `descuento_ids` se quitó a propósito: lo enviaba el cliente (antes
+    admin-only) y el servicio resolvía ESE descuento contra el catálogo. Ahora
+    el backend resuelve la asignación VIGENTE (`AsignacionDescuento`) de
+    `persona_id` y congela su valor solo -- ver
+    `PagoServicio._congelar_beneficio_activo`. Un usuario nunca puede enviar
+    un `descuento_id` para concedérselo (issue #398, "seguridad e
+    invariantes"): la única fuente de un beneficio es la asignación que un
+    ADMINISTRADOR haya creado por separado.
+
+    Igual que `monto_aplicado` en `MembresiaCreateDTO`, un `descuento_ids` que
+    llegue igual se IGNORA en silencio (comportamiento por defecto de
+    Pydantic para campos de más), no se rechaza -- para no romper a un
+    cliente viejo durante la cadena. El candado de
+    `tests/test_beneficio_en_pago.py` demuestra que ignorar significa
+    ignorar: enviarlo (con un id válido, inválido, repetido o de otra
+    persona) nunca cambia el descuento que termina aplicado.
+
+    El `monto` de arriba sigue siendo el monto BASE (sin descontar): el
+    servicio congela el valor del beneficio y calcula el monto final."""
     monto: Decimal = Field(..., gt=0)
     tipo_pago: TipoPago
     persona_id: int
     membresia_id: int
-    # Issue #11: descuento del catálogo a aplicar en ESTE registro (solo un
-    # ADMINISTRADOR puede enviarlo; ver `PagoServicio.registrar_pago`). El
-    # `monto` de arriba es el monto BASE (sin descontar): el servicio resuelve
-    # el valor vigente, lo congela y calcula el monto final. Un pago lleva UN
-    # solo descuento -- la lista existe por compatibilidad del contrato HTTP,
-    # pero el servicio rechaza con 400 cualquier envío de más de un id.
-    descuento_ids: list[int] = Field(default_factory=list)
 
     # `fecha_inicio`/`fecha_fin` NO se aceptan del cliente (fix período de
     # cobertura, PAG-5): el endpoint permitía mandar CUALQUIER rango -- un

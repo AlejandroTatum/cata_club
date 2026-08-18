@@ -57,6 +57,20 @@ def _crear_membresia(client, persona_id, tipo_id, monto_aplicado="35.00"):
     ).json()
 
 
+def _asignar_beneficio(client, persona_id, descuento_id):
+    """POST /personas/{id}/beneficio (issue #398): reemplaza al viejo
+    `descuento_ids` del POST de pago -- `test_cobertura_se_calcula_sobre_
+    el_monto_base_no_el_descontado` de más abajo lo necesita para seguir
+    ejercitando el mismo escenario (membresía anual con descuento) bajo el
+    contrato nuevo."""
+    resp = client.post(
+        f"/api/v1/personas/{persona_id}/beneficio",
+        json={"descuento_id": descuento_id},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 def _registrar_pago(client, persona_id, membresia_id, monto, *, descuento_ids=None,
                      fecha_inicio=None, fecha_fin=None):
     payload = {
@@ -64,6 +78,11 @@ def _registrar_pago(client, persona_id, membresia_id, monto, *, descuento_ids=No
         "persona_id": persona_id, "membresia_id": membresia_id,
     }
     if descuento_ids is not None:
+        # Issue #398/#400: `PagoCreateDTO` ya no tiene este campo -- lo que
+        # sigue mandando acá es exactamente el payload de un cliente
+        # desactualizado, y el backend debe ignorarlo (Pydantic descarta
+        # campos de más). Ningún test de este archivo depende ya de que
+        # tenga efecto.
         payload["descuento_ids"] = descuento_ids
     # `fecha_inicio`/`fecha_fin`, cuando se mandan, son EXACTAMENTE el
     # payload que un cliente desactualizado (o un curl como el de la
@@ -191,12 +210,13 @@ def test_cobertura_se_calcula_sobre_el_monto_base_no_el_descontado(client, monke
         "/api/v1/descuentos/",
         json={"nombre": "Anual", "porcentaje": "10", "activo": True},
     ).json()
+    # Issue #398/#400: el descuento ya no se envía en el POST del pago -- se
+    # ASIGNA como beneficio vigente de la persona, y `registrar_pago` lo
+    # resuelve solo.
+    _asignar_beneficio(client, persona["id"], descuento["id"])
 
-    resp = _registrar_pago(
-        client, persona["id"], membresia["id"], "300.00",
-        descuento_ids=[descuento["id"]],
-    )
-    assert resp.status_code == 201
+    resp = _registrar_pago(client, persona["id"], membresia["id"], "300.00")
+    assert resp.status_code == 201, resp.text
     pago = resp.json()
 
     assert Decimal(str(pago["monto"])) == Decimal("270.00")
