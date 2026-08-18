@@ -1,4 +1,5 @@
 .PHONY: help dev dev-backend dev-frontend test test-backend test-frontend test-compose \
+       test-qa-guard \
        lint lint-backend lint-frontend typecheck build build-frontend \
        install install-backend install-frontend \
        docker-up docker-down docker-build \
@@ -40,7 +41,7 @@ install-frontend: ## Install frontend dependencies (pnpm)
 # "Compose config tests" del job `backend` en .github/workflows/ci.yml), así
 # que una corrida local reproduce la señal de CI y no descubre el fallo
 # recién en el PR. No necesita Postgres, solo Docker Compose.
-test: test-backend test-compose test-frontend ## Run all tests
+test: test-backend test-compose test-qa-guard test-frontend ## Run all tests
 
 # Requiere `db-test` corriendo (`docker compose --profile test up -d
 # db-test`, ver docker-compose.yml): la suite ya no tiene una rama SQLite de
@@ -64,6 +65,12 @@ test-frontend: ## Run frontend unit tests (vitest)
 # PR-14) -- reutiliza el pytest ya instalado en el venv del backend.
 test-compose: ## Validate production compose layering (no build/ports leak into prod)
 	cd backend && uv run pytest ../tests/test_docker_compose_config.py -v
+
+# Mismo patrón que `test-compose`: stdlib puro, sin Postgres ni
+# TEST_DATABASE_URL, reutiliza el venv de backend ya instalado solo por
+# pytest (issue #350, scripts/qa_verify_build_sha.py).
+test-qa-guard: ## Test the qa-up build-SHA guard script
+	cd backend && uv run pytest ../tests/test_qa_verify_build_sha.py -v
 
 # ─── Linting ────────────────────────────────────────────────────────────────
 lint: lint-backend lint-frontend ## Lint both projects
@@ -149,11 +156,23 @@ QA_SERVICIOS = db redis mailpit backend frontend
 # `--wait` bloquea hasta que los healthchecks pasan, así que cuando el target
 # vuelve el stack ya responde: `scripts/entrypoint.sh` corrió
 # `alembic upgrade head` y `seed_dev_base.py` (AMBIENTE=development).
+#
+# issue #350: hasta acá, "el objetivo es mirar el código ACTUAL" (arriba) era
+# una intención sin verificación -- nada exponía qué commit terminó sirviendo
+# el contenedor, ni chequeaba que fuera el mismo que HEAD. `BUILD_SHA` viaja
+# como build-arg (ver frontend/Dockerfile) y queda expuesto en runtime por
+# `/api/health`; `scripts/qa_verify_build_sha.py` lo compara contra
+# origin/main después del seed y corta el target (sin `|| true`) si el
+# contenedor construido no refleja el código que se acaba de fetchear.
 qa-up: ## Levantar el entorno de QA desde cero: build + base sembrada + frontend
 	@echo "Levantando entorno de QA (proyecto cataclub-qa)..."
-	$(QA_ENV) $(QA_COMPOSE) up -d --build --wait $(QA_SERVICIOS)
+	git fetch origin main --quiet
+	BUILD_SHA=$$(git rev-parse HEAD) $(QA_ENV) $(QA_COMPOSE) up -d --build --wait $(QA_SERVICIOS)
 	@echo "Sembrando el dataset grande (seed_dev_bulk.py)..."
 	$(QA_ENV) $(QA_COMPOSE) exec -T backend uv run python scripts/seed_dev_bulk.py
+	@echo ""
+	@echo "Verificando el SHA servido contra origin/main (issue #350)..."
+	python3 scripts/qa_verify_build_sha.py --served-url http://localhost:3000/api/health
 	@echo ""
 	@echo "  Frontend:  http://localhost:3000"
 	@echo "  Backend:   http://localhost:8000/docs"

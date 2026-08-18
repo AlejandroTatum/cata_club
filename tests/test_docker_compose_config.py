@@ -620,6 +620,24 @@ def test_override_de_desarrollo_sigue_construyendo_las_imagenes_localmente():
         )
 
 
+def test_el_frontend_recibe_build_sha_como_build_arg():
+    """issue #350: `make qa-up` exporta `BUILD_SHA` con el HEAD local antes de
+    invocar Compose, y `frontend/Dockerfile` lo lee como build-arg (no
+    `NEXT_PUBLIC_*`: queda server-only, ver ese archivo) para exponerlo en
+    `/api/health`. Sin esta clave en `build.args`, el valor que exporta
+    `qa-up` nunca llegaría a la imagen y el guardia
+    (`scripts/qa_verify_build_sha.py`) siempre vería `unknown`."""
+    config = _renderizar("docker-compose.yml", "docker-compose.override.yml")
+    args = config["services"]["frontend"]["build"].get("args", {})
+    assert "BUILD_SHA" in args, (
+        "'frontend' perdió el build-arg BUILD_SHA en el override de desarrollo"
+    )
+    assert args["BUILD_SHA"] == "unknown", (
+        f"sin BUILD_SHA exportado por el entorno, el default esperado es "
+        f"'unknown' y se encontró {args['BUILD_SHA']!r}"
+    )
+
+
 # ─── Overlay de QA (`docker-compose.qa.yml`, ver `make qa-up`) ──────────────
 
 _NOMBRE_PROYECTO_QA = "cataclub-qa"
