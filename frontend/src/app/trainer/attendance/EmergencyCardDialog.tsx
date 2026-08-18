@@ -167,17 +167,30 @@ export default function EmergencyCardDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-cata-black/40 px-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      {/*
+       * El fondo es HERMANO del panel, no su contenedor. Envolviéndolo hacía
+       * falta un `stopPropagation` en el panel para que tocar un teléfono de
+       * emergencia no cerrara la tarjeta encima; como hermano, un click
+       * adentro no tiene por dónde llegar hasta acá y el panel se queda sin
+       * handler de click — que es lo que Sonar marcaba (S1082) apenas la línea
+       * entraba como código nuevo.
+       *
+       * Va `aria-hidden` porque no es contenido: es la superficie que apaga el
+       * fondo. Cerrar sin mouse ya tiene dos caminos, el botón Cerrar y Escape.
+       */}
+      <div
+        aria-hidden="true"
+        data-testid="emergency-card-backdrop"
+        onClick={onClose}
+        className="absolute inset-0 bg-cata-black/40"
+      />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="emergency-card-title"
-        onClick={(event) => event.stopPropagation()}
-        className="card w-full max-w-md overflow-hidden p-0"
+        className="card relative w-full max-w-md overflow-hidden p-0"
       >
         <div className="flex items-center gap-3 border-b border-line bg-state-bad-bg px-5 py-4">
           <span

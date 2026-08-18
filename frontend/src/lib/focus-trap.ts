@@ -86,8 +86,9 @@ export function useModalFocusTrap({
       const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
       if (focusable.length === 0) return;
 
-      const active = document.activeElement;
-      const currentIndex = focusable.findIndex((el) => el === active);
+      const active =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const currentIndex = active ? focusable.indexOf(active) : -1;
       if (currentIndex === -1) {
         // Focus is not on anything in the cycle — pull it to whichever end the
         // user was heading towards.

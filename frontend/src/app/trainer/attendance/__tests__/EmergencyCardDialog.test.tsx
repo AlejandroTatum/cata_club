@@ -132,10 +132,11 @@ describe("EmergencyCardDialog", () => {
   });
 
   /*
-   * El cierre por fondo y su contracara viajan juntos a propósito. El panel
-   * corta la propagación del click, y esa línea es lo único que evita que
-   * tocar un teléfono de emergencia para copiarlo cierre la tarjeta encima.
-   * Sin la segunda prueba, borrar el `stopPropagation` deja la primera verde.
+   * El cierre por fondo y su contracara viajan juntos a propósito: tocar un
+   * teléfono de emergencia para copiarlo no puede cerrar la tarjeta encima.
+   * El fondo es hermano del panel, no su contenedor, así que un click adentro
+   * no tiene por dónde llegar hasta él — pero eso es una propiedad del árbol,
+   * y el árbol se puede cambiar sin querer. Por eso se afirma.
    */
   it("cierra al tocar el fondo, y NO al tocar dentro del panel", async () => {
     vi.mocked(fetchFichaEmergencia).mockResolvedValue(fichaCompleta);
@@ -150,9 +151,7 @@ describe("EmergencyCardDialog", () => {
     fireEvent.click(screen.getByText("O_POSITIVO"));
     expect(onClose).not.toHaveBeenCalled();
 
-    const fondo = screen.getByRole("dialog").parentElement;
-    expect(fondo).not.toBeNull();
-    fireEvent.click(fondo!);
+    fireEvent.click(screen.getByTestId("emergency-card-backdrop"));
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
