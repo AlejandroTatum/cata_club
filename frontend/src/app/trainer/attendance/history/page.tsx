@@ -247,9 +247,19 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                   <Table>
                     <TableHead>
                       <tr>
-                        <TableHeaderCell>Sesión</TableHeaderCell>
+                        {/*
+                          Densidad: cada columna pide el ancho de lo que
+                          realmente lleva. "Sesión" es una fecha y una etiqueta
+                          de horario — mide siempre lo mismo, así que `w-px`
+                          (el idioma de "encogé hasta el contenido" en una tabla
+                          al 100%) le da eso y ni un píxel más. Lo que sobra se
+                          lo lleva "Resultado", que es la única columna donde el
+                          ancho es legibilidad y no aire: ahí vive la barra de
+                          composición.
+                        */}
+                        <TableHeaderCell className="w-px">Sesión</TableHeaderCell>
                         <TableHeaderCell>Registró</TableHeaderCell>
-                        <TableHeaderCell>Resultado</TableHeaderCell>
+                        <TableHeaderCell className="w-full">Resultado</TableHeaderCell>
                         {/*
                          * "Corregir" is the only action this column has ever
                          * offered, and only an admin may correct an
@@ -271,11 +281,34 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                       {visible.map((sessionRow: SessionSummary) => (
                         <TableRow key={`${sessionRow.fecha}|${sessionRow.horario}`}>
                           <TableNameCell
+                            className="w-px whitespace-nowrap"
                             name={formatDate(sessionRow.fecha)}
                             sub={sessionRow.horario}
                           />
                           <TableCell>
-                            {sessionRow.registradoPorNombre ?? "No registrado"}
+                            {/*
+                              Un nombre completo ecuatoriano son cuatro palabras
+                              y se comía el ancho de la columna de al lado. Se
+                              topa y se trunca — pero truncar no puede PERDER el
+                              dato: el `title` conserva el nombre entero, que es
+                              lo que el navegador muestra al pasar el mouse y lo
+                              que un lector de pantalla anuncia junto al texto
+                              recortado.
+
+                              El `title` solo cuelga del nombre real. "No
+                              registrado" es un marcador de posición: repetirlo
+                              en un tooltip no agrega nada que la celda no diga.
+                            */}
+                            {sessionRow.registradoPorNombre ? (
+                              <span
+                                className="block max-w-[240px] truncate"
+                                title={sessionRow.registradoPorNombre}
+                              >
+                                {sessionRow.registradoPorNombre}
+                              </span>
+                            ) : (
+                              "No registrado"
+                            )}
                           </TableCell>
                           <TableCell>
                             {/*
@@ -287,7 +320,15 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                               force every reader to memorize what each color
                               meant.
                             */}
-                            <div className="flex min-w-[220px] max-w-[420px] flex-col gap-2">
+                            {/*
+                              Sin techo: la barra mide una proporción, y una
+                              proporción de cuatro estados dibujada en 220px
+                              deja tramos de dos píxeles que no se distinguen
+                              entre sí. El mínimo sube y el máximo se va, para
+                              que la columna se quede con todo el ancho que las
+                              otras dos no reclamaron.
+                            */}
+                            <div className="flex w-full min-w-[320px] flex-col gap-2">
                               <SessionCompositionBar
                                 counts={sessionRow.counts}
                                 total={sessionRow.total}

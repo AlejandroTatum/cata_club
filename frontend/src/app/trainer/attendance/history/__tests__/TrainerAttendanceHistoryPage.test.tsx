@@ -479,6 +479,33 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(classes).toContain("grid");
   });
 
+  /*
+   * Densidad: "Registró" es una columna de ancho acotado.
+   *
+   * Un nombre completo ecuatoriano lleva cuatro palabras, y dejándolo crecer
+   * libre se comía el ancho que necesita "Resultado" para que la barra de
+   * composición se lea. Se topa y se trunca — pero truncar no puede PERDER el
+   * dato: el valor entero sigue disponible en el `title`, que es lo que el
+   * navegador muestra al pasar el mouse y lo que un lector de pantalla anuncia
+   * junto al texto recortado.
+   */
+  it("topa y trunca «Registró», sin perder el nombre completo", async () => {
+    const nombreLargo = "María Fernanda Villavicencio Zambrano";
+    mockFetchAttendanceRecords.mockResolvedValue([
+      record("present", "Sofia Vera", "2026-07-20", "Lunes 15:00 — 16:00", 12, nombreLargo),
+    ]);
+
+    render(<TrainerAttendanceHistoryPage />);
+
+    const rows = await screen.findAllByRole("row");
+    const celda = within(rows[1]).getAllByRole("cell")[1];
+    const valor = within(celda).getByTitle(nombreLargo);
+    expect(valor).toHaveTextContent(nombreLargo);
+    expect(valor.className).toContain("truncate");
+    // El tope tiene que existir: `truncate` sin ancho máximo no recorta nada.
+    expect(valor.className).toMatch(/max-w-\[/);
+  });
+
   it("leads back to Mi día", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
@@ -555,3 +582,4 @@ describe("TrainerAttendanceHistoryPage — el conteo de una sesión sale de su p
     expect(screen.getByText("15 presentes")).toBeInTheDocument();
   });
 });
+
