@@ -20,23 +20,31 @@ import subprocess
 import sys
 import urllib.request
 from collections.abc import Callable
-from urllib.error import URLError
 from urllib.parse import urlparse
+
+ALLOWED_SERVED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def validate_served_url(url: str) -> None:
-    """Raise RuntimeError if `url` isn't a safe absolute http(s) URL.
+    """Raise RuntimeError if `url` isn't a safe absolute http(s) URL pointing
+    at the local QA stack.
 
     Guards `fetch_served_sha` against S5144 (SSRF): the URL comes from an
     unvalidated CLI argument, so its scheme and host must be checked before
-    it's ever passed to `urlopen`."""
+    it's ever passed to `urlopen`. This script only ever needs to talk to the
+    locally-built `make qa-up` frontend container, so the host is restricted
+    to an explicit loopback allowlist rather than accepted unconditionally —
+    a scheme check alone doesn't bound *where* the request can go."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise RuntimeError(
             f"--served-url inválida ({url!r}): el esquema debe ser http o https"
         )
-    if not parsed.netloc:
-        raise RuntimeError(f"--served-url inválida ({url!r}): falta el host")
+    if parsed.hostname not in ALLOWED_SERVED_HOSTS:
+        raise RuntimeError(
+            f"--served-url inválida ({url!r}): el host debe ser localhost/127.0.0.1/::1 "
+            "(este guard solo verifica el entorno de QA local, no hosts arbitrarios)"
+        )
 
 
 def fetch_served_sha(url: str) -> str:
@@ -48,7 +56,7 @@ def fetch_served_sha(url: str) -> str:
     try:
         with urllib.request.urlopen(url, timeout=10) as response:  # noqa: S310
             payload = response.read()
-    except (URLError, OSError) as exc:
+    except OSError as exc:
         raise RuntimeError(f"no se pudo consultar {url}: {exc}") from exc
 
     try:

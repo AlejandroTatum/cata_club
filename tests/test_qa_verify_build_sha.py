@@ -182,6 +182,33 @@ def test_fetch_served_sha_sin_esquema_levanta_error_sin_llamar_a_urlopen():
     mock_urlopen.assert_not_called()
 
 
+def test_fetch_served_sha_con_host_no_loopback_levanta_error_sin_llamar_a_urlopen():
+    """S5144: este guard solo habla con el frontend de QA local levantado por
+    `make qa-up`, así que un host que no sea localhost/127.0.0.1/::1 —por
+    ejemplo un objetivo típico de SSRF como el metadata endpoint interno de
+    una nube— debe rechazarse antes de tocar la red, aunque el esquema y el
+    resto de la URL sean válidos."""
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        try:
+            guard.fetch_served_sha("http://169.254.169.254/latest/meta-data/")
+        except RuntimeError as exc:
+            assert "169.254.169.254" in str(exc)
+        else:
+            raise AssertionError("se esperaba RuntimeError ante un host no loopback")
+    mock_urlopen.assert_not_called()
+
+
+def test_fetch_served_sha_con_host_arbitrario_levanta_error_sin_llamar_a_urlopen():
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        try:
+            guard.fetch_served_sha("http://example.com/api/health")
+        except RuntimeError as exc:
+            assert "example.com" in str(exc)
+        else:
+            raise AssertionError("se esperaba RuntimeError ante un host arbitrario")
+    mock_urlopen.assert_not_called()
+
+
 class _RespuestaFalsa:
     """Doble mínimo de la respuesta de `urllib.request.urlopen` como context manager."""
 
