@@ -52,6 +52,9 @@ export type { PaginationProps } from "./Pagination";
 export { default as PageHeader } from "./PageHeader";
 export type { PageHeaderProps } from "./PageHeader";
 
+export { default as ResponsiveListTable } from "./ResponsiveListTable";
+export type { ResponsiveListTableProps } from "./ResponsiveListTable";
+
 export { default as SearchInput } from "./SearchInput";
 export type { SearchInputProps } from "./SearchInput";
 

@@ -34,14 +34,12 @@ import {
   IdentityCell,
   LoadingState,
   Pagination,
+  ResponsiveListTable,
   SearchInput,
   STAT_GRID,
   StatCard,
   StatTrack,
-  Table,
-  TableBody,
   TableCell,
-  TableHead,
   TableHeaderCell,
   TableRow,
 } from "@/components/ui";
@@ -1080,17 +1078,6 @@ export default function MembersPage(): React.ReactElement {
           </div>
         ) : filteredAccounts.length > 0 ? (
           <div className="card overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 text-xs text-ink-2">
-              <p role="status" aria-label="Resultados mostrados">
-                {filteredAccounts.length}{" "}
-                {filteredAccounts.length === 1 ? "resultado mostrado" : "resultados mostrados"}
-              </p>
-              {aggregateIsCapped && (
-                <p role="alert" className="max-w-md text-state-bad">
-                  La fuente devuelve hasta {MEMBERS_AGGREGATE_LIMIT} registros; este listado puede estar incompleto.
-                </p>
-              )}
-            </div>
             {/* Below `sm` the table used to hide Contacto/Estudiantes/Estado
                 /Editar behind `hidden sm:table-cell`, leaving a one-column
                 list with a second, duplicated edit button crammed under each
@@ -1100,74 +1087,83 @@ export default function MembersPage(): React.ReactElement {
                 rather than a hand-rolled `<li>` card. Divider hairlines are
                 applied directly (instead of via `DataRowList`) because this
                 list already sits inside the card's own border below — a
-                second border here would nest a box inside a box. */}
-            <ul className="divide-y divide-line sm:hidden">
-              {paginatedAccounts.map((account) => (
-                <AccountCard
-                  key={account.id}
-                  account={account}
-                  onEdit={() => toggleEditModal(account.id)}
-                />
-              ))}
-            </ul>
+                second border here would nest a box inside a box.
 
-            <div className="hidden overflow-x-auto sm:block">
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    {/* "Miembro", not "Responsable de pago" — issue #388 made
-                        the person the row's unit, not the paying root. A
-                        represented person's row holds THEIR identity, not
-                        their representative's; who pays for them is the
-                        adjacent "Representado por" column, not this one. */}
-                    <TableHeaderCell>Miembro</TableHeaderCell>
-                    <TableHeaderCell>Representado por</TableHeaderCell>
-                    <TableHeaderCell type="badge">Membresía</TableHeaderCell>
-                    {/* Named for what the column HOLDS, not for the button
-                        inside it — a column called "Editar" is a heading that
-                        reads the label of the control under it back to you.
-                        D9's rule of words also forbids a label deducible from
-                        another, and every trigger in this column already
-                        announces itself as "Editar <nombre>".
+                The mobile/desktop split itself, and the footer pager below,
+                are `ResponsiveListTable`'s shared shell — see that
+                component's doc comment for why the surrounding card and the
+                loading/empty states stayed page-owned. */}
+            <ResponsiveListTable
+              items={paginatedAccounts}
+              getKey={(account) => account.id}
+              header={
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 text-xs text-ink-2">
+                  <p role="status" aria-label="Resultados mostrados">
+                    {filteredAccounts.length}{" "}
+                    {filteredAccounts.length === 1 ? "resultado mostrado" : "resultados mostrados"}
+                  </p>
+                  {aggregateIsCapped && (
+                    <p role="alert" className="max-w-md text-state-bad">
+                      La fuente devuelve hasta {MEMBERS_AGGREGATE_LIMIT} registros; este listado puede estar
+                      incompleto.
+                    </p>
+                  )}
+                </div>
+              }
+              renderCard={(account) => (
+                <AccountCard account={account} onEdit={() => toggleEditModal(account.id)} />
+              )}
+              renderRow={(account) => (
+                <AccountRow account={account} onEdit={() => toggleEditModal(account.id)} />
+              )}
+              tableHead={
+                <TableRow>
+                  {/* "Miembro", not "Responsable de pago" — issue #388 made
+                      the person the row's unit, not the paying root. A
+                      represented person's row holds THEIR identity, not
+                      their representative's; who pays for them is the
+                      adjacent "Representado por" column, not this one. */}
+                  <TableHeaderCell>Miembro</TableHeaderCell>
+                  <TableHeaderCell>Representado por</TableHeaderCell>
+                  <TableHeaderCell type="badge">Membresía</TableHeaderCell>
+                  {/* Named for what the column HOLDS, not for the button
+                      inside it — a column called "Editar" is a heading that
+                      reads the label of the control under it back to you.
+                      D9's rule of words also forbids a label deducible from
+                      another, and every trigger in this column already
+                      announces itself as "Editar <nombre>".
 
-                        Kept off the screen rather than renamed in place: over
-                        a column of 32px triggers a printed heading is one more
-                        word to skip past, and "Acciones" tells a sighted
-                        reader nothing the buttons underneath do not. It stays
-                        in the accessibility tree because a `<th>` with no name
-                        is a column a screen reader announces as blank. */}
-                    <TableHeaderCell type="action">
-                      <span className="sr-only">Acciones</span>
-                    </TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {paginatedAccounts.map((account) => (
-                    <AccountRow
-                      key={account.id}
-                      account={account}
-                      onEdit={() => toggleEditModal(account.id)}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            {/* INSIDE the card, not after it. This pager used to be a sibling
-                of the card it paginates, so it floated on the canvas while
-                every other list in the product carried its pager welded to the
-                foot of the card. The `footer` variant owns that placement now,
-                so the move is a nesting change and no classes travel with it. */}
-            {totalPages > 1 && (
-              <Pagination
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                totalItems={filteredAccounts.length}
-                pageSize={MEMBERS_PAGE_SIZE}
-                itemNoun="miembro"
-                variant="footer"
-              />
-            )}
+                      Kept off the screen rather than renamed in place: over
+                      a column of 32px triggers a printed heading is one more
+                      word to skip past, and "Acciones" tells a sighted
+                      reader nothing the buttons underneath do not. It stays
+                      in the accessibility tree because a `<th>` with no name
+                      is a column a screen reader announces as blank. */}
+                  <TableHeaderCell type="action">
+                    <span className="sr-only">Acciones</span>
+                  </TableHeaderCell>
+                </TableRow>
+              }
+              // INSIDE the card, not after it. This pager used to be a sibling
+              // of the card it paginates, so it floated on the canvas while
+              // every other list in the product carried its pager welded to
+              // the foot of the card. The `footer` variant owns that
+              // placement now, so the move is a nesting change and no
+              // classes travel with it.
+              footer={
+                totalPages > 1 ? (
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    onPageChange={setPage}
+                    totalItems={filteredAccounts.length}
+                    pageSize={MEMBERS_PAGE_SIZE}
+                    itemNoun="miembro"
+                    variant="footer"
+                  />
+                ) : undefined
+              }
+            />
           </div>
         ) : null}
 
