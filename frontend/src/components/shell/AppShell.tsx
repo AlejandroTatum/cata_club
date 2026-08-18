@@ -847,7 +847,7 @@ export default function AppShell({
           </Link>
 
           {session && (
-            <div className="relative">
+            <div className="flex flex-col gap-2">
               <button
                 ref={userMenuTriggerRef}
                 type="button"
@@ -877,15 +877,45 @@ export default function AppShell({
                   </span>
                 </span>
               </button>
+              {/*
+                * EL PANEL VIVE EN EL FLUJO DEL PIE, NO ENCIMA DE ÉL.
+                *
+                * Era `absolute bottom-full mb-1.5 w-full`: 86px — borde 2px,
+                * padding 12px y dos ítems de 36px — creciendo hacia arriba
+                * desde la tarjeta, a ancho completo, sobre el mismo eje donde
+                * están «Ayuda y soporte» y «Preguntas frecuentes». Medido
+                * desde el borde superior de la tarjeta cubría de −6 a −92:
+                * preguntas frecuentes (−8 a −48) entera, y 36 de los 40px de
+                * ayuda y soporte. Abrir la cuenta borraba las dos salidas de
+                * ayuda justo cuando el usuario las estaba buscando (#367).
+                *
+                * De los caminos posibles este es el único que no muda el
+                * problema de lugar. Reordenar el pie deja al panel tapando lo
+                * que quede arriba, sea lo que sea. Abrirlo hacia abajo con
+                * `top-full` lo manda fuera de la pantalla: la tarjeta es lo
+                * último del `aside` y el `aside` llega al borde inferior.
+                * Sacarlo al costado con `left-full` anda en escritorio y se va
+                * de un teléfono de 360px, porque el cajón ya ocupa 236.
+                *
+                * En flujo no hay nada que tapar: el pie crece esos 86px y el
+                * `nav` de arriba, que es `flex-1 overflow-y-auto`, cede el
+                * alto y scrollea. Y como el panel queda después del disparador
+                * tanto en el DOM como en pantalla, el orden de lectura y el de
+                * foco son el mismo de siempre: ayuda, preguntas, tarjeta, y
+                * recién ahí las opciones de la cuenta.
+                *
+                * Colapsado conserva `lg:w-56` porque en un riel de 76px las
+                * etiquetas no entran, así que ahí el panel se desborda hacia
+                * la derecha: sobre el `main`, nunca sobre un destino de la
+                * barra, que es exactamente lo que este cambio vino a evitar.
+                */}
               {userMenuOpen && (
                 <UserMenuDropdown
                   ref={userMenuPanelRef}
                   id={userMenuId}
                   onLogout={logout}
                   onNavigate={closeUserMenu}
-                  className={`absolute bottom-full mb-1.5 ${
-                    collapsed ? "left-0 lg:w-56" : "left-0 w-full"
-                  }`}
+                  className={collapsed ? "lg:w-56" : "w-full"}
                 />
               )}
             </div>

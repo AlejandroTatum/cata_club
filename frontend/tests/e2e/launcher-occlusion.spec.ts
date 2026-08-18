@@ -1,6 +1,6 @@
 /**
  * The rule issue #59 asked for, written as geometry instead of class names:
- * NO `position: fixed` element may cover the centre of an interactive control.
+ * NO out-of-flow element may cover the centre of an interactive control.
  *
  * ## Why the centre, and why `elementFromPoint`
  *
@@ -65,6 +65,23 @@
  * defects behind #89 failed at different times: one left the launcher down
  * until an unrelated frame shipped (~2s), the other let it climb and then drop
  * back within ~300ms of arriving.
+ *
+ * ## What #367 widened, on both axes
+ *
+ * The sweep missed a real occlusion twice over, and each miss was a scope
+ * decision this file had made on purpose.
+ *
+ *   · It only counted occluders with a `fixed` ancestor. The account panel is
+ *     `absolute` inside a `sticky` aside, so it was never a candidate — yet it
+ *     covered "Preguntas frecuentes" whole and 36 of the 40px of "Ayuda y
+ *     soporte". "Left the flow and took the corner" is what the rule is about,
+ *     and `absolute` leaves the flow exactly as much as `fixed` does; what
+ *     changes is the containing block, not whether it paints over a sibling.
+ *     `sticky` stays out: it IS in the flow, and a sticky table header covering
+ *     a row it scrolled past is a header doing its job.
+ *   · It only ever probed the screen at rest. Nothing was open, so no panel
+ *     could be caught covering anything. A sweep that never opens a popup can
+ *     only certify the closed state, which is not the state a popup fails in.
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
@@ -142,8 +159,8 @@ interface Occlusion {
 }
 
 /**
- * Every interactive control whose centre the browser resolves to a `fixed`
- * ancestor other than the control itself.
+ * Every interactive control whose centre the browser resolves to an
+ * out-of-flow (`fixed` or `absolute`) ancestor other than the control itself.
  */
 const SWEEP_OCCLUSIONS = (): Occlusion[] => {
   const INTERACTIVE =
@@ -159,9 +176,14 @@ const SWEEP_OCCLUSIONS = (): Occlusion[] => {
     const r = el.getBoundingClientRect();
     return `(${Math.round(r.x)},${Math.round(r.y)}) ${Math.round(r.width)}x${Math.round(r.height)}`;
   };
-  const fixedAncestor = (start: Element): Element | null => {
+  // `absolute` counts alongside `fixed` since #367: both leave the flow and
+  // paint over their siblings, and the account panel that covered the two help
+  // rows was the `absolute` kind. `sticky` does not — it keeps its space in the
+  // flow, so a sticky header over a row it scrolled past is not an occlusion.
+  const floatingAncestor = (start: Element): Element | null => {
     for (let el: Element | null = start; el; el = el.parentElement) {
-      if (getComputedStyle(el).position === "fixed") return el;
+      const position = getComputedStyle(el).position;
+      if (position === "fixed" || position === "absolute") return el;
     }
     return null;
   };
@@ -177,7 +199,7 @@ const SWEEP_OCCLUSIONS = (): Occlusion[] => {
 
     const hit = document.elementFromPoint(cx, cy);
     if (!hit || hit === control || control.contains(hit)) continue;
-    const occluder = fixedAncestor(hit);
+    const occluder = floatingAncestor(hit);
     // Page content overlapping page content is the page's own business; this
     // rule is about elements that left the flow and took the corner.
     if (!occluder || occluder === control || occluder.contains(control)) continue;
@@ -239,8 +261,11 @@ const VIEWPORTS = [
   { width: 1280, height: 720 },
 ] as const;
 
+/** The sidebar's user card, by the name a screen reader announces. */
+const ACCOUNT_MENU_TRIGGER = /Menú de cuenta/i;
+
 for (const viewport of VIEWPORTS) {
-  test(`no fixed element covers an interactive control on /members at ${viewport.width}x${viewport.height}`, async ({
+  test(`no floating element covers an interactive control on /members at ${viewport.width}x${viewport.height}`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -274,6 +299,30 @@ for (const viewport of VIEWPORTS) {
         `scrolled to the ${position} of /members at ${viewport.width}x${viewport.height}`,
       ).toEqual([]);
     }
+
+    // Every probe above ran with the screen at rest, which is how #367 shipped:
+    // the account panel only exists while it is open. Back to the top first so
+    // the sidebar footer is measured at a known offset, and `click()` is what
+    // opens it — a synthetic scroll never dismisses it, so the panel is still
+    // up when the sweep runs.
+    await page.evaluate((): void => window.scrollTo(0, 0));
+    await page.getByRole("button", { name: ACCOUNT_MENU_TRIGGER }).click();
+    await expect(page.getByRole("dialog", { name: "Menú de cuenta" })).toBeVisible();
+    await page.waitForTimeout(300);
+
+    const withAccountMenu = await page.evaluate(SWEEP_OCCLUSIONS);
+    report.push(
+      `account menu open: ${withAccountMenu.length === 0 ? "clear" : withAccountMenu
+        .map(
+          (o) =>
+            `${o.control} ${o.controlRect} centre ${o.centre} -> ${o.hit} of ${o.occluder} ${o.occluderRect}`,
+        )
+        .join(" | ")}`,
+    );
+    expect(
+      withAccountMenu,
+      `with the account menu open on /members at ${viewport.width}x${viewport.height}`,
+    ).toEqual([]);
 
     await testInfo.attach(`occlusion-${viewport.width}x${viewport.height}`, {
       body: report.join("\n"),
