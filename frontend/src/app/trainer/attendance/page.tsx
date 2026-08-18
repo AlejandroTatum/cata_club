@@ -1277,11 +1277,19 @@ export default function TrainerAttendancePage(): React.ReactElement {
                             <button
                               key={sched.id}
                               type="button"
-                              onClick={() => setSelectedScheduleId(sched.id)}
+                              onClick={() => {
+                                if (takenForThisUser) return;
+                                setSelectedScheduleId(sched.id);
+                              }}
+                              disabled={takenForThisUser}
                               aria-pressed={isActive}
                               // Selection is coal + the yellow ball dot, never
                               // a red fill — red is CTA and destructive only.
-                              className={`flex min-h-[56px] flex-col justify-center gap-1 rounded-ctl border px-4 py-3 text-left transition-colors ${
+                              // Issue #397: a schedule already taken today is
+                              // genuinely unreachable — a real `disabled`, not
+                              // a "solo consulta" mode dressed up with CSS —
+                              // so it needs the shared disabled treatment too.
+                              className={`flex min-h-[56px] flex-col justify-center gap-1 rounded-ctl border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                                 isActive
                                   ? "border-coal bg-paper shadow-selected"
                                   : "border-line-2 bg-paper hover:border-ink-3"
@@ -1303,17 +1311,6 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                   {recordedToday === 1 ? "registro" : "registros"}
                                 </span>
                               )}
-                              {/* Nodo aparte del conteo, no un sufijo: son dos
-                                  hechos distintos — CUÁNTO hay registrado, y
-                                  qué se puede hacer con eso. Se nombra la
-                                  consecuencia, porque una tarjeta que solo
-                                  informa deja al entrenador enterarse del modo
-                                  lectura en el paso 2 (issue #368). */}
-                              {takenForThisUser && (
-                                <span className="flex items-center gap-1 text-2xs font-bold text-state-warn">
-                                  Solo consulta — no se puede volver a tomar
-                                </span>
-                              )}
                             </button>
                           );
                         })}
@@ -1327,11 +1324,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
         </div>
 
         {/*
-         * El aviso del #368, pegado al mismo control que el error de roster:
-         * "Continuar" sigue existiendo y sigue habilitado — abrir la lista en
-         * modo consulta es legítimo y útil — pero acá se dice a qué se entra.
-         * Deshabilitarlo callado sería el defecto del #312, y esconder la
-         * tarjeta dejaría al entrenador sin forma de ver lo que ya se registró.
+         * El aviso del #368, pegado al mismo control que el error de roster.
+         * Issue #397: la tarjeta ya no ofrece esta lectura por click — un
+         * horario tomado hoy es `disabled` de entrada. Lo que queda es el
+         * caso de vuelta atrás: el entrenador elige un horario disponible,
+         * avanza, alguien más lo toma mientras tanto, y al presionar "Atrás"
+         * vuelve al paso 1 con la selección todavía viva — ahí es donde este
+         * aviso nombra la consecuencia antes de que "Continuar" reabra la
+         * lista en modo consulta.
          *
          * `role="status"`, no `alert`: describe el estado del horario elegido,
          * no el resultado de algo que el entrenador acaba de hacer mal.
