@@ -498,7 +498,7 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
           <ul
             id={panelId}
             aria-label={`Jugadores de ${fullName}`}
-            className="flex flex-wrap gap-x-6 gap-y-1 py-1 text-sm text-ink"
+            className="flex flex-wrap gap-x-6 gap-y-field py-1 text-sm text-ink"
           >
             {represents.map((nombre) => (
               <li key={nombre}>{nombre}</li>
