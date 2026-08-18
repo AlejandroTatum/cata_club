@@ -59,8 +59,9 @@ export interface Destination {
  * Keyed by the exact pathname, because that is what both consumers already
  * hold: the rail carries an `href` and the back control is GIVEN one. Matching
  * is exact rather than prefix-based (`shell-routes.ts` does the prefix work,
- * for a different question) — `/trainer/attendance` is its own destination with
- * its own name, not a descendant of `/trainer` that inherits one.
+ * for a different question) — `/trainer/attendance/history` is its own
+ * destination with its own name, not a descendant of `/trainer` that inherits
+ * one.
  */
 export const DESTINATIONS: Record<string, Destination> = {
   /** The public site. `AuthShell`'s way out, and `/ayuda`'s. */
@@ -89,7 +90,12 @@ export const DESTINATIONS: Record<string, Destination> = {
    * it is the name the trainer has actually learned.
    */
   "/trainer": { label: "Mi día", preposition: "a" },
-  "/trainer/attendance": { label: "Pasar lista", preposition: "a" },
+  /**
+   * No hay entrada para `/trainer/attendance`: el asistente para tomar la
+   * lista ya no se ofrece desde ninguna pantalla y se rehará dentro del área
+   * de miembros. Un destino sin ningún control que lleve a él sería un nombre
+   * que el registro promete y el producto no cumple.
+   */
   "/trainer/attendance/history": { label: "Historial", preposition: "al" },
   /**
    * "Alumnos del club", no "Sus alumnos" ni "Mis alumnos".

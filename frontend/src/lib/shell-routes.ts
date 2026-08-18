@@ -88,7 +88,7 @@ const APP_SHELL_PREFIXES = [
   "/ayuda",
 ] as const;
 
-/** `/trainer` matches `/trainer` and `/trainer/attendance`, never `/trainers`. */
+/** `/trainer` matches `/trainer` and `/trainer/students`, never `/trainers`. */
 function matchesPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }

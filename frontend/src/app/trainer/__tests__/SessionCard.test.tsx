@@ -68,7 +68,6 @@ const NEXT_AT_15: SessionCardState = {
   kind: "next",
   schedule: schedule(7, "15:00", "16:00"),
   minutesAway: 25,
-  href: "/trainer/attendance?horario=7&paso=lista",
   later: [],
 };
 
@@ -85,10 +84,14 @@ describe("SessionCard", () => {
    * hour — the panel opened at 03:20 on a Friday whose first session is at
    * 15:00 printed "700 minutos" — so the figure is now the session's own
    * identifier, its start hour, in BOTH states, and the wait is said in words
-   * underneath. Nothing about which session, which link or which label
-   * changed; those assertions are untouched below.
+   * underneath.
+   *
+   * Lo que sí cambió después: la banda se quedó sin acciones. Llevaba "Pasar
+   * lista de las 15:00" y "Elegir otro horario", los dos hacia el asistente
+   * para tomar la lista, que se retiró de la interfaz mientras se rehace
+   * dentro del área de miembros. La tarjeta informa y no navega.
    */
-  it("'next': the hour is the big number, the wait is said in words, and the primary action names the session by its hour", () => {
+  it("'next': the hour is the big number, the wait is said in words, and the band carries no action", () => {
     render(
       <SessionCard
         state={NEXT_AT_15}
@@ -105,12 +108,9 @@ describe("SessionCard", () => {
     expect(screen.getByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
     expect(screen.getByText(/12 estudiantes inscritos/)).toBeInTheDocument();
 
-    const primary = screen.getByRole("link", { name: "Pasar lista de las 15:00" });
-    expect(primary).toHaveAttribute("href", "/trainer/attendance?horario=7&paso=lista");
-    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
-      "href",
-      "/trainer/attendance",
-    );
+    // Ni un ancla ni un botón: no queda acción que la banda pueda ofrecer.
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("'live': the start hour stays the big number, and 'En curso' is written, not only colored", () => {
@@ -118,7 +118,6 @@ describe("SessionCard", () => {
       kind: "live",
       schedule: schedule(7, "15:00", "16:00"),
       minutesElapsed: 10,
-      href: "/trainer/attendance?horario=7&paso=lista",
       later: [],
     };
     render(
@@ -134,8 +133,7 @@ describe("SessionCard", () => {
     expect(screen.getByText("En curso")).toBeInTheDocument();
     expect(screen.getByText(/Hace 10 minutos/)).toBeInTheDocument();
 
-    const primary = screen.getByRole("link", { name: "Pasar lista de las 15:00" });
-    expect(primary).toHaveAttribute("href", "/trainer/attendance?horario=7&paso=lista");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -334,7 +332,7 @@ describe("SessionCard", () => {
 
     expect(screen.getByText("15:00")).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Sus sesiones de hoy" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Pasar lista de las 15:00" })).toBeInTheDocument();
+    expect(screen.getByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
   });
 
   it("never leaves a horario= link inside the rail, whatever it draws", () => {
@@ -347,22 +345,21 @@ describe("SessionCard", () => {
     );
 
     const rail = screen.getByRole("list", { name: "Sus sesiones de hoy" });
-    // The rail is context, not a second CTA.
+    // The rail is context, not a CTA — and now nothing else in the band is one
+    // either, so the whole card has to come back without a single anchor.
     expect(rail.querySelectorAll("a, button")).toHaveLength(0);
-    // Exactly the two real actions carry a link — nothing per block.
-    expect(horarioLinks(container)).toHaveLength(1);
-    expect(container.querySelectorAll("a")).toHaveLength(2);
+    expect(horarioLinks(container)).toHaveLength(0);
+    expect(container.querySelectorAll("a")).toHaveLength(0);
   });
 
-  it("'done': no countdown, and the only action is the generic 'Elegir otro horario' — no session link at all", () => {
+  it("'done': says the day is over and offers nothing — no link, generic or otherwise", () => {
     const { container } = render(
       <SessionCard state={{ kind: "done" }} rail={null} enrolledCounts={{}} />,
     );
 
-    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
-      "href",
-      "/trainer/attendance",
-    );
+    expect(screen.getByText("Ya no quedan sesiones hoy.")).toBeInTheDocument();
+    // "Elegir otro horario" vivía acá y apuntaba al selector del asistente.
+    expect(screen.queryByRole("link", { name: "Elegir otro horario" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Pasar lista/ })).not.toBeInTheDocument();
     expect(horarioLinks(container)).toHaveLength(0);
   });

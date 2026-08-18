@@ -32,27 +32,23 @@ const ADMIN_SCREENS = [
   "app/members/page.tsx",
   "app/groups/page.tsx",
   "app/discounts/page.tsx",
-  "app/attendance/page.tsx",
   "app/reports/page.tsx",
 ];
 
 /**
- * The trainer and student surfaces that carry one, added by #43.
+ * The trainer and student surfaces that carry one. Today: none.
  *
- * Only two of the seven do, and the reason is measured rather than assumed. The
- * prototypes put a header action on five of their twelve screens and all five
- * are admin lists — `19-entrenador:62`, `21-entrenador-historial:55`,
- * `22-alumno-cuenta:60`, `23-alumno-pagos:59` and `24-alumno-asistencia:59` all
- * draw a bare `h-page` row with nothing beside it. #74 already overrode that for
- * `/dashboard` and `/reports`, on the record and for a stated reason, so the
- * question here was never "does the prototype have one" — it was "does this
- * screen's action move".
+ * #43 measured rather than assumed, and found only one — the trainer's
+ * "Historial de asistencias", whose header link mirrored its admin twin
+ * `/attendance`. Both of those links pointed at the roll-call wizard, which is
+ * no longer offered anywhere while it is rebuilt inside the Members area, so
+ * the list emptied and both screens moved to `NO_HEADER_ACTION` with that
+ * reason written beside them.
+ *
+ * The list stays rather than being deleted: it is what a family screen with a
+ * real header action gets added to, and the sweep below still reads it.
  */
-const FAMILY_SCREENS = [
-  // Its admin twin `/attendance` has carried the identical link since #74, and
-  // this screen offered no way to pass a list unless the table came back empty.
-  "app/trainer/attendance/history/page.tsx",
-];
+const FAMILY_SCREENS: string[] = [];
 
 /**
  * Screens whose primary action is legitimately NOT in the header, each with the
@@ -63,6 +59,15 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // A validation queue: the actions are per row, and the batch bar only exists
   // when there are reviewed rows to flush.
   "app/payments/page.tsx": "queue — actions are per row",
+  // --- Reversed when the roll-call wizard left the UI ------------------------
+  // Both of these carried "Tomar asistencia" / "Pasar lista" since #74,
+  // pointing at the trainer's roll-call wizard. The wizard is no longer
+  // offered anywhere while it is rebuilt inside the Members area, so the only
+  // verb either screen ever hoisted no longer has a destination. Both are
+  // records that get consulted; neither has a second verb to promote.
+  "app/attendance/page.tsx": "el único verbo que tenía apuntaba al asistente retirado",
+  "app/trainer/attendance/history/page.tsx":
+    "el único verbo que tenía apuntaba al asistente retirado",
   // --- The five family screens, decided in #43 -----------------------------
   // A wizard. Its buttons are "Continuar" and "Confirmar asistencia": they move
   // through the steps rather than act on the page, and which one is showing is

@@ -68,11 +68,11 @@ interface NavLink {
  * The set is the one named in the plan (Fase 1, item 4): layout-grid, users,
  * trophy, calendar, credit-card, clipboard-check, file-text. It replaces a map
  * where `Users` stood for BOTH "/members" and "/groups" and `Calendar` for
- * BOTH "/attendance" and "/trainer/attendance" — an icon language that could
- * not tell the club's own sections apart. Every icon within a single role's
- * nav is now distinct; the reuse that remains ("/dashboard" and "/trainer"
- * both `LayoutGrid`) is across roles that never see each other's nav, and it
- * is deliberate: both are that role's home.
+ * BOTH the admin's "/attendance" and the trainer's roll-call wizard — an icon
+ * language that could not tell the club's own sections apart. Every icon
+ * within a single role's nav is now distinct; the reuse that remains
+ * ("/dashboard" and "/trainer" both `LayoutGrid`) is across roles that never
+ * see each other's nav, and it is deliberate: both are that role's home.
  */
 export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   Omit<LucideProps, "ref"> & React.RefAttributes<SVGSVGElement>
@@ -86,7 +86,6 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   "/discounts": Percent,
   "/attendance": ClipboardCheck,
   "/trainer": LayoutGrid,
-  "/trainer/attendance": ClipboardCheck,
   // `History` (a clock turned back), not `Clock`: within this same map
   // time-shaped glyphs already mean scheduling — `Calendar` is "/groups"
   // (Horarios) — and a bare clock would read as "hours", not "what was

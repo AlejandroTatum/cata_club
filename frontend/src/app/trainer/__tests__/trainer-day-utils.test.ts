@@ -293,9 +293,13 @@ describe("formatAbsenceCount", () => {
 
 // ---------------------------------------------------------------------------
 // The immediate-session card (issue #211): the number that decides depends on
-// whether the session has started, and the primary action's href must call
-// the wizard's real query contract (`buildWizardQuery` /
-// `attendance-utils.ts`), never a hand-built string.
+// whether the session has started.
+//
+// El estado llevaba también un `href` hacia el asistente para tomar la lista,
+// armado con `buildWizardQuery` para no inventar la query a mano. El asistente
+// se retiró de la interfaz mientras se rehace dentro del área de miembros, así
+// que ningún estado lleva href y este módulo dejó de importar nada del
+// asistente — que es lo que hace que el corte sea real y no cosmético.
 // ---------------------------------------------------------------------------
 
 describe("buildSessionCardState", () => {
@@ -303,7 +307,7 @@ describe("buildSessionCardState", () => {
     expect(buildSessionCardState([], NOW)).toBeNull();
   });
 
-  it("answers 'next' before the session starts, with the countdown and the wizard href", () => {
+  it("answers 'next' before the session starts, with the countdown and no href", () => {
     const state = buildSessionCardState([schedule(1, "15:00", "16:00")], NOW);
 
     expect(state).not.toBeNull();
@@ -311,8 +315,11 @@ describe("buildSessionCardState", () => {
     if (state?.kind !== "next") throw new Error("expected next");
     expect(state.schedule.id).toBe(1);
     expect(state.minutesAway).toBe(25);
-    // `paso=lista` and no `fecha` — today needs no address (attendance-utils.ts).
-    expect(state.href).toBe("/trainer/attendance?horario=1&paso=lista");
+    // Ningún estado lleva ya un `href`: el que había apuntaba al asistente
+    // para tomar la lista, que se retiró de la interfaz mientras se rehace
+    // dentro del área de miembros. Se afirma la ausencia sobre el objeto, no
+    // sobre el tipo, porque TypeScript no corre en producción.
+    expect("href" in state).toBe(false);
     // One session today, nothing left to carousel.
     expect(state.later).toEqual([]);
   });
@@ -343,7 +350,7 @@ describe("buildSessionCardState", () => {
     if (state?.kind !== "live") throw new Error("expected live");
     expect(state.schedule.id).toBe(1);
     expect(state.minutesElapsed).toBe(10);
-    expect(state.href).toBe("/trainer/attendance?horario=1&paso=lista");
+    expect("href" in state).toBe(false);
     expect(state.later).toEqual([]);
   });
 

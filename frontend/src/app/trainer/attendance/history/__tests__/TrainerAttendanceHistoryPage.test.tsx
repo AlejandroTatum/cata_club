@@ -215,34 +215,39 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.getAllByRole("img", { name: /sobre \d+ registros/ })).toHaveLength(2);
   });
 
-  it("shows Corregir for every session within 30 days when the user is admin", async () => {
+  /*
+   * "Corregir" se fue, y con él la columna entera.
+   *
+   * Era la única acción que esta tabla ofrecía y abría el asistente para tomar
+   * la lista en esa sesión (#95), con la ventana de 30 días de #262 y su
+   * motivo dicho entero de #373. El asistente dejó de ofrecerse desde la
+   * interfaz mientras se rehace dentro del área de miembros, así que la
+   * columna se fue con él en vez de quedar como un encabezado "ACCIONES" con
+   * la celda vacía debajo — exactamente el defecto que #310 ya había corregido
+   * para el entrenador.
+   *
+   * Se afirma para los DOS roles. Para el entrenador la columna nunca existió,
+   * así que su prueba de abajo no cambia; la que importa acá es la del
+   * administrador, que es quien la tenía.
+   */
+  it("no ofrece Corregir a un administrador, ni vivo ni bloqueado", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
     render(<TrainerAttendanceHistoryPage />);
 
-    const links = await screen.findAllByRole("link", { name: "Corregir" });
-    expect(links).toHaveLength(2);
+    await screen.findAllByRole("row");
+    expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Corregir" })).not.toBeInTheDocument();
+    // Tampoco queda la superficie que acompañaba al control vencido.
+    expect(screen.queryByText(/ventana de corrección/i)).not.toBeInTheDocument();
   });
 
-  it("deep-links Corregir into that session's roll call, not the picker", async () => {
+  it("tampoco le deja al administrador una columna ACCIONES vacía", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
     render(<TrainerAttendanceHistoryPage />);
 
-    const links = await screen.findAllByRole("link", { name: "Corregir" });
     const rows = await screen.findAllByRole("row");
-
-    // Row order is most recent first, and each href must belong to the row it
-    // sits in — both the horario AND the day. Sending the Friday's button to
-    // the Monday's roll call is the same defect one row over.
-    expect(rows[1]).toHaveTextContent("20/07/2026");
-    expect(links[0]).toHaveAttribute(
-      "href",
-      "/trainer/attendance?horario=12&fecha=2026-07-20&paso=lista",
-    );
-    expect(rows[2]).toHaveTextContent("17/07/2026");
-    expect(links[1]).toHaveAttribute(
-      "href",
-      "/trainer/attendance?horario=7&fecha=2026-07-17&paso=lista",
-    );
+    expect(within(rows[0]).queryByText("Acciones")).not.toBeInTheDocument();
+    expect(within(rows[1]).getAllByRole("cell")).toHaveLength(3);
   });
 
   it("does not show Corregir to a trainer", async () => {
@@ -250,62 +255,6 @@ describe("TrainerAttendanceHistoryPage", () => {
 
     await screen.findAllByRole("row");
     expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
-  });
-
-  /*
-   * Issue #373: la celda vacía era el defecto, no la solución.
-   *
-   * Este test afirmaba lo contrario -- que pasados los 30 días no hubiera
-   * acción alguna -- y por eso el vencimiento se veía igual que un error de
-   * carga: el administrador no podía distinguir "esta sesión ya no se corrige"
-   * de "algo se rompió". La ventana de 30 días (issue #262) no se toca; lo que
-   * cambia es que ahora se NOMBRA.
-   *
-   * Un `<Link>` deshabilitado no existe en HTML, así que la acción vencida deja
-   * de ser un ancla y pasa a ser un `<button disabled>` con el motivo colgado
-   * de `aria-describedby` -- el mismo par que el asistente de asistencia ya usa
-   * para bloquear "Revisar y confirmar" con `unmarkedReasonId`
-   * (`src/app/trainer/attendance/page.tsx:2261-2336`).
-   */
-  it("mantiene la acción presente pero bloqueada, nombrando el motivo, pasados los 30 días (issue #373)", async () => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
-    const oldRecords: AttendanceRecord[] = [
-      record("present", "Sofia Vera", "2026-07-15"),
-    ];
-    mockFetchAttendanceRecords.mockResolvedValue(oldRecords);
-
-    render(<TrainerAttendanceHistoryPage />);
-
-    const rows = await screen.findAllByRole("row");
-    // The admin still HAS an "Acciones" column — the header exists, so the
-    // cell keeps the row's columns aligned with it.
-    const cells = within(rows[1]).getAllByRole("cell");
-    expect(cells).toHaveLength(4);
-
-    // Ya no navega a ningún lado, pero sigue estando y se lee deshabilitada.
-    expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
-    const accion = within(cells[3]).getByRole("button", { name: "Corregir" });
-    expect(accion).toBeDisabled();
-
-    // El motivo es texto real de la celda -- no un `title` que solo existe al
-    // pasar el mouse -- y está atado al control para un lector de pantalla.
-    const motivo = "La ventana de corrección de 30 días ya cerró para esta sesión.";
-    expect(cells[3]).toHaveTextContent(motivo);
-    const motivoId = accion.getAttribute("aria-describedby");
-    expect(motivoId).toBeTruthy();
-    expect(document.getElementById(motivoId as string)).toHaveTextContent(motivo);
-  });
-
-  it("deja intacta la acción dentro de la ventana: enlace vivo, sin bloqueo ni motivo (issue #373)", async () => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
-    render(<TrainerAttendanceHistoryPage />);
-
-    const links = await screen.findAllByRole("link", { name: "Corregir" });
-    expect(links).toHaveLength(2);
-    // Nada de la superficie vencida se filtra a una sesión que todavía se puede
-    // corregir: ni botón muerto ni línea de motivo.
-    expect(screen.queryByRole("button", { name: "Corregir" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/ventana de corrección/i)).not.toBeInTheDocument();
   });
 
   /*
@@ -341,14 +290,17 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(params.fechaInicio).toBe(params.fechaFin);
   });
 
-  it("shows an actionable empty state for a period with no lists", async () => {
+  it("names the empty period, and offers no way into the wizard from it", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([]);
     render(<TrainerAttendanceHistoryPage />);
 
     expect(await screen.findByText("No hay listas en este período")).toBeInTheDocument();
-    expect(
-      within(screen.getByRole("main")).getByRole("link", { name: "Pasar lista" }),
-    ).toHaveAttribute("href", "/trainer/attendance");
+    // Ofrecía "Pasar lista" acá y en el encabezado. Ninguno de los dos sigue,
+    // y se barre `main` por destino además de por etiqueta.
+    expect(screen.queryByRole("link", { name: "Pasar lista" })).not.toBeInTheDocument();
+    for (const link of within(screen.getByRole("main")).queryAllByRole("link")) {
+      expect(link.getAttribute("href")).not.toContain("/trainer/attendance?");
+    }
   });
 
   it("recovers from a failed load with a retry", async () => {

@@ -2,8 +2,13 @@
  * Component tests for the admin AttendancePage.
  *
  * Kept from earlier phases: the "Horarios de Entrenamiento" table stays gone,
- * "Tomar asistencia" stays reachable, and pagination stays a pair of visible,
- * labeled controls rather than icon-only ghost buttons.
+ * and pagination stays a pair of visible, labeled controls rather than
+ * icon-only ghost buttons.
+ *
+ * "Tomar asistencia" ya no está, y su ausencia se afirma: los dos enlaces que
+ * esta pantalla llevaba —el del encabezado y el del estado vacío— apuntaban al
+ * asistente del entrenador, que se retiró de la interfaz mientras se rehace
+ * dentro del área de miembros.
  *
  * Added in Fase 3: the range/horario/alumno filters actually reach the records
  * endpoint — this screen used to call it with no arguments at all and pull the
@@ -90,17 +95,20 @@ beforeEach(() => {
   mockFetchAttendanceRecords.mockReset().mockResolvedValue(buildRecords(5));
 });
 
-describe("AttendancePage — Horarios section removed, Tomar asistencia in the header", () => {
-  it("removes the Horarios table and keeps a Tomar asistencia entry point", async () => {
+describe("AttendancePage — Horarios section removed, no way into the roll-call wizard", () => {
+  it("removes the Horarios table and offers no Tomar asistencia entry point", async () => {
     render(<AttendancePage />);
 
     await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
     expect(screen.queryByText("Horarios de Entrenamiento")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Filtrar por día")).not.toBeInTheDocument();
 
-    const links = screen.getAllByRole("link", { name: /tomar asistencia/i });
-    expect(links.length).toBeGreaterThan(0);
-    expect(links[0]).toHaveAttribute("href", "/trainer/attendance");
+    expect(screen.queryByRole("link", { name: /tomar asistencia/i })).not.toBeInTheDocument();
+    // El destino, no solo la etiqueta: un enlace al asistente con otro nombre
+    // seguiría siendo la misma entrada.
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.getAttribute("href")).not.toContain("/trainer/attendance");
+    }
   });
 
   it("drops the redundant 'Volver al Panel' link the sidebar already provides", async () => {

@@ -17,15 +17,18 @@
  * which session; the wait only qualifies it, so the wait is a line of text
  * (`formatTimeUntilStart`, which changes unit at the hour).
  *
- * The primary action moved here from the page header (`page.tsx`) — once,
- * never twice — and names the session by its hour ("Pasar lista de las
- * 15:00"), never "esta sesión": the label has to survive being read without
- * the card around it.
+ * ## Una banda que informa, sin acción propia
+ *
+ * La tarjeta llevaba dos controles: "Pasar lista de las 15:00", que abría el
+ * asistente ya parado en esa sesión, y "Elegir otro horario", que lo abría en
+ * el selector. Los dos se fueron con el asistente, que dejó de ofrecerse desde
+ * la interfaz mientras se rehace dentro del área de miembros. Lo que queda es
+ * lo que la banda siempre supo decir por sí sola: cuál es la sesión, cuándo
+ * empieza o cuánto lleva, cuántos hay inscritos y cómo viene el día.
  *
  * `state === null` renders nothing. Combined with `page.tsx` never mounting
- * this component during loading/error, and `buildSessionCardState` never
- * producing a schedule for "done", none of the three no-session states can
- * leave a `horario=` link in the tree — see `SessionCard.test.tsx`.
+ * this component during loading/error, none of the three no-session states can
+ * put anything in the tree — see `SessionCard.test.tsx`.
  *
  * ## El resto del día: un riel, no una pila de filas
  *
@@ -45,9 +48,8 @@
  *
  * Esto NO deshace la decisión de `page.tsx`: la banda sigue siendo una sola
  * tarjeta `rounded-card bg-coal` a todo el ancho, con su cifra
- * `font-display text-display` y su CTA propio, que es el vocabulario que
- * comparte con `/dashboard`. Cambia lo que la banda dibuja adentro, no lo que
- * la banda es.
+ * `font-display text-display`, que es el vocabulario que comparte con
+ * `/dashboard`. Cambia lo que la banda dibuja adentro, no lo que la banda es.
  *
  * ## El equivalente accesible
  *
@@ -72,10 +74,6 @@
  * etiqueta que se le agregue sería inventada.
  */
 
-import Link from "next/link";
-import { ClipboardList } from "lucide-react";
-import { ICON } from "@/lib/icon-size";
-import { buttonClasses } from "@/components/ui";
 import { formatDay } from "@/app/attendance/attendance-utils";
 import {
   formatElapsedMinutes,
@@ -157,11 +155,6 @@ export default function SessionCard({
           Hoy
         </p>
         <p className="m-0 text-lg font-bold leading-snug">Ya no quedan sesiones hoy.</p>
-        <div className="mt-auto flex flex-wrap gap-2.5 pt-3">
-          <Link href="/trainer/attendance" className={buttonClasses("onCoal")}>
-            Elegir otro horario
-          </Link>
-        </div>
       </section>
     );
   }
@@ -264,16 +257,6 @@ export default function SessionCard({
         </span>
         {enrolledLabel && <span>{enrolledLabel}</span>}
       </p>
-
-      <div className="mt-auto flex flex-wrap gap-2.5">
-        <Link href={state.href} className={buttonClasses("primary")}>
-          <ClipboardList size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          Pasar lista de las {state.schedule.horaInicio}
-        </Link>
-        <Link href="/trainer/attendance" className={buttonClasses("onCoal")}>
-          Elegir otro horario
-        </Link>
-      </div>
     </section>
   );
 }

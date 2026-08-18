@@ -270,22 +270,24 @@ describe("TrainerPage — Mi día", () => {
     expect(screen.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
   });
 
-  it("'next': the primary action names the session by its hour and calls the wizard's real query contract", async () => {
+  // La banda perdió sus dos acciones —"Pasar lista de las 15:00" y "Elegir
+  // otro horario"— junto con el asistente para tomar la lista, que se retiró
+  // de la interfaz mientras se rehace dentro del área de miembros. Se afirma
+  // el barrido entero de `main`, no solo esas dos etiquetas: reponerlas con
+  // otro nombre sería la misma entrada.
+  it("'next': the band names the session and offers no way into the roll-call wizard", async () => {
     render(<TrainerPage />);
     await screen.findByText("Lunes 15:00 — 16:00");
 
-    const primary = screen.getByRole("link", { name: "Pasar lista de las 15:00" });
-    expect(primary).toHaveAttribute("href", "/trainer/attendance?horario=1&paso=lista");
-    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
-      "href",
-      "/trainer/attendance",
-    );
-    // No second copy of the primary action inside the page's own content —
-    // the sidebar carries its own "Pasar lista" nav row, which is
-    // navigation, not this screen's CTA.
-    expect(
-      within(screen.getByRole("main")).getAllByRole("link", { name: /Pasar lista/ }),
-    ).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: /Pasar lista/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Elegir otro horario" })).not.toBeInTheDocument();
+    // `/trainer/attendance/history` sí sigue, y es lo único que puede empezar
+    // con ese prefijo: la pantalla del historial se queda entera.
+    for (const link of within(screen.getByRole("main")).queryAllByRole("link")) {
+      const href = link.getAttribute("href") ?? "";
+      if (href.startsWith("/trainer/attendance/history")) continue;
+      expect(href).not.toContain("/trainer/attendance");
+    }
   });
 
   it("'live': the start hour replaces the countdown as the big number, and 'En curso' is written text", async () => {
@@ -300,8 +302,7 @@ describe("TrainerPage — Mi día", () => {
     // The number that was the countdown before the session started is gone.
     expect(screen.queryByText("25")).not.toBeInTheDocument();
 
-    const primary = screen.getByRole("link", { name: "Pasar lista de las 15:00" });
-    expect(primary).toHaveAttribute("href", "/trainer/attendance?horario=1&paso=lista");
+    expect(screen.queryByRole("link", { name: /Pasar lista/ })).not.toBeInTheDocument();
   });
 
   it("'done': no countdown and no session link anywhere once every session today has ended", async () => {
@@ -309,10 +310,7 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     expect(await screen.findByText("Ya no quedan sesiones hoy.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
-      "href",
-      "/trainer/attendance",
-    );
+    expect(screen.queryByRole("link", { name: "Elegir otro horario" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Pasar lista de las/ })).not.toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
   });
@@ -332,16 +330,19 @@ describe("TrainerPage — Mi día", () => {
   });
 
   /*
-   * Renegotiated in the trainer sweep, with the reason written: this used to
-   * assert that "Elegir otro horario" was absent on a rest day, which was true
-   * because the screen said NOTHING about a day with no sessions — the card
-   * simply vanished and the summary took the whole row. DESIGN.md's "regla del
-   * estado flaco" was written about this very screen, and D11 asks an empty
-   * state for three things: what is missing, why, and what to do. The exit is
-   * the generic picker, which carries no `horario=` — the safety rule the
-   * assertion above protects is unchanged and still asserted.
+   * Renegotiado dos veces, y las dos razones quedan escritas.
+   *
+   * Primero: el estado vacío no existía —la tarjeta simplemente desaparecía y
+   * el resumen se llevaba la fila entera— y la "regla del estado flaco" de
+   * DESIGN.md se escribió sobre esta misma pantalla. D11 le pide tres cosas:
+   * qué falta, por qué, y qué hacer.
+   *
+   * Después: la salida que ofrecía era "Elegir otro horario" hacia el selector
+   * del asistente, que se retiró de la interfaz mientras se rehace dentro del
+   * área de miembros. Un día de descanso se queda con las dos primeras — qué
+   * falta y por qué — porque no hay tercera que sea verdad.
    */
-  it("rest day: says so, says why, and still offers the picker as the way out", async () => {
+  it("rest day: says so, says why, and offers no way out that does not exist", async () => {
     mockFetchTrainingSchedules.mockResolvedValue([
       { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
     ]);
@@ -352,10 +353,7 @@ describe("TrainerPage — Mi día", () => {
     expect(
       screen.getByText(/El club no tiene sesiones programadas para hoy, lunes\./),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
-      "href",
-      "/trainer/attendance",
-    );
+    expect(screen.queryByRole("link", { name: "Elegir otro horario" })).not.toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
   });
 

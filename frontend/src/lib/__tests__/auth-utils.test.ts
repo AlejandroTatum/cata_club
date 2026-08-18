@@ -228,21 +228,26 @@ describe("getNavGroupsForRoles", () => {
     expect(groups).toHaveLength(2);
   });
 
-  // The four trainer destinations, in the exact order the sidebar shows them.
+  // The three trainer destinations, in the exact order the sidebar shows them.
   // Asserted as the whole group (not `.some(...)`) so dropping one, renaming
-  // it, or reordering "Historial" against "Pasar lista" all fail here — the
-  // order is what `resolveActiveHref` and the sidebar render.
+  // it, or reordering them all fail here — the order is what
+  // `resolveActiveHref` and the sidebar render.
   //
-  // "Alumnos del club" va última: es consulta, no trabajo del día. Las tres
-  // primeras son la secuencia de una sesión (mirar el día, pasar lista, revisar
-  // lo pasado) y meter el padrón en medio partiría esa secuencia.
-  it("gives trainer exactly Mi día, Pasar lista, Historial and Alumnos del club under Entrenar", () => {
+  // "Pasar lista" ya no está: el asistente para tomarla dejó de ofrecerse
+  // desde la interfaz mientras se rehace dentro del área de miembros, y una
+  // fila del rail es la entrada más visible que tenía. Que la lista se asserte
+  // ENTERA es lo que hace que reponerla sin decidirlo vuelva a poner esta
+  // prueba en rojo.
+  //
+  // "Alumnos del club" va última: es consulta, no trabajo del día. Las dos
+  // primeras son lo que el entrenador hace con su día (mirarlo y revisar lo ya
+  // pasado) y meter el padrón en medio partiría esa secuencia.
+  it("gives trainer exactly Mi día, Historial and Alumnos del club under Entrenar", () => {
     const groups = getNavGroupsForRoles(["trainer"]);
     expect(groups[1]).toEqual({
       heading: "Entrenar",
       links: [
         { href: "/trainer", label: "Mi día" },
-        { href: "/trainer/attendance", label: "Pasar lista" },
         { href: "/trainer/attendance/history", label: "Historial" },
         { href: "/trainer/students", label: "Alumnos del club" },
       ],
@@ -366,7 +371,6 @@ describe("getNavGroupsForRoles", () => {
     expect(headings(groups)).toEqual(["Entrenar", "Mi cuenta"]);
     expect(sectionHrefs(groups)).toEqual([
       "/trainer",
-      "/trainer/attendance",
       "/trainer/attendance/history",
       "/trainer/students",
       "/student",

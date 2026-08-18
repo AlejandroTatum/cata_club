@@ -16,12 +16,12 @@
  *   3. `PAGE_RAIL` — `RecentSessionsList` ("Últimas listas") fluid beside the
  *      340px "Distribución de asistencias" card.
  *
- * What did NOT come across is the hero's empty hands. `/dashboard` moved its
- * action to the header because it was the third place in the product where a
- * primary action could be found; this one is bound to one session and named by
- * that session's own hour — "Pasar lista de las 15:00", never "esta sesión" —
- * which is exactly what #211 put on the card and why. Porting a shape is not a
- * reason to undo a placement.
+ * La banda tampoco tiene acción propia, y no por copiar a `/dashboard`. #211
+ * le puso una atada a una sesión y nombrada por su hora ("Pasar lista de las
+ * 15:00"); esa acción abría el asistente para tomar la lista, que se retiró de
+ * la interfaz mientras se rehace dentro del área de miembros. Lo que se fue es
+ * el destino, no la decisión: cuando el asistente vuelva, la acción vuelve
+ * DONDE ESTABA, sobre la sesión que nombra, y no al encabezado.
  *
  * ## The pulse row is not the recap that was removed
  *
@@ -55,7 +55,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import Link from "next/link";
 import { CalendarCheck, CalendarOff } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
@@ -75,7 +74,6 @@ import {
   STAT_GRID,
   StatCard,
   StatTrack,
-  buttonClasses,
 } from "@/components/ui";
 import {
   buildAttendanceStats,
@@ -217,7 +215,7 @@ export default function TrainerPage(): React.ReactElement {
    *
    * Loaded separately from `loadData`, once `todaySchedules` is known: it is
    * a garnish, so a failure here leaves every count unknown (each clause
-   * simply not rendered) instead of blocking the card's one CTA.
+   * simply not rendered) instead of blocking the whole card.
    */
   useEffect((): (() => void) => {
     let cancelled = false;
@@ -272,12 +270,11 @@ export default function TrainerPage(): React.ReactElement {
               `rounded-card bg-coal`, a `font-display text-display` figure —
               it was just boxed into half a screen.
 
-              Its action stays on the card and did NOT move to the header.
-              `/dashboard`'s hero gave its action up because it was the third
-              place in the product where a primary action could be found; this
-              one is bound to a specific session and named by that session's
-              own hour ("Pasar lista de las 15:00"), which is the whole point
-              of #211's placement. Porting the shape is not a reason to undo it.
+              La banda hoy no tiene acción: la que #211 le puso —"Pasar lista
+              de las 15:00", atada a una sesión y nombrada por su hora— abría
+              el asistente para tomar la lista, que se retiró de la interfaz
+              mientras se rehace dentro del área de miembros. Lo que NO se
+              decidió es subirla al encabezado: cuando vuelva, vuelve acá.
 
               On a rest day `sessionCardState` is `null` and `SessionCard`
               renders nothing — that guard is the component's whole safety rule
@@ -292,19 +289,16 @@ export default function TrainerPage(): React.ReactElement {
                 enrolledCounts={enrolledCounts}
               />
             ) : (
+              // Sin acción, y la segunda oración del texto se fue con ella:
+              // ofrecía "Elegir otro horario" hacia el asistente para tomar
+              // la lista, que ya no se alcanza desde ninguna pantalla mientras
+              // se rehace dentro del área de miembros. Un día de descanso no
+              // tiene nada más que decir, y prometer una lista pendiente que
+              // nadie puede pasar era peor que no ofrecer nada.
               <EmptyState
                 icon={<CalendarOff size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                 title="Hoy no hay entrenamientos"
-                description={`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puede pasar la lista de otro día si quedó pendiente.`}
-                action={
-                  // The same words the card uses for the same destination —
-                  // "Elegir otro horario" is already how this screen names
-                  // the picker, and a second name for one place is the drift
-                  // the destination registry exists to stop.
-                  <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
-                    Elegir otro horario
-                  </Link>
-                }
+                description={`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}.`}
               />
             )}
 

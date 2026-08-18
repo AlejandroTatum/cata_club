@@ -295,10 +295,15 @@ describe("Header", (): void => {
 
     render(<Header />);
 
-    // Trainer gets Inicio + Mi día + Pasar lista.
+    // Trainer gets Inicio + Mi día + Historial.
     expect(screen.getByRole("link", { name: /Inicio/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Mi día" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Historial" })).toBeInTheDocument();
+    // "Pasar lista" se retiró del rail junto con el asistente para tomarla,
+    // que se rehará dentro del área de miembros. Se afirma su ausencia y no
+    // solo se deja de nombrarlo: una fila que vuelve sin decidirlo tiene que
+    // poner algo en rojo.
+    expect(screen.queryByRole("link", { name: "Pasar lista" })).not.toBeInTheDocument();
 
     // The nav must not carry an English label — see auth-utils.
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
@@ -350,7 +355,7 @@ describe("Header", (): void => {
     render(<Header />);
 
     expect(screen.getByRole("link", { name: "Mi día" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Historial" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pagos" })).toBeInTheDocument();
     // "Mi cuenta" is the name of `/student`; there is no group heading up here
     // to collide with it.

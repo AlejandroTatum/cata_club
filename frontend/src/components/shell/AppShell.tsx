@@ -303,7 +303,7 @@ function persistCollapsedPreference(value: boolean): void {
 
 /**
  * The nav row the current URL belongs to — longest matching prefix wins, so
- * `/trainer/attendance` highlights "Pasar lista" and not "Mi día".
+ * `/trainer/attendance/history` highlights "Historial" and not "Mi día".
  */
 export function resolveActiveHref(navLinks: NavLinkDef[], pathname: string): string | null {
   const matches = navLinks.filter(

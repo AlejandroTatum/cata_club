@@ -21,16 +21,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
-import { ArrowRight, UserCheck } from "lucide-react";
+import { UserCheck } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchTrainingSchedules, fetchAttendanceRecords } from "@/services/api";
 import {
   Badge,
-  buttonClasses,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -124,15 +122,14 @@ export default function AttendancePage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell
-        title="Asistencias"
-        actions={
-          <Link href="/trainer/attendance" className={buttonClasses("primary")}>
-            Tomar asistencia
-            <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          </Link>
-        }
-      >
+      {/*
+       * Sin acción en el encabezado. Llevaba "Tomar asistencia" desde #74,
+       * apuntando al asistente del entrenador, que dejó de ofrecerse desde la
+       * interfaz mientras se rehace dentro del área de miembros. Esta pantalla
+       * es el registro que el administrador consulta: tomar la lista nunca fue
+       * su trabajo, y no queda ningún verbo suyo para poner en el slot.
+       */}
+      <AppShell title="Asistencias">
         <div className={STAT_GRID}>
           <StatCard label="Horarios" value={schedules.length} hint="sesiones semanales" />
           <StatCard label="Registros" value={stats.totalStudents} hint="en el rango elegido" />
@@ -186,17 +183,7 @@ export default function AttendancePage(): React.ReactElement {
             fill
             icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="No hay registros en este rango"
-            description="Cambie el rango o los filtros, o registre una sesión de entrenamiento."
-            action={
-              // NOT `primary`. The page header already draws "Tomar asistencia"
-              // in red, so the empty state was putting the same label, in the
-              // same colour, pointing at the same destination, a second time on
-              // the same screen — two red buttons at once, and the client's "un
-              // botón por acá y otro por allá" in its most literal form.
-              <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
-                Tomar asistencia
-              </Link>
-            }
+            description="Cambie el rango o los filtros para ver otros registros."
           />
         )}
 

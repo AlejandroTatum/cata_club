@@ -2,7 +2,7 @@
  * Pure helpers for the trainer's "Mi día" screen
  * (`docs/archive/prototypes/prototipos/19-entrenador.html`).
  *
- * The screen has ONE job: get the trainer to the next roll call. Everything
+ * The screen has ONE job: tell the trainer where the day stands. Everything
  * here exists to answer four questions from data the backend actually
  * returns — when is the next session, what comes after it, how did the last
  * list go, and is anyone piling up absences.
@@ -25,7 +25,6 @@ import type {
   AttendanceRecord,
   TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
-import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 import type { AlumnoHorario } from "@/services/api";
 
 // ---------------------------------------------------------------------------
@@ -268,15 +267,20 @@ export function monthToDateRange(instant: Date = new Date()): DateRange {
 // until" before the session starts, "which one" once it has (the hour is a
 // session's identifier — `19-entrenador.html`'s successor,
 // `31-entrenador-dashboard-alternativas.html`, names this directly). "done"
-// carries no schedule and no href at all — a state with nothing to point at
-// must not be able to grow one by accident.
+// carries no schedule at all — a state with nothing to describe must not be
+// able to grow something by accident.
+//
+// Ningún estado lleva ya un `href`. Los dos que sí lo llevaban apuntaban al
+// asistente para tomar la lista, que dejó de ofrecerse desde la interfaz
+// mientras se rehace dentro del área de miembros; la tarjeta pasó a ser una
+// banda que informa y no navega. Este módulo es puro y no importa nada del
+// asistente, que es lo que hace que el corte sea completo y no cosmético.
 // ---------------------------------------------------------------------------
 
 export interface SessionCardNext {
   kind: "next";
   schedule: TrainingSchedule;
   minutesAway: number;
-  href: string;
   /** Everything still to come today, after `schedule` — see `selectTodaySessions`. */
   later: TrainingSchedule[];
 }
@@ -285,7 +289,6 @@ export interface SessionCardLive {
   kind: "live";
   schedule: TrainingSchedule;
   minutesElapsed: number;
-  href: string;
   /** Everything still to come today, after `schedule` — see `selectTodaySessions`. */
   later: TrainingSchedule[];
 }
@@ -297,13 +300,7 @@ export interface SessionCardDone {
 /** `null` stands for the three states that never render a card: rest day, loading, error. */
 export type SessionCardState = SessionCardNext | SessionCardLive | SessionCardDone | null;
 
-/**
- * Derive the immediate-session card's state from today's schedules.
- *
- * `fecha` is deliberately never passed to `buildWizardQuery`: this card is
- * always about TODAY, which is the wizard's own default and needs no address
- * (`attendance-utils.ts`'s own note on `fecha` being optional).
- */
+/** Derive the immediate-session card's state from today's schedules. */
 export function buildSessionCardState(
   todaySchedules: TrainingSchedule[],
   now: Date = new Date(),
@@ -313,12 +310,11 @@ export function buildSessionCardState(
   const { next, later } = selectTodaySessions(todaySchedules, now);
   if (!next) return { kind: "done" };
 
-  const href = `/trainer/attendance${buildWizardQuery(next.id, null, "mark-attendance")}`;
   const minutesAway = minutesUntilStart(next, now);
 
   return minutesAway > 0
-    ? { kind: "next", schedule: next, minutesAway, href, later }
-    : { kind: "live", schedule: next, minutesElapsed: -minutesAway, href, later };
+    ? { kind: "next", schedule: next, minutesAway, later }
+    : { kind: "live", schedule: next, minutesElapsed: -minutesAway, later };
 }
 
 /** "Hace N minutos" for the live state's support line. Never "hace 0 minutos". */

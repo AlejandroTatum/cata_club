@@ -355,11 +355,12 @@ describe("DashboardPage — actividad reciente", () => {
 
     expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
     expect(screen.getByText("Todavía no hay movimiento")).toBeInTheDocument();
-    // An empty state without a next action is a dead end.
-    expect(screen.getByRole("link", { name: /pasar lista/i })).toHaveAttribute(
-      "href",
-      "/trainer/attendance",
-    );
+    // Sin acción. Ofrecía "Pasar lista" hacia el asistente del entrenador, que
+    // se retiró de la interfaz mientras se rehace dentro del área de miembros;
+    // pasar lista tampoco era trabajo del administrador, así que no hay nada
+    // que poner en su lugar. Lo que sostiene el estado vacío es su texto, que
+    // sigue nombrando qué produce actividad.
+    expect(screen.queryByRole("link", { name: /pasar lista/i })).not.toBeInTheDocument();
   });
 
   it("keeps the attendance donut, and only when there are records", async () => {

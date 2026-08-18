@@ -120,22 +120,18 @@ function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] 
     case "trainer":
       links.push(
         row("/trainer"),
-        // Named after the action, not "Asistencia": the admin section called
-        // "Asistencias" is the record list, this one is the act of taking it.
-        // One word apart, they used to read as the same destination.
-        row("/trainer/attendance"),
-        // Its own section, not a detail of "Pasar lista": without this entry
-        // the only way into /trainer/attendance/history was a secondary button
-        // on the panel, and `resolveActiveHref` attributed the screen to
-        // "Pasar lista" (longest-prefix wins, and this href is the longer one
-        // as soon as it exists).
+        // Its own section, and now the trainer's only attendance surface. The
+        // roll-call wizard used to sit above it as "Pasar lista"; that row is
+        // gone because the wizard has no way in from the UI any more — it is
+        // being rebuilt inside the Members area. Nothing shorter competes with
+        // this href for `resolveActiveHref`'s longest-prefix highlight now.
         row("/trainer/attendance/history"),
-        // Última, y no por menos importante: las tres de arriba son la
-        // secuencia de una sesión —mirar el día, pasar lista, revisar lo
-        // pasado— y el padrón es consulta, no trabajo del día. Existe porque
-        // la ficha de emergencia vivía SOLO dentro del paso 2 del asistente:
-        // para ver a quién llamar había que entrar a un horario y ponerse a
-        // tomar asistencia.
+        // Última, y no por menos importante: las dos de arriba son lo que el
+        // entrenador hace con su día —mirarlo y revisar lo ya pasado— y el
+        // padrón es consulta, no trabajo del día. Existe porque la ficha de
+        // emergencia vivía SOLO dentro del paso 2 del asistente: para ver a
+        // quién llamar había que entrar a un horario y ponerse a tomar
+        // asistencia.
         row("/trainer/students"),
       );
       break;

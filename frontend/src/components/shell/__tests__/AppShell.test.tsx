@@ -284,7 +284,7 @@ describe("AppShell", (): void => {
     render(<AppShell title="Panel">{null}</AppShell>);
 
     expect(screen.getByRole("link", { name: "Mi día" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Historial" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Miembros/i })).not.toBeInTheDocument();
   });
 
@@ -797,9 +797,12 @@ describe("AppShell — the page header row", (): void => {
 // ---------------------------------------------------------------------------
 
 describe("resolveActiveHref", (): void => {
+  // Fixture local a propósito: acá se describe la REGLA, no el rail de hoy.
+  // Las filas reales viven en el bloque de abajo, que sí lee
+  // `getNavGroupsForRoles`.
   const trainerLinks = [
     { href: "/trainer", label: "Mi día" },
-    { href: "/trainer/attendance", label: "Pasar lista" },
+    { href: "/trainer/students", label: "Alumnos del club" },
   ];
 
   it("marks the exact route", (): void => {
@@ -807,13 +810,11 @@ describe("resolveActiveHref", (): void => {
   });
 
   it("prefers the most specific match over its parent section", (): void => {
-    expect(resolveActiveHref(trainerLinks, "/trainer/attendance")).toBe("/trainer/attendance");
+    expect(resolveActiveHref(trainerLinks, "/trainer/students")).toBe("/trainer/students");
   });
 
   it("keeps a descendant route inside its own section", (): void => {
-    expect(resolveActiveHref(trainerLinks, "/trainer/attendance/history")).toBe(
-      "/trainer/attendance",
-    );
+    expect(resolveActiveHref(trainerLinks, "/trainer/students/7")).toBe("/trainer/students");
   });
 
   it("returns null when nothing matches", (): void => {
@@ -840,8 +841,13 @@ describe("resolveActiveHref — real trainer navigation", (): void => {
     );
   });
 
-  it("still marks Pasar lista on the attendance screen", (): void => {
-    expect(resolveActiveHref(trainerNav, "/trainer/attendance")).toBe("/trainer/attendance");
+  // El asistente para tomar la lista ya no tiene fila en el rail: se retiró de
+  // la interfaz mientras se rehace dentro del área de miembros. Con "Pasar
+  // lista" fuera, el prefijo más largo que le queda a esa ruta es "/trainer",
+  // que es lo correcto — un entrenador parado ahí sigue estando en su día, no
+  // en una sección sin nombre.
+  it("falls back to Mi día on the wizard route, which no longer has a row", (): void => {
+    expect(resolveActiveHref(trainerNav, "/trainer/attendance")).toBe("/trainer");
   });
 
   it("still marks Mi día on the trainer panel", (): void => {
@@ -1156,7 +1162,6 @@ describe("AppShell — the rail of a person with several roles", (): void => {
     expect(rail().getByText("Mi cuenta", { selector: "p" })).toBeInTheDocument();
     expect(rail().getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
       "/trainer",
-      "/trainer/attendance",
       "/trainer/attendance/history",
       "/trainer/students",
       "/student",
@@ -1265,10 +1270,10 @@ describe("AppShell — the rail of a person with several roles", (): void => {
     render(<AppShell title="Mi día">{null}</AppShell>);
     fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
 
-    // "Asistencias" is a row of the account group; "Pasar lista" is the
+    // "Asistencias" is a row of the account group; "Historial" is the
     // trainer's. Both must be findable, or the palette would search only the
     // section the person happens to be standing in.
     expect(screen.getByRole("option", { name: "Asistencias" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Pasar lista" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Historial" })).toBeInTheDocument();
   });
 });

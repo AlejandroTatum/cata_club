@@ -26,34 +26,36 @@
  * this term?" had no answer anywhere in the trainer's product. Grouping stays
  * by session; the filters just narrow what gets grouped.
  *
- * ## "Corregir" deep-links into the session (#95)
+ * ## Solo lectura, por ahora
  *
- * Each row addresses its own roll call:
- * `/trainer/attendance?horario=<id>&fecha=<YYYY-MM-DD>&paso=lista`. Both
- * halves are load-bearing — the horario says which group, the fecha says
- * which day, and the same horario on two days is two different sessions. The
- * wizard opens on that roster with its filed marks already showing, and files
- * the correction back on that same date.
+ * Esta pantalla llevaba dos caminos hacia el asistente para tomar la lista:
+ * "Pasar lista" en el encabezado y en el estado vacío, y un "Corregir" por
+ * fila que abría la sesión con sus marcas ya cargadas (#95, con la ventana de
+ * 30 días de #262 y su motivo dicho entero de #373). Los tres se fueron con el
+ * asistente, que dejó de ofrecerse desde la interfaz mientras se rehace dentro
+ * del área de miembros.
  *
- * This used to be documented here as a gap needing a backend field. It did
- * not: `AsistenciaResponseDTO` had always sent `horarioId` and the adapter
- * was dropping it. `AttendanceRecord` carries it now, so the row has an id
- * and not only the "Lunes 15:00 — 16:30" label, which is not reversible into
- * a horario.
+ * La columna entera se fue, no solo su enlace: era la única acción que tenía y
+ * solo la veía un administrador. Una celda vacía bajo un encabezado "ACCIONES"
+ * es exactamente lo que esa columna ya se había prohibido en su momento. El
+ * historial en sí no cambió — sigue leyendo los mismos registros, agrupando
+ * por sesión y filtrando igual.
+ *
+ * `AttendanceRecord` sigue trayendo `horarioId` (el adaptador lo dejaba caer
+ * hasta #95) y eso no se toca: la corrección va a volver a necesitarlo, y una
+ * fila que solo dice "Lunes 15:00 — 16:30" no es reversible a un horario.
  */
 
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { ArrowRight, ClipboardList } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
 import {
-  Button,
   DataBox,
   EmptyState,
   ErrorState,
@@ -67,9 +69,7 @@ import {
   TableNameCell,
   TableRow,
   BackLink,
-  buttonClasses,
 } from "@/components/ui";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   getTotalPages,
   paginateRecords,
@@ -77,57 +77,16 @@ import {
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
 import { formatDate } from "@/lib/format-utils";
-import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
+import { clubIsoDate } from "@/lib/club-date";
 import { groupRecordsBySession, type SessionSummary } from "../../trainer-day-utils";
 import {
   SessionCompositionBar,
   SessionCompositionCounts,
 } from "../../SessionComposition";
-import { buildWizardQuery } from "../attendance-utils";
 import { summarizePeriodCoverage } from "./history-utils";
 
 /** Sessions per page. */
 const PAGE_SIZE = 10;
-
-/** Corregir solo admite sesiones con hasta 30 días de antigüedad (issue #262). */
-const LIMITE_CORRECCION_DIAS = 30;
-
-/**
- * Where "Corregir" goes: that session's roll call, already open.
- *
- * Built through `buildWizardQuery` rather than by hand so the wizard stays
- * the single owner of its own address — the parameter names and the step
- * vocabulary ("lista") live in one module, and this screen cannot drift out
- * of sync with the page it links into.
- */
-function buildCorrectionHref(session: SessionSummary): string {
-  return `/trainer/attendance${buildWizardQuery(session.horarioId, session.fecha, "mark-attendance")}`;
-}
-
-/**
- * El motivo del bloqueo, dicho entero (issue #373).
- *
- * Antes, pasados los 30 días, la celda quedaba vacía: el vencimiento se veía
- * exactamente igual que un error de carga, y el administrador no podía
- * distinguir "esta sesión ya no se corrige" de "algo se rompió". La regla no
- * cambió — sigue siendo la ventana de `LIMITE_CORRECCION_DIAS` atada al ciclo
- * de cobro (issue #262) — lo que cambió es que ahora se nombra en vez de
- * borrarse, el mismo criterio que #312: un control bloqueado dice por qué.
- */
-const MOTIVO_CORRECCION_VENCIDA =
-  "La ventana de corrección de 30 días ya cerró para esta sesión.";
-
-/**
- * El ancla entre el control muerto y su motivo, una por fila.
- *
- * `aria-describedby` apunta a un id, así que dos filas vencidas en la misma
- * página no pueden compartirlo o el lector de pantalla leería el motivo de
- * otra sesión. La fecha y el horario son justamente lo que hace única a una
- * sesión — la misma pareja con la que se arma la `key` de la fila.
- */
-function buildReasonId(session: SessionSummary): string {
-  return `correccion-vencida-${session.fecha}-${session.horarioId}`;
-}
 
 /**
  * La advertencia que convierte una cifra en una estimación.
@@ -189,17 +148,6 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-
-  const { session } = useAuth();
-  const esAdmin = session?.user.role === "admin";
-  // "Hoy - 30 días" resuelto en la zona del club, en YYYY-MM-DD para compararlo
-  // lexicográficamente contra `sessionRow.fecha` (también YYYY-MM-DD).
-  const corteCorreccion = useMemo(() => {
-    const hoy = clubToday();
-    const corte = new Date(hoy);
-    corte.setDate(corte.getDate() - LIMITE_CORRECCION_DIAS);
-    return calendarIsoDate(corte);
-  }, []);
 
   const filters = useAttendanceFilters("this_month");
   const { query } = filters;
@@ -270,22 +218,15 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
-      <AppShell
-        title="Historial de asistencias"
-        /*
-         * The same link, with the same label and the same arrow, that `/attendance`
-         * — this screen's admin twin, reading the same records — has carried in its
-         * header since #74. Until now this one offered no way to pass a list at all
-         * unless the table came back empty, so the action existed only in the state
-         * where there was nothing to correct.
-         */
-        actions={
-          <Link href="/trainer/attendance" className={buttonClasses("primary")}>
-            Pasar lista
-            <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          </Link>
-        }
-      >
+      {/*
+       * Sin acción en el encabezado. Llevaba el mismo "Pasar lista" que
+       * `/attendance` —su gemela de administración, leyendo los mismos
+       * registros— desde #74, y apuntaba al asistente que ya no se ofrece.
+       * `primary-action.test.ts` la nombra en su lista de excepciones con esta
+       * misma razón: no es un slot que alguien olvidó, es una pantalla de
+       * consulta que hoy no tiene verbo que promover.
+       */}
+      <AppShell title="Historial de asistencias">
         <BackLink href="/trainer" className="mb-6" />
 
         <AttendanceFilters filters={filters} schedules={schedules} layout="row" />
@@ -337,12 +278,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                     // two ends inverted — because "complete las dos fechas"
                     // is wrong advice when both are already filled in.
                     ? "Ajuste el rango de fechas para ver las listas."
-                    : "Cambie el rango o los filtros, o pase lista para que aparezca aquí."
-                }
-                action={
-                  <Link href="/trainer/attendance" className={buttonClasses("primary")}>
-                    Pasar lista
-                  </Link>
+                    : "Cambie el rango o los filtros para ver otras listas."
                 }
               />
             ) : (
@@ -365,20 +301,13 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                         <TableHeaderCell>Registró</TableHeaderCell>
                         <TableHeaderCell className="w-full">Resultado</TableHeaderCell>
                         {/*
-                         * "Corregir" is the only action this column has ever
-                         * offered, and only an admin may correct an
-                         * already-registered session (the same backend rule
-                         * `renderReadOnlyReason` explains in the wizard, issue
-                         * #310 / #27). For a trainer that action never exists,
-                         * so the column itself — header included — is omitted
-                         * rather than promising one under an "ACCIONES" label
-                         * that stayed empty on every row.
+                         * No hay columna de acciones. "Corregir" fue la única
+                         * que esta tabla ofreció, y se fue con el asistente al
+                         * que apuntaba. La regla que la gobernaba ya era la
+                         * misma: una columna cuya acción no existe se omite
+                         * entera —encabezado incluido— en vez de prometer algo
+                         * bajo un "ACCIONES" que queda vacío en cada fila.
                          */}
-                        {esAdmin && (
-                          <TableHeaderCell align="right">
-                            <span className="sr-only">Acciones</span>
-                          </TableHeaderCell>
-                        )}
                       </tr>
                     </TableHead>
                     <TableBody>
@@ -443,63 +372,6 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                               />
                             </div>
                           </TableCell>
-                          {esAdmin && (
-                            <TableCell align="right">
-                              {sessionRow.fecha >= corteCorreccion ? (
-                                <Link
-                                  href={buildCorrectionHref(sessionRow)}
-                                  className={buttonClasses("secondary", "sm")}
-                                >
-                                  Corregir
-                                </Link>
-                              ) : (
-                                /*
-                                 * Vencida: la acción se queda, apagada y con el
-                                 * motivo al lado (issue #373).
-                                 *
-                                 * Deja de ser un `<Link>` a propósito. Un ancla
-                                 * deshabilitada no existe en HTML — `disabled`
-                                 * no le aplica — así que seguiría navegando al
-                                 * asistente para que el backend rechace la
-                                 * corrección al final del camino. Un `<button
-                                 * disabled>` sí se lee bloqueado, y encima no
-                                 * promete un destino que no va a cumplir.
-                                 *
-                                 * El motivo es texto visible de la celda, no un
-                                 * `title`: un `title` solo aparece al pasar el
-                                 * mouse, no existe en pantalla táctil y no todo
-                                 * lector de pantalla lo anuncia.
-                                 * `aria-describedby` lo ata al control, que es
-                                 * como el asistente ya bloquea "Revisar y
-                                 * confirmar" cuando faltan alumnos por marcar
-                                 * (`../page.tsx`, `unmarkedReasonId`).
-                                 *
-                                 * Ese par allá usa `role="status"` porque el
-                                 * motivo aparece y desaparece mientras el
-                                 * entrenador marca. Acá no: la fila nace
-                                 * vencida y no cambia sola, y diez sesiones
-                                 * viejas en una página serían diez regiones
-                                 * vivas anunciándose al cargar la tabla.
-                                 */
-                                <div className="flex flex-col items-end gap-1.5">
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    disabled
-                                    aria-describedby={buildReasonId(sessionRow)}
-                                  >
-                                    Corregir
-                                  </Button>
-                                  <p
-                                    id={buildReasonId(sessionRow)}
-                                    className="max-w-[240px] text-balance text-xs text-ink-3"
-                                  >
-                                    {MOTIVO_CORRECCION_VENCIDA}
-                                  </p>
-                                </div>
-                              )}
-                            </TableCell>
-                          )}
                         </TableRow>
                       ))}
                     </TableBody>

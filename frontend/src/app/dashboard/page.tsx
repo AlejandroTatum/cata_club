@@ -376,17 +376,17 @@ export default function DashboardPage(): React.ReactElement {
             ) : (
               /* `inset`: the card and its header are already open above. What
                  the empty state has to do here is name the two things that
-                 actually produce activity, and offer the nearer one. */
+                 actually produce activity.
+
+                 No action: it used to offer "Pasar lista", and the roll-call
+                 wizard is no longer reachable from the UI while it is rebuilt
+                 inside the Members area. Passing a list is also not the
+                 admin's own job, so there is nothing to put in its place. */
               <EmptyState
                 surface="inset"
                 icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                 title="Todavía no hay movimiento"
                 description="Acá aparecen los pagos que suben y las listas que se pasan, apenas ocurra el primero."
-                action={
-                  <Link href="/trainer/attendance" className={buttonClasses("primary", "sm")}>
-                    Pasar lista
-                  </Link>
-                }
               />
             )}
           </section>

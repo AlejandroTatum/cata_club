@@ -59,7 +59,10 @@ const EXPECTED_PHRASES: Record<string, string> = {
   "/attendance": "Volver a Asistencias",
   "/reports": "Volver a Reportes",
   "/trainer": "Volver a Mi día",
-  "/trainer/attendance": "Volver a Pasar lista",
+  // Sin "/trainer/attendance": el asistente para tomar la lista dejó de
+  // ofrecerse desde la interfaz mientras se rehace dentro del área de
+  // miembros, así que el registro ya no lo nombra. La ausencia se sostiene
+  // sola — la prueba de abajo compara las dos listas en los dos sentidos.
   "/trainer/attendance/history": "Volver al Historial",
   // Plural común, sin artículo: la preposición es "a", igual que "Volver a
   // Miembros". El nombre dice "del club" a propósito — el club no asigna
