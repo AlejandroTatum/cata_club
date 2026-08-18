@@ -91,6 +91,14 @@ function hydratingAuth(): AuthState {
 beforeEach(() => {
   mockUseAuth.mockReturnValue(resolvedAuth("admin"));
   mockShowInfo.mockReset();
+  // `BeneficioSection` (issue #398) mounts unconditionally inside every
+  // student edit panel, so every test that opens the edit modal fetches a
+  // benefit whether it cares about one or not. Defaulting to "no beneficio"
+  // here keeps every pre-existing test that never mentions beneficios green
+  // without having to know this component exists.
+  mockFetchBeneficio.mockReset().mockResolvedValue(null);
+  mockAsignarBeneficio.mockReset();
+  mockRetirarBeneficio.mockReset();
 });
 
 const mockShowInfo = vi.fn();
@@ -118,6 +126,9 @@ const mockCrearMembresia = vi.fn();
 const mockRegistrarPago = vi.fn();
 const mockSubirVoucherPago = vi.fn().mockResolvedValue({ voucherUrl: "https://example.test/voucher.pdf" });
 const mockFetchDescuentos = vi.fn().mockResolvedValue([]);
+const mockFetchBeneficio = vi.fn().mockResolvedValue(null);
+const mockAsignarBeneficio = vi.fn();
+const mockRetirarBeneficio = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 const mockFetchMembresiaDeuda = vi.fn().mockResolvedValue({
@@ -156,6 +167,9 @@ vi.mock("@/services/api", () => {
     registrarPago: (data: unknown) => mockRegistrarPago(data),
     subirVoucherPago: (pagoId: number, archivo: File) => mockSubirVoucherPago(pagoId, archivo),
     fetchDescuentos: () => mockFetchDescuentos(),
+    fetchBeneficio: (personaId: number) => mockFetchBeneficio(personaId),
+    asignarBeneficio: (personaId: number, descuentoId: number) => mockAsignarBeneficio(personaId, descuentoId),
+    retirarBeneficio: (personaId: number) => mockRetirarBeneficio(personaId),
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     fetchMembresiaDeuda: () => mockFetchMembresiaDeuda(),
@@ -1139,108 +1153,54 @@ describe("MembersPage — Registrar pago inline form", () => {
     });
   });
 
-  it("offers active discounts, previews the final amount and submits descuentoIds (issue #12)", async () => {
-    const dialog = await openMemberDialog({
-      descuentos: [
-        { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
-        { id: 2, nombre: "Beca vieja", porcentaje: "100", monto: null, activo: false },
-      ],
-    });
-    await openPaymentForm(dialog);
-
-    // Only ACTIVE discounts are offered for application; the inactive one
-    // stays visible in the catalog screen but never here.
-    const mediaBeca = await within(dialog).findByRole("radio", { name: /media beca/i });
-    expect(within(dialog).queryByRole("radio", { name: /beca vieja/i })).not.toBeInTheDocument();
-
-    fireEvent.click(mediaBeca);
-
-    // Client-side DISPLAY preview: 85 − 50 % = 42.50 (backend recomputes).
-    expect(await within(dialog).findByText(/monto final/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/42,50/)).toBeInTheDocument();
-
-    submitPaymentWithVoucher(dialog);
-
-    await waitFor(() => {
-      expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
-    });
-    // `monto` stays the BASE amount: the backend freezes catalog values and
-    // computes the final amount itself.
-    expect(mockRegistrarPago.mock.calls[0][0]).toMatchObject({
-      monto: 85,
-      descuentoIds: [1],
-    });
-  });
-
-  it("omits descuentoIds when no discount is selected", async () => {
+  /**
+   * Issue #398: this form used to fetch the discount catalog and render a
+   * radio picker (see the git history of this test) so the admin chose a
+   * discount per payment. Since the backend now resolves a payment's
+   * discount from the persona's ASSIGNED benefit — see the "Beneficio del
+   * club" describe below — and ignores that choice entirely, this form
+   * offers no discount UI at all anymore, and never even asks the catalog
+   * for one.
+   */
+  it("renders no discount picker inside the payment form", async () => {
     const dialog = await openMemberDialog({
       descuentos: [{ id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true }],
     });
     await openPaymentForm(dialog);
-    await within(dialog).findByRole("radio", { name: /media beca/i });
+    await within(dialog).findByDisplayValue("85");
 
-    // "Sin descuento" is the default selection — a payment with no discount
-    // is the normal case and must stay reachable without touching any radio.
-    expect(within(dialog).getByRole("radio", { name: /sin descuento/i })).toBeChecked();
-
-    submitPaymentWithVoucher(dialog);
-
-    await waitFor(() => {
-      expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
-    });
-    expect("descuentoIds" in (mockRegistrarPago.mock.calls[0][0] as Record<string, unknown>)).toBe(false);
+    expect(within(dialog).queryByRole("radio")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/descuento/i)).not.toBeInTheDocument();
+    expect(mockFetchDescuentos).not.toHaveBeenCalled();
   });
 
-  it("only allows one discount selected at a time (regression: backend rejects more than one)", async () => {
-    const dialog = await openMemberDialog({
-      descuentos: [
-        { id: 1, nombre: "Beca parcial", porcentaje: "30", monto: null, activo: true },
-        { id: 2, nombre: "Familiar", porcentaje: "20", monto: null, activo: true },
-      ],
-    });
+  it("never sends descuentoIds in the payment payload", async () => {
+    const dialog = await openMemberDialog();
     await openPaymentForm(dialog);
 
-    const becaParcial = await within(dialog).findByRole("radio", { name: /beca parcial/i });
-    const familiar = within(dialog).getByRole("radio", { name: /^familiar/i });
-    const sinDescuento = within(dialog).getByRole("radio", { name: /sin descuento/i });
-
-    // Picking a discount is mutually exclusive with the others — there is no
-    // way, through this UI, to have two selected at once.
-    fireEvent.click(becaParcial);
-    expect(becaParcial).toBeChecked();
-    expect(familiar).not.toBeChecked();
-    expect(sinDescuento).not.toBeChecked();
-
-    fireEvent.click(familiar);
-    expect(familiar).toBeChecked();
-    expect(becaParcial).not.toBeChecked();
-    expect(sinDescuento).not.toBeChecked();
-
     submitPaymentWithVoucher(dialog);
 
     await waitFor(() => {
       expect(mockRegistrarPago).toHaveBeenCalledTimes(1);
     });
-    // Exactly one id travels — never both.
-    expect(mockRegistrarPago.mock.calls[0][0]).toMatchObject({ descuentoIds: [2] });
+    // The whole key set, not `objectContaining` — that would still pass even
+    // if `descuentoIds` came back on the payload.
+    expect(Object.keys(mockRegistrarPago.mock.calls[0][0] as Record<string, unknown>).sort()).toEqual(
+      ["membresiaId", "monto", "personaId", "tipoPago"].sort(),
+    );
   });
 
-  it("surfaces the backend cap-exceeded 400 as a normal form error", async () => {
+  it("surfaces an arbitrary backend 400 message as a normal form error", async () => {
     const { ApiClientError } = await import("@/services/api");
     const dialog = await openMemberDialog({
-      // A single FIXED discount larger than the base amount is enough to hit
-      // the backend's 100% cap — the old two-checkbox setup that summed two
-      // discounts no longer applies now that only one can be selected.
-      descuentos: [{ id: 1, nombre: "Beca completa+", porcentaje: null, monto: "200", activo: true }],
-      registrarPagoRejects: new ApiClientError("El descuento total no puede superar el 100% del monto", 400),
+      registrarPagoRejects: new ApiClientError("El monto no coincide con la cuota mensual", 400),
     });
     await openPaymentForm(dialog);
 
-    fireEvent.click(await within(dialog).findByRole("radio", { name: /beca completa\+/i }));
     submitPaymentWithVoucher(dialog);
 
     expect(
-      await within(dialog).findByText("El descuento total no puede superar el 100% del monto"),
+      await within(dialog).findByText("El monto no coincide con la cuota mensual"),
     ).toBeInTheDocument();
   });
 
@@ -1360,6 +1320,160 @@ describe("MembersPage — Registrar pago inline form", () => {
     const dialog = screen.getByRole("dialog");
     await within(dialog).findByRole("button", { name: /crear membresía/i });
     expect(within(dialog).queryByRole("button", { name: /^registrar pago$/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("MembersPage — Beneficio del club", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
+    mockFetchDescuentos.mockReset().mockResolvedValue([]);
+  });
+
+  const BENEFICIO_ACTIVO = {
+    id: 7,
+    personaId: 10,
+    descuento: { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
+    asignadoPorPersonaId: 3,
+    asignadoEn: "2026-08-01T10:00:00Z",
+    retiradoPorPersonaId: null,
+    retiradoEn: null,
+  };
+
+  async function openEditModal(): Promise<HTMLElement> {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getEditButton(row));
+    return screen.getByRole("dialog");
+  }
+
+  it("renders the active benefit, including who granted it", async () => {
+    mockFetchBeneficio.mockResolvedValue(BENEFICIO_ACTIVO);
+    const dialog = await openEditModal();
+
+    expect(await within(dialog).findByText("Media beca")).toBeInTheDocument();
+    expect(within(dialog).getByText("50%")).toBeInTheDocument();
+    // The whole point of an auditable assignment: who granted it.
+    expect(within(dialog).getByText(/asignado por persona #3/i)).toBeInTheDocument();
+  });
+
+  it('shows "Sin beneficio" when the persona has none', async () => {
+    mockFetchBeneficio.mockResolvedValue(null);
+    const dialog = await openEditModal();
+
+    expect(await within(dialog).findByText(/sin beneficio/i)).toBeInTheDocument();
+  });
+
+  it("only offers active catalog discounts when assigning", async () => {
+    mockFetchBeneficio.mockResolvedValue(null);
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
+      { id: 2, nombre: "Beca vieja", porcentaje: "100", monto: null, activo: false },
+    ]);
+    const dialog = await openEditModal();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /asignar beneficio/i }));
+    const select = await within(dialog).findByRole("combobox");
+
+    expect(within(select).getByText(/media beca/i)).toBeInTheDocument();
+    expect(within(select).queryByText(/beca vieja/i)).not.toBeInTheDocument();
+  });
+
+  it("assigning calls the API and refreshes the block with the new benefit", async () => {
+    mockFetchBeneficio.mockResolvedValue(null);
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
+    ]);
+    mockAsignarBeneficio.mockResolvedValue(BENEFICIO_ACTIVO);
+    const dialog = await openEditModal();
+    await within(dialog).findByText(/sin beneficio/i);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /asignar beneficio/i }));
+    const select = await within(dialog).findByRole("combobox");
+    fireEvent.change(select, { target: { value: "1" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^asignar$/i }));
+
+    await waitFor(() => {
+      expect(mockAsignarBeneficio).toHaveBeenCalledWith(10, 1);
+    });
+    expect(await within(dialog).findByText("Media beca")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/sin beneficio/i)).not.toBeInTheDocument();
+  });
+
+  it("retiring asks for confirmation naming the benefit and history, and cancelling does not call the API", async () => {
+    mockFetchBeneficio.mockResolvedValue(BENEFICIO_ACTIVO);
+    const dialog = await openEditModal();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /retirar beneficio/i }));
+
+    const confirm = within(dialog).getByRole("dialog");
+    expect(confirm).toHaveTextContent(/media beca/i);
+    expect(confirm).toHaveTextContent(/los pagos históricos no cambian/i);
+
+    fireEvent.click(within(confirm).getByRole("button", { name: /^cancelar$/i }));
+
+    expect(mockRetirarBeneficio).not.toHaveBeenCalled();
+    // Cancelling did not retire it — the benefit is still shown.
+    expect(within(dialog).getByText("Media beca")).toBeInTheDocument();
+  });
+
+  it("confirming the retirement calls the API and clears the benefit", async () => {
+    mockFetchBeneficio.mockResolvedValue(BENEFICIO_ACTIVO);
+    mockRetirarBeneficio.mockResolvedValue({ ...BENEFICIO_ACTIVO, retiradoEn: "2026-08-18T00:00:00Z" });
+    const dialog = await openEditModal();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /retirar beneficio/i }));
+    fireEvent.click(within(within(dialog).getByRole("dialog")).getByRole("button", { name: /^retirar$/i }));
+
+    await waitFor(() => {
+      expect(mockRetirarBeneficio).toHaveBeenCalledWith(10);
+    });
+    expect(await within(dialog).findByText(/sin beneficio/i)).toBeInTheDocument();
+  });
+
+  /**
+   * A 5xx is never shown verbatim (see `toUserMessage`'s own doc comment:
+   * "the detail describes the SERVER's failure, never the user's" — every
+   * 5xx collapses to the app's one generic `SERVER_FAILURE` sentence,
+   * regardless of what the backend's `detail` said). The first version of
+   * this test asserted the raw detail string would render, which no screen
+   * in this app actually does for a 5xx — fixed to assert the real,
+   * documented contract instead of a message `toUserMessage` deliberately
+   * discards.
+   */
+  it("surfaces a failure message when the initial fetch fails", async () => {
+    const { ApiClientError } = await import("@/services/api");
+    mockFetchBeneficio.mockRejectedValue(new ApiClientError("boom", 500));
+    const dialog = await openEditModal();
+
+    expect(
+      await within(dialog).findByText(/el servidor no pudo completar la operación/i),
+    ).toBeInTheDocument();
+  });
+
+  it("surfaces a backend failure message when assigning fails", async () => {
+    const { ApiClientError } = await import("@/services/api");
+    mockFetchBeneficio.mockResolvedValue(null);
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
+    ]);
+    mockAsignarBeneficio.mockRejectedValue(
+      new ApiClientError("La persona ya tiene un beneficio vigente", 400),
+    );
+    const dialog = await openEditModal();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /asignar beneficio/i }));
+    const select = await within(dialog).findByRole("combobox");
+    fireEvent.change(select, { target: { value: "1" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^asignar$/i }));
+
+    expect(
+      await within(dialog).findByText("La persona ya tiene un beneficio vigente"),
+    ).toBeInTheDocument();
   });
 });
 

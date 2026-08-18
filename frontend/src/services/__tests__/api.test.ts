@@ -1165,25 +1165,16 @@ describe("actualizarDescuento", () => {
   });
 });
 
-describe("registrarPago — descuentos", () => {
-  it("includes descuentoIds in the POST body when provided", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(
-      okResponse({ id: 7, estadoPago: "PENDIENTE_VALIDACION" }, { status: 201 }),
-    );
-
-    await registrarPago({
-      monto: 35,
-      tipoPago: "EFECTIVO",
-      personaId: 9,
-      membresiaId: 4,
-      descuentoIds: [1, 2],
-    });
-
-    const body = JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body));
-    expect(body.descuentoIds).toEqual([1, 2]);
-  });
-
-  it("keeps the payload unchanged when no descuentos are selected", async () => {
+/**
+ * Issue #398: `descuentoIds` used to be an optional field on this payload
+ * (see the git history of this describe block) so an admin could choose a
+ * discount per payment. The backend now resolves a payment's discount from
+ * the persona's ASSIGNED benefit and ignores `descuento_ids` entirely, so
+ * the field was dropped from `RegistrarPagoInput` outright — there is no
+ * longer a way to attach one, well-formed or not.
+ */
+describe("registrarPago — no descuentoIds (issue #398)", () => {
+  it("never sends a descuentoIds key — the discount comes from the persona's assigned benefit, not from this call", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       okResponse({ id: 8, estadoPago: "PENDIENTE_VALIDACION" }, { status: 201 }),
     );
@@ -1196,7 +1187,9 @@ describe("registrarPago — descuentos", () => {
     });
 
     const body = JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body));
-    expect("descuentoIds" in body).toBe(false);
+    // The whole key set, not `objectContaining` — that would still pass even
+    // if `descuentoIds` came back on the payload.
+    expect(Object.keys(body).sort()).toEqual(["membresiaId", "monto", "personaId", "tipoPago"].sort());
   });
 });
 

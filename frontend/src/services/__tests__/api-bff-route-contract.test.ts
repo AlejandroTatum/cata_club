@@ -349,21 +349,27 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
   });
 
   /**
-   * The discount seam (issue #12): the client sends camelCase `descuentoIds`
-   * and the pago handler is the only thing translating it into the backend's
-   * `descuento_ids`. A drift on either side would silently register the pago
-   * WITHOUT its discounts — no 400, just a wrong (undiscounted) amount.
+   * The discount seam used to run through here (issue #12): the client sent
+   * camelCase `descuentoIds` and the pago handler translated it into the
+   * backend's `descuento_ids`. Issue #398 moved the discount off the
+   * per-payment path entirely — `registrarPago` no longer has a
+   * `descuentoIds` field to send — so this now pins the opposite contract: a
+   * stale client bundle that still sends one (injected raw below, since the
+   * current client can't even construct it) gets it silently dropped, never
+   * forwarded and never rejected with a 400.
    */
-  it("registrarPago's descuentoIds are accepted and translated by POST /api/membresias/pagos", async () => {
-    const clientBody = await captureBody(() =>
-      registrarPago({
-        monto: 35,
-        tipoPago: "EFECTIVO",
-        personaId: 9,
-        membresiaId: 4,
-        descuentoIds: [1, 2],
-      }),
-    );
+  it("a stale client's descuentoIds is dropped, not translated, by POST /api/membresias/pagos", async () => {
+    const clientBody = {
+      ...((await captureBody(() =>
+        registrarPago({
+          monto: 35,
+          tipoPago: "EFECTIVO",
+          personaId: 9,
+          membresiaId: 4,
+        }),
+      )) as Record<string, unknown>),
+      descuentoIds: [1, 2],
+    };
 
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ id: 1 }), {
@@ -381,7 +387,7 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
     );
 
     expect(response.status).not.toBe(400);
-    expect(forwardedToBackend().descuento_ids).toEqual([1, 2]);
+    expect(forwardedToBackend()).not.toHaveProperty("descuento_ids");
   });
 
   /**
