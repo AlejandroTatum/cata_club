@@ -13,6 +13,15 @@ El reporte NUNCA expone datos privados de la persona (nombre, cédula,
 teléfono, correo) -- solo IDs numéricos, montos, booleanos y conteos. Esa
 es la garantía que permite pegar la salida en un issue de GitHub.
 
+Sobre "no escribe": no alcanza con no emitir `UPDATE`/`INSERT` propios.
+`Session` viene con `autoflush=True`, así que CUALQUIER `session.query(...)`
+vacía primero los objetos sucios que el llamador tenga pendientes -- y estas
+funciones reciben una `Session` ajena a propósito. Un llamador que las
+componga dentro de un script más grande, o que las invoque a mitad de una
+transacción, vería sus cambios pendientes bajar a la base por culpa de un
+reporte. Por eso cada detector consulta dentro de `session.no_autoflush`:
+sin eso la garantía del párrafo anterior es una intención, no un hecho.
+
 Tres clases de anomalía:
   A1 -- `monto_aplicado` != `precio` VIGENTE del plan, sin contar gratuidad
         familiar (eso es A2). El plan pudo subir de precio después de la
@@ -28,9 +37,14 @@ Tres clases de anomalía:
         se acumulan libres, y #400 exige a lo sumo una membresía operativa
         por persona.
 
+El destino se toma SIEMPRE de `settings.database_url`, nunca de un argumento
+de línea de comandos. Un `--database-url` libre convierte a argv en un canal
+para redirigir la conexión a una base arbitraria, y este script se corre
+contra la base real del club: quien necesite otro destino define
+`DATABASE_URL` en el entorno, que es de donde `settings` ya lo lee.
+
 Uso:
     uv run python scripts/inventario_anomalias_membresias.py [--json]
-        [--database-url <url>]  # default: settings.database_url
 """
 import argparse
 import json
@@ -53,9 +67,11 @@ def detectar_deriva_de_tarifa(session: Session) -> list[dict]:
     """A1: `monto_aplicado != precio_vigente`, excluyendo gratuidad familiar
     y ceros (esos casos son A2, nunca deriva de tarifa)."""
     filas = []
-    for membresia, tipo in session.query(Membresia, TipoMembresia).join(
-        TipoMembresia, Membresia.tipo_membresia_id == TipoMembresia.id
-    ):
+    with session.no_autoflush:
+        pares = session.query(Membresia, TipoMembresia).join(
+            TipoMembresia, Membresia.tipo_membresia_id == TipoMembresia.id
+        ).all()
+    for membresia, tipo in pares:
         if membresia.es_gratuidad_familiar or membresia.monto_aplicado == 0:
             continue
         if membresia.monto_aplicado == tipo.precio:
@@ -77,9 +93,11 @@ def detectar_importes_cero(session: Session) -> dict[str, list[dict]]:
     inexplicado: list[dict] = []
     incoherente: list[dict] = []
 
-    for membresia, tipo in session.query(Membresia, TipoMembresia).join(
-        TipoMembresia, Membresia.tipo_membresia_id == TipoMembresia.id
-    ):
+    with session.no_autoflush:
+        pares = session.query(Membresia, TipoMembresia).join(
+            TipoMembresia, Membresia.tipo_membresia_id == TipoMembresia.id
+        ).all()
+    for membresia, tipo in pares:
         fila = {
             "membresia_id": membresia.id, "tipo_membresia_id": tipo.id,
             "estado": membresia.estado.value, "monto_aplicado": membresia.monto_aplicado,
@@ -108,7 +126,10 @@ def detectar_membresias_no_activas_duplicadas(session: Session) -> list[dict]:
     agrupamiento se hace en Python (no `GROUP BY`) porque el volumen de
     `membresia` es chico y así la lista de ids/estados por persona sale
     directo del mismo recorrido, sin una segunda consulta."""
-    no_activas = session.query(Membresia).filter(Membresia.estado != EstadoMembresia.ACTIVA).all()
+    with session.no_autoflush:
+        no_activas = (
+            session.query(Membresia).filter(Membresia.estado != EstadoMembresia.ACTIVA).all()
+        )
 
     por_persona: dict[int, list[Membresia]] = {}
     for membresia in no_activas:
@@ -204,13 +225,12 @@ def main() -> None:
         "activos). No escribe nada; ver issue #400."
     )
     parser.add_argument("--json", action="store_true", help="Salida en JSON.")
-    parser.add_argument(
-        "--database-url", default=None,
-        help="Override de la URL. Default: settings.database_url.",
-    )
     args = parser.parse_args()
 
-    engine = create_engine(args.database_url or settings.database_url)
+    # El destino NO se toma de argv (ver docstring del módulo): `settings` lo
+    # resuelve desde el entorno, que es el único canal por el que se elige
+    # contra qué base corre este reporte.
+    engine = create_engine(settings.database_url)
     try:
         with sessionmaker(bind=engine)() as session:
             inventario = construir_inventario(session)

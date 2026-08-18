@@ -137,12 +137,51 @@ def test_no_activas_no_flaggea_una_activa_y_una_vencida(db_session):
     assert detectar_membresias_no_activas_duplicadas(db_session) == []
 
 
+# --- Particion de clases ------------------------------------------------------
+
+def test_a1_y_a2_no_se_solapan(db_session):
+    """A1 y A2 particionan: una gratuidad incoherente (bandera dice gratis,
+    monto no es cero ni igual al precio) cae en A2 y NUNCA tambien en A1.
+    Sin este test la exclusion mutua queda afirmada solo por inspeccion."""
+    persona = crear_persona_orm(db_session, "1000000010")
+    tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
+    membresia = crear_membresia_orm(
+        db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("15.00"),
+    )
+    membresia.es_gratuidad_familiar = True
+    db_session.flush()
+
+    en_a1 = {f["membresia_id"] for f in detectar_deriva_de_tarifa(db_session)}
+    ceros = detectar_importes_cero(db_session)
+    en_a2 = {f["membresia_id"] for filas in ceros.values() for f in filas}
+
+    assert membresia.id in en_a2
+    assert en_a1 & en_a2 == set()
+
+
 # --- Privacidad y no-escritura ------------------------------------------------
 
+# Allow-list, no block-list: la version anterior de este candado solo verificaba
+# que cuatro strings sembrados no aparecieran, asi que una fuga con otra forma
+# (un nombre recortado, un telefono formateado distinto) pasaba limpia. Lo que
+# hay que fijar es que ninguna fila lleve una clave que no sea ID, plata,
+# booleano o conteo.
+_CLAVES_PERMITIDAS = {
+    "membresia_id", "tipo_membresia_id", "estado", "monto_aplicado", "precio_vigente",
+    "delta", "es_gratuidad_familiar", "persona_id", "cantidad", "membresia_ids", "estados",
+}
+
+
+def _filas_del_inventario(inventario):
+    yield from inventario["a1_deriva_de_tarifa"]["filas"]
+    for bloque in inventario["a2_importes_cero"].values():
+        yield from bloque["filas"]
+    yield from inventario["a4_no_activas_duplicadas"]["filas"]
+
+
 def test_reporte_no_expone_datos_privados_de_la_persona(db_session):
-    """Candado de privacidad (#400): el JSON serializado nunca debe contener
-    nombre, apellido, cédula ni teléfono -- solo IDs, montos, booleanos y
-    conteos."""
+    """Candado de privacidad (#400): ninguna fila puede llevar una clave fuera
+    de la allow-list, y los datos sembrados no aparecen en el JSON."""
     persona = crear_persona_orm(
         db_session, "1717171717",
         nombres="Xilonenxxxxx", apellidos="Apuntobrilloso", telefono="0987654321",
@@ -154,23 +193,39 @@ def test_reporte_no_expone_datos_privados_de_la_persona(db_session):
     crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.VENCIDA)
     crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.INACTIVA)
 
-    salida = formatear_json(construir_inventario(db_session))
+    inventario = construir_inventario(db_session)
+    filas = list(_filas_del_inventario(inventario))
+    assert filas, "el escenario debe producir filas, si no el candado es vacuo"
+    for fila in filas:
+        assert set(fila) <= _CLAVES_PERMITIDAS, f"clave no permitida en {sorted(fila)}"
 
-    assert "Xilonenxxxxx" not in salida
-    assert "Apuntobrilloso" not in salida
-    assert "1717171717" not in salida
-    assert "0987654321" not in salida
+    salida = formatear_json(inventario)
+    for privado in ("Xilonenxxxxx", "Apuntobrilloso", "1717171717", "0987654321"):
+        assert privado not in salida
 
 
-def test_construir_inventario_es_de_solo_lectura(db_session):
+def test_construir_inventario_no_vacia_cambios_pendientes_del_llamador(db_session):
+    """Candado de la garantia de solo lectura. `Session` trae `autoflush=True`:
+    sin `no_autoflush`, la primera consulta del reporte bajaria a la base los
+    cambios que el llamador todavia tenia pendientes. Estas funciones reciben
+    una sesion ajena a proposito, asi que el caso no es hipotetico. Contar
+    filas antes y despues no lo detecta: un UPDATE no cambia el conteo."""
     persona = crear_persona_orm(db_session, "1000000009")
-    tipo = crear_tipo_membresia_orm(db_session)
-    crear_membresia_orm(
-        db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("0.00"),
+    tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
+    membresia = crear_membresia_orm(
+        db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
     )
 
+    # El conteo se toma ANTES de ensuciar: `query(...).count()` tambien
+    # autoflushea, asi que medirlo despues limpiaria el objeto sucio y el
+    # candado quedaria vacuo -- exactamente la trampa que este test vigila.
     antes = db_session.query(Membresia).count()
-    construir_inventario(db_session)
-    despues = db_session.query(Membresia).count()
 
-    assert antes == despues
+    membresia.monto_aplicado = Decimal("99.00")  # sucio a proposito, SIN flush
+    assert membresia in db_session.dirty
+
+    construir_inventario(db_session)
+
+    assert membresia in db_session.dirty, "el reporte vacio un cambio pendiente del llamador"
+    with db_session.no_autoflush:
+        assert db_session.query(Membresia).count() == antes
