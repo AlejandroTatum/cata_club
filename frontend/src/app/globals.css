@@ -385,11 +385,26 @@
  *
  * Esta hoja da el LIENZO; la COMPOSICIÓN la da el propio componente, y desde
  * el rediseño vertical es UNA SOLA: pantalla e impreso arman la misma columna
- * centrada sobre el mismo DOM, y las variantes `print:*` solo cambian el fondo
- * (degradado coal → blanco), la tinta y la escala física. Lo único que no
- * viaja al papel es lo que no puede viajar: la banda de estado (#286), los
- * botones, la trama halftone, el logo y «Valor mensual» (identificar
- * pertenencia no es publicar un precio).
+ * centrada sobre el mismo DOM. Las variantes `print:*` que quedan en el
+ * componente solo bajan la ESCALA FÍSICA —foto, marca, nombre y cédula, un
+ * paso cada uno— más `print:rounded-none` y `print:shadow-none`, dos adornos
+ * de pantalla que en papel ensucian la línea de corte. El COLOR no es asunto
+ * de ellas: lo decide esta hoja unas líneas más abajo, y lo que hace ahí
+ * (`print-color-adjust: exact`) es exactamente lo CONTRARIO de blanquear la
+ * tarjeta.
+ *
+ * NADA DENTRO DE LA CREDENCIAL SE EXCLUYE DEL PAPEL, y es una decisión, no un
+ * olvido: un `print:hidden` acá adentro sería un dato que la pantalla muestra
+ * y la hoja esconde, que es la deriva que hacía leer los dos medios como dos
+ * tarjetas distintas. Lo que no debe imprimirse —el panel, «Imprimir carnet»,
+ * la nota de tamaño— vive FUERA de `#carnet-print-area`, donde esta hoja ya lo
+ * oculta sin que nada tenga que optar por salirse.
+ *
+ * Y la banda de estado, la trama halftone y «Valor mensual» no se ocultan acá
+ * porque no existen en NINGÚN medio: se cayeron del diseño —ver el bloque de
+ * `app/student/page.tsx`—, no del papel. El logo tampoco se cae: es la marca
+ * DIBUJADA (`ClubPaddleMark`), imprime como color plano y baja un paso para
+ * hacerlo.
  *
  * ## Tres defectos medidos en un Chromium real, y qué los arregla
  *

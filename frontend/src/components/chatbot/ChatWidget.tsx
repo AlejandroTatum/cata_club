@@ -9,9 +9,14 @@
  * rendered at 32px is an unreadable red smudge — that mark carries three
  * lines of type inside a wreath and needs ~100px to resolve. The assistant is
  * now CATA-BOT everywhere it identifies itself (header, greeting, ARIA
- * labels, failure copy), drawn as `/brand/cata-bot-128.png`, a purpose-made
- * circular avatar that survives 32px. "Hablar con el club" keeps the club's
- * name on purpose: that link hands off to a person.
+ * labels, failure copy), drawn as `/brand/cata-bot.png`, a purpose-made
+ * circular avatar that survives 32px. That is the 512px master, and it is what
+ * both callers request — this header and `HelpChatDock`'s launcher — because
+ * `next/image` picks a source off `sizes`, not off the layout box, so a
+ * 32px-wide avatar on a 2x display still needs real pixels behind it; the
+ * 128px copy beside it in `public/brand` is asked for by nobody. See the
+ * header's own comment below for the sizing. "Hablar con el club" keeps the
+ * club's name on purpose: that link hands off to a person.
  *
  * Talks to the backend's FAQ chatbot (no RAG, no persistence) via the BFF
  * proxy at POST /api/chatbot (see src/app/api/chatbot/route.ts), which itself
