@@ -1609,6 +1609,87 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
   });
 });
 
+// ---------------------------------------------------------------------------
+// Issue #368 — el candado del #310 funciona, pero recién en el paso 2. En el
+// paso 1 un horario ya registrado se seleccionaba y ofrecía "Continuar" igual
+// que cualquier otro: el entrenador descubría el modo solo lectura después de
+// haberse decidido. El indicador "Lista tomada hoy · N registros" informaba,
+// pero no decía que eso IMPIDE volver a tomarla ni por qué.
+//
+// El arreglo es de superficie, no de permisos: la tarjeta sigue siendo
+// alcanzable (entrar en modo consulta es legítimo) y la ventana de corrección
+// del backend no se toca. Lo que cambia es que el paso 1 NOMBRA el motivo
+// antes, no después — un control mudo sería el defecto del #312.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una lista ya tomada (issue #368)", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset();
+    mockRegisterAttendance.mockReset();
+  });
+
+  /** Los tres alumnos de `buildAlumnoHorarios(3)` ya tienen registro de HOY. */
+  function todaysRecordsForAllStudents(): unknown[] {
+    return buildAlumnoHorarios(3).map((raw) => {
+      const s = raw as { personaId: number; personaNombreCompleto: string };
+      return {
+        id: `att-${s.personaId}`,
+        fecha: "2026-07-21",
+        horario: "Martes 18:00 — 19:00",
+        horarioId: 12,
+        personaId: s.personaId,
+        estudiante: s.personaNombreCompleto,
+        estado: "present",
+        entrenador: "Coach Torres",
+      };
+    });
+  }
+
+  it("nombra en la tarjeta y junto al control que el entrenador no puede volver a tomarla, y por qué", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue(todaysRecordsForAllStudents());
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    const scheduleButton = await screen.findByRole("button", { name: /18:00/i });
+
+    // El conteo del #310 / #22 sigue estando: informa CUÁNTO hay registrado.
+    expect(await within(scheduleButton).findByText(/Lista tomada hoy · 3 registros/)).toBeInTheDocument();
+    // Lo nuevo: la tarjeta dice que eso impide volver a tomarla, no solo que
+    // hay registros.
+    expect(within(scheduleButton).getByText(/no se puede volver a tomar/i)).toBeInTheDocument();
+
+    // Y al elegirla, el motivo aparece junto al control que la ofrece — antes
+    // de continuar, no en el paso siguiente.
+    fireEvent.click(scheduleButton);
+    const aviso = await screen.findByText("Esta lista ya fue tomada hoy.");
+    expect(aviso).toBeInTheDocument();
+    expect(screen.getByText(/solo lo puede hacer un administrador del club/i)).toBeInTheDocument();
+
+    // La tarjeta NO se esconde ni se vuelve inalcanzable: consultarla es
+    // legítimo, y el control sigue ahí.
+    expect(scheduleButton).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
+  });
+
+  it("no le advierte nada al administrador, que sí puede corregir dentro de la ventana", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    mockFetchAttendanceRecords.mockResolvedValue(todaysRecordsForAllStudents());
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    const scheduleButton = await screen.findByRole("button", { name: /18:00/i });
+
+    expect(await within(scheduleButton).findByText(/Lista tomada hoy · 3 registros/)).toBeInTheDocument();
+    expect(within(scheduleButton).queryByText(/no se puede volver a tomar/i)).not.toBeInTheDocument();
+
+    fireEvent.click(scheduleButton);
+    expect(screen.queryByText("Esta lista ya fue tomada hoy.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
+  });
+});
+
 describe("TrainerAttendancePage — partial failures name the students", () => {
   beforeEach(() => {
     mockReplace.mockReset();
