@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -246,6 +246,44 @@ class RegularizacionDeudaDTO(BaseModel):
             raise ValueError("Debe indicar el motivo de la regularización.")
         if self.fecha_inicio >= self.fecha_fin:
             raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
+        return self
+
+
+# --- Suspensión y reactivación (issue #400, slice 5a) ------------------------
+# Un único DTO para las dos operaciones: comparten forma exacta (motivo
+# obligatorio + fecha_efectiva opcional) y comparten quién puede usarlo
+# (solo ADMINISTRADOR, ver `membresias_pagos_router.py`). Partirlo en dos
+# clases idénticas solo agregaría dos nombres a importar sin ganar nada --
+# la diferencia de negocio (de qué estado a qué estado) la decide el
+# endpoint, no el payload.
+class SuspensionReactivacionDTO(BaseModel):
+    motivo: str = Field(..., min_length=1, max_length=255)
+    # `None` significa "ahora": el servicio completa `datetime.now(UTC)` --
+    # ver `PagoServicio.suspender_membresia`/`reactivar_membresia`. Se acepta
+    # explícito para que administración pueda registrar una suspensión con
+    # fecha efectiva pasada (ej. "se ausentó desde el lunes") sin que la
+    # auditoría mienta sobre cuándo empezó a regir.
+    fecha_efectiva: Optional[datetime] = None
+
+    @field_validator("fecha_efectiva")
+    @classmethod
+    def _normalizar_timezone(cls, valor: Optional[datetime]) -> Optional[datetime]:
+        """Un `fecha_efectiva` naive (sin timezone) se ASUME UTC, nunca la
+        hora local del proceso que lo recibió -- mismo criterio que
+        `_ensure_utc_aware` (`schemas/base.py`) aplica del lado de SALIDA a
+        todo `datetime` que sale de este backend. Sin esto, un valor naive
+        interpretado con el tz local del servidor podría desplazar el día
+        de calendario cerca de medianoche y correr un día el ancla de deuda
+        que `PagoServicio.calcular_meses_adeudados` deriva de esta fecha
+        (hallazgo del revisor, issue #400)."""
+        if valor is not None and valor.tzinfo is None:
+            return valor.replace(tzinfo=timezone.utc)
+        return valor
+
+    @model_validator(mode="after")
+    def _validar_motivo(self) -> "SuspensionReactivacionDTO":
+        if not self.motivo.strip():
+            raise ValueError("Debe indicar el motivo.")
         return self
 
 

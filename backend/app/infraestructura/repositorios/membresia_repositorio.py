@@ -1,9 +1,9 @@
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Membresia, TipoMembresia, Pago
+from app.dominio.modelos import Membresia, TipoMembresia, Pago, HistorialEstadoMembresia
 from app.dominio.enums import EstadoMembresia, EstadoPago
 
 
@@ -46,6 +46,34 @@ class MembresiaRepositorio:
             .where(Membresia.id == membresia_id)
         )
         return self.db.execute(stmt).scalars().first()
+
+    def obtener_por_id_con_bloqueo(self, membresia_id: int) -> Optional[Membresia]:
+        """Lee la membresía con `SELECT ... FOR UPDATE`: mismo patrón que
+        `PagoRepositorio.obtener_por_id_con_bloqueo` (issue #8, ver su
+        docstring), aplicado acá porque `PagoServicio.suspender_membresia`/
+        `reactivar_membresia` (issue #400/5a) tienen la MISMA clase de
+        carrera que `validar_pago` ya resolvió con ese lock.
+
+        Por qué el índice único parcial `uq_membresia_activa_por_persona`
+        NO alcanza para esto: protege que una fila DISTINTA ocupe el mismo
+        slot (persona_id, estado operativo), pero dos transiciones
+        concurrentes sobre LA MISMA fila (dos `reactivar_membresia(X)` a la
+        vez) actualizan la fila que YA ocupa el slot -- ninguna colisiona
+        contra el índice, así que Postgres deja pasar a las dos. Sin este
+        lock, ambas leen `estado == SUSPENDIDA` antes de que cualquiera
+        commitee, ambas pasan la guardia de estado de origen, y las dos
+        escriben su propia fila de `HistorialEstadoMembresia` -- dos
+        transiciones auditadas para un solo hecho lógico, con
+        `fecha_efectiva_ultima_reactivacion` (`MAX(fecha_efectiva)`)
+        decidiendo cuál "gana" según quién puso la fecha más tardía, no
+        según quién llegó primero.
+
+        Sin `joinedload` a propósito (a diferencia de `obtener_por_id`):
+        `FOR UPDATE` con un LEFT OUTER JOIN es inválido en Postgres salvo
+        que se acote con `of=`, y ninguno de los dos métodos que usan este
+        lock necesita `persona`/`tipo_membresia` precargados -- `reactivar_
+        membresia` resuelve el tipo aparte, por `tipo_membresia_id`."""
+        return self.db.get(Membresia, membresia_id, with_for_update=True)
 
     def contar_activas(self) -> int:
         stmt = (
@@ -187,3 +215,68 @@ class MembresiaRepositorio:
             .limit(limit)
         )
         return list(self.db.execute(stmt).scalars().unique().all())
+
+
+class HistorialEstadoMembresiaRepositorio:
+    """Issue #400 (slice 5a): huella auditable de transiciones de estado.
+
+    Sin `crear()` propio a propósito: `PagoServicio.suspender_membresia`/
+    `reactivar_membresia` agregan la fila a la sesión con `db.add()` y la
+    commitean JUNTO con el cambio de `Membresia.estado` (un solo
+    `guardar_cambios` para los dos objetos) -- mismo patrón que
+    `_activar_membresia_con_red_de_seguridad` + `repo.guardar_cambios(pago)`
+    en `validar_pago`. Partir la escritura en dos commits dejaría una
+    ventana donde el estado cambió pero la auditoría todavía no, o viceversa."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def fecha_efectiva_ultima_reactivacion(self, membresia_id: int) -> Optional[datetime]:
+        """`fecha_efectiva` de la transición MÁS RECIENTE hacia ACTIVA, o
+        `None` si esta membresía nunca se reactivó.
+
+        Por qué hace falta: `calcular_meses_adeudados` necesita saber si el
+        ancla de deuda (`fecha_fin` de la última cobertura aprobada) quedó
+        VIEJA por una suspensión -- el issue #400 exige que "los meses entre
+        el fin de cobertura y la reactivación no generan deuda", así que el
+        reloj de mora debe arrancar de nuevo en la fecha de reactivación
+        cuando esa fecha es MÁS RECIENTE que el fin de la cobertura (ver
+        docstring de `PagoServicio.calcular_meses_adeudados`)."""
+        stmt = (
+            select(HistorialEstadoMembresia.fecha_efectiva)
+            .where(
+                HistorialEstadoMembresia.membresia_id == membresia_id,
+                HistorialEstadoMembresia.estado_nuevo == EstadoMembresia.ACTIVA,
+            )
+            # `id.desc()` desempata (issue #400, hallazgo del revisor): dos
+            # filas con la MISMA `fecha_efectiva` (posible ahora que
+            # `PagoServicio._validar_fecha_efectiva` exige no-decreciente,
+            # no estrictamente creciente) deben resolverse por orden real de
+            # escritura, no por un empate arbitrario del planner.
+            .order_by(HistorialEstadoMembresia.fecha_efectiva.desc(), HistorialEstadoMembresia.id.desc())
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def ultima_transicion(self, membresia_id: int) -> Optional[HistorialEstadoMembresia]:
+        """La fila de `HistorialEstadoMembresia` escrita MÁS RECIENTEMENTE
+        para esta membresía (por orden real de inserción, `id DESC`), o
+        `None` si todavía no tiene ninguna.
+
+        Por qué existe (issue #400, hallazgo del revisor): sin esto, un
+        `fecha_efectiva` retroactivo en una transición POSTERIOR podía
+        quedar por delante de una transición ANTERIOR en el tiempo real --
+        ej. reactivar hoy con `fecha_efectiva` de hace un año, cuando ya
+        existía una suspensión con `fecha_efectiva` de hace un mes. Eso
+        rompería `fecha_efectiva_ultima_reactivacion` (que asume que la
+        fila con la `fecha_efectiva` más alta ES la más reciente) y además
+        no tiene sentido de negocio: una transición no puede regir ANTES de
+        que la anterior haya regido. `PagoServicio._validar_fecha_efectiva`
+        usa esto para exigir una secuencia no-decreciente."""
+        stmt = (
+            select(HistorialEstadoMembresia)
+            .where(HistorialEstadoMembresia.membresia_id == membresia_id)
+            .order_by(HistorialEstadoMembresia.id.desc())
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalars().first()

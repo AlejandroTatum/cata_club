@@ -260,6 +260,12 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/geografia/provincias"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
+    # Issue #400 (slice 5a): "Solo administración suspende o reactiva" es
+    # texto explícito del issue -- a diferencia de POST .../aplicar-beneficio
+    # (autoservicio, ver el comentario en la lista de arriba), estos dos SÍ
+    # llevan GestorPermisos(ROL_ADMIN).
+    ("POST", "/membresias/{membresia_id}/suspender"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/membresias/{membresia_id}/reactivar"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/pagos/{pago_id}/comprobante"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/tipos"): frozenset({"ADMINISTRADOR"}),
     # Issue #394: editar una tarifa es escribir sobre el número con el que el

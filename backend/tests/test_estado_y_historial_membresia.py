@@ -13,10 +13,13 @@ que nada:
    la escribió.
 
 El candado más importante de este archivo es el tercero: agregar un estado
-nuevo NO puede aflojar el invariante de "una sola membresía ACTIVA por
-persona". Ese índice es parcial (`WHERE estado = 'ACTIVA'`), así que una
-SUSPENDIDA tiene que poder convivir con una ACTIVA, y dos ACTIVAS tienen que
-seguir siendo imposibles.
+nuevo NO puede aflojar el invariante de "como máximo una membresía operativa
+por persona". Ese índice es parcial, pero desde la migración `fbd783a457d3`
+(issue #400, slice 5a) el predicado es `WHERE estado IN ('ACTIVA',
+'SUSPENDIDA')` -- SUSPENDIDA NO convive con una ACTIVA de la misma persona
+(corrección sobre la primera versión de este archivo, que asumía lo
+contrario: ver el docstring de esa migración y del índice en `modelos.py`
+para el porqué), y dos ACTIVAS siguen siendo imposibles.
 """
 from datetime import datetime, timezone
 
@@ -54,16 +57,19 @@ def test_una_membresia_puede_quedar_suspendida(db_session, persona_y_tipo):
     assert membresia.estado is EstadoMembresia.SUSPENDIDA
 
 
-def test_una_suspendida_convive_con_una_activa_de_la_misma_persona(db_session, persona_y_tipo):
-    """El índice `uq_membresia_activa_por_persona` es PARCIAL: solo restringe
-    ACTIVA. Agregar un estado nuevo no puede cambiar eso, porque el club
-    necesita conservar el historial de la persona mientras tiene su plan
-    vigente."""
+def test_una_suspendida_no_convive_con_una_activa_de_la_misma_persona(db_session, persona_y_tipo):
+    """El índice `uq_membresia_activa_por_persona` es PARCIAL, pero desde
+    `fbd783a457d3` (issue #400/5a) su WHERE cubre ACTIVA Y SUSPENDIDA: una
+    SUSPENDIDA sigue siendo la membresía OPERATIVA de la persona (conserva
+    plan, beneficio y cobertura, y puede volver a ACTIVA sin pasar por una
+    membresía nueva), así que dos filas operativas para la misma persona
+    -- sea cual sea la combinación de estados -- son igual de inválidas que
+    dos ACTIVAS."""
     persona, tipo = persona_y_tipo
-    crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
     crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.SUSPENDIDA)
 
-    db_session.flush()  # no debe levantar
+    with pytest.raises(IntegrityError, match="uq_membresia_activa_por_persona"):
+        crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
 
 
 def test_dos_activas_siguen_prohibidas(db_session, persona_y_tipo):

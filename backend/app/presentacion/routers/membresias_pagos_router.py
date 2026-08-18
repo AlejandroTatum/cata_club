@@ -13,7 +13,7 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO,
-    DeudaMembresiaResponseDTO, RegularizacionDeudaDTO,
+    DeudaMembresiaResponseDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
 )
 from app.presentacion.schemas.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
@@ -330,6 +330,52 @@ def regularizar_deuda_membresia(
         membresia_id, datos, persona_id_admin=token_payload.get("persona_id"),
     )
     return servicio.pago_a_response_dto(pago)
+
+
+# Suspensión y reactivación (issue #400, slice 5a): "Solo administración
+# suspende o reactiva" es texto explícito del issue -- a diferencia de
+# `aplicar-beneficio` (autoservicio del pagador), estos DOS endpoints SÍ
+# llevan `GestorPermisos(ROL_ADMIN)`. `token_payload.get("persona_id")` es el
+# admin que ejecuta la acción (`actor_persona_id` de la fila de auditoría),
+# nunca la persona dueña de la membresía.
+@router.post(
+    "/{membresia_id}/suspender",
+    response_model=MembresiaResponseDTO,
+    status_code=200,
+)
+def suspender_membresia(
+    membresia_id: int,
+    datos: SuspensionReactivacionDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorPermisos(ROL_ADMIN)),
+):
+    servicio = PagoServicio(db)
+    return servicio.suspender_membresia(
+        membresia_id,
+        datos.motivo,
+        actor_persona_id=token_payload.get("persona_id"),
+        fecha_efectiva=datos.fecha_efectiva,
+    )
+
+
+@router.post(
+    "/{membresia_id}/reactivar",
+    response_model=MembresiaResponseDTO,
+    status_code=200,
+)
+def reactivar_membresia(
+    membresia_id: int,
+    datos: SuspensionReactivacionDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorPermisos(ROL_ADMIN)),
+):
+    servicio = PagoServicio(db)
+    return servicio.reactivar_membresia(
+        membresia_id,
+        datos.motivo,
+        actor_persona_id=token_payload.get("persona_id"),
+        fecha_efectiva=datos.fecha_efectiva,
+    )
 
 
 # Otorga cobertura bonificada (issue #400, slice 4d): a diferencia de

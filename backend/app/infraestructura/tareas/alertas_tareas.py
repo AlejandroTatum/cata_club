@@ -448,6 +448,15 @@ def alertar_mora_diaria(self) -> dict:
             .options(joinedload(Persona.usuario))
             .where(
                 Membresia.estado != EstadoMembresia.INACTIVA,
+                # Issue #400 (slice 5a): "Suspender detiene la generación de
+                # deuda futura" -- una SUSPENDIDA no debe a nadie mientras
+                # dura (ver `PagoServicio.calcular_meses_adeudados`), así que
+                # tampoco debe recibir el aviso de mora ni figurar en el
+                # resumen diario al admin. Sin este filtro, alguien
+                # suspendido con cobertura ya vencida ANTES de suspenderse
+                # seguía matcheando `ultima_fecha_fin < hoy` y recibía el
+                # correo de mora de todos modos.
+                Membresia.estado != EstadoMembresia.SUSPENDIDA,
                 ultimo_pago.c.rn == 1,
                 ultimo_pago.c.ultima_fecha_fin < hoy,
             )
