@@ -49,8 +49,18 @@ app = FastAPI(
 # --- Respuesta de error consistente para frontend + backend -----------------
 # El frontend (Next.js) espera `message`; el backend original usa `detail`.
 # Devolvemos ambos para compatibilidad sin romper contratos existentes.
-def _respuesta_error(codigo: int, mensaje: str) -> JSONResponse:
-    return JSONResponse(status_code=codigo, content={"detail": mensaje, "message": mensaje})
+#
+# `mensaje_seguro` (issue #355): por defecto `False` -- un 5xx nunca filtra
+# `mensaje` al usuario salvo que la excepción que lo originó lo haya marcado
+# explícitamente como seguro (`ErrorDominio.seguro_mostrar`, ver
+# `excepciones.py`). El parámetro por defecto en `False` cubre además a
+# cualquier caller que arme la respuesta sin pasar por una `ErrorDominio`
+# (`HTTPException`, `RequestValidationError`, `IntegrityError` no manejado).
+def _respuesta_error(codigo: int, mensaje: str, *, mensaje_seguro: bool = False) -> JSONResponse:
+    return JSONResponse(
+        status_code=codigo,
+        content={"detail": mensaje, "message": mensaje, "mensaje_seguro": mensaje_seguro},
+    )
 
 
 # --- Rate limiting -----------------------------------------------------------
@@ -133,7 +143,9 @@ for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
                     getattr(request.state, "request_id", "-"),
                     detalle,
                 )
-            return _respuesta_error(codigo, exc.mensaje)
+            return _respuesta_error(
+                codigo, exc.mensaje, mensaje_seguro=getattr(exc, "seguro_mostrar", False)
+            )
         return _handler
     app.add_exception_handler(_excepcion, _crear_handler(_codigo))
 

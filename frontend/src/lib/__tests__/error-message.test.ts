@@ -9,13 +9,35 @@
 
 import { describe, it, expect } from "vitest";
 import { GENERIC_FAILURE, STATUS_MESSAGES, isUserFacingText, toUserMessage } from "../error-message";
+import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 
 /** Shapes an `ApiClientError` without importing the client into `lib/`. */
 function apiError(message: string, status: number): Error & { status: number } {
   return Object.assign(new Error(message), { status });
 }
 
+/**
+ * Shapes an `ApiClientError` that also carries the `safe` marker
+ * (`ApiClientError.safe`, `services/api.ts`) — the only thing that can make a
+ * 5xx's own text survive `toUserMessage` instead of the generic fallback.
+ */
+function apiErrorConSeguro(
+  message: string,
+  status: number,
+  safe: boolean,
+): Error & { status: number; safe: boolean } {
+  return Object.assign(new Error(message), { status, safe });
+}
+
 const FALLBACK = "No se pudo guardar el descuento.";
+
+/**
+ * The generic 5xx copy this module answers with whenever `safeOf(error)` is
+ * false or the marked text fails gate 2. Read via `toUserMessage`'s own
+ * output — not imported — because `SERVER_FAILURE` is module-private on
+ * purpose (see `error-message.ts`'s "5xx exception").
+ */
+const SERVER_FAILURE_TEXT = toUserMessage(apiError("cualquier cosa", 500), FALLBACK);
 
 describe("toUserMessage — the status gate", () => {
   it("never shows the client's own English default", () => {
@@ -26,20 +48,56 @@ describe("toUserMessage — the status gate", () => {
 
     expect(message).not.toContain("Request failed");
     expect(message).not.toContain("502");
-    expect(message).toBe(
-      "El servidor no pudo completar la operación. Intente nuevamente en unos minutos.",
+    expect(message).toBe(SERVER_FAILURE_TEXT);
+  });
+
+  it("gives the generic answer to every 5xx with no safe marker, whatever the body said", () => {
+    // A 500's `detail` describes the SERVER's failure, never the user's
+    // business. There is nothing in it a person can act on, so the status
+    // gate drops it before the vocabulary gate ever runs — UNLESS the
+    // backend marked it safe (issue #355), which none of these do: a plain
+    // `apiError` never sets `.safe`, so `safeOf` reads it as `false`.
+    for (const status of [500, 502, 503, 504]) {
+      expect(toUserMessage(apiError("psycopg2.OperationalError", status), FALLBACK)).toBe(
+        SERVER_FAILURE_TEXT,
+      );
+    }
+  });
+
+  it("gives the generic answer to a 5xx explicitly marked NOT safe (issue #355)", () => {
+    const detail =
+      "No se pudo subir el archivo en este momento. Vuelva a intentarlo más tarde " +
+      "o acérquese al club / escríbanos por WhatsApp.";
+
+    expect(toUserMessage(apiErrorConSeguro(detail, 503, false), FALLBACK)).toBe(
+      SERVER_FAILURE_TEXT,
     );
   });
 
-  it("gives every 5xx the same answer, whatever the body said", () => {
-    // A 500's `detail` describes the SERVER's failure, never the user's
-    // business. There is nothing in it a person can act on, so the status
-    // gate drops it before the vocabulary gate ever runs.
-    for (const status of [500, 502, 503, 504]) {
-      expect(toUserMessage(apiError("psycopg2.OperationalError", status), FALLBACK)).toBe(
-        "El servidor no pudo completar la operación. Intente nuevamente en unos minutos.",
-      );
-    }
+  it("shows the backend's own text on a 5xx marked safe, when it passes the vocabulary gate (issue #355)", () => {
+    // The regression this fix exists for: `cloudinary_cliente.py`'s
+    // `_MENSAJE_SUBIDA_NO_DISPONIBLE`, the one message in the whole backend
+    // marked `seguro_mostrar=True`. Before this fix `toUserMessage` discarded
+    // it unconditionally — a legitimate, hand-authored, actionable sentence
+    // thrown away for no reason other than its status being 503.
+    const detail =
+      "No se pudo subir el archivo en este momento. Vuelva a intentarlo más tarde " +
+      "o acérquese al club / escríbanos por WhatsApp.";
+
+    expect(toUserMessage(apiErrorConSeguro(detail, 503, true), FALLBACK)).toBe(detail);
+  });
+
+  it("still falls back to the generic answer when marked safe but the detail fails gate 2 (fail closed)", () => {
+    // Proves the marker alone is never enough: a backend bug that raises
+    // `seguro_mostrar=True` with a vendor-leaking string must not reach the
+    // user just because the flag says "trust me".
+    expect(
+      toUserMessage(apiErrorConSeguro("ValueError: Must supply api_key", 503, true), FALLBACK),
+    ).toBe(SERVER_FAILURE_TEXT);
+  });
+
+  it("still falls back to the generic answer when marked safe but the detail is blank (fail closed)", () => {
+    expect(toUserMessage(apiErrorConSeguro("   ", 503, true), FALLBACK)).toBe(SERVER_FAILURE_TEXT);
   });
 
   it("answers auth and rate limits from the status alone", () => {
@@ -201,7 +259,7 @@ describe("toUserMessage — anything that is not an API error", () => {
     // Firefox's "NetworkError when attempting to fetch resource") propagated
     // straight to `err.message` at 28 call sites.
     expect(toUserMessage(new TypeError("Failed to fetch"), FALLBACK)).toBe(
-      "No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.",
+      "No pudimos conectar. Revise su conexión a internet e intente nuevamente.",
     );
   });
 
@@ -222,7 +280,8 @@ describe("toUserMessage — anything that is not an API error", () => {
     });
 
     expect(toUserMessage(timedOut, FALLBACK)).toBe(
-      "La operación tardó demasiado. Intente nuevamente.",
+      "Esto está tardando más de lo normal y no pudimos terminarlo. " +
+        `Escríbanos por WhatsApp y lo ayudamos: ${toWhatsAppLink(landingConfig.contact.whatsapp[0])}`,
     );
     expect(toUserMessage(timedOut, FALLBACK)).not.toBe("La operación se canceló.");
   });
@@ -336,5 +395,73 @@ describe("isUserFacingText — the gate on its own", () => {
     for (const text of realProductMessages) {
       expect(`${text} → ${isUserFacingText(text)}`).toBe(`${text} → true`);
     }
+  });
+});
+
+describe("the rewritten copy speaks to a member, not to a machine (issue #355)", () => {
+  // "servidor" / "operación" / "solicitud" are exactly the system vocabulary
+  // the old copy used ("El servidor no pudo completar la operación...",
+  // "Demasiadas solicitudes...") — plain-language stand-ins for "internal
+  // implementation noun". A standalone 3-digit HTTP-status-like number is the
+  // other tell (`\b[1-5]\d{2}\b`, word-bounded on both sides).
+  const SYSTEM_WORDS = ["servidor", "operación", "solicitud"];
+  const STATUS_LIKE_NUMBER = /\b[1-5]\d{2}\b/;
+
+  function assertPlainLanguage(label: string, text: string): void {
+    for (const word of SYSTEM_WORDS) {
+      expect(text.toLowerCase(), `${label} contains "${word}": ${text}`).not.toContain(word);
+    }
+    expect(text, `${label} contains a bare status-like number: ${text}`).not.toMatch(
+      STATUS_LIKE_NUMBER,
+    );
+  }
+
+  it("the word-boundary regex does not false-positive on the WhatsApp digit run", () => {
+    // Verifying the reasoning, not just asserting it: the WhatsApp link is a
+    // long contiguous digit run with no separators, so a naive "any 3
+    // digits" check would flag it as a fake HTTP status. `\b` only lands at
+    // the ends of that run, never in its middle, so a WORD-BOUNDED 3-digit
+    // match can never land fully inside it.
+    const sampleLink = toWhatsAppLink(landingConfig.contact.whatsapp[0]);
+
+    expect(STATUS_LIKE_NUMBER.test(sampleLink)).toBe(false);
+    // The check still catches the real thing it exists for.
+    expect(STATUS_LIKE_NUMBER.test("hubo un fallo con código 503")).toBe(true);
+  });
+
+  it("SERVER_FAILURE (any unmarked 5xx) speaks plainly and points at WhatsApp", () => {
+    const text = toUserMessage(apiError("cualquier cosa", 500), FALLBACK);
+
+    assertPlainLanguage("SERVER_FAILURE", text);
+    expect(text).toContain(toWhatsAppLink(landingConfig.contact.whatsapp[0]));
+  });
+
+  it("TIMED_OUT speaks plainly and points at WhatsApp", () => {
+    const timedOut = Object.assign(new Error("aborted"), { name: "TimeoutError" });
+    const text = toUserMessage(timedOut, FALLBACK);
+
+    assertPlainLanguage("TIMED_OUT", text);
+    expect(text).toContain(toWhatsAppLink(landingConfig.contact.whatsapp[0]));
+  });
+
+  it("GENERIC_FAILURE (the client's own placeholder) speaks plainly and points at WhatsApp", () => {
+    // Exported, unlike the other four — imported directly rather than
+    // derived through `toUserMessage`, which never returns it as-is (see
+    // "the client's own placeholder is not a server sentence" above).
+    assertPlainLanguage("GENERIC_FAILURE", GENERIC_FAILURE);
+    expect(GENERIC_FAILURE).toContain(toWhatsAppLink(landingConfig.contact.whatsapp[0]));
+  });
+
+  it("NETWORK_FAILURE speaks plainly and keeps the advice, not the club contact", () => {
+    const text = toUserMessage(new TypeError("Failed to fetch"), FALLBACK);
+
+    assertPlainLanguage("NETWORK_FAILURE", text);
+    // Can-act family: the member can act on their own connection, so this
+    // one does NOT need to send them to WhatsApp.
+    expect(text).not.toContain("wa.me");
+  });
+
+  it("the 429 message speaks plainly", () => {
+    assertPlainLanguage("STATUS_MESSAGES[429]", STATUS_MESSAGES[429]);
   });
 });

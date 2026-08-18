@@ -63,7 +63,28 @@
  * site now reads an error through `toUserMessage`, and no `.tsx` reads
  * `err.message` directly. See `error-message-usage.test.ts` for the guard
  * that holds this state — a raw `err.message` read in a component goes red.
+ *
+ * ## The 5xx exception (issue #355)
+ *
+ * Gate 1 used to be absolute for `5xx`: no backend text ever survived it,
+ * because a server failure describes the server, never the user's business.
+ * That is still the default. The one hole cut into it is `safeOf(error)` —
+ * a marker the BACKEND sets (`ErrorDominio.seguro_mostrar`, `false` unless a
+ * raise site opts in explicitly) and `services/api.ts` carries onto
+ * `ApiClientError.safe`. A `5xx` whose body was never marked safe, or whose
+ * marked text still fails gate 2, gets exactly what it always got —
+ * `SERVER_FAILURE`. Marking a message safe is a backend decision this module
+ * only trusts after gate 2 agrees, never on the marker alone.
  */
+
+import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
+
+/**
+ * Where a member is sent when nothing in this module can tell them what to
+ * do next. Built from the published contact number, never a literal digit
+ * string, so it can never drift from the one the landing page itself shows.
+ */
+const WHATSAPP_CONTACTO = toWhatsAppLink(landingConfig.contact.whatsapp[0]);
 
 /**
  * The longest a `detail` may be and still be a sentence somebody wrote for a
@@ -180,11 +201,22 @@ export const STATUS_MESSAGES: Readonly<Record<number, string>> = {
   429: "Demasiados intentos. Espere un momento e intente nuevamente.",
 };
 
-/** Any 5xx. The detail describes the server's failure, never the user's. */
-const SERVER_FAILURE = "El servidor no pudo completar la operación. Intente nuevamente en unos minutos.";
+/**
+ * Any 5xx that was not marked safe (the default, see the module header's
+ * "5xx exception"). There is nothing left to suggest — trying again does not
+ * fix a fault the member cannot see — so this points at a person instead of
+ * an action.
+ */
+const SERVER_FAILURE =
+  `Tuvimos un problema de nuestro lado y no pudimos completar esto. ` +
+  `Escríbanos por WhatsApp y lo ayudamos: ${WHATSAPP_CONTACTO}`;
 
-/** `fetch` rejected: no server ever answered, so there is no status at all. */
-const NETWORK_FAILURE = "No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.";
+/**
+ * `fetch` rejected: no server ever answered, so there is no status at all.
+ * Unlike `SERVER_FAILURE`, this one IS something the member can act on —
+ * their own connection — so it keeps the advice instead of the club contact.
+ */
+const NETWORK_FAILURE = "No pudimos conectar. Revise su conexión a internet e intente nuevamente.";
 
 /** The caller aborted — a navigation, an unmount, a superseded request. */
 const CANCELLED = "La operación se canceló.";
@@ -193,10 +225,13 @@ const CANCELLED = "La operación se canceló.";
  * The client gave up waiting: `DEFAULT_TIMEOUT_MS` elapsed with no answer.
  *
  * It reads almost like `CANCELLED` and means the opposite. "Se canceló"
- * describes the user's own decision and suggests nothing to do; this one says
- * the server never answered and that trying again is worth it.
+ * describes the user's own decision; this one describes a wait nobody chose
+ * and that trying again cannot shorten — so, like `SERVER_FAILURE`, it points
+ * at the club instead of at "try again".
  */
-const TIMED_OUT = "La operación tardó demasiado. Intente nuevamente.";
+const TIMED_OUT =
+  `Esto está tardando más de lo normal y no pudimos terminarlo. ` +
+  `Escríbanos por WhatsApp y lo ayudamos: ${WHATSAPP_CONTACTO}`;
 
 /**
  * What an `ApiClientError` carries when the response body named no reason at
@@ -205,9 +240,14 @@ const TIMED_OUT = "La operación tardó demasiado. Intente nuevamente.";
  * It is exported because the API client builds the error and this module reads
  * it, and the two must not drift into separate opinions. It is deliberately a
  * complete Spanish sentence rather than a diagnostic: the client throws it
- * before anything here can intervene, so it has to be safe to show as-is.
+ * before anything here can intervene, so it has to be safe to show as-is. It
+ * stays a plain `string`, computed once at module load — `services/api.ts`
+ * assigns it straight to `ApiClientError.message`, and this module's own
+ * identity check (`detail !== GENERIC_FAILURE`, below) depends on it never
+ * varying between the two call sites.
  */
-export const GENERIC_FAILURE = "No se pudo completar la operación.";
+export const GENERIC_FAILURE =
+  `No pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: ${WHATSAPP_CONTACTO}`;
 
 /**
  * Reads an error's `status` without importing `ApiClientError` from
@@ -220,6 +260,18 @@ function statusOf(error: unknown): number | null {
   if (!(error instanceof Error)) return null;
   const status = (error as Error & { status?: unknown }).status;
   return typeof status === "number" && Number.isFinite(status) ? status : null;
+}
+
+/**
+ * Reads an error's `safe` marker the same structural way `statusOf` reads
+ * `status` (see that function's rationale) — this stays duck-typed so it
+ * also matches an `ApiClientError` that crossed a serialization boundary.
+ * Strict `=== true` on purpose: anything else (absent, `undefined`, a
+ * truthy non-boolean) is the fail-closed case, same as a missing marker.
+ */
+function safeOf(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (error as Error & { safe?: unknown }).safe === true;
 }
 
 /**
@@ -260,7 +312,14 @@ export function toUserMessage(error: unknown, fallback: string): string {
     return error instanceof TypeError ? NETWORK_FAILURE : fallback;
   }
 
-  if (status >= 500) return SERVER_FAILURE;
+  if (status >= 500) {
+    // The one hole in gate 1 — see the module header's "5xx exception". Both
+    // halves are required: a marker with no gate-2-passing text is exactly
+    // as untrusted as no marker at all.
+    const detail = (error as Error).message.trim();
+    if (safeOf(error) && isUserFacingText(detail)) return detail;
+    return SERVER_FAILURE;
+  }
 
   const canned = STATUS_MESSAGES[status];
   if (canned) return canned;

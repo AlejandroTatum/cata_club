@@ -98,6 +98,7 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
         raise ServicioNoDisponible(
             _MENSAJE_SUBIDA_NO_DISPONIBLE,
             detalle_tecnico=f"Cloudinary no disponible (circuito abierto): {descripcion}",
+            seguro_mostrar=True,
         )
 
     timeout = Timeout(
@@ -120,6 +121,7 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
         raise ServicioNoDisponible(
             _MENSAJE_SUBIDA_NO_DISPONIBLE,
             detalle_tecnico=f"Error subiendo {descripcion} a Cloudinary: {exc}",
+            seguro_mostrar=True,
         ) from exc
 
     url: Optional[str] = resultado.get("secure_url")
@@ -130,6 +132,7 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
         raise ServicioNoDisponible(
             _MENSAJE_SUBIDA_NO_DISPONIBLE,
             detalle_tecnico=f"Cloudinary no retornó `secure_url` ({descripcion})",
+            seguro_mostrar=True,
         )
 
     _circuito_cloudinary.registrar_exito()

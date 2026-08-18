@@ -180,11 +180,21 @@ function toPlainHeaders(...sources: (HeadersInit | undefined)[]): Record<string,
 
 export class ApiClientError extends Error {
   status: number;
+  /**
+   * Whether the backend explicitly marked THIS message as safe to show a
+   * member as-is (issue #355, `mensaje_seguro` in the response body — see
+   * `ErrorDominio.seguro_mostrar` in `backend/app/dominio/excepciones.py`).
+   * Defaults `false`: fail closed for the two synthetic call sites in this
+   * file that build an `ApiClientError` from scratch, with no response body
+   * to have marked anything at all.
+   */
+  public readonly safe: boolean;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, safe = false) {
     super(message);
     this.name = "ApiClientError";
     this.status = status;
+    this.safe = safe;
   }
 }
 
@@ -382,15 +392,19 @@ async function request<T>(
       // without a JSON body. `GENERIC_FAILURE` is Spanish and safe to render
       // as-is; the status itself is on the error for anyone who needs it.
       let message = GENERIC_FAILURE;
+      let safe = false;
       try {
         const errorBody: unknown = await response.json();
         if (isApiErrorBody(errorBody)) {
           message = errorBody.detail ?? errorBody.message ?? message;
+          // Strict `=== true` (issue #355): anything else — absent, `false`,
+          // a stray truthy non-boolean — must never mark a message safe.
+          safe = errorBody.mensaje_seguro === true;
         }
       } catch {
         // ignore parse errors — use default message
       }
-      throw new ApiClientError(message, response.status);
+      throw new ApiClientError(message, response.status, safe);
     }
 
     // 204 No Content never carries a body — calling response.json() on it
@@ -817,7 +831,9 @@ export async function fetchInstituciones(): Promise<Institucion[]> {
   return all;
 }
 
-function isApiErrorBody(value: unknown): value is { message?: string; detail?: string } {
+function isApiErrorBody(
+  value: unknown,
+): value is { message?: string; detail?: string; mensaje_seguro?: unknown } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const body = value as Record<string, unknown>;
   return (typeof body.message === "string" && body.message.length > 0) ||
@@ -994,10 +1010,12 @@ export async function downloadBlob(endpoint: string, fallbackFilename: string): 
       // a caller's own fallback (e.g. "No se pudo generar el PDF del reporte.").
       // A second, differently-worded generic here would have re-opened that gap.
       let message = GENERIC_FAILURE;
+      let safe = false;
       try {
         const errorBody: unknown = await response.json();
         if (isApiErrorBody(errorBody)) {
           message = errorBody.detail ?? errorBody.message ?? message;
+          safe = errorBody.mensaje_seguro === true;
         }
       } catch (parseError: unknown) {
         // A parse error is nothing to report — the status says enough. Our own
@@ -1007,7 +1025,7 @@ export async function downloadBlob(endpoint: string, fallbackFilename: string): 
           throw parseError;
         }
       }
-      throw new ApiClientError(message, response.status);
+      throw new ApiClientError(message, response.status, safe);
     }
 
     // `fetch()` settles on HEADERS; the PDF bytes stream after. Reading them

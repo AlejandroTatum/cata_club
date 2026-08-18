@@ -296,6 +296,6 @@ describe("getAddDependentErrorMessage", () => {
     // route in services/api.ts throws ApiClientError(message, status), so a
     // bare Error can only come from fetch itself rejecting.
     expect(getAddDependentErrorMessage(new TypeError("Failed to fetch")))
-      .toBe("No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.");
+      .toBe("No pudimos conectar. Revise su conexión a internet e intente nuevamente.");
   });
 });

@@ -464,7 +464,7 @@ describe("ReportsPage — preview area", () => {
 
     setRange("2026-01-01", "2026-12-31");
     expect(
-      await screen.findByText("El servidor no pudo completar la operación. Intente nuevamente en unos minutos."),
+      await screen.findByText("Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619"),
     ).toBeInTheDocument();
   });
 });
