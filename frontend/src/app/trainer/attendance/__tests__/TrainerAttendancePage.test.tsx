@@ -1469,9 +1469,14 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
   it("abre en modo lectura, con el motivo visible, cuando un entrenador reabre una lista ya registrada", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
+    // Issue #397: the card for a taken-today schedule is a real `disabled`
+    // control now, so `openRoster()`'s click can no longer reach this state —
+    // it still exists, reached the way a reload/deep-link reaches it (#95's
+    // URL restore), which is exactly what a trainer coming back to a session
+    // they already had open does.
+    window.history.replaceState(null, "", "/trainer/attendance?horario=12&paso=lista");
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
-    await openRoster();
     await screen.findByText("Student 01");
 
     expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
@@ -1662,10 +1667,12 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
 // haberse decidido. El indicador "Lista tomada hoy · N registros" informaba,
 // pero no decía que eso IMPIDE volver a tomarla ni por qué.
 //
-// El arreglo es de superficie, no de permisos: la tarjeta sigue siendo
-// alcanzable (entrar en modo consulta es legítimo) y la ventana de corrección
-// del backend no se toca. Lo que cambia es que el paso 1 NOMBRA el motivo
-// antes, no después — un control mudo sería el defecto del #312.
+// Issue #397 endureció ese arreglo: la tarjeta de un horario tomado hoy ya
+// NO es alcanzable por click — es un `disabled` real, no un modo consulta
+// vestido de CSS. Los únicos caminos que siguen llegando a modo solo lectura
+// son el deep-link/reload (#95) y el caso de "Atrás" después de que un
+// horario se tomó mientras el entrenador ya lo tenía seleccionado; ninguno
+// pasa por esta tarjeta.
 // ---------------------------------------------------------------------------
 
 describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una lista ya tomada (issue #368)", () => {
@@ -1694,7 +1701,7 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
     });
   }
 
-  it("nombra en la tarjeta y junto al control que el entrenador no puede volver a tomarla, y por qué", async () => {
+  it("nombra en la tarjeta que el entrenador no puede volver a tomarla, y la deshabilita de verdad (issue #397)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     mockFetchAttendanceRecords.mockResolvedValue(todaysRecordsForAllStudents());
 
@@ -1703,21 +1710,20 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
 
     // El conteo del #310 / #22 sigue estando: informa CUÁNTO hay registrado.
     expect(await within(scheduleButton).findByText(/Lista tomada hoy · 3 registros/)).toBeInTheDocument();
-    // Lo nuevo: la tarjeta dice que eso impide volver a tomarla, no solo que
-    // hay registros.
-    expect(within(scheduleButton).getByText(/no se puede volver a tomar/i)).toBeInTheDocument();
+    // #397: ya no hay un "modo consulta" que nombrar — la tarjeta es
+    // inalcanzable de verdad, así que ese aviso desaparece.
+    expect(within(scheduleButton).queryByText(/solo consulta/i)).not.toBeInTheDocument();
+    expect(within(scheduleButton).queryByText(/no se puede volver a tomar/i)).not.toBeInTheDocument();
 
-    // Y al elegirla, el motivo aparece junto al control que la ofrece — antes
-    // de continuar, no en el paso siguiente.
+    // El control es un `disabled` nativo, no un cosmético: ni el foco ni el
+    // click lo alcanzan.
+    expect(scheduleButton).toBeDisabled();
+
+    // Un click no selecciona nada: ni se abre el paso 2/3, ni aparece el
+    // aviso de "ya fue tomada hoy", ni "Continuar" se habilita.
     fireEvent.click(scheduleButton);
-    const aviso = await screen.findByText("Esta lista ya fue tomada hoy.");
-    expect(aviso).toBeInTheDocument();
-    expect(screen.getByText(/solo lo puede hacer un administrador del club/i)).toBeInTheDocument();
-
-    // La tarjeta NO se esconde ni se vuelve inalcanzable: consultarla es
-    // legítimo, y el control sigue ahí.
-    expect(scheduleButton).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
+    expect(screen.queryByText("Esta lista ya fue tomada hoy.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 
   it("no le advierte nada al administrador, que sí puede corregir dentro de la ventana", async () => {
@@ -2517,9 +2523,12 @@ describe("TrainerAttendancePage — el aviso de salida distingue datos del servi
   it("no registra el listener de beforeunload en modo lectura sin ninguna interacción", async () => {
     mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
     const addEventListenerSpy = vi.spyOn(window, "addEventListener");
+    // Issue #397: same reasoning as the #310 read-only test above — a
+    // taken-today card is disabled now, so this state is reached via URL
+    // restore, not via `openRoster()`'s click.
+    window.history.replaceState(null, "", "/trainer/attendance?horario=12&paso=lista");
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
-    await openRoster();
     await screen.findByText("Student 01");
 
     // Modo lectura confirmado: sin radios que editar.
