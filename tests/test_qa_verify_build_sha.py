@@ -44,9 +44,34 @@ def test_evaluate_sha_coincidente_no_consulta_is_ancestor():
     assert codigo == 0
 
 
-def test_evaluate_atras_de_origin_sale_en_uno_y_nombra_los_dos_sha():
+def test_evaluate_adelante_de_origin_sale_en_cero():
+    """Servido = rama local que ya tiene mergeado/rebasado origin/main
+    encima (todo dev en este repo, ya que CLAUDE.md prohíbe commitear
+    directo a main): origin es ancestro de lo servido, no al revés."""
+
+    def _origin_es_ancestro_de_servido(candidato, ref):
+        assert (candidato, ref) == ("def456", "abc123")
+        return True
+
     mensaje, codigo = guard.evaluate(
-        "abc123", "def456", is_ancestor_fn=lambda candidato, ref: True
+        "abc123", "def456", is_ancestor_fn=_origin_es_ancestro_de_servido
+    )
+    assert codigo == 0
+    assert "abc123" in mensaje
+    assert "def456" in mensaje
+    assert "detrás" not in mensaje
+
+
+def test_evaluate_atras_de_origin_sale_en_uno_y_nombra_los_dos_sha():
+    """Servido = SHA viejo: es ancestro de origin, pero origin NO es
+    ancestro de lo servido. El mock debe distinguir dirección, porque
+    `evaluate` ahora consulta el chequeo "adelante" primero."""
+
+    def _servido_es_ancestro_de_origin(candidato, ref):
+        return (candidato, ref) == ("abc123", "def456")
+
+    mensaje, codigo = guard.evaluate(
+        "abc123", "def456", is_ancestor_fn=_servido_es_ancestro_de_origin
     )
     assert codigo == 1
     assert "abc123" in mensaje
@@ -56,8 +81,15 @@ def test_evaluate_atras_de_origin_sale_en_uno_y_nombra_los_dos_sha():
 
 
 def test_evaluate_divergido_sale_en_uno_y_nombra_los_dos_sha():
+    """Ninguno es ancestro del otro en ninguna dirección: divergencia
+    genuina, no el caso "adelante" que ahora sale en 0."""
+
+    def _ninguna_direccion_es_ancestro(candidato, ref):
+        assert {candidato, ref} == {"abc123", "def456"}
+        return False
+
     mensaje, codigo = guard.evaluate(
-        "abc123", "def456", is_ancestor_fn=lambda candidato, ref: False
+        "abc123", "def456", is_ancestor_fn=_ninguna_direccion_es_ancestro
     )
     assert codigo == 1
     assert "abc123" in mensaje
@@ -155,10 +187,13 @@ def test_main_sale_en_cero_cuando_el_servido_coincide_con_origin(capsys):
 
 
 def test_main_sale_en_uno_cuando_el_servido_esta_atras_de_origin(capsys):
+    def _servido_es_ancestro_de_origin(candidato, ref):
+        return (candidato, ref) == ("old111", "new222")
+
     with (
         patch.object(guard, "fetch_served_sha", return_value="old111"),
         patch.object(guard, "fetch_origin_main_sha", return_value="new222"),
-        patch.object(guard, "is_ancestor", return_value=True),
+        patch.object(guard, "is_ancestor", side_effect=_servido_es_ancestro_de_origin),
     ):
         codigo = guard.main([])
     assert codigo == 1

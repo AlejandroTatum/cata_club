@@ -50,7 +50,7 @@ describe("GET /api/health", () => {
   });
 
   it("defaults the sha to 'unknown' when BUILD_SHA is unset", async () => {
-    delete process.env.BUILD_SHA;
+    vi.stubEnv("BUILD_SHA", undefined);
 
     const response = await GET();
 

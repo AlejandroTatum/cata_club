@@ -87,6 +87,13 @@ def evaluate(
         return (f"QA sirve {served_sha}, igual a origin/main.", 0)
 
     verificar_ancestro = is_ancestor_fn if is_ancestor_fn is not None else is_ancestor
+
+    if verificar_ancestro(origin_sha, served_sha):
+        return (
+            f"QA sirve {served_sha}, que incluye todo origin/main ({origin_sha}).",
+            0,
+        )
+
     if verificar_ancestro(served_sha, origin_sha):
         return (
             f"QA sirve {served_sha}, que está detrás de origin/main "
