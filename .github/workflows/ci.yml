@@ -392,6 +392,7 @@ jobs:
             NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
             NEXT_PUBLIC_APP_NAME=Cata Club Admin
             NEXT_PUBLIC_USE_MOCKS=false
+            BUILD_SHA=${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
 

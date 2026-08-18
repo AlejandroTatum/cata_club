@@ -29,8 +29,14 @@ WORKDIR /app
 # `getaddrinfo EAI_AGAIN <id>` en bucle de reinicio — el contenedor nunca llega
 # a escuchar. Fijarlo a 0.0.0.0 hace que escuche en todas las interfaces, que es
 # lo que necesita para que el mapeo de puertos del host llegue a él.
+#
+# BUILD_SHA queda server-only a propósito (issue #350): se lee en runtime con
+# `process.env.BUILD_SHA` desde /api/health, nunca se inlinea en el bundle del
+# cliente, así que no necesita el prefijo NEXT_PUBLIC_.
+ARG BUILD_SHA=unknown
 ENV NODE_ENV=production \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    BUILD_SHA=$BUILD_SHA
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
