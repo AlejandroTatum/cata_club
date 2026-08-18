@@ -1185,6 +1185,31 @@ export interface PagoPersona {
   membresiaId: number;
   voucherUrl: string | null;
   voucherFormato: string | null;
+  /**
+   * El descuento CONGELADO que el club aplicó a este pago, o `null` cuando no
+   * llevó ninguno (hallazgo de QA humana del 17/08/2026: el socio veía el
+   * monto ya descontado sin nada que lo explicara).
+   *
+   * Solo dos de las cuatro columnas `descuento_*` de `PagoResponseDTO` se
+   * declaran acá, a mano y no por espejo del modelo: `descuentoId` es el id
+   * del catálogo, que esta pantalla no muestra ni resuelve, y
+   * `descuentoAutorizadoPorPersonaId` es auditoría interna — a quién autorizó
+   * la rebaja el socio no tiene por qué leerlo, y publicarlo sería exponer un
+   * identificador de persona sin ningún uso en la vista. Mismo criterio que
+   * `FichaEmergenciaResponseDTO`.
+   *
+   * Aplicar descuentos es potestad EXCLUSIVA del administrador (issue #11 §4,
+   * `registrar_pago` rechaza `descuento_ids` de cualquier otro rol): acá viaja
+   * en un solo sentido, de lectura, y `RegistrarPagoInput` sigue siendo el
+   * único lugar donde se eligen.
+   *
+   * No existe un campo con el precio de lista: `monto` ES el monto final
+   * (`registrar_pago` hace `pago.monto = monto_final`) y el base se reconstruye
+   * sumándole `descuentoValorAplicado` — ver `describePagoDescuento`.
+   */
+  descuentoValorAplicado: string | null;
+  /** Porcentaje vigente al aplicarlo, o `null` si el descuento era de monto fijo. */
+  descuentoPorcentajeAplicado: string | null;
 }
 
 /**

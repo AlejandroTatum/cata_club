@@ -166,6 +166,8 @@ function pago(overrides: Partial<PagoPersona>): PagoPersona {
     membresiaId: 3,
     voucherUrl: null,
     voucherFormato: null,
+    descuentoValorAplicado: null,
+    descuentoPorcentajeAplicado: null,
     ...overrides,
   };
 }
