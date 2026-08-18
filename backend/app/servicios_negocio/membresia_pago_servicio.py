@@ -824,11 +824,12 @@ class PagoServicio:
         pago.fecha_validacion = datetime.now(timezone.utc)
 
         if datos.estado_pago == EstadoPago.APROBADO:
-            # Si el admin corrigió las fechas, aplicarlas al pago.
-            if datos.fecha_inicio is not None and datos.fecha_fin is not None:
-                pago.fecha_inicio = datos.fecha_inicio
-                pago.fecha_fin = datos.fecha_fin
-
+            # `pago.fecha_inicio`/`fecha_fin` NO se tocan acá (issue #400):
+            # Administración no puede editar la cobertura al aprobar, así
+            # que lo que sigue usando `pago.fecha_inicio` es SIEMPRE lo que
+            # `registrar_pago` derivó del monto base y la cuota vigente en
+            # el momento del registro -- nunca un valor que el admin haya
+            # podido pisar en este paso.
             membresia = pago.membresia
             membresia.estado = EstadoMembresia.ACTIVA
             membresia.fecha_activacion = datetime(

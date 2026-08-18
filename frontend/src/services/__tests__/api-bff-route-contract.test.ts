@@ -23,6 +23,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/groups/horarios/route";
 import { PUT } from "@/app/api/groups/horarios/[id]/route";
 import { POST as POST_PAGO } from "@/app/api/membresias/pagos/route";
+import { PUT as PUT_PAYMENT } from "@/app/api/payments/[id]/route";
 import { PATCH as PATCH_FICHA_MEDICA } from "@/app/api/fichas-medicas/persona/[id]/route";
 import { POST as POST_BENEFICIO } from "@/app/api/personas/[id]/beneficio/route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
@@ -388,6 +389,63 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
 
     expect(response.status).not.toBe(400);
     expect(forwardedToBackend()).not.toHaveProperty("descuento_ids");
+  });
+
+  /**
+   * The coverage-date seam (issue #400): Administración used to be able to
+   * "correct" a payment's `fecha_inicio`/`fecha_fin` while approving it —
+   * `updatePaymentValidation`'s `ApprovePaymentDTO` no longer has
+   * `startDate`/`endDate` fields to send, but a stale client bundle (or a
+   * curl built against the old contract) still could. Same posture as
+   * `descuentoIds` above: the handler must drop them silently, never forward
+   * them to `PATCH /membresias/pagos/{id}/validar` and never reject the
+   * request for carrying them.
+   */
+  it("a stale client's startDate/endDate is dropped, not forwarded, by PUT /api/payments/[id]", async () => {
+    const clientBody = {
+      ...((await captureBody(() => updatePaymentValidation("42", { action: "approved" }))) as Record<
+        string,
+        unknown
+      >),
+      startDate: "2026-08-01",
+      endDate: "2026-09-01",
+    };
+
+    const jsonResponse = (body: unknown, status = 200): Response =>
+      new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+    vi.spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 42,
+          monto: "85.00",
+          estadoPago: "APROBADO",
+          tipoPago: "TRANSFERENCIA",
+          fechaRegistro: "2026-06-28T10:30:00Z",
+          fechaInicio: "2026-07-01",
+          fechaFin: "2026-07-31",
+          personaId: 3,
+          membresiaId: 1,
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ id: 3, nombres: "Sofia", apellidos: "Alumna" }))
+      .mockResolvedValueOnce(jsonResponse({ estado: "ACTIVA", tipoMembresiaId: 5 }))
+      .mockResolvedValueOnce(jsonResponse([{ id: 5, categoria: "Mensual" }]));
+
+    const response = await PUT_PAYMENT(
+      new NextRequest("http://localhost/api/payments/42", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
+        body: JSON.stringify(clientBody),
+      }),
+      { params: { id: "42" } },
+    );
+
+    expect(response.status).not.toBe(400);
+    const forwarded = forwardedToBackend();
+    expect(forwarded).not.toHaveProperty("fecha_inicio");
+    expect(forwarded).not.toHaveProperty("fecha_fin");
+    expect(forwarded).toEqual({ estado_pago: "APROBADO" });
   });
 
   /**
