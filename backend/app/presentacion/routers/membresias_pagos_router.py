@@ -15,6 +15,9 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO,
     DeudaMembresiaResponseDTO, RegularizacionDeudaDTO,
 )
+from app.presentacion.schemas.cobertura_bonificada_schemas import (
+    CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
+)
 from app.presentacion.schemas.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.membresia_pago_servicio import (
@@ -327,6 +330,37 @@ def regularizar_deuda_membresia(
         membresia_id, datos, persona_id_admin=token_payload.get("persona_id"),
     )
     return servicio.pago_a_response_dto(pago)
+
+
+# Otorga cobertura bonificada (issue #400, slice 4d): a diferencia de
+# `regularizar-deuda` (admin-only, bookkeeping), esta es autoservicio del
+# propio pagador -- mismo criterio de autorización que `registrar_pago`
+# (dependencia mínima `decodificar_token`; dueño/representante se valida
+# DENTRO del servicio, ver `PagoServicio.aplicar_beneficio_bonificado`). NO
+# usa `GestorPermisos(ROL_ADMIN)`: el admin ya ejerció su parte del proceso
+# al conceder la `AsignacionDescuento` (issue #398, admin-only) por
+# separado.
+@router.post(
+    "/{membresia_id}/aplicar-beneficio",
+    response_model=CoberturaBonificadaResponseDTO,
+    status_code=201,
+)
+async def aplicar_beneficio_bonificado(
+    membresia_id: int,
+    datos: CoberturaBonificadaCreateDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+):
+    servicio = PagoServicio(db)
+    cobertura = servicio.aplicar_beneficio_bonificado(
+        membresia_id,
+        datos,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+    )
+    return servicio.cobertura_bonificada_a_response_dto(cobertura)
+
+
 # Registra un pago pendiente. A diferencia de antes, ya NO basta con estar
 # autenticado con cualquier rol: se exige ser el dueño (persona_id del token
 # == persona_id del payload) o ADMINISTRADOR, igual que en /voucher. Antes

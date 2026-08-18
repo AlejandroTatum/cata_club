@@ -18,9 +18,10 @@ from typing import List, Optional
 
 from sqlalchemy import (
     String, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, Table, Column,
-    CheckConstraint, Index, UniqueConstraint, text,
+    CheckConstraint, Index, UniqueConstraint, text, func,
     Enum as SAEnum,
 )
+from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.dominio.enums import (
@@ -696,6 +697,141 @@ class AsignacionDescuento(Base):
     )
     retirado_en: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class CoberturaBonificada(Base):
+    """Cobertura de membresía otorgada por un beneficio 100% personal
+    (issue #400, slice 4d): cuando `AsignacionDescuento` cubre el monto base
+    completo de un período, la persona no debe pagar nada -- pero "no pagar
+    nada" NUNCA puede significar un `Pago` fabricado (método/comprobante
+    inventados). Esta tabla es la fila auditable que reemplaza a esa
+    invención: mismo espíritu que `HistorialEstadoMembresia` (huella de un
+    hecho, nunca reconstruible desde otra tabla).
+
+    Por qué NO es una fila de `Pago` con un `TipoPago` nuevo: `Pago.tipo_pago`
+    ya carga un significado que no es "cobro" (`REGULARIZACION`, bookkeeping
+    del admin) y CADA consumidor de `Pago` (cola de validación, PDF, `reconciliar_
+    comprobantes_faltantes`, reportes) tendría que recordar excluir un segundo
+    caso. Una tabla dedicada hace "sin comprobante, sin voucher, sin PDF"
+    estructuralmente cierto -- no un hecho que dependa de que cada consumidor
+    lo recuerde.
+
+    Por qué NO tiene `estado`/ciclo de vida (a diferencia de `Pago`, que nace
+    PENDIENTE_VALIDACION): el derecho ya fue concedido antes, en la
+    `AsignacionDescuento` que referencia (issue #398, admin-only). Aplicarlo a
+    un período concreto es un hecho que se otorga completo de una sola vez --
+    no hay paso de aprobación pendiente que modelar acá.
+
+    `tarifa_mensual_aplicada`/`meses_comprados` son el mismo snapshot congelado
+    que `Pago` (ver su docstring): la tarifa vigente al momento de otorgar,
+    para que un cambio posterior al catálogo no reescriba el histórico.
+    `asignacion_descuento_id` es el vínculo permanente al beneficio que hizo
+    esto gratis -- a diferencia de `Pago.descuento_id` (que apunta al
+    catálogo `Descuento`), acá interesa la CONCESIÓN concreta, no solo qué
+    descuento era.
+
+    `descuento_valor_aplicado`/`descuento_porcentaje_aplicado` (hallazgo del
+    revisor) son el mismo congelamiento que `Pago.descuento_valor_aplicado`/
+    `_porcentaje_aplicado`: el valor CALCULADO al otorgar, copiado -- no una
+    referencia viva al catálogo. Sin esto, `DescuentoServicio.actualizar`
+    editando el `Descuento` original DESPUÉS de otorgada esta cobertura
+    reescribiría en los hechos cuánto valió (ej. de 100% a 50%), aunque el
+    monto que la persona pagó por ella -- cero -- nunca cambió.
+    `descuento_valor_aplicado` es NOT NULL: esta fila solo existe cuando el
+    beneficio cubrió el 100%, así que el valor siempre se conoce al crearla
+    (a diferencia de `Pago`, donde la columna es nullable porque un pago
+    puede no llevar ningún descuento). `_porcentaje_aplicado` sigue siendo
+    NULL cuando el descuento congelado era de monto fijo.
+
+    `otorgada_por_persona_id` nombra a quien ejecutó "Aplicar beneficio" --
+    por diseño (issue #400) es autoservicio del propio pagador o su
+    representante, nunca un administrador actuando "por" ellos (ver
+    `PagoServicio.aplicar_beneficio_bonificado`). El nombre de la columna
+    queda neutro a propósito: si algún día las reglas de titularidad
+    permitieran a un representante distinto actuar, la columna ya describe
+    "quién ejecutó", no "el titular".
+
+    Sin invariante en la base contra pisar la cobertura de un `Pago`
+    aprobado: eso lo exige el pre-check de servicio
+    (`PagoServicio._hay_cobertura_en_rango`, que consulta las DOS tablas),
+    red de seguridad que Postgres no puede expresar como constraint entre
+    dos tablas distintas.
+    Lo que SÍ respalda la base es que esta tabla no se solape CONSIGO MISMA
+    para la misma membresía (ver `ex_cobertura_bonificada_periodo_no_solapa`
+    más abajo) -- mismo criterio que el resto del módulo (auditoría hallazgo
+    7, issue #8): el pre-check del servicio es el camino primario de error,
+    el constraint es la red ante la carrera que el pre-check no puede ver.
+
+    Creada por la migración `b4736d8ac9ee`.
+    """
+
+    __tablename__ = "cobertura_bonificada"
+    __table_args__ = (
+        CheckConstraint(
+            "meses_comprados > 0",
+            name="ck_cobertura_bonificada_meses_positivo",
+        ),
+        # Red de seguridad (issue #8): dos otorgamientos concurrentes para la
+        # MISMA membresía con períodos que se solapan no pueden coexistir --
+        # el pre-check de servicio es el camino primario de error, esto es lo
+        # que Postgres hace cumplir cuando dos transacciones lo esquivan.
+        # Requiere la extensión `btree_gist` (habilitada por la misma
+        # migración) para poder comparar `membresia_id` con `=` dentro de un
+        # índice GiST.
+        # `ddl_if(dialect="postgresql")`: los tests de siembra (`test_seed_dev_
+        # base.py`/`test_seed_dev_bulk.py`) construyen `Base.metadata.create_
+        # all()` contra SQLite en memoria -- un motor que no sabe compilar
+        # `EXCLUDE USING gist` (no existe en SQLite). Sin este filtro,
+        # `create_all()` revienta con `UnsupportedCompilationError` para
+        # CUALQUIER tabla del esquema, no solo esta. El resto del módulo
+        # (índices, CHECK, FKs) es SQL estándar y no necesita el filtro.
+        ExcludeConstraint(
+            (Column("membresia_id"), "="),
+            (
+                func.daterange(Column("fecha_inicio"), Column("fecha_fin"), text("'[)'")),
+                "&&",
+            ),
+            name="ex_cobertura_bonificada_periodo_no_solapa",
+            using="gist",
+        ).ddl_if(dialect="postgresql"),
+        Index("ix_cobertura_bonificada_membresia_id", "membresia_id"),
+        Index("ix_cobertura_bonificada_persona_id", "persona_id"),
+        Index(
+            "ix_cobertura_bonificada_asignacion_descuento_id",
+            "asignacion_descuento_id",
+        ),
+        Index(
+            "ix_cobertura_bonificada_otorgada_por_persona_id",
+            "otorgada_por_persona_id",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    membresia_id: Mapped[int] = mapped_column(ForeignKey("membresia.id"), nullable=False)
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    asignacion_descuento_id: Mapped[int] = mapped_column(
+        ForeignKey("asignacion_descuento.id"), nullable=False
+    )
+
+    tarifa_mensual_aplicada: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    meses_comprados: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Congelamiento del valor del descuento (hallazgo del revisor, ver
+    # docstring de la clase): copia del cálculo de `_congelar_beneficio_
+    # activo` al momento de otorgar, nunca una referencia viva al catálogo.
+    descuento_valor_aplicado: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    descuento_porcentaje_aplicado: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(5, 2), nullable=True
+    )
+    fecha_inicio: Mapped[date] = mapped_column(Date, nullable=False)
+    fecha_fin: Mapped[date] = mapped_column(Date, nullable=False)
+
+    otorgada_por_persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id"), nullable=False
+    )
+    otorgada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc
     )
 
 

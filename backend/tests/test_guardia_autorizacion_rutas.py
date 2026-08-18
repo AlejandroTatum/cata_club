@@ -161,6 +161,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("PATCH", "/ranking/notificaciones/{notificacion_id}/leer"), # (b) - propio via `persona_id` del token
     ("POST", "/auth/me/foto"),                                   # (b) - propio via `sub`
     ("POST", "/auth/sesiones/invalidar"),                        # (b) - propio via `sub`
+    ("POST", "/membresias/{membresia_id}/aplicar-beneficio"),     # (b) - dueño/representante validado en el servicio
     ("POST", "/membresias/pagos"),                                # (b) - dueño/admin validado en el servicio
     ("POST", "/membresias/pagos/{pago_id}/voucher"),             # (b) - dueño/admin validado en el servicio
     ("POST", "/personas/{persona_id}/independizar"),             # (b)

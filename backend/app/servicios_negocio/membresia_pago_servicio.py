@@ -7,14 +7,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
-    Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion,
+    Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion, CoberturaBonificada,
 )
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio, TipoMembresiaRepositorio
-from app.infraestructura.repositorios.pago_repositorio import PagoRepositorio, ComprobantePagoRepositorio
+from app.infraestructura.repositorios.pago_repositorio import (
+    PagoRepositorio, ComprobantePagoRepositorio, CoberturaBonificadaRepositorio,
+)
 from app.infraestructura.repositorios.descuento_repositorio import (
     AsignacionDescuentoRepositorio, DescuentoRepositorio,
 )
@@ -29,6 +31,11 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     ComprobantePagoCreateDTO,
     PagoListItemDTO, PagoResponseDTO, RegularizacionDeudaDTO,
 )
+from app.presentacion.schemas.cobertura_bonificada_schemas import (
+    CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
+)
+from app.presentacion.schemas.beneficio_schemas import AsignacionDescuentoResponseDTO
+from app.presentacion.schemas.descuento_schemas import DescuentoResponseDTO
 
 
 def _sumar_meses(fecha: date, meses: int) -> date:
@@ -96,6 +103,20 @@ MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
     "Cancele o deje vencer la actual antes de crear una nueva."
 )
 
+# --- Issue #400 (slice 4d): cobertura bonificada -----------------------------
+MENSAJE_COBERTURA_YA_APLICADA = (
+    "El período indicado ya tiene cobertura (un pago aprobado, o un "
+    "beneficio bonificado ya otorgado)."
+)
+MENSAJE_BENEFICIO_NO_ES_TOTAL = (
+    "El beneficio vigente no cubre el 100% de este período; "
+    "regístrelo como un pago normal."
+)
+MENSAJE_MEMBRESIA_YA_GRATUITA = (
+    "Esta membresía ya tiene cobertura gratuita por regla familiar; "
+    "aplicar un beneficio bonificado no corresponde."
+)
+
 logger = logging.getLogger("cataclub.servicios.pagos")
 
 
@@ -104,9 +125,13 @@ logger = logging.getLogger("cataclub.servicios.pagos")
 # concedió la asignación (`AsignacionDescuento.asignado_por_persona_id`),
 # nunca quien registró este pago -- ver docstring de
 # `_congelar_beneficio_activo` y de `Pago.descuento_autorizado_por_persona_id`.
+# `asignacion_id` (issue #400/4d) es el id de la propia `AsignacionDescuento`
+# -- lo necesita `aplicar_beneficio_bonificado` para el vínculo permanente
+# `CoberturaBonificada.asignacion_descuento_id`; `registrar_pago` lo ignora.
 @dataclass(frozen=True)
 class _DescuentoCongelado:
     descuento_id: int
+    asignacion_id: int
     valor_aplicado: Decimal
     porcentaje_aplicado: Decimal | None
     autorizado_por_persona_id: int
@@ -276,6 +301,7 @@ class PagoServicio:
         self.repo_notificacion = NotificacionRepositorio(db)
         self.repo_descuento = DescuentoRepositorio(db)
         self.repo_asignacion = AsignacionDescuentoRepositorio(db)
+        self.repo_cobertura_bonificada = CoberturaBonificadaRepositorio(db)
 
     def registrar_pago(
         self,
@@ -386,10 +412,19 @@ class PagoServicio:
         # anterior a la otra -- un pago de UN mes podía pedir DOCE de
         # cobertura y el 201 lo aceptaba (agujero reproducido en vivo, ver
         # docs/archive/fixes/06-periodo-de-cobertura.md). Ahora el backend deriva el
-        # período: arranca donde termina la del último pago APROBADO (o hoy
-        # si no hay ninguno, igual que antes leía el frontend) y avanza
+        # período: arranca donde termina la última cobertura ya otorgada (o
+        # hoy si no hay ninguna, igual que antes leía el frontend) y avanza
         # tantos meses completos como el cliente pidió.
-        ultima_fecha_fin = self.repo.fecha_fin_maxima_aprobada(datos.membresia_id)
+        #
+        # Issue #400/4d (hallazgo del revisor, reproducido en vivo): el ancla
+        # combina AMBAS tablas (`Pago` aprobado Y `cobertura_bonificada`) vía
+        # `_fecha_fin_maxima_combinada` -- antes anclaba SOLO contra `Pago`,
+        # así que un pago normal podía registrarse (y aprobarse) encima de un
+        # período que un beneficio bonificado ya cubría. Al derivar SIEMPRE
+        # el período (nunca lo elige el cliente), anclar sobre el máximo real
+        # ya hace que el resultado no pueda solaparse por construcción -- no
+        # hace falta un chequeo aparte de "rechazar" acá.
+        ultima_fecha_fin = self._fecha_fin_maxima_combinada(datos.membresia_id)
         hoy = hoy_club()
         ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
         fecha_inicio, fecha_fin = ancla, _sumar_meses(ancla, meses)
@@ -553,11 +588,64 @@ class PagoServicio:
         return (
             _DescuentoCongelado(
                 descuento_id=descuento.id,
+                asignacion_id=asignacion.id,
                 valor_aplicado=valor,
                 porcentaje_aplicado=descuento.porcentaje,
                 autorizado_por_persona_id=asignacion.asignado_por_persona_id,
             ),
             monto_base - valor,
+        )
+
+    # --- Issue #400/4d (hallazgo del revisor, reproducido en vivo contra
+    # Postgres real): "cobertura" es un hecho que hoy vive en DOS tablas
+    # (`Pago` aprobado y `cobertura_bonificada`), y cada camino que ancla o
+    # verifica solapamiento debe mirar las DOS -- nunca solo la suya. Antes
+    # de este fix, `registrar_pago` anclaba SOLO contra `Pago`: una persona
+    # con cobertura bonificada vigente hasta noviembre podía registrar (y
+    # aprobar) un pago normal que arrancaba HOY, solapando esos meses ya
+    # cubiertos. Estos dos helpers son el ÚNICO lugar donde vive la
+    # combinación de ambas tablas -- `registrar_pago`, `regularizar_deuda` y
+    # `aplicar_beneficio_bonificado` los llaman en vez de reimplementar la
+    # combinación cada uno por su cuenta (así fue exactamente como se
+    # introdujo el bug: dos implementaciones que fueron divergiendo).
+    def _fecha_fin_maxima_combinada(self, membresia_id: int) -> date | None:
+        """`fecha_fin` más lejana entre AMBAS fuentes de cobertura de una
+        membresía, o `None` si no tiene ninguna. El ancla real de "hasta
+        cuándo ya está cubierta esta membresía", sin importar por cuál de
+        los dos caminos se cubrió."""
+        candidatos = [
+            fecha for fecha in (
+                self.repo.fecha_fin_maxima_aprobada(membresia_id),
+                self.repo_cobertura_bonificada.fecha_fin_maxima(membresia_id),
+            )
+            if fecha is not None
+        ]
+        return max(candidatos) if candidatos else None
+
+    def _hay_cobertura_en_rango(
+        self, membresia_id: int, fecha_inicio: date, fecha_fin: date, *, medio_abierto: bool,
+    ) -> bool:
+        """True si CUALQUIERA de las dos tablas ya cubre (total o
+        parcialmente) el rango dado para esta membresía.
+
+        `medio_abierto` decide qué variante de cada repositorio usar:
+        `regularizar_deuda` recibe fechas EXPLÍCITAS del admin y ya usaba
+        semántica CERRADA (`cobertura_aprobada_en_rango`) desde antes de
+        este slice -- se preserva sin cambios para no alterar un
+        comportamiento ya probado. `aplicar_beneficio_bonificado` ancla
+        automáticamente un período justo donde terminó el anterior
+        (`fecha_fin` de uno == `fecha_inicio` del siguiente), así que
+        necesita la variante MEDIO ABIERTA -- con la cerrada, dos períodos
+        apenas adyacentes se verían como solapados (bug real, ver
+        `test_segunda_aplicacion_ancla_sobre_la_cobertura_bonificada_previa`)."""
+        if medio_abierto:
+            return (
+                self.repo.cobertura_aprobada_en_rango_medio_abierto(membresia_id, fecha_inicio, fecha_fin)
+                or self.repo_cobertura_bonificada.existe_en_rango(membresia_id, fecha_inicio, fecha_fin)
+            )
+        return (
+            self.repo.cobertura_aprobada_en_rango(membresia_id, fecha_inicio, fecha_fin)
+            or self.repo_cobertura_bonificada.existe_en_rango_cerrado(membresia_id, fecha_inicio, fecha_fin)
         )
 
     def calcular_meses_adeudados(self, membresia_id: int) -> int:
@@ -622,9 +710,16 @@ class PagoServicio:
                 "no puede ser posterior a hoy."
             )
 
-        if self.repo.cobertura_aprobada_en_rango(membresia_id, datos.fecha_inicio, datos.fecha_fin):
+        # Issue #400/4d (hallazgo del revisor): además del pago aprobado de
+        # siempre, tampoco puede pisar un período ya cubierto por un
+        # beneficio bonificado -- el admin no debe poder backdatear un pago
+        # encima de una cobertura que la persona ya recibió gratis.
+        if self._hay_cobertura_en_rango(
+            membresia_id, datos.fecha_inicio, datos.fecha_fin, medio_abierto=False,
+        ):
             raise OperacionInvalida(
-                "El período indicado ya está cubierto por un pago aprobado."
+                "El período indicado ya está cubierto por un pago aprobado "
+                "o por un beneficio bonificado ya otorgado."
             )
 
         pago = Pago(
@@ -640,6 +735,197 @@ class PagoServicio:
             motivo_regularizacion=datos.motivo,
         )
         return self.repo.crear(pago)
+
+    # --- Issue #400 (slice 4d): cobertura bonificada -------------------------
+    def aplicar_beneficio_bonificado(
+        self,
+        membresia_id: int,
+        datos: CoberturaBonificadaCreateDTO,
+        persona_id_solicitante: int | None = None,
+        roles_solicitante: list[str] | None = None,
+    ) -> CoberturaBonificada:
+        """Otorga cobertura bonificada: cuando el beneficio 100% personal
+        vigente del titular cubre el monto base COMPLETO del período
+        elegido, la persona recibe cobertura sin que se cree ningún `Pago`
+        -- ver el docstring de `CoberturaBonificada` en `modelos.py` para el
+        porqué de la tabla dedicada (nunca un método/comprobante/PDF
+        inventados).
+
+        Autorización: autoservicio del PAGADOR (dueño o su representante),
+        NUNCA un ADMINISTRADOR "por" él. El admin ya ejerció su parte del
+        proceso al conceder la `AsignacionDescuento` (issue #398, admin-only,
+        ver `BeneficioServicio.asignar`); aplicarla a un período concreto es
+        un acto del propio pagador. A diferencia de `registrar_pago` (que sí
+        deja pasar a un ADMINISTRADOR, porque puede legítimamente registrar
+        una transferencia que presenció), acá no hay ningún movimiento de
+        dinero que un admin deba poder atestiguar en nombre de un tercero --
+        por eso el trío dueño/representante/admin de `registrar_pago` queda
+        reducido a un dúo acá.
+
+        Reglas de negocio, en orden:
+          1. Gratuidad familiar (`membresia.es_gratuidad_familiar`): si la
+             membresía YA es gratuita por la regla del 4to miembro
+             (E04-RF002), aplicar un beneficio bonificado no corresponde --
+             la cobertura ya es $0 por otro mecanismo. Mutuamente
+             excluyentes por construcción, mismo gate que `registrar_pago`.
+          2. El beneficio debe cubrir el 100% EXACTO del monto base de ESTE
+             período (`_congelar_beneficio_activo`, misma matemática que
+             `registrar_pago`): un descuento porcentual del 100% siempre
+             alcanza, pero uno de monto FIJO solo si ese monto iguala
+             exactamente `tarifa * meses` -- "100%" es una propiedad del PAR
+             (asignación, meses), no de la asignación sola. Sin beneficio
+             vigente, o un beneficio que cubre solo una parte, se rechaza:
+             ese caso sigue el camino normal de `registrar_pago`, con un
+             cobro real (posiblemente parcial).
+          3. Período: mismo ancla que `registrar_pago` (fin de la última
+             cobertura aprobada, o hoy), pero combinando el máximo de AMBAS
+             tablas (`Pago` y `cobertura_bonificada`) -- una persona con
+             cobertura bonificada hasta marzo que vuelve a aplicar el
+             beneficio no debe pisar esos meses.
+          4. Pre-check de solapamiento contra AMBAS tablas (pago aprobado O
+             cobertura bonificada ya otorgada) -- camino primario de error;
+             la restricción de exclusión
+             `ex_cobertura_bonificada_periodo_no_solapa` es la red de
+             seguridad ante la carrera que este pre-check no puede ver
+             (issue #8, mismo criterio que el resto del módulo).
+
+        Activa la membresía (a diferencia de `regularizar_deuda`, que es
+        bookkeeping retroactivo y deliberadamente NO activa): la persona
+        recibe cobertura real, mismo criterio que un pago aprobado
+        (`validar_pago`), reutilizando su misma red de seguridad
+        (`_activar_membresia_con_red_de_seguridad`).
+
+        NO dispara generación de PDF ni crea `ComprobantePago` -- no hay
+        nada que comprobar, no hubo transferencia ni efectivo. Tampoco es
+        barrida por `reconciliar_comprobantes_faltantes` (esa tarea consulta
+        `Pago`; esta tabla le es estructuralmente invisible). Sí crea una
+        notificación in-app, pero con `TipoNotificacion.
+        COBERTURA_BONIFICADA_OTORGADA` -- nunca `PAGO_APROBADO`, cuyo texto
+        ("Su pago de $X fue aprobado") describiría un cobro que no ocurrió.
+        """
+        roles_solicitante = roles_solicitante or []
+        membresia = self.repo_membresia.obtener_por_id(membresia_id)
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
+
+        es_duenio = (
+            persona_id_solicitante is not None
+            and persona_id_solicitante == membresia.persona_id
+        )
+        es_representante = False
+        if not es_duenio and persona_id_solicitante is not None:
+            persona_objetivo = self.repo_persona.obtener_por_id(membresia.persona_id)
+            es_representante = bool(
+                persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
+            )
+        if not (es_duenio or es_representante):
+            raise PermisosInsuficientes(
+                "Solo el titular de la membresía, o su representante, "
+                "pueden aplicar su beneficio bonificado"
+            )
+
+        if membresia.es_gratuidad_familiar:
+            raise OperacionInvalida(MENSAJE_MEMBRESIA_YA_GRATUITA)
+
+        precio_mensual = membresia.monto_aplicado
+        meses = datos.meses
+        monto_base = precio_mensual * meses
+
+        descuento_congelado, monto_final = self._congelar_beneficio_activo(
+            membresia.persona_id, monto_base,
+        )
+        if descuento_congelado is None or monto_final != 0:
+            raise OperacionInvalida(MENSAJE_BENEFICIO_NO_ES_TOTAL)
+
+        ultima_fecha_fin = self._fecha_fin_maxima_combinada(membresia_id)
+        hoy = hoy_club()
+        ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
+        fecha_inicio, fecha_fin = ancla, _sumar_meses(ancla, meses)
+
+        if self._hay_cobertura_en_rango(
+            membresia_id, fecha_inicio, fecha_fin, medio_abierto=True,
+        ):
+            raise OperacionInvalida(MENSAJE_COBERTURA_YA_APLICADA)
+
+        self._activar_membresia_con_red_de_seguridad(membresia, fecha_inicio)
+
+        cobertura = CoberturaBonificada(
+            membresia_id=membresia_id,
+            persona_id=membresia.persona_id,
+            asignacion_descuento_id=descuento_congelado.asignacion_id,
+            tarifa_mensual_aplicada=precio_mensual,
+            meses_comprados=meses,
+            # Congelamiento del valor del descuento (hallazgo del revisor):
+            # copia lo que `_congelar_beneficio_activo` YA calculó arriba,
+            # nunca una referencia viva al catálogo -- ver docstring de
+            # `CoberturaBonificada` en modelos.py.
+            descuento_valor_aplicado=descuento_congelado.valor_aplicado,
+            descuento_porcentaje_aplicado=descuento_congelado.porcentaje_aplicado,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            otorgada_por_persona_id=persona_id_solicitante,
+        )
+        try:
+            cobertura = self.repo_cobertura_bonificada.crear(cobertura)
+        except IntegrityError as error:
+            self.db.rollback()
+            if "ex_cobertura_bonificada_periodo_no_solapa" in str(error.orig):
+                raise OperacionInvalida(MENSAJE_COBERTURA_YA_APLICADA) from error
+            raise
+
+        self._crear_notificacion(
+            persona_id=membresia.persona_id,
+            entidad_relacionada_id=cobertura.id,
+            tipo=TipoNotificacion.COBERTURA_BONIFICADA_OTORGADA,
+            mensaje=(
+                f"Se le otorgó cobertura bonificada de {meses} "
+                f"{'mes' if meses == 1 else 'meses'} para su membresía."
+            ),
+            id_para_log=f"cobertura bonificada {cobertura.id}",
+        )
+        return cobertura
+
+    def cobertura_bonificada_a_response_dto(
+        self, cobertura: CoberturaBonificada,
+    ) -> CoberturaBonificadaResponseDTO:
+        """Punto único donde una `CoberturaBonificada` ORM se convierte en la
+        respuesta HTTP, anidando la `AsignacionDescuento` (con su `Descuento`
+        del catálogo dentro) -- mismo patrón que
+        `BeneficioServicio.a_response_dto`, duplicado a propósito: ninguna de
+        las dos clases depende de la otra (ver docstring de
+        `BeneficioServicio` sobre por qué issue #398 y #400/4c/4d quedan
+        deliberadamente separados).
+
+        `descuento_valor_aplicado`/`descuento_porcentaje_aplicado` del DTO
+        salen de LAS COLUMNAS CONGELADAS de `cobertura` (hallazgo del
+        revisor), NUNCA del `descuento` que se lee acá abajo -- ese lookup
+        es SOLO para nombrar/identificar el catálogo dentro de
+        `asignacion_descuento.descuento` (issue #398), y puede haber
+        cambiado de valor desde que se otorgó esta cobertura."""
+        asignacion = self.repo_asignacion.obtener_por_id(cobertura.asignacion_descuento_id)
+        descuento = self.repo_descuento.obtener_por_id(asignacion.descuento_id)
+        return CoberturaBonificadaResponseDTO(
+            id=cobertura.id,
+            membresia_id=cobertura.membresia_id,
+            persona_id=cobertura.persona_id,
+            asignacion_descuento=AsignacionDescuentoResponseDTO(
+                id=asignacion.id,
+                persona_id=asignacion.persona_id,
+                descuento=DescuentoResponseDTO.model_validate(descuento),
+                asignado_por_persona_id=asignacion.asignado_por_persona_id,
+                asignado_en=asignacion.asignado_en,
+                retirado_por_persona_id=asignacion.retirado_por_persona_id,
+                retirado_en=asignacion.retirado_en,
+            ),
+            tarifa_mensual_aplicada=cobertura.tarifa_mensual_aplicada,
+            meses_comprados=cobertura.meses_comprados,
+            descuento_valor_aplicado=cobertura.descuento_valor_aplicado,
+            descuento_porcentaje_aplicado=cobertura.descuento_porcentaje_aplicado,
+            fecha_inicio=cobertura.fecha_inicio,
+            fecha_fin=cobertura.fecha_fin,
+            otorgada_por_persona_id=cobertura.otorgada_por_persona_id,
+            otorgada_en=cobertura.otorgada_en,
+        )
 
     def obtener_pago(
         self,
@@ -831,30 +1117,17 @@ class PagoServicio:
             # el momento del registro -- nunca un valor que el admin haya
             # podido pisar en este paso.
             membresia = pago.membresia
-            membresia.estado = EstadoMembresia.ACTIVA
-            membresia.fecha_activacion = datetime(
-                year=pago.fecha_inicio.year,
-                month=pago.fecha_inicio.month,
-                day=pago.fecha_inicio.day,
-                tzinfo=timezone.utc,
-            )
-
             # Flush pending changes before counting active family memberships.
             # With autoflush=False, the ACTIVA state set above is not visible
             # to subsequent DB queries unless we explicitly flush. The 4th-family
             # gratuity rule (E04-RF002) depends on an accurate count, which
-            # includes the membership we just activated.
-            #
-            # Red de seguridad del invariante 2 (issue #8): aprobar es el
-            # ÚNICO escritor de ACTIVA, y `crear_membresia` no puede ver la
-            # carrera de dos membresías INACTIVAS de la misma persona cuyos
-            # pagos se aprueban a la vez (o una segunda aprobación con otra
-            # ya activa). El índice `uq_membresia_activa_por_persona` la
-            # rechaza en el flush/commit y se traduce al MISMO error de
-            # dominio que da el chequeo de `crear_membresia`. El `rollback()`
-            # es obligatorio: un flush fallido deja la sesión inválida.
+            # includes the membership we just activated. El flush (y su red
+            # de seguridad ante `uq_membresia_activa_por_persona`) vive en
+            # `_activar_membresia_con_red_de_seguridad`, compartida con
+            # `aplicar_beneficio_bonificado` (issue #400/4d) -- ver su
+            # docstring.
+            self._activar_membresia_con_red_de_seguridad(membresia, pago.fecha_inicio)
             try:
-                self.db.flush()
                 self._aplicar_regla_familiar_si_corresponde(membresia, pago)
                 self.repo.guardar_cambios(pago)
             except IntegrityError as error:
@@ -887,6 +1160,41 @@ class PagoServicio:
         # `_crear_notificacion_pago`).
         pago.aviso_no_enviado = not aviso_ok
         return pago
+
+    # --- Activación compartida (issue #400/4d) -------------------------------
+    def _activar_membresia_con_red_de_seguridad(
+        self, membresia: Membresia, fecha_inicio: date,
+    ) -> None:
+        """Activa la membresía (INACTIVA/VENCIDA -> ACTIVA) con `fecha_
+        activacion` derivada de `fecha_inicio`, y hace el `flush()` que la
+        vuelve visible a consultas posteriores en esta misma transacción.
+
+        Compartido por `validar_pago` (aprobar un pago) y
+        `aplicar_beneficio_bonificado` (otorgar cobertura 100% bonificada):
+        los dos caminos hacen que la persona reciba cobertura REAL, así que
+        los dos deben dejar la membresía ACTIVA -- a diferencia de
+        `regularizar_deuda`, que es bookkeeping retroactivo del admin y
+        deliberadamente NO activa nada.
+
+        Red de seguridad del invariante 2 (issue #8): dos escrituras
+        concurrentes de ACTIVA para la misma persona (dos pagos, o un pago y
+        un otorgamiento, aprobándose a la vez) las serializa el índice
+        `uq_membresia_activa_por_persona`; el `IntegrityError` se traduce acá
+        al MISMO error de dominio para ambos llamadores, así ninguno de los
+        dos tiene que saber del índice. El `rollback()` es obligatorio: un
+        flush fallido deja la sesión inválida para cualquier uso posterior."""
+        membresia.estado = EstadoMembresia.ACTIVA
+        membresia.fecha_activacion = datetime(
+            year=fecha_inicio.year, month=fecha_inicio.month, day=fecha_inicio.day,
+            tzinfo=timezone.utc,
+        )
+        try:
+            self.db.flush()
+        except IntegrityError as error:
+            self.db.rollback()
+            if "uq_membresia_activa_por_persona" in str(error.orig):
+                raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
+            raise
 
     # --- E04-RF002: gratuidad del 4to miembro -------------------------------
     def _aplicar_regla_familiar_si_corresponde(self, membresia: Membresia, pago: Pago) -> None:
@@ -968,25 +1276,44 @@ class PagoServicio:
         return None
 
     def _crear_notificacion_pago(self, pago: Pago, tipo: TipoNotificacion, mensaje: str) -> bool:
-        """Crea el aviso in-app para el alumno y, si tiene, para su
+        """Envoltorio delgado de `_crear_notificacion` para los dos avisos de
+        `validar_pago` (aprobado/rechazado): conserva la firma original
+        (`pago`, no `persona_id`/`entidad_relacionada_id` sueltos) para no
+        tocar sus dos call sites. Ver `_crear_notificacion` para el
+        comportamiento completo (nunca levanta, log + rollback local)."""
+        return self._crear_notificacion(
+            persona_id=pago.persona_id,
+            entidad_relacionada_id=pago.id,
+            tipo=tipo,
+            mensaje=mensaje,
+            id_para_log=f"pago {pago.id}",
+        )
+
+    def _crear_notificacion(
+        self, persona_id: int, entidad_relacionada_id: int,
+        tipo: TipoNotificacion, mensaje: str, id_para_log: str,
+    ) -> bool:
+        """Crea el aviso in-app para el titular y, si tiene, para su
         representante. Devuelve `False` (y NUNCA levanta) si no se pudo
         crear alguno de los dos -- NUNCA `True`/`False` a medias silenciado.
+        Compartida por `_crear_notificacion_pago` (aprobar/rechazar un pago)
+        y `aplicar_beneficio_bonificado` (issue #400/4d, otorgar cobertura
+        bonificada): las dos operaciones YA están commiteadas cuando esto
+        corre, así que un aviso fallido nunca debe convertirse en un 5xx
+        sobre una operación que en los hechos SÍ se procesó.
 
-        Por qué no relanza: cuando esto corre, `pago` YA está commiteado con
-        su estado final (`guardar_cambios` corre antes, en las dos ramas de
-        `validar_pago`). Levantar acá convertiría un aviso fallido en un 5xx
-        para toda la petición -- y por diseño del frontend
-        (`error-message.ts`: un `detail` 5xx nunca llega al usuario, porque
-        describe una falla del SERVIDOR, no algo que el usuario deba leer) el
-        admin vería el cartel genérico "El servidor no pudo completar la
-        operación" sobre un pago que en realidad SÍ se procesó. `validar_pago`
-        lee este `bool` y lo expone en `PagoResponseDTO.aviso_no_enviado`,
-        así el 200 que ya vuelve lleva la verdad completa en vez de tener que
-        elegir entre mentir con un 200 mudo o mentir con un 500 falso
-        (hallazgo en vivo, 2026-08-11: antes de este fix era ni siquiera
-        esto -- un `DataError` sin capturar por VARCHAR(255) en
-        `notificacion.mensaje`, con el rechazo ya commiteado)."""
-        persona = self.repo_persona.obtener_por_id(pago.persona_id)
+        Por qué no relanza: por diseño del frontend (`error-message.ts`: un
+        `detail` 5xx nunca llega al usuario, porque describe una falla del
+        SERVIDOR, no algo que el usuario deba leer) quien llama vería el
+        cartel genérico "El servidor no pudo completar la operación" sobre
+        una operación que en realidad SÍ se procesó. Cada llamador lee este
+        `bool` y lo expone en su propio DTO de respuesta (ver `PagoResponseDTO.
+        aviso_no_enviado`), así el 200 que ya vuelve lleva la verdad completa
+        en vez de tener que elegir entre mentir con un 200 mudo o mentir con
+        un 500 falso (hallazgo en vivo, 2026-08-11: antes de este fix era ni
+        siquiera esto -- un `DataError` sin capturar por VARCHAR(255) en
+        `notificacion.mensaje`, con la operación ya commiteada)."""
+        persona = self.repo_persona.obtener_por_id(persona_id)
         if not persona:
             return True  # nada que notificar no es un fallo
         try:
@@ -994,12 +1321,13 @@ class PagoServicio:
                 tipo=tipo,
                 mensaje=mensaje,
                 persona_id=persona.id,
-                entidad_relacionada_id=pago.id,
+                entidad_relacionada_id=entidad_relacionada_id,
             )
             self.repo_notificacion.crear(notif)
             if persona.representante_id:
                 # El nombre se acorta ACÁ, nunca `mensaje`: el motivo de un
-                # rechazo es lo que el representante necesita leer entero.
+                # rechazo (o el detalle del beneficio) es lo que el
+                # representante necesita leer entero.
                 nombre_alumno = acortar_nombre_para_notificacion(
                     f"{persona.nombres} {persona.apellidos}"
                 )
@@ -1007,22 +1335,22 @@ class PagoServicio:
                     tipo=tipo,
                     mensaje=f"Para {nombre_alumno}: {mensaje}",
                     persona_id=persona.representante_id,
-                    entidad_relacionada_id=pago.id,
+                    entidad_relacionada_id=entidad_relacionada_id,
                 )
                 self.repo_notificacion.crear(notif_rep)
             return True
         except Exception:
             # `rollback()` deshace SOLO la transacción de esta notificación
-            # (nunca llegó a `commit`): lo que `guardar_cambios` ya
-            # commiteó antes sigue intacto. Necesario para que la sesión
-            # quede usable después de un `DataError` -- sin esto, cualquier
-            # lectura posterior (ej. serializar la respuesta) tira
-            # `PendingRollbackError` encima del problema original.
+            # (nunca llegó a `commit`): lo que ya se commiteó antes sigue
+            # intacto. Necesario para que la sesión quede usable después de
+            # un `DataError` -- sin esto, cualquier lectura posterior (ej.
+            # serializar la respuesta) tira `PendingRollbackError` encima del
+            # problema original.
             self.db.rollback()
             logger.exception(
-                "No se pudo crear la notificación del pago %s (estado=%s, "
-                "persona_id=%s). El pago YA está commiteado con ese estado.",
-                pago.id, pago.estado_pago.value, pago.persona_id,
+                "No se pudo crear la notificación de %s (persona_id=%s). "
+                "La operación YA está commiteada.",
+                id_para_log, persona_id,
             )
             return False
 

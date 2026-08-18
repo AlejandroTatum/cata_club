@@ -57,6 +57,13 @@ class AsignacionDescuentoRepositorio:
     def __init__(self, db: Session):
         self.db = db
 
+    def obtener_por_id(self, asignacion_id: int) -> Optional[AsignacionDescuento]:
+        """A diferencia de `obtener_activa_por_persona`, no filtra por
+        vigencia: `CoberturaBonificadaResponseDTO` (issue #400/4d) enlaza
+        permanentemente a la asignación que la originó, y ese vínculo debe
+        seguir resolviendo aunque la asignación se haya retirado después."""
+        return self.db.get(AsignacionDescuento, asignacion_id)
+
     def obtener_activa_por_persona(self, persona_id: int) -> Optional[AsignacionDescuento]:
         """La asignación VIGENTE de una persona, si tiene una. "Vigente" es
         `retirado_en IS NULL` -- el mismo criterio que el índice único

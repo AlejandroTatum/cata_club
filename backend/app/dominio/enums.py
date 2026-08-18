@@ -148,3 +148,8 @@ class TipoNotificacion(str, enum.Enum):
     MIEMBRESIA_MORA_DIA_1 = "MIEMBRESIA_MORA_DIA_1"
     MIEMBRESIA_MORA_DIA_8 = "MIEMBRESIA_MORA_DIA_8"
     RESUMEN_MORA_ADMIN = "RESUMEN_MORA_ADMIN"
+    # Issue #400 (slice 4d): distinto de PAGO_APROBADO a propósito -- una
+    # cobertura bonificada nunca cobró nada, así que el aviso NO puede decir
+    # "Su pago de $X fue aprobado" (eso describiría un movimiento de dinero
+    # que no ocurrió). Ver `PagoServicio.aplicar_beneficio_bonificado`.
+    COBERTURA_BONIFICADA_OTORGADA = "COBERTURA_BONIFICADA_OTORGADA"
