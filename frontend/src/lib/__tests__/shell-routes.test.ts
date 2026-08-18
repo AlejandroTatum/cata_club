@@ -79,6 +79,9 @@ describe("resolveShellKind", () => {
   it("keeps the app shell for descendants of an app section", () => {
     expect(resolveShellKind("/trainer/attendance")).toBe("app");
     expect(resolveShellKind("/trainer/attendance/history")).toBe("app");
+    // Ruta nueva bajo el mismo prefijo: el registro de chrome ya la cubre y
+    // esto lo deja escrito, para que nadie la agregue a mano creyendo que falta.
+    expect(resolveShellKind("/trainer/students")).toBe("app");
     expect(resolveShellKind("/student/add-dependent")).toBe("app");
   });
 

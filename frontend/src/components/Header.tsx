@@ -36,6 +36,7 @@ import {
   History,
   Stethoscope,
   BookOpen,
+  BookUser,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
@@ -91,6 +92,11 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   // (Horarios) — and a bare clock would read as "hours", not "what was
   // already taken". It also stays distinct from its two nav neighbours.
   "/trainer/attendance/history": History,
+  // `BookUser` — un padrón, que es literalmente lo que la pantalla es: la
+  // nómina del club, no una sesión. Glifo propio y no `Users`: ese ya es
+  // "/members" del administrador, y una cuenta puede tener los dos roles a la
+  // vez, con lo cual el rail dibujaría dos filas distintas con el mismo icono.
+  "/trainer/students": BookUser,
   "/reports": FileText,
   "/student": User,
   "/student/payments": CreditCard,

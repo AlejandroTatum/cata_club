@@ -98,6 +98,11 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // button in the same place. A header action here would duplicate a button
   // the editor already draws, for either branch.
   "app/student/medical-record/page.tsx": "the save action lives inside the reused MedicalRecordEditor card",
+  // Una nómina que se consulta. La única acción es la ficha de emergencia y es
+  // POR PERSONA — subirla al encabezado obligaría a elegir de quién, que es
+  // justo la pregunta que el renglón ya contesta. Inscribir o dar de baja a un
+  // alumno es del administrador, y ofrecerlo acá terminaría en un 403.
+  "app/trainer/students/page.tsx": "roster — the only action is per row, bound to one alumno",
 };
 
 function read(path: string): string {

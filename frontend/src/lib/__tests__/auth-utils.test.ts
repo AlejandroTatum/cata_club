@@ -228,11 +228,15 @@ describe("getNavGroupsForRoles", () => {
     expect(groups).toHaveLength(2);
   });
 
-  // The three trainer destinations, in the exact order the sidebar shows them.
+  // The four trainer destinations, in the exact order the sidebar shows them.
   // Asserted as the whole group (not `.some(...)`) so dropping one, renaming
   // it, or reordering "Historial" against "Pasar lista" all fail here — the
   // order is what `resolveActiveHref` and the sidebar render.
-  it("gives trainer exactly Mi día, Pasar lista and Historial under Entrenar", () => {
+  //
+  // "Alumnos del club" va última: es consulta, no trabajo del día. Las tres
+  // primeras son la secuencia de una sesión (mirar el día, pasar lista, revisar
+  // lo pasado) y meter el padrón en medio partiría esa secuencia.
+  it("gives trainer exactly Mi día, Pasar lista, Historial and Alumnos del club under Entrenar", () => {
     const groups = getNavGroupsForRoles(["trainer"]);
     expect(groups[1]).toEqual({
       heading: "Entrenar",
@@ -240,6 +244,7 @@ describe("getNavGroupsForRoles", () => {
         { href: "/trainer", label: "Mi día" },
         { href: "/trainer/attendance", label: "Pasar lista" },
         { href: "/trainer/attendance/history", label: "Historial" },
+        { href: "/trainer/students", label: "Alumnos del club" },
       ],
     });
     expect(groups).toHaveLength(2);
@@ -363,6 +368,7 @@ describe("getNavGroupsForRoles", () => {
       "/trainer",
       "/trainer/attendance",
       "/trainer/attendance/history",
+      "/trainer/students",
       "/student",
       "/student/payments",
       "/student/attendance",

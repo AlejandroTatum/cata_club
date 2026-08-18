@@ -22,6 +22,10 @@ describe("isProtectedPath", () => {
       "/attendance",
       "/trainer",
       "/trainer/attendance",
+      // El padrón abre fichas de emergencia: si el guard grueso no la cubriera,
+      // la pantalla se pediría sin cookie de sesión. El prefijo `/trainer` ya
+      // la alcanza; queda asentado para que se note si alguien lo estrecha.
+      "/trainer/students",
       "/groups",
       "/payments",
       "/members",
