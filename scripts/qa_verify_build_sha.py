@@ -6,7 +6,7 @@ silently be evidence for stale code.
 Stdlib-only Python 3 — runs with plain `python3`, no third-party deps and no
 backend venv required. Invoked from the Makefile as:
 
-    python3 scripts/qa_verify_build_sha.py --served-url http://localhost:3000/api/health
+    python3 scripts/qa_verify_build_sha.py
 
 Exit code 0 means the served SHA matches (or is verifiably not behind)
 origin/main; exit code 1 means it's stale or unverifiable.
@@ -24,17 +24,25 @@ from urllib.parse import urlparse
 
 ALLOWED_SERVED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
+# `make qa-up` always serves the frontend at this fixed local address (see
+# `docker-compose.override.yml`); this script only ever supports that one
+# use case, so the URL is a constant rather than a CLI-configurable value —
+# a CLI-sourced value here would itself be an SSRF taint source (S5144),
+# not just something to validate after the fact.
+DEFAULT_SERVED_URL = "http://localhost:3000/api/health"
+
 
 def validate_served_url(url: str) -> None:
     """Raise RuntimeError if `url` isn't a safe absolute http(s) URL pointing
     at the local QA stack.
 
-    Guards `fetch_served_sha` against S5144 (SSRF): the URL comes from an
-    unvalidated CLI argument, so its scheme and host must be checked before
-    it's ever passed to `urlopen`. This script only ever needs to talk to the
-    locally-built `make qa-up` frontend container, so the host is restricted
-    to an explicit loopback allowlist rather than accepted unconditionally —
-    a scheme check alone doesn't bound *where* the request can go."""
+    Defense-in-depth for `fetch_served_sha`: even though `url` is now a fixed
+    module constant rather than CLI-controlled input, its scheme and host are
+    still checked before it's ever passed to `urlopen`. This script only ever
+    needs to talk to the locally-built `make qa-up` frontend container, so
+    the host is restricted to an explicit loopback allowlist rather than
+    accepted unconditionally — a scheme check alone doesn't bound *where*
+    the request can go."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise RuntimeError(
@@ -137,18 +145,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Verifica que el SHA servido por el frontend de QA coincida con "
-            "origin/main (issue #350)."
+            f"origin/main (issue #350). Siempre consulta {DEFAULT_SERVED_URL}, "
+            "la URL fija que sirve `make qa-up`."
         )
     )
-    parser.add_argument(
-        "--served-url",
-        default="http://localhost:3000/api/health",
-        help="URL del healthcheck del frontend de QA (default: %(default)s)",
-    )
-    args = parser.parse_args(argv)
+    parser.parse_args(argv)
 
     try:
-        served_sha = fetch_served_sha(args.served_url)
+        served_sha = fetch_served_sha(DEFAULT_SERVED_URL)
         origin_sha = fetch_origin_main_sha()
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)

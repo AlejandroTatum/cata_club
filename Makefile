@@ -172,7 +172,7 @@ qa-up: ## Levantar el entorno de QA desde cero: build + base sembrada + frontend
 	$(QA_ENV) $(QA_COMPOSE) exec -T backend uv run python scripts/seed_dev_bulk.py
 	@echo ""
 	@echo "Verificando el SHA servido contra origin/main (issue #350)..."
-	python3 scripts/qa_verify_build_sha.py --served-url http://localhost:3000/api/health
+	python3 scripts/qa_verify_build_sha.py
 	@echo ""
 	@echo "  Frontend:  http://localhost:3000"
 	@echo "  Backend:   http://localhost:8000/docs"

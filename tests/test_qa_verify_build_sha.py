@@ -267,10 +267,13 @@ def test_main_sale_en_uno_y_no_pasa_en_silencio_si_falla_fetch_served_sha(capsys
     assert "no se pudo consultar" in salida.err
 
 
-def test_main_usa_la_url_servida_provista():
+def test_main_usa_la_url_servida_fija():
+    """La URL ya no viene de argv (issue #350, regla S5144 de Sonar: un
+    argumento de CLI es en sí mismo una fuente de SSRF): `main()` siempre
+    consulta `DEFAULT_SERVED_URL`, sin importar qué se le pase en `argv`."""
     with (
         patch.object(guard, "fetch_served_sha", return_value="abc123") as mock_fetch,
         patch.object(guard, "fetch_origin_main_sha", return_value="abc123"),
     ):
-        guard.main(["--served-url", "http://qa.local/api/health"])
-    mock_fetch.assert_called_once_with("http://qa.local/api/health")
+        guard.main([])
+    mock_fetch.assert_called_once_with(guard.DEFAULT_SERVED_URL)
