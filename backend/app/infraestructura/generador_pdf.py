@@ -136,7 +136,7 @@ def generar_comprobante_pago_pdf(
         HRFlowable(width="100%", thickness=1, color=colors.HexColor(_ROJO_INSTITUCIONAL)),
         Spacer(1, 8),
 
-        Paragraph(f"<b>Nº de comprobante:</b> P-2024-{pago_id:06d}", cuerpo),
+        Paragraph(f"<b>Nº de comprobante:</b> P-{fecha_aprobacion.year}-{pago_id:06d}", cuerpo),
         Paragraph(
             f"<b>Fecha de aprobación:</b> {fecha_aprobacion.strftime('%d/%m/%Y %H:%M')}",
             cuerpo,

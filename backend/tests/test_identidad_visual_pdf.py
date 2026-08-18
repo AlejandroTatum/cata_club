@@ -181,6 +181,24 @@ def test_el_titulo_y_la_divisoria_del_comprobante_visten_de_la_casa(monkeypatch)
     assert divisorias[0].color == colors.HexColor(_ROJO_INSTITUCIONAL)
 
 
+def test_el_folio_del_comprobante_usa_el_anio_de_la_aprobacion(monkeypatch):
+    """El folio traía `P-2024-` grabado a fuego, sin importar cuándo se aprobó
+    el pago. Un comprobante aprobado en 2026 tiene que decir 2026: el folio
+    sale de `fecha_aprobacion`, nunca de un año pegado en el código."""
+    capturado = _comprobante_construido(
+        monkeypatch, pago_id=123, fecha_aprobacion=datetime(2026, 8, 17, 19, 30),
+    )
+
+    folios = [
+        elemento
+        for elemento in capturado["elementos"]
+        if isinstance(elemento, Paragraph) and "Nº de comprobante" in elemento.text
+    ]
+
+    assert len(folios) == 1
+    assert "P-2026-000123" in folios[0].text
+
+
 @pytest.mark.parametrize(
     "estado, texto_esperado, color_esperado",
     [
