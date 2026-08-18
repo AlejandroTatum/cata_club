@@ -484,10 +484,9 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
     // Interaction 1 of ≤3: the bulk action.
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
 
-    // `reviewedCount`, not the raw "presente" default: this must read the
-    // truth of what the trainer actually confirmed, not what the roster
-    // defaulted to — the exact tension K5 fixed and this cluster must not
-    // reopen.
+    // `reviewedCount`, not a count of rows that happen to show "Presente":
+    // this must read the truth of what the trainer actually confirmed — the
+    // exact tension K5 fixed and this cluster must not reopen.
     expect(marker).toHaveTextContent("15/15");
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
 
@@ -503,11 +502,13 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
 // ---------------------------------------------------------------------------
 // Unmarked-by-default guard (P0 — silent data loss).
 //
-// The roster used to default every student to "absent", and "Siguiente" was
-// gated only on `students.length === 0`. A trainer could tap
-// Continuar → Siguiente → Confirmar and file the whole session as a no-show.
-// The wizard paginates at 10 while `students` holds the FULL roster, so
-// students the trainer never even scrolled to were submitted as absent.
+// Twice now a default has answered for the trainer and shipped it as data. It
+// was "absent" first, with the advance gated only on `students.length === 0`:
+// Continuar → Siguiente → Confirmar filed the whole session as a no-show. It
+// was "present" next (issue #390), which filed students as having attended
+// without anybody looking at them. Both times the rows nobody saw were the
+// casualties. The answer is the same either way — no default at all, and an
+// advance the wizard refuses while a row is still nobody's answer.
 // ---------------------------------------------------------------------------
 
 // `diaSemana: "mar"` matches `TUESDAY_IN_CLUB_TIME` (today) on purpose: the
@@ -568,20 +569,19 @@ async function openRoster(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// The roster starts on "present" — the trainer asked for it, and a session is
-// overwhelmingly "everyone showed up".
+// The roster starts with nobody marked (issue #390).
 //
-// The silent-data-loss risk that the old `unmarked` default guarded against
-// did not go away, it INVERTED: instead of filing a whole session as a no-show
-// by tapping through, a distracted trainer now files students as having
-// attended without ever looking at them. So these tests moved from "the wizard
-// refuses to advance" to "the wizard never lets an untouched roster look like
-// a reviewed one" — the count spans the full roster, the fiche says which rows
-// are provisional, and the confirmation step names them instead of reporting
-// "N presentes" either way.
+// A "present" default was tried and reverted: it saved taps by answering, on
+// the trainer's behalf, the one question the screen exists to ask, so a
+// distracted roll call filed students as having attended without anybody
+// looking at them. These tests hold both halves of the answer: the wizard
+// refuses to advance while any row has no state, AND it never lets a roster
+// nobody reviewed look like one somebody did — the count spans the full
+// roster, the fiche says which rows are provisional, and one explicit tap on
+// "Marcar restantes presentes" is the way through for a full session.
 // ---------------------------------------------------------------------------
 
-describe("TrainerAttendancePage — the present default never passes for a reviewed roster", () => {
+describe("TrainerAttendancePage — nothing is decided until a human decides it", () => {
   beforeEach(() => {
     mockReplace.mockReset();
     mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
@@ -591,24 +591,21 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
   });
 
-  it("starts every student on Presente, and marks nobody as reviewed", async () => {
+  it("starts every student with no state at all, and marks nobody as reviewed", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([ANA_ALUMNO_HORARIO]);
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
-    // The state IS present — that is what will be filed if nobody touches it,
-    // and the control has to say so rather than hide it.
-    expect(within(group).getByRole("radio", { name: "Presente" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    for (const label of ["Ausente", "Tardanza", "Justificado"]) {
+    // Nothing is checked, because nothing has been answered. A checked
+    // "Presente" here would be the screen answering for the trainer.
+    for (const label of ["Presente", "Ausente", "Tardanza", "Justificado"]) {
       expect(within(group).getByRole("radio", { name: label })).toHaveAttribute("aria-checked", "false");
     }
-    // …and the value being present must not read as a decision anybody made.
+    expect(screen.getByText("Sin marcar")).toBeInTheDocument();
     expect(screen.getByText("1 sin revisar")).toBeInTheDocument();
+    expect(group.closest("[data-attendance]")).toHaveAttribute("data-attendance", "unmarked");
     expect(group.closest("[data-reviewed]")).toHaveAttribute("data-reviewed", "false");
   });
 
@@ -635,49 +632,130 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     expect(screen.getByText("25 alumnos sin revisar")).toBeInTheDocument();
   });
 
-  it("carries the unreviewed count into the confirmation summary when only some students were reviewed", async () => {
+  /*
+   * This test used to assert the OPPOSITE — that a trainer who decided on 10
+   * of 25 students could walk straight to the confirmation step, where a
+   * warning told them the other 15 "siguen en Presente porque nadie los
+   * revisó". That warning was the screen apologising for an answer it had
+   * invented. The 15 now carry no answer at all, and the confirmation step is
+   * not somewhere a half-decided roster can get to (issue #390).
+   */
+  it("will not reach the confirmation summary while 15 of 25 students have no state", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue(buildAlumnoHorarios(25));
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
 
-    // Mark 10 of the 25 — the other 15 are left on the untouched default.
+    // Decide on 10 of the 25 — the other 15 are nobody's answer yet.
     for (let i = 1; i <= 10; i++) {
       const group = screen.getByRole("radiogroup", { name: new RegExp(`Student ${String(i).padStart(2, "0")}`) });
       fireEvent.click(within(group).getByRole("radio", { name: "Presente" }));
     }
     expect(screen.getByText("15 sin revisar")).toBeInTheDocument();
 
+    const advance = screen.getByRole("button", { name: /Revisar y confirmar/ });
+    expect(advance).toBeDisabled();
+    expect(screen.getByText("Faltan 15 alumnos por marcar")).toBeInTheDocument();
+
+    // The explicit way through — and only then does the summary appear, with
+    // every one of the 25 accounted for by a human.
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
 
-    // "25 presentes" on its own would read identically whether the trainer
-    // went through the roster or never scrolled past page 1.
-    //
-    // It reads "25 presentes" now, in the plural: this summary used to print
-    // its four counts as badges whose text was a number welded to the NAME of
-    // the state ("25 presente"), and the whole panel counts a state through
+    // "25 presentes", in the plural: this summary used to print its four
+    // counts as badges whose text was a number welded to the NAME of the state
+    // ("25 presente"), and the whole panel counts a state through
     // `formatStateCount` since the redesign sweep.
     expect(await screen.findByText("25 presentes")).toBeInTheDocument();
-    expect(screen.getByText("15 sin revisar")).toBeInTheDocument();
-    expect(
-      screen.getByText(/15 de 25 alumnos siguen en "Presente" porque nadie los revisó/),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
   });
 
-  it("warns about unreviewed students instead of blocking the advance", async () => {
+  /*
+   * `countUnmarked` gates the CONTROLS, not the step. A `?paso=confirmar` deep
+   * link restores straight onto the confirmation step with an untouched
+   * roster, so the step renders with nobody marked and everything on it has to
+   * read correctly in that state. Filing stays blocked, which is the part that
+   * matters — but this is why the "sin revisar" badge and panel are not dead
+   * code, and why no comment may claim the step is unreachable while unmarked.
+   */
+  it("renders the confirmation step honestly when a deep link lands on it unmarked", async () => {
+    mockFetchAlumnosPorHorario.mockResolvedValue(buildAlumnoHorarios(3));
+    window.history.replaceState(null, "", "/trainer/attendance?horario=12&paso=confirmar");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    // It really is step 3, reached without ever touching the advance button.
+    const submit = await screen.findByRole("button", { name: /Confirmar asistencia/ });
+    expect(screen.getByText("Horario")).toBeInTheDocument();
+
+    // Nothing is fileable, and the button says why.
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAttribute("aria-describedby");
+    expect(screen.getByText("Faltan 3 alumnos por marcar")).toBeInTheDocument();
+
+    // And the summary does not read as a roster somebody went through.
+    expect(screen.getByText("3 sin revisar")).toBeInTheDocument();
+    expect(
+      screen.getByText("3 de 3 alumnos siguen sin que nadie los revise."),
+    ).toBeInTheDocument();
+    expect(mockRegisterAttendance).not.toHaveBeenCalled();
+  });
+
+  /*
+   * The second route onto that same state: the bulk action's toast outlives
+   * the step change, so its "Deshacer" can put the roster back after the
+   * trainer has already reached the summary.
+   */
+  it("still flags the summary when the bulk action is undone from the toast after advancing", async () => {
+    mockFetchAlumnosPorHorario.mockResolvedValue(buildAlumnoHorarios(3));
+
+    render(
+      <ToastProvider>
+        <TrainerAttendancePage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
+    expect(await screen.findByText("3 presentes")).toBeInTheDocument();
+    // Exact, not a regex: the bulk action's own toast is on screen and its
+    // description mentions "sin revisar" too.
+    expect(screen.queryByText("3 sin revisar")).not.toBeInTheDocument();
+
+    const toast = screen.getByRole("status", { name: "" });
+    fireEvent.click(within(toast).getByRole("button", { name: "Deshacer" }));
+
+    expect(screen.getByText("3 sin revisar")).toBeInTheDocument();
+    expect(
+      screen.getByText("3 de 3 alumnos siguen sin que nadie los revise."),
+    ).toBeInTheDocument();
+    // And filing is off the table again — the rows carry no state at all.
+    expect(screen.getByRole("button", { name: /Confirmar asistencia/ })).toBeDisabled();
+  });
+
+  it("names the one student still missing an answer, in the singular", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue(buildAlumnoHorarios(3));
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
 
-    // The trainer asked for a default; a default that cannot be submitted is
-    // not a default. The count is a warning, not a gate.
+    for (const i of [1, 2]) {
+      const group = screen.getByRole("radiogroup", { name: new RegExp(`Student 0${i}`) });
+      fireEvent.click(within(group).getByRole("radio", { name: "Presente" }));
+    }
+
+    // Two of three decided is still not a list — and a button disabled by an
+    // invariant has to say why, or it reads as a broken wizard.
     const next = screen.getByRole("button", { name: /Revisar y confirmar/ });
-    expect(next).toBeEnabled();
-    expect(next).not.toHaveAttribute("aria-describedby");
-    expect(screen.getByText("3 alumnos sin revisar")).toBeInTheDocument();
+    expect(next).toBeDisabled();
+    expect(next).toHaveAttribute("aria-describedby");
+    expect(screen.getByText("Falta 1 alumno por marcar")).toBeInTheDocument();
+    expect(screen.getByText("1 alumno sin revisar")).toBeInTheDocument();
   });
 
   it("stops flagging a student the moment the trainer decides on them", async () => {
@@ -695,9 +773,10 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeEnabled();
   });
 
-  // Setting a row to the state it already had is still a decision: the trainer
-  // looked at that student and said "yes, that one is here".
-  it("counts confirming the default as a review", async () => {
+  // Choosing "Presente" — the state the trainer would most often choose — is
+  // still a decision, and has to clear the row's unreviewed flag like any
+  // other: the trainer looked at that student and said "yes, that one is here".
+  it("counts choosing Presente as a review, like any other state", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([ANA_ALUMNO_HORARIO]);
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
@@ -821,9 +900,9 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
     const row = group.closest("[data-attendance]");
     expect(row).not.toBeNull();
-    // Present, and visibly provisional: the outline is what says "this value
-    // is the default, not somebody's answer".
-    expect(row).toHaveAttribute("data-attendance", "present");
+    // No state, and visibly provisional: the outline is what says "nobody has
+    // answered for this student yet".
+    expect(row).toHaveAttribute("data-attendance", "unmarked");
     expect(row).toHaveAttribute("data-reviewed", "false");
     expect(row).toHaveClass("border-dashed");
 
@@ -832,6 +911,134 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     expect(row).toHaveAttribute("data-attendance", "absent");
     expect(row).toHaveAttribute("data-reviewed", "true");
     expect(row).not.toHaveClass("border-dashed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #390 — a roster that is only PARTIALLY recorded.
+//
+// The wizard used to hand every student with no record a "present" it invented
+// itself, so re-opening a session where one student had been filed absent
+// showed the other two as present and let the trainer confirm a state nobody
+// had chosen for them. Enrolled-but-unrecorded is now the sentinel: the rows
+// say "Sin marcar", the advance stays blocked, and the way out is the one
+// explicit human action — "Marcar restantes presentes".
+//
+// Admin, not trainer: any existing record makes the session a CORRECTION, and
+// a trainer opening it lands in read-only mode with no radiogroup to act on
+// (issue #310 / #3). The default under test is the same for both roles.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — a partially recorded roster starts unmarked (issue #390)", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    // Only Student 01 (personaId 100) was ever filed for this session.
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([
+      {
+        id: "att-100",
+        fecha: "2026-07-21",
+        horario: "Martes 18:00 — 19:00",
+        horarioId: 12,
+        personaId: 100,
+        estudiante: "Student 01",
+        estado: "absent",
+        entrenador: "Coach Torres",
+      },
+    ]);
+    mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+  });
+
+  function rowFor(name: RegExp): HTMLElement {
+    return screen
+      .getByRole("radiogroup", { name })
+      .closest("[data-attendance]") as HTMLElement;
+  }
+
+  it("leaves the students nobody recorded unmarked, and keeps the recorded one on its real state", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    // The one real record survives, as a decision somebody made.
+    expect(rowFor(/Student 01/)).toHaveAttribute("data-attendance", "absent");
+    expect(rowFor(/Student 01/)).toHaveAttribute("data-reviewed", "true");
+
+    // The other two carry no answer at all — not an invented "Presente".
+    for (const name of [/Student 02/, /Student 03/]) {
+      expect(rowFor(name)).toHaveAttribute("data-attendance", "unmarked");
+      expect(rowFor(name)).toHaveAttribute("data-reviewed", "false");
+    }
+    expect(screen.getAllByText("Sin marcar")).toHaveLength(2);
+  });
+
+  it("blocks the advance while any student is unmarked, and says why", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    const advance = screen.getByRole("button", { name: /Revisar y confirmar/ });
+    expect(advance).toBeDisabled();
+    // A button disabled by an invariant has to say why, or it reads as a
+    // broken wizard.
+    expect(advance).toHaveAttribute("aria-describedby");
+    expect(screen.getByText("Faltan 2 alumnos por marcar")).toBeInTheDocument();
+  });
+
+  /*
+   * The read-only view is where a partially registered session is most likely
+   * to be SEEN: any existing record makes the session a correction, and a
+   * trainer (not an admin) lands here with no controls at all. Rendering
+   * nothing beside the 2 unrecorded names would read as "these rows failed to
+   * load", not "nobody recorded these" — so this view has to say "Sin marcar"
+   * in the same slot the editable roster does.
+   */
+  it("prints Sin marcar, not a blank row, for the unrecorded students in the read-only view", async () => {
+    // Trainer, not admin: `readOnly = sessionAlreadyRegistered && !isAdmin`.
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    // The read-only path, not the editable one.
+    expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+
+    const list = screen.getByRole("list", { name: "Asistencia registrada (solo lectura)" });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+
+    // The recorded one keeps its real state…
+    expect(within(rows[0]).getByText("Student 01")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("Ausente")).toBeInTheDocument();
+
+    // …and neither of the other two is a name with nothing beside it.
+    for (const row of [rows[1], rows[2]]) {
+      expect(within(row).getByText("Sin marcar")).toBeInTheDocument();
+    }
+    expect(within(list).getAllByText("Sin marcar")).toHaveLength(2);
+  });
+
+  it("unblocks it only after the trainer explicitly marks the rest present", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+
+    for (const name of [/Student 02/, /Student 03/]) {
+      expect(rowFor(name)).toHaveAttribute("data-attendance", "present");
+      expect(rowFor(name)).toHaveAttribute("data-reviewed", "true");
+    }
+    // The recorded student is untouched by the bulk action.
+    expect(rowFor(/Student 01/)).toHaveAttribute("data-attendance", "absent");
+
+    const advance = screen.getByRole("button", { name: /Revisar y confirmar/ });
+    expect(advance).toBeEnabled();
+    expect(advance).not.toHaveAttribute("aria-describedby");
   });
 });
 
@@ -923,7 +1130,7 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
   });
 
-  it("gives the group a single tab stop — only the checked radio is tabbable", async () => {
+  it("gives the group a single tab stop, checked or not", async () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
 
@@ -931,10 +1138,22 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
     const radios = within(group).getAllByRole("radio");
     const tabbable = radios.filter((r) => r.tabIndex === 0);
     expect(tabbable).toHaveLength(1);
-    expect(tabbable[0]).toHaveAttribute("aria-checked", "true");
+    // Nothing is checked on a row nobody has answered for (issue #390), so the
+    // tab stop cannot follow the checked radio — the ARIA pattern's own answer
+    // is the FIRST one. Without this the group would have no tab stop at all,
+    // which is how EVERY roster now opens.
+    expect(tabbable[0]).toHaveAccessibleName("Presente");
+    expect(tabbable[0]).toHaveAttribute("aria-checked", "false");
     radios
       .filter((r) => r !== tabbable[0])
       .forEach((r) => expect(r.tabIndex).toBe(-1));
+
+    // Once a state is chosen, the tab stop is the checked one again.
+    fireEvent.click(within(group).getByRole("radio", { name: "Tardanza" }));
+    const afterMark = within(group).getAllByRole("radio").filter((r) => r.tabIndex === 0);
+    expect(afterMark).toHaveLength(1);
+    expect(afterMark[0]).toHaveAttribute("aria-checked", "true");
+    expect(afterMark[0]).toHaveAccessibleName("Tardanza");
   });
 
   it("moves focus AND the checked state together with ArrowRight, without leaving the group", async () => {
@@ -1059,12 +1278,12 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     // a second name-bearing control.
     const fiche = within(row).getByRole("button", { name: /^Ana López:/ });
 
-    expect(row).toHaveAttribute("data-attendance", "present");
+    expect(row).toHaveAttribute("data-attendance", "unmarked");
     expect(row).toHaveAttribute("data-reviewed", "false");
 
-    // The FIRST tap confirms the default rather than moving off it: tapping
-    // the row of a student standing right there means "yes, that one", and
-    // sending them to Tardanza for saying so is the opposite of what they did.
+    // The FIRST tap lands on Presente: tapping the row of a student standing
+    // right there means "yes, that one", and the common answer should cost one
+    // tap, not four. It is a decision, so the row comes back reviewed.
     fireEvent.click(fiche);
     expect(row).toHaveAttribute("data-attendance", "present");
     expect(row).toHaveAttribute("data-reviewed", "true");
@@ -1147,11 +1366,12 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     await openRoster();
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
-    // A screen-reader user gets the same two facts a sighted one gets from
-    // the dashed outline: the state, and that nobody has confirmed it.
+    // A screen-reader user gets the same fact a sighted one gets from the
+    // dashed outline and the chip: there is no answer here yet, and the tap
+    // is how one gets made. Nothing to "confirmar" — nothing was proposed.
     expect(
       screen.getByRole("button", {
-        name: "Ana López: Presente, sin revisar. Confirmar o cambiar estado",
+        name: "Ana López: Sin marcar. Marcar estado",
       }),
     ).toBeInTheDocument();
 
@@ -1175,11 +1395,11 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
 
   it("shows a live revisados marker over the FULL roster, never a default nobody declared", async () => {
     // Issue #313 (K5 hallazgo #23): the big counter used to read "N/N
-    // presentes" before the trainer looked at anyone, because every row
-    // starts on the PRESENTE default. A novice reading "16/16 presentes"
-    // on open concludes the list is already taken — the default is the
-    // absence of a decision, not a result. The counter now measures what
-    // was actually REVIEWED, and "sin revisar" is the same honest number.
+    // presentes" before the trainer looked at anyone, back when every row
+    // started on a PRESENTE default. A novice reading "16/16 presentes" on
+    // open concludes the list is already taken. The counter measures what was
+    // actually REVIEWED, so it opens at 0/12 — and it would still open at 0/12
+    // if a pre-filled default ever came back, which is why this stays.
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
@@ -1212,6 +1432,9 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
+    // Every row needs an answer before the advance is even clickable — that
+    // gate is issue #390's, and it is not what this test is about.
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
 
     expect(await screen.findByRole("button", { name: /Confirmar asistencia/ })).toBeInTheDocument();
@@ -1256,7 +1479,9 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
-    expect(screen.getByText("12 presentes")).toBeInTheDocument();
+    // Nobody is anything yet, and the bar says so in every column rather than
+    // starting the trainer off at "12 presentes".
+    expect(screen.getByText("0 presentes")).toBeInTheDocument();
     expect(screen.getByText("12 sin revisar")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     expect(screen.getByText("12 presentes")).toBeInTheDocument();
@@ -2224,7 +2449,13 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
   });
 
-  /** Step 2, with Student 01 on Tardanza — the state the evaluator was in. */
+  /**
+   * Step 3, with Student 01 on Tardanza — the state the evaluator was in.
+   *
+   * The other two are settled with the bulk action rather than left alone:
+   * since issue #390 the wizard will not advance while any row has no answer,
+   * so reaching step 3 at all takes a decision about every student.
+   */
   async function reachConfirmWithOneMark(): Promise<void> {
     await openRoster();
     await screen.findByText("Student 01");
@@ -2233,6 +2464,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
         name: "Tardanza",
       }),
     );
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     await screen.findByRole("button", { name: /Confirmar asistencia/ });
   }
@@ -2245,6 +2477,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     await screen.findByText("Student 01");
     expect(window.location.search).toBe("?horario=12&paso=lista");
 
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     await screen.findByRole("button", { name: /Confirmar asistencia/ });
     expect(window.location.search).toBe("?horario=12&paso=confirmar");
@@ -2435,8 +2668,8 @@ describe("TrainerAttendancePage — leaving asks first", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
-    // An untouched roster is not unsaved work — the roster defaults to
-    // "present", and asking about it would be asking about nothing.
+    // An untouched roster is not unsaved work — nobody has decided anything
+    // on it, and asking about discarding that would be asking about nothing.
     fireEvent.click(screen.getByRole("link", { name: /Volver a Mi día/ }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -2641,6 +2874,14 @@ describe("TrainerAttendancePage — undo", () => {
     return within(group).getByRole("radio", { name: label }).getAttribute("aria-checked");
   }
 
+  /** What the row itself carries — including "unmarked", which no radio can show. */
+  function rowStateOf(name: string): string | null {
+    return screen
+      .getByRole("radiogroup", { name: new RegExp(name) })
+      .closest("[data-attendance]")
+      ?.getAttribute("data-attendance") ?? null;
+  }
+
   it("offers nothing to undo before the trainer has marked anything", async () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
@@ -2659,12 +2900,15 @@ describe("TrainerAttendancePage — undo", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /deshacer/i }));
 
-    expect(stateOf("Student 01", "Presente")).toBe("true");
+    // Back to where the roster started: no state at all, not a "Presente" the
+    // undo would have chosen for the trainer (issue #390).
+    expect(rowStateOf("Student 01")).toBe("unmarked");
+    expect(stateOf("Student 01", "Ausente")).toBe("false");
   });
 
-  it("puts the row back to UNREVIEWED, not merely back to Presente", async () => {
+  it("puts the row back to UNREVIEWED as well as unmarked", async () => {
     // The value and the decision are different facts on this screen. An undo
-    // that restored "Presente" but left the row counted as reviewed would
+    // that cleared the state but left the row counted as reviewed would
     // launder "nobody looked" into "confirmed" — the exact laundering the
     // unreviewed counter exists to prevent.
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
@@ -2702,11 +2946,11 @@ describe("TrainerAttendancePage — undo", () => {
 
     const undo = screen.getByRole("button", { name: /deshacer/i });
     fireEvent.click(undo);
-    expect(stateOf("Student 02", "Presente")).toBe("true");
+    expect(rowStateOf("Student 02")).toBe("unmarked");
     expect(stateOf("Student 01", "Ausente")).toBe("true");
 
     fireEvent.click(screen.getByRole("button", { name: /deshacer/i }));
-    expect(stateOf("Student 01", "Presente")).toBe("true");
+    expect(rowStateOf("Student 01")).toBe("unmarked");
     expect(screen.getByRole("button", { name: /deshacer/i })).toBeDisabled();
   });
 
@@ -2838,6 +3082,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
     await screen.findByText("Student 01");
     expect(window.location.search).toBe("?horario=12&fecha=2026-07-13&paso=lista");
 
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     await screen.findByRole("button", { name: /Confirmar asistencia/ });
     // Losing the date on Siguiente would file the batch on today after all.

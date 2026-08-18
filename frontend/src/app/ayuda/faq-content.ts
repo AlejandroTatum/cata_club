@@ -104,7 +104,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       {
         question: "¿Cómo tomo asistencia?",
         answer:
-          "Desde Asistencia. Elige el horario, pasa lista y confirma. Todos empiezan en Presente para que una sesión completa no cueste ni un toque, y el contador de sin revisar le dice a cuántos todavía nadie miró.",
+          "Desde Asistencia. Elige el horario, pasa lista y confirma. Los alumnos que todavía no tienen asistencia registrada empiezan sin marcar, así que ninguno queda registrado con un estado que nadie eligió; la lista no se puede confirmar mientras falte alguno. Si la sesión estuvo completa, el botón Marcar restantes presentes de la cabecera resuelve el resto en un toque.",
       },
       {
         question: "Me equivoqué al marcar. ¿Puedo deshacerlo?",

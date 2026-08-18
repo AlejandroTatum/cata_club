@@ -14,40 +14,53 @@
  *
  * ## Data-integrity guarantees this screen must never lose
  *
- * The roster starts on `DEFAULT_ATTENDANCE` ("present"), because a session is
- * overwhelmingly "everyone showed up" and starting from nothing turned 40
- * students into 40 obligatory taps.
+ * An enrolled student with no recorded attendance starts on `UNMARKED`, never
+ * on a state the screen picked for them (issue #390). A "present" default was
+ * tried and reverted: it saved taps by answering, on the trainer's behalf, the
+ * one question the screen exists to ask. Filing a whole session still costs
+ * one tap — "Marcar restantes presentes" — but that tap is a human saying so.
  *
- * That default does NOT remove the risk it replaced, it turns it around: the
- * old `absent` default let a trainer file a whole session as a no-show by
- * tapping straight through, and a `present` default lets them file students as
- * having attended without ever looking at them — including students on roster
- * page 2 they never scrolled to. So the roll call separates the VALUE from the
- * DECISION and never conflates the two:
- *   - `SessionStudent.reviewed` says whether a human touched the row. Every
- *     path that sets a state sets it: the fiche tap, the four controls,
- *     "Marcar restantes presentes", a record already saved for this session,
- *     and a restored draft entry.
- *   - `countUnreviewed` spans the FULL roster, never the visible page or the
- *     name filter, and both the roll call and the confirmation step show it.
- *   - An unreviewed fiche is visibly provisional (dashed outline, dashed state
- *     chip, "sin revisar" in its accessible name), and "Ver solo sin revisar"
- *     turns the count into a way to actually go clear it.
- *   - The confirmation step says "N de M siguen en Presente porque nadie los
- *     revisó" instead of reporting "45 presentes" identically either way, and
- *     offers to go back. It informs; it does not block — the trainer asked for
- *     a default, and a default that blocks is not one.
+ * From there the roll call separates the VALUE from the DECISION and never
+ * conflates the two:
+ *   - `countUnmarked` is the gate. It disables "Revisar y confirmar" and
+ *     "Confirmar asistencia" while any row has no state, and the disabled
+ *     button says how many rows are missing. It gates the CONTROLS, not the
+ *     step: a `?paso=confirmar` deep link restores straight onto the
+ *     confirmation step with an untouched roster (see the `pendingRestore`
+ *     effect below, and the note in `renderConfirmation`). That is safe —
+ *     `handleConfirm` refuses the batch on its own, and `toAttendanceMarks`
+ *     strips the sentinel — but the step DOES render in that state, so
+ *     everything on it has to read correctly with nobody marked.
+ *   - `SessionStudent.reviewed` says whether a human touched the row, and on
+ *     every reachable path it is the exact complement of `UNMARKED`: every
+ *     path that puts a state on a row sets `reviewed` in the same breath (the
+ *     fiche tap, the four controls, "Marcar restantes presentes", a record
+ *     already saved for this session, a restored draft entry), and nothing
+ *     else sets either. So `countUnreviewed === countUnmarked`, always. The
+ *     field survives because the UI reads it — the dotted outline, "Ver solo
+ *     sin revisar", the undo toast — not because it can disagree. See the
+ *     warning on `countUnreviewed` in `attendance-utils.ts` before adding a
+ *     path that could make it disagree.
+ *   - `countUnreviewed` spans the FULL roster, never the name filter, and both
+ *     the roll call and the confirmation step show it.
+ *   - An unreviewed fiche is visibly provisional: dashed outline, dashed
+ *     "Sin marcar" chip, and an accessible name that says the state is
+ *     nobody's yet. "Ver solo sin revisar" turns the count into a way to
+ *     actually go clear it. The read-only roster prints the same chip, so a
+ *     partially-registered session does not show bare names.
+ *   - The confirmation step's "sin revisar" badge and panel are what the deep
+ *     link above lands on, and what the bulk action's "Deshacer" toast
+ *     restores if it is pressed after the step advanced. Either way they beat
+ *     letting the summary read "45 presentes" as if somebody had said so.
  *   - Tapping a fiche cycles the state, but `cycleWizardAttendance` can never
  *     return to `UNMARKED`, and the four explicit 44px controls stay present
  *     and stay a `radiogroup` — the tap is an accelerator, not a replacement.
  *   - The draft in `sessionStorage` only ever persists REVIEWED rows in one of
  *     the four REAL states, keyed by horario + date, so a refresh can never
- *     launder "nobody looked" into "confirmed"; see the rules block in
+ *     launder "nobody looked" into an answer; see the rules block in
  *     `attendance-utils.ts`. Every way back INTO the flow — the browser's Back
  *     button, a reload, the resume offer on step 1 — goes through that same
  *     draft, so none of them can restore a row nobody decided.
- *   - The `UNMARKED` sentinel still never reaches the API: `toAttendanceMarks`
- *     strips it and the submit refuses while `countUnmarked` is non-zero.
  *
  * ## What the audit found, and where it is answered
  *
@@ -548,8 +561,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
       setRosterError(null);
       try {
         // Re-opening the wizard for a session that already has attendance
-        // recorded must show those existing marks, not silently default
-        // everyone back to unmarked.
+        // recorded must show those existing marks, not send the students the
+        // club already has on file back to "sin marcar".
         const fecha = requestedDate ?? clubIsoDate();
         // The prefill fetch is a convenience, not a requirement: if it fails,
         // fall back to an empty list rather than failing the whole roster load.
@@ -564,8 +577,9 @@ export default function TrainerAttendancePage(): React.ReactElement {
         ]);
 
         // Order matters: server records first, then the trainer's own in-progress
-        // draft on top — the draft is the newer intent. Neither can produce
-        // `UNMARKED`, so a student nobody has decided on stays undecided.
+        // draft on top — the draft is the newer intent. Both only ever REPLACE
+        // the `UNMARKED` the builder starts every row on, so a student neither
+        // of them mentions stays undecided and holds the gate.
         const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
         // Snapshot BEFORE the draft overlay below — see `hasUnsavedAttendanceEdits`.
         serverRosterRef.current = roster;
@@ -734,7 +748,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
    * The stack holds the roster AS IT WAS, not a description of the edit, which
    * is what lets one entry undo the bulk action's forty simultaneous changes
    * exactly as easily as it undoes one tap. It also restores `reviewed`, and
-   * that is the part that matters: putting a row back to "Presente" while
+   * that is the part that matters: putting a row back to "Sin marcar" while
    * leaving it counted as reviewed would launder "nobody looked" into
    * "confirmed", which is precisely what the unreviewed counter exists to stop.
    */
@@ -770,7 +784,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
   /**
    * Every mark the trainer makes is also a REVIEW of that student — including
    * setting a row to the state it already had. Tapping "Presente" on a student
-   * who was already present by default is the trainer saying "yes, that one is
+   * a record already had as present is the trainer saying "yes, that one is
    * here", and the roll call has to stop asking about them.
    */
   function handleDirectAttendanceSet(studentIndex: number, state: EstadoAsistencia): void {
@@ -1014,9 +1028,9 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   /**
    * Decisions the trainer has made and not yet filed. `reviewed` is what makes
-   * this answerable at all: the roster defaults everyone to "present", so
-   * counting marked rows would call an untouched roster "unsaved work" and ask
-   * about discarding something nobody wrote.
+   * this answerable at all: a row can already carry a state the SERVER sent,
+   * so counting rows that hold a state would call an untouched roster "unsaved
+   * work" and ask about discarding something nobody wrote.
    */
   const reviewedCount = students.length - unreviewedCount;
   /**
@@ -1406,7 +1420,18 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
                   {student.name}
                 </span>
-                {student.attendance !== UNMARKED && (
+                {/* A session can be PARTIALLY registered: 4 of 15 filed, the
+                    rest never marked (issue #390). Rendering nothing for those
+                    11 leaves a name with empty space beside it, which reads as
+                    "this row failed to load" rather than "nobody recorded
+                    this". Same dashed "Sin marcar" chip the editable roster
+                    uses in the same position, so the two views say the same
+                    thing about the same student. */}
+                {student.attendance === UNMARKED ? (
+                  <span className="h-badge inline-flex flex-none items-center rounded-full border border-dashed border-line-2 px-[11px] text-2xs tracking-flat font-bold text-ink-3">
+                    Sin marcar
+                  </span>
+                ) : (
                   <Badge tone={getAttendanceBadgeTone(student.attendance)} className="flex-none">
                     {ATTENDANCE_LABELS[student.attendance as EstadoAsistencia]}
                   </Badge>
@@ -1426,13 +1451,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
          */}
         <div className="flex flex-wrap items-center gap-5 rounded-card bg-coal px-[22px] py-[18px] text-white">
           {/*
-           * Revisados, no presentes (issue #313, K5 hallazgo #23): el roster
-           * arranca en PRESENTE por defecto, así que el conteo crudo de
-           * "presentes" daba "16/16" antes de que el entrenador mirara a
-           * nadie — un novato lo lee como lista ya tomada. El número grande
-           * ahora mide lo que de verdad se decidió; `unreviewedCount` (la
-           * misma fuente que ya alimentaba el aviso de abajo) es lo que
-           * falta para llegar al total.
+           * Revisados, no presentes (issue #313, K5 hallazgo #23): el número
+           * grande mide lo que de verdad se decidió, no cuántas filas
+           * muestran "Presente". Una sesión ya registrada llega con estado en
+           * todas sus filas sin que el entrenador haya mirado a nadie, y un
+           * conteo crudo de presentes se leería como lista ya tomada.
+           * `unreviewedCount` (la misma fuente que alimenta el aviso de
+           * abajo) es lo que falta para llegar al total.
            */}
           <span
             aria-live="polite"
@@ -1452,9 +1477,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 {selectedSchedule.horaInicio} — {selectedSchedule.horaFin}
               </span>
             </span>
-            {/* The counter that keeps the default honest: the big number reads
-                45/45 from the first second, and this says how much of it
-                anybody has actually looked at. */}
+            {/* The remainder of the big number, spelled out. It opens at the
+                full roster and empties as the trainer works, so it is the live
+                "how much is left" during the roll call — the same students the
+                commit bar's "Faltan N alumnos por marcar" refuses to file. It
+                disappears at zero, which is also the moment the wizard will
+                let the trainer advance. */}
             {unreviewedCount > 0 && (
               <span className="flex items-center gap-1.5 text-xs font-bold text-ball">
                 <AlertTriangle size={ICON.sm} strokeWidth={2.5} aria-hidden="true" />
@@ -1519,9 +1547,10 @@ export default function TrainerAttendancePage(): React.ReactElement {
               <p className="mt-2">
                 Una ficha con borde punteado y el estado{" "}
                 <span className="h-badge inline-flex items-center rounded-full border border-dashed border-line-2 px-[11px] text-2xs tracking-flat font-bold text-ink-3">
-                  Sin revisar
+                  Sin marcar
                 </span>{" "}
-                sigue en el valor por defecto porque todavía nadie la miró.
+                todavía no tiene respuesta: nadie decidió por ese alumno, y la lista no se puede
+                confirmar hasta que todos la tengan.
               </p>
             </ContextualHelp>
 
@@ -1668,13 +1697,17 @@ export default function TrainerAttendancePage(): React.ReactElement {
                         <button
                           type="button"
                           onClick={() => handleCycleAttendance(idx)}
-                          // The name says which of the two things a tap does
-                          // here: an unreviewed row is a proposal, and the
-                          // first tap accepts it.
+                          // The name says which of the three things a tap does
+                          // here. A row with no state yet has nothing to
+                          // confirm — the tap gives it one; a row carrying a
+                          // state nobody signed off on is a proposal the first
+                          // tap accepts; a reviewed row simply changes.
                           aria-label={
-                            reviewed
-                              ? `${student.name}: ${stateLabel}. Cambiar estado`
-                              : `${student.name}: ${stateLabel}, sin revisar. Confirmar o cambiar estado`
+                            isUnmarked
+                              ? `${student.name}: ${stateLabel}. Marcar estado`
+                              : reviewed
+                                ? `${student.name}: ${stateLabel}. Cambiar estado`
+                                : `${student.name}: ${stateLabel}, sin revisar. Confirmar o cambiar estado`
                           }
                           // `shrink-0` + `w-full`, and `flex-1` only from `sm`:
                           // on a phone the row is a COLUMN, where a bare
@@ -1696,10 +1729,11 @@ export default function TrainerAttendancePage(): React.ReactElement {
                             {student.name}
                           </span>
                           {/* Same chip, two weights. A reviewed row wears the
-                              state's own colour; an unreviewed one wears the
-                              state in a dashed outline — the value is there
-                              and readable, and it reads as provisional
-                              because it is. */}
+                              state's own colour; anything else wears a dashed
+                              outline — "Sin marcar" for a row with no state,
+                              or the state itself when it came from somewhere
+                              no human confirmed. Readable either way, and
+                              provisional-looking because it is. */}
                           {reviewed && !isUnmarked ? (
                             <Badge
                               tone={getAttendanceBadgeTone(student.attendance)}
@@ -1738,13 +1772,23 @@ export default function TrainerAttendancePage(): React.ReactElement {
                             // ARIA radiogroup pattern is ONE tab stop per
                             // group. Before this, all four buttons sat in tab
                             // order — 5 Tab presses per student.
+                            //
+                            // A row with no state has nothing checked to carry
+                            // that tab stop, and `isActive ? 0 : -1` alone
+                            // would leave the group with NO tab stop at all —
+                            // unreachable by keyboard, which since issue #390
+                            // is how every roster opens. The pattern's own
+                            // answer: with nothing selected, the FIRST radio
+                            // takes it.
+                            const isTabStop =
+                              isActive || (isUnmarked && state === ATTENDANCE_STATES[0]);
                             return (
                               <button
                                 key={state}
                                 type="button"
                                 role="radio"
                                 onClick={() => handleDirectAttendanceSet(idx, state)}
-                                tabIndex={isActive ? 0 : -1}
+                                tabIndex={isTabStop ? 0 : -1}
                                 onKeyDown={(e) => handleAttendanceRadioKeyDown(e, idx, state)}
                                 aria-checked={isActive}
                                 title={ATTENDANCE_LABELS[state]}
@@ -1826,10 +1870,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
                 className="max-w-md"
               />
               <SessionCompositionCounts counts={confirmCounts} total={students.length} />
-              {/* Without this, "45 presentes" reads the same whether the
-                  trainer went through the roster or never looked at it. This
-                  one stays a badge: it is not part of the composition, it is
-                  the warning that the composition may not have been decided. */}
+              {/* Defensive, like the panel below it: walking the wizard
+                  forward cannot reach this step with anyone unreviewed. It
+                  renders on the two routes that bypass the advance button — a
+                  `?paso=confirmar` deep link and the bulk action's "Deshacer"
+                  toast — where "45 presentes" would otherwise read exactly as
+                  it does for a roster somebody actually went through. Stays a
+                  badge, not a bar segment: it is not part of the composition,
+                  it is the warning that the composition is nobody's answer. */}
               {unreviewedCount > 0 && (
                 <Badge tone="warn" className="self-start">
                   {unreviewedCount} sin revisar
@@ -1841,10 +1889,15 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
         {unreviewedCount > 0 && (
           /*
-           * Names the risk in the trainer's own terms and hands back the way
-           * to fix it. It does NOT block: the trainer asked for a default, and
-           * a default you cannot submit is not a default. What it must never
-           * do is let the summary above read as a reviewed roster.
+           * The other half of the pair the commit bar's "Faltan N alumnos por
+           * marcar" starts. Walking the wizard forward cannot produce this —
+           * the advance button is disabled while anyone is unmarked, and
+           * `countUnreviewed === countUnmarked` on every reachable path — but
+           * two routes land here anyway: a `?paso=confirmar` deep link, which
+           * restores straight onto this step with an untouched roster (see
+           * `pendingRestore`), and the bulk action's "Deshacer" toast, which
+           * outlives the step change. Both leave the summary above describing
+           * a roster nobody signed off on, which is what this says out loud.
            */
           <div
             role="status"
@@ -1859,8 +1912,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
               />
               <span>
                 {unreviewedCount === 1
-                  ? `1 de ${students.length} alumnos sigue en "Presente" porque nadie lo revisó.`
-                  : `${unreviewedCount} de ${students.length} alumnos siguen en "Presente" porque nadie los revisó.`}
+                  ? `1 de ${students.length} alumnos sigue sin que nadie lo revise.`
+                  : `${unreviewedCount} de ${students.length} alumnos siguen sin que nadie los revise.`}
               </span>
             </p>
             <div className="flex flex-wrap gap-2">
@@ -2280,12 +2333,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
                         {step === "mark-attendance" && renderTotals()}
 
                         <div className="ml-auto flex flex-col items-end gap-1.5">
-                          {/* The `UNMARKED` invariant, and its explanation.
-                              No path the wizard can take produces the sentinel
-                              any more, so in practice neither renders — but a
-                              button disabled by an invariant still has to say
-                              why, or it reads as a broken wizard. Being
-                              unreviewed does NOT gate the advance: it is a
+                          {/* The gate, and its explanation. A roster starts
+                              with every row unmarked (issue #390), so this is
+                              what the trainer sees until they have decided —
+                              one by one, or in one tap on "Marcar restantes
+                              presentes". A button disabled by an invariant has
+                              to say why, or it reads as a broken wizard.
+                              Being unreviewed while HOLDING a state does not
+                              gate anything: that is the confirmation step's
                               warning, not a blocker. */}
                           {unmarkedCount > 0 && (
                             <p

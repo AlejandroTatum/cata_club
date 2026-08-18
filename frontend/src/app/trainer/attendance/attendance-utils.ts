@@ -18,35 +18,22 @@ import type { AttendanceRecord } from "@/app/attendance/attendance-utils";
 // ---------------------------------------------------------------------------
 
 /**
- * Frontend-only sentinel for "no state at all".
+ * What a roster row starts on: "no state at all", for a student nobody has
+ * recorded anything about (issue #390).
+ *
+ * A default of "present" was tried and reverted. It saved taps, but it made
+ * the screen answer a question no human had answered: an enrolled student
+ * whose row nobody ever looked at was shown — and would be filed — as having
+ * attended. The sentinel refuses to invent that answer. Marking a full session
+ * still costs one tap; it is just an explicit one ("Marcar restantes
+ * presentes") instead of a silent one.
  *
  * The backend contract (`AttendanceStudentMark.estado`) only accepts the four
  * real `EstadoAsistencia` values, so this value is NEVER submitted:
- * `toAttendanceMarks` strips it, the wizard refuses to submit while any row
- * carries it, and neither the roster builder nor the draft can produce it.
- *
- * It is no longer the roster's initial state (see `DEFAULT_ATTENDANCE`), but it
- * stays a real, guarded value: it is what a corrupted draft, a future code path
- * or a hand-edited storage entry would have to become, and every one of those
- * doors stays shut.
+ * `toAttendanceMarks` strips it, the wizard refuses to submit or even advance
+ * while any row carries it (`countUnmarked`), and the draft never writes it.
  */
 export const UNMARKED = "unmarked";
-
-/**
- * What a roster row starts on when nobody has decided anything about it.
- *
- * The trainer asked for this: a session is overwhelmingly "everyone showed
- * up", and starting from the answer instead of from nothing turns a 40-tap
- * chore into a handful of corrections.
- *
- * The risk that used to justify starting from `UNMARKED` did not disappear,
- * it INVERTED: a distracted trainer can now file students as present without
- * ever looking at them. So the default is separated from the decision —
- * `reviewed` records whether a human actually touched the row, the roll call
- * keeps a full-roster count of the untouched ones, and the confirmation step
- * says so out loud instead of reporting "45 presentes" either way.
- */
-export const DEFAULT_ATTENDANCE: EstadoAsistencia = "present";
 
 /** Attendance value a roster row can hold inside the wizard, before submission. */
 export type WizardAttendance = EstadoAsistencia | typeof UNMARKED;
@@ -69,9 +56,15 @@ export interface SessionStudent {
    * four controls, "Marcar restantes presentes", a record already saved for
    * this session, or a restored draft entry.
    *
-   * Absent/false means the row still carries `DEFAULT_ATTENDANCE` because
-   * nobody looked at it. Optional so that a `SessionStudent` literal without
-   * it reads as "not reviewed", which is the safe interpretation.
+   * Absent/false means nobody has looked at the row — which, on every
+   * reachable path, is exactly the set of rows still carrying `UNMARKED`.
+   * Every writer sets state and flag together, so the two never disagree; the
+   * field survives because the UI reads THIS one (dotted outline, "Ver solo
+   * sin revisar", the undo toast), not because it can say something different.
+   * `countUnreviewed` carries the warning about breaking that.
+   *
+   * Optional so that a `SessionStudent` literal without it reads as "not
+   * reviewed", which is the safe interpretation.
    */
   reviewed?: boolean;
 }
@@ -148,7 +141,8 @@ export function arrowAttendanceState(
  *   Sin marcar → Presente → Tardanza → Justificado → Ausente → Presente → …
  *
  * "Presente" comes first because it is the overwhelmingly common answer: one
- * tap should settle the common case, not the rarest one.
+ * tap on a row that starts `UNMARKED` should settle the common case, not the
+ * rarest one.
  *
  * `UNMARKED` is an ENTRY point only — the cycle never returns to it. Tapping
  * is an accelerator over the four explicit controls, and an accelerator that
@@ -173,16 +167,19 @@ export function cycleWizardAttendance(current: WizardAttendance): EstadoAsistenc
 }
 
 /**
- * What tapping a student's fiche does.
+ * What tapping a student's fiche does: cycle the state, except that an
+ * unreviewed row carrying a REAL state has its first tap confirm that state
+ * instead of moving off it.
  *
- * The first tap on an UNREVIEWED row confirms the default instead of moving
- * off it. The state shown is already "Presente", so a trainer tapping the row
- * of a student who is standing right there means "yes, that one" — advancing
- * them to "Tardanza" for saying so would be the opposite of what they did, and
- * would make confirming a present student cost four taps.
- *
- * Once the row is reviewed, tapping cycles as before. `UNMARKED` still cycles
- * straight away: there is nothing there to confirm.
+ * With the `UNMARKED` default (issue #390) that first branch is unreachable
+ * from the app: unreviewed and unmarked coincide everywhere (see
+ * `countUnreviewed`), so no live roster ever holds a real state on an
+ * unreviewed row. Not even a restored draft — `applyAttendanceDraft` sets
+ * `reviewed: true` on every entry it restores. Only a hand-written
+ * `SessionStudent` literal reaches it. It stays for the same reason `UNMARKED`
+ * itself does: the guard costs one comparison, and the alternative is a tap
+ * silently walking a state the caller did not put there. `UNMARKED` cycles
+ * straight away — there is nothing there to confirm.
  */
 export function tapWizardAttendance(student: SessionStudent): EstadoAsistencia {
   if (!isReviewed(student) && student.attendance !== UNMARKED) return student.attendance;
@@ -222,31 +219,56 @@ export function countByState(
 }
 
 /**
- * Count the rows still carrying the `UNMARKED` sentinel.
+ * Count the rows still carrying the `UNMARKED` sentinel — the students nobody
+ * has given an answer for.
  *
- * With `DEFAULT_ATTENDANCE` this is 0 on every path the wizard can produce —
- * which is the point. It stays wired to the submit guard as the invariant
- * check that the sentinel never reaches the API, not as a workflow gate.
- * For "how many students has nobody looked at", use `countUnreviewed`.
+ * This IS the workflow gate (issue #390): a freshly built roster starts here,
+ * and while it is non-zero page.tsx disables both "Revisar y confirmar" and
+ * "Confirmar asistencia", and `handleConfirm` returns early. Making it a gate
+ * is the whole point — a screen that let the trainer confirm without deciding
+ * would be filing an answer no human gave. "Marcar restantes presentes" is the
+ * one-tap way to clear it, and it is a human saying so out loud.
+ *
+ * It gates those CONTROLS, not the step itself: a `?paso=confirmar` deep link
+ * restores directly onto the confirmation step with an untouched roster, which
+ * is safe (nothing files) but does render. Anything on that step must read
+ * correctly with this count at full roster.
+ *
+ * It doubles as the invariant that the sentinel never reaches the API.
+ * For "how many rows has no human touched", use `countUnreviewed` — which is
+ * the same number on every reachable path; see the warning there.
  */
 export function countUnmarked(students: SessionStudent[]): number {
   return students.filter((s) => s.attendance === UNMARKED).length;
 }
 
-/** Did a human set this row's state, or is it still the default? */
+/** Did a human set this row's state, or has nobody touched it? */
 export function isReviewed(student: SessionStudent): boolean {
   return student.reviewed === true;
 }
 
 /**
- * Count how many students NOBODY has looked at — the rows still sitting on
- * `DEFAULT_ATTENDANCE` because no human touched them.
+ * Count how many students NOBODY has looked at. This is the one the roll
+ * call's dotted outline, its "sin revisar" counter and its filter read.
  *
- * Callers must pass the FULL roster, not the current page: the wizard
- * paginates at 10 and filters by name, so a page- or filter-scoped count
- * would report "0 sin revisar" while a whole second page of students was
- * about to be filed present sight unseen — the same silent-data-loss shape
- * the old `absent` default had, pointing the other way.
+ * It equals `countUnmarked` on EVERY reachable path, and that is not a
+ * coincidence to be relied on loosely — it is load-bearing. Every writer sets
+ * the state and the flag in the same breath (`buildRosterFromAlumnoHorarios`,
+ * `applyAttendanceDraft`, `markRemainingPresent`, and both `commitStudents`
+ * callers in page.tsx), so no reachable roster holds one without the other.
+ *
+ * WARNING before adding a path that could produce `{ attendance: UNMARKED,
+ * reviewed: true }`: that row would hard-lock the wizard. The submit gate
+ * counts `attendance === UNMARKED` and would stay non-zero, while "Marcar
+ * restantes presentes" — both its render condition and `markRemainingPresent`
+ * itself — keys off `!reviewed` and would skip the row AND hide the button.
+ * The session would be unfileable with nothing on screen to fix it. Either
+ * keep the two in lockstep, or make the gate and the bulk action agree on one
+ * of them first.
+ *
+ * Callers must pass the FULL roster, not the current page: the wizard filters
+ * by name, so a filter-scoped count would report "0 sin revisar" while
+ * students hidden by the filter were still waiting on somebody's answer.
  */
 export function countUnreviewed(students: SessionStudent[]): number {
   return students.filter((s) => !isReviewed(s)).length;
@@ -256,14 +278,20 @@ export function countUnreviewed(students: SessionStudent[]): number {
  * Bulk action for the common case (near-full attendance): the trainer states,
  * in one tap, that everyone they have not touched is present.
  *
- * That is a decision, so those rows come back REVIEWED — the button is how a
- * trainer says "I looked, the rest are here", and the confirmation step must
- * stop flagging them afterwards. Rows the trainer already decided are left
- * exactly as they are. Returns a new array — never mutates the input.
+ * That is a decision, so those rows come back REVIEWED and on a real state —
+ * the button is how a trainer says "I looked, the rest are here", and it is
+ * the one-tap path out of the `UNMARKED` gate for a full session. Rows the
+ * trainer already decided are left exactly as they are. Returns a new array —
+ * never mutates the input.
+ *
+ * The `"present"` literal is here, and nowhere else, on purpose: it is not a
+ * roster default the code reads back, it is the content of THIS button's
+ * promise. A named constant shared with the roster builder is exactly what
+ * issue #390 had to undo.
  */
 export function markRemainingPresent(students: SessionStudent[]): SessionStudent[] {
   return students.map((s) =>
-    isReviewed(s) ? s : { ...s, attendance: DEFAULT_ATTENDANCE, reviewed: true },
+    isReviewed(s) ? s : { ...s, attendance: "present", reviewed: true },
   );
 }
 
@@ -307,21 +335,6 @@ export function buildAttendanceReceipt(
 }
 
 /**
- * Build the roster to mark attendance for from a Horario's assigned alumnos
- * (`GET /groups/horarios/:id/alumnos`), starting every student on
- * `DEFAULT_ATTENDANCE` and NOT reviewed: the value is a proposal, and the
- * roll call keeps saying so until a human confirms it.
- *
- * `existingRecords` is optional — pass today's `AttendanceRecord[]` for this
- * same horario (see `fetchAttendanceRecords`) to pre-select each student's
- * already-registered `estado`. A saved record IS a decision somebody made for
- * this session, so those rows come back reviewed. This is what makes
- * re-opening the wizard for a session that already has recorded attendance
- * show the existing marks (and, combined with the backend upsert in
- * `registrar_asistencia`, resubmitting updates those rows instead of creating
- * duplicates).
- */
-/**
  * True once at least one row's `attendance` differs from `serverRoster` — the
  * snapshot the roster carried the moment it left the server, taken BEFORE any
  * draft overlay or trainer edit (see `openRoster`, page.tsx).
@@ -348,6 +361,25 @@ export function hasUnsavedAttendanceEdits(
   return current.some((s) => s.attendance !== serverAttendanceById.get(s.id));
 }
 
+/**
+ * Build the roster to mark attendance for from a Horario's assigned alumnos
+ * (`GET /groups/horarios/:id/alumnos`), starting every student with NO answer
+ * at all — `UNMARKED` and not reviewed (issue #390). An enrolled student the
+ * club has no record for is a question, not an attendance.
+ *
+ * `existingRecords` is optional — pass today's `AttendanceRecord[]` for this
+ * same horario (see `fetchAttendanceRecords`) to pre-select each student's
+ * already-registered `estado`. A saved record IS a decision somebody made for
+ * this session, so those rows come back reviewed. This is what makes
+ * re-opening the wizard for a session that already has recorded attendance
+ * show the existing marks (and, combined with the backend upsert in
+ * `registrar_asistencia`, resubmitting updates those rows instead of creating
+ * duplicates).
+ *
+ * A session can be PARTIALLY recorded: the students the records name come back
+ * with their real estado, reviewed; everyone else stays `UNMARKED`. Both views
+ * of the roster have to render that second group legibly.
+ */
 export function buildRosterFromAlumnoHorarios(
   items: AlumnoHorario[],
   existingRecords: AttendanceRecord[] = [],
@@ -358,7 +390,7 @@ export function buildRosterFromAlumnoHorarios(
     return {
       id: String(item.personaId),
       name: item.personaNombreCompleto,
-      attendance: (recorded ?? DEFAULT_ATTENDANCE) as WizardAttendance,
+      attendance: recorded ?? UNMARKED,
       reviewed: recorded !== undefined,
     };
   });
@@ -373,10 +405,10 @@ export function buildRosterFromAlumnoHorarios(
 // that true:
 //
 //   1. Only the four REAL states are ever written or read, and only for rows a
-//      human REVIEWED. A row still sitting on `DEFAULT_ATTENDANCE` is not a
-//      decision, so persisting it would let a page refresh quietly promote
-//      "nobody looked" into "confirmed present" — the draft would be laundering
-//      the exact signal the confirmation step exists to show.
+//      human REVIEWED. A row nobody touched is not a decision, so persisting
+//      it would let a page refresh quietly promote "nobody looked" into an
+//      answer — the draft would be laundering the exact signal the `UNMARKED`
+//      gate exists to hold.
 //   2. The key includes the horario AND the date, so yesterday's draft can
 //      never be replayed onto today's session.
 //   3. Restoring only ever narrows: a student absent from the draft keeps

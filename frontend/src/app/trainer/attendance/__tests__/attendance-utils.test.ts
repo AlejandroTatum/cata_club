@@ -31,7 +31,6 @@ import {
   isReviewed,
   markRemainingPresent,
   tapWizardAttendance,
-  DEFAULT_ATTENDANCE,
   toAttendanceMarks,
   buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
@@ -195,29 +194,28 @@ describe("buildRosterFromAlumnoHorarios", () => {
     },
   ];
 
-  // The roster starts on "present" (`DEFAULT_ATTENDANCE`) — a session is
-  // overwhelmingly "everyone showed up", and starting from nothing turned 40
-  // students into 40 obligatory taps.
-  //
-  // The silent-data-loss risk that the old `unmarked` default guarded against
-  // did not go away, it inverted: filing students as present without looking
-  // at them is the same defect pointing the other way. So the VALUE is not the
-  // DECISION — every row starts NOT reviewed, and that is what the roll call
-  // counts, flags and reports. See `countUnreviewed`.
-  it("maps each alumno-horario row to a SessionStudent defaulted to present but NOT reviewed", () => {
+  // Issue #390: an enrolled student the club has recorded nothing for is a
+  // QUESTION, not an attendance. A "present" default was tried and reverted —
+  // it answered, on the trainer's behalf, the one thing the screen exists to
+  // ask, and a distracted roll call filed students as having attended without
+  // anybody looking at them. The row starts with no state and not reviewed,
+  // and both `countUnmarked` (the gate) and `countUnreviewed` say so.
+  it("maps each alumno-horario row to a SessionStudent with no state and NOT reviewed", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
     expect(roster).toEqual([
-      { id: "3", name: "Sofia Alumna", attendance: "present", reviewed: false },
-      { id: "7", name: "Mateo Rodríguez", attendance: "present", reviewed: false },
+      { id: "3", name: "Sofia Alumna", attendance: UNMARKED, reviewed: false },
+      { id: "7", name: "Mateo Rodríguez", attendance: UNMARKED, reviewed: false },
     ]);
-    expect(roster.every((s) => s.attendance === DEFAULT_ATTENDANCE)).toBe(true);
     expect(countUnreviewed(roster)).toBe(2);
   });
 
-  // The one thing the new default must never do: reach the wire, or the
-  // confirmation summary, as if a human had chosen it.
-  it("never produces the unmarked sentinel", () => {
-    expect(countUnmarked(buildRosterFromAlumnoHorarios(alumnoHorarios))).toBe(0);
+  // Issue #390: an enrolled student nobody has recorded anything for arrives
+  // on the sentinel, not on "present". `countUnmarked` is what keeps the
+  // wizard from filing an answer no human ever gave.
+  it("starts every student with no record on the unmarked sentinel", () => {
+    const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
+    expect(countUnmarked(roster)).toBe(2);
+    expect(roster.every((s) => s.attendance === UNMARKED)).toBe(true);
   });
 
   it("returns an empty roster for an empty array", () => {
@@ -247,14 +245,18 @@ describe("buildRosterFromAlumnoHorarios", () => {
     ];
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
     // A saved record IS a decision somebody made for this session, so that row
-    // comes back reviewed; the student with no record does not.
+    // comes back reviewed and carries its real estado. The student with no
+    // record carries no answer at all (issue #390) — the sentinel, unreviewed.
     expect(roster).toEqual([
       { id: "3", name: "Sofia Alumna", attendance: "present", reviewed: true },
-      { id: "7", name: "Mateo Rodríguez", attendance: "present", reviewed: false },
+      { id: "7", name: "Mateo Rodríguez", attendance: UNMARKED, reviewed: false },
     ]);
+    // …and that half-decided roster must still block the confirmation.
+    expect(countUnmarked(roster)).toBe(1);
+    expect(countUnreviewed(roster)).toBe(1);
   });
 
-  it("defaults to present-but-unreviewed when no existing record matches a student's personaId", () => {
+  it("leaves a student unmarked when no existing record matches their personaId", () => {
     const existingRecords: AttendanceRecord[] = [
       {
         id: "att-1",
@@ -267,20 +269,21 @@ describe("buildRosterFromAlumnoHorarios", () => {
       },
     ];
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
-    expect(roster.every((s) => s.attendance === "present")).toBe(true);
+    // A record for somebody ELSE is no answer about these two.
+    expect(roster.every((s) => s.attendance === UNMARKED)).toBe(true);
     expect(roster.every((s) => !isReviewed(s))).toBe(true);
   });
 
-  it("still defaults to present-but-unreviewed when existingRecords is omitted", () => {
+  it("still leaves everyone unmarked when existingRecords is omitted", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
-    expect(roster.every((s) => s.attendance === "present")).toBe(true);
+    expect(roster.every((s) => s.attendance === UNMARKED)).toBe(true);
     expect(countUnreviewed(roster)).toBe(roster.length);
   });
 });
 
 // ---------------------------------------------------------------------------
-// `reviewed` — the flag that keeps the "everyone starts present" default from
-// becoming "everyone was filed present and nobody looked".
+// `reviewed` — the flag that keeps a row CARRYING a state (a record the server
+// already had, a restored draft) from passing for a state this trainer chose.
 // ---------------------------------------------------------------------------
 
 describe("countUnreviewed / isReviewed", () => {
@@ -295,8 +298,8 @@ describe("countUnreviewed / isReviewed", () => {
     expect(countUnreviewed(roster)).toBe(2);
   });
 
-  // A row that merely LOOKS decided is not: this is the whole distinction the
-  // present-by-default roster rests on.
+  // A row that merely LOOKS decided is not: a state on a row says nothing
+  // about who put it there.
   it("does not count a present row as reviewed just because it says present", () => {
     expect(isReviewed({ id: "x", name: "X", attendance: "present" })).toBe(false);
   });
@@ -392,10 +395,15 @@ describe("markRemainingPresent", () => {
 });
 
 describe("tapWizardAttendance", () => {
-  // Tapping the row of a student standing right in front of you means "yes,
-  // that one" — advancing them to Tardanza for saying so would be the opposite
-  // of what the trainer did, and would cost four taps to undo.
-  it("confirms the default instead of moving off it on the first tap", () => {
+  // Defensive, since issue #390: a row is unreviewed exactly while it is
+  // unmarked on every reachable path, so nothing in the app puts an unreviewed
+  // row on a real state — not even a restored draft, since
+  // `applyAttendanceDraft` marks every entry it restores as reviewed. The
+  // literal below is the only way in. If some future path does it, the first
+  // tap CONFIRMS that state rather than walking off it: tapping the row of a
+  // student standing right in front of you means "yes, that one", and sending
+  // them to Tardanza for saying so would be the opposite of what they did.
+  it("confirms an unreviewed row's existing state instead of moving off it", () => {
     expect(tapWizardAttendance({ id: "a", name: "A", attendance: "present" })).toBe("present");
   });
 
@@ -558,7 +566,7 @@ describe("toAttendanceDraft", () => {
   // looked" into "confirmed present": the draft would come back, the restore
   // would mark it reviewed, and the confirmation step would stop warning about
   // a student the trainer still has not seen.
-  it("does not persist a row that is still on the default", () => {
+  it("does not persist a row nobody reviewed, whatever state it shows", () => {
     expect(
       toAttendanceDraft([
         { id: "1", name: "A", attendance: "present" },
@@ -695,7 +703,7 @@ describe("saveAttendanceDraft / loadAttendanceDraft / clearAttendanceDraft", () 
     saveAttendanceDraft(KEY, [
       { id: "1", name: "A", attendance: "present", reviewed: true },
       { id: "2", name: "B", attendance: UNMARKED },
-      // Still on the default: not a decision, so not the draft's business.
+      // Unreviewed: not a decision, so not the draft's business.
       { id: "3", name: "C", attendance: "present" },
     ]);
 
@@ -769,7 +777,7 @@ describe("listAttendanceDrafts", () => {
   });
 
   it("ignores a draft nobody actually decided anything in", () => {
-    // A roster where every row is still the default writes an empty draft —
+    // A roster nobody has reviewed writes an empty draft —
     // there is nothing to resume, and offering to "retomar" it would be
     // offering the trainer their own untouched list back.
     saveAttendanceDraft("cata_attendance_draft:12:2026-07-20", [
