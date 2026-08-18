@@ -21,13 +21,14 @@ describe("GET /api/health", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("responds 200 with a JSON status body", async () => {
     const response = await GET();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: "ok" });
+    expect(await response.json()).toEqual({ status: "ok", sha: expect.any(String) });
   });
 
   it("has no downstream dependency: never calls fetch", async () => {
@@ -38,5 +39,21 @@ describe("GET /api/health", () => {
 
   it("opts out of prerendering so the standalone build serves it at runtime", () => {
     expect(dynamic).toBe("force-dynamic");
+  });
+
+  it("reports the build SHA from BUILD_SHA when set", async () => {
+    vi.stubEnv("BUILD_SHA", "abc123");
+
+    const response = await GET();
+
+    expect(await response.json()).toEqual({ status: "ok", sha: "abc123" });
+  });
+
+  it("defaults the sha to 'unknown' when BUILD_SHA is unset", async () => {
+    delete process.env.BUILD_SHA;
+
+    const response = await GET();
+
+    expect(await response.json()).toEqual({ status: "ok", sha: "unknown" });
   });
 });

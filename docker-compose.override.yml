@@ -93,5 +93,6 @@ services:
         NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
         NEXT_PUBLIC_APP_NAME: Cata Club Admin
         NEXT_PUBLIC_USE_MOCKS: "false"
+        BUILD_SHA: ${BUILD_SHA:-unknown}
     ports:
       - "127.0.0.1:3000:3000"
