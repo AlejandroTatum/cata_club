@@ -47,6 +47,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { fetchFichaEmergencia, type FichaEmergencia } from "@/services/api";
+import { useModalFocusTrap } from "@/lib/focus-trap";
 import { ICON } from "@/lib/icon-size";
 import Button from "@/components/ui/Button";
 import DataBox from "@/components/ui/DataBox";
@@ -61,8 +62,8 @@ export interface EmergencyCardStudent {
 
 export interface EmergencyCardDialogProps {
   /** The tapped roster row, or `null` when the dialog is closed. */
-  student: EmergencyCardStudent | null;
-  onClose: () => void;
+  readonly student: EmergencyCardStudent | null;
+  readonly onClose: () => void;
 }
 
 type CargaEstado =
@@ -74,8 +75,8 @@ function Campo({
   etiqueta,
   valor,
 }: {
-  etiqueta: string;
-  valor: string | null;
+  readonly etiqueta: string;
+  readonly valor: string | null;
 }): React.ReactElement {
   return (
     <div className="flex flex-col gap-1 border-b border-line px-5 py-3 last:border-b-0">
@@ -115,7 +116,7 @@ export default function EmergencyCardDialog({
 }: EmergencyCardDialogProps): React.ReactElement | null {
   const [estado, setEstado] = useState<CargaEstado>({ tipo: "cargando" });
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const triggerElementRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!student) return;
@@ -138,25 +139,20 @@ export default function EmergencyCardDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student?.id]);
 
-  // Focus the close control on open, Escape closes, focus returns to the
-  // trigger on close — same pattern as `ConfirmDialog`, minus the second
-  // (confirm) button: viewing this data is not an action to confirm.
-  useEffect(() => {
-    if (!student) return;
-    triggerElementRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeButtonRef.current?.focus();
-
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") onClose();
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return (): void => {
-      document.removeEventListener("keydown", handleKeyDown);
-      triggerElementRef.current?.focus();
-    };
-  }, [student, onClose]);
+  /*
+   * Focus lands on Cerrar when the card opens, Escape closes it, Tab and
+   * Shift+Tab cycle inside the panel, and focus returns to the roster row that
+   * opened it. The trap is `useModalFocusTrap` rather than a local effect
+   * because the focusable set here is not fixed: the error state adds a
+   * Reintentar button above Cerrar, and the loaded card has Cerrar alone. It
+   * reads the panel's focusables at each keypress instead of holding refs.
+   */
+  useModalFocusTrap({
+    open: student !== null,
+    onClose,
+    panelRef,
+    initialFocusRef: closeButtonRef,
+  });
 
   if (!student) return null;
 
@@ -171,16 +167,30 @@ export default function EmergencyCardDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-cata-black/40 px-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      {/*
+       * El fondo es HERMANO del panel, no su contenedor. Envolviéndolo hacía
+       * falta un `stopPropagation` en el panel para que tocar un teléfono de
+       * emergencia no cerrara la tarjeta encima; como hermano, un click
+       * adentro no tiene por dónde llegar hasta acá y el panel se queda sin
+       * handler de click — que es lo que Sonar marcaba (S1082) apenas la línea
+       * entraba como código nuevo.
+       *
+       * Va `aria-hidden` porque no es contenido: es la superficie que apaga el
+       * fondo. Cerrar sin mouse ya tiene dos caminos, el botón Cerrar y Escape.
+       */}
       <div
+        aria-hidden="true"
+        data-testid="emergency-card-backdrop"
+        onClick={onClose}
+        className="absolute inset-0 bg-cata-black/40"
+      />
+      <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="emergency-card-title"
-        onClick={(event) => event.stopPropagation()}
-        className="card w-full max-w-md overflow-hidden p-0"
+        className="card relative w-full max-w-md overflow-hidden p-0"
       >
         <div className="flex items-center gap-3 border-b border-line bg-state-bad-bg px-5 py-4">
           <span
