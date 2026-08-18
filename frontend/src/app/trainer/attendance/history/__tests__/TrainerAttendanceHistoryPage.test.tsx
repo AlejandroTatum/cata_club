@@ -252,7 +252,22 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
   });
 
-  it("does not show Corregir to an admin for a session older than 30 days, but keeps the column's alignment", async () => {
+  /*
+   * Issue #373: la celda vacía era el defecto, no la solución.
+   *
+   * Este test afirmaba lo contrario -- que pasados los 30 días no hubiera
+   * acción alguna -- y por eso el vencimiento se veía igual que un error de
+   * carga: el administrador no podía distinguir "esta sesión ya no se corrige"
+   * de "algo se rompió". La ventana de 30 días (issue #262) no se toca; lo que
+   * cambia es que ahora se NOMBRA.
+   *
+   * Un `<Link>` deshabilitado no existe en HTML, así que la acción vencida deja
+   * de ser un ancla y pasa a ser un `<button disabled>` con el motivo colgado
+   * de `aria-describedby` -- el mismo par que el asistente de asistencia ya usa
+   * para bloquear "Revisar y confirmar" con `unmarkedReasonId`
+   * (`src/app/trainer/attendance/page.tsx:2261-2336`).
+   */
+  it("mantiene la acción presente pero bloqueada, nombrando el motivo, pasados los 30 días (issue #373)", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
     const oldRecords: AttendanceRecord[] = [
       record("present", "Sofia Vera", "2026-07-15"),
@@ -262,11 +277,35 @@ describe("TrainerAttendanceHistoryPage", () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
+    // The admin still HAS an "Acciones" column — the header exists, so the
+    // cell keeps the row's columns aligned with it.
+    const cells = within(rows[1]).getAllByRole("cell");
+    expect(cells).toHaveLength(4);
+
+    // Ya no navega a ningún lado, pero sigue estando y se lee deshabilitada.
     expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
-    // The admin still HAS an "Acciones" column (it just has nothing to offer
-    // this particular row) — the header exists, so the empty cell keeps the
-    // row's columns aligned with it.
-    expect(within(rows[1]).getAllByRole("cell")).toHaveLength(4);
+    const accion = within(cells[3]).getByRole("button", { name: "Corregir" });
+    expect(accion).toBeDisabled();
+
+    // El motivo es texto real de la celda -- no un `title` que solo existe al
+    // pasar el mouse -- y está atado al control para un lector de pantalla.
+    const motivo = "La ventana de corrección de 30 días ya cerró para esta sesión.";
+    expect(cells[3]).toHaveTextContent(motivo);
+    const motivoId = accion.getAttribute("aria-describedby");
+    expect(motivoId).toBeTruthy();
+    expect(document.getElementById(motivoId as string)).toHaveTextContent(motivo);
+  });
+
+  it("deja intacta la acción dentro de la ventana: enlace vivo, sin bloqueo ni motivo (issue #373)", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
+    render(<TrainerAttendanceHistoryPage />);
+
+    const links = await screen.findAllByRole("link", { name: "Corregir" });
+    expect(links).toHaveLength(2);
+    // Nada de la superficie vencida se filtra a una sesión que todavía se puede
+    // corregir: ni botón muerto ni línea de motivo.
+    expect(screen.queryByRole("button", { name: "Corregir" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/ventana de corrección/i)).not.toBeInTheDocument();
   });
 
   /*
