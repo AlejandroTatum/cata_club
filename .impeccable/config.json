@@ -3,7 +3,8 @@
     "ignoreRules": [],
     "ignoreFiles": [
       "docs/archive/**",
-      "/tmp/**"
+      "/tmp/**",
+      "frontend/src/app/attendance/__tests__/AttendancePage.test.tsx"
     ],
     "ignoreValues": [
       {
