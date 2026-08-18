@@ -30,7 +30,17 @@ from app.soporte_transversal.tiempo import ahora_club
 _LOGO_PATH = Path(__file__).parent / "assets" / "cata-club-logo.jpeg"
 _ROJO_INSTITUCIONAL = "#D92128"
 _NEGRO_INSTITUCIONAL = "#111111"
+# Gris de las filas pares: el rojo institucional lavado hasta el punto en que
+# solo sirve para que el ojo no se salte de renglón. Lo comparten las dos
+# tablas porque una familia y un administrador miran documentos del mismo club.
+_GRIS_FILAS_ALTERNAS = "#F3F0F0"
 _NOMBRE_CLUB = "Cata Club - Academia de Tenis"
+
+# Alto que la cabecera institucional se reserva arriba de la hoja: el logo baja
+# hasta 24mm del borde y la barra roja se dibuja a 26mm. Ninguno de los dos es
+# un flowable, así que no empujan el contenido: si el margen superior no los
+# deja pasar, el texto les cae encima.
+_MARGEN_SUPERIOR_CON_CABECERA = 30 * mm
 
 FORMATO_SELLO_COMPROBANTE = "%d/%m/%Y %H:%M:%S"
 FORMATO_SELLO_REPORTE = "%d/%m/%Y %H:%M"
@@ -74,11 +84,18 @@ def generar_comprobante_pago_pdf(
     Construye un PDF de comprobante digital de pago en memoria y devuelve bytes.
 
     El PDF incluye:
+      - Cabecera institucional (logo + barra roja), la misma que el reporte
       - Encabezado de la academia (cata club)
       - Datos del alumno (nombre, cédula, teléfono)
       - Detalle del pago (monto, tipo, estado, fechas)
       - Sello de aprobación / datos de rechazo (si aplica)
       - Pie de página con timestamp de emisión
+
+    Este es el único PDF que sale del club hacia una familia, así que viste la
+    identidad de la casa y no la de ReportLab: el logo y la barra roja llegan
+    por el mismo callback `_dibujar_encabezado_pagina` que usan los reportes.
+    Lo único que no responde a la marca es el sello de estado, que es verde o
+    rojo porque informa si el pago se aprobó o se rechazó.
 
     El buffer se cierra internamente para liberar conexiones de ReportLab.
     """
@@ -89,7 +106,7 @@ def generar_comprobante_pago_pdf(
         pagesize=A4,
         leftMargin=18 * mm,
         rightMargin=18 * mm,
-        topMargin=18 * mm,
+        topMargin=_MARGEN_SUPERIOR_CON_CABECERA,
         bottomMargin=16 * mm,
         title=f"Comprobante de Pago #{pago_id}",
         author=_NOMBRE_CLUB,
@@ -98,7 +115,7 @@ def generar_comprobante_pago_pdf(
     estilos = getSampleStyleSheet()
     titulo = ParagraphStyle(
         "TituloComprobante", parent=estilos["Title"],
-        fontSize=18, textColor=colors.HexColor("#0B3D91"), spaceAfter=4,
+        fontSize=18, textColor=colors.HexColor(_NEGRO_INSTITUCIONAL), spaceAfter=4,
     )
     subtitulo = ParagraphStyle(
         "Sub", parent=estilos["Normal"],
@@ -116,7 +133,7 @@ def generar_comprobante_pago_pdf(
     elementos = [
         Paragraph(_NOMBRE_CLUB, titulo),
         Paragraph("Comprobante digital de pago de membresía", subtitulo),
-        HRFlowable(width="100%", thickness=1, color=colors.HexColor("#0B3D91")),
+        HRFlowable(width="100%", thickness=1, color=colors.HexColor(_ROJO_INSTITUCIONAL)),
         Spacer(1, 8),
 
         Paragraph(f"<b>Nº de comprobante:</b> P-2024-{pago_id:06d}", cuerpo),
@@ -176,7 +193,11 @@ def generar_comprobante_pago_pdf(
         ParagraphStyle("Pie", parent=cuerpo, fontSize=8, textColor=colors.grey),
     ))
 
-    doc.build(elementos)
+    doc.build(
+        elementos,
+        onFirstPage=_dibujar_encabezado_pagina,
+        onLaterPages=_dibujar_encabezado_pagina,
+    )
     pdf_bytes = buffer.getvalue()
     buffer.close()
     return pdf_bytes
@@ -184,24 +205,31 @@ def generar_comprobante_pago_pdf(
 
 def _construir_estilo_tabla(
     *,
-    color_encabezado: str,
     tamano_fuente: int,
-    color_filas_alternas: str,
     relleno: int,
 ) -> TableStyle:
     """Builder compartido de `TableStyle` para las tablas de comprobante y
-    reporte: mismas reglas base (encabezado en negrita, grid gris, filas
-    alternadas), parametrizadas por color/tamaño/relleno para que cada tabla
-    conserve su identidad visual propia sin duplicar la lista de reglas."""
+    reporte.
+
+    El color ya no se parametriza. Antes sí, y el comentario que estaba acá lo
+    justificaba diciendo que cada tabla «conserva su identidad visual propia»:
+    en los hechos, la del comprobante iba en un azul que no figuraba en la guía
+    visual ni en ningún otro rincón del club. No eran dos identidades sino una
+    sola y un huérfano, y el huérfano era justo el que veía la familia. Hoy las
+    dos tablas visten igual -- rojo institucional en el encabezado, gris de la
+    casa en las filas pares -- y lo único que las separa es la densidad: el
+    comprobante lista siete conceptos y respira; el reporte puede listar
+    doscientas filas y necesita fuente y relleno más chicos.
+    """
     return TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(color_encabezado)),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(_ROJO_INSTITUCIONAL)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), tamano_fuente),
         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#BBBBBB")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor(color_filas_alternas)]),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor(_GRIS_FILAS_ALTERNAS)]),
         ("LEFTPADDING", (0, 0), (-1, -1), relleno),
         ("RIGHTPADDING", (0, 0), (-1, -1), relleno),
         ("TOPPADDING", (0, 0), (-1, -1), relleno - 1),
@@ -210,11 +238,12 @@ def _construir_estilo_tabla(
 
 
 def _estilo_tabla() -> TableStyle:
-    """Devuelve los estilos de la tabla de detalle (TableStyle)."""
+    """Devuelve los estilos de la tabla de detalle (TableStyle).
+
+    Más grande y más aireada que la del reporte: son siete conceptos que una
+    familia lee una vez, no un listado que hay que recorrer."""
     return _construir_estilo_tabla(
-        color_encabezado="#0B3D91",
         tamano_fuente=10,
-        color_filas_alternas="#F3F6FF",
         relleno=6,
     )
 
@@ -253,7 +282,7 @@ def generar_reporte_pdf(
         pagesize=A4,
         leftMargin=14 * mm,
         rightMargin=14 * mm,
-        topMargin=30 * mm,
+        topMargin=_MARGEN_SUPERIOR_CON_CABECERA,
         bottomMargin=16 * mm,
         title=titulo,
         author=_NOMBRE_CLUB,
@@ -305,9 +334,7 @@ def generar_reporte_pdf(
 def _estilo_tabla_reporte() -> TableStyle:
     """Devuelve los estilos de la tabla de un reporte tabular genérico."""
     return _construir_estilo_tabla(
-        color_encabezado=_ROJO_INSTITUCIONAL,
         tamano_fuente=_TAM_FUENTE_REPORTE,
-        color_filas_alternas="#F3F0F0",
         relleno=_RELLENO_REPORTE,
     )
 
