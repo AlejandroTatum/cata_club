@@ -108,12 +108,16 @@ const mockFetchTrainingSchedules = vi.fn().mockResolvedValue([]);
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchAttendanceRecords = vi.fn().mockResolvedValue([]);
 const mockRegisterAttendance = vi.fn();
+const mockCorrectAttendance = vi.fn();
+const mockFetchAttendanceCorrections = vi.fn().mockResolvedValue([]);
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   registerAttendance: (request: unknown) => mockRegisterAttendance(request),
+  correctAttendance: (asistenciaId: number, data: unknown) => mockCorrectAttendance(asistenciaId, data),
+  fetchAttendanceCorrections: (asistenciaId: number) => mockFetchAttendanceCorrections(asistenciaId),
   fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
@@ -284,14 +288,18 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
-  it("pre-selects Presente for a student who already has an attendance record for today's date + this horario", async () => {
-    // Admin, not trainer (issue #310 / #3): a session with an existing record
-    // is now a CORRECTION only an admin may edit — a trainer opening this
-    // exact roster gets the read-only gate covered by its own describe block
-    // below, with no radiogroup to pre-select into. This test is about the
-    // PREFILL logic (`buildRosterFromAlumnoHorarios`), which applies the same
-    // way regardless of role, so it moves to the role that still sees it as
-    // an editable radiogroup.
+  it("opens read-only for an admin too when the session already has a record, reached by a plain click (issue #389)", async () => {
+    // Issue #389: a session with an existing record is now closed for
+    // EVERYONE, admin included — there is no role left that sees an editable,
+    // pre-selected radiogroup here. The underlying prefill mapping
+    // (`buildRosterFromAlumnoHorarios` defaulting to the existing record's
+    // estado) is still exercised directly in `attendance-utils.test.ts`;
+    // this test instead locks in that the read-only gate fires for admin via
+    // ordinary navigation clicks, not just the URL-restore path covered
+    // elsewhere. "lun" (Monday) is deliberately NOT `today` here, so the
+    // schedule card itself is not the #397 today-scoped `disabled` — the
+    // click reaches the roster, and read-only comes from
+    // `sessionAlreadyRegistered` alone.
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -315,9 +323,10 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
 
-    const stateSelector = await screen.findByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
-    expect(within(stateSelector).getByRole("radio", { name: "Presente" })).toHaveAttribute("aria-checked", "true");
-    expect(within(stateSelector).getByRole("radio", { name: "Ausente" })).toHaveAttribute("aria-checked", "false");
+    await screen.findByText("Ana López");
+    expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 });
 
@@ -1480,7 +1489,9 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     await screen.findByText("Student 01");
 
     expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
-    expect(screen.getByText(/Solo un administrador puede corregirla/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Quedó cerrada de forma permanente — no se puede editar desde acá/),
+    ).toBeInTheDocument();
     // Nothing left that promises an edit the backend was always going to
     // refuse — no radios, and "Revisar y confirmar" is disabled rather than
     // silently reachable.
@@ -1488,16 +1499,24 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
-  it("no aplica el modo lectura para un administrador, que sí puede corregir", async () => {
+  it("aplica el modo lectura también a un administrador, que ya no puede corregir desde acá", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
     mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
+    // Issue #397: la tarjeta ya está deshabilitada para el administrador
+    // también, así que `openRoster()` no puede alcanzar este estado por
+    // click — se llega como un reload/deep-link llegaría (#95's URL restore),
+    // igual que el test del entrenador arriba.
+    window.history.replaceState(null, "", "/trainer/attendance?horario=12&paso=lista");
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
-    await openRoster();
     await screen.findByText("Student 01");
 
-    expect(screen.queryByText("Esta lista ya fue registrada.")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
+    expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Quedó cerrada de forma permanente — no se puede editar desde acá/),
+    ).toBeInTheDocument();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
   it("marca en el paso 1 el horario que ya tiene lista tomada hoy (issue #310 / #22)", async () => {
@@ -1661,6 +1680,201 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
 });
 
 // ---------------------------------------------------------------------------
+// Issue #389, slice 4b — the correction door on the closed roster's own
+// rows: "Corregir", gated to admin + within-window + a real asistenciaId,
+// the inline form, in-place update, and the audit trace.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — la corrección por fila (issue #389)", () => {
+  /** Real, numeric-parseable Asistencia ids — `buildAlumnoHorarios(3)` gives
+   *  personaId 100/101/102; these are the corresponding filed rows. */
+  function existingRecordsWithAsistenciaIds(fecha = "2026-07-21"): unknown[] {
+    return buildAlumnoHorarios(3).map((raw, i) => {
+      const s = raw as { personaId: number; personaNombreCompleto: string };
+      return {
+        id: String(9001 + i),
+        fecha,
+        horario: "Martes 18:00 — 19:00",
+        horarioId: 12,
+        personaId: s.personaId,
+        estudiante: s.personaNombreCompleto,
+        estado: "absent",
+      };
+    });
+  }
+
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset();
+    mockRegisterAttendance.mockReset();
+    mockCorrectAttendance.mockReset();
+    mockFetchAttendanceCorrections.mockReset().mockResolvedValue([]);
+  });
+
+  async function openReadOnlyRoster(records: unknown[], fecha?: string): Promise<void> {
+    mockFetchAttendanceRecords.mockResolvedValue(records);
+    // `sessionDate` (the correction-window gate) comes from the URL/openRoster,
+    // NOT from any individual record's own `fecha` — deep-linking a past date
+    // is what `?fecha=` is for (see attendance-utils.ts's own doc comment on it).
+    const fechaQuery = fecha ? `&fecha=${fecha}` : "";
+    window.history.replaceState(null, "", `/trainer/attendance?horario=12${fechaQuery}&paso=lista`);
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 01");
+  }
+
+  it("ofrece Corregir a un administrador, dentro de la ventana, solo para filas con asistenciaId real", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+
+    expect(screen.getAllByRole("button", { name: "Corregir" })).toHaveLength(3);
+  });
+
+  it("no ofrece Corregir a un entrenador — el endpoint es admin-only", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+
+    expect(screen.queryByRole("button", { name: "Corregir" })).not.toBeInTheDocument();
+  });
+
+  it("deshabilita Corregir con el motivo visible pasados los 30 días, y no lo ofrece del todo sin fila filed", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    // 2026-05-01 is well past the 30-day cutoff from "today" (2026-07-21,
+    // per TUESDAY_IN_CLUB_TIME). One student (Student 03) has no filed
+    // record at all — a partially-failed batch — so it never even reaches
+    // the disabled-with-reason state.
+    const records = existingRecordsWithAsistenciaIds("2026-05-01").slice(0, 2);
+    await openReadOnlyRoster(records, "2026-05-01");
+
+    const disabledButtons = screen.getAllByRole("button", { name: "Corregir" });
+    expect(disabledButtons).toHaveLength(2);
+    for (const button of disabledButtons) {
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(
+        "La ventana de corrección de 30 días ya cerró para esta sesión.",
+      );
+    }
+  });
+
+  it("abre el formulario, exige motivo, envía la corrección y actualiza la fila en el sitio con la traza", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+    mockCorrectAttendance.mockResolvedValue({
+      asistencia: {
+        id: "9001", fecha: "2026-07-21", horario: "Martes 18:00 — 19:00", horarioId: 12,
+        personaId: 100, estudiante: "Student 01", estado: "present",
+      },
+      corregidoPorId: 1,
+      corregidoPorNombre: "Admin User",
+      corregidoEn: "2026-08-18T12:00:00Z",
+      motivo: "Se confirmó presencia con el profesor.",
+      estadoAnterior: "absent",
+    });
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    // Captured BEFORE the correction: `fetchAttendanceRecords` also gets
+    // called once by the unrelated "lista tomada hoy" indicator effect
+    // (issue #310/#22), so the real assertion is "the correction adds no
+    // NEW call", not "there was exactly one call ever".
+    const attendanceRecordsCallsBefore = mockFetchAttendanceRecords.mock.calls.length;
+    const alumnosCallsBefore = mockFetchAlumnosPorHorario.mock.calls.length;
+
+    // Submitting with an empty motivo is refused client-side, no network call.
+    fireEvent.click(within(row).getByRole("button", { name: "Corregir" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Guardar corrección" }));
+    expect(await within(row).findByRole("alert")).toHaveTextContent("El motivo es obligatorio.");
+    expect(mockCorrectAttendance).not.toHaveBeenCalled();
+
+    fireEvent.click(within(row).getByRole("radio", { name: "Presente" }));
+    fireEvent.change(within(row).getByPlaceholderText("Por qué se corrige este registro"), {
+      target: { value: "Se confirmó presencia con el profesor." },
+    });
+    fireEvent.click(within(row).getByRole("button", { name: "Guardar corrección" }));
+
+    await waitFor(() => expect(mockCorrectAttendance).toHaveBeenCalledWith(9001, {
+      estado: "present",
+      justificativo: null,
+      estadoJustificativo: null,
+      motivo: "Se confirmó presencia con el profesor.",
+    }));
+
+    // Updated in place — no full roster refetch.
+    expect(mockFetchAlumnosPorHorario.mock.calls.length).toBe(alumnosCallsBefore);
+    expect(mockFetchAttendanceRecords.mock.calls.length).toBe(attendanceRecordsCallsBefore);
+    expect(await within(row).findByText("Presente")).toBeInTheDocument();
+    expect(
+      within(row).getByText(/Corregido por Admin User el.*antes: Ausente.*motivo: Se confirmó presencia/),
+    ).toBeInTheDocument();
+
+    // Corregir stays available on the SAME row afterward — unlimited
+    // sequential corrections within the window, never hidden after one.
+    expect(within(row).getByRole("button", { name: "Corregir" })).toBeEnabled();
+  });
+
+  it("el historial de correcciones se ve bajo demanda, más reciente primero", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+    mockFetchAttendanceCorrections.mockResolvedValue([
+      {
+        id: 2, corregidoPorId: 1, corregidoPorNombre: "Admin User",
+        corregidoEn: "2026-08-18T12:00:00Z", motivo: "Segunda corrección", estadoAnterior: "present",
+      },
+      {
+        id: 1, corregidoPorId: 1, corregidoPorNombre: "Admin User",
+        corregidoEn: "2026-08-10T12:00:00Z", motivo: "Primera corrección", estadoAnterior: "absent",
+      },
+    ]);
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Ver historial" }));
+
+    await waitFor(() => expect(mockFetchAttendanceCorrections).toHaveBeenCalledWith(9001));
+    const entries = await within(row).findAllByRole("listitem");
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toHaveTextContent("Segunda corrección");
+    expect(entries[1]).toHaveTextContent("Primera corrección");
+  });
+
+  it("no pide confirmar la salida después de una corrección ya guardada", async () => {
+    // `hasUnsavedMarks` diffea `students` contra `serverRosterRef.current`
+    // (issue #335) -- si `handleRowCorrected` solo actualizara `students` y
+    // no la ref, esta pantalla mentiría "hay cambios sin guardar" sobre una
+    // fila que el backend ya confirmó. Candado directo de esa invariante,
+    // no solo lectura de código.
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+    mockCorrectAttendance.mockResolvedValue({
+      asistencia: {
+        id: "9001", fecha: "2026-07-21", horario: "Martes 18:00 — 19:00", horarioId: 12,
+        personaId: 100, estudiante: "Student 01", estado: "present",
+      },
+      corregidoPorId: 1,
+      corregidoPorNombre: "Admin User",
+      corregidoEn: "2026-08-18T12:00:00Z",
+      motivo: "Se confirmó presencia con el profesor.",
+      estadoAnterior: "absent",
+    });
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Corregir" }));
+    fireEvent.click(within(row).getByRole("radio", { name: "Presente" }));
+    fireEvent.change(within(row).getByPlaceholderText("Por qué se corrige este registro"), {
+      target: { value: "Se confirmó presencia con el profesor." },
+    });
+    fireEvent.click(within(row).getByRole("button", { name: "Guardar corrección" }));
+    await within(row).findByText("Presente");
+
+    // `handleLeaveWizard` solo llama a `preventDefault` + abre el diálogo
+    // cuando `hasUnsavedMarks` es true; si la ref quedó al día, el click cae
+    // en la navegación normal del link y el diálogo nunca se monta.
+    fireEvent.click(screen.getByRole("link", { name: /volver/i }));
+
+    expect(screen.queryByText("¿Salir sin registrar la asistencia?")).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Issue #368 — el candado del #310 funciona, pero recién en el paso 2. En el
 // paso 1 un horario ya registrado se seleccionaba y ofrecía "Continuar" igual
 // que cualquier otro: el entrenador descubría el modo solo lectura después de
@@ -1726,7 +1940,7 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
     expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 
-  it("no le advierte nada al administrador, que sí puede corregir dentro de la ventana", async () => {
+  it("nombra en la tarjeta que el administrador tampoco puede volver a tomarla, y la deshabilita de verdad (issue #389)", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
     mockFetchAttendanceRecords.mockResolvedValue(todaysRecordsForAllStudents());
 
@@ -1734,11 +1948,14 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
     const scheduleButton = await screen.findByRole("button", { name: /18:00/i });
 
     expect(await within(scheduleButton).findByText(/Lista tomada hoy · 3 registros/)).toBeInTheDocument();
+    expect(within(scheduleButton).queryByText(/solo consulta/i)).not.toBeInTheDocument();
     expect(within(scheduleButton).queryByText(/no se puede volver a tomar/i)).not.toBeInTheDocument();
+
+    expect(scheduleButton).toBeDisabled();
 
     fireEvent.click(scheduleButton);
     expect(screen.queryByText("Esta lista ya fue tomada hoy.")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 });
 

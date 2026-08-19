@@ -7,6 +7,14 @@
  * only failure mode this feature really has. So this spec starts on the
  * history, clicks the button an administrator clicks, and follows it all the
  * way to the batch that gets POSTed.
+ *
+ * Issue #389, slice 4b adds a SECOND pair of routes that need the same
+ * discipline: the new per-row "Corregir" button on the roster this deep-link
+ * lands on, and its own BFF proxy (`PATCH /api/attendance/records/{id}/correct`).
+ * The unit/route tests already cover each side in isolation; this spec's own
+ * stated purpose — prove the two routes agree — extends naturally to prove
+ * this third route pair agrees too, in the same flow this file already sets
+ * up.
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
@@ -120,7 +128,7 @@ async function mockCorrectionRuntime(page: Page): Promise<CorrectionRuntime> {
   return { postedBatches };
 }
 
-test("Corregir opens that session's roll call and files the fix on its own date", async ({ page }) => {
+test("Corregir opens that session's roll call, and the row-level Corregir actually corrects it (issue #389)", async ({ page }) => {
   const runtime = await mockCorrectionRuntime(page);
 
   await page.goto("/trainer/attendance/history");
@@ -138,28 +146,50 @@ test("Corregir opens that session's roll call and files the fix on its own date"
 
   // The marks already filed for THAT day are on screen — proof the wizard
   // asked the API for the corrected session and not for today.
-  const stateGroup = page.getByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
-  await expect(stateGroup.getByRole("radio", { name: "Ausente", exact: true })).toHaveAttribute(
-    "aria-checked",
-    "true",
-  );
+  await expect(page.getByText("Ana López")).toBeVisible();
+  await expect(page.getByText("Ausente", { exact: true }).first()).toBeVisible();
 
-  // Correct it, and file. The advance button stopped sharing the "Siguiente"
-  // label with the removed paginator in #332; it is "Revisar y confirmar".
-  await stateGroup.getByRole("radio", { name: "Presente", exact: true }).click();
-  await page.getByRole("button", { name: "Revisar y confirmar" }).click();
-  // Sentence case, not Title Case: the redesign normalised the product's copy
-  // and these two strings came along. Written case-insensitively so the next
-  // copy pass moves the words without moving the test.
-  await page.getByRole("button", { name: /confirmar asistencia/i }).click();
-  await expect(page.getByText(/asistencia registrada/i).first()).toBeVisible();
+  // Issue #389: closing a session is now permanent for EVERY role, admin
+  // included. This link used to land on an EDITABLE roster an admin could
+  // resubmit (issue #95's original "Corregir" mechanism) — that mechanism
+  // was removed on purpose. The WIZARD's own controls stay a dead end that
+  // tells the truth: read-only, no radios of its own, no way to resubmit
+  // from here.
+  await expect(page.getByText("Esta lista ya fue registrada.")).toBeVisible();
+  await expect(page.getByRole("radiogroup")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
 
-  expect(runtime.postedBatches).toHaveLength(1);
-  expect(runtime.postedBatches[0]).toMatchObject({
-    horarioId: HORARIO_ID,
-    // The whole point. On the default this would be 2026-07-22 and the
-    // session the trainer meant to fix would still be wrong.
-    fechaEntrenamiento: SESSION_DATE,
-    students: [{ personaId: 9, estado: "present" }],
+  expect(runtime.postedBatches).toHaveLength(0);
+
+  // The real working door lives beside Ana's row instead: this slice's
+  // per-row "Corregir" (motivo + traza, PATCH /asistencias/{id}/corregir
+  // through its own BFF proxy). Prove it end to end — click it, submit a
+  // motivo, and check the button + its own BFF route agree on the payload.
+  let correctionRequestBody: unknown = null;
+  await page.route(`**/api/attendance/records/${FILED_RECORD.id}/correct`, async (route: Route) => {
+    correctionRequestBody = route.request().postDataJSON();
+    await fulfillJson(route, {
+      asistencia: { ...FILED_RECORD, estado: "present" },
+      corregidoPorId: 1,
+      corregidoPorNombre: "Admin Demo",
+      corregidoEn: "2026-07-22T18:00:00Z",
+      motivo: "Se confirmó presencia con el profesor.",
+      estadoAnterior: "absent",
+    });
   });
+
+  await page.getByRole("button", { name: "Corregir" }).click();
+  await page.getByRole("radio", { name: "Presente" }).click();
+  await page
+    .getByPlaceholder("Por qué se corrige este registro")
+    .fill("Se confirmó presencia con el profesor.");
+  await page.getByRole("button", { name: "Guardar corrección" }).click();
+
+  await expect(page.getByText("Corrección guardada.")).toBeVisible();
+  expect(correctionRequestBody).toMatchObject({
+    estado: "present",
+    motivo: "Se confirmó presencia con el profesor.",
+  });
+  // Updated in place — the badge next to Ana's name now reads her new state.
+  await expect(page.getByText("Presente", { exact: true })).toBeVisible();
 });

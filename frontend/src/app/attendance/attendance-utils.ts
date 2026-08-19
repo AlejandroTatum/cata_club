@@ -58,6 +58,12 @@ export interface AttendanceRecord {
   registradoPorId?: number | null;
   /** The taker's display name, already resolved by the backend. */
   registradoPorNombre?: string | null;
+  /** The row's current justificativo, if any — pre-fills the correction form
+   *  (issue #389) instead of asking an admin to retype what is already on
+   *  file. `null`/absent when there is none. */
+  justificativo?: string | null;
+  /** Whether `justificativo` was accepted, when one exists. */
+  estadoJustificativo?: boolean | null;
 }
 
 /** Aggregate counts for today's attendance overview. */

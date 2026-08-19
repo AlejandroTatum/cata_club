@@ -563,6 +563,68 @@ export async function registerAttendance(data: RegisterAttendanceRequest): Promi
 }
 
 // ---------------------------------------------------------------------------
+// Attendance correction (issue #389, slice 4b) — the dedicated door for
+// fixing an already-closed session, distinct from `registerAttendance`
+// (which the backend now refuses a second time for the same row).
+// ---------------------------------------------------------------------------
+
+/** Request body for `PATCH /api/attendance/records/{id}/correct`. The three
+ *  mutable fields travel together, same as the original registration —
+ *  never field by field — and `motivo` is the one genuinely new, mandatory
+ *  input this operation introduces. */
+export interface CorrectAttendanceInput {
+  estado: EstadoAsistencia;
+  justificativo?: string | null;
+  estadoJustificativo?: boolean | null;
+  motivo: string;
+}
+
+/** Confirms the correction with the updated row plus the trace that got
+ *  recorded — an admin needs to see it took, not only the new value. */
+export interface CorrectAttendanceResult {
+  asistencia: AttendanceRecord;
+  corregidoPorId: number;
+  corregidoPorNombre: string;
+  corregidoEn: string;
+  motivo: string;
+  estadoAnterior: EstadoAsistencia;
+  justificativoAnterior?: string | null;
+  estadoJustificativoAnterior?: boolean | null;
+}
+
+/** One entry of a row's correction history — same shape as
+ *  `CorrectAttendanceResult` minus the nested `asistencia` (the caller
+ *  already has the current row). Most-recent-first, as the backend orders it. */
+export interface AttendanceCorrectionEntry {
+  id: number;
+  corregidoPorId: number;
+  corregidoPorNombre: string;
+  corregidoEn: string;
+  motivo: string;
+  estadoAnterior: EstadoAsistencia;
+  justificativoAnterior?: string | null;
+  estadoJustificativoAnterior?: boolean | null;
+}
+
+/** Correct one already-filed Asistencia row — `PATCH /api/attendance/records/{id}/correct`.
+ *  ADMINISTRADOR-only in the backend; a 30-day window past `fechaEntrenamiento`. */
+export async function correctAttendance(
+  asistenciaId: number,
+  data: CorrectAttendanceInput,
+): Promise<CorrectAttendanceResult> {
+  return request<CorrectAttendanceResult>(apiEndpoint(`/attendance/records/${asistenciaId}/correct`), {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+/** List the correction history of one Asistencia row, most-recent-first —
+ *  `GET /api/attendance/records/{id}/corrections`. ADMINISTRADOR-only. */
+export async function fetchAttendanceCorrections(asistenciaId: number): Promise<AttendanceCorrectionEntry[]> {
+  return request<AttendanceCorrectionEntry[]>(apiEndpoint(`/attendance/records/${asistenciaId}/corrections`));
+}
+
+// ---------------------------------------------------------------------------
 // Horarios (Training Schedules) CRUD
 // ---------------------------------------------------------------------------
 
