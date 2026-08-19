@@ -31,6 +31,8 @@ import {
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { useToast } from "@/contexts/ToastContext";
+import MotivoObligatorioField from "@/components/admin/MotivoObligatorioField";
+import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
 
 interface PagoCorreccionSectionProps {
   pagoId: number;
@@ -76,51 +78,6 @@ function buildInput(form: FormState): CorreccionPagoInput {
   if (form.fechaInicio.trim()) input.fechaInicio = form.fechaInicio.trim();
   if (form.fechaFin.trim()) input.fechaFin = form.fechaFin.trim();
   return input;
-}
-
-interface CampoCorregibleProps {
-  label: string;
-  type: "number" | "date";
-  value: string;
-  onChange: (value: string) => void;
-  /** Solo aplica cuando `type="number"` — cada campo numérico tiene su propio
-   *  paso/mínimo (`mesesComprados` es entero, el resto es plata con centavos). */
-  numberStep?: string;
-  numberMin?: string;
-  numberInputMode?: "decimal" | "numeric";
-}
-
-/**
- * Un campo del formulario de corrección — issue #400, criterio 7.
- *
- * Los seis campos corregibles (`tarifaMensualAplicada`, `mesesComprados`,
- * `montoBase`, `monto`, `fechaInicio`, `fechaFin`) compartían exactamente
- * esta misma forma (label + input + "vacío = sin cambio", ver `buildInput`)
- * repetida seis veces con solo el label/valor/tipo cambiando — extraído acá
- * para que un séptimo campo corregible algún día sea una línea, no un bloque
- * copiado.
- */
-function CampoCorregible({
-  label,
-  type,
-  value,
-  onChange,
-  numberStep = "0.01",
-  numberMin = "0",
-  numberInputMode = "decimal",
-}: CampoCorregibleProps): React.ReactElement {
-  return (
-    <label className="block text-2xs text-ink-3">
-      {label}
-      <input
-        type={type}
-        {...(type === "number" ? { inputMode: numberInputMode, min: numberMin, step: numberStep } : {})}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-      />
-    </label>
-  );
 }
 
 export default function PagoCorreccionSection({
@@ -240,13 +197,13 @@ export default function PagoCorreccionSection({
             {formOpen && (
               <form onSubmit={handleSubmit} className="mt-2 rounded-lg border border-line bg-surface p-3">
                 <div className="grid grid-cols-2 gap-2">
-                  <CampoCorregible
+                  <CampoFormularioAdmin
                     label="Tarifa mensual"
                     type="number"
                     value={form.tarifaMensualAplicada}
                     onChange={(v) => setForm((f) => ({ ...f, tarifaMensualAplicada: v }))}
                   />
-                  <CampoCorregible
+                  <CampoFormularioAdmin
                     label="Meses comprados"
                     type="number"
                     value={form.mesesComprados}
@@ -255,25 +212,25 @@ export default function PagoCorreccionSection({
                     numberStep="1"
                     numberInputMode="numeric"
                   />
-                  <CampoCorregible
+                  <CampoFormularioAdmin
                     label="Monto base"
                     type="number"
                     value={form.montoBase}
                     onChange={(v) => setForm((f) => ({ ...f, montoBase: v }))}
                   />
-                  <CampoCorregible
+                  <CampoFormularioAdmin
                     label="Monto final"
                     type="number"
                     value={form.monto}
                     onChange={(v) => setForm((f) => ({ ...f, monto: v }))}
                   />
-                  <CampoCorregible
+                  <CampoFormularioAdmin
                     label="Fecha inicio"
                     type="date"
                     value={form.fechaInicio}
                     onChange={(v) => setForm((f) => ({ ...f, fechaInicio: v }))}
                   />
-                  <CampoCorregible
+                  <CampoFormularioAdmin
                     label="Fecha fin"
                     type="date"
                     value={form.fechaFin}
@@ -281,18 +238,12 @@ export default function PagoCorreccionSection({
                   />
                 </div>
 
-                <label className="mt-2 block text-2xs text-ink-3">
-                  Motivo (obligatorio)
-                  <textarea
-                    value={form.motivo}
-                    onChange={(e) => setForm((f) => ({ ...f, motivo: e.target.value }))}
-                    rows={2}
-                    maxLength={255}
-                    placeholder="Por qué se corrige (p. ej. error de tipeo, descuento mal aplicado)"
-                    className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-                    required
-                  />
-                </label>
+                <MotivoObligatorioField
+                  value={form.motivo}
+                  onChange={(v) => setForm((f) => ({ ...f, motivo: v }))}
+                  placeholder="Por qué se corrige (p. ej. error de tipeo, descuento mal aplicado)"
+                  labelClassName="mt-2 block text-2xs text-ink-3"
+                />
 
                 {submitError && <p className="mt-2 text-2xs text-state-bad">{submitError}</p>}
 

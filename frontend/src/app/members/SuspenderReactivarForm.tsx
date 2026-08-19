@@ -19,6 +19,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { suspenderMembresia, reactivarMembresia } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
 import type { EstadoMembresia } from "@/types/domain";
+import MotivoObligatorioField from "@/components/admin/MotivoObligatorioField";
 
 interface SuspenderReactivarFormProps {
   membresiaId: number;
@@ -103,22 +104,15 @@ export default function SuspenderReactivarForm({
           className="mt-2 rounded-lg border border-line bg-surface p-3"
           aria-label={triggerLabel}
         >
-          <label className="block text-2xs text-ink-3">
-            Motivo (obligatorio)
-            <textarea
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              rows={2}
-              maxLength={255}
-              placeholder={
-                accion === "suspender"
-                  ? "Por qué se suspende (p. ej. ausencia prolongada)"
-                  : "Por qué se reactiva (p. ej. regresó al club)"
-              }
-              className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-              required
-            />
-          </label>
+          <MotivoObligatorioField
+            value={motivo}
+            onChange={setMotivo}
+            placeholder={
+              accion === "suspender"
+                ? "Por qué se suspende (p. ej. ausencia prolongada)"
+                : "Por qué se reactiva (p. ej. regresó al club)"
+            }
+          />
 
           {error && <p className="mt-2 text-2xs text-cata-red">{error}</p>}
 

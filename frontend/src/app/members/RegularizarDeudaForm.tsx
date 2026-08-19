@@ -26,6 +26,8 @@ import { fetchMembresiaDeuda, regularizarDeuda } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
+import MotivoObligatorioField from "@/components/admin/MotivoObligatorioField";
+import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
 
 interface RegularizarDeudaFormProps {
   /** Backend membership id (the one the admin BFF aggregates, not the display label). */
@@ -194,60 +196,43 @@ export default function RegularizarDeudaForm({
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            <label className="block text-2xs text-ink-3">
-              Fecha inicio
-              <input
-                type="date"
-                value={fechaInicio}
-                max={clubIsoDate()}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-                required
-              />
-            </label>
-            <label className="block text-2xs text-ink-3">
-              Fecha fin
-              <input
-                type="date"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
-                className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-                required
-              />
-            </label>
-          </div>
-
-          <label className="mt-2 block text-2xs text-ink-3">
-            Monto
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={monto}
-              onChange={(e) => setMonto(e.target.value)}
-              className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
+            <CampoFormularioAdmin
+              label="Fecha inicio"
+              type="date"
+              value={fechaInicio}
+              onChange={setFechaInicio}
+              dateMax={clubIsoDate()}
               required
             />
-          </label>
+            <CampoFormularioAdmin
+              label="Fecha fin"
+              type="date"
+              value={fechaFin}
+              onChange={setFechaFin}
+              required
+            />
+          </div>
+
+          <CampoFormularioAdmin
+            label="Monto"
+            type="number"
+            value={monto}
+            onChange={setMonto}
+            labelClassName="mt-2 block text-2xs text-ink-3"
+            required
+          />
           {montoMensual > 0 && (
             <p className="mt-0.5 text-2xs text-ink-3">
               Precio mensual: {formatCurrency(montoMensual)} — el monto debe ser múltiplo.
             </p>
           )}
 
-          <label className="mt-2 block text-2xs text-ink-3">
-            Motivo (obligatorio)
-            <textarea
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              rows={2}
-              maxLength={255}
-              placeholder="Por qué se regulariza (p. ej. demora del club, acuerdo con el socio)"
-              className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-              required
-            />
-          </label>
+          <MotivoObligatorioField
+            value={motivo}
+            onChange={setMotivo}
+            placeholder="Por qué se regulariza (p. ej. demora del club, acuerdo con el socio)"
+            labelClassName="mt-2 block text-2xs text-ink-3"
+          />
 
           {error && <p className="mt-2 text-2xs text-cata-red">{error}</p>}
 

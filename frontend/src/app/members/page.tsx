@@ -533,9 +533,7 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
 function MemberEditDialog({
   account,
   onClose,
-  onMembershipCreated,
-  onDebtRegularized,
-  onMembresiaChanged,
+  ...membresiaCallbacks
 }: MemberEditDialogProps): React.ReactElement {
   // Roles and estado are ONE concern, not two: a single request answers both,
   // a failed load has to show up in both places, and the header badge below
@@ -832,9 +830,7 @@ function MemberEditDialog({
                       <StudentEditPanel
                         key={estudiante.id}
                         student={estudiante}
-                        onMembershipCreated={onMembershipCreated}
-                        onDebtRegularized={onDebtRegularized}
-                        onMembresiaChanged={onMembresiaChanged}
+                        {...membresiaCallbacks}
                       />
                     ))}
                   </ul>

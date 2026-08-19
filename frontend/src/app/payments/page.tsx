@@ -198,6 +198,36 @@ function actionLabel(request: PaymentValidationRequest): string {
     : `Ver el detalle del pago de ${request.studentName}`;
 }
 
+/** The five row facts, already formatted — shared by both queue renderings. */
+interface RowFields {
+  studentName: string;
+  payer: string;
+  period: string;
+  amount: string;
+  method: string;
+}
+
+/**
+ * Derives the five row facts ONCE (Sonar duplication follow-up, issue
+ * #400): the desktop `<TableRow>` and the mobile `<li>` card render the
+ * SAME five facts, in the SAME order, off the SAME `req` — only their
+ * surrounding DOM shape differs (table cells vs a card layout, which is a
+ * genuine difference this file keeps for a reason, see "the same rows as
+ * cards" below). What used to duplicate was the field ACCESS/FORMATTING
+ * itself — `payerLabel(req)`, `humanizePaymentPeriod(req.membershipPeriod)`,
+ * `formatCurrency(req.expectedAmount)` — called out twice, once per
+ * rendering. Computed here once; both renderings just read the result.
+ */
+function buildRowFields(req: PaymentValidationRequest): RowFields {
+  return {
+    studentName: req.studentName,
+    payer: payerLabel(req),
+    period: humanizePaymentPeriod(req.membershipPeriod),
+    amount: formatCurrency(req.expectedAmount),
+    method: req.paymentMethod,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Detail sub-views
 // ---------------------------------------------------------------------------
@@ -1096,15 +1126,16 @@ export default function PaymentsPage(): React.ReactElement {
                 <TableBody>
                   {visibleItems.map((req) => {
                     const desktopNameId = `payment-name-desktop-${req.id}`;
+                    const fields = buildRowFields(req);
                     return (
                     <TableRow key={req.id}>
                       <TableNameCell
-                        name={<span id={desktopNameId}>{req.studentName}</span>}
-                        sub={payerLabel(req)}
+                        name={<span id={desktopNameId}>{fields.studentName}</span>}
+                        sub={fields.payer}
                       />
-                      <TableCell type="text">{humanizePaymentPeriod(req.membershipPeriod)}</TableCell>
-                      <TableCell type="number">{formatCurrency(req.expectedAmount)}</TableCell>
-                      <TableCell type="text">{req.paymentMethod}</TableCell>
+                      <TableCell type="text">{fields.period}</TableCell>
+                      <TableCell type="number">{fields.amount}</TableCell>
+                      <TableCell type="text">{fields.method}</TableCell>
                       <TableCell type="action">
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
                           {renderRowActions(req)}
@@ -1121,19 +1152,20 @@ export default function PaymentsPage(): React.ReactElement {
             <ul data-testid="payments-cards" className="divide-y divide-line md:hidden">
               {visibleItems.map((req) => {
                 const mobileNameId = `payment-name-mobile-${req.id}`;
+                const fields = buildRowFields(req);
                 return (
                 <li key={req.id} className="flex flex-col gap-3 p-4">
                   <div className="min-w-0">
                     <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
-                      {req.studentName}
+                      {fields.studentName}
                     </p>
-                    <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
+                    <p className="truncate text-2xs tracking-flat text-ink-3">{fields.payer}</p>
                   </div>
                   <p className="text-xs text-ink-2">
-                    {humanizePaymentPeriod(req.membershipPeriod)} · {req.paymentMethod}
+                    {fields.period} · {fields.method}
                   </p>
                   <div className="flex items-center justify-between gap-3">
-                    <DataBox variant="numeric">{formatCurrency(req.expectedAmount)}</DataBox>
+                    <DataBox variant="numeric">{fields.amount}</DataBox>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
                       {renderRowActions(req)}
                     </div>
