@@ -8,7 +8,8 @@ from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.asistencia_schemas import (
-    AsistenciaCreateDTO, AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
+    AsistenciaCreateDTO, AsistenciaCorreccionDTO, AsistenciaCorreccionResponseDTO,
+    AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
     UltimaListaDTO,
@@ -131,6 +132,36 @@ async def registrar_asistencia(
 ):
     return AsistenciaServicio(db).registrar_asistencia(
         datos, token_payload.get("roles", []), token_payload.get("persona_id")
+    )
+
+
+# Corrección explícita de UNA Asistencia ya cerrada (issue #389, slice 2):
+# camino DISTINTO de `registrar_asistencia`, exclusivo de ADMINISTRADOR y
+# con traza obligatoria. Sin endpoint de LISTADO del historial -- alcance
+# de un slice posterior ("auditoría visible").
+@router.patch(
+    "/{asistencia_id}/corregir",
+    response_model=AsistenciaCorreccionResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def corregir_asistencia(
+    asistencia_id: int,
+    datos: AsistenciaCorreccionDTO,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    correccion = AsistenciaServicio(db).corregir_asistencia(
+        asistencia_id, datos, token_payload.get("roles", []), token_payload.get("persona_id"),
+    )
+    return AsistenciaCorreccionResponseDTO(
+        asistencia=correccion.asistencia,
+        corregido_por_id=correccion.corregido_por_id,
+        corregido_por_nombre=correccion.corregido_por_nombre,
+        corregido_en=correccion.corregido_en,
+        motivo=correccion.motivo,
+        estado_anterior=correccion.estado_anterior,
+        justificativo_anterior=correccion.justificativo_anterior,
+        estado_justificativo_anterior=correccion.estado_justificativo_anterior,
     )
 
 
