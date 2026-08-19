@@ -273,10 +273,22 @@ describe("describeMembershipState", () => {
     });
   });
 
+  it("reads a SUSPENDIDA membership as suspended, never as expired", () => {
+    // Bug fix (issue #400, slice 06): SUSPENDIDA used to fall through to the
+    // generic "vencida" branch, which is misleading — a suspension (5a)
+    // never forfeits the coverage already paid for. `warn`, not `bad`: same
+    // "pending, not broken" reasoning INACTIVA already gets.
+    expect(describeMembershipState("SUSPENDIDA")).toEqual({
+      label: "Suspendida — cobertura vigente",
+      tone: "warn",
+      active: false,
+    });
+  });
+
   it("falls back to 'vencida' for any other estado the backend may add", () => {
     // Same fallback the carnet has always used — an unknown estado is never
     // reported as active.
-    expect(describeMembershipState("SUSPENDIDA").active).toBe(false);
+    expect(describeMembershipState("ALGO_NUEVO").active).toBe(false);
   });
 });
 

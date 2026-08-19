@@ -1374,6 +1374,53 @@ export async function registrarPago(data: RegistrarPagoInput): Promise<PagoPerso
   });
 }
 
+/**
+ * `CoberturaBonificadaResponseDTO` (backend cobertura_bonificada_schemas.py).
+ *
+ * What `aplicarBeneficio` grants: cobertura sin ningún `Pago` -- issue #400,
+ * slice 4d/06. Nested `asignacionDescuento` reuses `BeneficioAsignado` for
+ * the same reason `BeneficioAsignado.descuento` is nested: the screen that
+ * shows this needs to explain WITH WHICH benefit it was granted, without a
+ * second read.
+ */
+export interface CoberturaBonificada {
+  id: number;
+  membresiaId: number;
+  personaId: number;
+  asignacionDescuento: BeneficioAsignado;
+  tarifaMensualAplicada: string;
+  mesesComprados: number;
+  descuentoValorAplicado: string;
+  descuentoPorcentajeAplicado: string | null;
+  fechaInicio: string;
+  fechaFin: string;
+  otorgadaPorPersonaId: number;
+  otorgadaEn: string;
+}
+
+/**
+ * Apply the caller's active 100% benefit to a whole number of months, with
+ * no `Pago` created — `POST /api/membresias/:membresiaId/aplicar-beneficio`
+ * (issue #400, slice 06).
+ *
+ * Autoservicio: dueño o su representante, nunca un ADMINISTRADOR "por"
+ * ellos (`membresia_pago_servicio.aplicar_beneficio_bonificado`). No
+ * `tipoPago`, no voucher, no `monto` — a 100% benefit never creates a
+ * `Pago`, so there is nothing to collect. `meses` is the same whole-number
+ * month count `registrarPago` takes.
+ */
+export async function aplicarBeneficio(
+  membresiaId: number,
+  meses: number,
+): Promise<CoberturaBonificada> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<CoberturaBonificada>(apiEndpoint(`/membresias/${membresiaId}/aplicar-beneficio`), {
+    method: "POST",
+    body: JSON.stringify({ meses }),
+    headers: { "Content-Type": "application/json", ...mockHeaders },
+  });
+}
+
 /** Upload a payment voucher (comprobante) — `POST /api/membresias/pagos/{pagoId}/voucher`. */
 export async function subirVoucherPago(pagoId: number, archivo: File): Promise<PagoPersona> {
   const formData = new FormData();
@@ -1585,7 +1632,17 @@ export interface BeneficioAsignado {
   retiradoEn: string | null;
 }
 
-/** Admin-only: the persona's active club benefit, or `null` if none — `GET /api/personas/:id/beneficio`. */
+/**
+ * The persona's active club benefit, or `null` if none — `GET
+ * /api/personas/:id/beneficio`.
+ *
+ * No longer admin-only for this verb (issue #400, slice 06): the backend GET
+ * now also authorizes the persona's owner or their representative, so the
+ * student portal can show a benefit BEFORE the reader pays
+ * (`RenewPaymentForm` in `/student/payments`). `POST`/`DELETE` below stay
+ * admin-only — assigning/retiring a benefit is still exclusively the club's
+ * call.
+ */
 export async function fetchBeneficio(personaId: number): Promise<BeneficioAsignado | null> {
   return request<BeneficioAsignado | null>(apiEndpoint(`/personas/${personaId}/beneficio`), {
     method: "GET",

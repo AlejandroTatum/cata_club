@@ -5,11 +5,15 @@
  *
  * BFF proxy to FastAPI's:
  *   GET/POST/DELETE /personas/{persona_id}/beneficio
- * All three are ADMINISTRADOR-only in the backend (issue #398); the actor
+ * POST/DELETE are ADMINISTRADOR-only in the backend (issue #398); the actor
  * (`asignado_por`/`retirado_por`) is derived backend-side from the token,
- * never sent by this route. Backend refusals (403/404/400) are relayed with
- * their own message via `passthroughBackendError`, never flattened to a
- * generic 500.
+ * never sent by this route. GET was relaxed (issue #400, slice 06) to also
+ * allow the persona's owner or their representative — the student portal
+ * needs to show a benefit before the reader pays. This handler carries no
+ * role guard of its own for any of the three verbs: it forwards the caller's
+ * token and lets the backend decide, so the GET relaxation needed no change
+ * here. Backend refusals (403/404/400) are relayed with their own message
+ * via `passthroughBackendError`, never flattened to a generic 500.
  *
  * The three handlers share one shape — validate id, proxy, relay error,
  * refresh cookie — so `respondFromProxy` below is the single place that

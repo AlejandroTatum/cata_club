@@ -187,6 +187,45 @@ export function addMonthsIso(isoDate: string, months: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Total estimado antes de confirmar (issue #400, slice 06)
+// ---------------------------------------------------------------------------
+
+/**
+ * The total the checkpoint shows BEFORE the reader confirms — a client-side
+ * PREVIEW only, never sent to the backend as authoritative (it still only
+ * receives `meses`; the backend resolves the real total itself, applying
+ * whatever benefit is active at that exact moment). The real, final amount
+ * is `PagoPersona.monto` from the `registrarPago` response, shown after
+ * registration in the checkpoint's success toast and in the history.
+ *
+ * Only a PERCENTAGE benefit is factored in here (`beneficioPorcentaje`) — a
+ * fixed-amount (`monto`) discount is a second modality the catalog supports
+ * (see `DescuentoCatalogo`) that this preview does not attempt to reproduce
+ * client-side; the estimate simply falls back to the undiscounted sticker
+ * price in that case, same as when there is no active benefit at all.
+ *
+ * Rounded to the cent (`Math.round(... * 100) / 100`) so the display never
+ * shows a fraction of a cent — this is a preview, not the exact `Decimal`
+ * arithmetic `wholeMonthsFor`'s docstring cares about, so plain floating
+ * point rounded at the end is precise enough for what the reader compares
+ * it against (the real total, shown separately, after registering).
+ */
+export function estimateTotal(
+  monthlyPrice: number,
+  months: number,
+  beneficioPorcentaje: number | null,
+): number {
+  if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0) return 0;
+  if (!Number.isFinite(months) || months <= 0) return 0;
+
+  const sticker = monthlyPrice * months;
+  if (beneficioPorcentaje == null || !Number.isFinite(beneficioPorcentaje)) return sticker;
+
+  const factor = Math.min(1, Math.max(0, 1 - beneficioPorcentaje / 100));
+  return Math.round(sticker * factor * 100) / 100;
+}
+
+// ---------------------------------------------------------------------------
 // Counts
 // ---------------------------------------------------------------------------
 

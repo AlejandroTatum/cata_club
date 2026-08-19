@@ -10,6 +10,7 @@ import {
   wholeMonthsFor,
   addMonthsIso,
   describePagoDescuento,
+  estimateTotal,
   type PagoStatusFilter,
 } from "../payments-utils";
 import type { PagoPersona } from "@/services/api";
@@ -355,5 +356,34 @@ describe("describePagoDescuento", () => {
       porcentaje: "100%",
       montoFinal: "$0,00",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// estimateTotal (issue #400, slice 06)
+// ---------------------------------------------------------------------------
+
+describe("estimateTotal", () => {
+  it("is the sticker price when there is no active benefit", () => {
+    expect(estimateTotal(25, 2, null)).toBe(50);
+  });
+
+  it("applies a percentage benefit", () => {
+    expect(estimateTotal(35, 1, 50)).toBe(17.5);
+  });
+
+  it("rounds to the cent", () => {
+    // 33.33 repeating -- would show a fraction of a cent without rounding.
+    expect(estimateTotal(30, 1, 33.33)).toBe(20);
+  });
+
+  it("never goes negative even if the percentage is somehow over 100", () => {
+    expect(estimateTotal(30, 1, 150)).toBe(0);
+  });
+
+  it("falls back to the sticker price for a non-finite months or price", () => {
+    expect(estimateTotal(Number.NaN, 1, 50)).toBe(0);
+    expect(estimateTotal(30, 0, 50)).toBe(0);
+    expect(estimateTotal(30, -1, 50)).toBe(0);
   });
 });

@@ -82,12 +82,16 @@ const mockFetchStudentPortal = vi.fn();
 const mockFetchPagosDePersona = vi.fn();
 const mockSubirVoucherPago = vi.fn();
 const mockRegistrarPago = vi.fn();
+const mockFetchBeneficio = vi.fn();
+const mockAplicarBeneficio = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchStudentPortal: () => mockFetchStudentPortal(),
   fetchPagosDePersona: (...args: unknown[]) => mockFetchPagosDePersona(...args),
   subirVoucherPago: (...args: unknown[]) => mockSubirVoucherPago(...args),
   registrarPago: (...args: unknown[]) => mockRegistrarPago(...args),
+  fetchBeneficio: (...args: unknown[]) => mockFetchBeneficio(...args),
+  aplicarBeneficio: (...args: unknown[]) => mockAplicarBeneficio(...args),
 }));
 
 function authSession(role: "estudiante" | "representante" = "estudiante") {
@@ -211,7 +215,10 @@ beforeEach(() => {
   mockFetchStudentPortal.mockReset().mockResolvedValue(PORTAL);
   mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago()]);
   mockSubirVoucherPago.mockReset().mockResolvedValue(undefined);
-  mockRegistrarPago.mockReset().mockResolvedValue({ id: 99 });
+  mockRegistrarPago.mockReset().mockResolvedValue({ id: 99, monto: "25.00" });
+  // No active benefit by default — tests that care override this per-case.
+  mockFetchBeneficio.mockReset().mockResolvedValue(null);
+  mockAplicarBeneficio.mockReset().mockResolvedValue({ id: 1 });
 });
 
 afterEach(() => {
@@ -339,6 +346,111 @@ describe("StudentPaymentsPage — the membership card", () => {
     const card = await screen.findByTestId("membership-status");
     expect(within(card).getByText("$25,00")).toBeInTheDocument();
     expect(within(card).queryByText("$25.00")).not.toBeInTheDocument();
+  });
+
+  // Issue #400 (slice 06): SUSPENDIDA used to fall through to the generic
+  // "vencida" badge — misleading, since 5a's invariant is that a suspension
+  // never forfeits the coverage already paid for.
+  it("reads a SUSPENDIDA membership as suspended, never as expired", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, estado: "SUSPENDIDA" } },
+    });
+
+    render(<StudentPaymentsPage />);
+
+    const card = await screen.findByTestId("membership-status");
+    expect(within(card).getByText(/suspendida/i)).toBeInTheDocument();
+    expect(within(card).queryByText(/membresía vencida/i)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The socio could not know whether they had a discount before this slice —
+ * `GET /personas/{id}/beneficio` was ADMINISTRADOR-only (issue #398). These
+ * tests pin the relaxed read and the two shapes it drives: a partial benefit
+ * only informs the estimate, a 100% one replaces the payment form outright.
+ */
+describe("StudentPaymentsPage — the club's benefit, read before paying", () => {
+  const BENEFICIO_PARCIAL = {
+    id: 1,
+    personaId: 9,
+    descuento: { id: 2, nombre: "Beca deportiva", porcentaje: "50.00", monto: null, activo: true },
+    asignadoPorPersonaId: 1,
+    asignadoEn: "2026-07-01T00:00:00Z",
+    retiradoPorPersonaId: null,
+    retiradoEn: null,
+  };
+
+  const BENEFICIO_TOTAL = {
+    ...BENEFICIO_PARCIAL,
+    id: 2,
+    descuento: { id: 3, nombre: "Beca 100%", porcentaje: "100.00", monto: null, activo: true },
+  };
+
+  it("shows nothing when the persona has no active benefit", async () => {
+    render(<StudentPaymentsPage />);
+
+    await screen.findByTestId("membership-status");
+    expect(screen.queryByText(/su beneficio/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the benefit's percentage before the payment form, and folds it into the estimated total", async () => {
+    mockFetchBeneficio.mockReset().mockResolvedValue(BENEFICIO_PARCIAL);
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText(/su beneficio/i)).toBeInTheDocument();
+    expect(screen.getByText("50% OFF")).toBeInTheDocument();
+    expect(screen.getByText("Beca deportiva")).toBeInTheDocument();
+
+    // $25,00 a un mes, con 50% de beneficio = $12,50 estimado — el normal
+    // RenewPaymentForm sigue siendo el formulario (no es 100%).
+    fireEvent.click(screen.getByRole("button", { name: /registrar un pago/i }));
+    expect(await screen.findByText(/total estimado: \$12,50/i)).toBeInTheDocument();
+  });
+
+  it("replaces the payment form with ApplyBenefitForm when the benefit is 100%, with no monto or voucher field", async () => {
+    mockFetchBeneficio.mockReset().mockResolvedValue(BENEFICIO_TOTAL);
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText("100% OFF")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^registrar un pago$/i })).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /aplicar mi beneficio/i }));
+
+    expect(screen.queryByLabelText(/forma de pago/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("renew-voucher-input")).not.toBeInTheDocument();
+    expect(screen.getByText(/sin costo — el beneficio cubre el 100%/i)).toBeInTheDocument();
+  });
+
+  it("applies the benefit only after the checkpoint, sending meses and no monto/tipoPago", async () => {
+    mockFetchBeneficio.mockReset().mockResolvedValue(BENEFICIO_TOTAL);
+    mockAplicarBeneficio.mockReset().mockResolvedValue({
+      id: 9,
+      membresiaId: 3,
+      personaId: 9,
+      fechaInicio: COVERAGE_END,
+      fechaFin: RENEWAL_END,
+    });
+
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /aplicar mi beneficio/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^aplicar beneficio$/i }));
+
+    const confirm = await screen.findByTestId("benefit-confirm");
+    expect(within(confirm).getByText(/beneficio del 100%/i)).toBeInTheDocument();
+    expect(mockAplicarBeneficio).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /confirmar y aplicar/i }));
+
+    await waitFor(() => {
+      expect(mockAplicarBeneficio).toHaveBeenCalledWith(3, 1);
+    });
+    expect(mockShowSuccess).toHaveBeenCalledTimes(1);
+    const [message] = mockShowSuccess.mock.calls[0];
+    expect(message).toMatch(/cobertura activa/i);
   });
 });
 
@@ -469,16 +581,44 @@ describe("StudentPaymentsPage — registering a payment", () => {
     expect(screen.getByText(/1 mes a \$25,00 por mes/i)).toBeInTheDocument();
   });
 
-  it("refuses an amount that is not a whole number of months instead of silently truncating it", async () => {
+  // Issue #400 (slice 06): the free-form monto input (and the "must be a
+  // whole multiple of the monthly price" error it could produce) is gone.
+  // `MonthCountField` only ever holds a whole number of months, picked with
+  // +/- buttons, clamped to [1, 12] — the same bound `PagoCreateDTO.meses`
+  // enforces server-side.
+  it("lets the reader pick a whole number of months with +/- buttons instead of typing an amount", async () => {
     render(<StudentPaymentsPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "37.5" } });
 
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    expect(screen.getByText(/1 mes a \$25,00 por mes/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /un mes más/i }));
+
+    expect(await screen.findByText(/2 meses a \$25,00 por mes/i)).toBeInTheDocument();
     expect(
-      await screen.findByText(/el monto debe ser un múltiplo de \$25,00/i),
+      await screen.findByText(shownRange(COVERAGE_END, "2026-09-30")),
     ).toBeInTheDocument();
-    expect(mockRegistrarPago).not.toHaveBeenCalled();
+  });
+
+  it("clamps the month count between 1 and 12", async () => {
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+
+    expect(screen.getByRole("button", { name: /un mes menos/i })).toBeDisabled();
+
+    for (let i = 0; i < 11; i += 1) {
+      fireEvent.click(screen.getByRole("button", { name: /un mes más/i }));
+    }
+
+    expect(await screen.findByText(/12 meses a \$25,00 por mes/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /un mes más/i })).toBeDisabled();
+
+    // One more click past the ceiling does nothing.
+    fireEvent.click(screen.getByRole("button", { name: /un mes más/i }));
+    expect(screen.getByText(/12 meses a \$25,00 por mes/i)).toBeInTheDocument();
   });
 
   it("addresses the reader as usted — the portal is not voseo", async () => {

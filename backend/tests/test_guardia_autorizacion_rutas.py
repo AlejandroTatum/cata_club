@@ -154,6 +154,11 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/personas/buscar"),                                 # (a) - autocomplete, no PII sensible expuesta en el DTO
     ("GET", "/personas/{persona_id}"),                           # (b)
     ("GET", "/personas/{persona_id}/antecedentes-club"),         # (b)
+    # Issue #400 (slice 06): relajado de ADMINISTRADOR-only (issue #398) a
+    # dueño/representante/admin -- el socio necesita leer su propio beneficio
+    # ANTES de pagar. POST/DELETE (ver Balde 3) siguen ADMINISTRADOR-only sin
+    # cambios; solo esta lectura se movió.
+    ("GET", "/personas/{persona_id}/beneficio"),                 # (b)
     ("GET", "/personas/{persona_id}/representados"),             # (b)
     ("GET", "/ranking/notificaciones/mias"),                     # (b) - propio via `persona_id` del token
     ("PATCH", "/auth/me"),                                       # (b) - propio via `sub`
@@ -190,7 +195,8 @@ RUTAS_ROLES_REQUERIDOS = {
     # borrado duro destruía asistencias, pagos y ficha médica del ex-miembro.
     ("DELETE", "/personas/{persona_id}/roles/{tipo_rol}"): frozenset({"ADMINISTRADOR"}),
     # Issue #398: retirar el beneficio del club es ADMINISTRADOR-only, igual
-    # que asignarlo (ver sus hermanos GET/POST más abajo).
+    # que asignarlo (ver su hermano POST más abajo). El GET vecino se relajó
+    # en el issue #400 (slice 06, ver Balde 2) -- POST/DELETE no cambiaron.
     ("DELETE", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/asistencias/horarios/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
@@ -238,10 +244,6 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/personas/"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo/pdf"): frozenset({"ADMINISTRADOR"}),
-    # Issue #398: leer el beneficio vigente de una persona es tan sensible
-    # como asignarlo (expone qué descuento y quién lo concedió) -- mismo rol
-    # que sus hermanos POST/DELETE, no "cualquier autenticado".
-    ("GET", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/membresias/pagos/{pago_id}/validar"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
