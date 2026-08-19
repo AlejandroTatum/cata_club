@@ -31,7 +31,6 @@ import {
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { useToast } from "@/contexts/ToastContext";
-import MotivoObligatorioField from "@/components/admin/MotivoObligatorioField";
 import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
 
 interface PagoCorreccionSectionProps {
@@ -238,11 +237,14 @@ export default function PagoCorreccionSection({
                   />
                 </div>
 
-                <MotivoObligatorioField
+                <CampoFormularioAdmin
+                  label="Motivo (obligatorio)"
+                  type="textarea"
                   value={form.motivo}
                   onChange={(v) => setForm((f) => ({ ...f, motivo: v }))}
                   placeholder="Por qué se corrige (p. ej. error de tipeo, descuento mal aplicado)"
                   labelClassName="mt-2 block text-2xs text-ink-3"
+                  required
                 />
 
                 {submitError && <p className="mt-2 text-2xs text-state-bad">{submitError}</p>}

@@ -126,6 +126,7 @@ import {
   FilterPill,
   LoadingState,
   Pagination,
+  ResponsiveList,
   SearchInput,
   Table,
   TableBody,
@@ -1107,10 +1108,12 @@ export default function PaymentsPage(): React.ReactElement {
         )}
 
         {!visibleLoading && !visibleError && visibleItems.length > 0 && (
-          <>
-            <div className="card overflow-hidden">
-            {/* Desktop: the five columns that carry a decision. */}
-            <div data-testid="payments-table" className="hidden overflow-x-auto md:block">
+          <ResponsiveList
+            breakpoint="md"
+            order="tableFirst"
+            tableTestId="payments-table"
+            cardsTestId="payments-cards"
+            table={
               <Table>
                 <TableHead>
                   <TableRow>
@@ -1146,49 +1149,45 @@ export default function PaymentsPage(): React.ReactElement {
                   })}
                 </TableBody>
               </Table>
-            </div>
-
-            {/* Mobile: the same rows as cards, like members already does. */}
-            <ul data-testid="payments-cards" className="divide-y divide-line md:hidden">
-              {visibleItems.map((req) => {
-                const mobileNameId = `payment-name-mobile-${req.id}`;
-                const fields = buildRowFields(req);
-                return (
-                <li key={req.id} className="flex flex-col gap-3 p-4">
-                  <div className="min-w-0">
-                    <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
-                      {fields.studentName}
-                    </p>
-                    <p className="truncate text-2xs tracking-flat text-ink-3">{fields.payer}</p>
-                  </div>
-                  <p className="text-xs text-ink-2">
-                    {fields.period} · {fields.method}
+            }
+            cards={visibleItems.map((req) => {
+              const mobileNameId = `payment-name-mobile-${req.id}`;
+              const fields = buildRowFields(req);
+              return (
+              <li key={req.id} className="flex flex-col gap-3 p-4">
+                <div className="min-w-0">
+                  <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
+                    {fields.studentName}
                   </p>
-                  <div className="flex items-center justify-between gap-3">
-                    <DataBox variant="numeric">{fields.amount}</DataBox>
-                    <div className="flex flex-wrap items-center justify-end gap-1.5">
-                      {renderRowActions(req)}
-                    </div>
+                  <p className="truncate text-2xs tracking-flat text-ink-3">{fields.payer}</p>
+                </div>
+                <p className="text-xs text-ink-2">
+                  {fields.period} · {fields.method}
+                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <DataBox variant="numeric">{fields.amount}</DataBox>
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    {renderRowActions(req)}
                   </div>
-                </li>
-                );
-              })}
-            </ul>
-
-            {totalPages > 1 && (
-              <Pagination
-                variant="footer"
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                totalItems={visibleTotal}
-                pageSize={PAYMENTS_PAGE_SIZE}
-                itemNoun="solicitud"
-                itemNounPlural="solicitudes"
-              />
-            )}
-            </div>
-          </>
+                </div>
+              </li>
+              );
+            })}
+            pagination={
+              totalPages > 1 && (
+                <Pagination
+                  variant="footer"
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                  totalItems={visibleTotal}
+                  pageSize={PAYMENTS_PAGE_SIZE}
+                  itemNoun="solicitud"
+                  itemNounPlural="solicitudes"
+                />
+              )
+            }
+          />
         )}
       </>
     );

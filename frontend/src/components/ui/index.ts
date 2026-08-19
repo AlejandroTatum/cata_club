@@ -55,6 +55,18 @@ export type { PageHeaderProps } from "./PageHeader";
 export { default as ResponsiveListTable } from "./ResponsiveListTable";
 export type { ResponsiveListTableProps } from "./ResponsiveListTable";
 
+// `ResponsiveList` (issue #400) is a separate, deliberately distinct sibling of
+// `ResponsiveListTable` above — not a duplicate to collapse into it. It needs a
+// configurable breakpoint (`/payments` splits at `md`, `ResponsiveListTable`'s
+// `/members`+`/discounts` callers split at a fixed `sm`) and a configurable DOM
+// order (`order: "cardsFirst" | "tableFirst"`) that `ResponsiveListTable` doesn't
+// expose — `/payments`' `document.querySelector`-based focus restore depends on
+// which of the two renderings is first in the DOM, a real regression this
+// project's own history caught. Unifying them would either force a breakpoint/
+// order change onto `ResponsiveListTable`'s existing callers or silently drop
+// `/payments`' focus behavior — follow-up, not a merge-time call.
+export { default as ResponsiveList } from "./ResponsiveList";
+
 export { default as SearchInput } from "./SearchInput";
 export type { SearchInputProps } from "./SearchInput";
 

@@ -26,7 +26,6 @@ import { fetchMembresiaDeuda, regularizarDeuda } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
-import MotivoObligatorioField from "@/components/admin/MotivoObligatorioField";
 import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
 
 interface RegularizarDeudaFormProps {
@@ -227,11 +226,14 @@ export default function RegularizarDeudaForm({
             </p>
           )}
 
-          <MotivoObligatorioField
+          <CampoFormularioAdmin
+            label="Motivo (obligatorio)"
+            type="textarea"
             value={motivo}
             onChange={setMotivo}
             placeholder="Por qué se regulariza (p. ej. demora del club, acuerdo con el socio)"
             labelClassName="mt-2 block text-2xs text-ink-3"
+            required
           />
 
           {error && <p className="mt-2 text-2xs text-cata-red">{error}</p>}
