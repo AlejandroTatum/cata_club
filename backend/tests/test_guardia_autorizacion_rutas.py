@@ -113,6 +113,8 @@ RUTAS_PUBLICAS = {
                                # alguno mas alla del estado up/down de cada
                                # dependencia.
     ("GET", "/personas/instituciones"),
+    ("GET", "/membresias/tarifas"),  # issue #394/#331: mitad pública del catálogo
+                                      # de tarifas, misma clase que /personas/instituciones.
     ("POST", "/auth/login"),
     ("POST", "/auth/recuperar-contrasenia"),
     ("POST", "/auth/refresh"),
