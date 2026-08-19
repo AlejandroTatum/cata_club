@@ -67,6 +67,7 @@ import {
   suspenderMembresia,
   reactivarMembresia,
   cambiarPlanMembresia,
+  aplicarBeneficio,
 } from "../api";
 
 const API_ROOT = path.resolve(
@@ -215,6 +216,10 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     ["suspenderMembresia", () => suspenderMembresia(3, { motivo: "Ausencia" })],
     ["reactivarMembresia", () => reactivarMembresia(3, { motivo: "Regresa" })],
     ["cambiarPlanMembresia", () => cambiarPlanMembresia(3, 5)],
+    // Issue #400 (entrega 06): aplicarBeneficio was the one new function of
+    // 05b/06/07 missing from this list — same 404-blind-spot risk as the six
+    // above if its route directory ever moved or was renamed.
+    ["aplicarBeneficio", () => aplicarBeneficio(3, 1)],
   ];
 
   it.each(CASES)("%s targets an existing route handler", async (_name, call) => {
