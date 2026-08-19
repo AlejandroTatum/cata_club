@@ -2,6 +2,7 @@ import re
 import unicodedata
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
@@ -467,9 +468,31 @@ class AsistenciaServicio:
         self.repo_sesion.obtener_o_crear_cerrada(
             datos.horario_id, datos.fecha_entrenamiento, persona_id_solicitante,
         )
-        return self.repo.crear(
-            Asistencia(**datos.model_dump(), registrado_por_id=persona_id_solicitante)
-        )
+        try:
+            return self.repo.crear(
+                Asistencia(**datos.model_dump(), registrado_por_id=persona_id_solicitante)
+            )
+        except IntegrityError:
+            # Carrera real (no solo teórica): dos requests para la MISMA
+            # persona pueden pasar ambas el `if existente` de arriba antes
+            # de que cualquiera commitee -- el chequeo de más arriba es
+            # check-then-act, no atómico. `uq_asistencia_persona_horario_fecha`
+            # (migración de este mismo slice) es quien realmente lo impide;
+            # acá solo traducimos su violación al mismo rechazo legible que
+            # ya usa el camino no-concurrente.
+            self.repo.db.rollback()
+            raise OperacionInvalida(
+                f"La asistencia de {persona.nombres} {persona.apellidos} para el "
+                f"{datos.fecha_entrenamiento.isoformat()} ya fue registrada. Esa "
+                "lista quedó cerrada de forma permanente y no puede volver a "
+                "tomarse.",
+                detalle_tecnico=(
+                    f"choque de unique en insercion concurrente: horario_id="
+                    f"{datos.horario_id} fecha_entrenamiento="
+                    f"{datos.fecha_entrenamiento.isoformat()} persona_id="
+                    f"{datos.persona_id}"
+                ),
+            ) from None
 
     def historial_por_persona(
         self, persona_id: int, skip: int = 0, limit: Optional[int] = None
