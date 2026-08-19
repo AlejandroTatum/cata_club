@@ -12,7 +12,7 @@ import {
   Star,
 } from "lucide-react";
 import LandingMap from "./LandingMap";
-import LandingMotion from "./LandingMotion";
+import LandingMotionLoader from "./LandingMotionLoader";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { buildLandingStats, landingConfig, toWhatsAppLink, type LandingSchedule } from "./landing-config";
 import { GALLERY_PHOTOS, slideSizes } from "./landing-gallery";
@@ -325,7 +325,7 @@ export default function LandingPage(): React.ReactElement {
   return (
     <div className="landing-page">
       <a className="landing-skip-link" href="#inicio">Saltar al contenido</a>
-      <LandingMotion />
+      <LandingMotionLoader />
       <Navbar />
       {/*
        * The landmark opens at `Hero`, which is what `#inicio` — the skip link's
