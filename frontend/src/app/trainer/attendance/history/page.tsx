@@ -89,7 +89,9 @@ import { summarizePeriodCoverage } from "./history-utils";
 /** Sessions per page. */
 const PAGE_SIZE = 10;
 
-/** Corregir solo admite sesiones con hasta 30 días de antigüedad (issue #262). */
+/** Corregir solo admite sesiones con hasta 30 días de antigüedad — mismo
+ *  tope que el backend impone en `PATCH /asistencias/{id}/corregir`
+ *  (`LIMITE_CORRECCION_ASISTENCIA_DIAS`, issue #389). */
 const LIMITE_CORRECCION_DIAS = 30;
 
 /**
@@ -99,6 +101,12 @@ const LIMITE_CORRECCION_DIAS = 30;
  * the single owner of its own address — the parameter names and the step
  * vocabulary ("lista") live in one module, and this screen cannot drift out
  * of sync with the page it links into.
+ *
+ * The roster it lands on is read-only for everyone now (issue #389, slice 3)
+ * — what actually corrects a row is that slice's per-student "Corregir"
+ * button on that same roster (slice 4b), not this link by itself. This link
+ * is only the entry point: it still has to land on the right session before
+ * an admin can reach that button.
  */
 function buildCorrectionHref(session: SessionSummary): string {
   return `/trainer/attendance${buildWizardQuery(session.horarioId, session.fecha, "mark-attendance")}`;
@@ -110,9 +118,10 @@ function buildCorrectionHref(session: SessionSummary): string {
  * Antes, pasados los 30 días, la celda quedaba vacía: el vencimiento se veía
  * exactamente igual que un error de carga, y el administrador no podía
  * distinguir "esta sesión ya no se corrige" de "algo se rompió". La regla no
- * cambió — sigue siendo la ventana de `LIMITE_CORRECCION_DIAS` atada al ciclo
- * de cobro (issue #262) — lo que cambió es que ahora se nombra en vez de
- * borrarse, el mismo criterio que #312: un control bloqueado dice por qué.
+ * cambió — sigue siendo la ventana de `LIMITE_CORRECCION_DIAS`, la misma que
+ * el backend re-verifica en `PATCH /asistencias/{id}/corregir` (issue #389)
+ * — lo que cambió es que ahora se nombra en vez de borrarse, el mismo
+ * criterio que #312: un control bloqueado dice por qué.
  */
 const MOTIVO_CORRECCION_VENCIDA =
   "La ventana de corrección de 30 días ya cerró para esta sesión.";

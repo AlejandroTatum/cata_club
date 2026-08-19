@@ -113,8 +113,9 @@ const RECORDS: AttendanceRecord[] = [
   record("justified", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00", 7),
 ];
 
-// Fixed "today" for the clock-dependent correction gate (issue #262): without
-// this pin the 30-day window shifts with whatever day the CI happens to run on.
+// Fixed "today" for the clock-dependent correction gate (issue #389, the
+// window the backend re-verifies in `PATCH /asistencias/{id}/corregir`):
+// without this pin the 30-day window shifts with whatever day CI runs on.
 // The existing fixtures (2026-07-17/20) fall inside the window; 2026-07-15 is
 // one day past the 30-day cut-off (2026-07-16).
 const TODAY_IN_CLUB_TIME = new Date("2026-08-15T15:00:00Z");
@@ -258,8 +259,9 @@ describe("TrainerAttendanceHistoryPage", () => {
    * Este test afirmaba lo contrario -- que pasados los 30 días no hubiera
    * acción alguna -- y por eso el vencimiento se veía igual que un error de
    * carga: el administrador no podía distinguir "esta sesión ya no se corrige"
-   * de "algo se rompió". La ventana de 30 días (issue #262) no se toca; lo que
-   * cambia es que ahora se NOMBRA.
+   * de "algo se rompió". La ventana de 30 días no se toca -- es el mismo tope
+   * que el backend re-verifica hoy en `PATCH /asistencias/{id}/corregir`
+   * (issue #389) --; lo que cambia es que ahora se NOMBRA.
    *
    * Un `<Link>` deshabilitado no existe en HTML, así que la acción vencida deja
    * de ser un ancla y pasa a ser un `<button disabled>` con el motivo colgado
