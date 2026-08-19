@@ -120,7 +120,7 @@ async function mockCorrectionRuntime(page: Page): Promise<CorrectionRuntime> {
   return { postedBatches };
 }
 
-test("Corregir opens that session's roll call and files the fix on its own date", async ({ page }) => {
+test("Corregir opens that session's roll call, now read-only for admin too (issue #389)", async ({ page }) => {
   const runtime = await mockCorrectionRuntime(page);
 
   await page.goto("/trainer/attendance/history");
@@ -138,28 +138,20 @@ test("Corregir opens that session's roll call and files the fix on its own date"
 
   // The marks already filed for THAT day are on screen — proof the wizard
   // asked the API for the corrected session and not for today.
-  const stateGroup = page.getByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
-  await expect(stateGroup.getByRole("radio", { name: "Ausente", exact: true })).toHaveAttribute(
-    "aria-checked",
-    "true",
-  );
+  await expect(page.getByText("Ana López")).toBeVisible();
+  await expect(page.getByText("Ausente", { exact: true }).first()).toBeVisible();
 
-  // Correct it, and file. The advance button stopped sharing the "Siguiente"
-  // label with the removed paginator in #332; it is "Revisar y confirmar".
-  await stateGroup.getByRole("radio", { name: "Presente", exact: true }).click();
-  await page.getByRole("button", { name: "Revisar y confirmar" }).click();
-  // Sentence case, not Title Case: the redesign normalised the product's copy
-  // and these two strings came along. Written case-insensitively so the next
-  // copy pass moves the words without moving the test.
-  await page.getByRole("button", { name: /confirmar asistencia/i }).click();
-  await expect(page.getByText(/asistencia registrada/i).first()).toBeVisible();
+  // Issue #389: closing a session is now permanent for EVERY role, admin
+  // included. This link used to land on an EDITABLE roster an admin could
+  // resubmit (issue #95's original "Corregir" mechanism) — that mechanism
+  // was removed on purpose. Today it's a dead end that at least tells the
+  // truth: read-only, no radios, no way to resubmit from here. A working
+  // "Corregir" (motivo + traza, PATCH /asistencias/{id}/corregir) is a
+  // dedicated door on this same screen, not this wizard — see the tracker
+  // for issue #389's follow-up slice.
+  await expect(page.getByText("Esta lista ya fue registrada.")).toBeVisible();
+  await expect(page.getByRole("radiogroup")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
 
-  expect(runtime.postedBatches).toHaveLength(1);
-  expect(runtime.postedBatches[0]).toMatchObject({
-    horarioId: HORARIO_ID,
-    // The whole point. On the default this would be 2026-07-22 and the
-    // session the trainer meant to fix would still be wrong.
-    fechaEntrenamiento: SESSION_DATE,
-    students: [{ personaId: 9, estado: "present" }],
-  });
+  expect(runtime.postedBatches).toHaveLength(0);
 });
