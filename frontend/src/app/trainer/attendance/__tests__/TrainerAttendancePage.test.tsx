@@ -1835,6 +1835,43 @@ describe("TrainerAttendancePage — la corrección por fila (issue #389)", () =>
     expect(entries[0]).toHaveTextContent("Segunda corrección");
     expect(entries[1]).toHaveTextContent("Primera corrección");
   });
+
+  it("no pide confirmar la salida después de una corrección ya guardada", async () => {
+    // `hasUnsavedMarks` diffea `students` contra `serverRosterRef.current`
+    // (issue #335) -- si `handleRowCorrected` solo actualizara `students` y
+    // no la ref, esta pantalla mentiría "hay cambios sin guardar" sobre una
+    // fila que el backend ya confirmó. Candado directo de esa invariante,
+    // no solo lectura de código.
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+    mockCorrectAttendance.mockResolvedValue({
+      asistencia: {
+        id: "9001", fecha: "2026-07-21", horario: "Martes 18:00 — 19:00", horarioId: 12,
+        personaId: 100, estudiante: "Student 01", estado: "present",
+      },
+      corregidoPorId: 1,
+      corregidoPorNombre: "Admin User",
+      corregidoEn: "2026-08-18T12:00:00Z",
+      motivo: "Se confirmó presencia con el profesor.",
+      estadoAnterior: "absent",
+    });
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Corregir" }));
+    fireEvent.click(within(row).getByRole("radio", { name: "Presente" }));
+    fireEvent.change(within(row).getByPlaceholderText("Por qué se corrige este registro"), {
+      target: { value: "Se confirmó presencia con el profesor." },
+    });
+    fireEvent.click(within(row).getByRole("button", { name: "Guardar corrección" }));
+    await within(row).findByText("Presente");
+
+    // `handleLeaveWizard` solo llama a `preventDefault` + abre el diálogo
+    // cuando `hasUnsavedMarks` es true; si la ref quedó al día, el click cae
+    // en la navegación normal del link y el diálogo nunca se monta.
+    fireEvent.click(screen.getByRole("link", { name: /volver/i }));
+
+    expect(screen.queryByText("¿Salir sin registrar la asistencia?")).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
