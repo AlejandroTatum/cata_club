@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
@@ -18,26 +19,55 @@ vi.mock("@/app/landing/LandingMap", (): { default: () => React.ReactElement } =>
   default: (): React.ReactElement => <div aria-label="Mapa de ubicación de Cata Club" />,
 }));
 
+// `LandingMotion` (GSAP + Lenis) must load as a deferred, mockable module
+// boundary rather than a plain synchronous import — that boundary is what the
+// "progressive motion enhancement" suite below proves. `motionMount` fires
+// exactly when the real component function runs, whether that happens inside
+// a synchronous render (today) or only after a deferred `import()` resolves
+// (once `LandingMotionLoader` exists).
+const { motionMount } = vi.hoisted((): { motionMount: ReturnType<typeof vi.fn> } => ({
+  motionMount: vi.fn(),
+}));
+
+vi.mock("@/app/landing/LandingMotion", (): { default: () => null } => ({
+  default: (): null => {
+    motionMount();
+    return null;
+  },
+}));
+
+interface MockedMediaQueryList extends MediaQueryList {
+  addEventListener: ReturnType<typeof vi.fn>;
+  removeEventListener: ReturnType<typeof vi.fn>;
+}
+
 describe("LandingPage", (): void => {
   let reducedMotion = true;
+  let matchMediaCalls: MockedMediaQueryList[] = [];
 
   beforeEach((): void => {
     reducedMotion = true;
+    matchMediaCalls = [];
+    motionMount.mockClear();
     vi.stubGlobal("ResizeObserver", class {
       observe(): void {}
       unobserve(): void {}
       disconnect(): void {}
     });
-    vi.stubGlobal("matchMedia", vi.fn((query: string): MediaQueryList => ({
-      matches: query === "(prefers-reduced-motion: reduce)" ? reducedMotion : !reducedMotion,
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })));
+    vi.stubGlobal("matchMedia", vi.fn((query: string): MockedMediaQueryList => {
+      const mql: MockedMediaQueryList = {
+        matches: query === "(prefers-reduced-motion: reduce)" ? reducedMotion : !reducedMotion,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      };
+      matchMediaCalls.push(mql);
+      return mql;
+    }));
   });
 
   afterEach((): void => {
@@ -317,6 +347,114 @@ describe("LandingPage", (): void => {
     screen.getAllByTestId("motion-section").forEach((section): void => {
       expect(section).not.toHaveAttribute("aria-hidden", "true");
       expect(section).not.toHaveStyle({ opacity: "0" });
+    });
+  });
+
+  /**
+   * GSAP, its plugins, and Lenis must not sit on the landing's critical path
+   * (issue #341): `LandingMotion` is a client boundary that only downloads
+   * once the server-rendered page has already painted, and never at all when
+   * the visitor prefers reduced motion — the server output already is that
+   * reduced-motion end state (see `landing.css`: `[data-reveal]`,
+   * `[data-split]`, `[data-hero-parallax]`, `[data-media-reveal]`, and
+   * `[data-rule]` carry no hidden-by-default rule).
+   */
+  describe("progressive motion enhancement", (): void => {
+    it("keeps the motion runtime out of the synchronous server render", (): void => {
+      render(<LandingPage />);
+
+      expect(motionMount).not.toHaveBeenCalled();
+      // The content that must not wait on GSAP/Lenis is already there.
+      expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+      expect(screen.getAllByRole("link", { name: /inscr/i }).length).toBeGreaterThan(0);
+      expect(document.querySelectorAll(".landing-slide")).toHaveLength(GALLERY_PHOTOS.length);
+    });
+
+    it("loads the motion runtime once the visitor does not prefer reduced motion", async (): Promise<void> => {
+      reducedMotion = false;
+
+      render(<LandingPage />);
+
+      await waitFor((): void => {
+        expect(motionMount).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("never imports the motion runtime when reduced motion is preferred", async (): Promise<void> => {
+      reducedMotion = true;
+
+      render(<LandingPage />);
+
+      // Give any pending microtask an eager import would have scheduled a
+      // bounded window to resolve — `waitFor` polls inside `act()`, so this
+      // stays consistent with how React itself flushes updates — then
+      // confirm it still never fired.
+      await expect(
+        waitFor((): void => { expect(motionMount).toHaveBeenCalled(); }, { timeout: 75 }),
+      ).rejects.toThrow();
+      expect(motionMount).not.toHaveBeenCalled();
+    });
+
+    it("removes its reduced-motion listener on unmount so a remount cannot double it up", async (): Promise<void> => {
+      reducedMotion = false;
+
+      const { unmount } = render(<LandingPage />);
+      await waitFor((): void => {
+        expect(motionMount).toHaveBeenCalledTimes(1);
+      });
+
+      const mql = matchMediaCalls.find((entry): boolean => entry.media === "(prefers-reduced-motion: reduce)");
+      expect(mql).toBeDefined();
+      expect(mql?.addEventListener).toHaveBeenCalledTimes(1);
+      expect(mql?.addEventListener.mock.calls[0][0]).toBe("change");
+      expect(mql?.removeEventListener).not.toHaveBeenCalled();
+
+      unmount();
+
+      expect(mql?.removeEventListener).toHaveBeenCalledTimes(1);
+      expect(mql?.removeEventListener.mock.calls[0][1]).toBe(mql?.addEventListener.mock.calls[0][1]);
+    });
+
+    it("leaves a usable static page when the deferred motion import fails", async (): Promise<void> => {
+      reducedMotion = false;
+      const consoleError = vi.spyOn(console, "error").mockImplementation((): void => {});
+      vi.resetModules();
+      vi.doMock("@/app/landing/LandingMotion", (): never => {
+        throw new Error("chunk load failed");
+      });
+
+      try {
+        const { default: FreshLandingPage } = await import("@/app/landing/LandingPage");
+        render(<FreshLandingPage />);
+
+        await waitFor((): void => {
+          expect(consoleError).toHaveBeenCalled();
+        });
+        expect(screen.getAllByRole("link", { name: /inscr/i }).length).toBeGreaterThan(0);
+        expect(document.querySelectorAll(".landing-slide")).toHaveLength(GALLERY_PHOTOS.length);
+      } finally {
+        consoleError.mockRestore();
+        vi.doUnmock("@/app/landing/LandingMotion");
+        vi.resetModules();
+      }
+    });
+
+    /**
+     * Simulates JavaScript never running at all: `renderToStaticMarkup` never
+     * commits, so no `useEffect` fires and no client bundle is evaluated —
+     * this is the actual server output a visitor with JS disabled receives.
+     */
+    it("renders every key section from pure server output, with no client bundle involved", (): void => {
+      const html = renderToStaticMarkup(<LandingPage />);
+
+      expect(html).toMatch(/FORMANDO/);
+      expect(html).toContain("Misión y Visión");
+      expect(html).toContain("Horarios");
+      expect(html).toContain(landingConfig.contact.hours);
+      GALLERY_PHOTOS.forEach((photo): void => {
+        expect(html).toContain(photo.caption);
+      });
+      expect(motionMount).not.toHaveBeenCalled();
     });
   });
 });
