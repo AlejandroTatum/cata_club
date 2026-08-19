@@ -71,6 +71,22 @@ export interface MemberStudentSummary {
      * the backend omits it.
      */
     esGratuidadFamiliar?: boolean;
+    /**
+     * Issue #326: derived overdue months for a VENCIDA membership, from the
+     * bulk debt endpoint (`GET /membresias/deuda/bulk`, admin-only) resolved
+     * server-side in `src/app/api/members/route.ts`. Optional and omitted
+     * (never fabricated as zero) when the membership isn't `"vencida"` or
+     * the bulk lookup didn't resolve it (best-effort, same degrade as
+     * `sinDatosEmergencia`'s ficha-médica lookup).
+     */
+    mesesAdeudados?: number;
+    /**
+     * `mesesAdeudados * montoMensual` — pure presentation arithmetic done in
+     * `members-adapter.ts` on two numbers the backend already computed
+     * (never a reimplementation of the day-15/16 debt formula, which stays
+     * backend-only). Same optionality/omission rule as `mesesAdeudados`.
+     */
+    montoAdeudado?: number;
   } | null;
   ultimoPago: {
     estado: PaymentStatus;

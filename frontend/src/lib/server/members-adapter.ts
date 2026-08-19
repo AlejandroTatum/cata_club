@@ -58,6 +58,19 @@ import type { BackendPagoListItem } from "@/lib/server/payments-adapter";
 // Backend DTO shapes (camelCase, as received from FastAPI)
 // ---------------------------------------------------------------------------
 
+/**
+ * Issue #326: one row of `GET /membresias/deuda/bulk`'s response
+ * (`DeudaMembresiaBulkItemDTO`, camelCase via `ResponseBase`) — resolved
+ * server-side in `src/app/api/members/route.ts` and passed in here keyed by
+ * `membresiaId`. Only `mesesAdeudados`/`montoMensual` are needed here — the
+ * route keeps the raw `membresiaId`/`ultimaCoberturaFin` fields for its own
+ * bookkeeping, this adapter only multiplies.
+ */
+export interface DeudaBulkItem {
+  mesesAdeudados: number;
+  montoMensual: number;
+}
+
 /** Fields of `PersonaResponseDTO` this feature needs. */
 export interface BackendPersonaFull {
   id: number;
@@ -101,24 +114,52 @@ function buildMembershipTypeLabel(tipo: BackendTipoMembresia | undefined): strin
   return tipo ? tipo.categoria : "Sin tipo";
 }
 
+/**
+ * Which `BackendMembresia` (if any) is displayed for a persona — the payment
+ * chain first (also supplies the paid period), `membresiaByPersona` as
+ * fallback for a membership with zero Pago rows. Exported so
+ * `src/app/api/members/route.ts` can compute the exact set of VENCIDA
+ * membresiaIds actually rendered (issue #326, the bulk debt lookup) without
+ * duplicating this resolution rule — two independent implementations of
+ * "which membership is this persona's" is exactly the kind of drift the
+ * backend's `_fecha_fin_maxima_combinada` docstring warns about.
+ *
+ * A membership does not require a payment to exist. Three personas in the
+ * current data hold an ACTIVA membresía with zero Pago rows — Ana García is
+ * one — and resolving membership ONLY through the latest payment made this
+ * screen show them as having none, while their own student portal said
+ * "Membresía activa".
+ */
+export function resolveMembresiaParaPersona(
+  personaId: number,
+  pago: BackendPagoListItem | undefined,
+  membresiaById: Map<number, BackendMembresia>,
+  membresiaByPersona: Map<number, BackendMembresia>,
+): BackendMembresia | undefined {
+  return (pago ? membresiaById.get(pago.membresiaId) : undefined) ?? membresiaByPersona.get(personaId);
+}
+
 function buildMemberStudentSummary(
   persona: BackendPersonaFull,
   pago: BackendPagoListItem | undefined,
   membresiaById: Map<number, BackendMembresia>,
   membresiaByPersona: Map<number, BackendMembresia>,
   tipoById: Map<number, BackendTipoMembresia>,
+  deudaByMembresiaId: Map<number, DeudaBulkItem>,
 ): MemberStudentSummary {
-  /*
-   * A membership does not require a payment to exist. Three personas in the
-   * current data hold an ACTIVA membresía with zero Pago rows — Ana García is
-   * one — and resolving membership ONLY through the latest payment made this
-   * screen show them as having none, while their own student portal said
-   * "Membresía activa". So the payment chain is the primary source (it also
-   * supplies the paid period), and `membresiaByPersona` is the fallback.
-   */
-  const membresia =
-    (pago ? membresiaById.get(pago.membresiaId) : undefined) ?? membresiaByPersona.get(persona.id);
+  const membresia = resolveMembresiaParaPersona(persona.id, pago, membresiaById, membresiaByPersona);
   const tipo = membresia ? tipoById.get(membresia.tipoMembresiaId) : undefined;
+
+  /*
+   * Issue #326: overdue amount + months, VENCIDA memberships only. The
+   * multiplication (`mesesAdeudados * montoMensual`) is pure presentation
+   * arithmetic on two numbers the backend already computed — see the
+   * module's DeudaBulkItem doc comment; the day-15/16 debt formula itself
+   * never runs here. Omitted (not fabricated as zero) when the bulk lookup
+   * didn't resolve this membresiaId — same degrade-gracefully convention as
+   * `sinDatosEmergencia`'s ficha-médica lookup below.
+   */
+  const deuda = membresia?.estado === "VENCIDA" ? deudaByMembresiaId.get(membresia.id) : undefined;
 
   return {
     id: String(persona.id),
@@ -150,6 +191,9 @@ function buildMemberStudentSummary(
           // interface's doc comment (payments-adapter.ts) for why an older
           // backend omitting it must resolve to "no gratuity" here.
           esGratuidadFamiliar: membresia.esGratuidadFamiliar ?? false,
+          ...(deuda
+            ? { mesesAdeudados: deuda.mesesAdeudados, montoAdeudado: deuda.mesesAdeudados * deuda.montoMensual }
+            : {}),
         }
       : null,
     ultimoPago: pago
@@ -182,6 +226,10 @@ function buildMemberStudentSummary(
  *   set) so existing fixtures/tests that don't care about the emergency-data
  *   gap don't need to thread it through — every row simply reads
  *   `sinDatosEmergencia: false` until it's supplied.
+ * @param deudaByMembresiaId — issue #326: `GET /membresias/deuda/bulk`
+ *   results keyed by `membresiaId`. Optional (defaults to an empty map) —
+ *   only read for a VENCIDA membership, and only ever adds the two owed-debt
+ *   fields, so omitting it changes nothing for existing callers/fixtures.
  */
 export function buildMemberAccounts(
   personas: BackendPersonaFull[],
@@ -190,6 +238,7 @@ export function buildMemberAccounts(
   membresiaByPersona: Map<number, BackendMembresia>,
   tipoById: Map<number, BackendTipoMembresia>,
   personaIdsConFicha: Set<number> = new Set(),
+  deudaByMembresiaId: Map<number, DeudaBulkItem> = new Map(),
 ): MemberAccount[] {
   const personaById = new Map<number, BackendPersonaFull>(
     personas.map((persona) => [persona.id, persona]),
@@ -226,6 +275,7 @@ export function buildMemberAccounts(
           membresiaById,
           membresiaByPersona,
           tipoById,
+          deudaByMembresiaId,
         ),
       ],
     };
