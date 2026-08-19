@@ -12,6 +12,7 @@
 import type { EstadoAsistencia } from "@/types/domain";
 import type { AlumnoHorario, AttendanceStudentMark } from "@/services/api";
 import type { AttendanceRecord } from "@/app/attendance/attendance-utils";
+import { calendarIsoDate, clubToday } from "@/lib/club-date";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -74,6 +75,20 @@ export interface SessionStudent {
    * it reads as "not reviewed", which is the safe interpretation.
    */
   reviewed?: boolean;
+  /**
+   * The real `Asistencia` row id for this student's session, when one
+   * exists — `null`/absent when the student has no filed record yet (a
+   * partially-failed batch can leave some rows without one). This is what a
+   * correction (`PATCH /asistencias/{id}/corregir`, issue #389) addresses;
+   * `id` above is only the persona id and was never enough to reach it.
+   * Threaded from `AttendanceRecord.id` in `buildRosterFromAlumnoHorarios`.
+   */
+  asistenciaId?: number | null;
+  /** The row's current justificativo, threaded straight from the server so
+   *  the correction form pre-fills instead of guessing (issue #389). */
+  justificativo?: string | null;
+  /** Whether `justificativo` was accepted, when one exists. */
+  estadoJustificativo?: boolean | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -352,16 +367,52 @@ export function buildRosterFromAlumnoHorarios(
   items: AlumnoHorario[],
   existingRecords: AttendanceRecord[] = [],
 ): SessionStudent[] {
-  const estadoByPersonaId = new Map(existingRecords.map((r) => [r.personaId, r.estado]));
+  const recordByPersonaId = new Map(existingRecords.map((r) => [r.personaId, r]));
   return items.map((item) => {
-    const recorded = estadoByPersonaId.get(item.personaId);
+    const record = recordByPersonaId.get(item.personaId);
     return {
       id: String(item.personaId),
       name: item.personaNombreCompleto,
-      attendance: (recorded ?? DEFAULT_ATTENDANCE) as WizardAttendance,
-      reviewed: recorded !== undefined,
+      attendance: (record?.estado ?? DEFAULT_ATTENDANCE) as WizardAttendance,
+      reviewed: record !== undefined,
+      // `record.id` is the real Asistencia row id (`String(asistencia.id)`,
+      // see `buildAttendanceRecord`) — NOT `item.personaId`, which is what
+      // `id` above already holds. A student with no filed record yet has
+      // nothing to correct.
+      asistenciaId: record ? Number(record.id) : null,
+      justificativo: record?.justificativo ?? null,
+      estadoJustificativo: record?.estadoJustificativo ?? null,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Correction window (issue #389, slice 4b)
+// ---------------------------------------------------------------------------
+
+/**
+ * Corrections only reach back this many days — mirrors the backend's
+ * `LIMITE_CORRECCION_ASISTENCIA_DIAS`
+ * (`backend/app/servicios_negocio/asistencia_servicio.py`) and the same
+ * 30-day concept `trainer/attendance/history/page.tsx` already names locally
+ * as `LIMITE_CORRECCION_DIAS` for its own deep-link gate.
+ */
+export const CORRECTION_WINDOW_DIAS = 30;
+
+/**
+ * Whether a session dated `fecha` ("YYYY-MM-DD") is still inside the
+ * correction window, computed client-side so a row's "Corregir" can be
+ * disabled without a round trip — the backend re-checks this itself and is
+ * the real gate; this only avoids offering a button the API is always going
+ * to refuse.
+ *
+ * Compared lexicographically against the cutoff, same as
+ * `history/page.tsx`'s `corteCorreccion` — both sides are "YYYY-MM-DD".
+ */
+export function isWithinCorrectionWindow(fecha: string, today: Date = clubToday()): boolean {
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() - CORRECTION_WINDOW_DIAS);
+  return fecha >= calendarIsoDate(cutoff);
 }
 
 // ---------------------------------------------------------------------------

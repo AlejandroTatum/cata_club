@@ -36,6 +36,7 @@ import {
   buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
   hasUnsavedAttendanceEdits,
+  isWithinCorrectionWindow,
   type SessionStudent,
 } from "../attendance-utils";
 import type { AlumnoHorario } from "@/services/api";
@@ -207,8 +208,14 @@ describe("buildRosterFromAlumnoHorarios", () => {
   it("maps each alumno-horario row to a SessionStudent defaulted to present but NOT reviewed", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
     expect(roster).toEqual([
-      { id: "3", name: "Sofia Alumna", attendance: "present", reviewed: false },
-      { id: "7", name: "Mateo Rodríguez", attendance: "present", reviewed: false },
+      {
+        id: "3", name: "Sofia Alumna", attendance: "present", reviewed: false,
+        asistenciaId: null, justificativo: null, estadoJustificativo: null,
+      },
+      {
+        id: "7", name: "Mateo Rodríguez", attendance: "present", reviewed: false,
+        asistenciaId: null, justificativo: null, estadoJustificativo: null,
+      },
     ]);
     expect(roster.every((s) => s.attendance === DEFAULT_ATTENDANCE)).toBe(true);
     expect(countUnreviewed(roster)).toBe(2);
@@ -236,7 +243,36 @@ describe("buildRosterFromAlumnoHorarios", () => {
   it("pre-selects the existing record's estado for a student who already has one for this session", () => {
     const existingRecords: AttendanceRecord[] = [
       {
-        id: "att-1",
+        id: "501",
+        fecha: "2026-07-23",
+        horario: "Lunes 18:00 — 19:00",
+        horarioId: 1,
+        personaId: 3,
+        estudiante: "Sofia Alumna",
+        estado: "present",
+        justificativo: "Certificado médico",
+        estadoJustificativo: true,
+      },
+    ];
+    const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
+    // A saved record IS a decision somebody made for this session, so that row
+    // comes back reviewed; the student with no record does not.
+    expect(roster).toEqual([
+      {
+        id: "3", name: "Sofia Alumna", attendance: "present", reviewed: true,
+        asistenciaId: 501, justificativo: "Certificado médico", estadoJustificativo: true,
+      },
+      {
+        id: "7", name: "Mateo Rodríguez", attendance: "present", reviewed: false,
+        asistenciaId: null, justificativo: null, estadoJustificativo: null,
+      },
+    ]);
+  });
+
+  it("threads the real Asistencia row id as asistenciaId, distinct from the persona-derived id (issue #389)", () => {
+    const existingRecords: AttendanceRecord[] = [
+      {
+        id: "9001",
         fecha: "2026-07-23",
         horario: "Lunes 18:00 — 19:00",
         horarioId: 1,
@@ -246,12 +282,11 @@ describe("buildRosterFromAlumnoHorarios", () => {
       },
     ];
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
-    // A saved record IS a decision somebody made for this session, so that row
-    // comes back reviewed; the student with no record does not.
-    expect(roster).toEqual([
-      { id: "3", name: "Sofia Alumna", attendance: "present", reviewed: true },
-      { id: "7", name: "Mateo Rodríguez", attendance: "present", reviewed: false },
-    ]);
+    const sofia = roster.find((s) => s.id === "3");
+    expect(sofia?.asistenciaId).toBe(9001);
+    // A student with no filed record has nothing a correction could address.
+    const mateo = roster.find((s) => s.id === "7");
+    expect(mateo?.asistenciaId).toBeNull();
   });
 
   it("defaults to present-but-unreviewed when no existing record matches a student's personaId", () => {
@@ -860,5 +895,21 @@ describe("parseWizardQuery / buildWizardQuery", () => {
       step: "select-session",
     });
     expect(parseWizardQuery("")).toEqual({ horarioId: null, fecha: null, step: "select-session" });
+  });
+});
+
+describe("isWithinCorrectionWindow", () => {
+  const today = new Date(2026, 6, 21); // 2026-07-21 local
+
+  it("accepts a session exactly 30 days old", () => {
+    expect(isWithinCorrectionWindow("2026-06-21", today)).toBe(true);
+  });
+
+  it("rejects a session 31 days old", () => {
+    expect(isWithinCorrectionWindow("2026-06-20", today)).toBe(false);
+  });
+
+  it("accepts today's own session", () => {
+    expect(isWithinCorrectionWindow("2026-07-21", today)).toBe(true);
   });
 });
