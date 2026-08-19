@@ -645,12 +645,24 @@ class Asistencia(Base):
     el JWT la trae y `Asistencia` ya usaba `persona_id` para el alumno). Quién
     corrige DESPUÉS es un follow-up documentado, FUERA de este alcance (no
     existe columna `corregido_por`).
+
+    `uq_asistencia_persona_horario_fecha` (#389): el servicio ya trataba
+    (persona_id, horario_id, fecha_entrenamiento) como clave de upsert, pero
+    nada a nivel de base lo hacía cumplir -- dos requests concurrentes para
+    el mismo alumno podían pasar ambas el chequeo "no existe todavía" y crear
+    dos filas, esquivando el cierre de sesión por timing. El constraint es la
+    red de seguridad real; el servicio sigue chequeando primero para dar un
+    mensaje legible.
     """
     __tablename__ = "asistencia"
     __table_args__ = (
         Index("ix_asistencia_persona_id", "persona_id"),
         Index("ix_asistencia_horario_id", "horario_id"),
         Index("ix_asistencia_registrado_por_id", "registrado_por_id"),
+        UniqueConstraint(
+            "persona_id", "horario_id", "fecha_entrenamiento",
+            name="uq_asistencia_persona_horario_fecha",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

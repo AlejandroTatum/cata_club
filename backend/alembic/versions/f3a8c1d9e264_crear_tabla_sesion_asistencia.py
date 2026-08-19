@@ -41,6 +41,23 @@ tabla) y la tabla, dejando el esquema idéntico al estado previo. Sin
 pérdida de datos: la tabla nace vacía y, mientras el downgrade se aplique
 antes de que el slice siguiente empiece a escribir en ella, no hay nada que
 preservar.
+
+Además, agrega `uq_asistencia_persona_horario_fecha` sobre la tabla
+EXISTENTE `asistencia`: el servicio siempre trató (persona_id, horario_id,
+fecha_entrenamiento) como clave de upsert, pero nada a nivel de base lo
+hacía cumplir. Sin este constraint, dos requests concurrentes para el mismo
+alumno podían pasar ambas el chequeo "no existe todavía" del servicio y
+crear dos filas -- esquivando el cierre de sesión por timing, exactamente
+el tipo de bypass que este slice existe para cerrar. Es aditivo sobre datos
+existentes: si las 525+ filas actuales ya son únicas en esa tripleta (el
+upsert de `registrar_asistencia` nunca creó una fila duplicada a propósito),
+el `ALTER TABLE ... ADD CONSTRAINT` no falla. Si llegara a fallar, es porque
+existe una violación de datos histórica que esta migración no debe silenciar
+ni resolver adivinando cuál fila es la "correcta" -- hay que investigarla
+antes de reintentar el upgrade.
+
+Downgrade de esta segunda parte: elimina el constraint, sin pérdida de
+datos (ninguna fila se toca, solo deja de exigirse la unicidad).
 """
 from typing import Sequence, Union
 
@@ -77,8 +94,15 @@ def upgrade() -> None:
         "ix_sesion_asistencia_cerrada_por_id",
         "sesion_asistencia", ["cerrada_por_id"], unique=False,
     )
+    op.create_unique_constraint(
+        "uq_asistencia_persona_horario_fecha",
+        "asistencia", ["persona_id", "horario_id", "fecha_entrenamiento"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_constraint(
+        "uq_asistencia_persona_horario_fecha", "asistencia", type_="unique",
+    )
     op.drop_index("ix_sesion_asistencia_cerrada_por_id", table_name="sesion_asistencia")
     op.drop_table("sesion_asistencia")
