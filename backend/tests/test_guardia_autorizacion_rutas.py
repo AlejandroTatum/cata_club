@@ -188,6 +188,9 @@ RUTAS_ROLES_REQUERIDOS = {
     # LÓGICA (`PATCH /personas/{persona_id}/estado`, más abajo), porque el
     # borrado duro destruía asistencias, pagos y ficha médica del ex-miembro.
     ("DELETE", "/personas/{persona_id}/roles/{tipo_rol}"): frozenset({"ADMINISTRADOR"}),
+    # Issue #398: retirar el beneficio del club es ADMINISTRADOR-only, igual
+    # que asignarlo (ver sus hermanos GET/POST más abajo).
+    ("DELETE", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/asistencias/horarios/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
@@ -230,6 +233,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/personas/"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo/pdf"): frozenset({"ADMINISTRADOR"}),
+    # Issue #398: leer el beneficio vigente de una persona es tan sensible
+    # como asignarlo (expone qué descuento y quién lo concedió) -- mismo rol
+    # que sus hermanos POST/DELETE, no "cualquier autenticado".
+    ("GET", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/membresias/pagos/{pago_id}/validar"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
@@ -260,6 +267,9 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/admin/cuentas"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
+    # Issue #398: solo el club (ADMINISTRADOR) concede un beneficio -- el
+    # propio beneficiario nunca puede pedirlo (ver docstring del endpoint).
+    ("POST", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
     # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): mismo par de roles
