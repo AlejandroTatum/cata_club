@@ -1360,6 +1360,7 @@ function EnrollWizard(): React.ReactElement {
                 <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
               ) : tarifas.length === 0 ? (
                 <EmptyState
+                  surface="inset"
                   title="Sin tarifas publicadas"
                   description="Todavía no hay categorías de membresía configuradas."
                 />
