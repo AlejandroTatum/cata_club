@@ -339,22 +339,36 @@ class TipoMembresia(Base):
 
 class Membresia(Base):
     __tablename__ = "membresia"
-    # Invariante de negocio EN LA BASE (auditoría hallazgo 7, issue #8): una
-    # sola membresía ACTIVA por persona. El chequeo de
+    # Invariante de negocio EN LA BASE (auditoría hallazgo 7, issue #8): como
+    # máximo una membresía OPERATIVA por persona. El chequeo de
     # `MembresiaServicio.crear_membresia` sigue siendo el camino primario de
     # error (UX); este índice único PARCIAL es la red de seguridad ante
     # escrituras concurrentes que lo burlen -- en particular dos
     # `validar_pago` simultáneos aprobando pagos de dos membresías INACTIVAS
     # de la misma persona. Parcial a propósito: el historial (VENCIDA,
     # INACTIVA) convive sin límite; el WHERE es el espejo exacto del chequeo
-    # del servicio (`estado == ACTIVA`). Creado por la migración
-    # `c3d9f2b7a1e5`.
+    # del servicio (`estado in (ACTIVA, SUSPENDIDA)`).
+    #
+    # Ensanchado por la migración de issue #400 (suspensión temporal) para
+    # incluir SUSPENDIDA junto a ACTIVA -- creado originalmente solo con
+    # ACTIVA por `c3d9f2b7a1e5`. SUSPENDIDA NO es un estado histórico como
+    # VENCIDA/INACTIVA: la propia sección "API e invariantes" del issue #400
+    # exige "como máximo una membresía operativa por persona", y una
+    # membresía suspendida sigue siendo la membresía operativa de esa
+    # persona (conserva plan, beneficio y cobertura) -- si el índice solo
+    # protegiera ACTIVA, alguien podría suspenderse y de inmediato inscribir
+    # una membresía nueva sin cancelar la anterior, duplicando el vínculo
+    # persona-plan que este índice existe para impedir. La migración
+    # `d2a7e5c91b34` había dejado esto deliberadamente sin tocar bajo la
+    # premisa contraria ("una SUSPENDIDA convive con la ACTIVA de la misma
+    # persona"); esa premisa quedó corregida acá porque no se sostiene contra
+    # el propio texto del issue.
     __table_args__ = (
         Index(
             "uq_membresia_activa_por_persona",
             "persona_id",
             unique=True,
-            postgresql_where=text("estado = 'ACTIVA'"),
+            postgresql_where=text("estado IN ('ACTIVA', 'SUSPENDIDA')"),
         ),
         Index("ix_membresia_persona_id", "persona_id"),
         Index("ix_membresia_tipo_membresia_id", "tipo_membresia_id"),

@@ -8,12 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
     Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion, CoberturaBonificada,
+    HistorialEstadoMembresia,
 )
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
-from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio, TipoMembresiaRepositorio
+from app.infraestructura.repositorios.membresia_repositorio import (
+    MembresiaRepositorio, TipoMembresiaRepositorio, HistorialEstadoMembresiaRepositorio,
+)
 from app.infraestructura.repositorios.pago_repositorio import (
     PagoRepositorio, ComprobantePagoRepositorio, CoberturaBonificadaRepositorio,
 )
@@ -99,8 +102,32 @@ MENSAJE_PAGO_PENDIENTE_DUPLICADO = (
     "Espere a que sea validado antes de registrar uno nuevo."
 )
 MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
-    "La persona ya tiene una membresía activa. "
-    "Cancele o deje vencer la actual antes de crear una nueva."
+    "La persona ya tiene una membresía activa o suspendida. "
+    "Cancele, deje vencer, o reactive la actual antes de crear una nueva."
+)
+
+# --- Issue #400 (slice 5a): suspensión y reactivación ------------------------
+# Redactados en minúscula a propósito (test_vocabulario_en_mensajes_de_
+# usuario.py, `_miembros_de_enums`): el candado de vocabulario detecta el
+# NOMBRE del enum tal cual se escribe en `enums.py` (mayúsculas), así que
+# "activa"/"suspendida" en prosa castellana no lo dispara, pero "ACTIVA"/
+# "SUSPENDIDA" sí -- por más que sea prosa legítima para un socio.
+MENSAJE_SUSPENSION_ORIGEN_INVALIDO = (
+    "Solo una membresía activa puede suspenderse."
+)
+MENSAJE_REACTIVACION_ORIGEN_INVALIDO = (
+    "Solo una membresía suspendida puede reactivarse."
+)
+MENSAJE_MEMBRESIA_SUSPENDIDA = (
+    "Esta membresía está suspendida; reactívela antes de registrar un pago "
+    "o aplicar un beneficio."
+)
+MENSAJE_FECHA_EFECTIVA_FUTURA = (
+    "La fecha efectiva no puede ser una fecha futura."
+)
+MENSAJE_FECHA_EFECTIVA_RETROCEDE = (
+    "La fecha efectiva no puede ser anterior a la fecha efectiva de la "
+    "última transición registrada de esta membresía."
 )
 
 # --- Issue #400 (slice 4d): cobertura bonificada -----------------------------
@@ -180,7 +207,16 @@ class MembresiaServicio:
         if not tipo:
             raise EntidadNoEncontrada(f"Tipo de membresía con id {datos.tipo_membresia_id} no encontrado")
         existentes = self.repo.listar_por_persona(datos.persona_id)
-        if any(m.estado == EstadoMembresia.ACTIVA for m in existentes):
+        # Issue #400 (slice 5a): SUSPENDIDA cuenta como operativa, igual que
+        # ACTIVA -- ver el docstring del índice `uq_membresia_activa_por_
+        # persona` en `modelos.py`. Sin este chequeo, alguien podía
+        # suspenderse y de inmediato inscribir una membresía nueva para el
+        # mismo plan; el índice ensanchado es la red de seguridad, este
+        # chequeo Python es el camino primario de error (UX).
+        if any(
+            m.estado in (EstadoMembresia.ACTIVA, EstadoMembresia.SUSPENDIDA)
+            for m in existentes
+        ):
             raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA)
         # Estado y fecha_activacion NO vienen del payload (B-12): una membresía
         # nace INACTIVA y se ACTIVA al aprobarse su primer pago. La
@@ -302,6 +338,12 @@ class PagoServicio:
         self.repo_descuento = DescuentoRepositorio(db)
         self.repo_asignacion = AsignacionDescuentoRepositorio(db)
         self.repo_cobertura_bonificada = CoberturaBonificadaRepositorio(db)
+        # Issue #400 (slice 5a): `repo_tipo` resincroniza la tarifa al
+        # reactivar (`TipoMembresia.precio` vigente, no el congelado);
+        # `repo_historial_estado` lee la última reactivación para el reloj
+        # de deuda (ver `calcular_meses_adeudados`).
+        self.repo_tipo = TipoMembresiaRepositorio(db)
+        self.repo_historial_estado = HistorialEstadoMembresiaRepositorio(db)
 
     def registrar_pago(
         self,
@@ -392,6 +434,14 @@ class PagoServicio:
             raise PermisosInsuficientes(
                 "La membresía indicada no pertenece a la persona del pago"
             )
+
+        # Issue #400 (slice 5a): "Suspender... bloquea nuevos pagos" -- una
+        # membresía SUSPENDIDA no genera deuda mientras dura, así que
+        # tampoco puede recibir un pago que compraría cobertura sobre un
+        # período que la propia suspensión declaró "no se cobra". Debe
+        # reactivarse primero (`PagoServicio.reactivar_membresia`).
+        if membresia.estado == EstadoMembresia.SUSPENDIDA:
+            raise OperacionInvalida(MENSAJE_MEMBRESIA_SUSPENDIDA)
 
         if self.repo.existe_pendiente_para_membresia(datos.membresia_id):
             raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
@@ -649,19 +699,78 @@ class PagoServicio:
         )
 
     def calcular_meses_adeudados(self, membresia_id: int) -> int:
-        ultimo_fin = self.repo.fecha_fin_maxima_aprobada(membresia_id)
+        """Meses de deuda desde la última cobertura aprobada hasta hoy.
+
+        Tres correcciones de issue #400 (slice 5a) sobre la cuenta pura de
+        fechas que había antes:
+
+        1. Mientras la membresía está SUSPENDIDA, la deuda es CERO sin
+           importar cuán vieja sea la cobertura -- "Suspender detiene la
+           generación de deuda futura" no admite excepción por antigüedad.
+           Antes de este guard, esta función solo miraba `Pago.fecha_fin` y
+           nunca `Membresia.estado`: alguien suspendido con cobertura vencida
+           desde antes de suspenderse seguía figurando en mora.
+        2. Tras REACTIVAR una membresía cuya cobertura ya había vencido, el
+           reloj de mora arranca en la fecha de reactivación, no en el fin de
+           cobertura original -- "los meses entre el fin de cobertura y la
+           reactivación no generan deuda" (issue #400). El ancla es
+           `max(fin_de_cobertura, fecha_efectiva_de_la_última_reactivación)`:
+             - si la persona se reactivó DESPUÉS de que la cobertura venciera,
+               ese máximo es la fecha de reactivación, y la deuda cuenta solo
+               desde ahí (el hueco completo queda gratis).
+             - si se reactivó con cobertura TODAVÍA vigente (`fin_de_cobertura`
+               ya era mayor que la fecha de reactivación), el máximo sigue
+               siendo `fin_de_cobertura`: esa cobertura real vale hasta que
+               vence de verdad, sin ningún privilegio extra por haber pasado
+               por una suspensión.
+           Una membresía que nunca se suspendió no tiene ninguna fila de
+           reactivación, así que el máximo colapsa al comportamiento de
+           siempre (`fin_de_cobertura` solo) -- sin regresión para el caso
+           común.
+        3. `fin_de_cobertura` se lee de `_fecha_fin_maxima_combinada`
+           (`Pago` aprobado Y `cobertura_bonificada`), no de `self.repo.
+           fecha_fin_maxima_aprobada` (solo `Pago`) como antes (hallazgo del
+           revisor, issue #400/5a). Es un defecto preexistente a este slice
+           -- `aplicar_beneficio_bonificado` (4d) ya podía dejar la ÚNICA
+           cobertura futura de una membresía en `cobertura_bonificada`, y
+           esta función la ignoraba por completo, calculando deuda sobre un
+           `Pago` viejo mientras la persona seguía cubierta gratis -- pero
+           el ancla nueva de este slice (punto 2) se apoya sobre el mismo
+           valor, así que corregirlo acá era necesario para no construir la
+           corrección de hoy sobre un valor ya stale.
+        """
+        membresia = self.repo_membresia.obtener_por_id(membresia_id)
+        if membresia is not None and membresia.estado == EstadoMembresia.SUSPENDIDA:
+            return 0
+
+        ultimo_fin = self._fecha_fin_maxima_combinada(membresia_id)
         if ultimo_fin is None:
             return 0
         hoy = hoy_club()
         if ultimo_fin >= hoy:
             return 0
-        return _meses_enteros_desde(ultimo_fin, hoy)
+
+        ancla = ultimo_fin
+        fecha_reactivacion = self.repo_historial_estado.fecha_efectiva_ultima_reactivacion(
+            membresia_id,
+        )
+        if fecha_reactivacion is not None:
+            dia_reactivacion = hoy_club(fecha_reactivacion)
+            if dia_reactivacion > ancla:
+                ancla = dia_reactivacion
+
+        if ancla >= hoy:
+            return 0
+        return _meses_enteros_desde(ancla, hoy)
 
     def obtener_deuda(self, membresia_id: int) -> dict:
         membresia = self.repo_membresia.obtener_por_id(membresia_id)
         if not membresia:
             raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
-        ultimo_fin = self.repo.fecha_fin_maxima_aprobada(membresia_id)
+        # Mismo ancla combinada que `calcular_meses_adeudados` (punto 3 de
+        # su docstring): si difirieran, este campo de DISPLAY mentiría sobre
+        # cuál es la cobertura real que `meses_adeudados` ya está usando.
+        ultimo_fin = self._fecha_fin_maxima_combinada(membresia_id)
         return {
             "meses_adeudados": self.calcular_meses_adeudados(membresia_id),
             "ultima_cobertura_fin": ultimo_fin,
@@ -671,6 +780,229 @@ class PagoServicio:
             # ausente aunque la columna exista en `membresia`.
             "es_gratuidad_familiar": membresia.es_gratuidad_familiar,
         }
+
+    # --- Issue #400 (slice 5a): suspensión y reactivación ---------------------
+    # Viven en PagoServicio, no en MembresiaServicio, por el mismo motivo que
+    # `obtener_deuda`/`calcular_meses_adeudados`/`regularizar_deuda` ya viven
+    # acá: las tres cosas son la misma superficie ("qué le pasa a la deuda y
+    # a la cobertura de una membresía"), y las dos piezas que este par de
+    # métodos necesita -- el ancla de cobertura (`_fecha_fin_maxima_
+    # combinada`, que combina `Pago` Y `cobertura_bonificada`) y el
+    # catálogo de tarifas vigente (`repo_tipo`) -- ya son vecinas de
+    # `PagoServicio`, no de `MembresiaServicio` (que solo conoce `Membresia`,
+    # `TipoMembresia` y `Persona`, y nunca tocó `Pago`). Partirlos en dos
+    # clases habría obligado a `MembresiaServicio` a importar medio
+    # `PagoServicio` solo para reactivar, o a duplicar `_fecha_fin_maxima_
+    # combinada` -- ninguna de las dos gana claridad.
+    def _validar_fecha_efectiva(self, membresia_id: int, efectiva: datetime) -> None:
+        """Guardia compartida por `suspender_membresia`/`reactivar_membresia`
+        (hallazgo del revisor, issue #400/5a): `fecha_efectiva` llega del
+        DTO sin ningún límite -- `SuspensionReactivacionDTO` solo normaliza
+        timezone, no fecha. Sin esta validación, un `fecha_efectiva` futuro
+        en `reactivar_membresia` mueve el ancla de `calcular_meses_
+        adeudados` (`max(fin_de_cobertura, fecha_reactivacion)`) hacia
+        adelante en el tiempo -- la persona sale gratis hasta esa fecha
+        fabricada, exactamente la clase de "meses gratis" que el issue
+        prohíbe.
+
+        Dos reglas, ambas a nivel de DÍA DE CALENDARIO DEL CLUB (`hoy_club`,
+        no del instante exacto -- `fecha_efectiva` describe "desde qué día
+        rige esto", igual que el resto del módulo trabaja en días, nunca en
+        segundos):
+
+        1. No puede ser POSTERIOR a hoy. Una transición no puede regir antes
+           de ejecutarse. Mismo criterio ya establecido por `regularizar_
+           deuda` (`datos.fecha_inicio > hoy` -> rechazado), reutilizado acá
+           tal cual.
+        2. No puede ser ANTERIOR a la `fecha_efectiva` de la transición
+           previa de esta misma membresía (`HistorialEstadoMembresiaRepositorio.
+           ultima_transicion`). Sin este chequeo, una reactivación backdateada
+           a una fecha anterior a una suspensión previa podría hacer que
+           `fecha_efectiva_ultima_reactivacion` (que ordena por `fecha_
+           efectiva DESC`) devolviera la fila EQUIVOCADA como "la más
+           reciente" -- la secuencia de `fecha_efectiva` de una membresía
+           debe ser no-decreciente para que "más alta" siga significando
+           "más reciente".
+
+        Deliberadamente SIN techo de backdateo (a diferencia del límite de
+        "no futuro", que sí existe): `regularizar_deuda`, en este mismo
+        archivo, permite fechas retroactivas arbitrarias porque cubre meses
+        adeudados reales sin límite de antigüedad, y una suspensión
+        backdateada ("se ausentó desde el lunes", ver docstring del DTO) es
+        la misma clase de corrección administrativa honesta. Inventar un
+        límite arbitrario (30 días, 90 días) sería una regla de negocio sin
+        base en el texto del issue; "no antes de la transición previa" es,
+        en cambio, una restricción LÓGICA siempre verdadera, no una política.
+
+        Filo conocido (dejado documentado, no resuelto acá -- fuera de
+        alcance de este slice backend-only): un `fecha_efectiva` de
+        medianoche UTC EXACTA cae del lado del día ANTERIOR en calendario
+        del club (America/Guayaquil, UTC-5) -- ej. `2026-08-16T00:00:00Z`
+        convierte a `2026-08-15 19:00` club. Un selector de fecha del
+        frontend que serialice "solo fecha" como medianoche UTC (patrón
+        común de `<input type=date>` + `Date.toISOString()`) correría el
+        riesgo de mandar, sin quererlo, el día anterior al que el admin
+        eligió. Cuando este endpoint tenga UI (fuera de #400/5a), esa
+        pantalla debe enviar un instante real (`fecha_efectiva` con hora
+        de guardado, no medianoche fabricada) o este chequeo debe pasar a
+        comparar la FECHA que el cliente quiso decir en vez de convertir un
+        instante -- ver el hallazgo en vivo en `test_suspension_
+        reactivacion.py::test_suspender_con_fecha_efectiva_futura_es_
+        rechazada`, que pisó exactamente este borde.
+        """
+        hoy = hoy_club()
+        if hoy_club(efectiva) > hoy:
+            raise OperacionInvalida(MENSAJE_FECHA_EFECTIVA_FUTURA)
+        ultima = self.repo_historial_estado.ultima_transicion(membresia_id)
+        if ultima is not None and efectiva < ultima.fecha_efectiva:
+            raise OperacionInvalida(MENSAJE_FECHA_EFECTIVA_RETROCEDE)
+
+    def suspender_membresia(
+        self,
+        membresia_id: int,
+        motivo: str,
+        actor_persona_id: int,
+        fecha_efectiva: datetime | None = None,
+    ) -> Membresia:
+        """Suspende una membresía ACTIVA (issue #400): detiene la generación
+        de deuda futura (ver `calcular_meses_adeudados`) y bloquea nuevos
+        pagos (ver `registrar_pago`/`aplicar_beneficio_bonificado`). La
+        cobertura ya pagada NO se toca -- ni una columna de `Pago` ni de
+        `CoberturaBonificada` cambia acá; conserva su `fecha_fin` original
+        tal cual la regla de negocio exige ("no se congela, no se extiende,
+        no se convierte en saldo").
+
+        Origen permitido: solo ACTIVA. VENCIDA e INACTIVA no tienen debajo
+        ninguna deuda "corriendo" que suspender esté deteniendo (VENCIDA ya
+        genera su propia mora por diseño; INACTIVA nunca tuvo cobertura), así
+        que suspenderlas describiría una pausa sobre algo que no estaba en
+        marcha. Una SUSPENDIDA no puede volver a suspenderse (usar
+        `reactivar_membresia` primero) -- eso evitaría una segunda fila de
+        historial con `estado_anterior == estado_nuevo`, que además el CHECK
+        `ck_historial_estado_cambia` de la tabla rechazaría.
+
+        Lee la membresía con `FOR UPDATE` (`obtener_por_id_con_bloqueo`,
+        hallazgo del revisor, issue #400/5a): el índice único parcial
+        `uq_membresia_activa_por_persona` solo impide que una fila DISTINTA
+        ocupe el mismo slot -- no impide que dos llamados concurrentes sobre
+        la MISMA fila (dos suspensiones/reactivaciones a la vez) lean el
+        mismo estado de origen y las dos pasen la guardia. El lock serializa:
+        el segundo llamado espera al commit del primero y relee el estado ya
+        transicionado, así que lo rechaza la guardia normal de "estado de
+        origen inválido" -- mismo mecanismo que `validar_pago` ya usa contra
+        la doble aprobación de un pago (`obtener_por_id_con_bloqueo` en
+        `pago_repositorio.py`).
+
+        Escribe el nuevo estado y la fila de `HistorialEstadoMembresia` en UN
+        solo commit (mismo patrón que `_activar_membresia_con_red_de_
+        seguridad` + `repo.guardar_cambios(pago)` en `validar_pago`): la
+        auditoría nunca debe quedar un paso atrás del estado real.
+        """
+        membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
+
+        if not motivo or not motivo.strip():
+            raise OperacionInvalida("Debe indicar el motivo de la suspensión.")
+
+        if membresia.estado != EstadoMembresia.ACTIVA:
+            raise OperacionInvalida(MENSAJE_SUSPENSION_ORIGEN_INVALIDO)
+
+        efectiva = fecha_efectiva or datetime.now(timezone.utc)
+        self._validar_fecha_efectiva(membresia_id, efectiva)
+
+        estado_anterior = membresia.estado
+        membresia.estado = EstadoMembresia.SUSPENDIDA
+        self.db.add(
+            HistorialEstadoMembresia(
+                membresia_id=membresia.id,
+                estado_anterior=estado_anterior,
+                estado_nuevo=EstadoMembresia.SUSPENDIDA,
+                fecha_efectiva=efectiva,
+                actor_persona_id=actor_persona_id,
+                motivo=motivo,
+            )
+        )
+        return self.repo_membresia.guardar_cambios(membresia)
+
+    def reactivar_membresia(
+        self,
+        membresia_id: int,
+        motivo: str,
+        actor_persona_id: int,
+        fecha_efectiva: datetime | None = None,
+    ) -> Membresia:
+        """Reactiva una membresía SUSPENDIDA (issue #400).
+
+        Operación de TRANSICIÓN DE ESTADO únicamente -- nunca otorga
+        cobertura. No crea ningún `Pago` ni `CoberturaBonificada`:
+          - Si la última cobertura combinada (`_fecha_fin_maxima_combinada`,
+            que mira `Pago` Y `cobertura_bonificada`) todavía cubre hoy, esa
+            cobertura sigue siendo válida sin más ("si vuelve antes del
+            vencimiento, usa la cobertura que todavía sigue vigente") -- este
+            método no necesita hacer nada especial para ese caso, solo
+            flipear el estado; `calcular_meses_adeudados` ya lo resuelve
+            (`ultimo_fin >= hoy` -> 0) sin mirar si hubo una suspensión.
+          - Si la cobertura ya venció (o nunca existió), la persona queda
+            ACTIVA pero SIN cobertura vigente: necesita un pago nuevo (fuera
+            de alcance de este método, camino normal de `registrar_pago`,
+            ahora desbloqueado porque el estado dejó de ser SUSPENDIDA). El
+            "reloj de deuda" para ese pago futuro arranca en `fecha_efectiva`
+            de ESTA reactivación, no en el fin de la cobertura vieja -- eso lo
+            resuelve `calcular_meses_adeudados` leyendo el historial que este
+            método escribe, no algo que se calcule acá.
+
+        Resincroniza la tarifa (issue #400: "usa la tarifa vigente"):
+        `Membresia.monto_aplicado` es una COPIA congelada en `crear_membresia`
+        y nunca se resincroniza sola (ver docstring de
+        `MembresiaServicio.actualizar_tipo_membresia`) -- si el catálogo
+        cambió durante la suspensión, sin este resync la reactivación seguiría
+        cobrando la tarifa vieja en el próximo pago. Se copia de nuevo desde
+        `TipoMembresia.precio` con el mismo criterio "copia, no referencia"
+        que usa el resto del módulo.
+
+        Origen permitido: solo SUSPENDIDA. Lee la membresía con `FOR UPDATE`
+        por la misma razón que `suspender_membresia` (ver su docstring):
+        sin el lock, dos `reactivar_membresia(X)` concurrentes leen las dos
+        `estado == SUSPENDIDA`, las dos pasan la guardia, y las dos
+        commitean -- dos filas de historial para una sola transición lógica.
+        """
+        membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
+
+        if not motivo or not motivo.strip():
+            raise OperacionInvalida("Debe indicar el motivo de la reactivación.")
+
+        if membresia.estado != EstadoMembresia.SUSPENDIDA:
+            raise OperacionInvalida(MENSAJE_REACTIVACION_ORIGEN_INVALIDO)
+
+        efectiva = fecha_efectiva or datetime.now(timezone.utc)
+        self._validar_fecha_efectiva(membresia_id, efectiva)
+
+        tipo = self.repo_tipo.obtener_por_id(membresia.tipo_membresia_id)
+        if tipo is not None:
+            membresia.monto_aplicado = tipo.precio
+
+        estado_anterior = membresia.estado
+        membresia.estado = EstadoMembresia.ACTIVA
+        self.db.add(
+            HistorialEstadoMembresia(
+                membresia_id=membresia.id,
+                estado_anterior=estado_anterior,
+                estado_nuevo=EstadoMembresia.ACTIVA,
+                fecha_efectiva=efectiva,
+                actor_persona_id=actor_persona_id,
+                motivo=motivo,
+            )
+        )
+        try:
+            return self.repo_membresia.guardar_cambios(membresia)
+        except IntegrityError as error:
+            self.db.rollback()
+            if "uq_membresia_activa_por_persona" in str(error.orig):
+                raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
+            raise
 
     def regularizar_deuda(self, membresia_id: int, datos: RegularizacionDeudaDTO, persona_id_admin: int) -> Pago:
         """Regulariza deuda de una membresía (issue #284), operación SOLO de admin.
@@ -826,6 +1158,14 @@ class PagoServicio:
 
         if membresia.es_gratuidad_familiar:
             raise OperacionInvalida(MENSAJE_MEMBRESIA_YA_GRATUITA)
+
+        # Issue #400 (slice 5a): mismo gate que `registrar_pago`. Una
+        # cobertura bonificada es, en los hechos, cobertura nueva otorgada a
+        # la membresía -- si "suspender bloquea nuevos pagos", también debe
+        # bloquear el único otro camino que produce cobertura sin pago, o el
+        # gate de `registrar_pago` sería un agujero con nombre distinto.
+        if membresia.estado == EstadoMembresia.SUSPENDIDA:
+            raise OperacionInvalida(MENSAJE_MEMBRESIA_SUSPENDIDA)
 
         precio_mensual = membresia.monto_aplicado
         meses = datos.meses

@@ -328,6 +328,32 @@ def test_membresia_inactiva_no_genera_aviso(db_session, sesion_inyectada, monkey
     assert resultado["total_avisos_familia"] == 0
 
 
+# --- Membresías SUSPENDIDA no cuentan (issue #400, slice 5a) ----------------
+# Gap del revisor: la query original solo excluía INACTIVA
+# (`Membresia.estado != EstadoMembresia.INACTIVA`), lo que ADMITE SUSPENDIDA.
+# "Suspender detiene la generación de deuda futura" no admite excepción: si
+# la cobertura ya estaba vencida ANTES de que administración suspendiera,
+# sin este filtro la familia seguía recibiendo el correo de mora (y el admin
+# seguía viéndola en su resumen diario) durante toda la suspensión.
+
+def test_membresia_suspendida_no_genera_aviso(db_session, sesion_inyectada, monkeypatch):
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumno = _crear_persona(db_session, cedula_valida(220))
+    _crear_usuario(db_session, alumno, "alumno220@cataclub.test")
+    _crear_membresia_con_pago(
+        db_session, alumno, HOY - timedelta(days=1), estado=EstadoMembresia.SUSPENDIDA,
+    )
+    llamadas = _mock_envio(monkeypatch)
+
+    resultado = alertas_mod.alertar_mora_diaria()
+
+    assert resultado["total_avisos_familia"] == 0
+    assert llamadas == []
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
+    ) == 0
+
+
 # --- Resumen diario al administrador -----------------------------------------
 
 def test_resumen_admin_contiene_morosos_con_meses_adeudados(
