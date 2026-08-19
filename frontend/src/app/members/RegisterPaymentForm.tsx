@@ -16,11 +16,9 @@ import { useRef, useState } from "react";
 import { CheckCircle2, Loader2, Plus, Upload } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
-import { fetchDescuentos, registrarPago } from "@/services/api";
-import type { DescuentoCatalogo, RegistrarPagoInput } from "@/services/api";
-import { computeMontoFinal, descuentosActivos, descuentoValorLabel } from "@/app/discounts/discounts-utils";
+import { registrarPago } from "@/services/api";
+import type { RegistrarPagoInput } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
-import { formatCurrency } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
 import type { MemberStudentSummary } from "./members-utils";
 
@@ -46,22 +44,6 @@ export default function RegisterPaymentForm({
   const [registered, setRegistered] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
-  /*
-   * Discount to apply on THIS registration (issue #12). The catalog is fetched
-   * lazily when the form opens; only ACTIVE discounts are offered. `null` =
-   * not fetched yet (or fetch failed: the form degrades to the pre-discount
-   * behavior — the backend is the authority anyway).
-   *
-   * A payment carries at most ONE discount (the backend rejects more than one
-   * with a 400 — see `_congelar_descuento`), so selection is single, with
-   * "Sin descuento" as the normal, default choice — never a plural array.
-   */
-  const [catalogo, setCatalogo] = useState<DescuentoCatalogo[] | null>(null);
-  const [selectedDescuentoId, setSelectedDescuentoId] = useState<number | null>(null);
-
-  const ofrecidos = descuentosActivos(catalogo ?? []);
-  const seleccionados = ofrecidos.filter((d) => d.id === selectedDescuentoId);
-  const montoFinalPreview = computeMontoFinal(Number(monto) || 0, seleccionados);
 
   function calcEndDate(baseDate: Date, amount: number): string {
     if (monthlyPrice <= 0 || amount <= 0) return "";
@@ -82,14 +64,6 @@ export default function RegisterPaymentForm({
     setError(null);
     setRegistered(false);
     setVoucherFile(null);
-    setSelectedDescuentoId(null);
-    if (catalogo === null) {
-      fetchDescuentos()
-        .then(setCatalogo)
-        // A failed catalog fetch never blocks registering a payment: the form
-        // simply offers no discounts (same as an empty catalog).
-        .catch(() => setCatalogo([]));
-    }
     // A calendar date, so `calcEndDate` adds months to a day rather than to an instant.
     const hoy = clubToday();
     setFechaInicio(calendarIsoDate(hoy));
@@ -121,9 +95,9 @@ export default function RegisterPaymentForm({
     setError(null);
     try {
       const input: RegistrarPagoInput = {
-        // Always the BASE amount: with discounts attached the backend resolves
-        // and freezes the catalog values and computes the final amount itself
-        // (the preview shown in the form is display-only).
+        // The discount, if any, is no longer chosen here (issue #398): the
+        // backend resolves it from the persona's assigned benefit
+        // (see BeneficioSection) — this is always just the plain amount.
         monto: montoNum,
         tipoPago: "TRANSFERENCIA",
         // No fechaInicio/fechaFin (fix período de cobertura, PAG-5): el backend
@@ -131,7 +105,6 @@ export default function RegisterPaymentForm({
         // vista previa "Inicio: / Fin:" de más abajo.
         personaId,
         membresiaId: membresia.id,
-        ...(selectedDescuentoId != null ? { descuentoIds: [selectedDescuentoId] } : {}),
       };
       const nuevoPago = await registrarPago(input);
       if (voucherFile && nuevoPago?.id) {
@@ -215,50 +188,6 @@ export default function RegisterPaymentForm({
           {Number(monto) / monthlyPrice === 1 ? "mes de vigencia" : "meses de vigencia"} (precio
           mensual: ${monthlyPrice})
         </p>
-      )}
-
-      {ofrecidos.length > 0 && (
-        <fieldset className="rounded-ctl border border-line bg-paper p-3">
-          <legend className="px-1 text-xs font-semibold text-ink-2">Descuento</legend>
-          {/* Single-select: exactly one radio group, "Sin descuento" first as
-              the default — never checkboxes, a payment admits at most one
-              discount (the backend rejects more than one with a 400). */}
-          <div className="space-y-field">
-            <label className="flex cursor-pointer items-center gap-2 rounded-ctl px-2 py-1.5 text-xs text-ink transition-colors hover:bg-sunken">
-              <input
-                type="radio"
-                name={`descuento-${personaId}`}
-                checked={selectedDescuentoId === null}
-                onChange={() => setSelectedDescuentoId(null)}
-                className="h-3.5 w-3.5 accent-coal"
-              />
-              <span>Sin descuento</span>
-            </label>
-            {ofrecidos.map((descuento) => (
-              <label
-                key={descuento.id}
-                className="flex cursor-pointer items-center gap-2 rounded-ctl px-2 py-1.5 text-xs text-ink transition-colors hover:bg-sunken"
-              >
-                <input
-                  type="radio"
-                  name={`descuento-${personaId}`}
-                  checked={selectedDescuentoId === descuento.id}
-                  onChange={() => setSelectedDescuentoId(descuento.id)}
-                  className="h-3.5 w-3.5 accent-coal"
-                />
-                <span>
-                  {descuento.nombre}
-                  <span className="text-ink-3"> · {descuentoValorLabel(descuento)}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-          {seleccionados.length > 0 && (
-            <p className="mt-1.5 border-t border-line pt-1.5 text-xs font-semibold text-ink">
-              Monto final con descuento: {formatCurrency(montoFinalPreview)}
-            </p>
-          )}
-        </fieldset>
       )}
 
       {/* TRANSFERENCIA is the only method, so the voucher is always required

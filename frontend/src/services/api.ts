@@ -1278,10 +1278,12 @@ export interface PagoPersona {
    * identificador de persona sin ningún uso en la vista. Mismo criterio que
    * `FichaEmergenciaResponseDTO`.
    *
-   * Aplicar descuentos es potestad EXCLUSIVA del administrador (issue #11 §4,
-   * `registrar_pago` rechaza `descuento_ids` de cualquier otro rol): acá viaja
-   * en un solo sentido, de lectura, y `RegistrarPagoInput` sigue siendo el
-   * único lugar donde se eligen.
+   * Aplicar descuentos es potestad EXCLUSIVA del administrador. Desde el
+   * issue #398 ya no se elige por pago (`RegistrarPagoInput` no lleva
+   * `descuentoIds`): el admin asigna o retira el beneficio de la persona con
+   * `asignarBeneficio`/`retirarBeneficio`, y `registrar_pago` lo resuelve
+   * solo, ignorando cualquier `descuento_ids` que todavía llegue. Acá sigue
+   * viajando en un solo sentido, de lectura.
    *
    * No existe un campo con el precio de lista: `monto` ES el monto final
    * (`registrar_pago` hace `pago.monto = monto_final`) y el base se reconstruye
@@ -1305,9 +1307,15 @@ export async function fetchPagosDePersona(personaId: string): Promise<PagoPerson
 }
 
 /** Payload for registering a new pending payment — `POST /api/membresias/pagos`.
- *  `monto` is always the BASE amount: when `descuentoIds` are attached the
- *  backend resolves each discount's current value, freezes it and computes
- *  the final amount itself (frozen-value semantics, issue #12).
+ *  `monto` is always the BASE amount: the backend resolves the persona's
+ *  assigned benefit (if any — see `fetchBeneficio`/`BeneficioAsignado`
+ *  below), freezes its current value and computes the final amount itself.
+ *
+ *  No `descuentoIds` (issue #398): a discount used to be a per-payment
+ *  choice sent here, but the backend now resolves it from the persona's
+ *  ASSIGNED benefit and ignores `descuento_ids` entirely — the choice moved
+ *  to `asignarBeneficio`/`retirarBeneficio`, admin-only and independent of
+ *  any single payment.
  *
  *  No `fechaInicio`/`fechaFin` (fix período de cobertura, PAG-5): the
  *  backend derives the coverage period from `monto` and the membership's
@@ -1321,9 +1329,6 @@ export interface RegistrarPagoInput {
   tipoPago: "EFECTIVO" | "TRANSFERENCIA";
   personaId: number;
   membresiaId: number;
-  /** Catalog discounts to apply on THIS registration (admin-only decision).
-   *  Optional and default-empty so existing flows are unchanged. */
-  descuentoIds?: number[];
 }
 
 /** Register a new pending payment (PENDIENTE_VALIDACION) — `POST /api/membresias/pagos`.

@@ -98,6 +98,7 @@ import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatu
 import CreateMembershipForm from "./CreateMembershipForm";
 import RegisterPaymentForm from "./RegisterPaymentForm";
 import RegularizarDeudaForm from "./RegularizarDeudaForm";
+import BeneficioSection from "./BeneficioSection";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
@@ -311,6 +312,11 @@ function StudentEditPanel({ student, onMembershipCreated, onDebtRegularized }: S
           </LabeledDataBox>
         </div>
       )}
+
+      {/* Beneficio del club attaches to the PERSONA, not the membership
+          (issue #398) — shown regardless of whether the student currently
+          has a membresia, unlike the two forms below it. */}
+      <BeneficioSection personaId={personaId} />
 
       {/* The two write flows are independent forms, each owning its own state
           and its own failures — see CreateMembershipForm / RegisterPaymentForm.
