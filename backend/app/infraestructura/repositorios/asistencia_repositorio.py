@@ -1,9 +1,12 @@
 from datetime import date
 from typing import Optional, List
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Asistencia, HorarioEntrenamiento, AlumnoHorario, Persona
+from app.dominio.modelos import (
+    Asistencia, HorarioEntrenamiento, AlumnoHorario, Persona, SesionAsistencia,
+)
 from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
 
 
@@ -225,6 +228,60 @@ class AsistenciaRepositorio:
                 "conteos": conteos,
             })
         return sesiones
+
+
+class SesionAsistenciaRepositorio:
+    """Get-or-create del cierre de una sesión (issue #389, slice 1). NO abre
+    su propia transacción: `obtener_o_crear_cerrada` deja la fila nueva
+    solo agregada/flusheada, nunca commiteada acá -- el llamador
+    (`AsistenciaServicio.registrar_asistencia`) la commitea junto con la
+    `Asistencia` que la disparó, en el mismo `commit()` de
+    `AsistenciaRepositorio.crear`. Esto es a propósito: cerrar la sesión sin
+    que la primera `Asistencia` llegue a existir (o viceversa) dejaría el
+    cierre y la lista desincronizados si algo falla entre medio."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def buscar_por_horario_fecha(
+        self, horario_id: int, fecha_entrenamiento: date
+    ) -> Optional[SesionAsistencia]:
+        stmt = select(SesionAsistencia).where(
+            SesionAsistencia.horario_id == horario_id,
+            SesionAsistencia.fecha_entrenamiento == fecha_entrenamiento,
+        )
+        return self.db.execute(stmt).scalars().first()
+
+    def obtener_o_crear_cerrada(
+        self, horario_id: int, fecha_entrenamiento: date, cerrada_por_id: int
+    ) -> SesionAsistencia:
+        """Devuelve la fila de cierre de esta sesión, creándola si es la
+        primera vez. Race-safe: si dos requests llegan acá para el MISMO
+        (horario_id, fecha_entrenamiento) sin que ninguna haya commiteado
+        todavía, ambas fallan la búsqueda inicial y ambas intentan
+        insertar -- el `UniqueConstraint` de la base
+        (`uq_sesion_asistencia_horario_fecha`) deja pasar una sola, la otra
+        recibe `IntegrityError` en el `flush()` (contenido en un SAVEPOINT
+        propio vía `begin_nested`, para no arrastrar el resto de la
+        transacción del llamador) y relee la fila que la ganadora insertó."""
+        existente = self.buscar_por_horario_fecha(horario_id, fecha_entrenamiento)
+        if existente:
+            return existente
+
+        sesion = SesionAsistencia(
+            horario_id=horario_id, fecha_entrenamiento=fecha_entrenamiento,
+            cerrada_por_id=cerrada_por_id,
+        )
+        try:
+            with self.db.begin_nested():
+                self.db.add(sesion)
+                self.db.flush()
+        except IntegrityError:
+            existente = self.buscar_por_horario_fecha(horario_id, fecha_entrenamiento)
+            if existente is None:
+                raise
+            return existente
+        return sesion
 
 
 class AlumnoHorarioRepositorio:
