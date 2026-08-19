@@ -1013,6 +1013,42 @@ export async function fetchInstituciones(): Promise<Institucion[]> {
   return all;
 }
 
+/**
+ * One row of the public, unauthenticated tariff catalog (issue #394 contract,
+ * issue #331 consumer). Mirrors `TarifaPublicaDTO`
+ * (`backend/app/presentacion/schemas/membresia_pago_schemas.py`) — deliberately
+ * ONLY `categoria` and `precio`, no `id`/`modalidad`: those are admin editing
+ * details, not what an anonymous visitor needs before enrolling.
+ * `precio` stays a STRING: FastAPI/Pydantic serialise `Decimal` to a JSON
+ * string, and `formatCurrency` already accepts one directly — converting to
+ * `number` here would only reintroduce float rounding for no benefit.
+ */
+export interface TarifaPublica {
+  categoria: string;
+  precio: string;
+}
+
+function isTarifaPublica(value: unknown): value is TarifaPublica {
+  if (typeof value !== "object" || value === null) return false;
+  const tarifa = value as Record<string, unknown>;
+  return typeof tarifa.categoria === "string" && typeof tarifa.precio === "string";
+}
+
+/**
+ * Fetch the public membership tariff catalog (read-only, no auth) — issue
+ * #331 shows this to a visitor before the enrollment wizard's first field.
+ * Unlike `fetchInstituciones`, the backend endpoint is deliberately
+ * unpaginated (small, low-churn catalog), so this is a single request that
+ * returns the backend's FLAT array verbatim — no `{items, total}` envelope.
+ */
+export async function fetchTarifas(): Promise<TarifaPublica[]> {
+  const response: unknown = await request<unknown>(apiEndpoint("/membresias/tarifas"));
+  if (!Array.isArray(response) || !response.every(isTarifaPublica)) {
+    throw new ApiClientError("Respuesta inválida de tarifas.", 502);
+  }
+  return response;
+}
+
 function isApiErrorBody(
   value: unknown,
 ): value is { message?: string; detail?: string; mensaje_seguro?: unknown } {

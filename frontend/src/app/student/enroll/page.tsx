@@ -16,11 +16,19 @@
 
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { enrollStudent, fetchInstituciones, type Institucion } from "@/services/api";
+import {
+  enrollStudent,
+  fetchInstituciones,
+  fetchTarifas,
+  type Institucion,
+  type TarifaPublica,
+} from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { backHrefForRole } from "@/lib/auth-utils";
+import { toUserMessage } from "@/lib/error-message";
+import { formatCurrency } from "@/lib/format-utils";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
@@ -39,6 +47,9 @@ import {
   BackLink,
   Button,
   DataRowList,
+  EmptyState,
+  ErrorState,
+  LoadingState,
   PageHeader,
   Stepper,
   buttonClasses,
@@ -146,6 +157,16 @@ function EnrollWizard(): React.ReactElement {
    */
   const [institucionesFailed, setInstitucionesFailed] = useState(false);
   const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
+  /**
+   * Issue #331: the public tariff catalog shown on step 1, BEFORE the
+   * visitor's first field. Unlike `instituciones`, a failure here gets its
+   * own visible `ErrorState` with retry rather than a silently empty list —
+   * a price is what this block exists to show, so its absence must be loud,
+   * not swallowed the way `institucionesFailed` swallows the school catalog.
+   */
+  const [tarifas, setTarifas] = useState<TarifaPublica[]>([]);
+  const [tarifasLoading, setTarifasLoading] = useState(true);
+  const [tarifasError, setTarifasError] = useState<string | null>(null);
   const queryAppliedRef = useRef(false);
   /**
    * Whether `formData` currently holds a draft recovered from `sessionStorage`
@@ -253,6 +274,22 @@ function EnrollWizard(): React.ReactElement {
       .then(setInstituciones)
       .catch(() => setInstitucionesFailed(true));
   }, []);
+
+  const loadTarifas = useCallback(async (): Promise<void> => {
+    setTarifasLoading(true);
+    setTarifasError(null);
+    try {
+      setTarifas(await fetchTarifas());
+    } catch (err) {
+      setTarifasError(toUserMessage(err, "No se pudieron cargar las tarifas vigentes."));
+    } finally {
+      setTarifasLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTarifas();
+  }, [loadTarifas]);
 
   // ---- Helpers ----
 
@@ -1300,6 +1337,46 @@ function EnrollWizard(): React.ReactElement {
                   Representante
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Public tariff catalog (issue #331, consumes the public BFF/
+              backend contract of #394) — shown ONLY on step 1, before the
+              visitor's first field, so anyone knows the price before they
+              start. Public and harmless data: unlike the demo panel above,
+              this is NOT gated on auth or environment, and unlike
+              `institucionesFailed` (a silently-empty auxiliary list), a
+              failure here gets its own loud `ErrorState` with retry — the
+              whole point of this block is showing a price, so its absence
+              must say so. */}
+          {step === "type" && (
+            <div className="card p-page">
+              <h2 className="mb-page font-display text-lg uppercase tracking-flat text-ink">
+                Tarifas vigentes
+              </h2>
+              {tarifasLoading ? (
+                <LoadingState label="Cargando tarifas…" />
+              ) : tarifasError ? (
+                <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
+              ) : tarifas.length === 0 ? (
+                <EmptyState
+                  surface="inset"
+                  title="Sin tarifas publicadas"
+                  description="Todavía no hay categorías de membresía configuradas."
+                />
+              ) : (
+                <ul className="space-y-field">
+                  {tarifas.map((tarifa) => (
+                    <li
+                      key={tarifa.categoria}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span className="text-ink-2">{tarifa.categoria}</span>
+                      <b className="text-ink">{formatCurrency(tarifa.precio)}</b>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
