@@ -78,6 +78,7 @@ export const DESTINATIONS: Record<string, Destination> = {
   "/groups": { label: "Horarios", preposition: "a" },
   "/payments": { label: "Membresías y Pagos", preposition: "a" },
   "/discounts": { label: "Descuentos", preposition: "a" },
+  "/tarifas": { label: "Tarifas", preposition: "a" },
   "/attendance": { label: "Asistencias", preposition: "a" },
   "/reports": { label: "Reportes", preposition: "a" },
 
