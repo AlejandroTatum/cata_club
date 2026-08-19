@@ -234,6 +234,9 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/membresias/"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/estadisticas"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/{membresia_id}/deuda"): frozenset({"ADMINISTRADOR"}),
+    # Issue #326: deuda en bloque para el admin `/members` -- mismo rol que
+    # su hermano de una sola membresía, arriba.
+    ("GET", "/membresias/deuda/bulk"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/pagos"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5b): ver el historial de correcciones financieras de
     # un pago es tan sensible como crear una -- mismo rol que su hermano POST

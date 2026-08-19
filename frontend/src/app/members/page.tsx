@@ -469,6 +469,29 @@ function EmergencyDataWarning(): React.ReactElement {
   );
 }
 
+/**
+ * Issue #326: overdue amount + months, right on the list row instead of
+ * requiring the admin to open the edit dialog's "Regularizar deuda" form
+ * (`RegularizarDeudaForm.tsx`, which fetches the SAME debt per-membership on
+ * demand — a different surface, not replaced by this). Sourced from
+ * `estudiantes[0].membresia.mesesAdeudados`/`montoAdeudado`
+ * (`members-adapter.ts`, built from the bulk debt endpoint) — renders
+ * nothing when either is missing (membership isn't `"vencida"`, or the bulk
+ * lookup didn't resolve it), never a fabricated "$0".
+ */
+function MembershipDebtInfo({ account }: { account: MemberAccount }): React.ReactElement | null {
+  const membresia = account.estudiantes[0]?.membresia;
+  if (!membresia || membresia.estado !== "vencida") return null;
+  if (membresia.montoAdeudado === undefined || membresia.mesesAdeudados === undefined) return null;
+
+  return (
+    <span className="mt-1 block text-2xs font-semibold text-state-bad">
+      {formatCurrency(membresia.montoAdeudado)} adeudado ·{" "}
+      {membresia.mesesAdeudados === 1 ? "1 mes" : `${membresia.mesesAdeudados} meses`}
+    </span>
+  );
+}
+
 /** One account as a table row (`sm` and up). */
 function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
@@ -494,6 +517,7 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
       <TableCell>{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">
         <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+        <MembershipDebtInfo account={account} />
       </TableCell>
       <TableCell type="action">
         <EditAccountButton account={account} onEdit={onEdit} />
@@ -524,7 +548,12 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
           {account.sinDatosEmergencia ? <EmergencyDataWarning /> : null}
         </>
       }
-      status={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
+      status={
+        <>
+          <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+          <MembershipDebtInfo account={account} />
+        </>
+      }
       actions={<EditAccountButton account={account} onEdit={onEdit} />}
     />
   );

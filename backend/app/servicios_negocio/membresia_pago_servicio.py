@@ -77,6 +77,18 @@ def _meses_enteros_desde(fin: date, hoy: date) -> int:
     return meses
 
 
+def _maximo_fecha_opcional(*fechas: date | None) -> date | None:
+    """`max()` que tolera `None` (fecha ausente) sin romper -- `None` si
+    NINGUNA fecha está presente, la mayor de las que sí lo están en caso
+    contrario. Único lugar donde vive "combinar dos anclas de cobertura
+    opcionales" (issue #326): `_fecha_fin_maxima_combinada` (una membresía)
+    y `PagoServicio.obtener_deuda_bulk` (N membresías, con mapas
+    pre-cargados) lo comparten en vez de repetir el `[f for f in (...) if f
+    is not None]` cada uno por su lado."""
+    candidatos = [fecha for fecha in fechas if fecha is not None]
+    return max(candidatos) if candidatos else None
+
+
 # --- Regla Familiar E04-RF002 -----------------------------------------------
 # Si una familia (mismos representados bajo el mismo representante_id) ya
 # tiene 3 membresías ACTIVAS en el mismo periodo, el 4to miembro recibe
@@ -743,14 +755,10 @@ class PagoServicio:
         membresía, o `None` si no tiene ninguna. El ancla real de "hasta
         cuándo ya está cubierta esta membresía", sin importar por cuál de
         los dos caminos se cubrió."""
-        candidatos = [
-            fecha for fecha in (
-                self.repo.fecha_fin_maxima_aprobada(membresia_id),
-                self.repo_cobertura_bonificada.fecha_fin_maxima(membresia_id),
-            )
-            if fecha is not None
-        ]
-        return max(candidatos) if candidatos else None
+        return _maximo_fecha_opcional(
+            self.repo.fecha_fin_maxima_aprobada(membresia_id),
+            self.repo_cobertura_bonificada.fecha_fin_maxima(membresia_id),
+        )
 
     def _hay_cobertura_en_rango(
         self,
@@ -794,6 +802,47 @@ class PagoServicio:
             or self.repo_cobertura_bonificada.existe_en_rango_cerrado(membresia_id, fecha_inicio, fecha_fin)
         )
 
+    def _calcular_meses_adeudados_desde_datos(
+        self,
+        *,
+        estado: EstadoMembresia | None,
+        ultimo_fin: date | None,
+        fecha_reactivacion: datetime | None,
+        hoy: date,
+    ) -> int:
+        """Núcleo PURO de la deuda (issue #284/#400), con los datos YA
+        resueltos en vez de leerlos de los repos -- las tres reglas de
+        `calcular_meses_adeudados` (suspendida = 0, ancla combinada, reloj
+        de reactivación) viven acá UNA sola vez.
+
+        Issue #326: `calcular_meses_adeudados` (una membresía) y
+        `obtener_deuda_bulk` (N membresías) llaman a este mismo método en
+        vez de reimplementar la aritmética día-15/16 cada uno por su lado
+        -- el camino bulk solo cambia CÓMO llegan `ultimo_fin`/
+        `fecha_reactivacion` (3 consultas agrupadas en vez de 3*N), nunca
+        el cálculo en sí.
+
+        `estado=None` (membresía inexistente) se comporta igual que un
+        estado que no es SUSPENDIDA -- mismo comportamiento que el código
+        anterior a este refactor, que solo cortaba en 0 cuando la
+        membresía existía y estaba SUSPENDIDA."""
+        if estado == EstadoMembresia.SUSPENDIDA:
+            return 0
+        if ultimo_fin is None:
+            return 0
+        if ultimo_fin >= hoy:
+            return 0
+
+        ancla = ultimo_fin
+        if fecha_reactivacion is not None:
+            dia_reactivacion = hoy_club(fecha_reactivacion)
+            if dia_reactivacion > ancla:
+                ancla = dia_reactivacion
+
+        if ancla >= hoy:
+            return 0
+        return _meses_enteros_desde(ancla, hoy)
+
     def calcular_meses_adeudados(self, membresia_id: int) -> int:
         """Meses de deuda desde la última cobertura aprobada hasta hoy.
 
@@ -836,28 +885,66 @@ class PagoServicio:
            corrección de hoy sobre un valor ya stale.
         """
         membresia = self.repo_membresia.obtener_por_id(membresia_id)
-        if membresia is not None and membresia.estado == EstadoMembresia.SUSPENDIDA:
-            return 0
-
         ultimo_fin = self._fecha_fin_maxima_combinada(membresia_id)
-        if ultimo_fin is None:
-            return 0
-        hoy = hoy_club()
-        if ultimo_fin >= hoy:
-            return 0
-
-        ancla = ultimo_fin
         fecha_reactivacion = self.repo_historial_estado.fecha_efectiva_ultima_reactivacion(
             membresia_id,
         )
-        if fecha_reactivacion is not None:
-            dia_reactivacion = hoy_club(fecha_reactivacion)
-            if dia_reactivacion > ancla:
-                ancla = dia_reactivacion
+        return self._calcular_meses_adeudados_desde_datos(
+            estado=membresia.estado if membresia is not None else None,
+            ultimo_fin=ultimo_fin,
+            fecha_reactivacion=fecha_reactivacion,
+            hoy=hoy_club(),
+        )
 
-        if ancla >= hoy:
-            return 0
-        return _meses_enteros_desde(ancla, hoy)
+    def obtener_deuda_bulk(self, membresia_ids: list[int]) -> list[dict]:
+        """Deuda en bloque (issue #326): N membresías con 4 consultas
+        agrupadas (membresías + 3 fuentes de la ancla), nunca 1 consulta por
+        membresía -- ver `PagoRepositorio.fecha_fin_maxima_aprobada_bulk`,
+        `CoberturaBonificadaRepositorio.fecha_fin_maxima_bulk` y
+        `HistorialEstadoMembresiaRepositorio.
+        fecha_efectiva_ultima_reactivacion_bulk`.
+
+        Ids duplicados se deduplican preservando el primer orden de
+        aparición; ids que no resuelven a una membresía existente se omiten
+        SILENCIOSAMENTE del resultado (mismo espíritu que
+        `FichaMedicaRepositorio.listar_persona_ids_con_ficha`, issue #362:
+        un id desconocido en un batch no debe 404 el batch entero).
+
+        Contrato de 4 campos (decisión del owner, issue #326):
+        `membresia_id`, `meses_adeudados`, `ultima_cobertura_fin`,
+        `monto_mensual` -- sin `es_gratuidad_familiar` a propósito (fuera de
+        alcance, ver el DTO)."""
+        ids_unicos = list(dict.fromkeys(membresia_ids))
+        if not ids_unicos:
+            return []
+
+        membresias = self.repo_membresia.listar_por_ids(ids_unicos)
+        membresias_por_id = {m.id: m for m in membresias}
+        ids_existentes = [mid for mid in ids_unicos if mid in membresias_por_id]
+        if not ids_existentes:
+            return []
+
+        fin_pagos = self.repo.fecha_fin_maxima_aprobada_bulk(ids_existentes)
+        fin_cobertura = self.repo_cobertura_bonificada.fecha_fin_maxima_bulk(ids_existentes)
+        reactivaciones = self.repo_historial_estado.fecha_efectiva_ultima_reactivacion_bulk(ids_existentes)
+        hoy = hoy_club()
+
+        resultado = []
+        for membresia_id in ids_existentes:
+            membresia = membresias_por_id[membresia_id]
+            ultimo_fin = _maximo_fecha_opcional(fin_pagos.get(membresia_id), fin_cobertura.get(membresia_id))
+            resultado.append({
+                "membresia_id": membresia_id,
+                "meses_adeudados": self._calcular_meses_adeudados_desde_datos(
+                    estado=membresia.estado,
+                    ultimo_fin=ultimo_fin,
+                    fecha_reactivacion=reactivaciones.get(membresia_id),
+                    hoy=hoy,
+                ),
+                "ultima_cobertura_fin": ultimo_fin,
+                "monto_mensual": membresia.monto_aplicado,
+            })
+        return resultado
 
     def obtener_deuda(self, membresia_id: int) -> dict:
         membresia = self.repo_membresia.obtener_por_id(membresia_id)

@@ -13,7 +13,7 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO,
-    DeudaMembresiaResponseDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
+    DeudaMembresiaResponseDTO, DeudaMembresiaBulkItemDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
     CorreccionPagoDTO, CorreccionPagoResponseDTO, CorreccionPagoResultadoDTO,
     CambioPlanMembresiaDTO,
 )
@@ -307,6 +307,41 @@ async def obtener_membresia(
 # bookkeeping del admin: entra APROBADO directo, con fechas retroactivas
 # explícitas y motivo obligatorio. No toca el estado de la membresía (ver
 # `PagoServicio.regularizar_deuda`).
+
+# Issue #326: el admin `/members` necesitaba deuda de N membresías VENCIDAs
+# a la vez (monto + meses) sin caer en una consulta por fila -- mismo patrón
+# de "ids repetidos en la query" que `GET /fichas-medicas/existe` (issue
+# #362): `?membresia_ids=1&membresia_ids=2`, nunca una lista separada por
+# comas parseada a mano. Reutiliza LA MISMA fórmula día-15/16 que la ruta de
+# una sola membresía de abajo -- ver `PagoServicio.obtener_deuda_bulk` y su
+# núcleo puro compartido `_calcular_meses_adeudados_desde_datos`.
+#
+# Registrada ANTES de `/{membresia_id}/deuda` a propósito (aunque FastAPI
+# igual no las confundiría -- distinto segundo segmento literal, "bulk" vs
+# "deuda"): mismo criterio que `/estadisticas` antes de `/{membresia_id}`,
+# un literal de dos segmentos junto a sus primos parametrizados.
+_MAX_BULK_DEUDA_IDS = 200
+
+
+@router.get(
+    "/deuda/bulk",
+    response_model=List[DeudaMembresiaBulkItemDTO],
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+def obtener_deuda_membresias_bulk(
+    membresia_ids: List[int] = Query(default=[]),
+    db: Session = Depends(obtener_sesion),
+):
+    if not membresia_ids:
+        raise HTTPException(status_code=422, detail="Debe indicar al menos una membresía.")
+    if len(membresia_ids) > _MAX_BULK_DEUDA_IDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Esta consulta admite hasta {_MAX_BULK_DEUDA_IDS} membresías a la vez.",
+        )
+    return PagoServicio(db).obtener_deuda_bulk(membresia_ids)
+
+
 @router.get(
     "/{membresia_id}/deuda",
     response_model=DeudaMembresiaResponseDTO,

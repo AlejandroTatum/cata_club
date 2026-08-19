@@ -252,7 +252,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: page1, total: 201, skip: 0, limit: 200 })) // /membresias/ page 1
       .mockResolvedValueOnce(jsonResponse({ items: page2, total: 201, skip: 200, limit: 200 })) // /membresias/ page 2
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /membresias/deuda/bulk — persona 3's page-1 row is VENCIDA
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
@@ -425,5 +426,72 @@ describe("GET /api/members", () => {
 
     expect(response.status).toBe(200);
     expect(body.accounts[0].estudiantes[0].membresia).toBeNull();
+  });
+
+  // --- Deuda en bloque (issue #326) -------------------------------------------
+  describe("bulk debt lookup", () => {
+    const membresiaVencida = { ...membresia, estado: "VENCIDA" };
+
+    it("does not call the bulk debt endpoint when no membership is VENCIDA", async () => {
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/
+        .mockResolvedValueOnce(jsonResponse({ items: [pago] })) // /membresias/pagos
+        .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+        .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })) // /membresias/ (ACTIVA)
+        .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+
+      const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+
+      expect(response.status).toBe(200);
+      // Exactly 5 calls: no /membresias/deuda/bulk fired for an ACTIVA-only page.
+      expect(global.fetch).toHaveBeenCalledTimes(5);
+    });
+
+    it("calls the bulk debt endpoint ONCE for every VENCIDA membership and attaches amount + months", async () => {
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/
+        .mockResolvedValueOnce(jsonResponse({ items: [pago] })) // /membresias/pagos
+        .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+        .mockResolvedValueOnce(jsonResponse({ items: [membresiaVencida], total: 1, skip: 0, limit: 200 })) // /membresias/
+        .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+        .mockResolvedValueOnce(
+          jsonResponse([
+            { membresiaId: 77, mesesAdeudados: 3, ultimaCoberturaFin: "2026-05-31", montoMensual: "30.00" },
+          ]),
+        ); // /membresias/deuda/bulk
+
+      const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(global.fetch).toHaveBeenCalledTimes(6);
+      const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+      const bulkCalls = urls.filter((url) => url.includes("/membresias/deuda/bulk"));
+      expect(bulkCalls).toHaveLength(1);
+      expect(bulkCalls[0]).toContain("membresia_ids=77");
+
+      const student = body.accounts[0].estudiantes[0];
+      expect(student.membresia.mesesAdeudados).toBe(3);
+      expect(student.membresia.montoAdeudado).toBe(90);
+    });
+
+    it("degrades gracefully (no debt fields) when the bulk debt fetch fails", async () => {
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/
+        .mockResolvedValueOnce(jsonResponse({ items: [pago] })) // /membresias/pagos
+        .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+        .mockResolvedValueOnce(jsonResponse({ items: [membresiaVencida], total: 1, skip: 0, limit: 200 })) // /membresias/
+        .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+        .mockResolvedValueOnce(jsonResponse({ detail: "boom" }, 500)); // /membresias/deuda/bulk fails
+
+      const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      const student = body.accounts[0].estudiantes[0];
+      expect(student.membresia.estado).toBe("vencida");
+      expect(student.membresia.mesesAdeudados).toBeUndefined();
+      expect(student.membresia.montoAdeudado).toBeUndefined();
+    });
   });
 });

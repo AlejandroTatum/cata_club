@@ -15,7 +15,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
-import { buildMemberAccounts, type BackendPersonaFull } from "@/lib/server/members-adapter";
+import {
+  buildMemberAccounts,
+  resolveMembresiaParaPersona,
+  type BackendPersonaFull,
+  type DeudaBulkItem,
+} from "@/lib/server/members-adapter";
 import { fetchAllPages, type PaginatedPage } from "@/lib/server/paged-fetch";
 import type { BackendMembresia, BackendPagoListItem, BackendTipoMembresia } from "@/lib/server/payments-adapter";
 
@@ -131,6 +136,48 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       : [],
   );
 
+  /*
+   * Issue #326: overdue amount + months for VENCIDA memberships, one bulk
+   * `?membresia_ids=1&membresia_ids=2` call — same shape as the ficha-médica
+   * lookup right above. `membresiaIdsVencidas` is derived through
+   * `resolveMembresiaParaPersona`, the SAME resolution `buildMemberAccounts`
+   * uses per row, so this only ever queries ids that are actually about to
+   * be displayed (never every historical VENCIDA row a persona has
+   * accumulated) — and stays bounded by `PERSONAS_PAGE_LIMIT` (200), the
+   * backend's own per-request cap on this endpoint.
+   *
+   * Best-effort, same fallback shape as `fichasFetch` above: a failed or
+   * empty lookup degrades to "no debt figures shown" on those rows rather
+   * than failing the whole page — never fetched at all when nobody is
+   * VENCIDA, so the common case adds zero extra backend calls.
+   */
+  const membresiaIdsVencidas = new Set<number>();
+  for (const persona of personasBody.items) {
+    const membresia = resolveMembresiaParaPersona(
+      persona.id,
+      latestPagoByPersona.get(persona.id),
+      membresiaById,
+      membresiaByPersona,
+    );
+    if (membresia?.estado === "VENCIDA") membresiaIdsVencidas.add(membresia.id);
+  }
+
+  const deudaByMembresiaId = new Map<number, DeudaBulkItem>();
+  if (membresiaIdsVencidas.size > 0) {
+    const membresiaIdsQuery = Array.from(membresiaIdsVencidas, (id) => `membresia_ids=${id}`).join("&");
+    const deudaFetch = await backendFetchAuthed(request, `/membresias/deuda/bulk?${membresiaIdsQuery}`);
+    if (deudaFetch.ok && deudaFetch.response.ok) {
+      type BackendDeudaBulkItem = { membresiaId: number; mesesAdeudados: number; montoMensual: string };
+      const items = (await deudaFetch.response.json()) as BackendDeudaBulkItem[];
+      for (const item of items) {
+        deudaByMembresiaId.set(item.membresiaId, {
+          mesesAdeudados: item.mesesAdeudados,
+          montoMensual: Number(item.montoMensual),
+        });
+      }
+    }
+  }
+
   const accounts = buildMemberAccounts(
     personasBody.items,
     latestPagoByPersona,
@@ -138,6 +185,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     membresiaByPersona,
     tipoById,
     personaIdsConFicha,
+    deudaByMembresiaId,
   );
 
   const personasCapped = personasBody.total >= PERSONAS_PAGE_LIMIT;
