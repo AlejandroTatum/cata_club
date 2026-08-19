@@ -139,7 +139,11 @@ describe("EnrollPage — tarifas públicas antes del primer campo", () => {
 
     render(<EnrollPage />);
 
-    await screen.findByRole("button", { name: "Jugador" });
+    // Wait on the state that actually depends on `fetchTarifas` resolving —
+    // the step-1 "Jugador" button renders regardless of tariff-fetch status,
+    // so finding it proves nothing about whether the empty state has landed
+    // yet (a real race under CI's slower/different scheduling).
+    await screen.findByText("Sin tarifas publicadas");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByText(/^\$/)).not.toBeInTheDocument();
     expect(fetchTarifas).toHaveBeenCalledTimes(1);
