@@ -144,7 +144,7 @@ describe("buildMemberAccounts", () => {
       new Map([[5, tipo]]),
     );
 
-    const student = accounts.find((a) => a.id === "2")?.estudiantes[0];
+    const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
     expect(student?.membresia?.esGratuidadFamiliar).toBe(true);
   });
 
