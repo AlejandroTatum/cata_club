@@ -24,6 +24,7 @@ import { POST } from "@/app/api/groups/horarios/route";
 import { PUT } from "@/app/api/groups/horarios/[id]/route";
 import { POST as POST_PAGO } from "@/app/api/membresias/pagos/route";
 import { PATCH as PATCH_FICHA_MEDICA } from "@/app/api/fichas-medicas/persona/[id]/route";
+import { POST as POST_BENEFICIO } from "@/app/api/personas/[id]/beneficio/route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 import {
   obtenerRolesDePersona,
@@ -55,6 +56,9 @@ import {
   crearDescuento,
   actualizarDescuento,
   actualizarTipoMembresia,
+  fetchBeneficio,
+  asignarBeneficio,
+  retirarBeneficio,
 } from "../api";
 
 const API_ROOT = path.resolve(
@@ -186,6 +190,11 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     // #394: editar una tarifa toca el numero con el que el club cobra, asi
     // que su ruta tiene que existir de verdad y no caer en el 404 HTML.
     ["actualizarTipoMembresia", () => actualizarTipoMembresia(5, { precio: "40.00" })],
+    // #398: BFF plumbing for a persona's club benefit — no UI yet, but the
+    // route must exist for real or these silently 404 like `quitarRol` did.
+    ["fetchBeneficio", () => fetchBeneficio(2)],
+    ["asignarBeneficio", () => asignarBeneficio(2, 3)],
+    ["retirarBeneficio", () => retirarBeneficio(2)],
   ];
 
   it.each(CASES)("%s targets an existing route handler", async (_name, call) => {
@@ -419,5 +428,34 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
       contacto_emergencia: "María Pérez",
       telefono_emergencia: "0997654321",
     });
+  });
+
+  /**
+   * The benefit seam (issue #398): the client sends camelCase `descuentoId`
+   * and the beneficio handler is the only thing translating it into the
+   * backend's `descuento_id`. Same failure class as `registrarPago` above —
+   * a drift here would not 404, it would silently 400 or assign the wrong id.
+   */
+  it("asignarBeneficio's descuentoId is accepted and translated by POST /api/personas/[id]/beneficio", async () => {
+    const clientBody = await captureBody(() => asignarBeneficio(2, 3));
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: 1 }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await POST_BENEFICIO(
+      new NextRequest("http://localhost/api/personas/2/beneficio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
+        body: JSON.stringify(clientBody),
+      }),
+      { params: { id: "2" } },
+    );
+
+    expect(response.status).not.toBe(400);
+    expect(forwardedToBackend()).toEqual({ descuento_id: 3 });
   });
 });
