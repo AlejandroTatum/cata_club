@@ -782,6 +782,63 @@ class SesionAsistencia(Base):
     cerrada_por: Mapped["Persona"] = relationship(foreign_keys=[cerrada_por_id])
 
 
+class AsistenciaCorreccion(Base):
+    """Traza de auditoría de CORRECCIÓN (issue #389, slice 2), la tabla que
+    el docstring de `SesionAsistencia` ya anunciaba como pendiente.
+    Append-only: cada corrección exitosa de
+    `AsistenciaServicio.corregir_asistencia` agrega una fila nueva, nunca
+    actualiza una existente.
+
+    Guarda el valor ANTERIOR de los tres campos que una corrección puede
+    tocar; el valor NUEVO ya vive en la fila mutada de `Asistencia` --
+    duplicarlo acá daría dos fuentes de verdad que podrían desincronizarse.
+
+    Sin `ondelete="CASCADE"` en ninguna FK, mismo criterio que
+    `ConsultaFichaEmergencia`/`SesionAsistencia`: `Asistencia` nunca se
+    borra (siempre queda como historial) y `Persona` se da de baja LÓGICA
+    (`Persona.activo`), así que la cascada nunca dispararía."""
+
+    __tablename__ = "asistencia_correccion"
+    __table_args__ = (
+        # Historial de esta fila, más reciente primero -- mismo criterio
+        # que `ix_consulta_ficha_emergencia_alumno_consultada`. Cubre
+        # también la FK `asistencia_id` (columna más a la izquierda).
+        Index(
+            "ix_asistencia_correccion_asistencia_corregido_en",
+            "asistencia_id", "corregido_en",
+        ),
+        # Cobertura de la FK `corregido_por_id` (`test_indices_fk.py`).
+        Index("ix_asistencia_correccion_corregido_por_id", "corregido_por_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asistencia_id: Mapped[int] = mapped_column(ForeignKey("asistencia.id"), nullable=False)
+    corregido_por_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    corregido_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc, nullable=False,
+    )
+    # Ancho 500, no 255: mismo criterio que `Notificacion.MENSAJE_MAX` --
+    # este proyecto ya tiene un incidente documentado de un techo de 255
+    # truncando texto libre.
+    motivo: Mapped[str] = mapped_column(String(500), nullable=False)
+    estado_anterior: Mapped[EstadoAsistencia] = mapped_column(
+        SAEnum(EstadoAsistencia), nullable=False,
+    )
+    justificativo_anterior: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    estado_justificativo_anterior: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+
+    asistencia: Mapped["Asistencia"] = relationship()
+    corregido_por: Mapped["Persona"] = relationship(foreign_keys=[corregido_por_id])
+
+    @property
+    def corregido_por_nombre(self) -> str:
+        """Mismo criterio que `Asistencia.registrado_por_nombre`, sin
+        `Optional`: `corregido_por_id` es NOT NULL (tabla nueva, sin
+        historial previo sin autor)."""
+        autor = self.corregido_por
+        return f"{autor.nombres} {autor.apellidos}".strip()
+
+
 # ---------------------------------------------------------------------------
 # Asignación directa Alumno ↔ Horario (muchos a muchos)
 # Permite que dos alumnos en el mismo nivel asistan a horarios distintos.

@@ -6,11 +6,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
-    Asistencia, HorarioEntrenamiento, AlumnoHorario, CategoriaHorario, CategoriaHorarioDia,
+    Asistencia, AsistenciaCorreccion, HorarioEntrenamiento, AlumnoHorario, CategoriaHorario,
+    CategoriaHorarioDia,
 )
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
-from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
+from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
@@ -19,8 +20,8 @@ from app.infraestructura.repositorios.asistencia_repositorio import (
     SesionAsistenciaRepositorio,
 )
 from app.presentacion.schemas.asistencia_schemas import (
-    AsistenciaCreateDTO, CategoriaCreateDTO, CategoriaResponseDTO, CategoriaUpdateDTO,
-    HorarioCreateDTO, HorarioUpdateDTO,
+    AsistenciaCreateDTO, AsistenciaCorreccionDTO, CategoriaCreateDTO, CategoriaResponseDTO,
+    CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
     UltimaListaDTO,
 )
@@ -28,6 +29,12 @@ from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.soporte_transversal.tiempo import hoy_club
 
 _CODIGO_MAX_LEN = 20
+
+# Issue #262, recreado desde cero para la corrección explícita del issue
+# #389 (slice 2): el mecanismo previo (rol + este mismo tope) fue eliminado
+# del camino de `registrar_asistencia` en el slice 1. Mismo valor: el
+# criterio de negocio no cambió, solo el CAMINO por el que se corrige.
+LIMITE_CORRECCION_ASISTENCIA_DIAS = 30
 
 # `date.weekday()` (Python, Lunes=0..Domingo=6) -> `DiaSemana`. Usado por
 # `registrar_asistencia` para exigir que `fecha_entrenamiento` caiga
@@ -493,6 +500,64 @@ class AsistenciaServicio:
                     f"{datos.persona_id}"
                 ),
             ) from None
+
+    def corregir_asistencia(
+        self, asistencia_id: int, datos: AsistenciaCorreccionDTO,
+        roles_solicitante: list[str], persona_id_solicitante: int,
+    ) -> AsistenciaCorreccion:
+        """Corrige UNA `Asistencia` ya cerrada (issue #389, slice 2): el
+        reemplazo explícito, con traza obligatoria, del mecanismo previo de
+        "corrección" (issue #262) que el slice 1 eliminó del camino de
+        `registrar_asistencia`. No reabre la sesión ni permite un segundo
+        alta -- sigue existiendo UNA sola fila de `Asistencia`; lo que
+        cambia es su VALOR, con quién/cuándo/motivo/valor-anterior
+        grabados aparte, para siempre.
+
+        `PermisosInsuficientes` si el rol no trae ADMINISTRADOR: defensa en
+        profundidad junto al `GestorPermisos(["ADMINISTRADOR"])` del router
+        -- la excepción de dominio es la fuente de verdad, no la sola
+        dependencia (`app/dominio/excepciones.py`).
+
+        `OperacionInvalida` si pasaron más de
+        `LIMITE_CORRECCION_ASISTENCIA_DIAS`: mismo tope que el mecanismo
+        eliminado, recreado porque el criterio de negocio no cambió.
+
+        El snapshot "anterior" se toma del estado ACTUAL de `asistencia`
+        antes de mutarla. Los tres campos mutables se pisan juntos, como
+        una unidad -- igual que la toma original -- nunca campo por
+        campo."""
+        if "ADMINISTRADOR" not in roles_solicitante:
+            raise PermisosInsuficientes(
+                "Solo un administrador puede corregir una asistencia ya registrada.",
+            )
+
+        asistencia = self.repo.obtener_por_id(asistencia_id)
+        if not asistencia:
+            raise EntidadNoEncontrada(f"Asistencia con id {asistencia_id} no encontrada")
+
+        antiguedad_dias = (hoy_club() - asistencia.fecha_entrenamiento).days
+        if antiguedad_dias > LIMITE_CORRECCION_ASISTENCIA_DIAS:
+            raise OperacionInvalida(
+                "No se puede corregir una asistencia de hace más de "
+                f"{LIMITE_CORRECCION_ASISTENCIA_DIAS} días.",
+                detalle_tecnico=f"asistencia_id={asistencia_id} antiguedad_dias={antiguedad_dias}",
+            )
+
+        correccion = AsistenciaCorreccion(
+            asistencia_id=asistencia.id,
+            corregido_por_id=persona_id_solicitante,
+            motivo=datos.motivo,
+            estado_anterior=asistencia.estado,
+            justificativo_anterior=asistencia.justificativo,
+            estado_justificativo_anterior=asistencia.estado_justificativo,
+        )
+
+        asistencia.estado = datos.estado
+        asistencia.justificativo = datos.justificativo
+        asistencia.estado_justificativo = datos.estado_justificativo
+
+        _, correccion = self.repo.guardar_correccion(asistencia, correccion)
+        return correccion
 
     def historial_por_persona(
         self, persona_id: int, skip: int = 0, limit: Optional[int] = None
