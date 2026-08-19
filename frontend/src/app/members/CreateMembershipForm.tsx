@@ -53,16 +53,18 @@ export default function CreateMembershipForm({
 
   async function handleCreate(): Promise<void> {
     if (!selectedTipoId || !personaId) return;
-    const tipo = tipos.find((t) => t.id === selectedTipoId);
-    if (!tipo) return;
 
     setLoading(true);
     setError(null);
     try {
+      // Only who and which plan. The catalogue price is still fetched and
+      // shown in the selector so the admin sees what they are assigning, but
+      // it is NOT sent: the backend resolves the current tariff from
+      // `tipoMembresiaId` (issue #400). Echoing the price back would make the
+      // number the club charges with editable in transit.
       await crearMembresia({
         personaId,
         tipoMembresiaId: selectedTipoId,
-        montoAplicado: Number(tipo.precio),
       });
       setCreated(true);
       setOpen(false);
