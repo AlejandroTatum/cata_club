@@ -229,6 +229,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/membresias/estadisticas"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/{membresia_id}/deuda"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/pagos"): frozenset({"ADMINISTRADOR"}),
+    # Issue #400 (slice 5b): ver el historial de correcciones financieras de
+    # un pago es tan sensible como crear una -- mismo rol que su hermano POST
+    # .../corregir, más abajo.
+    ("GET", "/membresias/pagos/{pago_id}/correcciones"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/pagos/reportes"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/pagos/reportes/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/"): frozenset({"ADMINISTRADOR"}),
@@ -260,6 +264,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/geografia/provincias"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
+    # Issue #400 (slice 5b): corregir un campo financiero congelado de un
+    # pago ya aprobado es tan sensible como crear el pago mismo -- admin-only,
+    # mismo criterio que regularizar-deuda/suspender/reactivar.
+    ("POST", "/membresias/pagos/{pago_id}/corregir"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5a): "Solo administración suspende o reactiva" es
     # texto explícito del issue -- a diferencia de POST .../aplicar-beneficio
     # (autoservicio, ver el comentario en la lista de arriba), estos dos SÍ

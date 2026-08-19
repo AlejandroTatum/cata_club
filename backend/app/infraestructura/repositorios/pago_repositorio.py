@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Pago, ComprobantePago, CoberturaBonificada
+from app.dominio.modelos import Pago, ComprobantePago, CoberturaBonificada, CorreccionPago
 from app.dominio.enums import EstadoPago
 
 
@@ -23,6 +23,24 @@ class PagoRepositorio:
 
     def obtener_por_id(self, pago_id: int) -> Optional[Pago]:
         return self.db.get(Pago, pago_id)
+
+    def obtener_membresia_id(self, pago_id: int) -> Optional[int]:
+        """Lee SOLO la columna `membresia_id` de un pago -- una consulta de
+        una sola columna, NUNCA `Session.get(Pago, ...)` (issue #400/5b,
+        hallazgo del revisor). `corregir_pago` necesita conocer la
+        `Membresia` de un pago ANTES de poder lockearla (para respetar el
+        orden Membresia-primero, Pago-después), pero un `Session.get(Pago,
+        pago_id)` sin lock, en la MISMA sesión que después llama
+        `obtener_por_id_con_bloqueo(pago_id)`, deja el objeto `Pago` YA
+        cacheado en el identity map -- y `Session.get(..., with_for_
+        update=True)` sobre un id que el identity map ya tiene puede
+        devolver la instancia cacheada SIN emitir un `SELECT` nuevo,
+        dejando el lock (y el refresh de atributos) silenciosamente sin
+        efecto. Una consulta de columna suelta (`select(Pago.membresia_id)`)
+        nunca crea ni toca una instancia ORM de `Pago`, así que no hay
+        identity map que ensuciar."""
+        stmt = select(Pago.membresia_id).where(Pago.id == pago_id)
+        return self.db.execute(stmt).scalar_one_or_none()
 
     def obtener_por_id_con_bloqueo(self, pago_id: int) -> Optional[Pago]:
         """Lee el pago con `SELECT ... FOR UPDATE`: la fila queda bloqueada
@@ -106,16 +124,33 @@ class PagoRepositorio:
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def cobertura_aprobada_en_rango(self, membresia_id: int, fecha_inicio: date, fecha_fin: date) -> bool:
+    def cobertura_aprobada_en_rango(
+        self,
+        membresia_id: int,
+        fecha_inicio: date,
+        fecha_fin: date,
+        *,
+        excluir_pago_id: Optional[int] = None,
+    ) -> bool:
         """True si la membresía ya tiene un pago APROBADO cuyo período [fecha_inicio, fecha_fin]
         se solapa con el rango dado (issue #284: la regularización no puede pisar
-        cobertura ya aprobada)."""
+        cobertura ya aprobada).
+
+        `excluir_pago_id` (issue #400/5b): `PagoServicio.corregir_pago` corrige
+        las fechas del PROPIO pago -- sin excluirlo, la fila que se está
+        corrigiendo (todavía con sus valores VIEJOS en esta misma consulta)
+        se solaparía trivialmente consigo misma y el chequeo de superposición
+        rechazaría cualquier corrección de fecha. `regularizar_deuda` no pasa
+        este argumento (crea un `Pago` nuevo, nunca corrige uno existente),
+        así que el default `None` preserva su comportamiento sin cambios."""
         stmt = select(func.count()).select_from(Pago).where(
             Pago.membresia_id == membresia_id,
             Pago.estado_pago == EstadoPago.APROBADO,
             Pago.fecha_inicio <= fecha_fin,
             Pago.fecha_fin >= fecha_inicio,
         )
+        if excluir_pago_id is not None:
+            stmt = stmt.where(Pago.id != excluir_pago_id)
         return self.db.execute(stmt).scalar_one() > 0
 
     def cobertura_aprobada_en_rango_medio_abierto(
@@ -153,6 +188,18 @@ class PagoRepositorio:
         self.db.commit()
         self.db.refresh(pago)
         return pago
+
+    def listar_correcciones_por_pago(self, pago_id: int) -> list[CorreccionPago]:
+        """Historial completo de correcciones financieras de un pago (issue
+        #400/5b), orden cronológico de escritura -- el rastro que el issue
+        exige que sea "conservado" tiene que ser CONSULTABLE, no solo
+        escribible."""
+        stmt = (
+            select(CorreccionPago)
+            .where(CorreccionPago.pago_id == pago_id)
+            .order_by(CorreccionPago.fecha_registro, CorreccionPago.id)
+        )
+        return list(self.db.execute(stmt).scalars().all())
 
 
 class ComprobantePagoRepositorio:

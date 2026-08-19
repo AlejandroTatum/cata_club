@@ -130,6 +130,17 @@ class TipoSangre(str, enum.Enum):
     DESCONOCIDO = "DESCONOCIDO"
 
 
+class EfectoCoberturaCorreccion(str, enum.Enum):
+    """Efecto EXPLÍCITO de una corrección financiera (issue #400, slice 5b)
+    sobre la cobertura de un pago -- calculado por `PagoServicio.
+    corregir_pago` comparando `fecha_fin` anterior vs. nueva. Nunca queda
+    implícito en la fila de `CorreccionPago`: el texto del issue exige
+    "efecto explícito sobre cobertura" como parte del rastro auditable."""
+    SIN_CAMBIO = "SIN_CAMBIO"
+    AMPLIADA = "AMPLIADA"
+    REDUCIDA = "REDUCIDA"
+
+
 class TipoNotificacion(str, enum.Enum):
     """Notificación in-app (no email/push)."""
     MIEMBRESIA_VENCIMIENTO_PROXIMO = "MIEMBRESIA_VENCIMIENTO_PROXIMO"

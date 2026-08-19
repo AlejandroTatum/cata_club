@@ -3,7 +3,9 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from app.dominio.enums import EstadoMembresia, TipoModalidad, EstadoPago, TipoPago
+from app.dominio.enums import (
+    EstadoMembresia, TipoModalidad, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
+)
 from app.presentacion.schemas.base import ResponseBase
 
 
@@ -285,6 +287,66 @@ class SuspensionReactivacionDTO(BaseModel):
         if not self.motivo.strip():
             raise ValueError("Debe indicar el motivo.")
         return self
+
+
+# --- Corrección financiera (issue #400, slice 5b) ----------------------------
+# Los seis campos financieros congelados de `Pago` -- todos OPCIONALES acá:
+# solo se envían los que efectivamente cambian. Un campo omitido significa
+# "sin cambio para ese campo" (el servicio conserva el valor anterior),
+# nunca "poner en null" -- ninguno de los seis admite `null` como corrección
+# válida (mismo criterio que `TipoMembresiaUpdateDTO`, que sí distingue
+# omitido de `null` explícito, pero acá `null` no tiene ningún significado
+# de negocio para estos campos).
+class CorreccionPagoDTO(BaseModel):
+    tarifa_mensual_aplicada: Optional[Decimal] = Field(None, gt=0)
+    meses_comprados: Optional[int] = Field(None, gt=0)
+    monto_base: Optional[Decimal] = Field(None, gt=0)
+    monto: Optional[Decimal] = Field(None, gt=0)
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    motivo: str = Field(..., min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def _validar(self) -> "CorreccionPagoDTO":
+        if not self.motivo.strip():
+            raise ValueError("Debe indicar el motivo de la corrección.")
+        if (
+            self.fecha_inicio is not None
+            and self.fecha_fin is not None
+            and self.fecha_inicio >= self.fecha_fin
+        ):
+            raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
+        return self
+
+
+class CorreccionPagoResponseDTO(ResponseBase, BaseModel):
+    id: int
+    pago_id: int
+    tarifa_mensual_aplicada_anterior: Optional[Decimal] = None
+    tarifa_mensual_aplicada_nuevo: Optional[Decimal] = None
+    meses_comprados_anterior: Optional[int] = None
+    meses_comprados_nuevo: Optional[int] = None
+    monto_base_anterior: Optional[Decimal] = None
+    monto_base_nuevo: Optional[Decimal] = None
+    monto_anterior: Decimal
+    monto_nuevo: Decimal
+    fecha_inicio_anterior: date
+    fecha_inicio_nuevo: date
+    fecha_fin_anterior: date
+    fecha_fin_nuevo: date
+    efecto_cobertura: EfectoCoberturaCorreccion
+    motivo: str
+    actor_persona_id: int
+    fecha_registro: datetime
+
+
+class CorreccionPagoResultadoDTO(ResponseBase, BaseModel):
+    """Shape de respuesta de `POST /membresias/pagos/{pago_id}/corregir`:
+    el pago YA corregido más la fila de auditoría que la corrección creó --
+    "efecto explícito y auditado" (issue #400) exige que la respuesta
+    muestre las dos caras de la misma operación, no solo el pago final."""
+    pago: PagoResponseDTO
+    correccion: CorreccionPagoResponseDTO
 
 
 # --- ComprobantePago ---
