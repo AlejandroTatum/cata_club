@@ -708,6 +708,68 @@ class Asistencia(Base):
         return f"{self.persona.nombres} {self.persona.apellidos}".strip()
 
 
+class SesionAsistencia(Base):
+    """Marca el CIERRE atómico de una sesión de asistencia (issue #389,
+    slice 1 de la cadena). Una fila = una sesión cerrada, donde "sesión" es
+    el par (`horario_id`, `fecha_entrenamiento`) -- `Asistencia` no tenía
+    ningún otro concepto de sesión (no existe una tabla "clase del día"
+    previa a este cambio), así que ese par ES la sesión.
+
+    El cierre es ATÓMICO y RACE-SAFE por el `UniqueConstraint` de abajo,
+    mismo patrón que `HorarioEntrenamiento.uq_horario_categoria_dia` (líneas
+    620-635): el chequeo del servicio
+    (`AsistenciaServicio.registrar_asistencia`) sigue siendo el camino
+    primario de error, y el UNIQUE es la red de seguridad ante dos primeras
+    inserciones concurrentes para el mismo par -- solo una gana, la otra
+    relee la fila que la ganadora ya creó en vez de fallar (ver
+    `SesionAsistenciaRepositorio.obtener_o_crear_cerrada`).
+
+    NO es todavía la traza de auditoría de corrección que pide el issue
+    (quién/cuándo/motivo/valor anterior de CADA corrección): eso vive en
+    `asistencia_correccion`, una tabla distinta que llega en un slice
+    posterior de esta misma cadena. Esta tabla solo responde "¿esta sesión
+    ya se cerró, quién la cerró y cuándo?" -- una vez que existe la fila, la
+    sesión queda cerrada para siempre: nadie vuelve a tomar lista ahí, ni
+    un ADMINISTRADOR (`registrar_asistencia` rechaza con `OperacionInvalida`
+    cualquier alumno que ya tenga fila de `Asistencia` en esa sesión, sin
+    excepción de rol -- a diferencia del tope de 30 días que existía antes
+    de este slice, que sí dejaba una puerta abierta).
+
+    `cerrada_por_id` es NOT NULL a propósito (a diferencia de
+    `Asistencia.registrado_por_id`, nullable por filas históricas sin autor
+    conocido): esta tabla nace junto con este slice, así que no hay
+    historia previa sin autor -- siempre es la persona cuyo primer INSERT
+    exitoso de `Asistencia` disparó el cierre de la sesión. Sin
+    `ondelete="CASCADE"`: mismo criterio que `ConsultaFichaEmergencia`
+    (líneas 780-817) y el resto del archivo -- `Persona` se da de baja
+    LÓGICA (`Persona.activo`), nunca se borra, así que la cascada nunca
+    dispararía y agregarla sería documentar un caso que no puede pasar.
+    """
+
+    __tablename__ = "sesion_asistencia"
+    __table_args__ = (
+        UniqueConstraint(
+            "horario_id", "fecha_entrenamiento", name="uq_sesion_asistencia_horario_fecha",
+        ),
+        # Cobertura de la FK `cerrada_por_id` (`test_indices_fk.py`, guardia
+        # de índices de cobertura de FK del proyecto): `horario_id` ya queda
+        # cubierto por ser la columna más a la izquierda del UNIQUE de
+        # arriba, mismo criterio que `AlumnoHorario.uq_alumno_horario`.
+        Index("ix_sesion_asistencia_cerrada_por_id", "cerrada_por_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    horario_id: Mapped[int] = mapped_column(ForeignKey(_HORARIO_FK))
+    fecha_entrenamiento: Mapped[date] = mapped_column(Date)
+    cerrada_por_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    cerrada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc, nullable=False,
+    )
+
+    horario: Mapped["HorarioEntrenamiento"] = relationship()
+    cerrada_por: Mapped["Persona"] = relationship(foreign_keys=[cerrada_por_id])
+
+
 # ---------------------------------------------------------------------------
 # Asignación directa Alumno ↔ Horario (muchos a muchos)
 # Permite que dos alumnos en el mismo nivel asistan a horarios distintos.
