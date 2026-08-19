@@ -13,7 +13,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_TOKEN_COOKIE, getBackendApiUrl, setAuthCookies } from "@/lib/server/auth";
+import { ACCESS_TOKEN_COOKIE, backendFetch, getBackendApiUrl, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 
 /** Default backend timeout for proxied requests. */
@@ -172,6 +172,51 @@ export async function proxyToBackend(path: string, init: ProxyToBackendInit): Pr
   } finally {
     done();
   }
+}
+
+/**
+ * Shared GET algorithm for anonymous public-catalog routes (issue #394):
+ * `api/personas/instituciones` and `api/membresias/tarifas` are the only two
+ * BFF routes with NO auth dependency at all, and both proxied the same
+ * `backendFetch` + 503 (unreachable) / 502 (backend error) / 502 (invalid
+ * JSON) / 200-passthrough sequence almost verbatim. Extracted here so a
+ * third anonymous catalog route doesn't copy it a third time.
+ *
+ * Takes the already-built backend path (including any query string) rather
+ * than building it itself: `instituciones` forwards `skip`/`limit` as a
+ * query string it assembles on its own, `tarifas` has no query params at
+ * all — the helper stays agnostic to that and just proxies whatever path
+ * it's given.
+ */
+export async function publicCatalogGet(
+  backendPath: string,
+  forwardedFor: string | undefined,
+): Promise<NextResponse> {
+  const result = await backendFetch(backendPath, { method: "GET" }, { forwardedFor });
+
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error.code, message: result.error.message }, { status: 503 });
+  }
+
+  const response = result.data;
+  if (!response.ok) {
+    return NextResponse.json(
+      { error: "backend_unavailable", message: `El servidor respondió con un error (${response.status}).` },
+      { status: 502 },
+    );
+  }
+
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    return NextResponse.json(
+      { error: "invalid_response", message: "Respuesta del servidor inválida." },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json(json, { status: 200 });
 }
 
 interface PatchCatalogResourceOptions<Field extends string> {

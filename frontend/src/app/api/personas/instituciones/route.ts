@@ -15,10 +15,17 @@
  * `force-dynamic` is required even though this used to read nothing from
  * `request`: without it, Next attempts to statically prerender the route at
  * build time, which fails in Docker when the backend isn't reachable yet.
+ *
+ * The shared 503/502/200 response shaping (backend unreachable / backend
+ * error / invalid JSON / passthrough) lives in `publicCatalogGet`
+ * (`@/lib/server/bff-helpers`), shared with `api/membresias/tarifas` (issue
+ * #394) — this route still builds its own `skip`/`limit` query string,
+ * since that part is specific to this endpoint's pagination.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { backendFetch, forwardedForFrom } from "@/lib/server/auth";
+import { forwardedForFrom } from "@/lib/server/auth";
+import { publicCatalogGet } from "@/lib/server/bff-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -31,33 +38,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (limit) qs.set("limit", limit);
   const suffix = qs.size > 0 ? `?${qs.toString()}` : "";
 
-  const result = await backendFetch(
-    `/personas/instituciones${suffix}`,
-    { method: "GET" },
-    { forwardedFor: forwardedForFrom(request) },
-  );
-
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error.code, message: result.error.message }, { status: 503 });
-  }
-
-  const response = result.data;
-  if (!response.ok) {
-    return NextResponse.json(
-      { error: "backend_unavailable", message: `El servidor respondió con un error (${response.status}).` },
-      { status: 502 },
-    );
-  }
-
-  let json: unknown;
-  try {
-    json = await response.json();
-  } catch {
-    return NextResponse.json(
-      { error: "invalid_response", message: "Respuesta del servidor inválida." },
-      { status: 502 },
-    );
-  }
-
-  return NextResponse.json(json, { status: 200 });
+  return publicCatalogGet(`/personas/instituciones${suffix}`, forwardedForFrom(request));
 }

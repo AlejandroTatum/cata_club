@@ -6,7 +6,9 @@
  * session. This route MUST stay PUBLIC: using `proxyToBackend`/token
  * extraction here would 401 that anonymous flow. Follows the exact same
  * public shape as `api/personas/instituciones` (`backendFetch`, no token
- * extraction) — the only other anonymous BFF surface in the app.
+ * extraction) — the only other anonymous BFF surface in the app. The shared
+ * 503/502/200 response shaping lives in `publicCatalogGet`
+ * (`@/lib/server/bff-helpers`), which both routes use.
  *
  * No query params to forward: the backend endpoint is deliberately
  * unpaginated (small, low-churn catalog, see
@@ -18,38 +20,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { backendFetch, forwardedForFrom } from "@/lib/server/auth";
+import { forwardedForFrom } from "@/lib/server/auth";
+import { publicCatalogGet } from "@/lib/server/bff-helpers";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const result = await backendFetch(
-    "/membresias/tarifas",
-    { method: "GET" },
-    { forwardedFor: forwardedForFrom(request) },
-  );
-
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error.code, message: result.error.message }, { status: 503 });
-  }
-
-  const response = result.data;
-  if (!response.ok) {
-    return NextResponse.json(
-      { error: "backend_unavailable", message: `El servidor respondió con un error (${response.status}).` },
-      { status: 502 },
-    );
-  }
-
-  let json: unknown;
-  try {
-    json = await response.json();
-  } catch {
-    return NextResponse.json(
-      { error: "invalid_response", message: "Respuesta del servidor inválida." },
-      { status: 502 },
-    );
-  }
-
-  return NextResponse.json(json, { status: 200 });
+  return publicCatalogGet("/membresias/tarifas", forwardedForFrom(request));
 }
