@@ -248,3 +248,48 @@ def test_cobertura_se_calcula_sobre_el_monto_base_no_el_descontado(client, monke
     assert Decimal(str(pago["monto"])) == Decimal("270.00")
     assert pago["fechaInicio"] == FECHA_CONGELADA_HOY.isoformat()
     assert pago["fechaFin"] == date(2030, 1, 1).isoformat()  # doce meses, no diez
+
+
+# --- Issue #400 (slice 4c-c): Administración no puede editar la cobertura ---
+# --- al aprobar, tampoco. --------------------------------------------------
+
+def test_fecha_inicio_fin_en_el_payload_de_validar_no_alteran_la_cobertura(client, monkeypatch):
+    """El agujero de `POST /membresias/pagos` (el candado de arriba) tenía un
+    gemelo en `PATCH .../validar`: hasta issue #400 el admin podía "corregir"
+    la vigencia al aprobar, pisando `pago.fecha_inicio`/`fecha_fin` con lo que
+    mandara en ese PATCH. La regla del issue es explícita -- "Administración
+    no puede editar fecha_inicio ni fecha_fin durante la aprobación" -- así
+    que este test manda esos campos en el payload de `/validar` (el payload
+    que seguiría mandando un cliente desactualizado, o un curl directo contra
+    la API) y verifica que la cobertura aprobada es EXACTAMENTE la que
+    `registrar_pago` derivó al registrar el pago, no la del payload.
+
+    `PagoValidarDTO` ya no declara estos campos -- Pydantic los descarta en
+    silencio -- pero eso por sí solo no prueba que el resultado sea correcto,
+    solo que no hubo un 422. Este test fija el RESULTADO, no la ausencia de
+    error."""
+    _congelar_hoy_en_pagos(monkeypatch)
+    persona = _crear_persona(client)
+    tipo = _crear_tipo_membresia(client, precio="25.00")
+    membresia = _crear_membresia(client, persona["id"], tipo["id"], monto_aplicado="25.00")
+
+    pago = _registrar_pago(client, persona["id"], membresia["id"], 1).json()
+    fecha_inicio_derivada = pago["fechaInicio"]
+    fecha_fin_derivada = pago["fechaFin"]
+
+    resp = client.patch(
+        f"/api/v1/membresias/pagos/{pago['id']}/validar",
+        json={
+            "estado_pago": "APROBADO",
+            # Un año de diferencia respecto de lo derivado -- si esto tuviera
+            # algún efecto, la cobertura aprobada no coincidiría con lo que
+            # se afirma arriba.
+            "fecha_inicio": "2099-01-01",
+            "fecha_fin": "2099-12-31",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    aprobado = resp.json()
+
+    assert aprobado["fechaInicio"] == fecha_inicio_derivada
+    assert aprobado["fechaFin"] == fecha_fin_derivada

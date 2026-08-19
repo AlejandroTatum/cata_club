@@ -151,19 +151,21 @@ class PagoCreateDTO(BaseModel):
 class PagoValidarDTO(BaseModel):
     estado_pago: EstadoPago
     motivo_rechazo: Optional[str] = Field(None, max_length=255)
-    fecha_inicio: Optional[date] = None
-    fecha_fin: Optional[date] = None
 
+    # `fecha_inicio`/`fecha_fin` NO se aceptan al validar (issue #400):
+    # Administración no puede editar la cobertura durante la aprobación, ni
+    # siquiera para "corregirla". El período ya lo derivó
+    # `PagoServicio.registrar_pago` a partir del monto base y la cuota
+    # vigente -- dejar que el admin lo pise acá reabría exactamente el bug
+    # que el fix de cobertura (PAG-5) cerró del lado de `registrar_pago`,
+    # solo que un paso más tarde. Un cliente viejo que todavía mande estos
+    # campos los pierde en silencio (Pydantic ignora extras); no es un 400
+    # porque el contrato nunca los necesitó.
     @model_validator(mode="after")
     def _validar_campos(self) -> "PagoValidarDTO":
         if self.estado_pago == EstadoPago.RECHAZADO:
             if self.motivo_rechazo is None or not self.motivo_rechazo.strip():
                 raise ValueError("Debe indicar el motivo del rechazo.")
-        if (self.fecha_inicio is None) != (self.fecha_fin is None):
-            raise ValueError("Indique la fecha de inicio y la de fin, o ninguna de las dos.")
-        if self.fecha_inicio is not None and self.fecha_fin is not None:
-            if self.fecha_inicio >= self.fecha_fin:
-                raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
         return self
 
 

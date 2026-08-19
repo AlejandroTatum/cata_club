@@ -28,10 +28,17 @@ import {
 } from "@/lib/server/payments-adapter";
 
 type ParsedUpdateBody =
-  | { action: "approved"; startDate?: string; endDate?: string }
+  | { action: "approved" }
   | { action: "rejected"; rejectionReason: string };
 
-/** Mirrors the `UpdatePaymentValidationDTO` contract `updatePaymentValidation()` in src/services/api.ts sends — do not change without updating that client. */
+/**
+ * Mirrors the `UpdatePaymentValidationDTO` contract `updatePaymentValidation()` in src/services/api.ts sends — do not change without updating that client.
+ *
+ * A stale client that still sends `startDate`/`endDate` on approve (issue
+ * #400: Administración can no longer edit coverage dates at validation
+ * time) has them silently dropped here, same posture as `descuento_ids` in
+ * an earlier slice — never forwarded, never a 400.
+ */
 function parseUpdateBody(value: unknown): ParsedUpdateBody | { error: string } {
   if (typeof value !== "object" || value === null) {
     return { error: "Acción inválida. Use 'approved' o 'rejected'." };
@@ -39,9 +46,7 @@ function parseUpdateBody(value: unknown): ParsedUpdateBody | { error: string } {
   const body = value as Record<string, unknown>;
 
   if (body.action === "approved") {
-    const startDate = typeof body.startDate === "string" ? body.startDate : undefined;
-    const endDate = typeof body.endDate === "string" ? body.endDate : undefined;
-    return { action: "approved", startDate, endDate };
+    return { action: "approved" };
   }
 
   if (body.action === "rejected") {
@@ -75,11 +80,6 @@ export async function PUT(
     parsed.action === "approved"
       ? { estado_pago: "APROBADO" }
       : { estado_pago: "RECHAZADO", motivo_rechazo: parsed.rejectionReason };
-
-  if (parsed.action === "approved" && parsed.startDate && parsed.endDate) {
-    validarBody.fecha_inicio = parsed.startDate;
-    validarBody.fecha_fin = parsed.endDate;
-  }
 
   const validarResult = await backendFetchAuthed(request, `/membresias/pagos/${params.id}/validar`, {
     method: "PATCH",

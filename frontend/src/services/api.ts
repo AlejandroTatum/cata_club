@@ -99,11 +99,16 @@ export interface PaymentValidationRequest {
   notificationDeliveryFailed?: boolean;
 }
 
-/** DTO for approving a payment validation request. */
+/**
+ * DTO for approving a payment validation request.
+ *
+ * No `startDate`/`endDate` here (issue #400): Administración can no longer
+ * edit `fecha_inicio`/`fecha_fin` at approval time. Coverage comes only
+ * from the month-based engine that runs at registration — approving just
+ * confirms it.
+ */
 export interface ApprovePaymentDTO {
   action: "approved";
-  startDate?: string;
-  endDate?: string;
 }
 
 /** DTO for rejecting a payment validation request. */
