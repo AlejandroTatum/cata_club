@@ -97,6 +97,21 @@ class AsistenciaRepositorio:
         self.db.refresh(correccion)
         return asistencia, correccion
 
+    def listar_correcciones_por_asistencia(self, asistencia_id: int) -> List[AsistenciaCorreccion]:
+        """Historial de correcciones de UNA `Asistencia` (issue #389, slice
+        4a), más reciente primero -- coincide con el orden del índice
+        compuesto `ix_asistencia_correccion_asistencia_corregido_en`
+        (migración `300423734f25`), construido para esta consulta.
+        `corregido_por` va eager-loaded (evita N+1 al resolver
+        `corregido_por_nombre` por cada fila)."""
+        stmt = (
+            select(AsistenciaCorreccion)
+            .options(joinedload(AsistenciaCorreccion.corregido_por))
+            .where(AsistenciaCorreccion.asistencia_id == asistencia_id)
+            .order_by(AsistenciaCorreccion.corregido_en.desc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
     def buscar_por_persona_horario_fecha(
         self, persona_id: int, horario_id: int, fecha_entrenamiento: date
     ) -> Optional[Asistencia]:
