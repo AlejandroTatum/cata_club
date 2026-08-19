@@ -12,7 +12,7 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     MembresiaCreateDTO, MembresiaEstadisticasResponseDTO, MembresiaResponseDTO,
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
-    TipoMembresiaCreateDTO, TipoMembresiaResponseDTO,
+    TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO,
     DeudaMembresiaResponseDTO, RegularizacionDeudaDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
@@ -70,6 +70,24 @@ async def crear_tipo_membresia(datos: TipoMembresiaCreateDTO, db: Session = Depe
 )
 async def listar_tipos_membresia(db: Session = Depends(obtener_sesion)):
     return MembresiaServicio(db).listar_tipos_membresia()
+
+
+# Issue #394: hasta acá el catálogo solo se podía escribir una vez. Cambiar el
+# precio de un plan obligaba a crear un tipo nuevo y dejar el viejo vivo, sin
+# forma de retirarlo -- una fuente de verdad que solo admite un INSERT es un
+# valor de siembra, no una fuente de verdad.
+#
+# Mismo candado de rol que el POST de arriba: esto escribe sobre el número con
+# el que el club cobra. Un cambio de tarifa alcanza SOLO a los pagos futuros;
+# el servicio explica por qué y los tests lo fijan.
+@router.patch(
+    "/tipos/{tipo_id}", response_model=TipoMembresiaResponseDTO,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+async def actualizar_tipo_membresia(
+    tipo_id: int, datos: TipoMembresiaUpdateDTO, db: Session = Depends(obtener_sesion),
+):
+    return MembresiaServicio(db).actualizar_tipo_membresia(tipo_id, datos)
 
 
 # --- Membresia ---

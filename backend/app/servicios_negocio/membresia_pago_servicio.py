@@ -23,7 +23,8 @@ from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
 from app.presentacion.schemas.membresia_pago_schemas import (
-    TipoMembresiaCreateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO, ComprobantePagoCreateDTO,
+    TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO,
+    ComprobantePagoCreateDTO,
     PagoListItemDTO, PagoResponseDTO, RegularizacionDeudaDTO,
 )
 
@@ -113,6 +114,29 @@ class MembresiaServicio:
 
     def listar_tipos_membresia(self) -> list[TipoMembresia]:
         return self.repo_tipo.listar()
+
+    def actualizar_tipo_membresia(
+        self, tipo_id: int, datos: TipoMembresiaUpdateDTO,
+    ) -> TipoMembresia:
+        """Actualización parcial del catálogo de tarifas (issue #394).
+
+        NO toca ninguna membresía ni ningún pago, y eso no es un olvido: es
+        la regla no negociable de #400. `membresia.monto_aplicado` es una
+        COPIA del precio al momento de asignar el plan, no una referencia
+        viva, y cada pago congela sus propios valores. Por eso subir la cuota
+        del catálogo alcanza solo a los pagos FUTUROS, y el historial nunca
+        se recalcula. Los candados de `tests/test_tarifas_administracion.py`
+        fijan esa propiedad, porque es la que se rompería en silencio: sin
+        error y sin excepción, solo plata vieja que cambia de valor.
+        """
+        tipo = self.repo_tipo.obtener_por_id(tipo_id)
+        if not tipo:
+            raise EntidadNoEncontrada(f"Tipo de membresía con id {tipo_id} no encontrado")
+
+        for campo, valor in datos.model_dump(exclude_unset=True).items():
+            setattr(tipo, campo, valor)
+
+        return self.repo_tipo.guardar_cambios(tipo)
 
     def crear_membresia(self, datos: MembresiaCreateDTO) -> Membresia:
         if not self.repo_persona.obtener_por_id(datos.persona_id):
