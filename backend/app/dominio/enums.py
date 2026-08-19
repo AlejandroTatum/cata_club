@@ -25,10 +25,18 @@ class EstadoMembresia(str, enum.Enum):
     Membresia -- dos objetos distintos no deben compartir una sola máquina de
     estados. INACTIVA es el estado inicial real de una Membresia (creada, pero
     aún sin ningún pago aprobado); no es sinónimo de "pago pendiente".
+
+    SUSPENDIDA se agrega en issue #400: el club para la generación de deuda de
+    alguien que se ausenta un tiempo, sin perder su plan, su beneficio ni su
+    cobertura ya pagada. NO es un cuarto sabor de "vencida": una VENCIDA debe
+    plata, una SUSPENDIDA no acumula ninguna mientras dura. La cobertura ya
+    pagada conserva su fecha final original -- no se congela, no se extiende y
+    no se convierte en saldo a favor.
     """
     INACTIVA = "INACTIVA"
     ACTIVA = "ACTIVA"
     VENCIDA = "VENCIDA"
+    SUSPENDIDA = "SUSPENDIDA"
 
 
 class DiaSemana(str, enum.Enum):
