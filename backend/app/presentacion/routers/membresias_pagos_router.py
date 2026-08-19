@@ -12,7 +12,7 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     MembresiaCreateDTO, MembresiaEstadisticasResponseDTO, MembresiaResponseDTO,
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
-    TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO,
+    TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO, TarifaPublicaDTO,
     DeudaMembresiaResponseDTO, DeudaMembresiaBulkItemDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
     CorreccionPagoDTO, CorreccionPagoResponseDTO, CorreccionPagoResultadoDTO,
     CambioPlanMembresiaDTO,
@@ -93,6 +93,23 @@ async def actualizar_tipo_membresia(
     tipo_id: int, datos: TipoMembresiaUpdateDTO, db: Session = Depends(obtener_sesion),
 ):
     return MembresiaServicio(db).actualizar_tipo_membresia(tipo_id, datos)
+
+
+# Issue #394 (mitad pública, contrato de issue #331): la pantalla de
+# inscripción necesita mostrar el precio del plan ANTES de que la persona
+# tenga sesión -- misma clase que `GET /personas/instituciones`: catálogo
+# sin dato de persona, deliberadamente SIN autenticación (documentado en
+# `frontend/src/app/api/membresias/tarifas/route.ts`). Rate-limited igual
+# que esa ruta: es la única otra superficie anónima de todo el backend, así
+# que le toca el mismo tope de 60/min por el mismo motivo (D6-a).
+# Reusa `listar_tipos_membresia` (mismo método que ya sirve al admin) y
+# mapea acá al DTO público, mismo patrón que `listar_instituciones` mapea
+# `Institucion` -> `InstitucionResponseDTO` en `personas_router.py`.
+@router.get("/tarifas", response_model=List[TarifaPublicaDTO])
+@limiter.limit("60/minute")
+async def listar_tarifas_publicas(request: Request, db: Session = Depends(obtener_sesion)):
+    tipos = MembresiaServicio(db).listar_tipos_membresia()
+    return [TarifaPublicaDTO(categoria=t.categoria, precio=t.precio) for t in tipos]
 
 
 # --- Membresia ---

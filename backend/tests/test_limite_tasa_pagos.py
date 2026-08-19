@@ -84,6 +84,11 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
         "validar_pago": "20/minute",
         "adjuntar_comprobante": "20/minute",
         "subir_voucher": "5/minute",
+        # Issue #394/#331: única superficie anónima de este router (catálogo
+        # público de tarifas para la pantalla de inscripción, sin sesión) --
+        # mismo tope que `listar_instituciones`, la otra ruta anónima del
+        # backend entero.
+        "listar_tarifas_publicas": "60/minute",
     },
     # PR3 (sdd/api-abuse-protection, Fase 4): cobertura D6 de personas_router.
     # Regla aplicada endpoint por endpoint (ver sdd/api-abuse-protection/apply-progress

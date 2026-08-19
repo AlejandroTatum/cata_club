@@ -22,11 +22,14 @@ archivo; el resto es el CRUD alrededor.
 """
 import pytest
 
+from decimal import Decimal
+
 from tests.fabricas_pagos import (
     crear_membresia_api,
     crear_pago_api,
     crear_persona_api,
     crear_tipo_membresia_api,
+    crear_tipo_membresia_orm,
 )
 
 RUTA_TIPOS = "/api/v1/membresias/tipos"
@@ -168,3 +171,52 @@ def test_sin_token_da_401(client_sin_token):
     respuesta = client_sin_token.patch(f"{RUTA_TIPOS}/1", json={"precio": "40.00"})
 
     assert respuesta.status_code == 401
+
+
+# --- GET /membresias/tarifas (issue #394, contrato de issue #331) -----------
+# Mitad pública del mismo issue: el admin ya puede EDITAR una tarifa (arriba);
+# esto expone el catálogo de SOLO LECTURA para quien todavía no tiene sesión
+# (la pantalla de inscripción necesita mostrar el precio antes de que la
+# persona exista como cuenta). Anónimo a propósito, misma clase que
+# `GET /personas/instituciones`: catálogo, no dato de persona.
+RUTA_TARIFAS = "/api/v1/membresias/tarifas"
+
+
+# Las tres pruebas siguientes usan `db_session` (fábrica ORM) en vez del
+# cliente `client` autenticado para sembrar el tipo: `client` y
+# `client_sin_token` NO pueden pedirse juntos en el mismo test (ver el
+# comentario de arriba, línea 154) porque ambos pisan el mismo
+# `app.dependency_overrides` global -- pedir `client_sin_token` después de
+# `client` borra el override del token admin antes de que el test alcance a
+# usarlo.
+def test_get_tarifas_es_publico_y_devuelve_200(db_session, client_sin_token):
+    crear_tipo_membresia_orm(db_session)
+
+    respuesta = client_sin_token.get(RUTA_TARIFAS)
+
+    assert respuesta.status_code == 200
+
+
+def test_get_tarifas_expone_exactamente_categoria_y_precio(db_session, client_sin_token):
+    """El catálogo público NUNCA debe filtrar `id` ni `modalidad`: son
+    detalles administrativos del plan, no parte del contrato público de
+    tarifas (issue #331)."""
+    crear_tipo_membresia_orm(db_session)
+
+    items = client_sin_token.get(RUTA_TARIFAS).json()
+
+    assert len(items) >= 1
+    for item in items:
+        assert set(item.keys()) == {"categoria", "precio"}
+
+
+def test_get_tarifas_refleja_los_tipos_creados(db_session, client_sin_token):
+    tipo = crear_tipo_membresia_orm(db_session, categoria="Infantil", precio=Decimal("28.75"))
+
+    items = client_sin_token.get(RUTA_TARIFAS).json()
+
+    coincidencias = [
+        i for i in items
+        if i["categoria"] == tipo.categoria and Decimal(i["precio"]) == tipo.precio
+    ]
+    assert len(coincidencias) == 1

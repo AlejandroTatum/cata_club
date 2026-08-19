@@ -58,6 +58,18 @@ class TipoMembresiaResponseDTO(ResponseBase, TipoMembresiaCreateDTO):
     id: int
 
 
+class TarifaPublicaDTO(ResponseBase, BaseModel):
+    """Mitad pública del catálogo de tarifas (issue #394, contrato de issue
+    #331): SOLO `categoria` y `precio`. A propósito sin `id` ni `modalidad`
+    -- son detalles administrativos del plan (edición, agrupación interna),
+    no parte de lo que un visitante anónimo necesita ver antes de
+    inscribirse. `TipoMembresiaResponseDTO` de arriba sigue siendo el DTO
+    completo para el admin autenticado; este es un catálogo aparte, no un
+    subconjunto derivado en runtime."""
+    categoria: str
+    precio: Decimal
+
+
 # --- Membresia ---
 class MembresiaCreateDTO(BaseModel):
     """Asignar un plan dice a QUIÉN y CUÁL, nunca CUÁNTO (issue #400).
