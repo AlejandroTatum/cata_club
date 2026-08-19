@@ -244,6 +244,19 @@ class DeudaMembresiaResponseDTO(ResponseBase, BaseModel):
     es_gratuidad_familiar: bool = Field(..., examples=[False])
 
 
+# Issue #326: deuda en bloque para el admin `/members` (mismos meses/monto
+# que `DeudaMembresiaResponseDTO`, N membresías por request en vez de una).
+# Contrato de 4 campos DECIDIDO por el owner -- `membresia_id` (implícito en
+# la ruta individual, acá explícito porque la respuesta es una lista) +
+# los mismos 3 campos de siempre. Sin `es_gratuidad_familiar` A PROPÓSITO:
+# fuera de alcance de este issue (ver PagoServicio.obtener_deuda_bulk).
+class DeudaMembresiaBulkItemDTO(ResponseBase, BaseModel):
+    membresia_id: int = Field(..., examples=[42])
+    meses_adeudados: int = Field(..., examples=[4])
+    ultima_cobertura_fin: Optional[date] = Field(default=None, examples=["2026-03-31"])
+    monto_mensual: Decimal = Field(..., examples=["30.00"])
+
+
 class RegularizacionDeudaDTO(BaseModel):
     monto: Decimal = Field(..., gt=0)
     fecha_inicio: date

@@ -47,6 +47,16 @@ class MembresiaRepositorio:
         )
         return self.db.execute(stmt).scalars().first()
 
+    def listar_por_ids(self, membresia_ids: list[int]) -> List[Membresia]:
+        """Trae varias membresías por id en una sola consulta (issue #326,
+        deuda en bloque). Sin `joinedload` a propósito, a diferencia de
+        `obtener_por_id`: la deuda en bloque solo necesita `estado`/
+        `monto_aplicado`, no `persona`/`tipo_membresia` precargados."""
+        if not membresia_ids:
+            return []
+        stmt = select(Membresia).where(Membresia.id.in_(membresia_ids))
+        return list(self.db.execute(stmt).scalars().all())
+
     def obtener_por_id_con_bloqueo(self, membresia_id: int) -> Optional[Membresia]:
         """Lee la membresía con `SELECT ... FOR UPDATE`: mismo patrón que
         `PagoRepositorio.obtener_por_id_con_bloqueo` (issue #8, ver su
@@ -257,6 +267,24 @@ class HistorialEstadoMembresiaRepositorio:
             .limit(1)
         )
         return self.db.execute(stmt).scalar_one_or_none()
+
+    def fecha_efectiva_ultima_reactivacion_bulk(self, membresia_ids: list[int]) -> dict[int, datetime]:
+        """Versión agrupada de `fecha_efectiva_ultima_reactivacion`: UN
+        `MAX(fecha_efectiva)` agrupado por membresía, en vez de N consultas
+        (issue #326, deuda en bloque). El desempate por `id.desc()` de la
+        versión de una sola fila no hace falta acá -- el agregado `MAX()`
+        ya da el mismo valor sin necesitar la fila entera."""
+        if not membresia_ids:
+            return {}
+        stmt = (
+            select(HistorialEstadoMembresia.membresia_id, func.max(HistorialEstadoMembresia.fecha_efectiva))
+            .where(
+                HistorialEstadoMembresia.membresia_id.in_(membresia_ids),
+                HistorialEstadoMembresia.estado_nuevo == EstadoMembresia.ACTIVA,
+            )
+            .group_by(HistorialEstadoMembresia.membresia_id)
+        )
+        return dict(self.db.execute(stmt).all())
 
     def ultima_transicion(self, membresia_id: int) -> Optional[HistorialEstadoMembresia]:
         """La fila de `HistorialEstadoMembresia` escrita MÁS RECIENTEMENTE

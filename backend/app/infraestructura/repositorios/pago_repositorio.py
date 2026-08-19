@@ -124,6 +124,24 @@ class PagoRepositorio:
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
+    def fecha_fin_maxima_aprobada_bulk(self, membresia_ids: list[int]) -> dict[int, date]:
+        """Versión agrupada de `fecha_fin_maxima_aprobada`: UNA consulta con
+        `GROUP BY membresia_id` para N membresías, en vez de N consultas
+        (issue #326, deuda en bloque de `/members`). Un id sin pagos
+        APROBADOS simplemente no aparece en el dict devuelto -- mismo
+        contrato que `Optional[date]` de la versión de una sola fila."""
+        if not membresia_ids:
+            return {}
+        stmt = (
+            select(Pago.membresia_id, func.max(Pago.fecha_fin))
+            .where(
+                Pago.membresia_id.in_(membresia_ids),
+                Pago.estado_pago == EstadoPago.APROBADO,
+            )
+            .group_by(Pago.membresia_id)
+        )
+        return dict(self.db.execute(stmt).all())
+
     def cobertura_aprobada_en_rango(
         self,
         membresia_id: int,
@@ -235,6 +253,19 @@ class CoberturaBonificadaRepositorio:
             CoberturaBonificada.membresia_id == membresia_id,
         )
         return self.db.execute(stmt).scalar_one_or_none()
+
+    def fecha_fin_maxima_bulk(self, membresia_ids: list[int]) -> dict[int, date]:
+        """Versión agrupada de `fecha_fin_maxima`: mismo criterio que
+        `PagoRepositorio.fecha_fin_maxima_aprobada_bulk` para la otra tabla
+        de cobertura (issue #326)."""
+        if not membresia_ids:
+            return {}
+        stmt = (
+            select(CoberturaBonificada.membresia_id, func.max(CoberturaBonificada.fecha_fin))
+            .where(CoberturaBonificada.membresia_id.in_(membresia_ids))
+            .group_by(CoberturaBonificada.membresia_id)
+        )
+        return dict(self.db.execute(stmt).all())
 
     def existe_en_rango(self, membresia_id: int, fecha_inicio: date, fecha_fin: date) -> bool:
         """True si la membresía ya tiene una cobertura bonificada cuyo
