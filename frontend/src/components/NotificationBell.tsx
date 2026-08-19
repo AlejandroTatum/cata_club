@@ -25,6 +25,7 @@ const TIPO_LABELS: Record<TipoNotificacion, string> = {
   MIEMBRESIA_MORA_DIA_1: "Membresía vencida",
   MIEMBRESIA_MORA_DIA_8: "Membresía vencida",
   RESUMEN_MORA_ADMIN: "Resumen de mora",
+  COBERTURA_BONIFICADA_OTORGADA: "Cobertura bonificada otorgada",
 };
 
 export interface NotificationBellProps {

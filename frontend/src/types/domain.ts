@@ -375,7 +375,12 @@ export type TipoNotificacion =
   // daily admin summary. Kept in sync by tipo-notificacion-parity.test.ts.
   | "MIEMBRESIA_MORA_DIA_1"
   | "MIEMBRESIA_MORA_DIA_8"
-  | "RESUMEN_MORA_ADMIN";
+  | "RESUMEN_MORA_ADMIN"
+  // Issue #400 (slice 4d): distinct from PAGO_APROBADO on purpose — a
+  // bonificada coverage never charged anything, so the notice can't read
+  // "your payment of $X was approved" (that would describe money that never
+  // moved). See `PagoServicio.aplicar_beneficio_bonificado`.
+  | "COBERTURA_BONIFICADA_OTORGADA";
 
 /**
  * An in-app notification (`GET /ranking/notificaciones/mias`) —

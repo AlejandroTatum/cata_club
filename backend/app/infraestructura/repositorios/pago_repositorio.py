@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Pago, ComprobantePago
+from app.dominio.modelos import Pago, ComprobantePago, CoberturaBonificada
 from app.dominio.enums import EstadoPago
 
 
@@ -118,6 +118,31 @@ class PagoRepositorio:
         )
         return self.db.execute(stmt).scalar_one() > 0
 
+    def cobertura_aprobada_en_rango_medio_abierto(
+        self, membresia_id: int, fecha_inicio: date, fecha_fin: date,
+    ) -> bool:
+        """Variante de `cobertura_aprobada_en_rango` con semántica de rango
+        MEDIO ABIERTO `[fecha_inicio, fecha_fin)` -- issue #400/4d, usada
+        SOLO por `PagoServicio.aplicar_beneficio_bonificado`.
+
+        Por qué NO reutilizar `cobertura_aprobada_en_rango` (que usa `<=`/`>=`,
+        rango CERRADO): esa función la llama `regularizar_deuda` con fechas
+        explícitas del admin, donde "cerrado" nunca importó en la práctica.
+        Acá los períodos se anclan automáticamente unos sobre otros
+        (`fecha_fin` de uno == `fecha_inicio` del siguiente, misma convención
+        que `_sumar_meses`/la restricción de exclusión `'[)'`), así que un
+        rango CERRADO confundiría dos períodos ADYACENTES (que no se pisan)
+        con dos que se solapan de verdad -- exactamente el bug que reprodujo
+        `test_segunda_aplicacion_ancla_sobre_la_cobertura_bonificada_previa`
+        contra Postgres real antes de este fix."""
+        stmt = select(func.count()).select_from(Pago).where(
+            Pago.membresia_id == membresia_id,
+            Pago.estado_pago == EstadoPago.APROBADO,
+            Pago.fecha_inicio < fecha_fin,
+            Pago.fecha_fin > fecha_inicio,
+        )
+        return self.db.execute(stmt).scalar_one() > 0
+
     def crear(self, pago: Pago) -> Pago:
         self.db.add(pago)
         self.db.commit()
@@ -139,3 +164,71 @@ class ComprobantePagoRepositorio:
         self.db.commit()
         self.db.refresh(comprobante)
         return comprobante
+
+
+class CoberturaBonificadaRepositorio:
+    """Acceso a datos de `CoberturaBonificada` (issue #400, slice 4d). Fino
+    a propósito, mismo reparto de responsabilidades que
+    `AsignacionDescuentoRepositorio`/`BeneficioServicio`: qué constituye un
+    período "ya cubierto", la resolución del beneficio y la traducción del
+    `IntegrityError` de la carrera viven en `PagoServicio`, no acá."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def fecha_fin_maxima(self, membresia_id: int) -> Optional[date]:
+        """`fecha_fin` más lejana entre las coberturas bonificadas ya
+        otorgadas de una membresía, o `None` si nunca tuvo una. Mismo rol que
+        `PagoRepositorio.fecha_fin_maxima_aprobada` para el otro lado del
+        ancla: `PagoServicio.aplicar_beneficio_bonificado` combina ambos
+        máximos (issue #400: "derivada exactamente como un pago normal,
+        anclando contra AMBAS tablas") para no pisar cobertura ya otorgada
+        por cualquiera de los dos caminos."""
+        stmt = select(func.max(CoberturaBonificada.fecha_fin)).where(
+            CoberturaBonificada.membresia_id == membresia_id,
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def existe_en_rango(self, membresia_id: int, fecha_inicio: date, fecha_fin: date) -> bool:
+        """True si la membresía ya tiene una cobertura bonificada cuyo
+        período se solapa con el rango dado. Contraparte de
+        `PagoRepositorio.cobertura_aprobada_en_rango_medio_abierto` para la
+        otra tabla -- `PagoServicio.aplicar_beneficio_bonificado` consulta
+        las DOS antes de otorgar (pre-check, camino primario de error); la
+        restricción de exclusión `ex_cobertura_bonificada_periodo_no_solapa`
+        es la red de seguridad ante la carrera que este pre-check no puede
+        ver.
+
+        Semántica de rango MEDIO ABIERTO `[fecha_inicio, fecha_fin)`, EXACTA
+        pareja de `daterange(fecha_inicio, fecha_fin, '[)')` de la
+        restricción de exclusión (mismo motivo que la variante `_medio_
+        abierto` de `PagoRepositorio`): dos otorgamientos consecutivos donde
+        el segundo arranca justo donde terminó el primero NO se solapan."""
+        stmt = select(func.count()).select_from(CoberturaBonificada).where(
+            CoberturaBonificada.membresia_id == membresia_id,
+            CoberturaBonificada.fecha_inicio < fecha_fin,
+            CoberturaBonificada.fecha_fin > fecha_inicio,
+        )
+        return self.db.execute(stmt).scalar_one() > 0
+
+    def existe_en_rango_cerrado(self, membresia_id: int, fecha_inicio: date, fecha_fin: date) -> bool:
+        """Variante de `existe_en_rango` con semántica de rango CERRADO
+        (`<=`/`>=`) -- hallazgo del revisor (issue #400/4d): `regularizar_
+        deuda` recibe fechas EXPLÍCITAS del admin (no auto-ancladas), igual
+        que su propio `PagoRepositorio.cobertura_aprobada_en_rango` (con el
+        que corre en paralelo, ver `PagoServicio._hay_cobertura_en_rango`) --
+        usar la variante medio-abierta acá sería inconsistente entre las dos
+        mitades del mismo chequeo y podría dejar pasar un backdate que roza
+        el borde de una cobertura bonificada ya otorgada."""
+        stmt = select(func.count()).select_from(CoberturaBonificada).where(
+            CoberturaBonificada.membresia_id == membresia_id,
+            CoberturaBonificada.fecha_inicio <= fecha_fin,
+            CoberturaBonificada.fecha_fin >= fecha_inicio,
+        )
+        return self.db.execute(stmt).scalar_one() > 0
+
+    def crear(self, cobertura: CoberturaBonificada) -> CoberturaBonificada:
+        self.db.add(cobertura)
+        self.db.commit()
+        self.db.refresh(cobertura)
+        return cobertura
