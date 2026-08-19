@@ -168,7 +168,14 @@ function MembershipCard({
 
   const facts: { label: string; value: string }[] = [];
   if (membership?.categoria) facts.push({ label: "Plan", value: membership.categoria });
-  if (membership?.montoAplicado) {
+  // Issue #400 (slice 4c-b): `montoAplicado` stays the real, nonzero tariff
+  // even for a gratuitous membership (`esGratuidadFamiliar`) — E04-RF002
+  // stopped zeroing it. Printing "Valor mensual: $35,00" here would read as
+  // an amount this family owes, when this specific membership charges $0
+  // regardless. The gratuity itself is stated by the form area below
+  // (`RenewPaymentForm` is replaced by an explanatory paragraph for this
+  // case), not by this facts row.
+  if (membership?.montoAplicado && !membership.esGratuidadFamiliar) {
     facts.push({ label: "Valor mensual", value: formatCurrency(membership.montoAplicado) });
   }
 
@@ -262,16 +269,39 @@ function HowToPay({
   studentName,
   /** The minor-on-their-own-account case: the rail carries the alternative, not the steps. */
   blocked,
+  /**
+   * Issue #400 (slice 4c-b): the gratuitous case — `RenewPaymentForm` is
+   * replaced by an explanatory paragraph (see the render below), so the
+   * amount-driven procedure below ("escriba el monto… cada $X cubre un
+   * mes") describes a form that is not there for this reader.
+   */
+  gratuitous,
   /** True once the club has a `Membresia` to renew; without one the form cannot be reached at all. */
   hasMembership,
   monthlyPrice,
 }: {
   studentName: string | null;
   blocked: boolean;
+  gratuitous: boolean;
   hasMembership: boolean;
   monthlyPrice: string | null;
 }): React.ReactElement {
   const subject = studentName ? `de ${studentName}` : "suyo";
+
+  if (gratuitous) {
+    return (
+      <ContextualHelp title="Cómo funciona esta membresía">
+        <p>
+          El club le otorgó gratuidad familiar: esta membresía no genera ningún cobro y no hay
+          ningún monto que registrar acá.
+        </p>
+        <p className="mt-2.5">
+          Para extender la cobertura cuando corresponda, el club se encarga de registrarlo. Si
+          necesita algo puntual, acérquese a administración.
+        </p>
+      </ContextualHelp>
+    );
+  }
 
   if (blocked) {
     return (
@@ -1056,18 +1086,31 @@ function PaymentsContent({
     monthlyPrice: selectedProfile?.membership?.montoAplicado ?? null,
     coverageEnd,
     pendingCount: pagos.filter((pago) => pago.estadoPago === "PENDIENTE_VALIDACION").length,
+    esGratuidadFamiliar: selectedProfile?.membership?.esGratuidadFamiliar ?? false,
   });
+
+  /**
+   * Issue #400 (slice 4c-b): the amount-driven renewal form below
+   * (`RenewPaymentForm`) asks for a monto and derives months from it —
+   * there is no honest monto to ask a gratuitous member for, since the
+   * charge is $0 regardless of `membership.montoAplicado` (the real
+   * tariff, which this slice stopped zeroing). Rather than redesign the
+   * form around a months-only input, this reader gets the same "blocked,
+   * with an explanation" treatment `blockedAsMinor` already gets below.
+   */
+  const isGratuitous = selectedProfile?.membership?.esGratuidadFamiliar ?? false;
 
   /**
    * Whether the form above is actually reachable for this reader — the only
    * condition under which the empty history may offer "Registrar un pago" as
-   * its way out (D11). It restates the three gates `RenewPaymentForm` already
+   * its way out (D11). It restates the four gates `RenewPaymentForm` already
    * applies, in the order it applies them: a minor on their own account never
-   * registers, a persona with no `Membresia` has nothing to renew, and a
-   * pending payment blocks a second one until the club rules on it.
+   * registers, a persona with no `Membresia` has nothing to renew, a
+   * gratuitous membership has nothing to pay, and a pending payment blocks a
+   * second one until the club rules on it.
    */
   const canRegisterHere =
-    !blockedAsMinor && selectedProfile?.membership != null && !hasPendingPago;
+    !blockedAsMinor && selectedProfile?.membership != null && !isGratuitous && !hasPendingPago;
 
   function handleSelectFile(pagoId: number): void {
     setUploadError(null);
@@ -1156,6 +1199,12 @@ function PaymentsContent({
                 resolves that from the payload. */}
             {situation.detail}
           </p>
+        ) : isGratuitous ? (
+          // Issue #400 (slice 4c-b): `situation.detail` already carries the
+          // gratuity explanation (`describePaymentSituation`'s "gratuitous"
+          // kind) — same source `blockedAsMinor` reads above, so the two
+          // blocked states read from one place and cannot disagree.
+          <p className="text-sm text-ink-2">{situation.detail}</p>
         ) : selectedProfile.membership ? (
           <RenewPaymentForm
             membership={selectedProfile.membership}
@@ -1177,6 +1226,7 @@ function PaymentsContent({
       <HowToPay
         studentName={studentName}
         blocked={blockedAsMinor}
+        gratuitous={isGratuitous}
         hasMembership={selectedProfile.membership != null}
         monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
       />

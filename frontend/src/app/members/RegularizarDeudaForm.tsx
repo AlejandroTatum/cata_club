@@ -32,6 +32,17 @@ interface RegularizarDeudaFormProps {
   membresiaId: number;
   /** Monthly price (monto_aplicado) — prefills the monto field. */
   montoMensual: number;
+  /**
+   * `Membresia.esGratuidadFamiliar` (issue #400, slice 4c-b) — since that
+   * slice `montoMensual` stays the real, nonzero tariff even for a
+   * gratuitous membership (E04-RF002 stopped zeroing it), so this form
+   * would otherwise prefill a real dollar amount as if it were owed. It is
+   * not: the backend's `RegularizacionDeudaDTO.monto` requires `> 0`
+   * (there is no honest zero to submit), and a member who does not pay has
+   * no dollar amount to "catch up on" — the form is blocked entirely for
+   * this case rather than prefilling a number that does not apply.
+   */
+  esGratuidadFamiliar?: boolean;
   /** Called after a successful regularization so the page can refetch its data. */
   onRegularized: () => void;
 }
@@ -39,6 +50,7 @@ interface RegularizarDeudaFormProps {
 export default function RegularizarDeudaForm({
   membresiaId,
   montoMensual,
+  esGratuidadFamiliar = false,
   onRegularized,
 }: RegularizarDeudaFormProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
@@ -94,6 +106,20 @@ export default function RegularizarDeudaForm({
       void loadDeuda();
     }
   }, [open, regularized, loadDeuda]);
+
+  // Issue #400 (slice 4c-b): after every hook above, so this stays a
+  // conditional RENDER, not a conditional HOOK CALL (React's rules of
+  // hooks — a `useState`/`useEffect` above this line must run on every
+  // render regardless of `esGratuidadFamiliar`, or the hook order breaks
+  // the moment a membership's gratuity changes between renders).
+  if (esGratuidadFamiliar) {
+    return (
+      <p className="mt-2.5 text-2xs text-ink-3">
+        Gratuidad familiar: esta membresía no genera ningún cobro, así que no hay ningún monto que
+        regularizar.
+      </p>
+    );
+  }
 
   async function handleSubmit(event: React.FormEvent): Promise<void> {
     event.preventDefault();

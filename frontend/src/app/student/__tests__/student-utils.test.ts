@@ -356,6 +356,7 @@ describe("describePaymentSituation", () => {
       situation({ pendingCount: 2 }),
       situation({ hasMembership: false, monthlyPrice: null, planName: null }),
       situation({ blockedAsMinor: true }),
+      situation({ esGratuidadFamiliar: true }),
     ];
     for (const input of inputs) {
       const result = describePaymentSituation(input, TODAY);
@@ -478,6 +479,45 @@ describe("describePaymentSituation", () => {
     const result = describePaymentSituation(situation({ coverageEnd: "no-es-una-fecha" }), TODAY);
     expect(result.figure).toBeNull();
     expect(result.headline).not.toMatch(/NaN/);
+  });
+
+  // Issue #400 (slice 4c-b): `esGratuidadFamiliar` is the ONLY authorized
+  // gratuity signal — since that slice `monthlyPrice` stays real (not
+  // zeroed) for a gratuitous membership, so these tests deliberately pair
+  // `esGratuidadFamiliar: true` with a real, nonzero `monthlyPrice` to prove
+  // the branch reads the flag and not the price.
+  it("reports gratuity from the flag, not from the price, and blocks registration", () => {
+    const result = describePaymentSituation(
+      situation({ esGratuidadFamiliar: true, monthlyPrice: "35.00", coverageEnd: "2026-08-30" }),
+      TODAY,
+    );
+    expect(result.kind).toBe("gratuitous");
+    expect(result.canRegister).toBe(false);
+    expect(result.urgent).toBe(false);
+    expect(result.priceNote).toBeNull();
+    expect(result.headline).toMatch(/gratuidad/i);
+  });
+
+  it("takes priority over an expired or ending-soon coverage date — nothing is urgent for a member who does not pay", () => {
+    const expired = describePaymentSituation(
+      situation({ esGratuidadFamiliar: true, monthlyPrice: "35.00", coverageEnd: "2026-07-01" }),
+      TODAY,
+    );
+    expect(expired.kind).toBe("gratuitous");
+    expect(expired.urgent).toBe(false);
+  });
+
+  it("names the dependent for a guardian reading a gratuitous profile", () => {
+    const result = describePaymentSituation(
+      situation({
+        studentName: "Sofía",
+        viewingOwnProfile: false,
+        esGratuidadFamiliar: true,
+        monthlyPrice: "35.00",
+      }),
+      TODAY,
+    );
+    expect(result.headline).toContain("Sofía");
   });
 
   it("keeps the ending-soon window at exactly one week", () => {

@@ -332,6 +332,7 @@ function StudentEditPanel({ student, onMembershipCreated, onDebtRegularized }: S
           <RegularizarDeudaForm
             membresiaId={Number(student.membresia.id)}
             montoMensual={student.membresia.monto ?? 0}
+            esGratuidadFamiliar={student.membresia.esGratuidadFamiliar}
             onRegularized={onDebtRegularized}
           />
         </div>

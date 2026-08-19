@@ -63,20 +63,26 @@ def test_deriva_no_flaggea_gratuidad_en_cero(db_session):
     assert detectar_deriva_de_tarifa(db_session) == []
 
 
-# --- A2: importes en cero y gratuidad familiar -------------------------------
+# --- A2: gratuidad familiar y ceros inexplicados -----------------------------
 
-def test_importes_cero_gratuidad_coherente(db_session):
-    persona = crear_persona_orm(db_session, "1000000004")
-    tipo = crear_tipo_membresia_orm(db_session)
+def test_importes_cero_gratuidad_con_tarifa_real(db_session):
+    """Caso NORMAL desde el slice 4c-b (#400): bandera en `True` y tarifa
+    REAL (no cero) -- ya no zerea `monto_aplicado`. Cae en `a2_gratuidad`,
+    nunca en `incoherente`, porque la persona SÍ tiene representante (la
+    precondición de negocio de la regla)."""
+    representante = crear_persona_orm(db_session, "1000000004")
+    alumno = crear_persona_orm(db_session, "1000000014")
+    alumno.representante_id = representante.id
+    tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("35.00"))
     membresia = crear_membresia_orm(
-        db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("0.00"),
+        db_session, alumno, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("35.00"),
     )
     membresia.es_gratuidad_familiar = True
     db_session.flush()
 
     resultado = detectar_importes_cero(db_session)
 
-    assert [f["membresia_id"] for f in resultado["a2_gratuidad_coherente"]] == [membresia.id]
+    assert [f["membresia_id"] for f in resultado["a2_gratuidad"]] == [membresia.id]
     assert resultado["a2_cero_inexplicado"] == []
     assert resultado["a2_gratuidad_incoherente"] == []
 
@@ -91,11 +97,17 @@ def test_importes_cero_cero_inexplicado(db_session):
     resultado = detectar_importes_cero(db_session)
 
     assert [f["membresia_id"] for f in resultado["a2_cero_inexplicado"]] == [membresia.id]
-    assert resultado["a2_gratuidad_coherente"] == []
+    assert resultado["a2_gratuidad"] == []
     assert resultado["a2_gratuidad_incoherente"] == []
 
 
-def test_importes_cero_gratuidad_incoherente(db_session):
+def test_importes_cero_gratuidad_incoherente_sin_representante(db_session):
+    """A2 `incoherente` redefinida (slice 4c-b): ya NO es "bandera True,
+    monto != 0" -- eso es lo esperado ahora. Es "bandera True" en una
+    persona SIN `representante_id", la única precondición que
+    `_aplicar_regla_familiar_si_corresponde` exige antes de ponerla; sin
+    representante, ningún camino del código pudo haber llegado a
+    `True`."""
     persona = crear_persona_orm(db_session, "1000000006")
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
@@ -107,7 +119,7 @@ def test_importes_cero_gratuidad_incoherente(db_session):
     resultado = detectar_importes_cero(db_session)
 
     assert [f["membresia_id"] for f in resultado["a2_gratuidad_incoherente"]] == [membresia.id]
-    assert resultado["a2_gratuidad_coherente"] == []
+    assert resultado["a2_gratuidad"] == []
     assert resultado["a2_cero_inexplicado"] == []
 
 

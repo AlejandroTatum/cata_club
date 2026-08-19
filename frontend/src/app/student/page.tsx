@@ -1159,6 +1159,7 @@ function ActivePortalView({
         monthlyPrice: selectedProfile.membership?.montoAplicado ?? null,
         coverageEnd,
         pendingCount: pendingPagos,
+        esGratuidadFamiliar: selectedProfile.membership?.esGratuidadFamiliar ?? false,
       })
     : null;
 

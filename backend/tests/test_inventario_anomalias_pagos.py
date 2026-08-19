@@ -31,15 +31,24 @@ from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_t
 
 def _pago(sesion, persona, membresia, inicio, fin, *,
           estado=EstadoPago.APROBADO, monto=Decimal("30.00"), tipo_pago=TipoPago.EFECTIVO,
-          descuento_valor_aplicado=None):
+          descuento_valor_aplicado=None, tarifa_mensual_aplicada=None,
+          meses_comprados=None, monto_base=None):
     """`crear_pago_orm` fija `fecha_inicio`/`fecha_fin` a un período propio y
     no las parametriza; acá la cobertura ES lo que se prueba, así que se
     ajustan después del `add` y se flushea. Envolver la fábrica compartida
-    evita duplicarla, que es lo que este repo no quiere (ver #326)."""
+    evita duplicarla, que es lo que este repo no quiere (ver #326).
+
+    Los tres parámetros de snapshot (`tarifa_mensual_aplicada`/
+    `meses_comprados`/`monto_base`) quedan en `None` por defecto -- así se
+    fabrica un pago "legado" (anterior al slice 4c-b de #400, sin
+    snapshot), que es el camino que sigue habiendo que probar. Pasarlos
+    fabrica el pago "nuevo" con el snapshot ya congelado."""
     pago = Pago(
         monto=monto, estado_pago=estado, tipo_pago=tipo_pago,
         fecha_inicio=inicio, fecha_fin=fin,
         descuento_valor_aplicado=descuento_valor_aplicado,
+        tarifa_mensual_aplicada=tarifa_mensual_aplicada,
+        meses_comprados=meses_comprados, monto_base=monto_base,
         persona_id=persona.id, membresia_id=membresia.id,
     )
     sesion.add(pago)
@@ -219,6 +228,63 @@ def test_incompatible_no_evalua_un_pago_sin_meses_derivables(db_session, escenar
 
     assert detectar_cobertura_incompatible(db_session) == []
     assert len(detectar_meses_no_derivables(db_session)) == 1
+
+
+# --- Snapshot-aware (issue #400, slice 4c-b) ---------------------------------
+
+def test_incompatible_no_flaggea_pago_gratuito_con_snapshot(db_session):
+    """El falso positivo que motivó este slice: un pago GRATUITO
+    (`monto == 0`) con tarifa real detrás (`membresia.monto_aplicado`) y
+    cobertura real de 3 meses. Sin snapshot, `monto_base` se reconstruía
+    como `0 + 0 = 0` y `0 // 30 == 0` meses -- la cobertura real de 3 meses
+    nunca calzaba con eso y el pago salía marcado A3b. Con el snapshot
+    congelado (`meses_comprados=3`), el detector usa ese número y el pago
+    no se reporta."""
+    persona = crear_persona_orm(db_session, "1200000010")
+    tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
+    membresia = crear_membresia_orm(
+        db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
+    )
+    _pago(
+        db_session, persona, membresia, date(2026, 1, 1), date(2026, 4, 1),
+        monto=Decimal("0.00"),
+        tarifa_mensual_aplicada=Decimal("30.00"), meses_comprados=3, monto_base=Decimal("90.00"),
+    )
+
+    assert detectar_cobertura_incompatible(db_session) == []
+    assert detectar_meses_no_derivables(db_session) == []
+
+
+def test_no_derivables_sigue_flaggeando_gratuito_legado_sin_snapshot(db_session):
+    """Regresión inversa del test anterior: un pago gratuito SIN snapshot
+    (anterior al slice 4c-b, cuando la gratuidad todavía zereaba
+    `monto_aplicado`) debe seguir cayendo en A5 -- el camino viejo no
+    cambia para datos que ya existían antes de este slice."""
+    persona = crear_persona_orm(db_session, "1200000011")
+    tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
+    membresia = crear_membresia_orm(
+        db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("0.00"),
+    )
+    pago = _pago(db_session, persona, membresia, date(2026, 1, 1), date(2026, 4, 1),
+                 monto=Decimal("0.00"))
+
+    filas = detectar_meses_no_derivables(db_session)
+
+    assert [(f["pago_id"], f["motivo"]) for f in filas] == [(pago.id, "precio_mensual_cero")]
+
+
+def test_no_derivables_no_flaggea_pago_no_gratuito_con_snapshot(db_session, escenario):
+    """Ancla de regresión: un pago NO gratuito, con snapshot y cobertura
+    correcta, sigue sin reportarse en ninguno de los dos detectores."""
+    persona, membresia = escenario
+    _pago(
+        db_session, persona, membresia, date(2026, 1, 1), date(2026, 3, 1),
+        monto=Decimal("60.00"),
+        tarifa_mensual_aplicada=Decimal("30.00"), meses_comprados=2, monto_base=Decimal("60.00"),
+    )
+
+    assert detectar_cobertura_incompatible(db_session) == []
+    assert detectar_meses_no_derivables(db_session) == []
 
 
 # --- Privacidad y no-escritura ------------------------------------------------

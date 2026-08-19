@@ -503,6 +503,7 @@ export type PaymentSituationKind =
   | "minor-blocked"
   | "no-membership"
   | "awaiting-validation"
+  | "gratuitous"
   | "never-paid"
   | "expired"
   | "ending-soon"
@@ -527,6 +528,15 @@ export interface PaymentSituationInput {
   coverageEnd: string | null;
   /** How many of this profile's payments are waiting on the club. */
   pendingCount: number;
+  /**
+   * `Membresia.esGratuidadFamiliar` (issue #400, slice 4c-b) — the
+   * AUTHORITATIVE "does not pay" signal. Since that slice the membership
+   * keeps its real `monthlyPrice` even when this is `true` (E04-RF002 no
+   * longer zeroes the tariff, it only flags it), so `monthlyPrice` can no
+   * longer be read as "gratuity if falsy" anywhere downstream — this field
+   * is the only correct source for that fact.
+   */
+  esGratuidadFamiliar?: boolean;
 }
 
 export interface PaymentSituation {
@@ -658,6 +668,29 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       // Not a permission problem: the backend accepts a second pending payment,
       // but the club then has two vouchers for one period to reconcile. The
       // renewal form has always refused it; the band now says why.
+      canRegister: false,
+      urgent: false,
+    };
+  }
+
+  // Issue #400 (slice 4c-b): checked BEFORE any coverage-driven branch below,
+  // because none of those ("never-paid", "expired", "ending-soon") describes
+  // an action this reader can still take — the self-service renewal form is
+  // an amount-driven form (enter a monto, derive months from it), and there
+  // is no honest monto to enter for a membership that charges $0 regardless
+  // of the real tariff behind it. `priceNote` is deliberately dropped (not
+  // reused from `priceNote` above): showing "$35,00 al mes" next to "no
+  // paga" reads as a contradiction, not as context.
+  if (input.hasMembership && input.esGratuidadFamiliar) {
+    return {
+      kind: "gratuitous",
+      figure: null,
+      headline: input.viewingOwnProfile
+        ? "Su membresía tiene gratuidad familiar"
+        : `La membresía de ${input.studentName} tiene gratuidad familiar`,
+      detail:
+        "El club le otorgó gratuidad familiar por ser el cuarto integrante de la familia inscripto: esta membresía no genera ningún cobro. Para extender su cobertura, acérquese a administración del club.",
+      priceNote: null,
       canRegister: false,
       urgent: false,
     };

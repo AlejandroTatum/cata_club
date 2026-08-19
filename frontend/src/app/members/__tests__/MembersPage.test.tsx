@@ -1254,6 +1254,24 @@ describe("MembersPage — Registrar pago inline form", () => {
     });
   });
 
+  // Issue #400 (slice 4c-b): a gratuitous membership's real, nonzero
+  // `monto` ($85) is exactly what this form used to prefill as the amount
+  // to "catch up on" — the backend's `RegularizacionDeudaDTO.monto`
+  // requires `> 0` regardless, so there is no honest amount this admin
+  // could submit for a member who does not pay.
+  it("does NOT offer 'Regularizar deuda' for a gratuitous membership, and explains why", async () => {
+    const dialog = await openMemberDialog({
+      membresia: { ...MEMBRESIA_VENCIDA, esGratuidadFamiliar: true },
+    });
+
+    expect(
+      await within(dialog).findByText(/no hay ningún monto que regularizar/i),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: /regularizar deuda/i }),
+    ).not.toBeInTheDocument();
+  });
+
   // Issue #313 (K5 hallazgo #15): "Membresía: Vencida" y "0 meses adeudados"
   // a la vez, en el mismo recuadro. Las dos cifras son individualmente
   // correctas — el estado se vence apenas vence la cobertura, la deuda
@@ -1319,6 +1337,28 @@ describe("MembersPage — Registrar pago inline form", () => {
 
     // El período aparece UNA sola vez — nunca la forma cruda "aaaa-mm-dd".
     expect(within(dialog).queryByText(/2026-08-01 — 2026-09-05/)).not.toBeInTheDocument();
+  });
+
+  // Issue #400 (slice 4c-b): E04-RF002 stopped zeroing `monto_aplicado`, so
+  // a gratuitous membership now carries a real, nonzero `monto` ($85 here,
+  // same as `MEMBRESIA_VENCIDA`) — exactly the combination that would let
+  // an admin register a real charge against a member who does not pay.
+  it("does NOT render a 'Registrar pago' button for a gratuitous membership, and explains why", async () => {
+    const dialog = await openMemberDialog({
+      membresia: { ...MEMBRESIA_VENCIDA, esGratuidadFamiliar: true },
+    });
+
+    // `RegisterPaymentForm` AND `RegularizarDeudaForm` both block on this
+    // same flag, each with its own explanatory sentence — both contain
+    // "gratuidad familiar", so this asserts the one specific to the
+    // register-payment form rather than a plain `findByText` (which would
+    // throw on the two matches).
+    expect(
+      await within(dialog).findByText(/no hay ningún pago que registrar/i),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: /^registrar pago$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("does NOT render a 'Registrar pago' button when the student has no membership", async () => {
