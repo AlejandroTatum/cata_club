@@ -108,12 +108,16 @@ const mockFetchTrainingSchedules = vi.fn().mockResolvedValue([]);
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchAttendanceRecords = vi.fn().mockResolvedValue([]);
 const mockRegisterAttendance = vi.fn();
+const mockCorrectAttendance = vi.fn();
+const mockFetchAttendanceCorrections = vi.fn().mockResolvedValue([]);
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   registerAttendance: (request: unknown) => mockRegisterAttendance(request),
+  correctAttendance: (asistenciaId: number, data: unknown) => mockCorrectAttendance(asistenciaId, data),
+  fetchAttendanceCorrections: (asistenciaId: number) => mockFetchAttendanceCorrections(asistenciaId),
   fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
@@ -1672,6 +1676,164 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(
       screen.getByRole("button", { name: /Confirmar asistencia/ }),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #389, slice 4b — the correction door on the closed roster's own
+// rows: "Corregir", gated to admin + within-window + a real asistenciaId,
+// the inline form, in-place update, and the audit trace.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — la corrección por fila (issue #389)", () => {
+  /** Real, numeric-parseable Asistencia ids — `buildAlumnoHorarios(3)` gives
+   *  personaId 100/101/102; these are the corresponding filed rows. */
+  function existingRecordsWithAsistenciaIds(fecha = "2026-07-21"): unknown[] {
+    return buildAlumnoHorarios(3).map((raw, i) => {
+      const s = raw as { personaId: number; personaNombreCompleto: string };
+      return {
+        id: String(9001 + i),
+        fecha,
+        horario: "Martes 18:00 — 19:00",
+        horarioId: 12,
+        personaId: s.personaId,
+        estudiante: s.personaNombreCompleto,
+        estado: "absent",
+      };
+    });
+  }
+
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset();
+    mockRegisterAttendance.mockReset();
+    mockCorrectAttendance.mockReset();
+    mockFetchAttendanceCorrections.mockReset().mockResolvedValue([]);
+  });
+
+  async function openReadOnlyRoster(records: unknown[], fecha?: string): Promise<void> {
+    mockFetchAttendanceRecords.mockResolvedValue(records);
+    // `sessionDate` (the correction-window gate) comes from the URL/openRoster,
+    // NOT from any individual record's own `fecha` — deep-linking a past date
+    // is what `?fecha=` is for (see attendance-utils.ts's own doc comment on it).
+    const fechaQuery = fecha ? `&fecha=${fecha}` : "";
+    window.history.replaceState(null, "", `/trainer/attendance?horario=12${fechaQuery}&paso=lista`);
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 01");
+  }
+
+  it("ofrece Corregir a un administrador, dentro de la ventana, solo para filas con asistenciaId real", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+
+    expect(screen.getAllByRole("button", { name: "Corregir" })).toHaveLength(3);
+  });
+
+  it("no ofrece Corregir a un entrenador — el endpoint es admin-only", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+
+    expect(screen.queryByRole("button", { name: "Corregir" })).not.toBeInTheDocument();
+  });
+
+  it("deshabilita Corregir con el motivo visible pasados los 30 días, y no lo ofrece del todo sin fila filed", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    // 2026-05-01 is well past the 30-day cutoff from "today" (2026-07-21,
+    // per TUESDAY_IN_CLUB_TIME). One student (Student 03) has no filed
+    // record at all — a partially-failed batch — so it never even reaches
+    // the disabled-with-reason state.
+    const records = existingRecordsWithAsistenciaIds("2026-05-01").slice(0, 2);
+    await openReadOnlyRoster(records, "2026-05-01");
+
+    const disabledButtons = screen.getAllByRole("button", { name: "Corregir" });
+    expect(disabledButtons).toHaveLength(2);
+    for (const button of disabledButtons) {
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(
+        "La ventana de corrección de 30 días ya cerró para esta sesión.",
+      );
+    }
+  });
+
+  it("abre el formulario, exige motivo, envía la corrección y actualiza la fila en el sitio con la traza", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+    mockCorrectAttendance.mockResolvedValue({
+      asistencia: {
+        id: "9001", fecha: "2026-07-21", horario: "Martes 18:00 — 19:00", horarioId: 12,
+        personaId: 100, estudiante: "Student 01", estado: "present",
+      },
+      corregidoPorId: 1,
+      corregidoPorNombre: "Admin User",
+      corregidoEn: "2026-08-18T12:00:00Z",
+      motivo: "Se confirmó presencia con el profesor.",
+      estadoAnterior: "absent",
+    });
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    // Captured BEFORE the correction: `fetchAttendanceRecords` also gets
+    // called once by the unrelated "lista tomada hoy" indicator effect
+    // (issue #310/#22), so the real assertion is "the correction adds no
+    // NEW call", not "there was exactly one call ever".
+    const attendanceRecordsCallsBefore = mockFetchAttendanceRecords.mock.calls.length;
+    const alumnosCallsBefore = mockFetchAlumnosPorHorario.mock.calls.length;
+
+    // Submitting with an empty motivo is refused client-side, no network call.
+    fireEvent.click(within(row).getByRole("button", { name: "Corregir" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Guardar corrección" }));
+    expect(await within(row).findByRole("alert")).toHaveTextContent("El motivo es obligatorio.");
+    expect(mockCorrectAttendance).not.toHaveBeenCalled();
+
+    fireEvent.click(within(row).getByRole("radio", { name: "Presente" }));
+    fireEvent.change(within(row).getByPlaceholderText("Por qué se corrige este registro"), {
+      target: { value: "Se confirmó presencia con el profesor." },
+    });
+    fireEvent.click(within(row).getByRole("button", { name: "Guardar corrección" }));
+
+    await waitFor(() => expect(mockCorrectAttendance).toHaveBeenCalledWith(9001, {
+      estado: "present",
+      justificativo: null,
+      estadoJustificativo: null,
+      motivo: "Se confirmó presencia con el profesor.",
+    }));
+
+    // Updated in place — no full roster refetch.
+    expect(mockFetchAlumnosPorHorario.mock.calls.length).toBe(alumnosCallsBefore);
+    expect(mockFetchAttendanceRecords.mock.calls.length).toBe(attendanceRecordsCallsBefore);
+    expect(await within(row).findByText("Presente")).toBeInTheDocument();
+    expect(
+      within(row).getByText(/Corregido por Admin User el.*antes: Ausente.*motivo: Se confirmó presencia/),
+    ).toBeInTheDocument();
+
+    // Corregir stays available on the SAME row afterward — unlimited
+    // sequential corrections within the window, never hidden after one.
+    expect(within(row).getByRole("button", { name: "Corregir" })).toBeEnabled();
+  });
+
+  it("el historial de correcciones se ve bajo demanda, más reciente primero", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+    mockFetchAttendanceCorrections.mockResolvedValue([
+      {
+        id: 2, corregidoPorId: 1, corregidoPorNombre: "Admin User",
+        corregidoEn: "2026-08-18T12:00:00Z", motivo: "Segunda corrección", estadoAnterior: "present",
+      },
+      {
+        id: 1, corregidoPorId: 1, corregidoPorNombre: "Admin User",
+        corregidoEn: "2026-08-10T12:00:00Z", motivo: "Primera corrección", estadoAnterior: "absent",
+      },
+    ]);
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Ver historial" }));
+
+    await waitFor(() => expect(mockFetchAttendanceCorrections).toHaveBeenCalledWith(9001));
+    const entries = await within(row).findAllByRole("listitem");
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toHaveTextContent("Segunda corrección");
+    expect(entries[1]).toHaveTextContent("Primera corrección");
   });
 });
 

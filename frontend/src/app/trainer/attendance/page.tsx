@@ -130,6 +130,7 @@ import {
 } from "@/app/attendance/attendance-utils";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ContextualHelp from "@/components/ContextualHelp";
+import AttendanceCorrectionRow, { type CorrectionPatch } from "./CorrectionRow";
 import {
   SessionCompositionBar,
   SessionCompositionCounts,
@@ -607,6 +608,30 @@ export default function TrainerAttendancePage(): React.ReactElement {
     },
     [writeWizardUrl],
   );
+
+  /**
+   * A row's correction just landed (issue #389, slice 4b) — patch `students`
+   * AND `serverRosterRef.current` in the SAME operation. Both derive from the
+   * exact same `apply` closure so they can never disagree: if only `students`
+   * moved, `hasUnsavedAttendanceEdits` would diff a row that WAS saved
+   * against a stale server snapshot and spuriously flag it as unsaved,
+   * tripping the `beforeunload` warning on a session the admin just closed
+   * again on purpose.
+   *
+   * Correcting stays available on the same row afterward (unlimited
+   * sequential corrections within the window) — this only ever patches the
+   * one row, it never disables anything.
+   */
+  const handleRowCorrected = useCallback((personaId: string, patch: CorrectionPatch): void => {
+    const apply = (list: SessionStudent[]): SessionStudent[] =>
+      list.map((s) =>
+        s.id === personaId
+          ? { ...s, attendance: patch.attendance, justificativo: patch.justificativo, estadoJustificativo: patch.estadoJustificativo }
+          : s,
+      );
+    setStudents((prev) => apply(prev));
+    serverRosterRef.current = apply(serverRosterRef.current);
+  }, []);
 
   async function handleContinueToRoster(): Promise<void> {
     if (selectedScheduleId === null) return;
@@ -1406,25 +1431,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
           {renderReadOnlyReason()}
           <ul className="flex flex-col gap-2" aria-label="Asistencia registrada (solo lectura)">
             {students.map((student) => (
-              <li
+              <AttendanceCorrectionRow
                 key={student.id}
-                className="flex h-12 items-center gap-[11px] rounded-ctl border border-line-2 bg-paper px-[13px]"
-              >
-                <span
-                  aria-hidden="true"
-                  className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-state-neutral-bg text-2xs tracking-flat font-bold text-state-neutral"
-                >
-                  {getUserInitials(student.name)}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-                  {student.name}
-                </span>
-                {student.attendance !== UNMARKED && (
-                  <Badge tone={getAttendanceBadgeTone(student.attendance)} className="flex-none">
-                    {ATTENDANCE_LABELS[student.attendance as EstadoAsistencia]}
-                  </Badge>
-                )}
-              </li>
+                student={student}
+                sessionDate={sessionDate ?? clubIsoDate()}
+                canCorrect={isAdmin}
+                onCorrected={handleRowCorrected}
+              />
             ))}
           </ul>
         </div>
